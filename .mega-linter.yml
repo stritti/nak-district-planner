@@ -1,0 +1,61 @@
+# MegaLinter configuration
+# Docs: https://megalinter.io/latest/configuration/
+
+# ── General ──────────────────────────────────────────────────────────────────
+
+# Only lint changed files on PRs; full scan on push to main (set via workflow env)
+APPLY_FIXES: none
+PRINT_ALPACA: false
+SHOW_ELAPSED_TIME: true
+FILEIO_REPORTER: false
+
+# ── Reporters ────────────────────────────────────────────────────────────────
+REPORTERS:
+  - consolereporter
+  - githubreporter
+  - githubstatusreporter
+
+# ── Linter selection ─────────────────────────────────────────────────────────
+# Enable only the linters relevant to this project's tech stack.
+# Python (ruff handles lint+format), TypeScript/Vue, YAML, JSON, Dockerfile, Markdown
+
+ENABLE_LINTERS:
+  # Python
+  - PYTHON_RUFF
+  - PYTHON_BANDIT
+  # TypeScript / Vue
+  - TYPESCRIPT_ES
+  - JAVASCRIPT_ES
+  # Markup / config
+  - YAML_YAMLLINT
+  - JSON_JSONLINT
+  # Docker
+  - DOCKERFILE_HADOLINT
+  # Markdown
+  - MARKDOWN_MARKDOWNLINT
+
+# ── Python / Ruff ─────────────────────────────────────────────────────────────
+PYTHON_RUFF_CONFIG_FILE: services/backend/pyproject.toml
+PYTHON_RUFF_FILTER_REGEX_INCLUDE: "(services/backend/)"
+
+# Bandit — security linter for Python
+PYTHON_BANDIT_FILTER_REGEX_INCLUDE: "(services/backend/app/)"
+PYTHON_BANDIT_ARGUMENTS: "-r -ll"
+
+# ── TypeScript / ESLint ───────────────────────────────────────────────────────
+TYPESCRIPT_ES_FILTER_REGEX_INCLUDE: "(services/frontend/src/)"
+JAVASCRIPT_ES_FILTER_REGEX_INCLUDE: "(services/frontend/)"
+
+# ── YAML ─────────────────────────────────────────────────────────────────────
+YAML_YAMLLINT_FILTER_REGEX_EXCLUDE: "(megalinter-reports/|node_modules/|.venv/|uv.lock)"
+
+# ── Dockerfile ───────────────────────────────────────────────────────────────
+DOCKERFILE_HADOLINT_FILTER_REGEX_INCLUDE: "(services/)"
+
+# ── Markdown ─────────────────────────────────────────────────────────────────
+MARKDOWN_MARKDOWNLINT_CONFIG_FILE: .markdownlint.json
+
+# ── Global excludes ───────────────────────────────────────────────────────────
+FILTER_REGEX_EXCLUDE: >-
+  (\.git/|node_modules/|\.venv/|dist/|build/|coverage/|megalinter-reports/|
+  services/backend/uv\.lock|services/frontend/bun\.lock)

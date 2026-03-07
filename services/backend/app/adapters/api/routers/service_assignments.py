@@ -81,7 +81,9 @@ async def update_assignment(
     repo = SqlServiceAssignmentRepository(db)
     assignment = await repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
+        )
 
     if body.leader_name is not None:
         assignment.leader_name = body.leader_name

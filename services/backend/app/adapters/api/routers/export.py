@@ -26,7 +26,9 @@ router = APIRouter()
     response_model=ExportTokenResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_export_token(_: ApiKeyGuard, body: ExportTokenCreate, session: DbSession) -> ExportTokenResponse:
+async def create_export_token(
+    _: ApiKeyGuard, body: ExportTokenCreate, session: DbSession
+) -> ExportTokenResponse:
     token = ExportToken.create(
         label=body.label,
         token_type=body.token_type,
@@ -56,11 +58,7 @@ async def list_export_tokens(
     district_id: uuid.UUID | None = None,
 ) -> list[ExportTokenResponse]:
     repo = SqlExportTokenRepository(session)
-    tokens = (
-        await repo.list_by_district(district_id)
-        if district_id
-        else await repo.list_all()
-    )
+    tokens = await repo.list_by_district(district_id) if district_id else await repo.list_all()
     return [
         ExportTokenResponse(
             id=t.id,
@@ -117,14 +115,11 @@ async def export_calendar_ics(token_str: str, session: DbSession) -> Response:
 
     # Load congregation names for LOCATION field
     from sqlalchemy import select
+
     cong_result = await session.execute(
-        select(CongregationORM).where(
-            CongregationORM.district_id == export_token.district_id
-        )
+        select(CongregationORM).where(CongregationORM.district_id == export_token.district_id)
     )
-    cong_map: dict[uuid.UUID, str] = {
-        c.id: c.name for c in cong_result.scalars()
-    }
+    cong_map: dict[uuid.UUID, str] = {c.id: c.name for c in cong_result.scalars()}
 
     # Build iCalendar
     cal = Calendar()

@@ -2,6 +2,7 @@
 
 All HTTP calls are intercepted via a mock httpx.AsyncClient — no network needed.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
@@ -21,11 +22,7 @@ def _ics(*vevents: str) -> bytes:
     """Wrap VEVENT strings in a minimal VCALENDAR envelope."""
     body = "\r\n".join(vevents)
     return (
-        "BEGIN:VCALENDAR\r\n"
-        "VERSION:2.0\r\n"
-        "PRODID:-//UnitTest//EN\r\n"
-        f"{body}\r\n"
-        "END:VCALENDAR\r\n"
+        f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//UnitTest//EN\r\n{body}\r\nEND:VCALENDAR\r\n"
     ).encode()
 
 
@@ -203,7 +200,9 @@ class TestFetchEvents:
         assert len(events[0].content_hash) == 64  # SHA-256 hex
 
     async def test_multiple_events_returned(self):
-        connector = ICalConnector(client=_mock_http(_ics(VEVENT_BASIC, VEVENT_CANCELLED, VEVENT_ALLDAY)))
+        connector = ICalConnector(
+            client=_mock_http(_ics(VEVENT_BASIC, VEVENT_CANCELLED, VEVENT_ALLDAY))
+        )
         events = await connector.fetch_events(CREDS)
         assert len(events) == 3
 

@@ -4,6 +4,7 @@ Tasks intentionally run synchronous Celery workers; asyncio.run() bridges
 to the async database/HTTP layer.  This is the standard pattern for Celery
 + SQLAlchemy async without a dedicated async worker library.
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -49,6 +49,7 @@ node_modules/
 services/frontend/dist/
 services/frontend/.vite/
 bun.lockb
+package-lock.json
 
 # ============================================================
 # Docker
@@ -83,3 +84,8 @@ logs/
 tmp/
 .tmp/
 .claude/
+
+# ============================================================
+# CI / MegaLinter
+# ============================================================
+megalinter-reports/

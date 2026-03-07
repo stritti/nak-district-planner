@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
-
-logger = logging.getLogger(__name__)
 
 from app.adapters.api.deps import ApiKeyGuard, DbSession
 from app.adapters.api.schemas.calendar_integration import (
@@ -19,6 +18,8 @@ from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegra
 from app.application.crypto import encrypt_credentials
 from app.application.sync_service import run_sync
 from app.domain.models.calendar_integration import CalendarIntegration
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/calendar-integrations", tags=["calendar-integrations"])
 
@@ -116,7 +117,9 @@ async def update_calendar_integration(
     repo = SqlCalendarIntegrationRepository(db)
     integration = await repo.get(integration_id)
     if integration is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden"
+        )
 
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
@@ -128,7 +131,6 @@ async def update_calendar_integration(
     if "capabilities" in fields and body.capabilities is not None:
         integration.capabilities = body.capabilities
 
-    from datetime import datetime, timezone
     integration.updated_at = datetime.now(timezone.utc)
     await repo.save(integration)
     return _to_response(integration)
@@ -142,5 +144,7 @@ async def delete_calendar_integration(
 ) -> None:
     repo = SqlCalendarIntegrationRepository(db)
     if not await repo.get(integration_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden"
+        )
     await repo.delete(integration_id)
