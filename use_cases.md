@@ -64,6 +64,7 @@ Ziel: Gesetzliche und kirchliche Feiertage im System verfügbar machen, damit si
 - Palmsonntag = Ostern − 7 Tage
 - Ostersonntag = Ostern
 - Pfingstsonntag = Ostern + 49 Tage
+- Entschlafenen-Gottesdienst = erster Sonntag im März, Juli und November (3× pro Jahr)
 - Berechnung via Anonymem Gregorianischem Algorithmus (kein externer Dienst, keine Abhängigkeit).
 - Gilt für alle Bezirke, unabhängig vom state_code.
 

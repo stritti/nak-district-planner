@@ -84,15 +84,26 @@
             <th
               v-for="date in matrixStore.matrix.dates"
               :key="date"
-              class="border border-gray-300 px-2 py-2 text-center font-medium text-gray-700 min-w-[110px]"
+              class="border px-2 py-2 text-center font-medium min-w-[110px]"
+              :class="matrixStore.matrix.holidays[date]?.length
+                ? 'border-amber-300 bg-amber-50 text-amber-900'
+                : 'border-gray-300 text-gray-700'"
             >
-              <div class="text-gray-400 font-normal text-[11px]">{{ formatWeekday(date) }}</div>
+              <div class="text-[11px] font-normal" :class="matrixStore.matrix.holidays[date]?.length ? 'text-amber-500' : 'text-gray-400'">
+                {{ formatWeekday(date) }}
+              </div>
               <div>{{ formatDate(date) }}</div>
               <div
                 v-if="matrixStore.matrix.holidays[date]?.length"
-                class="text-gray-400 font-normal italic text-[10px] leading-tight mt-0.5"
+                class="mt-1 space-y-0.5"
               >
-                {{ matrixStore.matrix.holidays[date].join(', ') }}
+                <span
+                  v-for="name in matrixStore.matrix.holidays[date]"
+                  :key="name"
+                  class="block text-[10px] leading-tight font-medium text-amber-700 bg-amber-100 rounded px-1 py-0.5"
+                >
+                  {{ name }}
+                </span>
               </div>
             </th>
           </tr>

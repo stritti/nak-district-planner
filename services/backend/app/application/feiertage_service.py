@@ -47,6 +47,20 @@ KIRCHLICHE_FESTTAGE: list[tuple[str, int]] = [
     ("Pfingstsonntag", 49),
 ]
 
+# Entschlafenen-Gottesdienste: jeweils erster Sonntag im März, Juli, November
+ENTSCHLAFENEN_MONATE: list[tuple[str, int]] = [
+    ("Entschlafenen-Gottesdienst", 3),
+    ("Entschlafenen-Gottesdienst", 7),
+    ("Entschlafenen-Gottesdienst", 11),
+]
+
+
+def _first_sunday(year: int, month: int) -> date:
+    """Return the first Sunday of the given month/year."""
+    d = date(year, month, 1)
+    days_until_sunday = (6 - d.weekday()) % 7
+    return d + timedelta(days=days_until_sunday)
+
 
 def _easter_sunday(year: int) -> date:
     """Compute Easter Sunday (Gregorian calendar) via the Anonymous Gregorian algorithm."""
@@ -160,16 +174,23 @@ async def import_kirchliche_festtage(
     year: int,
     session: AsyncSession,
 ) -> dict[str, int]:
-    """Import NAK-relevant moveable feasts (Palmsonntag, Ostersonntag, Pfingstsonntag)
-    derived from Easter Sunday.  No external API call — purely computed.
-    Applies to all districts regardless of state_code.
+    """Import NAK-relevant computed dates:
+    - Kirchliche Festtage: Palmsonntag, Ostersonntag, Pfingstsonntag (aus Ostern abgeleitet)
+    - Entschlafenen-Gottesdienste: erster Sonntag im März, Juli und November
+
+    No external API call — purely computed.  Applies to all districts regardless of state_code.
     """
     easter = _easter_sunday(year)
     event_repo = SqlEventRepository(session)
     created = updated = skipped = 0
 
+    festtage: list[tuple[str, date]] = []
     for name, offset in KIRCHLICHE_FESTTAGE:
-        day = easter + timedelta(days=offset)
+        festtage.append((name, easter + timedelta(days=offset)))
+    for name, month in ENTSCHLAFENEN_MONATE:
+        festtage.append((name, _first_sunday(year, month)))
+
+    for name, day in festtage:
         date_str = day.isoformat()
         uid = _external_uid(district_id, date_str, name)
         chash = _content_hash(date_str, name)
