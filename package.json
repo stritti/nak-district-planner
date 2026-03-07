@@ -1,1 +1,7 @@
-{"dependencies": {}}
+{
+  "name": "nak-district-planner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bezirksplanung für die Neuapostolische Kirche",
+  "dependencies": {}
+}
