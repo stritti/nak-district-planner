@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -13,6 +13,7 @@ from app.adapters.api.schemas.district import (
     DistrictCreate,
     DistrictResponse,
     DistrictUpdate,
+    ServiceTime,
 )
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
@@ -25,93 +26,48 @@ from app.domain.models.district import District
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
 
 
+def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -> list[str]:
+    """Return ISO date strings for all expected Gottesdienst dates in [from_date, to_date]."""
+    dates: list[str] = []
+    seen: set[str] = set()
+    current = from_date
+    while current <= to_date:
+        for st in service_times:
+            if current.weekday() == st["weekday"]:
+                iso = current.isoformat()
+                if iso not in seen:
+                    dates.append(iso)
+                    seen.add(iso)
+                break
+        current += timedelta(days=1)
+    return dates
+
+
+# ── Districts ─────────────────────────────────────────────────────────────────
+
+
 @router.post("", response_model=DistrictResponse, status_code=status.HTTP_201_CREATED)
-async def create_district(
-    body: DistrictCreate,
-    _: ApiKeyGuard,
-    db: DbSession,
-) -> DistrictResponse:
+async def create_district(body: DistrictCreate, _: ApiKeyGuard, db: DbSession) -> DistrictResponse:
     district = District.create(name=body.name)
-    repo = SqlDistrictRepository(db)
-    await repo.save(district)
+    await SqlDistrictRepository(db).save(district)
     return DistrictResponse(
-        id=district.id,
-        name=district.name,
-        created_at=district.created_at,
-        updated_at=district.updated_at,
+        id=district.id, name=district.name,
+        created_at=district.created_at, updated_at=district.updated_at,
     )
 
 
 @router.get("", response_model=list[DistrictResponse])
-async def list_districts(
-    _: ApiKeyGuard,
-    db: DbSession,
-) -> list[DistrictResponse]:
-    repo = SqlDistrictRepository(db)
-    districts = await repo.list_all()
+async def list_districts(_: ApiKeyGuard, db: DbSession) -> list[DistrictResponse]:
+    districts = await SqlDistrictRepository(db).list_all()
     return [
         DistrictResponse(id=d.id, name=d.name, created_at=d.created_at, updated_at=d.updated_at)
         for d in districts
     ]
 
 
-@router.post(
-    "/{district_id}/congregations",
-    response_model=CongregationResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_congregation(
-    district_id: uuid.UUID,
-    body: CongregationCreate,
-    _: ApiKeyGuard,
-    db: DbSession,
-) -> CongregationResponse:
-    district_repo = SqlDistrictRepository(db)
-    if not await district_repo.get(district_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-
-    congregation = Congregation.create(name=body.name, district_id=district_id)
-    repo = SqlCongregationRepository(db)
-    await repo.save(congregation)
-    return CongregationResponse(
-        id=congregation.id,
-        name=congregation.name,
-        district_id=congregation.district_id,
-        created_at=congregation.created_at,
-        updated_at=congregation.updated_at,
-    )
-
-
-@router.get("/{district_id}/congregations", response_model=list[CongregationResponse])
-async def list_congregations(
-    district_id: uuid.UUID,
-    _: ApiKeyGuard,
-    db: DbSession,
-) -> list[CongregationResponse]:
-    district_repo = SqlDistrictRepository(db)
-    if not await district_repo.get(district_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-
-    repo = SqlCongregationRepository(db)
-    congregations = await repo.list_by_district(district_id)
-    return [
-        CongregationResponse(
-            id=c.id,
-            name=c.name,
-            district_id=c.district_id,
-            created_at=c.created_at,
-            updated_at=c.updated_at,
-        )
-        for c in congregations
-    ]
-
-
 @router.patch("/{district_id}", response_model=DistrictResponse)
 async def update_district(
-    district_id: uuid.UUID,
-    body: DistrictUpdate,
-    _: ApiKeyGuard,
-    db: DbSession,
+    district_id: uuid.UUID, body: DistrictUpdate, _: ApiKeyGuard, db: DbSession,
 ) -> DistrictResponse:
     repo = SqlDistrictRepository(db)
     district = await repo.get(district_id)
@@ -121,14 +77,47 @@ async def update_district(
     district.updated_at = datetime.now(timezone.utc)
     await repo.save(district)
     return DistrictResponse(
-        id=district.id,
-        name=district.name,
-        created_at=district.created_at,
-        updated_at=district.updated_at,
+        id=district.id, name=district.name,
+        created_at=district.created_at, updated_at=district.updated_at,
     )
 
 
-@router.patch("/{district_id}/congregations/{congregation_id}", response_model=CongregationResponse)
+# ── Congregations ─────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/{district_id}/congregations",
+    response_model=CongregationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_congregation(
+    district_id: uuid.UUID, body: CongregationCreate, _: ApiKeyGuard, db: DbSession,
+) -> CongregationResponse:
+    if not await SqlDistrictRepository(db).get(district_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    service_times = (
+        [st.model_dump() for st in body.service_times] if body.service_times is not None else None
+    )
+    congregation = Congregation.create(
+        name=body.name, district_id=district_id, service_times=service_times
+    )
+    await SqlCongregationRepository(db).save(congregation)
+    return _cong_response(congregation)
+
+
+@router.get("/{district_id}/congregations", response_model=list[CongregationResponse])
+async def list_congregations(
+    district_id: uuid.UUID, _: ApiKeyGuard, db: DbSession,
+) -> list[CongregationResponse]:
+    if not await SqlDistrictRepository(db).get(district_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    congregations = await SqlCongregationRepository(db).list_by_district(district_id)
+    return [_cong_response(c) for c in congregations]
+
+
+@router.patch(
+    "/{district_id}/congregations/{congregation_id}", response_model=CongregationResponse
+)
 async def update_congregation(
     district_id: uuid.UUID,
     congregation_id: uuid.UUID,
@@ -140,16 +129,27 @@ async def update_congregation(
     congregation = await repo.get(congregation_id)
     if not congregation or congregation.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gemeinde nicht gefunden")
-    congregation.name = body.name
+    if body.name is not None:
+        congregation.name = body.name
+    if body.service_times is not None:
+        congregation.service_times = [st.model_dump() for st in body.service_times]
     congregation.updated_at = datetime.now(timezone.utc)
     await repo.save(congregation)
+    return _cong_response(congregation)
+
+
+def _cong_response(c: Congregation) -> CongregationResponse:
     return CongregationResponse(
-        id=congregation.id,
-        name=congregation.name,
-        district_id=congregation.district_id,
-        created_at=congregation.created_at,
-        updated_at=congregation.updated_at,
+        id=c.id,
+        name=c.name,
+        district_id=c.district_id,
+        service_times=[ServiceTime(**st) for st in c.service_times],
+        created_at=c.created_at,
+        updated_at=c.updated_at,
     )
+
+
+# ── Matrix ────────────────────────────────────────────────────────────────────
 
 
 @router.get("/{district_id}/matrix", response_model=MatrixResponse)
@@ -160,82 +160,78 @@ async def get_matrix(
     from_dt: datetime = Query(...),
     to_dt: datetime = Query(...),
 ) -> MatrixResponse:
-    district_repo = SqlDistrictRepository(db)
-    if not await district_repo.get(district_id):
+    if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
 
     congregations = await SqlCongregationRepository(db).list_by_district(district_id)
+    from_date = from_dt.date()
+    to_date = to_dt.date()
 
-    # Load all events for the district in the date range (no pagination limit)
+    # Compute expected Gottesdienst-Dates per congregation from their schedule
+    expected_by_cong: dict[uuid.UUID, list[str]] = {
+        c.id: _expected_dates(c.service_times, from_date, to_date) for c in congregations
+    }
+
+    # Collect all unique expected dates across all congregations
+    all_dates: set[str] = set()
+    for dates in expected_by_cong.values():
+        all_dates.update(dates)
+    sorted_dates = sorted(all_dates)
+
+    # Load Gottesdienst events for the district in the date range
     events, _ = await SqlEventRepository(db).list(
-        district_id=district_id,
-        from_dt=from_dt,
-        to_dt=to_dt,
-        limit=5000,
-        offset=0,
+        district_id=district_id, from_dt=from_dt, to_dt=to_dt, limit=5000, offset=0,
     )
+    gottesdienst_events = [e for e in events if e.category == "Gottesdienst" and e.congregation_id]
 
-    # Load all assignments for these events in one query
-    event_ids = [e.id for e in events]
+    # Build lookup: (congregation_id, date) → event
+    event_by_cong_date: dict[tuple[uuid.UUID, str], object] = {}
+    for event in gottesdienst_events:
+        key = (event.congregation_id, event.start_at.date().isoformat())
+        if key not in event_by_cong_date:
+            event_by_cong_date[key] = event
+
+    # Load all assignments for found events in one batch
+    event_ids = [e.id for e in gottesdienst_events]
     assignments = await SqlServiceAssignmentRepository(db).list_by_events(event_ids)
-
-    # Build lookup: event_id → first assignment
     assignment_by_event: dict[uuid.UUID, object] = {}
     for a in assignments:
         if a.event_id not in assignment_by_event:
             assignment_by_event[a.event_id] = a
 
-    # Group events by (congregation_id, date)
-    from collections import defaultdict
-
-    events_by_cong_date: dict[uuid.UUID, dict[str, list]] = defaultdict(lambda: defaultdict(list))
-    for event in events:
-        if event.congregation_id is None:
-            continue
-        date_key = event.start_at.date().isoformat()
-        events_by_cong_date[event.congregation_id][date_key].append(event)
-
-    # Collect all unique dates across all congregations
-    all_dates: set[str] = set()
-    for date_map in events_by_cong_date.values():
-        all_dates.update(date_map.keys())
-    sorted_dates = sorted(all_dates)
-
     # Build matrix rows
     rows: list[MatrixRow] = []
     for congregation in congregations:
+        cong_expected = set(expected_by_cong[congregation.id])
         cells: dict[str, MatrixCell] = {}
-        date_map = events_by_cong_date.get(congregation.id, {})
 
         for date_key in sorted_dates:
-            cong_events = date_map.get(date_key, [])
-
-            # Prioritize Gottesdienst events
-            gottesdienst = [e for e in cong_events if e.category == "Gottesdienst"]
-            primary = gottesdienst[0] if gottesdienst else (cong_events[0] if cong_events else None)
-
-            if primary is None:
+            if date_key not in cong_expected:
+                # Date not in this congregation's schedule
                 cells[date_key] = MatrixCell()
                 continue
 
-            assignment = assignment_by_event.get(primary.id)
-            is_gap = primary.category == "Gottesdienst" and assignment is None
+            event = event_by_cong_date.get((congregation.id, date_key))
+            if event is None:
+                # Expected but no event created yet — empty cell
+                cells[date_key] = MatrixCell()
+                continue
+
+            assignment = assignment_by_event.get(event.id)
             cells[date_key] = MatrixCell(
-                event_id=primary.id,
-                event_title=primary.title,
-                category=primary.category,
-                is_gap=is_gap,
+                event_id=event.id,
+                event_title=event.title,
+                category=event.category,
+                is_gap=assignment is None,
                 assignment_id=assignment.id if assignment else None,
                 assignment_status=assignment.status if assignment else None,
                 leader_name=assignment.leader_name if assignment else None,
             )
 
-        rows.append(
-            MatrixRow(
-                congregation_id=congregation.id,
-                congregation_name=congregation.name,
-                cells=cells,
-            )
-        )
+        rows.append(MatrixRow(
+            congregation_id=congregation.id,
+            congregation_name=congregation.name,
+            cells=cells,
+        ))
 
     return MatrixResponse(dates=sorted_dates, rows=rows)

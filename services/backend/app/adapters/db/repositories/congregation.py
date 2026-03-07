@@ -15,6 +15,7 @@ def _orm_to_domain(row: CongregationORM) -> Congregation:
         id=row.id,
         name=row.name,
         district_id=row.district_id,
+        service_times=list(row.service_times) if row.service_times else [],
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -46,6 +47,7 @@ class SqlCongregationRepository(CongregationRepository):
         row.id = congregation.id
         row.name = congregation.name
         row.district_id = congregation.district_id
+        row.service_times = congregation.service_times
         row.created_at = congregation.created_at
         row.updated_at = congregation.updated_at
         await self._session.flush()

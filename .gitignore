@@ -83,9 +83,9 @@ Thumbs.db
 logs/
 tmp/
 .tmp/
-.claude/
 
 # ============================================================
 # CI / MegaLinter
 # ============================================================
 megalinter-reports/
+.claude/settings.local.json

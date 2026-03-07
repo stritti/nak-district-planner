@@ -12,6 +12,7 @@ services:
     volumes:
       - ./services/backend/app:/app/app
       - ./services/backend/tests:/app/tests
+      - ./services/backend/alembic:/app/alembic
     ports:
       - "8000:8000"
     environment:

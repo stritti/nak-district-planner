@@ -86,7 +86,8 @@
               :key="date"
               class="border border-gray-300 px-2 py-2 text-center font-medium text-gray-700 min-w-[110px]"
             >
-              {{ formatDate(date) }}
+              <div class="text-gray-400 font-normal text-[11px]">{{ formatWeekday(date) }}</div>
+              <div>{{ formatDate(date) }}</div>
             </th>
           </tr>
         </thead>
@@ -256,9 +257,17 @@ function onDistrictChange() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+
 function formatDate(iso: string): string {
   const [year, month, day] = iso.split('-')
   return `${day}.${month}.${year}`
+}
+
+function formatWeekday(iso: string): string {
+  // Parse as local date to avoid UTC-offset shifts
+  const [year, month, day] = iso.split('-').map(Number)
+  return WEEKDAY_SHORT[new Date(year, month - 1, day).getDay()]
 }
 
 function cellClass(cell: MatrixCell | undefined): string {

@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column("label", sa.String(200), nullable=False),
         sa.Column(
             "token_type",
-            sa.Enum("PUBLIC", "INTERNAL", name="tokentype", create_type=False),
+            postgresql.ENUM(name="tokentype", create_type=False),
             nullable=False,
         ),
         sa.Column(
