@@ -44,7 +44,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push backend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: services/backend
           push: ${{ github.event_name == 'push' }}
@@ -82,7 +82,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push frontend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: services/frontend
           push: ${{ github.event_name == 'push' }}
