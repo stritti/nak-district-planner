@@ -12,6 +12,9 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
+    # Requires GitHub Dependency Graph (Advanced Security) to be enabled in repo settings.
+    # continue-on-error allows the PR to merge even when the feature is not yet enabled.
+    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
