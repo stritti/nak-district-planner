@@ -37,6 +37,7 @@ def _to_response(integration: CalendarIntegration) -> CalendarIntegrationRespons
         last_synced_at=integration.last_synced_at,
         created_at=integration.created_at,
         updated_at=integration.updated_at,
+        default_category=integration.default_category,
     )
 
 
@@ -55,6 +56,7 @@ async def create_calendar_integration(
         credentials_enc=credentials_enc,
         sync_interval=body.sync_interval,
         capabilities=body.capabilities,
+        default_category=body.default_category,
     )
     repo = SqlCalendarIntegrationRepository(db)
     await repo.save(integration)
@@ -130,6 +132,8 @@ async def update_calendar_integration(
         integration.sync_interval = body.sync_interval
     if "capabilities" in fields and body.capabilities is not None:
         integration.capabilities = body.capabilities
+    if "default_category" in fields:
+        integration.default_category = body.default_category
 
     integration.updated_at = datetime.now(timezone.utc)
     await repo.save(integration)

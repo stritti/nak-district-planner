@@ -77,6 +77,18 @@ class SqlEventRepository(EventRepository):
         row = result.scalar_one_or_none()
         return _orm_to_domain(row) if row else None
 
+    async def get_by_external_uid_district(
+        self, external_uid: str, district_id: uuid.UUID
+    ) -> Event | None:
+        result = await self._session.execute(
+            select(EventORM).where(
+                EventORM.external_uid == external_uid,
+                EventORM.district_id == district_id,
+            )
+        )
+        row = result.scalar_one_or_none()
+        return _orm_to_domain(row) if row else None
+
     async def list(
         self,
         *,

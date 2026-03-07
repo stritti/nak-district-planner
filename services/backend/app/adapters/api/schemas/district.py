@@ -13,10 +13,12 @@ class ServiceTime(BaseModel):
 
 class DistrictCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    state_code: str | None = Field(None, min_length=2, max_length=2)
 
 
 class DistrictUpdate(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
+    name: str | None = Field(None, min_length=1, max_length=255)
+    state_code: str | None = Field(None, min_length=2, max_length=2)
 
 
 class DistrictResponse(BaseModel):
@@ -24,6 +26,7 @@ class DistrictResponse(BaseModel):
 
     id: uuid.UUID
     name: str
+    state_code: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -47,3 +50,19 @@ class CongregationResponse(BaseModel):
     service_times: list[ServiceTime]
     created_at: datetime
     updated_at: datetime
+
+
+class FeiertageImportRequest(BaseModel):
+    year: int = Field(..., ge=2020, le=2035)
+    state_code: str | None = Field(
+        None,
+        min_length=2,
+        max_length=2,
+        description="2-Buchstaben Bundesland-Kürzel (z.B. BY, NW) oder leer für nur bundesweite Feiertage",
+    )
+
+
+class FeiertageImportResult(BaseModel):
+    created: int
+    updated: int
+    skipped: int

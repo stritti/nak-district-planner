@@ -56,6 +56,11 @@ class EventRepository(ABC):
     ) -> Event | None: ...
 
     @abstractmethod
+    async def get_by_external_uid_district(
+        self, external_uid: str, district_id: uuid.UUID
+    ) -> Event | None: ...
+
+    @abstractmethod
     async def save(self, event: Event) -> None: ...
 
 

@@ -24,3 +24,4 @@ class MatrixRow(BaseModel):
 class MatrixResponse(BaseModel):
     dates: list[str]  # sorted ISO date strings "YYYY-MM-DD"
     rows: list[MatrixRow]
+    holidays: dict[str, list[str]] = {}  # "YYYY-MM-DD" → list of holiday names

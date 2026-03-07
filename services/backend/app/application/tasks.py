@@ -72,3 +72,73 @@ def sync_all_active_integrations() -> dict:
 
     logger.info("Dispatched sync for %d integration(s)", len(due_ids))
     return {"dispatched": len(due_ids)}
+
+
+@celery.task(name="auto_import_feiertage")
+def auto_import_feiertage() -> dict:
+    """Celery beat task — runs on the 1st of each month at 03:00 Europe/Berlin.
+
+    Imports German public holidays for:
+    - the current year (ensures new districts are covered)
+    - the upcoming year (starting from September, i.e. 4 months in advance)
+
+    Only processes districts that have a state_code configured.
+    Import is idempotent — safe to run multiple times.
+    """
+    from datetime import datetime, timezone
+
+    from app.adapters.db.repositories.district import SqlDistrictRepository
+    from app.adapters.db.session import AsyncSessionLocal
+    from app.application.feiertage_service import import_feiertage
+
+    async def _run() -> dict:
+        now = datetime.now(timezone.utc)
+        years = {now.year}
+        if now.month >= 9:  # September onwards → pre-import next year
+            years.add(now.year + 1)
+
+        total_created = total_updated = total_skipped = 0
+
+        async with AsyncSessionLocal() as session:
+            from app.application.feiertage_service import import_feiertage, import_kirchliche_festtage
+
+            repo = SqlDistrictRepository(session)
+            all_districts = await repo.list_all()
+
+            for district in all_districts:
+                for year in years:
+                    # Gesetzliche Feiertage — nur für Bezirke mit konfiguriertem Bundesland
+                    if district.state_code:
+                        r = await import_feiertage(
+                            district_id=district.id,
+                            year=year,
+                            state_code=district.state_code,
+                            session=session,
+                        )
+                        total_created += r["created"]
+                        total_updated += r["updated"]
+                        total_skipped += r["skipped"]
+
+                    # Kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag) — immer
+                    r = await import_kirchliche_festtage(
+                        district_id=district.id, year=year, session=session,
+                    )
+                    total_created += r["created"]
+                    total_updated += r["updated"]
+                    total_skipped += r["skipped"]
+
+            await session.commit()
+
+        logger.info(
+            "auto_import_feiertage: years=%s, districts=%d, created=%d, updated=%d, skipped=%d",
+            sorted(years), len(all_districts), total_created, total_updated, total_skipped,
+        )
+        return {
+            "years": sorted(years),
+            "districts": len(all_districts),
+            "created": total_created,
+            "updated": total_updated,
+            "skipped": total_skipped,
+        }
+
+    return asyncio.run(_run())

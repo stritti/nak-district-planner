@@ -8,6 +8,7 @@ export interface ServiceTime {
 export interface DistrictResponse {
   id: string
   name: string
+  state_code: string | null
   created_at: string
   updated_at: string
 }
@@ -25,17 +26,20 @@ export function listDistricts(): Promise<DistrictResponse[]> {
   return apiFetch('/api/v1/districts')
 }
 
-export function createDistrict(name: string): Promise<DistrictResponse> {
+export function createDistrict(name: string, stateCode?: string | null): Promise<DistrictResponse> {
   return apiFetch('/api/v1/districts', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, state_code: stateCode ?? null }),
   })
 }
 
-export function updateDistrict(id: string, name: string): Promise<DistrictResponse> {
+export function updateDistrict(
+  id: string,
+  payload: { name?: string; state_code?: string | null },
+): Promise<DistrictResponse> {
   return apiFetch(`/api/v1/districts/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(payload),
   })
 }
 
@@ -62,5 +66,26 @@ export function updateCongregation(
   return apiFetch(`/api/v1/districts/${districtId}/congregations/${congregationId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
+  })
+}
+
+export interface FeiertageImportResult {
+  created: number
+  updated: number
+  skipped: number
+}
+
+export function listDeStates(districtId: string): Promise<Record<string, string>> {
+  return apiFetch(`/api/v1/districts/${districtId}/feiertage/states`)
+}
+
+export function importFeiertage(
+  districtId: string,
+  year: number,
+  stateCode: string | null,
+): Promise<FeiertageImportResult> {
+  return apiFetch(`/api/v1/districts/${districtId}/feiertage`, {
+    method: 'POST',
+    body: JSON.stringify({ year, state_code: stateCode }),
   })
 }

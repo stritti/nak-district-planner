@@ -33,6 +33,7 @@ class CalendarIntegration:
     created_at: datetime
     updated_at: datetime
     congregation_id: uuid.UUID | None = None
+    default_category: str | None = None
 
     @classmethod
     def create(
@@ -45,6 +46,7 @@ class CalendarIntegration:
         sync_interval: int = 60,
         capabilities: list[CalendarCapability] | None = None,
         congregation_id: uuid.UUID | None = None,
+        default_category: str | None = None,
     ) -> CalendarIntegration:
         now = datetime.now(timezone.utc)
         return cls(
@@ -60,4 +62,5 @@ class CalendarIntegration:
             last_synced_at=None,
             created_at=now,
             updated_at=now,
+            default_category=default_category,
         )

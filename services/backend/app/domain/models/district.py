@@ -11,8 +11,9 @@ class District:
     name: str
     created_at: datetime
     updated_at: datetime
+    state_code: str | None = None  # 2-letter German state code, e.g. "BY"
 
     @classmethod
-    def create(cls, *, name: str) -> District:
+    def create(cls, *, name: str, state_code: str | None = None) -> District:
         now = datetime.now(timezone.utc)
-        return cls(id=uuid.uuid4(), name=name, created_at=now, updated_at=now)
+        return cls(id=uuid.uuid4(), name=name, created_at=now, updated_at=now, state_code=state_code)

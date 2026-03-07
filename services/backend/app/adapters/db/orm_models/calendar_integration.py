@@ -33,3 +33,4 @@ class CalendarIntegrationORM(Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    default_category: Mapped[str | None] = mapped_column(String(255), nullable=True)

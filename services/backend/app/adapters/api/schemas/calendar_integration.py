@@ -18,6 +18,7 @@ class CalendarIntegrationCreate(BaseModel):
     capabilities: list[CalendarCapability] = Field(
         default_factory=lambda: [CalendarCapability.READ]
     )
+    default_category: str | None = None
 
 
 class CalendarIntegrationResponse(BaseModel):
@@ -32,6 +33,7 @@ class CalendarIntegrationResponse(BaseModel):
     last_synced_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    default_category: str | None = None
     # credentials_enc is intentionally omitted from responses
 
     model_config = {"from_attributes": True}
@@ -42,6 +44,7 @@ class CalendarIntegrationUpdate(BaseModel):
     credentials: dict | None = None  # if provided, re-encrypted before storage
     sync_interval: int | None = Field(None, ge=1, le=10080)
     capabilities: list[CalendarCapability] | None = None
+    default_category: str | None = None
 
 
 class CalendarIntegrationListResponse(BaseModel):

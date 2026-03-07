@@ -19,6 +19,7 @@ export interface MatrixRow {
 export interface MatrixResponse {
   dates: string[]
   rows: MatrixRow[]
+  holidays: Record<string, string[]>
 }
 
 export function fetchMatrix(

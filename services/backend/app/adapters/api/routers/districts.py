@@ -6,6 +6,8 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.adapters.api.deps import ApiKeyGuard, DbSession
+import httpx
+
 from app.adapters.api.schemas.district import (
     CongregationCreate,
     CongregationResponse,
@@ -13,8 +15,11 @@ from app.adapters.api.schemas.district import (
     DistrictCreate,
     DistrictResponse,
     DistrictUpdate,
+    FeiertageImportRequest,
+    FeiertageImportResult,
     ServiceTime,
 )
+from app.application.feiertage_service import DE_STATES, import_feiertage, import_kirchliche_festtage
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
@@ -48,21 +53,15 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
 
 @router.post("", response_model=DistrictResponse, status_code=status.HTTP_201_CREATED)
 async def create_district(body: DistrictCreate, _: ApiKeyGuard, db: DbSession) -> DistrictResponse:
-    district = District.create(name=body.name)
+    district = District.create(name=body.name, state_code=body.state_code)
     await SqlDistrictRepository(db).save(district)
-    return DistrictResponse(
-        id=district.id, name=district.name,
-        created_at=district.created_at, updated_at=district.updated_at,
-    )
+    return _district_response(district)
 
 
 @router.get("", response_model=list[DistrictResponse])
 async def list_districts(_: ApiKeyGuard, db: DbSession) -> list[DistrictResponse]:
     districts = await SqlDistrictRepository(db).list_all()
-    return [
-        DistrictResponse(id=d.id, name=d.name, created_at=d.created_at, updated_at=d.updated_at)
-        for d in districts
-    ]
+    return [_district_response(d) for d in districts]
 
 
 @router.patch("/{district_id}", response_model=DistrictResponse)
@@ -73,12 +72,20 @@ async def update_district(
     district = await repo.get(district_id)
     if not district:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-    district.name = body.name
+    fields = body.model_fields_set
+    if "name" in fields and body.name is not None:
+        district.name = body.name
+    if "state_code" in fields:
+        district.state_code = body.state_code
     district.updated_at = datetime.now(timezone.utc)
     await repo.save(district)
+    return _district_response(district)
+
+
+def _district_response(d: District) -> DistrictResponse:
     return DistrictResponse(
-        id=district.id, name=district.name,
-        created_at=district.created_at, updated_at=district.updated_at,
+        id=d.id, name=d.name, state_code=d.state_code,
+        created_at=d.created_at, updated_at=d.updated_at,
     )
 
 
@@ -172,16 +179,26 @@ async def get_matrix(
         c.id: _expected_dates(c.service_times, from_date, to_date) for c in congregations
     }
 
-    # Collect all unique expected dates across all congregations
-    all_dates: set[str] = set()
-    for dates in expected_by_cong.values():
-        all_dates.update(dates)
-    sorted_dates = sorted(all_dates)
-
-    # Load Gottesdienst events for the district in the date range
+    # Load all events for the district in the date range (single query)
     events, _ = await SqlEventRepository(db).list(
         district_id=district_id, from_dt=from_dt, to_dt=to_dt, limit=5000, offset=0,
     )
+
+    # Build holidays dict and collect Feiertag dates for the column set
+    holidays: dict[str, list[str]] = {}
+    for event in events:
+        if event.category == "Feiertag":
+            date_key = event.start_at.date().isoformat()
+            holidays.setdefault(date_key, []).append(event.title)
+
+    # Collect all unique dates: congregation schedules + Feiertag dates
+    all_dates: set[str] = set()
+    for dates in expected_by_cong.values():
+        all_dates.update(dates)
+    all_dates.update(holidays.keys())  # kirchliche Feiertage immer als Spalten
+    sorted_dates = sorted(all_dates)
+
+    # Filter Gottesdienst events for the matrix cells
     gottesdienst_events = [e for e in events if e.category == "Gottesdienst" and e.congregation_id]
 
     # Build lookup: (congregation_id, date) → event
@@ -207,13 +224,13 @@ async def get_matrix(
 
         for date_key in sorted_dates:
             if date_key not in cong_expected:
-                # Date not in this congregation's schedule
+                # Feiertag-Spalte oder anderer Bezirks-Termin — nicht im Gemeinde-Zeitplan
                 cells[date_key] = MatrixCell()
                 continue
 
             event = event_by_cong_date.get((congregation.id, date_key))
             if event is None:
-                # Expected but no event created yet — empty cell
+                # Im Zeitplan erwartet, aber noch kein Event angelegt
                 cells[date_key] = MatrixCell()
                 continue
 
@@ -234,4 +251,59 @@ async def get_matrix(
             cells=cells,
         ))
 
-    return MatrixResponse(dates=sorted_dates, rows=rows)
+    return MatrixResponse(dates=sorted_dates, rows=rows, holidays=holidays)
+
+
+# ── Feiertage ─────────────────────────────────────────────────────────────────
+
+
+@router.get("/{district_id}/feiertage/states")
+async def list_de_states(_: ApiKeyGuard) -> dict[str, str]:
+    """Return mapping of 2-letter state codes to German names."""
+    return DE_STATES
+
+
+@router.post("/{district_id}/feiertage", response_model=FeiertageImportResult)
+async def import_feiertage_endpoint(
+    district_id: uuid.UUID,
+    body: FeiertageImportRequest,
+    _: ApiKeyGuard,
+    db: DbSession,
+) -> FeiertageImportResult:
+    """Import German public holidays from Nager.Date API into the district (idempotent)."""
+    if not await SqlDistrictRepository(db).get(district_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+
+    if body.state_code and body.state_code.upper() not in DE_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unbekanntes Bundesland-Kürzel: {body.state_code}. Gültig: {', '.join(DE_STATES)}",
+        )
+
+    totals = {"created": 0, "updated": 0, "skipped": 0}
+
+    # 1. Gesetzliche Feiertage via Nager.Date (nur wenn Bundesland konfiguriert)
+    if body.state_code:
+        try:
+            r = await import_feiertage(
+                district_id=district_id,
+                year=body.year,
+                state_code=body.state_code.upper(),
+                session=db,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Feiertags-API nicht erreichbar: {exc}",
+            ) from exc
+        for k in totals:
+            totals[k] += r[k]
+
+    # 2. Kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag) — immer
+    r = await import_kirchliche_festtage(
+        district_id=district_id, year=body.year, session=db,
+    )
+    for k in totals:
+        totals[k] += r[k]
+
+    return FeiertageImportResult(**totals)

@@ -56,7 +56,15 @@
                   &nbsp;›&nbsp;{{ congregationName(item.congregation_id) }}
                 </template>
               </div>
-              <div>Sync alle {{ item.sync_interval }} Min. &nbsp;·&nbsp; {{ item.capabilities.join(', ') }}</div>
+              <div>
+                Sync alle {{ item.sync_interval }} Min. &nbsp;·&nbsp; {{ item.capabilities.join(', ') }}
+                <template v-if="item.default_category">
+                  &nbsp;·&nbsp;
+                  <span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs font-medium">
+                    Kategorie: {{ item.default_category }}
+                  </span>
+                </template>
+              </div>
               <div v-if="item.last_synced_at">
                 Letzter Sync: {{ formatDt(item.last_synced_at) }}
               </div>
@@ -104,6 +112,83 @@
     </div>
 
     <div v-else class="text-sm text-gray-500">Noch keine Integrationen angelegt.</div>
+
+    <!-- Feiertage Import -->
+    <div class="mt-8 border border-gray-200 rounded-lg">
+      <button
+        class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg"
+        @click="feiertageOpen = !feiertageOpen"
+      >
+        <span>Deutsche Feiertage importieren</span>
+        <span class="text-gray-400 text-xs">{{ feiertageOpen ? '▲' : '▼' }}</span>
+      </button>
+
+      <div v-if="feiertageOpen" class="px-4 pb-4 border-t border-gray-200 pt-4 space-y-4">
+        <p class="text-xs text-gray-500">
+          Importiert Feiertage aus dem öffentlichen Nager.Date-Dienst als Events mit
+          <code class="bg-gray-100 px-1 rounded">Kategorie: Feiertag</code>.
+          Der Import ist idempotent — mehrfaches Ausführen erzeugt keine Duplikate.
+        </p>
+
+        <div class="flex flex-wrap gap-3 items-end">
+          <!-- District -->
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Bezirk</label>
+            <select
+              v-model="feiertageForm.districtId"
+              class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Bitte wählen…</option>
+              <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
+                {{ d.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Year -->
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Jahr</label>
+            <input
+              v-model.number="feiertageForm.year"
+              type="number" min="2020" max="2035"
+              class="border border-gray-300 rounded px-3 py-1.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <!-- State -->
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">
+              Bundesland <span class="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <select
+              v-model="feiertageForm.stateCode"
+              class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Nur bundesweite Feiertage</option>
+              <option v-for="(name, code) in DE_STATES" :key="code" :value="code">
+                {{ code }} – {{ name }}
+              </option>
+            </select>
+          </div>
+
+          <button
+            class="flex items-center gap-1.5 bg-blue-600 text-white text-sm px-4 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
+            :disabled="!feiertageForm.districtId || feiertageImporting"
+            @click="runFeiertageImport"
+          >
+            <ArrowDownTrayIcon class="h-4 w-4" />
+            {{ feiertageImporting ? 'Importiere…' : 'Importieren' }}
+          </button>
+        </div>
+
+        <div v-if="feiertageResult" class="text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
+          ✓ {{ feiertageResult.created }} neu &nbsp;·&nbsp;
+          {{ feiertageResult.updated }} aktualisiert &nbsp;·&nbsp;
+          {{ feiertageResult.skipped }} unverändert
+        </div>
+        <div v-if="feiertageError" class="text-sm text-red-600">{{ feiertageError }}</div>
+      </div>
+    </div>
 
     <!-- Delete confirmation modal -->
     <div
@@ -225,6 +310,19 @@
             <input
               v-model.number="editForm.sync_interval"
               type="number" min="1" max="10080"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <!-- Default category -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Standard-Kategorie <span class="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              v-model="editForm.default_category"
+              type="text"
+              placeholder="z.B. Feiertag"
               class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -407,6 +505,19 @@
               </label>
             </div>
           </div>
+
+          <!-- Default category -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Standard-Kategorie <span class="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              v-model="form.default_category"
+              type="text"
+              placeholder="z.B. Feiertag"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         <p v-if="formError" class="text-sm text-red-600 mt-3">{{ formError }}</p>
@@ -433,9 +544,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ArrowPathIcon, PencilSquareIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowPathIcon, PencilSquareIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useDistrictsStore } from '@/stores/districts'
-import { listCongregations, type CongregationResponse } from '@/api/districts'
+import {
+  importFeiertage,
+  listCongregations,
+  type CongregationResponse,
+  type FeiertageImportResult,
+} from '@/api/districts'
 import {
   createIntegration,
   deleteIntegration,
@@ -447,6 +563,14 @@ import {
   type CalendarType,
   type SyncResult,
 } from '@/api/calendarIntegrations'
+
+const DE_STATES: Record<string, string> = {
+  BB: 'Brandenburg', BE: 'Berlin', BW: 'Baden-Württemberg', BY: 'Bayern',
+  HB: 'Bremen', HE: 'Hessen', HH: 'Hamburg', MV: 'Mecklenburg-Vorpommern',
+  NI: 'Niedersachsen', NW: 'Nordrhein-Westfalen', RP: 'Rheinland-Pfalz',
+  SH: 'Schleswig-Holstein', SL: 'Saarland', SN: 'Sachsen', ST: 'Sachsen-Anhalt',
+  TH: 'Thüringen',
+}
 
 const districtsStore = useDistrictsStore()
 
@@ -555,6 +679,7 @@ const editForm = reactive({
   creds: { url: '', username: '', password: '' },
   credsJson: '',
   sync_interval: 60,
+  default_category: '',
 })
 
 function openEdit(item: CalendarIntegrationResponse) {
@@ -564,6 +689,7 @@ function openEdit(item: CalendarIntegrationResponse) {
   editForm.creds = { url: '', username: '', password: '' }
   editForm.credsJson = ''
   editForm.sync_interval = item.sync_interval
+  editForm.default_category = item.default_category ?? ''
 }
 
 function buildEditCredentials(): Record<string, string> | undefined {
@@ -582,6 +708,7 @@ async function saveEdit() {
     const payload: Parameters<typeof updateIntegration>[1] = {
       name: editForm.name.trim() || undefined,
       sync_interval: editForm.sync_interval,
+      default_category: editForm.default_category.trim() || null,
     }
     const creds = buildEditCredentials()
     if (creds) payload.credentials = creds
@@ -612,6 +739,7 @@ const form = reactive({
   credsJson: '',
   sync_interval: 60,
   capabilities: ['READ'] as CalendarCapability[],
+  default_category: '',
 })
 
 watch(() => form.district_id, async (id) => {
@@ -641,6 +769,7 @@ function openForm() {
   form.credsJson = ''
   form.sync_interval = 60
   form.capabilities = ['READ']
+  form.default_category = ''
   formError.value = ''
   formOpen.value = true
   // Preload congregations when a filter district is already set
@@ -680,6 +809,7 @@ async function submit() {
       credentials: buildCredentials(),
       sync_interval: form.sync_interval,
       capabilities: form.capabilities,
+      default_category: form.default_category.trim() || null,
     })
     integrations.value.unshift(created)
     closeForm()
@@ -687,6 +817,36 @@ async function submit() {
     formError.value = e instanceof Error ? e.message : 'Fehler beim Anlegen'
   } finally {
     saving.value = false
+  }
+}
+
+// --- Feiertage Import ---
+const feiertageOpen = ref(false)
+const feiertageImporting = ref(false)
+const feiertageResult = ref<FeiertageImportResult | null>(null)
+const feiertageError = ref('')
+
+const feiertageForm = reactive({
+  districtId: '',
+  year: new Date().getFullYear(),
+  stateCode: '',
+})
+
+async function runFeiertageImport() {
+  if (!feiertageForm.districtId) return
+  feiertageImporting.value = true
+  feiertageResult.value = null
+  feiertageError.value = ''
+  try {
+    feiertageResult.value = await importFeiertage(
+      feiertageForm.districtId,
+      feiertageForm.year,
+      feiertageForm.stateCode || null,
+    )
+  } catch (e) {
+    feiertageError.value = e instanceof Error ? e.message : 'Import fehlgeschlagen'
+  } finally {
+    feiertageImporting.value = false
   }
 }
 </script>

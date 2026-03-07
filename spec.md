@@ -38,7 +38,17 @@ sync_interval: Intervall in Minuten.
 
 capabilities: READ, WRITE, WEBHOOK.
 
-### 3.3 Event & Planung
+default_category: Optionale Standard-Kategorie für importierte Events (z.B. "Feiertag"). Wird beim Sync auf neu erstellte Events gesetzt.
+
+### 3.3 Bezirk (District)
+
+District:
+
+name: Name des Bezirks.
+
+state_code: 2-stelliges Bundesland-Kürzel (z.B. "BY", "NW"). Steuert den automatischen Feiertags-Import via Celery-Beat-Task. Optional — Bezirke ohne state_code erhalten trotzdem kirchliche Festtage.
+
+### 3.4 Event & Planung
 
 Event: Das Kalender-Objekt.
 
@@ -67,3 +77,9 @@ Idempotenz: Sync-Jobs müssen via Hash-Vergleich verhindern, dass Duplikate ents
 Hexagonal Design: Die Business-Logik (Dienstplanung) darf nicht direkt von der FastAPI oder SQLAlchemy abhängen. Nutze Interfaces (Abstract Base Classes) für Repositories und Kalender-Connectoren.
 
 iCal Stabilität: UIDs in exportierten ICS-Feeds müssen über die Zeit stabil bleiben, damit Kalender-Apps nicht ständig neue Termine anzeigen.
+
+Feiertags-Import: Zwei Quellen werden kombiniert:
+1. Gesetzliche Feiertage pro Bundesland via Nager.Date API (erfordert state_code am Bezirk).
+2. NAK-kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag) berechnet aus dem Ostertermin (Gauss-Algorithmus) — gilt für alle Bezirke unabhängig vom state_code.
+
+Automatisierung: Ein Celery-Beat-Task läuft jeden 1. des Monats um 03:00 Uhr. Ab September wird zusätzlich das Folgejahr importiert (4 Monate Vorlauf). Alle Imports sind idempotent.

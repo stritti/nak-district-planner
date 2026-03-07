@@ -15,6 +15,7 @@ export interface CalendarIntegrationResponse {
   last_synced_at: string | null
   created_at: string
   updated_at: string
+  default_category: string | null
 }
 
 export interface CalendarIntegrationListResponse {
@@ -42,6 +43,7 @@ export function createIntegration(payload: {
   credentials: Record<string, string>
   sync_interval: number
   capabilities: CalendarCapability[]
+  default_category?: string | null
 }): Promise<CalendarIntegrationResponse> {
   return apiFetch('/api/v1/calendar-integrations', {
     method: 'POST',
@@ -60,6 +62,7 @@ export function updateIntegration(
     credentials?: Record<string, string>
     sync_interval?: number
     capabilities?: CalendarCapability[]
+    default_category?: string | null
   },
 ): Promise<CalendarIntegrationResponse> {
   return apiFetch(`/api/v1/calendar-integrations/${integrationId}`, {

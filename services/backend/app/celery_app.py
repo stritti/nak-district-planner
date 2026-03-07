@@ -1,7 +1,7 @@
 import os
 
 from celery import Celery
-from celery.schedules import timedelta
+from celery.schedules import crontab, timedelta
 
 celery = Celery(
     "nak_planner",
@@ -23,6 +23,11 @@ celery.conf.update(
         "sync-all-active-calendars": {
             "task": "sync_all_active_integrations",
             "schedule": timedelta(minutes=5),
-        }
+        },
+        # 1st of each month at 03:00 Europe/Berlin — imports current year + next year from September
+        "auto-import-feiertage": {
+            "task": "auto_import_feiertage",
+            "schedule": crontab(day_of_month="1", hour="3", minute="0"),
+        },
     },
 )

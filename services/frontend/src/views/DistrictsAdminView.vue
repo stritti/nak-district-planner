@@ -45,7 +45,13 @@
             </div>
           </template>
           <template v-else>
-            <span class="font-medium text-gray-900">{{ district.name }}</span>
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-gray-900">{{ district.name }}</span>
+              <span
+                v-if="district.state_code"
+                class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium"
+              >{{ district.state_code }}</span>
+            </div>
             <div class="flex items-center gap-1.5">
               <button
                 class="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200"
@@ -143,6 +149,20 @@
           placeholder="z. B. Bezirk Nord"
           @keyup.enter="saveNewDistrict"
         />
+
+        <label class="block text-sm font-medium text-gray-700 mt-4 mb-1">
+          Bundesland <span class="text-gray-400 font-normal">(für automatischen Feiertags-Import)</span>
+        </label>
+        <select
+          v-model="newDistrictStateCode"
+          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">Kein Bundesland</option>
+          <option v-for="(label, code) in DE_STATES" :key="code" :value="code">
+            {{ code }} – {{ label }}
+          </option>
+        </select>
+
         <p v-if="modalError" class="text-sm text-red-600 mt-2">{{ modalError }}</p>
         <div class="flex justify-end gap-3 mt-5">
           <button
@@ -265,6 +285,14 @@ import {
   type ServiceTime,
 } from '@/api/districts'
 
+const DE_STATES: Record<string, string> = {
+  BB: 'Brandenburg', BE: 'Berlin', BW: 'Baden-Württemberg', BY: 'Bayern',
+  HB: 'Bremen', HE: 'Hessen', HH: 'Hamburg', MV: 'Mecklenburg-Vorpommern',
+  NI: 'Niedersachsen', NW: 'Nordrhein-Westfalen', RP: 'Rheinland-Pfalz',
+  SH: 'Schleswig-Holstein', SL: 'Saarland', SN: 'Sachsen', ST: 'Sachsen-Anhalt',
+  TH: 'Thüringen',
+}
+
 const WEEKDAYS = [
   { value: 0, label: 'Mo' },
   { value: 1, label: 'Di' },
@@ -303,6 +331,7 @@ const newCongInput = ref<HTMLInputElement | null>(null)
 
 const newDistrictOpen = ref(false)
 const newDistrictName = ref('')
+const newDistrictStateCode = ref('')
 
 // ── Edit congregation modal ───────────────────────────────────────────────────
 
@@ -398,7 +427,7 @@ async function saveDistrict(district: DistrictResponse) {
   if (!editName.value.trim()) return
   saving.value = true
   try {
-    const updated = await updateDistrict(district.id, editName.value.trim())
+    const updated = await updateDistrict(district.id, { name: editName.value.trim() })
     const idx = districts.value.findIndex((d) => d.id === district.id)
     if (idx !== -1) districts.value[idx] = updated
     cancelEdit()
@@ -409,6 +438,7 @@ async function saveDistrict(district: DistrictResponse) {
 
 function openNewDistrict() {
   newDistrictName.value = ''
+  newDistrictStateCode.value = ''
   modalError.value = ''
   newDistrictOpen.value = true
 }
@@ -418,7 +448,10 @@ async function saveNewDistrict() {
   saving.value = true
   modalError.value = ''
   try {
-    const created = await createDistrict(newDistrictName.value.trim())
+    const created = await createDistrict(
+      newDistrictName.value.trim(),
+      newDistrictStateCode.value || null,
+    )
     districts.value.push(created)
     congregationsByDistrict[created.id] = []
     newDistrictOpen.value = false

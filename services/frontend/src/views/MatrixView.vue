@@ -88,6 +88,12 @@
             >
               <div class="text-gray-400 font-normal text-[11px]">{{ formatWeekday(date) }}</div>
               <div>{{ formatDate(date) }}</div>
+              <div
+                v-if="matrixStore.matrix.holidays[date]?.length"
+                class="text-gray-400 font-normal italic text-[10px] leading-tight mt-0.5"
+              >
+                {{ matrixStore.matrix.holidays[date].join(', ') }}
+              </div>
             </th>
           </tr>
         </thead>

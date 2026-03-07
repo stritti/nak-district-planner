@@ -70,6 +70,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
                 external_uid=raw.uid,
                 calendar_integration_id=integration.id,
                 content_hash=raw.content_hash,
+                category=integration.default_category,
             )
             await event_repo.save(event)
             created += 1

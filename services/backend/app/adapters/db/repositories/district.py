@@ -14,6 +14,7 @@ def _orm_to_domain(row: DistrictORM) -> District:
     return District(
         id=row.id,
         name=row.name,
+        state_code=row.state_code,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -40,6 +41,7 @@ class SqlDistrictRepository(DistrictRepository):
             row = existing
         row.id = district.id
         row.name = district.name
+        row.state_code = district.state_code
         row.created_at = district.created_at
         row.updated_at = district.updated_at
         await self._session.flush()
