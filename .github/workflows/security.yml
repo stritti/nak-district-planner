@@ -62,10 +62,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Export requirements for audit
+        run: uv export --format requirements-txt --no-dev --no-emit-project -o /tmp/requirements-audit.txt
+
       - name: Audit Python dependencies
         uses: pypa/gh-action-pip-audit@v1.1.0
         with:
-          inputs: services/backend/pyproject.toml
+          inputs: /tmp/requirements-audit.txt
           vulnerability-service: osv
 
   npm-audit:
