@@ -7,7 +7,6 @@ function makeResponse(
     status = 200,
     ok = true,
     contentLength = null as string | null,
-    contentType = 'application/json',
   } = {},
 ) {
   return {
