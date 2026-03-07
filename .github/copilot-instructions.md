@@ -5,6 +5,7 @@
 **NAK Bezirksplaner** is a planning tool for worship services and events in NAK (Neuapostolische Kirche / New Apostolic Church) districts. It manages congregations, appointments, and service assignments, and exports calendars as ICS feeds.
 
 The specification and domain language use German. Key terms:
+
 - **Bezirk** = District (root tenant)
 - **Gemeinde** = Congregation (belongs to a district)
 - **Gottesdienst** = Worship service
@@ -30,7 +31,7 @@ The specification and domain language use German. Key terms:
 
 Business logic must **not** depend on FastAPI or SQLAlchemy directly. All repository and calendar connector interfaces are expressed as Abstract Base Classes (ABCs) in `domain/ports/`.
 
-```
+```text
 services/backend/app/
   domain/          # Pure Python — no framework imports
     models/        # Domain entities (Event, ServiceAssignment, …)
@@ -49,25 +50,32 @@ The **backend** and **worker** containers share the same Docker build context (`
 ## Domain Model
 
 ### Tenants
+
 - `District` (Bezirk) — root tenant
 - `Congregation` (Gemeinde) — belongs to a district
 
 ### CalendarIntegration
+
 External calendar source connected to a congregation or district:
+
 - `type`: `GOOGLE | MICROSOFT | CALDAV | ICS`
 - `credentials`: encrypted JSON (OAuth tokens or URL/auth)
 - `sync_interval`: minutes between syncs
 - `capabilities`: `READ | WRITE | WEBHOOK`
 
 ### Event
+
 Core calendar object:
+
 - `source`: `INTERNAL` (created in tool) | `EXTERNAL` (imported)
 - `status`: `DRAFT | PUBLISHED`
 - `visibility`: `INTERNAL | PUBLIC`
 - `audiences`: list of tags (e.g. `"Amtsträger"`, `"Jugend"`)
 
 ### ServiceAssignment
+
 Links a service event to a leader:
+
 - `event_id`, `leader_name` (or person ID)
 - `status`: `OPEN | ASSIGNED | CONFIRMED`
 
@@ -88,26 +96,31 @@ Links a service event to a leader:
 ## Key Implementation Rules
 
 ### Schema & Models
+
 - Use **Pydantic v2** for all schemas — never v1 syntax.
 - SQLAlchemy 2.0 style: use `mapped_column`, `Mapped[T]`, and `DeclarativeBase`.
 
 ### Security
+
 - API keys and OAuth tokens **must be encrypted** at the service layer (decorator pattern) before storing to DB.
 - All `/api/v1/` endpoints require an `X-API-Key` header.
 - Never commit secrets or credentials.
 
 ### Calendar Sync (UC-02)
+
 - Sync jobs must be **idempotent** — use hash comparison to prevent duplicates.
 - Conflict resolution: New → Create, Changed → Update, Deleted → mark `"cancelled"` (configurable).
 - UIDs in exported ICS feeds must be **stable over time** so calendar clients don't treat them as new events.
 
-### Frontend
+### Frontend Rules
+
 - Use **Tailwind CSS utility classes only** — no custom CSS unless absolutely unavoidable.
 - Use the **Composition API** (`<script setup>`) for all Vue components.
 - State management via **Pinia** stores.
 - Matrix view (UC-03): X-axis = date, Y-axis = congregation. Cell shows `"LÜCKE"` in red when `category=Gottesdienst AND ServiceAssignment=NULL`. Clicking a cell opens a modal to assign a leader.
 
 ### Python Code Style
+
 - Line length: **100 characters** (configured in `ruff`).
 - Target: **Python 3.11+** syntax.
 - Use `async`/`await` throughout (FastAPI async handlers, SQLAlchemy async sessions).
@@ -145,7 +158,7 @@ uv run pytest tests/unit/ -v     # Unit tests only (no DB/network)
 uv run pytest tests/integration/ # Integration tests (needs running DB)
 ```
 
-### Frontend
+### Frontend Commands
 
 ```bash
 # Inside services/frontend/
@@ -159,7 +172,7 @@ bun run lint      # ESLint
 
 ## Monorepo Structure
 
-```
+```text
 nak-district-planner/
 ├── docker-compose.yml              # Production
 ├── docker-compose.override.yml     # Dev overrides (hot-reload, exposed ports)
