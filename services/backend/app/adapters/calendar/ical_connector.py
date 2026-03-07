@@ -5,6 +5,7 @@ RawCalendarEvent value objects suitable for the sync service.
 
 Credentials format: {"url": "https://example.com/feed.ics"}
 """
+
 from __future__ import annotations
 
 import hashlib

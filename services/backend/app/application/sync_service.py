@@ -12,6 +12,7 @@ Orchestrates the sync of a single CalendarIntegration:
 
 Returns the number of events created/updated/cancelled.
 """
+
 from __future__ import annotations
 
 import uuid

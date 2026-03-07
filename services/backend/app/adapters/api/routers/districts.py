@@ -121,8 +121,10 @@ async def update_district(
     district.updated_at = datetime.now(timezone.utc)
     await repo.save(district)
     return DistrictResponse(
-        id=district.id, name=district.name,
-        created_at=district.created_at, updated_at=district.updated_at,
+        id=district.id,
+        name=district.name,
+        created_at=district.created_at,
+        updated_at=district.updated_at,
     )
 
 
@@ -142,9 +144,11 @@ async def update_congregation(
     congregation.updated_at = datetime.now(timezone.utc)
     await repo.save(congregation)
     return CongregationResponse(
-        id=congregation.id, name=congregation.name,
+        id=congregation.id,
+        name=congregation.name,
         district_id=congregation.district_id,
-        created_at=congregation.created_at, updated_at=congregation.updated_at,
+        created_at=congregation.created_at,
+        updated_at=congregation.updated_at,
     )
 
 
@@ -226,10 +230,12 @@ async def get_matrix(
                 leader_name=assignment.leader_name if assignment else None,
             )
 
-        rows.append(MatrixRow(
-            congregation_id=congregation.id,
-            congregation_name=congregation.name,
-            cells=cells,
-        ))
+        rows.append(
+            MatrixRow(
+                congregation_id=congregation.id,
+                congregation_name=congregation.name,
+                cells=cells,
+            )
+        )
 
     return MatrixResponse(dates=sorted_dates, rows=rows)

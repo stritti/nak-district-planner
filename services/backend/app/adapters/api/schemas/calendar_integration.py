@@ -15,7 +15,9 @@ class CalendarIntegrationCreate(BaseModel):
     type: CalendarType
     credentials: dict  # plain dict — encrypted before storage
     sync_interval: int = Field(60, ge=1, le=10080)  # 1 min – 1 week
-    capabilities: list[CalendarCapability] = Field(default_factory=lambda: [CalendarCapability.READ])
+    capabilities: list[CalendarCapability] = Field(
+        default_factory=lambda: [CalendarCapability.READ]
+    )
 
 
 class CalendarIntegrationResponse(BaseModel):

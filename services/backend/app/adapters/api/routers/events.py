@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.adapters.api.deps import ApiKeyGuard, DbSession
-from app.adapters.api.schemas.event import EventCreate, EventListResponse, EventResponse, EventUpdate
+from app.adapters.api.schemas.event import (
+    EventCreate,
+    EventListResponse,
+    EventResponse,
+    EventUpdate,
+)
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.domain.models.event import Event, EventStatus
 

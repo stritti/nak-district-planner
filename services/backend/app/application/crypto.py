@@ -7,6 +7,7 @@ Usage:
     enc = encrypt_credentials({"url": "https://example.com/cal.ics"})
     dec = decrypt_credentials(enc)  # -> {"url": "https://..."}
 """
+
 from __future__ import annotations
 
 import base64

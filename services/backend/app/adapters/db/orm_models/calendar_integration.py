@@ -28,12 +28,8 @@ class CalendarIntegrationORM(Base):
     credentials_enc: Mapped[str] = mapped_column(String, nullable=False)  # Fernet token
     sync_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     # capabilities stored as a VARCHAR[] of enum string values
-    capabilities: Mapped[list[str]] = mapped_column(
-        ARRAY(String), nullable=False, default=list
-    )
+    capabilities: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    last_synced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

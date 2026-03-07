@@ -16,4 +16,6 @@ class Congregation:
     @classmethod
     def create(cls, *, name: str, district_id: uuid.UUID) -> Congregation:
         now = datetime.now(timezone.utc)
-        return cls(id=uuid.uuid4(), name=name, district_id=district_id, created_at=now, updated_at=now)
+        return cls(
+            id=uuid.uuid4(), name=name, district_id=district_id, created_at=now, updated_at=now
+        )

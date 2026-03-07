@@ -3,6 +3,7 @@
 Repositories, crypto, and the calendar connector are all mocked.
 No database or network access is required.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -264,9 +265,7 @@ class TestRunSync:
         )
 
         m.integration_repo.get.return_value = integration
-        m.connector.fetch_events.return_value = [
-            raw_new, raw_changed, raw_cancelled, raw_unchanged
-        ]
+        m.connector.fetch_events.return_value = [raw_new, raw_changed, raw_cancelled, raw_unchanged]
 
         def _get_by_uid(uid, _int_id):
             return {

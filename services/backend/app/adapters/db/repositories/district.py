@@ -28,9 +28,7 @@ class SqlDistrictRepository(DistrictRepository):
         return _orm_to_domain(row) if row else None
 
     async def list_all(self) -> list[District]:
-        result = await self._session.execute(
-            select(DistrictORM).order_by(DistrictORM.name)
-        )
+        result = await self._session.execute(select(DistrictORM).order_by(DistrictORM.name))
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
     async def save(self, district: District) -> None:

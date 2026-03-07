@@ -8,7 +8,7 @@ from enum import Enum
 
 
 class TokenType(str, Enum):
-    PUBLIC = "PUBLIC"      # leader names anonymized
+    PUBLIC = "PUBLIC"  # leader names anonymized
     INTERNAL = "INTERNAL"  # full leader names visible
 
 

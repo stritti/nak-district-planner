@@ -7,13 +7,20 @@ from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.adapters.api.routers import calendar_integrations, districts, events, export, service_assignments
+from app.adapters.api.routers import (
+    calendar_integrations,
+    districts,
+    events,
+    export,
+    service_assignments,
+)
 from app.config import settings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
+
     cfg = Config("alembic.ini")
     # env.py uses asyncio.run() internally — must run in a thread without an active loop
     await asyncio.to_thread(command.upgrade, cfg, "head")
