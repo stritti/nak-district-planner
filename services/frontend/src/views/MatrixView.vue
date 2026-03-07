@@ -1,0 +1,311 @@
+<template>
+  <div class="p-6">
+    <h1 class="text-xl font-semibold text-gray-900 mb-4">Dienstplan-Matrix</h1>
+
+    <!-- Filter-Leiste -->
+    <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+
+      <!-- Schnellfilter -->
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs text-gray-400 font-medium mr-1">Schnellfilter:</span>
+        <button
+          v-for="preset in presets"
+          :key="preset.key"
+          class="text-xs px-3 py-1 rounded-full border transition-colors"
+          :class="activePreset === preset.key
+            ? 'bg-blue-600 text-white border-blue-600'
+            : 'border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600'"
+          @click="setPreset(preset.key)"
+        >
+          {{ preset.label }}
+        </button>
+      </div>
+
+      <!-- Bezirk + Datumsfelder -->
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Bezirk</label>
+          <select
+            v-model="matrixStore.districtId"
+            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            @change="onDistrictChange"
+          >
+            <option value="">Bezirk wählen…</option>
+            <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
+              {{ d.name }}
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Von</label>
+          <input
+            v-model="matrixStore.fromDt"
+            type="date"
+            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Bis</label>
+          <input
+            v-model="matrixStore.toDt"
+            type="date"
+            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+
+        <button
+          class="flex items-center gap-1.5 bg-blue-600 text-white text-sm px-4 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
+          :disabled="!matrixStore.districtId || !matrixStore.fromDt || !matrixStore.toDt || matrixStore.loading"
+          @click="matrixStore.fetch()"
+        >
+          <ArrowPathIcon class="h-4 w-4" :class="matrixStore.loading ? 'animate-spin' : ''" />
+          Anzeigen
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading / Error -->
+    <div v-if="matrixStore.loading" class="text-sm text-gray-500">Lade…</div>
+    <div v-else-if="matrixStore.error" class="text-sm text-red-600">{{ matrixStore.error }}</div>
+
+    <!-- Matrix Table -->
+    <div
+      v-else-if="matrixStore.matrix && matrixStore.matrix.dates.length > 0"
+      class="overflow-x-auto"
+    >
+      <table class="border-collapse text-xs">
+        <thead>
+          <tr>
+            <th class="sticky left-0 z-10 bg-white border border-gray-300 px-3 py-2 text-left font-medium text-gray-700 min-w-[140px]">
+              Gemeinde
+            </th>
+            <th
+              v-for="date in matrixStore.matrix.dates"
+              :key="date"
+              class="border border-gray-300 px-2 py-2 text-center font-medium text-gray-700 min-w-[110px]"
+            >
+              {{ formatDate(date) }}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in matrixStore.matrix.rows" :key="row.congregation_id">
+            <td class="sticky left-0 z-10 bg-white border border-gray-300 px-3 py-2 font-medium text-gray-800">
+              {{ row.congregation_name }}
+            </td>
+            <td
+              v-for="date in matrixStore.matrix.dates"
+              :key="date"
+              class="border border-gray-300 px-2 py-1.5 align-top"
+              :class="cellClass(row.cells[date])"
+            >
+              <template v-if="row.cells[date]?.event_id">
+                <button
+                  v-if="row.cells[date].is_gap"
+                  class="w-full text-left"
+                  @click="openModal(row.cells[date], date, row.congregation_name)"
+                >
+                  <div class="font-semibold text-red-700">LÜCKE</div>
+                  <div class="text-red-600 truncate max-w-[100px]">{{ row.cells[date].event_title }}</div>
+                </button>
+                <template v-else>
+                  <div class="font-medium text-gray-800 truncate max-w-[100px]">
+                    {{ row.cells[date].event_title }}
+                  </div>
+                  <div v-if="row.cells[date].leader_name" class="text-gray-500 truncate max-w-[100px]">
+                    {{ row.cells[date].leader_name }}
+                  </div>
+                  <div v-if="row.cells[date].category" class="text-gray-400">
+                    {{ row.cells[date].category }}
+                  </div>
+                </template>
+              </template>
+              <template v-else>
+                <span class="text-gray-300">–</span>
+              </template>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div
+      v-else-if="matrixStore.matrix && matrixStore.matrix.dates.length === 0"
+      class="text-sm text-gray-500"
+    >
+      Keine Ereignisse im gewählten Zeitraum.
+    </div>
+
+    <!-- Assignment Modal -->
+    <div
+      v-if="modal.open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="closeModal"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="text-base font-semibold text-gray-900">Dienstleiter zuweisen</h2>
+          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="closeModal">
+            <XMarkIcon class="h-5 w-5" />
+          </button>
+        </div>
+        <p class="text-sm text-gray-500 mb-4">
+          {{ modal.congregationName }} — {{ formatDate(modal.date) }}
+        </p>
+        <p class="text-sm text-gray-700 mb-4">
+          <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
+        </p>
+
+        <label class="block text-sm font-medium text-gray-700 mb-1">Name des Dienstleiters</label>
+        <input
+          v-model="modal.leaderName"
+          type="text"
+          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Vor- und Nachname"
+          @keyup.enter="submitAssignment"
+        />
+        <p v-if="modal.error" class="text-sm text-red-600 mt-2">{{ modal.error }}</p>
+
+        <div class="flex justify-end gap-3 mt-5">
+          <button
+            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            @click="closeModal"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            :disabled="!modal.leaderName.trim() || modal.saving"
+            @click="submitAssignment"
+          >
+            {{ modal.saving ? 'Speichern…' : 'Zuweisen' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive } from 'vue'
+import { ArrowPathIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { useMatrixStore } from '@/stores/matrix'
+import { useDistrictsStore } from '@/stores/districts'
+import type { MatrixCell } from '@/api/matrix'
+
+const matrixStore = useMatrixStore()
+const districtsStore = useDistrictsStore()
+
+// ── Preset-Filter ────────────────────────────────────────────────────────────
+
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function monthRange(offset: number): { from: string; to: string } {
+  const now = new Date()
+  return {
+    from: localDate(new Date(now.getFullYear(), now.getMonth() + offset, 1)),
+    to:   localDate(new Date(now.getFullYear(), now.getMonth() + offset + 1, 0)),
+  }
+}
+
+const presets = [
+  { key: 'current', label: 'Aktueller Monat' },
+  { key: 'next',    label: 'Kommender Monat' },
+]
+
+const activePreset = computed(() => {
+  const curr = monthRange(0)
+  const next = monthRange(1)
+  if (matrixStore.fromDt === curr.from && matrixStore.toDt === curr.to) return 'current'
+  if (matrixStore.fromDt === next.from && matrixStore.toDt === next.to) return 'next'
+  return null
+})
+
+function setPreset(key: string) {
+  const offset = key === 'next' ? 1 : 0
+  const { from, to } = monthRange(offset)
+  matrixStore.fromDt = from
+  matrixStore.toDt = to
+  if (matrixStore.districtId) matrixStore.fetch()
+}
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+onMounted(async () => {
+  if (districtsStore.districts.length === 0) await districtsStore.fetchDistricts()
+  // Pre-select current month if no range set yet
+  if (!matrixStore.fromDt || !matrixStore.toDt) {
+    const { from, to } = monthRange(0)
+    matrixStore.fromDt = from
+    matrixStore.toDt = to
+  }
+  // Auto-fetch if district already selected (e.g. navigating back)
+  if (matrixStore.districtId) matrixStore.fetch()
+})
+
+function onDistrictChange() {
+  matrixStore.matrix = null
+  if (matrixStore.districtId && matrixStore.fromDt && matrixStore.toDt) {
+    matrixStore.fetch()
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatDate(iso: string): string {
+  const [year, month, day] = iso.split('-')
+  return `${day}.${month}.${year}`
+}
+
+function cellClass(cell: MatrixCell | undefined): string {
+  if (!cell?.event_id) return 'bg-white'
+  if (cell.is_gap) return 'bg-red-50 cursor-pointer hover:bg-red-100'
+  return 'bg-white'
+}
+
+// ── Assignment Modal ──────────────────────────────────────────────────────────
+
+const modal = reactive({
+  open: false,
+  eventId: '',
+  eventTitle: '',
+  date: '',
+  congregationName: '',
+  leaderName: '',
+  saving: false,
+  error: '',
+})
+
+function openModal(cell: MatrixCell, date: string, congregationName: string) {
+  modal.open = true
+  modal.eventId = cell.event_id!
+  modal.eventTitle = cell.event_title ?? ''
+  modal.date = date
+  modal.congregationName = congregationName
+  modal.leaderName = ''
+  modal.saving = false
+  modal.error = ''
+}
+
+function closeModal() {
+  modal.open = false
+}
+
+async function submitAssignment() {
+  if (!modal.leaderName.trim()) return
+  modal.saving = true
+  modal.error = ''
+  try {
+    await matrixStore.assign(modal.eventId, modal.leaderName.trim())
+    closeModal()
+  } catch (e) {
+    modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+  } finally {
+    modal.saving = false
+  }
+}
+</script>

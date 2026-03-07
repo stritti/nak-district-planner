@@ -1,0 +1,92 @@
+from __future__ import annotations
+
+import uuid
+from abc import ABC, abstractmethod
+from datetime import datetime
+
+from app.domain.models.calendar_integration import CalendarIntegration
+from app.domain.models.congregation import Congregation
+from app.domain.models.district import District
+from app.domain.models.event import Event, EventStatus
+from app.domain.models.service_assignment import ServiceAssignment
+
+
+class DistrictRepository(ABC):
+    @abstractmethod
+    async def get(self, district_id: uuid.UUID) -> District | None: ...
+
+    @abstractmethod
+    async def list_all(self) -> list[District]: ...
+
+    @abstractmethod
+    async def save(self, district: District) -> None: ...
+
+
+class CongregationRepository(ABC):
+    @abstractmethod
+    async def get(self, congregation_id: uuid.UUID) -> Congregation | None: ...
+
+    @abstractmethod
+    async def list_by_district(self, district_id: uuid.UUID) -> list[Congregation]: ...
+
+    @abstractmethod
+    async def save(self, congregation: Congregation) -> None: ...
+
+
+class EventRepository(ABC):
+    @abstractmethod
+    async def get(self, event_id: uuid.UUID) -> Event | None: ...
+
+    @abstractmethod
+    async def list(
+        self,
+        *,
+        district_id: uuid.UUID | None = None,
+        congregation_id: uuid.UUID | None = None,
+        status: EventStatus | None = None,
+        from_dt: datetime | None = None,
+        to_dt: datetime | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[Event], int]: ...
+
+    @abstractmethod
+    async def get_by_external_uid(
+        self, external_uid: str, calendar_integration_id: uuid.UUID
+    ) -> Event | None: ...
+
+    @abstractmethod
+    async def save(self, event: Event) -> None: ...
+
+
+class ServiceAssignmentRepository(ABC):
+    @abstractmethod
+    async def get(self, assignment_id: uuid.UUID) -> ServiceAssignment | None: ...
+
+    @abstractmethod
+    async def list_by_event(self, event_id: uuid.UUID) -> list[ServiceAssignment]: ...
+
+    @abstractmethod
+    async def list_by_events(self, event_ids: list[uuid.UUID]) -> list[ServiceAssignment]: ...
+
+    @abstractmethod
+    async def save(self, assignment: ServiceAssignment) -> None: ...
+
+
+class CalendarIntegrationRepository(ABC):
+    @abstractmethod
+    async def get(self, integration_id: uuid.UUID) -> CalendarIntegration | None: ...
+
+    @abstractmethod
+    async def list_by_district(self, district_id: uuid.UUID) -> list[CalendarIntegration]: ...
+
+    @abstractmethod
+    async def list_active(self) -> list[CalendarIntegration]:
+        """Return all active integrations — used by the Celery beat scheduler."""
+        ...
+
+    @abstractmethod
+    async def save(self, integration: CalendarIntegration) -> None: ...
+
+    @abstractmethod
+    async def delete(self, integration_id: uuid.UUID) -> None: ...

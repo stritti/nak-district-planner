@@ -1,0 +1,35 @@
+# Development overrides — automatically merged by docker compose
+#
+# ENV-Strategie:
+#   .env              → enthält localhost-URLs (für "uv run uvicorn" direkt auf dem Host)
+#   dieses Override   → überschreibt DATABASE_URL/REDIS_URL in den Containern mit
+#                       den Docker-internen Hostnamen (db, redis)
+#
+# Ergebnis: nur eine .env-Datei, kein manuelles Umschalten.
+services:
+  backend:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./services/backend/app:/app/app
+      - ./services/backend/tests:/app/tests
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      REDIS_URL: "redis://redis:6379/0"
+
+  worker:
+    command: celery -A app.celery_app worker --loglevel=debug
+    volumes:
+      - ./services/backend/app:/app/app
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      REDIS_URL: "redis://redis:6379/0"
+
+  db:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"

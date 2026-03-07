@@ -1,0 +1,348 @@
+<template>
+  <div class="p-6 max-w-3xl">
+    <div class="flex items-center justify-between mb-5">
+      <h1 class="text-xl font-semibold text-gray-900">Kalender-Export</h1>
+      <button
+        class="flex items-center gap-1.5 text-sm bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700"
+        @click="openCreate"
+      >
+        <PlusIcon class="h-4 w-4" />
+        Neuer Token
+      </button>
+    </div>
+
+    <p class="text-sm text-gray-500 mb-6">
+      Erstelle ICS-Export-Links für Bezirke oder einzelne Gemeinden. Öffentliche Tokens
+      anonymisieren den Dienstleiter-Namen; interne Tokens zeigen den vollen Namen.
+    </p>
+
+    <div v-if="loading" class="text-sm text-gray-500">Lade…</div>
+    <div v-else-if="error" class="text-sm text-red-600">{{ error }}</div>
+
+    <!-- Token list -->
+    <div v-else class="space-y-3">
+      <div
+        v-for="t in tokens"
+        :key="t.id"
+        class="border border-gray-200 rounded-lg p-4"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-medium text-gray-900 truncate">{{ t.label }}</span>
+              <span
+                class="text-xs px-2 py-0.5 rounded-full font-medium"
+                :class="t.token_type === 'INTERNAL'
+                  ? 'bg-yellow-100 text-yellow-800'
+                  : 'bg-green-100 text-green-800'"
+              >
+                {{ t.token_type === 'INTERNAL' ? 'Intern' : 'Öffentlich' }}
+              </span>
+            </div>
+            <div class="text-xs text-gray-500 mb-2">
+              {{ districtName(t.district_id) }}
+              <template v-if="t.congregation_id">
+                › {{ congregationName(t.congregation_id) }}
+              </template>
+            </div>
+            <!-- ICS URL -->
+            <div class="flex items-center gap-2">
+              <code class="text-xs bg-gray-100 rounded px-2 py-1 text-gray-700 truncate max-w-sm block">
+                {{ icsUrl(t.token) }}
+              </code>
+              <button
+                class="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 shrink-0"
+                title="URL kopieren"
+                @click="copyUrl(t.token)"
+              >
+                <ClipboardDocumentIcon class="h-4 w-4" />
+              </button>
+              <a
+                :href="icsUrl(t.token)"
+                target="_blank"
+                class="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 shrink-0"
+                title="Im Browser öffnen"
+              >
+                <ArrowTopRightOnSquareIcon class="h-4 w-4" />
+              </a>
+            </div>
+            <p v-if="copiedToken === t.token" class="text-xs text-green-600 mt-1">Kopiert!</p>
+          </div>
+          <button
+            class="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+            title="Token löschen"
+            @click="confirmDelete(t)"
+          >
+            <TrashIcon class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div v-if="!loading && tokens.length === 0" class="text-sm text-gray-500">
+        Noch keine Export-Tokens angelegt.
+      </div>
+    </div>
+
+    <!-- Create modal -->
+    <div
+      v-if="form.open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="form.open = false"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold text-gray-900">Neuer Export-Token</h2>
+          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="form.open = false">
+            <XMarkIcon class="h-5 w-5" />
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Bezeichnung</label>
+            <input
+              v-model="form.label"
+              type="text"
+              placeholder="z. B. Bezirk Nord – Öffentlich"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Typ</label>
+            <select
+              v-model="form.token_type"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="PUBLIC">Öffentlich (Dienstleiter anonymisiert)</option>
+              <option value="INTERNAL">Intern (Dienstleiter sichtbar)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Bezirk</label>
+            <select
+              v-model="form.district_id"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              @change="onFormDistrictChange"
+            >
+              <option value="">Bezirk wählen…</option>
+              <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
+                {{ d.name }}
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Gemeinde <span class="text-gray-400 font-normal">(optional — leer = ganzer Bezirk)</span>
+            </label>
+            <select
+              v-model="form.congregation_id"
+              :disabled="!form.district_id || formCongregations.length === 0"
+              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+            >
+              <option value="">Ganzer Bezirk</option>
+              <option v-for="c in formCongregations" :key="c.id" :value="c.id">
+                {{ c.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <p v-if="form.error" class="text-sm text-red-600 mt-3">{{ form.error }}</p>
+
+        <div class="flex justify-end gap-3 mt-5">
+          <button
+            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            @click="form.open = false"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="flex items-center gap-1.5 text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            :disabled="!form.label.trim() || !form.district_id || form.saving"
+            @click="saveToken"
+          >
+            <LinkIcon class="h-4 w-4" />
+            {{ form.saving ? 'Erstellen…' : 'Token erstellen' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete confirm modal -->
+    <div
+      v-if="deleteTarget"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="deleteTarget = null"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 mb-2">Token löschen?</h2>
+        <p class="text-sm text-gray-600 mb-5">
+          Der Token <strong>{{ deleteTarget.label }}</strong> wird unwiderruflich gelöscht.
+          Bestehende Kalender-Abonnements funktionieren danach nicht mehr.
+        </p>
+        <div class="flex justify-end gap-3">
+          <button
+            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            @click="deleteTarget = null"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="text-sm px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+            :disabled="deleting"
+            @click="doDelete"
+          >
+            {{ deleting ? 'Löschen…' : 'Löschen' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+import {
+  ArrowTopRightOnSquareIcon,
+  ClipboardDocumentIcon,
+  LinkIcon,
+  PlusIcon,
+  TrashIcon,
+  XMarkIcon,
+} from '@heroicons/vue/24/outline'
+import {
+  createExportToken,
+  deleteExportToken,
+  listExportTokens,
+  type ExportTokenResponse,
+} from '@/api/exportTokens'
+import { listCongregations, type CongregationResponse } from '@/api/districts'
+import { useDistrictsStore } from '@/stores/districts'
+
+const districtsStore = useDistrictsStore()
+const tokens = ref<ExportTokenResponse[]>([])
+const loading = ref(false)
+const error = ref('')
+const copiedToken = ref<string | null>(null)
+const deleteTarget = ref<ExportTokenResponse | null>(null)
+const deleting = ref(false)
+const formCongregations = ref<CongregationResponse[]>([])
+
+const form = reactive({
+  open: false,
+  label: '',
+  token_type: 'PUBLIC' as 'PUBLIC' | 'INTERNAL',
+  district_id: '',
+  congregation_id: '',
+  saving: false,
+  error: '',
+})
+
+onMounted(async () => {
+  loading.value = true
+  try {
+    if (districtsStore.districts.length === 0) await districtsStore.fetchDistricts()
+    tokens.value = await listExportTokens()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Fehler beim Laden'
+  } finally {
+    loading.value = false
+  }
+})
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const allCongregations = ref<CongregationResponse[]>([])
+
+async function ensureAllCongregations() {
+  if (allCongregations.value.length > 0) return
+  const lists = await Promise.all(
+    districtsStore.districts.map((d) => listCongregations(d.id)),
+  )
+  allCongregations.value = lists.flat()
+}
+
+function districtName(id: string): string {
+  return districtsStore.districts.find((d) => d.id === id)?.name ?? id
+}
+
+function congregationName(id: string): string {
+  return allCongregations.value.find((c) => c.id === id)?.name ?? id
+}
+
+function icsUrl(token: string): string {
+  return `${window.location.origin}/api/v1/export/${token}/calendar.ics`
+}
+
+async function copyUrl(token: string) {
+  await navigator.clipboard.writeText(icsUrl(token))
+  copiedToken.value = token
+  setTimeout(() => { copiedToken.value = null }, 2000)
+}
+
+// ── Create ────────────────────────────────────────────────────────────────────
+
+function openCreate() {
+  form.open = true
+  form.label = ''
+  form.token_type = 'PUBLIC'
+  form.district_id = ''
+  form.congregation_id = ''
+  form.saving = false
+  form.error = ''
+  formCongregations.value = []
+}
+
+async function onFormDistrictChange() {
+  form.congregation_id = ''
+  formCongregations.value = []
+  if (form.district_id) {
+    formCongregations.value = await listCongregations(form.district_id)
+  }
+}
+
+async function saveToken() {
+  if (!form.label.trim() || !form.district_id) return
+  form.saving = true
+  form.error = ''
+  try {
+    const created = await createExportToken({
+      label: form.label.trim(),
+      token_type: form.token_type,
+      district_id: form.district_id,
+      congregation_id: form.congregation_id || null,
+    })
+    tokens.value.unshift(created)
+    await ensureAllCongregations()
+    form.open = false
+  } catch (e) {
+    form.error = e instanceof Error ? e.message : 'Fehler'
+  } finally {
+    form.saving = false
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+function confirmDelete(t: ExportTokenResponse) {
+  deleteTarget.value = t
+}
+
+async function doDelete() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  try {
+    await deleteExportToken(deleteTarget.value.id)
+    tokens.value = tokens.value.filter((t) => t.id !== deleteTarget.value!.id)
+    deleteTarget.value = null
+  } finally {
+    deleting.value = false
+  }
+}
+
+// Preload congregation names for display
+onMounted(ensureAllCongregations)
+</script>
