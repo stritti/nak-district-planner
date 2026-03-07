@@ -1,0 +1,48 @@
+name: MegaLinter
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: megalinter-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  megalinter:
+    name: MegaLinter
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history for accurate blame/diff info
+          fetch-depth: 0
+
+      - name: Run MegaLinter
+        uses: oxsecurity/megalinter@v8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Validate only files changed in the PR/push (faster)
+          VALIDATE_ALL_CODEBASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # Do not auto-apply fixes — just report
+          APPLY_FIXES: none
+          # Post a summary comment on PRs
+          MEGALINTER_CONFIG: .mega-linter.yml
+
+      - name: Archive MegaLinter reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: megalinter-reports
+          path: |
+            megalinter-reports/
+          retention-days: 7
