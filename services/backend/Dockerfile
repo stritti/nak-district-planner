@@ -12,14 +12,14 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Install dependencies before copying source (layer caching)
-COPY pyproject.toml .
-RUN uv pip install --system --no-cache -e ".[dev]"
+COPY pyproject.toml uv.lock ./
+ENV UV_SYSTEM_PYTHON=1
+RUN uv sync --frozen --no-dev
 
-# Copy application source, Alembic migrations, and tests
+# Copy application source and Alembic migrations
 COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
-COPY tests/ ./tests/
 
 # Run as non-root user
 RUN useradd --create-home appuser
