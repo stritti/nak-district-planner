@@ -10,8 +10,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from app.application.tasks import cleanup_old_events
 
 
@@ -94,4 +92,37 @@ class TestCleanupOldEvents:
     def test_session_commit_is_called(self):
         _, _, session = self._run_task(deleted=1)
         session.commit.assert_called_once()
+
+    def test_feb29_leap_year_cutoff_falls_back_to_feb28(self):
+        """When today is Feb 29 (leap year), cutoff must be Feb 28 two years back."""
+        leap_day = datetime(2024, 2, 29, 12, 0, 0, tzinfo=timezone.utc)
+
+        repo = _make_repo_mock(0)
+        cm, session = _make_session_cm(repo)
+
+        # Patch datetime.now at module level so the inner _run closure picks it up.
+        original_datetime = datetime
+
+        class _FakeDatetime(original_datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return leap_day
+
+        with (
+            patch(
+                "app.adapters.db.session.AsyncSessionLocal",
+                return_value=cm,
+            ),
+            patch(
+                "app.adapters.db.repositories.event.SqlEventRepository",
+                return_value=repo,
+            ),
+            patch("app.application.tasks.datetime", _FakeDatetime),
+        ):
+            result = cleanup_old_events()
+
+        cutoff = datetime.fromisoformat(result["cutoff"])
+        assert cutoff.year == 2022
+        assert cutoff.month == 2
+        assert cutoff.day == 28
 

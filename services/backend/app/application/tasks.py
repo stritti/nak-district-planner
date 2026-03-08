@@ -81,8 +81,6 @@ def cleanup_old_events() -> dict:
     Runs on the 1st of each month via Celery beat.  All events whose *end_at*
     is before the cutoff (now − 24 months) are permanently removed.
     """
-    from datetime import datetime, timezone
-
     from app.adapters.db.repositories.event import SqlEventRepository
     from app.adapters.db.session import AsyncSessionLocal
 
