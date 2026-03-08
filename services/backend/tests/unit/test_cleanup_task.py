@@ -1,7 +1,8 @@
 """Unit tests for the cleanup_old_events Celery task.
 
-asyncio.run is patched so that the inner _run coroutine is intercepted and
-the DB layer is never touched — no real DB or network access is required.
+The real task function is executed, but the async DB session factory
+(AsyncSessionLocal) and SqlEventRepository are patched so that no real
+database or network access is performed.
 """
 
 from __future__ import annotations
