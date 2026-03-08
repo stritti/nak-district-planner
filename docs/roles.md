@@ -131,7 +131,7 @@ Das Rollenkonzept muss diese Hierarchie widerspiegeln. Eine Rolle ist immer an e
 
 Die folgende Tabelle gibt einen Überblick über die Berechtigungen je Ressource und Rolle.
 
-**Legende:** ✅ erlaubt · 🔒 nur eigene Ressourcen (bei Benutzerverwaltung: nur wenn Delegation durch `district_admin` aktiviert wurde) · 👁️ nur lesen · ❌ nicht erlaubt
+**Legende:** ✅ erlaubt · 🔒 nur eigene Ressourcen (bei Benutzerverwaltung: nur wenn Delegation durch `district_admin` aktiviert wurde) · 👁️ nur lesen · ❓ offen (siehe Abschnitt 6) · ❌ nicht erlaubt
 
 | Ressource / Aktion                        | system_admin | district_admin | congregation_admin | planner | viewer |
 |-------------------------------------------|:---:|:---:|:---:|:---:|:---:|
@@ -158,7 +158,8 @@ Die folgende Tabelle gibt einen Überblick über die Berechtigungen je Ressource
 | Integration erstellen / löschen          | ✅  | ✅  | 🔒  | ❌  | ❌  |
 | Integration bearbeiten / Sync auslösen  | ✅  | ✅  | 🔒  | ❌  | ❌  |
 | **Export-Tokens**                         |     |     |     |     |     |
-| Token erstellen / löschen                | ✅  | ✅  | 🔒  | ❌  | ❌  |
+| `PUBLIC`-Token erstellen / löschen       | ✅  | ✅  | 🔒  | ❌  | ❌  |
+| `INTERNAL`-Token erstellen / löschen     | ✅  | ✅  | ❓  | ❌  | ❌  |
 | Token auflisten                           | ✅  | ✅  | 🔒  | ❌  | ❌  |
 | **Benutzerverwaltung**                    |     |     |     |     |     |
 | Benutzer anlegen (systemweit)            | ✅  | ❌  | ❌  | ❌  | ❌  |
@@ -199,22 +200,49 @@ Das Backend verifiziert ausschließlich JWT-Access-Tokens, die von Keycloak ausg
 
 ```
 User
-  id, keycloak_sub (UNIQUE, eindeutige Keycloak-UUID), email, display_name, is_active, created_at
+  id, keycloak_sub (UNIQUE), email, display_name, is_active, created_at,
+  district_id (FK → District, nullable — nur NULL für system_admin)
 
 UserRole
-  id, user_id (FK), role (enum), district_id (FK, nullable), congregation_id (FK, nullable)
-  UNIQUE(user_id, district_id, congregation_id)
+  id, user_id (FK → User), role (enum), congregation_id (FK → Congregation, nullable)
+  -- congregation_id = NULL  → Rolle gilt für den gesamten Bezirk des Benutzers
+  -- congregation_id = <uuid> → Rolle ist auf diese Gemeinde eingeschränkt
 ```
 
-- Ein Benutzer kann mehrere Einträge in `UserRole` haben (z. B. `district_admin` in Bezirk A und `viewer` in Bezirk B).
-- Innerhalb eines Bezirks oder einer Gemeinde hat ein Benutzer genau **eine** Rolle (`UNIQUE` auf `user_id + district_id + congregation_id`).
-- `district_id` und `congregation_id` sind optional und definieren den Geltungsbereich.
-- `system_admin` hat keinen Bezirk/Gemeinde-Bezug (beide `NULL`).
+**Constraints:**
+
+Ein Benutzer kann innerhalb seines Bezirks **mehrere Rollen** haben (z. B. gleichzeitig `district_admin` und `planner`). Derselbe Rollen-Typ darf aber nicht doppelt vergeben werden. Da `congregation_id` nullable ist und PostgreSQL `NULL ≠ NULL` behandelt (eine einfache UNIQUE-Constraint würde mehrere Zeilen mit `congregation_id = NULL` erlauben), werden **partielle Unique-Indizes** benötigt:
+
+```sql
+-- Bezirksweite Rollen (keine Gemeinde-Einschränkung): kein Duplikat pro Rolle
+CREATE UNIQUE INDEX uq_userrole_district
+  ON user_role (user_id, role)
+  WHERE congregation_id IS NULL;
+
+-- Gemeindebezogene Rollen: kein Duplikat pro Rolle+Gemeinde
+CREATE UNIQUE INDEX uq_userrole_congregation
+  ON user_role (user_id, role, congregation_id)
+  WHERE congregation_id IS NOT NULL;
+
+-- Verhindert ungültige Kombination: Gemeinde ohne Bezirkszuordnung am User
+ALTER TABLE user_role ADD CONSTRAINT chk_congregation_in_district
+  CHECK (
+    congregation_id IS NULL OR EXISTS (
+      SELECT 1 FROM congregation c
+      JOIN "user" u ON u.district_id = c.district_id
+      WHERE c.id = congregation_id AND u.id = user_id
+    )
+  );
+```
+
+Weitere Regeln:
+- `district_id` wird auf dem `User`-Datensatz gespeichert (ein Benutzer gehört immer zu einem Bezirk).
+- Ausnahme: `system_admin` hat `district_id = NULL` und keinen `UserRole`-Eintrag (oder einen mit `role = 'system_admin'`).
 - `keycloak_sub` ersetzt `hashed_password` — Passwort-Management liegt vollständig bei Keycloak.
 
-### 4.3 JWT-Token-Inhalt (Claim-Vorschlag)
+### 4.3 JWT-Token-Inhalt
 
-Das Backend liest die Keycloak-Rollen aus dem JWT-Claim und reichert sie bei Bedarf mit DB-Daten an:
+Das Keycloak-JWT enthält ausschließlich die Benutzeridentität. Rollen werden **nicht** als JWT-Claim gespeichert, sondern bei jeder Anfrage aus der `UserRole`-Tabelle geladen (einzige Quelle der Wahrheit).
 
 ```json
 {
@@ -224,7 +252,7 @@ Das Backend liest die Keycloak-Rollen aus dem JWT-Claim und reichert sie bei Bed
 }
 ```
 
-Die Rollen werden **nicht** im JWT gespeichert, sondern bei jeder Anfrage aus der `UserRole`-Tabelle geladen (authoritative source of truth im Backend). Dies ermöglicht sofortige Wirksamkeit von Rollenänderungen ohne Token-Refresh.
+Damit werden Rollenänderungen sofort wirksam, ohne dass ein Token-Refresh abgewartet werden muss.
 
 ::: tip Performance
 Um die Datenbanklast zu minimieren, werden die geladenen Rollen pro Request im Keycloak-Session-Cache (oder alternativ in Redis mit einer kurzen TTL von ~60 Sekunden) zwischengespeichert. Rollenänderungen wirken sich nach Ablauf des Cache-Fensters aus.
@@ -272,8 +300,8 @@ Die folgenden Fragen wurden im Review geklärt.
 
 | # | Frage | Entscheidung |
 |---|-------|-------------|
-| 1 | Rollenvererbung | Rollen sind **strikt getrennt**. `district_admin` erbt keine `congregation_admin`-Rechte automatisch. Ein Benutzer kann aber mehrere Rollen haben (z. B. `district_admin` im Bezirk **und** `congregation_admin` in einer Gemeinde). |
-| 2 | Mehrmandantenfähigkeit | Ein Benutzer hat **genau eine Rolle pro Mandant** (Bezirk oder Gemeinde). Mehrere Mandate sind über separate `UserRole`-Einträge möglich. |
+| 1 | Rollenvererbung | Rollen sind **strikt getrennt**. `district_admin` erbt keine `congregation_admin`-Rechte automatisch. Ein Benutzer kann mehrere Rollen innerhalb seines Bezirks haben (z. B. gleichzeitig `district_admin` und `planner`). |
+| 2 | Bezirkszuordnung | Jeder Benutzer (außer `system_admin`) ist **genau einem Bezirk** zugeordnet. Innerhalb dieses Bezirks kann er mehrere Rollen besitzen. Die Bezirkszuordnung wird auf dem `User`-Datensatz gespeichert, nicht in `UserRole`. |
 | 3 | Gemeindegruppen | Keine eigene Berechtigungsstufe für Gruppen. Gruppen dienen der Kooperation (gemeinsame Gottesdienste, gegenseitige Unterstützung) und werden vollständig durch `district_admin` verwaltet. |
 | 4 | Einladungsworkflow | **Alle drei Varianten** werden unterstützt: E-Mail-Einladung (durch `district_admin`), Selbstregistrierung mit Freigabe, manuelle Anlage durch `system_admin`. Technisch über Keycloak abgebildet. |
 | 5 | Sichtbarkeit ServiceAssignments | **Ja.** `congregation_admin` kann die Dienstleiter-Namen aller Gemeinden im gleichen Bezirk in der Matrixansicht sehen. |
