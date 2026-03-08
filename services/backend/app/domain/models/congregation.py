@@ -19,6 +19,7 @@ class Congregation:
     service_times: list[dict]
     created_at: datetime
     updated_at: datetime
+    group_id: uuid.UUID | None = None
 
     @classmethod
     def create(
@@ -27,6 +28,7 @@ class Congregation:
         name: str,
         district_id: uuid.UUID,
         service_times: list[dict] | None = None,
+        group_id: uuid.UUID | None = None,
     ) -> Congregation:
         now = datetime.now(timezone.utc)
         return cls(
@@ -36,4 +38,5 @@ class Congregation:
             service_times=service_times if service_times is not None else list(DEFAULT_SERVICE_TIMES),
             created_at=now,
             updated_at=now,
+            group_id=group_id,
         )

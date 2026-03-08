@@ -62,6 +62,13 @@
               </button>
               <button
                 class="flex items-center gap-1 text-xs text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50"
+                @click="openNewGroup(district.id)"
+              >
+                <PlusIcon class="h-3.5 w-3.5" />
+                Gruppe
+              </button>
+              <button
+                class="flex items-center gap-1 text-xs text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50"
                 @click="openNewCongregation(district.id)"
               >
                 <PlusIcon class="h-3.5 w-3.5" />
@@ -69,6 +76,68 @@
               </button>
             </div>
           </template>
+        </div>
+
+        <!-- New group inline form -->
+        <div
+          v-if="newGroupDistrictId === district.id"
+          class="px-4 py-2 border-t border-gray-100 bg-amber-50 flex items-center gap-2"
+        >
+          <input
+            ref="newGroupInput"
+            v-model="newGroupName"
+            placeholder="Name der Gruppe"
+            class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 w-56"
+            @keyup.enter="saveGroup(district.id)"
+            @keyup.escape="cancelNewGroup"
+          />
+          <button
+            class="p-1.5 rounded text-green-600 hover:bg-green-100 disabled:opacity-40"
+            :disabled="!newGroupName.trim() || saving"
+            title="Hinzufügen"
+            @click="saveGroup(district.id)"
+          >
+            <CheckIcon class="h-4 w-4" />
+          </button>
+          <button class="p-1.5 rounded text-gray-500 hover:bg-gray-200" title="Abbrechen" @click="cancelNewGroup">
+            <XMarkIcon class="h-4 w-4" />
+          </button>
+        </div>
+
+        <!-- Groups list (inline editting) -->
+        <div v-if="groupsByDistrict[district.id]?.length" class="bg-gray-50/50 border-t border-gray-100 px-4 py-2 space-y-1">
+          <div v-for="group in groupsByDistrict[district.id]" :key="group.id" class="flex items-center justify-between">
+            <template v-if="editingGroupId === group.id">
+              <input
+                v-model="editGroupName"
+                class="border border-gray-300 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 w-40"
+                @keyup.enter="saveEditGroup(district.id, group)"
+                @keyup.escape="editingGroupId = null"
+              />
+              <div class="flex gap-1">
+                <button class="p-1 rounded text-green-600 hover:bg-green-100" @click="saveEditGroup(district.id, group)">
+                  <CheckIcon class="h-3 w-3" />
+                </button>
+                <button class="p-1 rounded text-gray-400 hover:bg-gray-100" @click="editingGroupId = null">
+                  <XMarkIcon class="h-3 w-3" />
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <span class="text-xs font-medium text-gray-500 uppercase tracking-wider">{{ group.name }}</span>
+              <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <!-- Actually the li/div above needs "group" class for hover, let's add it -->
+              </div>
+              <div class="flex items-center gap-1">
+                <button class="p-1 rounded text-gray-300 hover:text-gray-600" @click="startEditGroup(group)">
+                  <PencilSquareIcon class="h-3 w-3" />
+                </button>
+                <button class="p-1 rounded text-gray-300 hover:text-red-600" @click="confirmDeleteGroup(district.id, group)">
+                  <TrashIcon class="h-3 w-3" />
+                </button>
+              </div>
+            </template>
+          </div>
         </div>
 
         <!-- New congregation inline form -->
@@ -202,8 +271,24 @@
         <input
           v-model="editCongModal.name"
           type="text"
-          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-5"
+          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
         />
+
+        <!-- Group (optional) -->
+        <label class="block text-sm font-medium text-gray-700 mb-1">Gruppe (optional)</label>
+        <select
+          v-model="editCongModal.groupId"
+          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-5"
+        >
+          <option :value="null">Keine Gruppe</option>
+          <option
+            v-for="g in groupsByDistrict[editCongModal.districtId]"
+            :key="g.id"
+            :value="g.id"
+          >
+            {{ g.name }}
+          </option>
+        </select>
 
         <!-- Gottesdienst-Zeiten -->
         <div class="flex items-center justify-between mb-2">
@@ -276,11 +361,16 @@ import { CheckIcon, PencilSquareIcon, PlusIcon, TrashIcon, XMarkIcon } from '@he
 import {
   createCongregation,
   createDistrict,
+  createGroup,
+  deleteGroup,
   listCongregations,
   listDistricts,
+  listGroups,
   updateCongregation,
   updateDistrict,
+  updateGroup,
   type CongregationResponse,
+  type CongregationGroupResponse,
   type DistrictResponse,
   type ServiceTime,
 } from '@/api/districts'
@@ -316,6 +406,7 @@ function formatServiceTimes(times: ServiceTime[]): string {
 
 const districts = ref<DistrictResponse[]>([])
 const congregationsByDistrict = reactive<Record<string, CongregationResponse[]>>({})
+const groupsByDistrict = reactive<Record<string, CongregationGroupResponse[]>>({})
 const loadingDistricts = ref(false)
 const globalError = ref('')
 const saving = ref(false)
@@ -342,6 +433,7 @@ const editCongModal = reactive({
   districtId: '',
   congregationId: '',
   name: '',
+  groupId: '' as string | null,
   serviceTimes: [] as EditableServiceTime[],
   error: '',
 })
@@ -351,6 +443,7 @@ function openEditCong(districtId: string, cong: CongregationResponse) {
   editCongModal.districtId = districtId
   editCongModal.congregationId = cong.id
   editCongModal.name = cong.name
+  editCongModal.groupId = cong.group_id
   editCongModal.serviceTimes = cong.service_times.map((st) => ({ ...st }))
   editCongModal.error = ''
 }
@@ -377,6 +470,7 @@ async function saveEditCong() {
       editCongModal.congregationId,
       {
         name: editCongModal.name.trim(),
+        group_id: editCongModal.groupId || null,
         service_times: editCongModal.serviceTimes.map((st) => ({
           weekday: Number(st.weekday),
           time: st.time,
@@ -406,6 +500,7 @@ async function loadAll() {
     await Promise.all(
       districts.value.map(async (d) => {
         congregationsByDistrict[d.id] = await listCongregations(d.id)
+        groupsByDistrict[d.id] = await listGroups(d.id)
       }),
     )
   } catch (e) {
@@ -496,8 +591,80 @@ function cancelNewCong() {
   inlineError.value = ''
 }
 
+// ── Groups ───────────────────────────────────────────────────────────────────
+
+const newGroupDistrictId = ref<string | null>(null)
+const newGroupName = ref('')
+const newGroupInput = ref<HTMLInputElement | null>(null)
+
+const editingGroupId = ref<string | null>(null)
+const editGroupName = ref('')
+
+function openNewGroup(districtId: string) {
+  cancelEdit()
+  newGroupName.value = ''
+  newGroupDistrictId.value = districtId
+  nextTick(() => newGroupInput.value?.focus())
+}
+
+async function saveGroup(districtId: string) {
+  if (!newGroupName.value.trim()) return
+  saving.value = true
+  try {
+    const created = await createGroup(districtId, newGroupName.value.trim())
+    groupsByDistrict[districtId] = [
+      ...(groupsByDistrict[districtId] ?? []),
+      created,
+    ].sort((a, b) => a.name.localeCompare(b.name))
+    cancelNewGroup()
+  } finally {
+    saving.value = false
+  }
+}
+
+function cancelNewGroup() {
+  newGroupDistrictId.value = null
+  newGroupName.value = ''
+}
+
+function startEditGroup(group: CongregationGroupResponse) {
+  editingGroupId.value = group.id
+  editGroupName.value = group.name
+}
+
+async function saveEditGroup(districtId: string, group: CongregationGroupResponse) {
+  if (!editGroupName.value.trim()) return
+  saving.value = true
+  try {
+    const updated = await updateGroup(districtId, group.id, editGroupName.value.trim())
+    const list = groupsByDistrict[districtId]
+    const idx = list?.findIndex((g) => g.id === group.id) ?? -1
+    if (idx !== -1) list[idx] = updated
+    editingGroupId.value = null
+  } finally {
+    saving.value = false
+  }
+}
+
+async function confirmDeleteGroup(districtId: string, group: CongregationGroupResponse) {
+  if (!confirm(`Gruppe "${group.name}" wirklich löschen?`)) return
+  saving.value = true
+  try {
+    await deleteGroup(districtId, group.id)
+    groupsByDistrict[districtId] = (groupsByDistrict[districtId] || []).filter((g) => g.id !== group.id)
+    // Local state: clear group_id for congregations that were in this group
+    congregationsByDistrict[districtId]?.forEach((c) => {
+      if (c.group_id === group.id) c.group_id = null
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
 function cancelEdit() {
   editingDistrictId.value = null
   editName.value = ''
+  newGroupDistrictId.value = null
+  editingGroupId.value = null
 }
 </script>

@@ -34,11 +34,13 @@ class DistrictResponse(BaseModel):
 class CongregationCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     service_times: list[ServiceTime] | None = None  # None → Defaults
+    group_id: uuid.UUID | None = None
 
 
 class CongregationUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     service_times: list[ServiceTime] | None = None
+    group_id: uuid.UUID | None = None
 
 
 class CongregationResponse(BaseModel):
@@ -47,7 +49,26 @@ class CongregationResponse(BaseModel):
     id: uuid.UUID
     name: str
     district_id: uuid.UUID
+    group_id: uuid.UUID | None
     service_times: list[ServiceTime]
+    created_at: datetime
+    updated_at: datetime
+
+
+class CongregationGroupCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class CongregationGroupUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class CongregationGroupResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: uuid.UUID
+    name: str
+    district_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
 

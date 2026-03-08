@@ -26,7 +26,9 @@ export function fetchMatrix(
   districtId: string,
   fromDt: string,
   toDt: string,
+  groupId?: string,
 ): Promise<MatrixResponse> {
   const params = new URLSearchParams({ from_dt: fromDt, to_dt: toDt })
+  if (groupId) params.append('group_id', groupId)
   return apiFetch<MatrixResponse>(`/api/v1/districts/${districtId}/matrix?${params}`)
 }

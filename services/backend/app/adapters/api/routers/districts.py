@@ -10,6 +10,9 @@ import httpx
 
 from app.adapters.api.schemas.district import (
     CongregationCreate,
+    CongregationGroupCreate,
+    CongregationGroupResponse,
+    CongregationGroupUpdate,
     CongregationResponse,
     CongregationUpdate,
     DistrictCreate,
@@ -21,11 +24,15 @@ from app.adapters.api.schemas.district import (
 )
 from app.application.feiertage_service import DE_STATES, import_feiertage, import_kirchliche_festtage
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
-from app.adapters.db.repositories.congregation import SqlCongregationRepository
-from app.adapters.db.repositories.district import SqlDistrictRepository
-from app.adapters.db.repositories.event import SqlEventRepository
-from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
+from app.adapters.db.repositories import (
+    SqlCongregationRepository,
+    SqlCongregationGroupRepository,
+    SqlDistrictRepository,
+    SqlEventRepository,
+    SqlServiceAssignmentRepository,
+)
 from app.domain.models.congregation import Congregation
+from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
@@ -106,7 +113,10 @@ async def create_congregation(
         [st.model_dump() for st in body.service_times] if body.service_times is not None else None
     )
     congregation = Congregation.create(
-        name=body.name, district_id=district_id, service_times=service_times
+        name=body.name,
+        district_id=district_id,
+        service_times=service_times,
+        group_id=body.group_id,
     )
     await SqlCongregationRepository(db).save(congregation)
     return _cong_response(congregation)
@@ -114,11 +124,16 @@ async def create_congregation(
 
 @router.get("/{district_id}/congregations", response_model=list[CongregationResponse])
 async def list_congregations(
-    district_id: uuid.UUID, _: ApiKeyGuard, db: DbSession,
+    district_id: uuid.UUID,
+    _: ApiKeyGuard,
+    db: DbSession,
+    group_id: uuid.UUID | None = Query(None),
 ) -> list[CongregationResponse]:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-    congregations = await SqlCongregationRepository(db).list_by_district(district_id)
+    congregations = await SqlCongregationRepository(db).list_by_district(
+        district_id, group_id=group_id
+    )
     return [_cong_response(c) for c in congregations]
 
 
@@ -140,6 +155,8 @@ async def update_congregation(
         congregation.name = body.name
     if body.service_times is not None:
         congregation.service_times = [st.model_dump() for st in body.service_times]
+    if "group_id" in body.model_fields_set:
+        congregation.group_id = body.group_id
     congregation.updated_at = datetime.now(timezone.utc)
     await repo.save(congregation)
     return _cong_response(congregation)
@@ -150,9 +167,78 @@ def _cong_response(c: Congregation) -> CongregationResponse:
         id=c.id,
         name=c.name,
         district_id=c.district_id,
+        group_id=c.group_id,
         service_times=[ServiceTime(**st) for st in c.service_times],
         created_at=c.created_at,
         updated_at=c.updated_at,
+    )
+
+
+# ── Congregation Groups ───────────────────────────────────────────────────────
+
+
+@router.post(
+    "/{district_id}/groups",
+    response_model=CongregationGroupResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_group(
+    district_id: uuid.UUID, body: CongregationGroupCreate, _: ApiKeyGuard, db: DbSession,
+) -> CongregationGroupResponse:
+    if not await SqlDistrictRepository(db).get(district_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    group = CongregationGroup.create(name=body.name, district_id=district_id)
+    await SqlCongregationGroupRepository(db).save(group)
+    return _group_response(group)
+
+
+@router.get("/{district_id}/groups", response_model=list[CongregationGroupResponse])
+async def list_groups(
+    district_id: uuid.UUID, _: ApiKeyGuard, db: DbSession,
+) -> list[CongregationGroupResponse]:
+    if not await SqlDistrictRepository(db).get(district_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
+    return [_group_response(g) for g in groups]
+
+
+@router.patch("/{district_id}/groups/{group_id}", response_model=CongregationGroupResponse)
+async def update_group(
+    district_id: uuid.UUID,
+    group_id: uuid.UUID,
+    body: CongregationGroupUpdate,
+    _: ApiKeyGuard,
+    db: DbSession,
+) -> CongregationGroupResponse:
+    repo = SqlCongregationGroupRepository(db)
+    group = await repo.get(group_id)
+    if not group or group.district_id != district_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gruppe nicht gefunden")
+    if body.name is not None:
+        group.name = body.name
+    group.updated_at = datetime.now(timezone.utc)
+    await repo.save(group)
+    return _group_response(group)
+
+
+@router.delete("/{district_id}/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_group(
+    district_id: uuid.UUID, group_id: uuid.UUID, _: ApiKeyGuard, db: DbSession,
+) -> None:
+    repo = SqlCongregationGroupRepository(db)
+    group = await repo.get(group_id)
+    if not group or group.district_id != district_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gruppe nicht gefunden")
+    await repo.delete(group_id)
+
+
+def _group_response(g: CongregationGroup) -> CongregationGroupResponse:
+    return CongregationGroupResponse(
+        id=g.id,
+        name=g.name,
+        district_id=g.district_id,
+        created_at=g.created_at,
+        updated_at=g.updated_at,
     )
 
 
@@ -166,11 +252,14 @@ async def get_matrix(
     db: DbSession,
     from_dt: datetime = Query(...),
     to_dt: datetime = Query(...),
+    group_id: uuid.UUID | None = Query(None),
 ) -> MatrixResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
 
-    congregations = await SqlCongregationRepository(db).list_by_district(district_id)
+    congregations = await SqlCongregationRepository(db).list_by_district(
+        district_id, group_id=group_id
+    )
     from_date = from_dt.date()
     to_date = to_dt.date()
 

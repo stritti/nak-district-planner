@@ -18,6 +18,7 @@ def _orm_to_domain(row: CongregationORM) -> Congregation:
         service_times=list(row.service_times) if row.service_times else [],
         created_at=row.created_at,
         updated_at=row.updated_at,
+        group_id=row.group_id,
     )
 
 
@@ -29,12 +30,14 @@ class SqlCongregationRepository(CongregationRepository):
         row = await self._session.get(CongregationORM, congregation_id)
         return _orm_to_domain(row) if row else None
 
-    async def list_by_district(self, district_id: uuid.UUID) -> list[Congregation]:
-        result = await self._session.execute(
-            select(CongregationORM)
-            .where(CongregationORM.district_id == district_id)
-            .order_by(CongregationORM.name)
-        )
+    async def list_by_district(
+        self, district_id: uuid.UUID, group_id: uuid.UUID | None = None
+    ) -> list[Congregation]:
+        stmt = select(CongregationORM).where(CongregationORM.district_id == district_id)
+        if group_id is not None:
+            stmt = stmt.where(CongregationORM.group_id == group_id)
+        stmt = stmt.order_by(CongregationORM.name)
+        result = await self._session.execute(stmt)
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
     async def save(self, congregation: Congregation) -> None:
@@ -47,6 +50,7 @@ class SqlCongregationRepository(CongregationRepository):
         row.id = congregation.id
         row.name = congregation.name
         row.district_id = congregation.district_id
+        row.group_id = congregation.group_id
         row.service_times = congregation.service_times
         row.created_at = congregation.created_at
         row.updated_at = congregation.updated_at

@@ -6,6 +6,7 @@ from datetime import datetime
 
 from app.domain.models.calendar_integration import CalendarIntegration
 from app.domain.models.congregation import Congregation
+from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.service_assignment import ServiceAssignment
@@ -22,12 +23,28 @@ class DistrictRepository(ABC):
     async def save(self, district: District) -> None: ...
 
 
+class CongregationGroupRepository(ABC):
+    @abstractmethod
+    async def get(self, group_id: uuid.UUID) -> CongregationGroup | None: ...
+
+    @abstractmethod
+    async def list_by_district(self, district_id: uuid.UUID) -> list[CongregationGroup]: ...
+
+    @abstractmethod
+    async def save(self, group: CongregationGroup) -> None: ...
+
+    @abstractmethod
+    async def delete(self, group_id: uuid.UUID) -> None: ...
+
+
 class CongregationRepository(ABC):
     @abstractmethod
     async def get(self, congregation_id: uuid.UUID) -> Congregation | None: ...
 
     @abstractmethod
-    async def list_by_district(self, district_id: uuid.UUID) -> list[Congregation]: ...
+    async def list_by_district(
+        self, district_id: uuid.UUID, group_id: uuid.UUID | None = None
+    ) -> list[Congregation]: ...
 
     @abstractmethod
     async def save(self, congregation: Congregation) -> None: ...

@@ -10,6 +10,7 @@ export const useMatrixStore = defineStore('matrix', () => {
 
   // Active filters
   const districtId = ref<string>('')
+  const groupId = ref<string>('')
   const fromDt = ref<string>('')
   const toDt = ref<string>('')
 
@@ -18,7 +19,12 @@ export const useMatrixStore = defineStore('matrix', () => {
     loading.value = true
     error.value = null
     try {
-      matrix.value = await fetchMatrix(districtId.value, fromDt.value, toDt.value)
+      matrix.value = await fetchMatrix(
+        districtId.value,
+        fromDt.value,
+        toDt.value,
+        groupId.value || undefined,
+      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unbekannter Fehler'
     } finally {
@@ -31,7 +37,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     await fetch() // refresh matrix
   }
 
-  return { matrix, loading, error, districtId, fromDt, toDt, fetch, assign }
+  return { matrix, loading, error, districtId, groupId, fromDt, toDt, fetch, assign }
 }, {
-  persist: { pick: ['districtId', 'fromDt', 'toDt'] },
+  persist: { pick: ['districtId', 'groupId', 'fromDt', 'toDt'] },
 })
