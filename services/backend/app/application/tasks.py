@@ -110,6 +110,9 @@ def cleanup_old_events() -> dict:
         result["cutoff"],
     )
     return result
+
+
+@celery.task(name="auto_import_feiertage")
 def auto_import_feiertage() -> dict:
     """Celery beat task — runs on the 1st of each month at 03:00 Europe/Berlin.
 
