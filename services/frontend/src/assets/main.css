@@ -25,7 +25,7 @@
   html.dark {
     color-scheme: dark;
   }
-  * {
+  button, a, input, select, textarea {
     @apply transition-colors duration-150;
   }
 }

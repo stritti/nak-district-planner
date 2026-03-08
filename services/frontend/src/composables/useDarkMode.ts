@@ -15,12 +15,13 @@ function applyTheme(dark: boolean) {
   }
 }
 
-watch(isDark, applyTheme)
-
 export function useDarkMode() {
   onMounted(() => {
     if (initialized) return
     initialized = true
+
+    // Register the watcher once, after the first mount
+    watch(isDark, applyTheme)
 
     const stored = typeof localStorage !== 'undefined'
       ? localStorage.getItem(STORAGE_KEY)
