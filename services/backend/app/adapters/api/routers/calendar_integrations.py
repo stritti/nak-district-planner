@@ -15,7 +15,7 @@ from app.adapters.api.schemas.calendar_integration import (
     SyncResult,
 )
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
-from app.application.crypto import encrypt_credentials
+from app.application.crypto import CryptoError, encrypt_credentials
 from app.application.sync_service import run_sync
 from app.domain.models.calendar_integration import CalendarIntegration
 
@@ -99,7 +99,7 @@ async def trigger_sync(
 
     try:
         summary = await run_sync(integration_id, db)
-    except ValueError as exc:
+    except (ValueError, CryptoError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return SyncResult(
         integration_id=integration_id,

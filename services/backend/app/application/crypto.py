@@ -13,10 +13,17 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class CryptoError(Exception):
+    """Raised when decryption fails (e.g. wrong secret key)."""
 
 
 def _fernet() -> Fernet:
@@ -31,4 +38,14 @@ def encrypt_credentials(data: dict) -> str:
 
 def decrypt_credentials(token: str) -> dict:
     """Decrypt a Fernet token and return the original dict."""
-    return json.loads(_fernet().decrypt(token.encode()))
+    try:
+        return json.loads(_fernet().decrypt(token.encode()))
+    except InvalidToken as e:
+        logger.error("Failed to decrypt credentials. Likely SECRET_KEY mismatch.")
+        raise CryptoError(
+            "Entschlüsselung fehlgeschlagen. Wahrscheinlich wurde der SECRET_KEY geändert. "
+            "Bitte die Zugangsdaten für diesen Kalender neu speichern."
+        ) from e
+    except Exception as e:
+        logger.error(f"Unexpected error during decryption: {e}")
+        raise CryptoError(f"Unerwarteter Fehler bei der Entschlüsselung: {e}") from e
