@@ -10,12 +10,17 @@ function formatDate(iso: string): string {
   return `${day}.${month}.${year}`
 }
 
+const DATE_TIME_FORMATTER = new Intl.DateTimeFormat('de-DE', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 function formatDateTime(isoString: string): string {
   // Display times in the user's local timezone using Intl
-  return new Intl.DateTimeFormat('de-DE', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  }).format(new Date(isoString))
+  return DATE_TIME_FORMATTER.format(new Date(isoString))
 }
 
 function headerCell(value: string): Cell {
