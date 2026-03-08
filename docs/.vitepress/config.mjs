@@ -11,6 +11,8 @@ export default defineConfig({
       { text: 'Guide', link: '/getting-started' },
       { text: 'Use Cases', link: '/use-cases' },
       { text: 'Rollenkonzept', link: '/roles' }
+      { text: 'Auth', link: '/auth-keycloak' },
+      { text: 'Use Cases', link: '/use-cases' }
     ],
 
     sidebar: [
@@ -18,6 +20,7 @@ export default defineConfig({
         text: 'Einführung',
         items: [
           { text: 'Erste Schritte', link: '/getting-started' },
+          { text: 'Authentifizierung', link: '/auth-keycloak' },
           { text: 'Use Cases', link: '/use-cases' }
         ]
       },
