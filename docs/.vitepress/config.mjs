@@ -9,7 +9,8 @@ export default defineConfig({
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/getting-started' },
-      { text: 'Use Cases', link: '/use-cases' }
+      { text: 'Use Cases', link: '/use-cases' },
+      { text: 'Rollenkonzept', link: '/roles' }
     ],
 
     sidebar: [
@@ -18,6 +19,12 @@ export default defineConfig({
         items: [
           { text: 'Erste Schritte', link: '/getting-started' },
           { text: 'Use Cases', link: '/use-cases' }
+        ]
+      },
+      {
+        text: 'Sicherheit & Berechtigungen',
+        items: [
+          { text: 'Rollenkonzept', link: '/roles' }
         ]
       }
     ],
