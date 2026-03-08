@@ -40,7 +40,7 @@ async def list_leaders(
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     leaders = await SqlLeaderRepository(db).list_by_district(district_id)
-    return [_leader_response(l) for l in leaders]
+    return [_leader_response(leader) for leader in leaders]
 
 
 @router.post("", response_model=LeaderResponse, status_code=status.HTTP_201_CREATED)

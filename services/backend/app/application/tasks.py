@@ -125,7 +125,6 @@ def auto_import_feiertage() -> dict:
 
     from app.adapters.db.repositories.district import SqlDistrictRepository
     from app.adapters.db.session import AsyncSessionLocal
-    from app.application.feiertage_service import import_feiertage
 
     async def _run() -> dict:
         now = datetime.now(timezone.utc)
