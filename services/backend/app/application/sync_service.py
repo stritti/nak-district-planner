@@ -88,6 +88,10 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
                 existing.end_at = raw.end_at
                 existing.description = raw.description
                 existing.content_hash = raw.content_hash
+                
+                # Apply auto-categorization on update
+                existing.apply_auto_categorization()
+
                 existing.updated_at = datetime.now(timezone.utc)
                 await event_repo.save(existing)
                 updated += 1

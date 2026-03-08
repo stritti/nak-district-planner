@@ -38,10 +38,11 @@
         </div>
 
         <div v-if="districtsStore.groups.length > 0">
-          <label class="block text-xs font-medium text-gray-500 mb-1">Gruppe (optional)</label>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Gruppe</label>
           <select
             v-model="matrixStore.groupId"
-            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            :disabled="matrixStore.onlyDistrictLevel"
+            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
             @change="matrixStore.fetch()"
           >
             <option value="">Alle Gruppen</option>
@@ -49,6 +50,17 @@
               {{ g.name }}
             </option>
           </select>
+        </div>
+
+        <div class="flex items-center gap-2 pt-5">
+          <input
+            id="only-district"
+            v-model="matrixStore.onlyDistrictLevel"
+            type="checkbox"
+            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+            @change="onDistrictOnlyChange"
+          />
+          <label for="only-district" class="text-sm text-gray-700 cursor-pointer">Nur Bezirksebene</label>
         </div>
 
         <div>
@@ -285,12 +297,20 @@ onMounted(async () => {
 async function onDistrictChange() {
   matrixStore.matrix = null
   matrixStore.groupId = ''
+  matrixStore.onlyDistrictLevel = false
   if (matrixStore.districtId) {
     await districtsStore.fetchGroups(matrixStore.districtId)
     if (matrixStore.fromDt && matrixStore.toDt) {
       matrixStore.fetch()
     }
   }
+}
+
+function onDistrictOnlyChange() {
+  if (matrixStore.onlyDistrictLevel) {
+    matrixStore.groupId = ''
+  }
+  matrixStore.fetch()
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

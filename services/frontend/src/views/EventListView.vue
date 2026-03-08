@@ -95,6 +95,7 @@
             @change="onFilterChange"
           >
             <option value="">Alle Gemeinden</option>
+            <option value="DISTRICT_ONLY">Nur Bezirksebene</option>
             <option v-for="c in districtsStore.congregations" :key="c.id" :value="c.id">
               {{ c.name }}
             </option>
@@ -264,16 +265,18 @@
               <div class="text-base font-semibold" :class="day.isToday ? 'text-white' : 'text-gray-900'">
                 {{ day.day }}
               </div>
-              <div v-if="calendarHolidays[day.iso]?.length" class="mt-0.5">
-                <span
-                  v-for="name in calendarHolidays[day.iso]"
-                  :key="name"
-                  class="block text-[10px] leading-tight px-1 py-0.5 rounded bg-amber-100 text-amber-800 font-medium mt-0.5"
-                >{{ name }}</span>
-              </div>
             </div>
             <!-- Events -->
             <div class="p-1.5 space-y-1 min-h-[140px]">
+              <!-- Feiertage oben im Inhaltsbereich (wie in der Monatsansicht) -->
+              <template v-if="calendarHolidays[day.iso]?.length">
+                <div
+                  v-for="name in calendarHolidays[day.iso]"
+                  :key="name"
+                  class="rounded px-1.5 py-1 text-xs leading-tight bg-amber-100 text-amber-800 font-medium"
+                >{{ name }}</div>
+              </template>
+              <!-- Reguläre Events -->
               <template v-if="eventsByDate[day.iso]?.filter(e => e.category !== 'Feiertag').length">
                 <div
                   v-for="event in eventsByDate[day.iso].filter(e => e.category !== 'Feiertag')"
@@ -286,7 +289,10 @@
                   <div class="text-[10px] opacity-70">{{ formatTime(event.start_at) }}</div>
                 </div>
               </template>
-              <div v-else class="text-gray-200 text-xs text-center pt-4">–</div>
+              <div
+                v-if="!calendarHolidays[day.iso]?.length && !eventsByDate[day.iso]?.filter(e => e.category !== 'Feiertag').length"
+                class="text-gray-200 text-xs text-center pt-4"
+              >–</div>
             </div>
           </div>
         </div>
@@ -546,7 +552,11 @@ async function fetchCalendar() {
     }
     const params: EventListParams = { from_dt: from, to_dt: to, limit: 500, offset: 0 }
     if (selectedDistrictId.value)     params.district_id     = selectedDistrictId.value
-    if (selectedCongregationId.value) params.congregation_id = selectedCongregationId.value
+    if (selectedCongregationId.value === 'DISTRICT_ONLY') {
+      params.only_district_level = true
+    } else if (selectedCongregationId.value) {
+      params.congregation_id = selectedCongregationId.value
+    }
     if (selectedGroupId.value)        params.group_id        = selectedGroupId.value
     if (selectedStatus.value)         params.status          = selectedStatus.value
     const res = await listEvents(params)
@@ -705,10 +715,12 @@ function onFilterChange() {
 }
 
 function applyFilters() {
+  const isDistrictOnly = selectedCongregationId.value === 'DISTRICT_ONLY'
   eventsStore.setFilter({
     district_id:    selectedDistrictId.value || undefined,
-    congregation_id: selectedCongregationId.value || undefined,
+    congregation_id: (!isDistrictOnly && selectedCongregationId.value) ? selectedCongregationId.value : undefined,
     group_id:        selectedGroupId.value || undefined,
+    only_district_level: isDistrictOnly,
     status:          selectedStatus.value || undefined,
     from_dt: fromDate.value ? fromDate.value + 'T00:00:00' : undefined,
     to_dt:   toDate.value   ? toDate.value   + 'T23:59:59' : undefined,

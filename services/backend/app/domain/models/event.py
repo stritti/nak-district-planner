@@ -44,6 +44,10 @@ class Event:
     calendar_integration_id: uuid.UUID | None = None
     content_hash: str | None = None
 
+    def apply_auto_categorization(self) -> None:
+        if "gottesdienst" in self.title.lower():
+            self.category = "Gottesdienst"
+
     @classmethod
     def create(
         cls,
@@ -65,7 +69,11 @@ class Event:
         content_hash: str | None = None,
     ) -> Event:
         now = datetime.now(timezone.utc)
-        return cls(
+
+        if "gottesdienst" in title.lower():
+            category = "Gottesdienst"
+
+        event = cls(
             id=uuid.uuid4(),
             title=title,
             start_at=start_at,
@@ -85,3 +93,7 @@ class Event:
             created_at=now,
             updated_at=now,
         )
+        # Re-apply in case it was explicitly passed as something else but contains the keyword
+        # (Though the current logic overrides it anyway above)
+        event.apply_auto_categorization()
+        return event

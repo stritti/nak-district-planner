@@ -61,6 +61,7 @@ class EventRepository(ABC):
         district_id: uuid.UUID | None = None,
         congregation_id: uuid.UUID | None = None,
         group_id: uuid.UUID | None = None,
+        only_district_level: bool = False,
         status: EventStatus | None = None,
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,

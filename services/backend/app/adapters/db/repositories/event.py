@@ -96,6 +96,7 @@ class SqlEventRepository(EventRepository):
         district_id: uuid.UUID | None = None,
         congregation_id: uuid.UUID | None = None,
         group_id: uuid.UUID | None = None,
+        only_district_level: bool = False,
         status: EventStatus | None = None,
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
@@ -111,6 +112,9 @@ class SqlEventRepository(EventRepository):
         if congregation_id is not None:
             query = query.where(EventORM.congregation_id == congregation_id)
             count_query = count_query.where(EventORM.congregation_id == congregation_id)
+        elif only_district_level:
+            query = query.where(EventORM.congregation_id == None)
+            count_query = count_query.where(EventORM.congregation_id == None)
         elif group_id is not None:
             query = query.join(CongregationORM, EventORM.congregation_id == CongregationORM.id)
             query = query.where(CongregationORM.group_id == group_id)
@@ -125,8 +129,8 @@ class SqlEventRepository(EventRepository):
             query = query.where(EventORM.start_at >= from_dt)
             count_query = count_query.where(EventORM.start_at >= from_dt)
         if to_dt is not None:
-            query = query.where(EventORM.end_at <= to_dt)
-            count_query = count_query.where(EventORM.end_at <= to_dt)
+            query = query.where(EventORM.start_at <= to_dt)
+            count_query = count_query.where(EventORM.start_at <= to_dt)
 
         total_result = await self._session.execute(count_query)
         total = total_result.scalar_one()
