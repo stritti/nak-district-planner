@@ -5,6 +5,7 @@
 
 Idempotent: UIDs sind stabil — wiederholter Import überschreibt nur bei Änderungen.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -71,10 +72,10 @@ def _easter_sunday(year: int) -> date:
     g = (b - f + 1) // 3
     h = (19 * a + b - d - g + 15) % 30
     i, k = divmod(c, 4)
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = (h + l - 7 * m + 114) % 31 + 1
+    l_val = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l_val) // 451
+    month = (h + l_val - 7 * m + 114) // 31
+    day = (h + l_val - 7 * m + 114) % 31 + 1
     return date(year, month, day)
 
 
@@ -86,7 +87,14 @@ def _content_hash(date: str, name: str) -> str:
 
 
 def _external_uid(district_id: uuid.UUID, date: str, name: str) -> str:
-    slug = name.lower().replace(" ", "-").replace("/", "-").replace("ä", "ae").replace("ö", "oe").replace("ü", "ue")
+    slug = (
+        name.lower()
+        .replace(" ", "-")
+        .replace("/", "-")
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+    )
     return f"feiertag-DE-{district_id}-{date}-{slug}"
 
 
@@ -123,9 +131,9 @@ async def import_feiertage(
 
     # Include national holidays (counties=None) and state-specific ones matching state_code
     relevant = [
-        h for h in holidays
-        if h.get("counties") is None
-        or (de_county and de_county in (h.get("counties") or []))
+        h
+        for h in holidays
+        if h.get("counties") is None or (de_county and de_county in (h.get("counties") or []))
     ]
 
     event_repo = SqlEventRepository(session)

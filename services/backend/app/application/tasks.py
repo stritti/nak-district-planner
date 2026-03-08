@@ -89,7 +89,6 @@ def auto_import_feiertage() -> dict:
 
     from app.adapters.db.repositories.district import SqlDistrictRepository
     from app.adapters.db.session import AsyncSessionLocal
-    from app.application.feiertage_service import import_feiertage
 
     async def _run() -> dict:
         now = datetime.now(timezone.utc)
@@ -100,7 +99,10 @@ def auto_import_feiertage() -> dict:
         total_created = total_updated = total_skipped = 0
 
         async with AsyncSessionLocal() as session:
-            from app.application.feiertage_service import import_feiertage, import_kirchliche_festtage
+            from app.application.feiertage_service import (
+                import_feiertage,
+                import_kirchliche_festtage,
+            )
 
             repo = SqlDistrictRepository(session)
             all_districts = await repo.list_all()
@@ -121,7 +123,9 @@ def auto_import_feiertage() -> dict:
 
                     # Kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag) — immer
                     r = await import_kirchliche_festtage(
-                        district_id=district.id, year=year, session=session,
+                        district_id=district.id,
+                        year=year,
+                        session=session,
                     )
                     total_created += r["created"]
                     total_updated += r["updated"]
@@ -131,7 +135,11 @@ def auto_import_feiertage() -> dict:
 
         logger.info(
             "auto_import_feiertage: years=%s, districts=%d, created=%d, updated=%d, skipped=%d",
-            sorted(years), len(all_districts), total_created, total_updated, total_skipped,
+            sorted(years),
+            len(all_districts),
+            total_created,
+            total_updated,
+            total_skipped,
         )
         return {
             "years": sorted(years),

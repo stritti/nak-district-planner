@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 # weekday: 0=Mo, 1=Di, 2=Mi, 3=Do, 4=Fr, 5=Sa, 6=So  (Python-Konvention)
@@ -35,7 +35,9 @@ class Congregation:
             id=uuid.uuid4(),
             name=name,
             district_id=district_id,
-            service_times=service_times if service_times is not None else list(DEFAULT_SERVICE_TIMES),
+            service_times=service_times
+            if service_times is not None
+            else list(DEFAULT_SERVICE_TIMES),
             created_at=now,
             updated_at=now,
             group_id=group_id,

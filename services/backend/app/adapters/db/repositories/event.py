@@ -113,8 +113,8 @@ class SqlEventRepository(EventRepository):
             query = query.where(EventORM.congregation_id == congregation_id)
             count_query = count_query.where(EventORM.congregation_id == congregation_id)
         elif only_district_level:
-            query = query.where(EventORM.congregation_id == None)
-            count_query = count_query.where(EventORM.congregation_id == None)
+            query = query.where(EventORM.congregation_id.is_(None))
+            count_query = count_query.where(EventORM.congregation_id.is_(None))
         elif group_id is not None:
             query = query.join(CongregationORM, EventORM.congregation_id == CongregationORM.id)
             query = query.where(CongregationORM.group_id == group_id)

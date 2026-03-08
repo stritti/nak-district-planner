@@ -12,6 +12,7 @@ class MatrixCell(BaseModel):
     is_gap: bool = False  # category==Gottesdienst AND no assignment
     assignment_id: uuid.UUID | None = None
     assignment_status: AssignmentStatus | None = None
+    leader_id: uuid.UUID | None = None
     leader_name: str | None = None
 
 
