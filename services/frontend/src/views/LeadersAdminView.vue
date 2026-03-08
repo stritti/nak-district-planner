@@ -435,16 +435,37 @@ const saving = ref(false)
 
 // ── Sections ──────────────────────────────────────────────────────────────────
 
+const RANK_ORDER: Record<string, number> = {
+  'StAp.': 9,
+  'BezAp.': 8,
+  'Ap.': 7,
+  'Bi.': 6,
+  'BÄ': 5,
+  'BE': 4,
+  'Hi.': 3,
+  'Ev.': 2,
+  'Pr.': 1,
+  'Di.': 0,
+}
+
 const sections = computed(() => [
   { id: 'district', label: 'Bezirksebene', congregationId: null as string | null },
   ...congregations.value.map((c) => ({ id: c.id, label: c.name, congregationId: c.id })),
 ])
 
 function leadersForSection(congregationId: string | null): LeaderResponse[] {
-  if (congregationId === null) {
-    return leaders.value.filter((l) => l.congregation_id === null)
-  }
-  return leaders.value.filter((l) => l.congregation_id === congregationId)
+  const filtered =
+    congregationId === null
+      ? leaders.value.filter((l) => l.congregation_id === null)
+      : leaders.value.filter((l) => l.congregation_id === congregationId)
+  return [...filtered].sort((a, b) => {
+    const rankDiff = (RANK_ORDER[b.rank ?? ''] ?? -1) - (RANK_ORDER[a.rank ?? ''] ?? -1)
+    if (rankDiff !== 0) return rankDiff
+    const roleA = a.special_role ? 1 : 0
+    const roleB = b.special_role ? 1 : 0
+    if (roleB !== roleA) return roleB - roleA
+    return a.name.localeCompare(b.name)
+  })
 }
 
 function congregationName(id: string | null): string {
@@ -508,7 +529,7 @@ async function saveAdd() {
       email: addModal.email.trim() || null,
       phone: addModal.phone.trim() || null,
     })
-    leaders.value = [...leaders.value, created].sort((a, b) => a.name.localeCompare(b.name))
+    leaders.value = [...leaders.value, created]
     addModal.open = false
   } catch (e) {
     addModal.error = e instanceof Error ? e.message : 'Fehler'
