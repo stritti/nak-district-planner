@@ -77,6 +77,15 @@
           <ArrowPathIcon class="h-4 w-4" :class="matrixStore.loading ? 'animate-spin' : ''" />
           Anzeigen
         </button>
+
+        <button
+          class="flex items-center gap-1.5 bg-green-600 text-white text-sm px-4 py-1.5 rounded hover:bg-green-700 disabled:opacity-50"
+          :disabled="!matrixStore.matrix || matrixStore.matrix.dates.length === 0 || exporting"
+          @click="triggerMatrixExport"
+        >
+          <ArrowDownTrayIcon class="h-4 w-4" />
+          {{ exporting ? 'Exportiere…' : 'Excel' }}
+        </button>
       </div>
     </div>
 
@@ -221,11 +230,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
-import { ArrowPathIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ArrowDownTrayIcon, ArrowPathIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '@/stores/matrix'
 import { useDistrictsStore } from '@/stores/districts'
 import type { MatrixCell } from '@/api/matrix'
+import { exportMatrixToExcel } from '@/composables/useExcelExport'
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
@@ -353,6 +363,20 @@ async function submitAssignment() {
     modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
   } finally {
     modal.saving = false
+  }
+}
+
+// ── Excel Export ──────────────────────────────────────────────────────────────
+
+const exporting = ref(false)
+
+async function triggerMatrixExport() {
+  if (!matrixStore.matrix) return
+  exporting.value = true
+  try {
+    await exportMatrixToExcel(matrixStore.matrix, matrixStore.fromDt, matrixStore.toDt)
+  } finally {
+    exporting.value = false
   }
 }
 </script>

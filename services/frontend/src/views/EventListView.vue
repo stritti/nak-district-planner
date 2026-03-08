@@ -6,19 +6,31 @@
         <h1 class="text-lg font-semibold text-gray-900">Ereignisse</h1>
         <span v-if="viewMode === 'list'" class="text-sm text-gray-400">{{ eventsStore.total }} gesamt</span>
       </div>
-      <!-- View toggle -->
-      <div class="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+      <div class="flex items-center gap-2">
+        <!-- Excel Export (list mode only) -->
         <button
-          v-for="m in VIEW_MODES"
-          :key="m.key"
-          class="px-3 py-1.5 transition-colors"
-          :class="viewMode === m.key
-            ? 'bg-blue-600 text-white'
-            : 'text-gray-600 hover:bg-gray-50'"
-          @click="setViewMode(m.key)"
+          v-if="viewMode === 'list'"
+          class="flex items-center gap-1.5 bg-green-600 text-white text-sm px-3 py-1.5 rounded hover:bg-green-700 disabled:opacity-50"
+          :disabled="eventsStore.total === 0 || exporting"
+          @click="triggerEventsExport"
         >
-          {{ m.label }}
+          <ArrowDownTrayIcon class="h-4 w-4" />
+          {{ exporting ? 'Exportiere…' : 'Excel' }}
         </button>
+        <!-- View toggle -->
+        <div class="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+          <button
+            v-for="m in VIEW_MODES"
+            :key="m.key"
+            class="px-3 py-1.5 transition-colors"
+            :class="viewMode === m.key
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-600 hover:bg-gray-50'"
+            @click="setViewMode(m.key)"
+          >
+            {{ m.label }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -452,6 +464,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
+  ArrowDownTrayIcon,
   BuildingOffice2Icon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -461,6 +474,7 @@ import { useDistrictsStore } from '@/stores/districts'
 import { useEventsStore } from '@/stores/events'
 import { listCongregations, type CongregationResponse } from '@/api/districts'
 import { listEvents, updateEvent, type EventListParams, type EventResponse } from '@/api/events'
+import { exportEventsToExcel } from '@/composables/useExcelExport'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
@@ -828,6 +842,26 @@ async function saveEdit() {
     editError.value = e instanceof Error ? e.message : 'Fehler beim Speichern'
   } finally {
     editSaving.value = false
+  }
+}
+
+// ── Excel Export ──────────────────────────────────────────────────────────────
+
+const exporting = ref(false)
+
+async function triggerEventsExport() {
+  exporting.value = true
+  try {
+    // Fetch all matching events (no pagination) using current filter settings.
+    // The limit of 10 000 acts as a safety cap; normal districts have far fewer events.
+    const { district_id, congregation_id, group_id, only_district_level, status, from_dt, to_dt } = eventsStore.filters
+    const res = await listEvents({ district_id, congregation_id, group_id, only_district_level, status, from_dt, to_dt, limit: 10000, offset: 0 })
+    const fromLabel = from_dt ? from_dt.slice(0, 10) : ''
+    const toLabel   = to_dt   ? to_dt.slice(0, 10)   : ''
+    const filePart  = fromLabel && toLabel ? `_${fromLabel}_${toLabel}` : ''
+    await exportEventsToExcel(res.items, `Ereignisse${filePart}.xlsx`)
+  } finally {
+    exporting.value = false
   }
 }
 </script>
