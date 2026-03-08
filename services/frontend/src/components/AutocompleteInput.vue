@@ -18,20 +18,12 @@
       v-if="showDropdown && flatFiltered.length > 0"
       class="absolute z-50 left-0 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-56 overflow-y-auto"
     >
-      <template v-for="section in sections" :key="section.label ?? '__default__'">
+      <template v-for="(opt, idx) in flatFiltered" :key="opt.id">
         <li
-          v-if="section.label"
-          class="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 sticky top-0"
-        >
-          {{ section.label }}
-        </li>
-        <li
-          v-for="opt in section.items"
-          :key="opt.id"
           class="flex flex-col px-3 py-2 cursor-pointer select-none"
-          :class="flatFiltered.indexOf(opt) === highlightedIndex ? 'bg-blue-100' : 'hover:bg-gray-50'"
+          :class="idx === highlightedIndex ? 'bg-blue-100' : 'hover:bg-gray-50'"
           @mousedown.prevent="selectOption(opt)"
-          @mousemove="highlightedIndex = flatFiltered.indexOf(opt)"
+          @mousemove="highlightedIndex = idx"
         >
           <span class="text-sm text-gray-900">{{ opt.label }}</span>
           <span v-if="opt.sublabel" class="text-xs text-gray-400">{{ opt.sublabel }}</span>
