@@ -2,8 +2,8 @@
 
 Diese Seite beschreibt das geplante Rollenkonzept für den NAK Bezirksplaner. Es dient als Grundlage für den Review und die spätere Implementierung (Phase 4).
 
-::: warning Status: Entwurf (überarbeitet)
-Dieses Dokument ist ein Review-Entwurf. Noch keine Implementierung vorhanden. Klärungsbedarf und getroffene Entscheidungen sind am Ende des Dokuments aufgeführt.
+::: warning Status: Entwurf (vollständig überarbeitet)
+Dieses Dokument ist ein Review-Entwurf. Noch keine Implementierung vorhanden. Alle Klärungsfragen sind beantwortet — eine vollständige Übersicht der getroffenen Entscheidungen findet sich in Abschnitt 5.
 :::
 
 ## 1. Übersicht
@@ -88,12 +88,12 @@ Das Rollenkonzept muss diese Hierarchie widerspiegeln. Eine Rolle ist immer an e
 - Dienstmatrix des Bezirks lesen
 - ServiceAssignments für alle Gemeinden des Bezirks erstellen, bearbeiten und bestätigen
 - Events aller Gemeinden des Bezirks lesen
+- Export-Tokens für den eigenen Bezirk erstellen und löschen
 
 **Keine Berechtigungen für:**
 - Bezirks- oder Gemeindeeinstellungen ändern
 - Events erstellen oder löschen
 - Kalender-Integrationen verwalten
-- Export-Tokens verwalten
 
 ---
 
@@ -107,9 +107,10 @@ Das Rollenkonzept muss diese Hierarchie widerspiegeln. Eine Rolle ist immer an e
 - Events des zugeordneten Bezirks / der Gemeinde lesen
 - ServiceAssignments lesen
 - Dienstmatrix lesen
+- Export-Tokens für den eigenen Zuständigkeitsbereich erstellen und löschen
 
 **Keine Berechtigungen für:**
-- Daten ändern (kein Schreibzugriff)
+- Daten ändern (kein Schreibzugriff auf Events, ServiceAssignments)
 
 ---
 
@@ -131,7 +132,7 @@ Das Rollenkonzept muss diese Hierarchie widerspiegeln. Eine Rolle ist immer an e
 
 Die folgende Tabelle gibt einen Überblick über die Berechtigungen je Ressource und Rolle.
 
-**Legende:** ✅ erlaubt · 🔒 nur eigene Ressourcen (bei Benutzerverwaltung: nur wenn Delegation durch `district_admin` aktiviert wurde) · 👁️ nur lesen · ❓ offen (siehe Abschnitt 6) · ❌ nicht erlaubt
+**Legende:** ✅ erlaubt · 🔒 nur eigene Ressourcen (bei Benutzerverwaltung: nur wenn Delegation durch `district_admin` aktiviert wurde) · 👁️ nur lesen · ❌ nicht erlaubt
 
 | Ressource / Aktion                        | system_admin | district_admin | congregation_admin | planner | viewer |
 |-------------------------------------------|:---:|:---:|:---:|:---:|:---:|
@@ -158,9 +159,9 @@ Die folgende Tabelle gibt einen Überblick über die Berechtigungen je Ressource
 | Integration erstellen / löschen          | ✅  | ✅  | 🔒  | ❌  | ❌  |
 | Integration bearbeiten / Sync auslösen  | ✅  | ✅  | 🔒  | ❌  | ❌  |
 | **Export-Tokens**                         |     |     |     |     |     |
-| `PUBLIC`-Token erstellen / löschen       | ✅  | ✅  | 🔒  | ❌  | ❌  |
-| `INTERNAL`-Token erstellen / löschen     | ✅  | ✅  | ❓  | ❌  | ❌  |
-| Token auflisten                           | ✅  | ✅  | 🔒  | ❌  | ❌  |
+| `PUBLIC`-Token erstellen / löschen       | ✅  | ✅  | 🔒  | ✅  | ✅  |
+| `INTERNAL`-Token erstellen / löschen     | ✅  | ✅  | 🔒  | ✅  | ✅  |
+| Token auflisten                           | ✅  | ✅  | 🔒  | ✅  | ✅  |
 | **Benutzerverwaltung**                    |     |     |     |     |     |
 | Benutzer anlegen (systemweit)            | ✅  | ❌  | ❌  | ❌  | ❌  |
 | Benutzer einladen (im Bezirk)            | ✅  | ✅  | ❌  | ❌  | ❌  |
@@ -317,6 +318,7 @@ Die folgenden Fragen wurden im Review geklärt.
 | 3 | Gemeindegruppen | Keine eigene Berechtigungsstufe für Gruppen. Gruppen dienen der Kooperation (gemeinsame Gottesdienste, gegenseitige Unterstützung) und werden vollständig durch `district_admin` verwaltet. |
 | 4 | Einladungsworkflow | **Alle drei Varianten** werden unterstützt: E-Mail-Einladung (durch `district_admin`), Selbstregistrierung mit Freigabe, manuelle Anlage durch `system_admin`. Technisch über Keycloak abgebildet. |
 | 5 | Sichtbarkeit ServiceAssignments | **Ja.** `congregation_admin` kann die Dienstleiter-Namen aller Gemeinden im gleichen Bezirk in der Matrixansicht sehen. |
+| 6 | Datenschutz bei Export-Tokens | **Jeder** angemeldete Benutzer darf Export-Tokens für den eigenen Zuständigkeitsbereich erstellen (PUBLIC und INTERNAL). Die Sichtbarkeit ergibt sich aus den Datenzugriffsrechten der jeweiligen Rolle. |
 | 7 | Authentifizierung / SSO | **Keycloak** wird als Identity Provider eingebunden. Google- und Microsoft-Login werden über Keycloak aktiviert. |
 | 8 | Session-Dauer | **Empfehlung:** Access Token 15 min, Refresh Token / SSO-Session 8 h. Konfiguration über Keycloak Realm-Einstellungen (siehe Abschnitt 4.1). |
 | 9 | Audit-Log | **Ja.** Sicherheitsrelevante Aktionen werden in einer `AuditLog`-Tabelle festgehalten (siehe Abschnitt 4.5). |
@@ -326,14 +328,19 @@ Die folgenden Fragen wurden im Review geklärt.
 
 ---
 
-## 6. Offene Fragen
+## 6. Vergleich mit `auth-keycloak.md`
 
-::: danger Klärungsbedarf
-Die folgenden Fragen müssen noch vor der Implementierung geklärt werden.
+Die Datei [`auth-keycloak.md`](./auth-keycloak.md) enthält ein früheres, vereinfachtes Konzept für Authentifizierung und Autorisierung. Die folgende Tabelle zeigt die wesentlichen Unterschiede und Entscheidungsgründe:
+
+| Aspekt | `auth-keycloak.md` (alt) | `roles.md` (dieses Dokument) | Begründung |
+|--------|--------------------------|------------------------------|------------|
+| **Anzahl Rollen** | 3 (`admin`, `district-admin`, `congregation-editor`) | 5 (`system_admin`, `district_admin`, `congregation_admin`, `planner`, `viewer`) | Feinere Granularität für die Dienstplanung (`planner`) und den reinen Lesezugriff (`viewer`) |
+| **Rollennamen** | Kebab-case (`district-admin`) | Snake_case (`district_admin`) | Konsistenz mit Python-Enum-Konvention im Backend |
+| **Autorisierungsspeicher** | Keycloak Gruppen (JWT-Claims, z. B. `/Bezirke/{id}/Admins`) | Datenbank (`UserRole`-Tabelle, DB-only) | DB-only ermöglicht sofortige Wirksamkeit von Rollenänderungen (kein JWT-Ablauf abwarten); siehe Abschnitt 4.3 |
+| **Gemeinde-Editor-Scope** | Einem Benutzer können mehrere Gemeinden (auch aus verschiedenen Bezirken) zugewiesen werden | Jeder Benutzer gehört genau **einem** Bezirk (außer `system_admin`) | Klare Mandantentrennung; Bezirkszuordnung auf `User`-Datensatz |
+| **Sichtbarkeit anderer Gemeinden** | `congregation-editor` sieht standardmäßig **keine** Termine anderer Gemeinden | `congregation_admin` sieht die **gesamte Dienstmatrix** des Bezirks (alle Gemeinden) | Notwendig für die koordinierte Dienstplanung über Gemeindegrenzen hinweg |
+| **Keycloak-Gruppen-Mapping** | Explizite Gruppenstruktur `/Bezirke/{id}/Gemeinden/{id}/Editoren` | Nicht verwendet — Keycloak verwaltet nur die Identität (`sub`), Rollen liegen in der DB | Reduziert Komplexität bei der Rollenverwaltung; kein Abgleich zwischen Keycloak und DB nötig |
+
+::: info Empfehlung
+Das Konzept in **diesem Dokument** (`roles.md`) löst `auth-keycloak.md` ab und ist die Grundlage für Phase 4. Die technischen Details aus `auth-keycloak.md` (OIDC-Protokoll, JWT-Validierung, Gruppenstruktur) bleiben als historischer Kontext erhalten, werden aber durch die Abschnitte 4.1–4.3 dieses Dokuments ersetzt.
 :::
-
-### Frage 6: Datenschutz bei internen Export-Tokens
-
-Ein `INTERNAL`-Token zeigt vollständige Dienstleiter-Namen. Wer darf solche Tokens erstellen? Soll es eine Einschränkung auf `district_admin` geben, oder reicht `congregation_admin` für die eigene Gemeinde?
-
-*Status: Noch offen.*
