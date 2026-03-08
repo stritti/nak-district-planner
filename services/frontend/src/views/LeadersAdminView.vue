@@ -1,13 +1,13 @@
 <template>
   <div class="p-6 max-w-5xl">
-    <h1 class="text-xl font-semibold text-gray-900 mb-5">Amtstragende</h1>
+    <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-5">Amtstragende</h1>
 
     <!-- Bezirk wählen -->
     <div class="mb-6">
-      <label class="block text-xs font-medium text-gray-500 mb-1">Bezirk</label>
+      <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Bezirk</label>
       <select
         v-model="selectedDistrictId"
-        class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+        class="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
         @change="onDistrictChange"
       >
         <option value="">Bezirk wählen…</option>
@@ -15,21 +15,21 @@
       </select>
     </div>
 
-    <div v-if="!selectedDistrictId" class="text-sm text-gray-400">Bitte Bezirk wählen.</div>
-    <div v-else-if="loading" class="text-sm text-gray-500">Lade…</div>
+    <div v-if="!selectedDistrictId" class="text-sm text-gray-400 dark:text-gray-500">Bitte Bezirk wählen.</div>
+    <div v-else-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
 
     <template v-else>
       <div v-for="section in sections" :key="section.id" class="mb-8">
         <!-- Section header -->
-        <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-gray-200">
+        <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-gray-200 dark:border-gray-700">
           <div class="flex items-center gap-2">
             <BuildingOffice2Icon
               v-if="section.congregationId === null"
               class="h-4 w-4 text-indigo-400"
             />
             <HomeModernIcon v-else class="h-4 w-4 text-teal-400" />
-            <h2 class="text-sm font-semibold text-gray-700">{{ section.label }}</h2>
-            <span class="text-xs text-gray-400">({{ leadersForSection(section.congregationId).length }})</span>
+            <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ section.label }}</h2>
+            <span class="text-xs text-gray-400 dark:text-gray-500">({{ leadersForSection(section.congregationId).length }})</span>
           </div>
           <button
             class="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50"
@@ -43,15 +43,15 @@
         <!-- Empty state -->
         <div
           v-if="leadersForSection(section.congregationId).length === 0"
-          class="text-xs text-gray-400 py-2 pl-1"
+          class="text-xs text-gray-400 dark:text-gray-500 py-2 pl-1"
         >
           Keine Amtstragende angelegt.
         </div>
 
         <!-- Leaders table -->
-        <div v-else class="border border-gray-200 rounded-lg overflow-hidden">
+        <div v-else class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-xs text-gray-500 font-medium">
+            <thead class="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 font-medium">
               <tr>
                 <th class="px-4 py-2 text-left">Grad</th>
                 <th class="px-4 py-2 text-left">Name</th>
@@ -63,37 +63,37 @@
                 <th class="px-4 py-2 text-right">Aktionen</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100">
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
               <tr
                 v-for="leader in leadersForSection(section.congregationId)"
                 :key="leader.id"
-                class="hover:bg-gray-50"
+                class="hover:bg-gray-50 dark:hover:bg-gray-800"
                 :class="!leader.is_active ? 'opacity-50' : ''"
               >
                 <td class="px-4 py-2">
-                  <span class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                  <span class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 border border-blue-100">
                     {{ leader.rank ?? '—' }}
                   </span>
                 </td>
-                <td class="px-4 py-2 font-medium text-gray-800">{{ leader.name }}</td>
+                <td class="px-4 py-2 font-medium text-gray-800 dark:text-gray-200">{{ leader.name }}</td>
                 <td class="px-4 py-2">
                   <span
                     v-if="leader.special_role"
-                    class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-100"
+                    class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-100"
                   >
                     {{ leader.special_role }}
                   </span>
-                  <span v-else class="text-gray-300">—</span>
+                  <span v-else class="text-gray-300 dark:text-gray-600">—</span>
                 </td>
-                <td v-if="section.congregationId === null" class="px-4 py-2 text-gray-500">
+                <td v-if="section.congregationId === null" class="px-4 py-2 text-gray-500 dark:text-gray-400">
                   {{ congregationName(leader.congregation_id) || '—' }}
                 </td>
-                <td class="px-4 py-2 text-gray-500">{{ leader.email || '—' }}</td>
-                <td class="px-4 py-2 text-gray-500">{{ leader.phone || '—' }}</td>
+                <td class="px-4 py-2 text-gray-500 dark:text-gray-400">{{ leader.email || '—' }}</td>
+                <td class="px-4 py-2 text-gray-500 dark:text-gray-400">{{ leader.phone || '—' }}</td>
                 <td class="px-4 py-2 text-center">
                   <span
                     class="inline-block px-2 py-0.5 rounded text-xs font-medium"
-                    :class="leader.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'"
+                    :class="leader.is_active ? 'bg-green-100 dark:bg-green-900/20 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'"
                   >
                     {{ leader.is_active ? 'Aktiv' : 'Inaktiv' }}
                   </span>
@@ -101,21 +101,21 @@
                 <td class="px-4 py-2 text-right">
                   <div class="flex items-center justify-end gap-1">
                     <button
-                      class="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                      class="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       title="Bearbeiten"
                       @click="openEditModal(leader)"
                     >
                       <PencilSquareIcon class="h-4 w-4" />
                     </button>
                     <button
-                      class="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                      class="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-600 hover:bg-blue-50"
                       title="ICS-Export-Token erstellen"
                       @click="openExportModal(leader)"
                     >
                       <LinkIcon class="h-4 w-4" />
                     </button>
                     <button
-                      class="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50"
+                      class="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                       title="Löschen"
                       @click="confirmDelete(leader)"
                     >
@@ -136,40 +136,40 @@
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="addModal.open = false"
     >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900">Amtstragenden hinzufügen</h2>
-          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="addModal.open = false">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Amtstragenden hinzufügen</h2>
+          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="addModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
 
-        <div class="mb-4 px-3 py-2 bg-gray-50 rounded text-xs text-gray-500 flex items-center gap-1.5">
+        <div class="mb-4 px-3 py-2 bg-gray-50 dark:bg-gray-800 rounded text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
           <BuildingOffice2Icon v-if="addModal.congregationId === null" class="h-3.5 w-3.5 text-indigo-400" />
           <HomeModernIcon v-else class="h-3.5 w-3.5 text-teal-400" />
           Ebene:
-          <span class="font-medium text-gray-700">
+          <span class="font-medium text-gray-700 dark:text-gray-300">
             {{ addModal.congregationId ? congregationName(addModal.congregationId) : 'Bezirksebene' }}
           </span>
         </div>
 
         <div class="grid grid-cols-2 gap-4 mb-4">
           <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
             <input
               v-model="addModal.name"
               type="text"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
               placeholder="Vor- und Nachname"
               @keyup.enter="saveAdd"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Grad *</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Grad *</label>
             <select
               v-model="addModal.rank"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             >
               <option value="">Grad wählen…</option>
               <option v-for="r in LEADER_RANKS" :key="r.value" :value="r.value">{{ r.label }}</option>
@@ -177,10 +177,10 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Besondere Beauftragung</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Besondere Beauftragung</label>
             <select
               v-model="addModal.special_role"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             >
               <option :value="null">Keine</option>
               <option v-for="sr in SPECIAL_ROLES" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
@@ -188,31 +188,31 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-Mail</label>
             <input
               v-model="addModal.email"
               type="email"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
               placeholder="optional"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Telefon</label>
             <input
               v-model="addModal.phone"
               type="text"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
               placeholder="optional"
             />
           </div>
         </div>
 
-        <p v-if="addModal.error" class="text-sm text-red-600 mb-3">{{ addModal.error }}</p>
+        <p v-if="addModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ addModal.error }}</p>
 
         <div class="flex justify-end gap-3">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
             @click="addModal.open = false"
           >
             Abbrechen
@@ -235,29 +235,29 @@
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="editModal.open = false"
     >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900">Amtstragenden bearbeiten</h2>
-          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="editModal.open = false">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Amtstragenden bearbeiten</h2>
+          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="editModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
 
         <div class="grid grid-cols-2 gap-4 mb-4">
           <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
             <input
               v-model="editModal.name"
               type="text"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Grad *</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Grad *</label>
             <select
               v-model="editModal.rank"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             >
               <option value="">Grad wählen…</option>
               <option v-for="r in LEADER_RANKS" :key="r.value" :value="r.value">{{ r.label }}</option>
@@ -265,10 +265,10 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Besondere Beauftragung</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Besondere Beauftragung</label>
             <select
               v-model="editModal.special_role"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             >
               <option :value="null">Keine</option>
               <option v-for="sr in SPECIAL_ROLES" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
@@ -276,10 +276,10 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Gemeinde</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Gemeinde</label>
             <select
               v-model="editModal.congregation_id"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             >
               <option :value="null">Bezirksebene</option>
               <option v-for="c in congregations" :key="c.id" :value="c.id">{{ c.name }}</option>
@@ -287,43 +287,43 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-Mail</label>
             <input
               v-model="editModal.email"
               type="email"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Telefon</label>
             <input
               v-model="editModal.phone"
               type="text"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             />
           </div>
 
           <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Notizen</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notizen</label>
             <textarea
               v-model="editModal.notes"
               rows="2"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             />
           </div>
         </div>
 
         <label class="flex items-center gap-2 text-sm mb-4">
           <input v-model="editModal.is_active" type="checkbox" class="rounded" />
-          <span class="text-gray-700">Aktiv (für Dienstplan-Zuweisung verfügbar)</span>
+          <span class="text-gray-700 dark:text-gray-300">Aktiv (für Dienstplan-Zuweisung verfügbar)</span>
         </label>
 
-        <p v-if="editModal.error" class="text-sm text-red-600 mb-3">{{ editModal.error }}</p>
+        <p v-if="editModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ editModal.error }}</p>
 
         <div class="flex justify-end gap-3">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
             @click="editModal.open = false"
           >
             Abbrechen
@@ -346,23 +346,23 @@
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="exportModal.open = false"
     >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">
             ICS-Export: {{ exportModal.leaderRank }} {{ exportModal.leaderName }}
           </h2>
-          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="exportModal.open = false">
+          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="exportModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
 
         <template v-if="exportModal.icsUrl">
-          <p class="text-sm text-gray-600 mb-2">Persönliche Kalender-URL (nur zugewiesene Gottesdienste):</p>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">Persönliche Kalender-URL (nur zugewiesene Gottesdienste):</p>
           <div class="flex items-center gap-2 mb-1">
             <input
               :value="exportModal.icsUrl"
               readonly
-              class="flex-1 border border-gray-300 rounded px-3 py-2 text-xs bg-gray-50 text-gray-700 font-mono"
+              class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono"
             />
             <button
               class="shrink-0 text-sm px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -375,13 +375,13 @@
         </template>
 
         <template v-else>
-          <p class="text-sm text-gray-600 mb-4">
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Erstelle einen persönlichen Kalender-Export-Token. Die URL enthält alle zugewiesenen Gottesdienste.
           </p>
-          <p v-if="exportModal.error" class="text-sm text-red-600 mb-3">{{ exportModal.error }}</p>
+          <p v-if="exportModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ exportModal.error }}</p>
           <div class="flex justify-end gap-3">
             <button
-              class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
               @click="exportModal.open = false"
             >
               Abbrechen

@@ -1,7 +1,7 @@
 <template>
   <div class="p-6 max-w-3xl">
     <div class="flex items-center justify-between mb-5">
-      <h1 class="text-xl font-semibold text-gray-900">Kalender-Export</h1>
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Kalender-Export</h1>
       <button
         class="flex items-center gap-1.5 text-sm bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700"
         @click="openCreate"
@@ -11,35 +11,33 @@
       </button>
     </div>
 
-    <p class="text-sm text-gray-500 mb-6">
+    <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
       Erstelle ICS-Export-Links für Bezirke oder einzelne Gemeinden. Öffentliche Tokens
       anonymisieren den Dienstleiter-Namen; interne Tokens zeigen den vollen Namen.
     </p>
 
-    <div v-if="loading" class="text-sm text-gray-500">Lade…</div>
-    <div v-else-if="error" class="text-sm text-red-600">{{ error }}</div>
+    <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
+    <div v-else-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</div>
 
     <!-- Token list -->
     <div v-else class="space-y-3">
       <div
         v-for="t in tokens"
         :key="t.id"
-        class="border border-gray-200 rounded-lg p-4"
+        class="border border-gray-200 dark:border-gray-700 rounded-lg p-4"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="flex items-center gap-2 mb-1">
-              <span class="font-medium text-gray-900 truncate">{{ t.label }}</span>
+              <span class="font-medium text-gray-900 dark:text-gray-100 truncate">{{ t.label }}</span>
               <span
                 class="text-xs px-2 py-0.5 rounded-full font-medium"
-                :class="t.token_type === 'INTERNAL'
-                  ? 'bg-yellow-100 text-yellow-800'
-                  : 'bg-green-100 text-green-800'"
+                :class="t.token_type === 'INTERNAL' ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300' : 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'"
               >
                 {{ t.token_type === 'INTERNAL' ? 'Intern' : 'Öffentlich' }}
               </span>
             </div>
-            <div class="text-xs text-gray-500 mb-2">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">
               {{ districtName(t.district_id) }}
               <template v-if="t.congregation_id">
                 › {{ congregationName(t.congregation_id) }}
@@ -47,11 +45,11 @@
             </div>
             <!-- ICS URL -->
             <div class="flex items-center gap-2">
-              <code class="text-xs bg-gray-100 rounded px-2 py-1 text-gray-700 truncate max-w-sm block">
+              <code class="text-xs bg-gray-100 dark:bg-gray-700 rounded px-2 py-1 text-gray-700 dark:text-gray-300 truncate max-w-sm block">
                 {{ icsUrl(t.token) }}
               </code>
               <button
-                class="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 shrink-0"
+                class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 shrink-0"
                 title="URL kopieren"
                 @click="copyUrl(t.token)"
               >
@@ -60,7 +58,7 @@
               <a
                 :href="icsUrl(t.token)"
                 target="_blank"
-                class="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 shrink-0"
+                class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 shrink-0"
                 title="Im Browser öffnen"
               >
                 <ArrowTopRightOnSquareIcon class="h-4 w-4" />
@@ -69,7 +67,7 @@
             <p v-if="copiedToken === t.token" class="text-xs text-green-600 mt-1">Kopiert!</p>
           </div>
           <button
-            class="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+            class="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
             title="Token löschen"
             @click="confirmDelete(t)"
           >
@@ -78,7 +76,7 @@
         </div>
       </div>
 
-      <div v-if="!loading && tokens.length === 0" class="text-sm text-gray-500">
+      <div v-if="!loading && tokens.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
         Noch keine Export-Tokens angelegt.
       </div>
     </div>
@@ -89,30 +87,30 @@
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="form.open = false"
     >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900">Neuer Export-Token</h2>
-          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="form.open = false">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Neuer Export-Token</h2>
+          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="form.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
 
         <div class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Bezeichnung</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bezeichnung</label>
             <input
               v-model="form.label"
               type="text"
               placeholder="z. B. Bezirk Nord – Öffentlich"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Typ</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Typ</label>
             <select
               v-model="form.token_type"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
             >
               <option value="PUBLIC">Öffentlich (Dienstleiter anonymisiert)</option>
               <option value="INTERNAL">Intern (Dienstleiter sichtbar)</option>
@@ -120,10 +118,10 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Bezirk</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bezirk</label>
             <select
               v-model="form.district_id"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
               @change="onFormDistrictChange"
             >
               <option value="">Bezirk wählen…</option>
@@ -134,13 +132,13 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              Gemeinde <span class="text-gray-400 font-normal">(optional — leer = ganzer Bezirk)</span>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Gemeinde <span class="text-gray-400 dark:text-gray-500 font-normal">(optional — leer = ganzer Bezirk)</span>
             </label>
             <select
               v-model="form.congregation_id"
               :disabled="!form.district_id || formCongregations.length === 0"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:bg-gray-800 dark:text-gray-100"
             >
               <option value="">Ganzer Bezirk</option>
               <option v-for="c in formCongregations" :key="c.id" :value="c.id">
@@ -150,11 +148,11 @@
           </div>
         </div>
 
-        <p v-if="form.error" class="text-sm text-red-600 mt-3">{{ form.error }}</p>
+        <p v-if="form.error" class="text-sm text-red-600 dark:text-red-400 mt-3">{{ form.error }}</p>
 
         <div class="flex justify-end gap-3 mt-5">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
             @click="form.open = false"
           >
             Abbrechen
@@ -177,15 +175,15 @@
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="deleteTarget = null"
     >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-        <h2 class="text-base font-semibold text-gray-900 mb-2">Token löschen?</h2>
-        <p class="text-sm text-gray-600 mb-5">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">Token löschen?</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-5">
           Der Token <strong>{{ deleteTarget.label }}</strong> wird unwiderruflich gelöscht.
           Bestehende Kalender-Abonnements funktionieren danach nicht mehr.
         </p>
         <div class="flex justify-end gap-3">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
             @click="deleteTarget = null"
           >
             Abbrechen
