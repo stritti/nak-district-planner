@@ -310,7 +310,7 @@ async def get_matrix(
 
     # Batch-load leaders for this district
     leaders = await SqlLeaderRepository(db).list_by_district(district_id)
-    leaders_by_id = {l.id: l for l in leaders}
+    leaders_by_id = {leader.id: leader for leader in leaders}
 
     # Build matrix rows
     rows: list[MatrixRow] = []

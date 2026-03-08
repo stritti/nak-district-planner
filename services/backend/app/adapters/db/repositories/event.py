@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.congregation import CongregationORM
@@ -113,8 +113,8 @@ class SqlEventRepository(EventRepository):
             query = query.where(EventORM.congregation_id == congregation_id)
             count_query = count_query.where(EventORM.congregation_id == congregation_id)
         elif only_district_level:
-            query = query.where(EventORM.congregation_id == None)
-            count_query = count_query.where(EventORM.congregation_id == None)
+            query = query.where(EventORM.congregation_id.is_(None))
+            count_query = count_query.where(EventORM.congregation_id.is_(None))
         elif group_id is not None:
             query = query.join(CongregationORM, EventORM.congregation_id == CongregationORM.id)
             query = query.where(CongregationORM.group_id == group_id)
@@ -147,3 +147,13 @@ class SqlEventRepository(EventRepository):
         if existing is None:
             self._session.add(row)
         await self._session.flush()
+
+    async def delete_before(self, cutoff: datetime) -> int:
+        """Delete all events whose end_at is before *cutoff*.
+
+        Returns the number of deleted rows.
+        """
+        result = await self._session.execute(
+            delete(EventORM).where(EventORM.end_at < cutoff)
+        )
+        return result.rowcount
