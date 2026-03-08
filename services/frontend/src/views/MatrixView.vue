@@ -1,20 +1,20 @@
 <template>
   <div class="p-6">
-    <h1 class="text-xl font-semibold text-gray-900 mb-4">Dienstplan-Matrix</h1>
+    <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Dienstplan-Matrix</h1>
 
     <!-- Filter-Leiste -->
-    <div class="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+    <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-6">
 
       <!-- Schnellfilter -->
       <div class="flex items-center gap-2 mb-3">
-        <span class="text-xs text-gray-400 font-medium mr-1">Schnellfilter:</span>
+        <span class="text-xs text-gray-400 dark:text-gray-500 font-medium mr-1">Schnellfilter:</span>
         <button
           v-for="preset in presets"
           :key="preset.key"
           class="text-xs px-3 py-1 rounded-full border transition-colors"
           :class="activePreset === preset.key
             ? 'bg-blue-600 text-white border-blue-600'
-            : 'border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600'"
+            : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400 hover:text-blue-600 dark:hover:border-blue-500 dark:hover:text-blue-400'"
           @click="setPreset(preset.key)"
         >
           {{ preset.label }}
@@ -24,10 +24,10 @@
       <!-- Bezirk + Datumsfelder -->
       <div class="flex flex-wrap items-end gap-3">
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Bezirk</label>
+          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Bezirk</label>
           <select
             v-model="matrixStore.districtId"
-            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
             @change="onDistrictChange"
           >
             <option value="">Bezirk wählen…</option>
@@ -38,10 +38,10 @@
         </div>
 
         <div v-if="districtsStore.groups.length > 0">
-          <label class="block text-xs font-medium text-gray-500 mb-1">Gruppe</label>
+          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Gruppe</label>
           <select
             v-model="matrixStore.groupId"
-            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
             @change="matrixStore.fetch()"
           >
             <option value="">Alle Gruppen</option>
@@ -52,20 +52,20 @@
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Von</label>
+          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Von</label>
           <input
             v-model="matrixStore.fromDt"
             type="date"
-            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Bis</label>
+          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Bis</label>
           <input
             v-model="matrixStore.toDt"
             type="date"
-            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
 
@@ -81,8 +81,8 @@
     </div>
 
     <!-- Loading / Error -->
-    <div v-if="matrixStore.loading" class="text-sm text-gray-500">Lade…</div>
-    <div v-else-if="matrixStore.error" class="text-sm text-red-600">{{ matrixStore.error }}</div>
+    <div v-if="matrixStore.loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
+    <div v-else-if="matrixStore.error" class="text-sm text-red-600 dark:text-red-400">{{ matrixStore.error }}</div>
 
     <!-- Matrix Table -->
     <div
@@ -92,7 +92,7 @@
       <table class="border-collapse text-xs">
         <thead>
           <tr>
-            <th class="sticky left-0 z-10 bg-white border border-gray-300 px-3 py-2 text-left font-medium text-gray-700 min-w-[140px]">
+            <th class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[140px]">
               Gemeinde
             </th>
             <th
@@ -100,10 +100,10 @@
               :key="date"
               class="border px-2 py-2 text-center font-medium min-w-[110px]"
               :class="matrixStore.matrix.holidays[date]?.length
-                ? 'border-amber-300 bg-amber-50 text-amber-900'
-                : 'border-gray-300 text-gray-700'"
+                ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200'
+                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'"
             >
-              <div class="text-[11px] font-normal" :class="matrixStore.matrix.holidays[date]?.length ? 'text-amber-500' : 'text-gray-400'">
+              <div class="text-[11px] font-normal" :class="matrixStore.matrix.holidays[date]?.length ? 'text-amber-500 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'">
                 {{ formatWeekday(date) }}
               </div>
               <div>{{ formatDate(date) }}</div>
@@ -114,7 +114,7 @@
                 <span
                   v-for="name in matrixStore.matrix.holidays[date]"
                   :key="name"
-                  class="block text-[10px] leading-tight font-medium text-amber-700 bg-amber-100 rounded px-1 py-0.5"
+                  class="block text-[10px] leading-tight font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 rounded px-1 py-0.5"
                 >
                   {{ name }}
                 </span>
@@ -124,13 +124,13 @@
         </thead>
         <tbody>
           <tr v-for="row in matrixStore.matrix.rows" :key="row.congregation_id">
-            <td class="sticky left-0 z-10 bg-white border border-gray-300 px-3 py-2 font-medium text-gray-800">
+            <td class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium text-gray-800 dark:text-gray-200">
               {{ row.congregation_name }}
             </td>
             <td
               v-for="date in matrixStore.matrix.dates"
               :key="date"
-              class="border border-gray-300 px-2 py-1.5 align-top"
+              class="border border-gray-300 dark:border-gray-600 px-2 py-1.5 align-top"
               :class="cellClass(row.cells[date])"
             >
               <template v-if="row.cells[date]?.event_id">
@@ -139,23 +139,23 @@
                   class="w-full text-left"
                   @click="openModal(row.cells[date], date, row.congregation_name)"
                 >
-                  <div class="font-semibold text-red-700">LÜCKE</div>
-                  <div class="text-red-600 truncate max-w-[100px]">{{ row.cells[date].event_title }}</div>
+                  <div class="font-semibold text-red-700 dark:text-red-400">LÜCKE</div>
+                  <div class="text-red-600 dark:text-red-400 truncate max-w-[100px]">{{ row.cells[date].event_title }}</div>
                 </button>
                 <template v-else>
-                  <div class="font-medium text-gray-800 truncate max-w-[100px]">
+                  <div class="font-medium text-gray-800 dark:text-gray-200 truncate max-w-[100px]">
                     {{ row.cells[date].event_title }}
                   </div>
-                  <div v-if="row.cells[date].leader_name" class="text-gray-500 truncate max-w-[100px]">
+                  <div v-if="row.cells[date].leader_name" class="text-gray-500 dark:text-gray-400 truncate max-w-[100px]">
                     {{ row.cells[date].leader_name }}
                   </div>
-                  <div v-if="row.cells[date].category" class="text-gray-400">
+                  <div v-if="row.cells[date].category" class="text-gray-400 dark:text-gray-500">
                     {{ row.cells[date].category }}
                   </div>
                 </template>
               </template>
               <template v-else>
-                <span class="text-gray-300">–</span>
+                <span class="text-gray-300 dark:text-gray-600">–</span>
               </template>
             </td>
           </tr>
@@ -165,7 +165,7 @@
 
     <div
       v-else-if="matrixStore.matrix && matrixStore.matrix.dates.length === 0"
-      class="text-sm text-gray-500"
+      class="text-sm text-gray-500 dark:text-gray-400"
     >
       Keine Ereignisse im gewählten Zeitraum.
     </div>
@@ -176,24 +176,24 @@
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="closeModal"
     >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="text-base font-semibold text-gray-900">Amtstragenden zuweisen</h2>
-          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="closeModal">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Amtstragenden zuweisen</h2>
+          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="closeModal">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
-        <p class="text-sm text-gray-500 mb-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
           {{ modal.congregationName }} — {{ formatDate(modal.date) }}
         </p>
-        <p class="text-sm text-gray-700 mb-4">
+        <p class="text-sm text-gray-700 dark:text-gray-300 mb-4">
           <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
         </p>
 
-        <label class="block text-sm font-medium text-gray-700 mb-1">Amtstragender</label>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amtstragender</label>
         <select
           v-model="modal.selectedLeaderId"
-          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+          class="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
           @change="onLeaderSelectChange"
         >
           <option value="">Bitte wählen…</option>
@@ -208,21 +208,21 @@
         </select>
 
         <div v-if="modal.selectedLeaderId === '__freetext__'">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Name des Gastdienstleiters</label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name des Gastdienstleiters</label>
           <input
             v-model="modal.leaderName"
             type="text"
-            class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Vor- und Nachname"
             @keyup.enter="submitAssignment"
           />
         </div>
 
-        <p v-if="modal.error" class="text-sm text-red-600 mt-2">{{ modal.error }}</p>
+        <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modal.error }}</p>
 
         <div class="flex justify-end gap-3 mt-5">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
             @click="closeModal"
           >
             Abbrechen
@@ -343,9 +343,9 @@ function formatWeekday(iso: string): string {
 }
 
 function cellClass(cell: MatrixCell | undefined): string {
-  if (!cell?.event_id) return 'bg-white'
-  if (cell.is_gap) return 'bg-red-50 cursor-pointer hover:bg-red-100'
-  return 'bg-white'
+  if (!cell?.event_id) return 'bg-white dark:bg-gray-900'
+  if (cell.is_gap) return 'bg-red-50 dark:bg-red-900/20 cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/30'
+  return 'bg-white dark:bg-gray-900'
 }
 
 // ── Assignment Modal ──────────────────────────────────────────────────────────
