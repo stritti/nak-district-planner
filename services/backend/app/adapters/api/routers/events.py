@@ -65,6 +65,7 @@ async def list_events(
     db: DbSession,
     district_id: uuid.UUID | None = Query(None),
     congregation_id: uuid.UUID | None = Query(None),
+    group_id: uuid.UUID | None = Query(None),
     status: EventStatus | None = Query(None),
     from_dt: datetime | None = Query(None),
     to_dt: datetime | None = Query(None),
@@ -75,6 +76,7 @@ async def list_events(
     events, total = await repo.list(
         district_id=district_id,
         congregation_id=congregation_id,
+        group_id=group_id,
         status=status,
         from_dt=from_dt,
         to_dt=to_dt,

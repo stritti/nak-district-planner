@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.event import EventORM
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
 from app.domain.ports.repositories import EventRepository
@@ -94,6 +95,7 @@ class SqlEventRepository(EventRepository):
         *,
         district_id: uuid.UUID | None = None,
         congregation_id: uuid.UUID | None = None,
+        group_id: uuid.UUID | None = None,
         status: EventStatus | None = None,
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
@@ -109,6 +111,13 @@ class SqlEventRepository(EventRepository):
         if congregation_id is not None:
             query = query.where(EventORM.congregation_id == congregation_id)
             count_query = count_query.where(EventORM.congregation_id == congregation_id)
+        elif group_id is not None:
+            query = query.join(CongregationORM, EventORM.congregation_id == CongregationORM.id)
+            query = query.where(CongregationORM.group_id == group_id)
+            count_query = count_query.join(
+                CongregationORM, EventORM.congregation_id == CongregationORM.id
+            )
+            count_query = count_query.where(CongregationORM.group_id == group_id)
         if status is not None:
             query = query.where(EventORM.status == status)
             count_query = count_query.where(EventORM.status == status)

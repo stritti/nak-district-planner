@@ -101,6 +101,21 @@
           </select>
         </div>
 
+        <!-- Gruppe -->
+        <div v-if="districtsStore.groups.length > 0">
+          <label class="block text-xs font-medium text-gray-500 mb-1">Gruppe (optional)</label>
+          <select
+            v-model="selectedGroupId"
+            class="rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            @change="onGroupChange"
+          >
+            <option value="">Alle Gruppen</option>
+            <option v-for="g in districtsStore.groups" :key="g.id" :value="g.id">
+              {{ g.name }}
+            </option>
+          </select>
+        </div>
+
         <!-- Status -->
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Status</label>
@@ -532,6 +547,7 @@ async function fetchCalendar() {
     const params: EventListParams = { from_dt: from, to_dt: to, limit: 500, offset: 0 }
     if (selectedDistrictId.value)     params.district_id     = selectedDistrictId.value
     if (selectedCongregationId.value) params.congregation_id = selectedCongregationId.value
+    if (selectedGroupId.value)        params.group_id        = selectedGroupId.value
     if (selectedStatus.value)         params.status          = selectedStatus.value
     const res = await listEvents(params)
     let events = res.items
@@ -630,6 +646,7 @@ const periodLabel = computed(() => {
 
 const selectedDistrictId    = ref('')
 const selectedCongregationId = ref('')
+const selectedGroupId        = ref('')
 const selectedStatus         = ref('')
 const fromDate               = ref('')
 const toDate                 = ref('')
@@ -666,8 +683,19 @@ function setPreset(key: string) {
 
 async function onDistrictChange() {
   selectedCongregationId.value = ''
+  selectedGroupId.value = ''
   districtsStore.clearCongregations()
-  if (selectedDistrictId.value) await districtsStore.fetchCongregations(selectedDistrictId.value)
+  if (selectedDistrictId.value) {
+    await Promise.all([
+      districtsStore.fetchCongregations(selectedDistrictId.value),
+      districtsStore.fetchGroups(selectedDistrictId.value),
+    ])
+  }
+  onFilterChange()
+}
+
+function onGroupChange() {
+  selectedCongregationId.value = ''
   onFilterChange()
 }
 
@@ -680,6 +708,7 @@ function applyFilters() {
   eventsStore.setFilter({
     district_id:    selectedDistrictId.value || undefined,
     congregation_id: selectedCongregationId.value || undefined,
+    group_id:        selectedGroupId.value || undefined,
     status:          selectedStatus.value || undefined,
     from_dt: fromDate.value ? fromDate.value + 'T00:00:00' : undefined,
     to_dt:   toDate.value   ? toDate.value   + 'T23:59:59' : undefined,

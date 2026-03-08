@@ -28,6 +28,7 @@ export interface EventListResponse {
 export interface EventListParams {
   district_id?: string
   congregation_id?: string
+  group_id?: string
   status?: string
   from_dt?: string
   to_dt?: string
@@ -53,6 +54,7 @@ export function listEvents(params: EventListParams = {}): Promise<EventListRespo
   const query = new URLSearchParams()
   if (params.district_id) query.set('district_id', params.district_id)
   if (params.congregation_id) query.set('congregation_id', params.congregation_id)
+  if (params.group_id) query.set('group_id', params.group_id)
   if (params.status) query.set('status', params.status)
   if (params.from_dt) query.set('from_dt', params.from_dt)
   if (params.to_dt) query.set('to_dt', params.to_dt)
