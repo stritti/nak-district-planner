@@ -253,7 +253,6 @@ async def get_matrix(
     from_dt: datetime = Query(...),
     to_dt: datetime = Query(...),
     group_id: uuid.UUID | None = Query(None),
-    only_district_level: bool = Query(False),
 ) -> MatrixResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
@@ -311,65 +310,38 @@ async def get_matrix(
     # Build matrix rows
     rows: list[MatrixRow] = []
 
-    # Add District row if requested or if no group filter is set
-    if only_district_level or not group_id:
-        district_cells: dict[str, MatrixCell] = {}
-        # ... (implementation from before)
+    for congregation in congregations:
+        cong_expected = set(expected_by_cong[congregation.id])
+        cells: dict[str, MatrixCell] = {}
+
         for date_key in sorted_dates:
-            event = event_by_cong_date.get((district_id, date_key))
-            if event:
-                assignment = assignment_by_event.get(event.id)
-                district_cells[date_key] = MatrixCell(
-                    event_id=event.id,
-                    event_title=event.title,
-                    category=event.category,
-                    is_gap=assignment is None,
-                    assignment_id=assignment.id if assignment else None,
-                    assignment_status=assignment.status if assignment else None,
-                    leader_name=assignment.leader_name if assignment else None,
-                )
-            else:
-                district_cells[date_key] = MatrixCell()
-        
+            if date_key not in cong_expected:
+                # Feiertag-Spalte oder anderer Bezirks-Termin — nicht im Gemeinde-Zeitplan
+                cells[date_key] = MatrixCell()
+                continue
+
+            event = event_by_cong_date.get((congregation.id, date_key))
+            if event is None:
+                # Im Zeitplan erwartet, aber noch kein Event angelegt
+                cells[date_key] = MatrixCell()
+                continue
+
+            assignment = assignment_by_event.get(event.id)
+            cells[date_key] = MatrixCell(
+                event_id=event.id,
+                event_title=event.title,
+                category=event.category,
+                is_gap=assignment is None,
+                assignment_id=assignment.id if assignment else None,
+                assignment_status=assignment.status if assignment else None,
+                leader_name=assignment.leader_name if assignment else None,
+            )
+
         rows.append(MatrixRow(
-            congregation_id=district_id,
-            congregation_name="Bezirksebene",
-            cells=district_cells,
+            congregation_id=congregation.id,
+            congregation_name=congregation.name,
+            cells=cells,
         ))
-
-    if not only_district_level:
-        for congregation in congregations:
-            cong_expected = set(expected_by_cong[congregation.id])
-            cells: dict[str, MatrixCell] = {}
-
-            for date_key in sorted_dates:
-                if date_key not in cong_expected:
-                    # Feiertag-Spalte oder anderer Bezirks-Termin — nicht im Gemeinde-Zeitplan
-                    cells[date_key] = MatrixCell()
-                    continue
-
-                event = event_by_cong_date.get((congregation.id, date_key))
-                if event is None:
-                    # Im Zeitplan erwartet, aber noch kein Event angelegt
-                    cells[date_key] = MatrixCell()
-                    continue
-
-                assignment = assignment_by_event.get(event.id)
-                cells[date_key] = MatrixCell(
-                    event_id=event.id,
-                    event_title=event.title,
-                    category=event.category,
-                    is_gap=assignment is None,
-                    assignment_id=assignment.id if assignment else None,
-                    assignment_status=assignment.status if assignment else None,
-                    leader_name=assignment.leader_name if assignment else None,
-                )
-
-            rows.append(MatrixRow(
-                congregation_id=congregation.id,
-                congregation_name=congregation.name,
-                cells=cells,
-            ))
 
     return MatrixResponse(dates=sorted_dates, rows=rows, holidays=holidays)
 
