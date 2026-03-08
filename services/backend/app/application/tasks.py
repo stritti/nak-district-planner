@@ -74,7 +74,42 @@ def sync_all_active_integrations() -> dict:
     return {"dispatched": len(due_ids)}
 
 
-@celery.task(name="auto_import_feiertage")
+@celery.task(name="cleanup_old_events")
+def cleanup_old_events() -> dict:
+    """Delete events older than 24 months.
+
+    Runs on the 1st of each month via Celery beat.  All events whose *end_at*
+    is before the cutoff (now − 24 months) are permanently removed.
+    """
+    from datetime import datetime, timezone
+
+    from app.adapters.db.repositories.event import SqlEventRepository
+    from app.adapters.db.session import AsyncSessionLocal
+
+    async def _run() -> dict:
+        now = datetime.now(timezone.utc)
+        # Compute cutoff as exactly 24 months (2 years) ago.
+        # Handle the Feb-29 edge case: replace day with 28 when the target
+        # year is not a leap year.
+        try:
+            cutoff = now.replace(year=now.year - 2)
+        except ValueError:
+            cutoff = now.replace(year=now.year - 2, day=28)
+
+        async with AsyncSessionLocal() as session:
+            repo = SqlEventRepository(session)
+            deleted = await repo.delete_before(cutoff)
+            await session.commit()
+
+        return {"deleted": deleted, "cutoff": cutoff.isoformat()}
+
+    result = asyncio.run(_run())
+    logger.info(
+        "cleanup_old_events: deleted %d event(s) older than %s",
+        result["deleted"],
+        result["cutoff"],
+    )
+    return result
 def auto_import_feiertage() -> dict:
     """Celery beat task — runs on the 1st of each month at 03:00 Europe/Berlin.
 

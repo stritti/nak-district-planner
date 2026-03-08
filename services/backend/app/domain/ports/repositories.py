@@ -82,6 +82,14 @@ class EventRepository(ABC):
     @abstractmethod
     async def save(self, event: Event) -> None: ...
 
+    @abstractmethod
+    async def delete_before(self, cutoff: datetime) -> int:
+        """Delete all events whose end_at is before *cutoff*.
+
+        Returns the number of deleted rows.
+        """
+        ...
+
 
 class ServiceAssignmentRepository(ABC):
     @abstractmethod

@@ -29,5 +29,10 @@ celery.conf.update(
             "task": "auto_import_feiertage",
             "schedule": crontab(day_of_month="1", hour="3", minute="0"),
         },
+        # 1st of each month at 02:00 Europe/Berlin — deletes events older than 24 months
+        "cleanup-old-events": {
+            "task": "cleanup_old_events",
+            "schedule": crontab(day_of_month="1", hour="2", minute="0"),
+        },
     },
 )
