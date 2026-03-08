@@ -139,6 +139,16 @@ bun run dev                          # http://localhost:5173
 bun run lint
 ```
 
+#### Dokumentation (VitePress)
+
+Die Projekt-Dokumentation basiert auf VitePress und befindet sich im Ordner `docs`.
+
+```bash
+bun install                          # Abhängigkeiten installieren (im Hauptverzeichnis)
+bun run docs:dev                     # Entwicklungs-Server unter http://localhost:5173
+bun run docs:build                   # Dokumentation bauen
+```
+
 ---
 
 ### 7. Stack stoppen
@@ -295,6 +305,11 @@ nak-district-planner/
     │   └── tests/
     └── frontend/                # Vue 3 + Tailwind (gebaut mit bun)
         └── src/
+├── docs/                        # Projekt-Dokumentation (VitePress)
+│   ├── .vitepress/              # Konfiguration und Themes
+│   ├── index.md                 # Startseite
+│   ├── getting-started.md       # Erste Schritte
+│   └── use-cases.md             # Anwendungsfälle
 ```
 
 ## API-Nutzung (Kurzreferenz)

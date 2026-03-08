@@ -119,3 +119,19 @@ jobs:
 
       - name: Run unit tests
         run: bun run test
+
+  docs-build:
+    name: Docs Build Check (VitePress)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build Docs
+        run: bun run docs:build
