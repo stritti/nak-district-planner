@@ -1,6 +1,7 @@
 <template>
   <div class="relative">
     <input
+      ref="inputRef"
       :value="inputText"
       type="text"
       :placeholder="placeholder"
@@ -78,6 +79,7 @@ const emit = defineEmits<{
 }>()
 
 // Internal display text used to filter options
+const inputRef = ref<HTMLInputElement | null>(null)
 const inputText = ref(props.modelValue.text)
 const showDropdown = ref(false)
 const highlightedIndex = ref(-1)
@@ -184,4 +186,9 @@ function selectOption(opt: AutocompleteOption) {
   showDropdown.value = false
   highlightedIndex.value = -1
 }
+
+/** Focus the text input — call this when the parent opens the modal */
+defineExpose({
+  focus: () => inputRef.value?.focus(),
+})
 </script>

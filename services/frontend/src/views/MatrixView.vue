@@ -201,6 +201,7 @@
 
         <label class="block text-sm font-medium text-gray-700 mb-1">Amtstragender</label>
         <AutocompleteInput
+          ref="autocompleteRef"
           v-model="modal.leaderInput"
           :options="autocompleteOptions"
           placeholder="Name eingeben oder auswählen…"
@@ -230,13 +231,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ArrowPathIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '@/stores/matrix'
 import { useDistrictsStore } from '@/stores/districts'
 import { useLeadersStore } from '@/stores/leaders'
 import type { MatrixCell } from '@/api/matrix'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '@/components/AutocompleteInput.vue'
+
+const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
@@ -388,6 +391,8 @@ function openModal(cell: MatrixCell, date: string, congregationName: string, con
   if (matrixStore.districtId && leadersStore.districtId !== matrixStore.districtId) {
     leadersStore.fetchLeaders(matrixStore.districtId)
   }
+  // Focus the autocomplete input once the modal DOM is rendered
+  nextTick(() => autocompleteRef.value?.focus())
 }
 
 function closeModal() {
