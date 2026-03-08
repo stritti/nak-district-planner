@@ -1,9 +1,9 @@
 # Rollenkonzept
 
-Diese Seite beschreibt das geplante Rollenkonzept für den NAK Bezirksplaner. Es dient als Grundlage für den Review und die spätere Implementierung (Phase 4).
+Dieses Dokument definiert das Rollenkonzept für den NAK Bezirksplaner und ist die verbindliche Grundlage für die Implementierung in Phase 4 (Authentifizierung & Autorisierung). Es löst das frühere Dokument [`auth-keycloak.md`](./auth-keycloak.md) vollständig ab.
 
-::: warning Status: Entwurf (vollständig überarbeitet)
-Dieses Dokument ist ein Review-Entwurf. Noch keine Implementierung vorhanden. Alle Klärungsfragen sind beantwortet — eine vollständige Übersicht der getroffenen Entscheidungen findet sich in Abschnitt 5.
+::: info Status
+Alle Designentscheidungen sind getroffen. Dieses Dokument ist implementierungsbereit.
 :::
 
 ## 1. Übersicht
@@ -18,7 +18,17 @@ System (globaler Admin)
         └── Gemeinde (Congregation)
 ```
 
-Das Rollenkonzept muss diese Hierarchie widerspiegeln. Eine Rolle ist immer an einen Mandanten (Bezirk oder Gemeinde) gebunden – mit Ausnahme der systemweiten Rollen.
+Jede Rolle ist an genau einen Mandanten gebunden (Bezirk oder Gemeinde), mit Ausnahme der systemweiten `system_admin`-Rolle. Ein Benutzer gehört immer zu **genau einem Bezirk** und kann darin mehrere Rollen besitzen.
+
+**Überblick der Rollen:**
+
+| Rolle | Geltungsbereich | Zweck |
+|-------|----------------|-------|
+| `system_admin` | Systemweit | Plattformbetrieb, mandantenübergreifend |
+| `district_admin` | Ein Bezirk | Administrative Verantwortung für den Bezirk |
+| `congregation_admin` | Eine Gemeinde | Administrative Verantwortung für die Gemeinde |
+| `planner` | Ein Bezirk | Dienstplanung ohne Administrationsrechte |
+| `viewer` | Bezirk oder Gemeinde | Nur-Lesen-Zugriff |
 
 ---
 
@@ -305,11 +315,9 @@ Wird ein Benutzer deaktiviert (`is_active = false`):
 
 ---
 
-## 5. Getroffene Entscheidungen
+## 5. Design-Entscheidungen
 
-::: tip Status
-Die folgenden Fragen wurden im Review geklärt.
-:::
+Die folgenden Entscheidungen wurden im Rahmen der Konzeptentwicklung getroffen und sind verbindlich für die Implementierung.
 
 | # | Frage | Entscheidung |
 |---|-------|-------------|
@@ -325,22 +333,3 @@ Die folgenden Fragen wurden im Review geklärt.
 | 10 | Rollendelegation | **Ja.** Ein `district_admin` kann einem `congregation_admin` das Recht delegieren, Benutzer für die eigene Gemeinde einzuladen und deren Rollen zu verwalten. |
 | 11 | Benutzer deaktivieren | Bestehende `ServiceAssignment`-Einträge werden **beibehalten**. Neue Zuweisungen an deaktivierte Benutzer sind nicht mehr möglich (siehe Abschnitt 4.6). |
 | 12 | Gast-Zugang | **Immer ein Login erforderlich.** Die Web-App hat keinen anonymen Gastmodus. Kalender-Abonnements laufen weiterhin über Export-Tokens (ICS, kein Web-Login nötig). |
-
----
-
-## 6. Vergleich mit `auth-keycloak.md`
-
-Die Datei [`auth-keycloak.md`](./auth-keycloak.md) enthält ein früheres, vereinfachtes Konzept für Authentifizierung und Autorisierung. Die folgende Tabelle zeigt die wesentlichen Unterschiede und Entscheidungsgründe:
-
-| Aspekt | `auth-keycloak.md` (alt) | `roles.md` (dieses Dokument) | Begründung |
-|--------|--------------------------|------------------------------|------------|
-| **Anzahl Rollen** | 3 (`admin`, `district-admin`, `congregation-editor`) | 5 (`system_admin`, `district_admin`, `congregation_admin`, `planner`, `viewer`) | Feinere Granularität für die Dienstplanung (`planner`) und den reinen Lesezugriff (`viewer`) |
-| **Rollennamen** | Kebab-case (`district-admin`) | Snake_case (`district_admin`) | Konsistenz mit Python-Enum-Konvention im Backend |
-| **Autorisierungsspeicher** | Keycloak Gruppen (JWT-Claims, z. B. `/Bezirke/{id}/Admins`) | Datenbank (`UserRole`-Tabelle, DB-only) | DB-only ermöglicht sofortige Wirksamkeit von Rollenänderungen (kein JWT-Ablauf abwarten); siehe Abschnitt 4.3 |
-| **Gemeinde-Editor-Scope** | Einem Benutzer können mehrere Gemeinden (auch aus verschiedenen Bezirken) zugewiesen werden | Jeder Benutzer gehört genau **einem** Bezirk (außer `system_admin`) | Klare Mandantentrennung; Bezirkszuordnung auf `User`-Datensatz |
-| **Sichtbarkeit anderer Gemeinden** | `congregation-editor` sieht standardmäßig **keine** Termine anderer Gemeinden | `congregation_admin` sieht die **gesamte Dienstmatrix** des Bezirks (alle Gemeinden) | Notwendig für die koordinierte Dienstplanung über Gemeindegrenzen hinweg |
-| **Keycloak-Gruppen-Mapping** | Explizite Gruppenstruktur `/Bezirke/{id}/Gemeinden/{id}/Editoren` | Nicht verwendet — Keycloak verwaltet nur die Identität (`sub`), Rollen liegen in der DB | Reduziert Komplexität bei der Rollenverwaltung; kein Abgleich zwischen Keycloak und DB nötig |
-
-::: info Empfehlung
-Das Konzept in **diesem Dokument** (`roles.md`) löst `auth-keycloak.md` ab und ist die Grundlage für Phase 4. Die technischen Details aus `auth-keycloak.md` (OIDC-Protokoll, JWT-Validierung, Gruppenstruktur) bleiben als historischer Kontext erhalten, werden aber durch die Abschnitte 4.1–4.3 dieses Dokuments ersetzt.
-:::

@@ -1,5 +1,9 @@
 # Authentifizierung & Autorisierung mit Keycloak
 
+::: warning Veraltet
+Dieses Dokument wurde durch [`roles.md`](./roles.md) abgelöst, das das vollständige und verbindliche Rollenkonzept für Phase 4 enthält. Die unten stehenden Inhalte dienen nur noch als historischer Kontext.
+:::
+
 Der NAK District Planner verwendet **Keycloak** für ein sicheres und zentralisiertes Identitäts- und Zugriffsmanagement (IAM).
 
 ## Überblick
