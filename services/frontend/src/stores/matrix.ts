@@ -32,8 +32,11 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  async function assign(eventId: string, leaderName: string) {
-    await createAssignment(eventId, leaderName, 'ASSIGNED')
+  async function assign(
+    eventId: string,
+    options: { leaderId?: string | null; leaderName?: string | null },
+  ) {
+    await createAssignment(eventId, options, 'ASSIGNED')
     await fetch() // refresh matrix
   }
 

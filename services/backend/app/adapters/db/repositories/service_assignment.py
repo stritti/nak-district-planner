@@ -14,6 +14,7 @@ def _orm_to_domain(row: ServiceAssignmentORM) -> ServiceAssignment:
     return ServiceAssignment(
         id=row.id,
         event_id=row.event_id,
+        leader_id=row.leader_id,
         leader_name=row.leader_name,
         status=AssignmentStatus(row.status),
         created_at=row.created_at,
@@ -52,6 +53,7 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
             row = existing
         row.id = assignment.id
         row.event_id = assignment.event_id
+        row.leader_id = assignment.leader_id
         row.leader_name = assignment.leader_name
         row.status = assignment.status
         row.created_at = assignment.created_at

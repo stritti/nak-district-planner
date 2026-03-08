@@ -29,6 +29,7 @@ from app.adapters.db.repositories import (
     SqlCongregationGroupRepository,
     SqlDistrictRepository,
     SqlEventRepository,
+    SqlLeaderRepository,
     SqlServiceAssignmentRepository,
 )
 from app.domain.models.congregation import Congregation
@@ -307,6 +308,10 @@ async def get_matrix(
         if a.event_id not in assignment_by_event:
             assignment_by_event[a.event_id] = a
 
+    # Batch-load leaders for this district
+    leaders = await SqlLeaderRepository(db).list_by_district(district_id)
+    leaders_by_id = {l.id: l for l in leaders}
+
     # Build matrix rows
     rows: list[MatrixRow] = []
 
@@ -327,6 +332,17 @@ async def get_matrix(
                 continue
 
             assignment = assignment_by_event.get(event.id)
+            # Resolve leader name from leader_id if leader_name is not set directly
+            leader_name: str | None = None
+            leader_id = None
+            if assignment:
+                leader_id = assignment.leader_id
+                if assignment.leader_name:
+                    leader_name = assignment.leader_name
+                elif assignment.leader_id and assignment.leader_id in leaders_by_id:
+                    ldr = leaders_by_id[assignment.leader_id]
+                    rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
+                    leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
                 event_id=event.id,
                 event_title=event.title,
@@ -334,7 +350,8 @@ async def get_matrix(
                 is_gap=assignment is None,
                 assignment_id=assignment.id if assignment else None,
                 assignment_status=assignment.status if assignment else None,
-                leader_name=assignment.leader_name if assignment else None,
+                leader_id=leader_id,
+                leader_name=leader_name,
             )
 
         rows.append(MatrixRow(

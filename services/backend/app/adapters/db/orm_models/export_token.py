@@ -30,6 +30,11 @@ class ExportTokenORM(Base):
         sa.ForeignKey("congregations.id", ondelete="CASCADE"),
         nullable=True,
     )
+    leader_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        sa.ForeignKey("leaders.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         nullable=False,
