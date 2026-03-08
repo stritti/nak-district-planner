@@ -240,9 +240,23 @@ Weitere Regeln:
 - Ausnahme: `system_admin` hat `district_id = NULL` und keinen `UserRole`-Eintrag (oder einen mit `role = 'system_admin'`).
 - `keycloak_sub` ersetzt `hashed_password` — Passwort-Management liegt vollständig bei Keycloak.
 
-### 4.3 JWT-Token-Inhalt
+### 4.3 Rollen-Speicherung und JWT-Token-Inhalt
 
-Das Keycloak-JWT enthält ausschließlich die Benutzeridentität. Rollen werden **nicht** als JWT-Claim gespeichert, sondern bei jeder Anfrage aus der `UserRole`-Tabelle geladen (einzige Quelle der Wahrheit).
+**Empfehlung: Rollen ausschließlich in der Datenbank (`UserRole`) speichern.**
+
+Es gibt drei Varianten — die Empfehlung ist fett markiert:
+
+| Variante | Beschreibung | Vorteile | Nachteile |
+|----------|-------------|----------|-----------|
+| JWT-only | Rollen als Keycloak Realm Roles im JWT-Claim | Kein DB-Zugriff bei jeder Anfrage | Rollenänderungen wirken erst nach Token-Ablauf (bis zu 15 min) — Sicherheitsrisiko |
+| **DB-only (empfohlen)** | **JWT enthält nur Identität (`sub`), Rollen kommen aus `UserRole`** | **Sofortige Wirksamkeit, volle Kontrolle im Backend** | **Minimaler DB-Zugriff pro Request (mit Redis-Cache vernachlässigbar)** |
+| Hybrid | Rollen im JWT als Hinweis, DB ist authoritative | Flexibel | Komplexe Synchronisierung, zwei Quellen der Wahrheit |
+
+**Begründung für DB-only:** Für einen Bezirksplaner (kein hochfrequentes System) ist die Redis-Cache-Latenz von ~60 Sekunden akzeptabel. Wichtiger ist, dass ein `district_admin` einem Benutzer eine Rolle entziehen kann und dies sofort Wirkung zeigt — z. B. wenn ein Amt wechselt. Mit JWT-Rollen hätte der deaktivierte Benutzer für bis zu 15 Minuten noch Zugriff.
+
+**Rollenmanagement im Frontend:** Das Frontend ruft eine eigene API (`PATCH /api/v1/users/{id}/roles`) auf, die die `UserRole`-Tabelle direkt schreibt. Keycloak wird **nicht** für die Rollenverwaltung verwendet — Keycloak kennt nur die Identität des Benutzers.
+
+Das JWT enthält damit ausschließlich:
 
 ```json
 {
@@ -252,10 +266,8 @@ Das Keycloak-JWT enthält ausschließlich die Benutzeridentität. Rollen werden 
 }
 ```
 
-Damit werden Rollenänderungen sofort wirksam, ohne dass ein Token-Refresh abgewartet werden muss.
-
 ::: tip Performance
-Um die Datenbanklast zu minimieren, werden die geladenen Rollen pro Request im Keycloak-Session-Cache (oder alternativ in Redis mit einer kurzen TTL von ~60 Sekunden) zwischengespeichert. Rollenänderungen wirken sich nach Ablauf des Cache-Fensters aus.
+Um die Datenbanklast zu minimieren, werden die geladenen Rollen pro Request in Redis mit einer TTL von ~60 Sekunden zwischengespeichert. Der Cache-Key ist `roles:{user_id}` und wird bei jeder Rollenänderung aktiv invalidiert (sodass Änderungen in der Praxis sofort wirken).
 :::
 
 ### 4.4 Middleware / Permission-Guard
