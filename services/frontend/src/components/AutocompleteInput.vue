@@ -1,12 +1,16 @@
 <template>
   <div class="relative">
     <input
-      ref="inputRef"
-      v-model="inputText"
+      :value="inputText"
       type="text"
       :placeholder="placeholder"
       autocomplete="off"
+      role="combobox"
+      :aria-expanded="showDropdown && indexedSections.flatMap((s) => s.items).length > 0"
+      aria-haspopup="listbox"
+      aria-autocomplete="list"
       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      @input="onInput"
       @focus="onFocus"
       @blur="onBlur"
       @keydown.down.prevent="moveHighlight(1)"
@@ -15,7 +19,8 @@
       @keydown.esc.prevent="closeDropdown"
     />
     <ul
-      v-if="showDropdown && flatFiltered.length > 0"
+      v-if="showDropdown && indexedSections.flatMap((s) => s.items).length > 0"
+      role="listbox"
       class="absolute z-50 left-0 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-56 overflow-y-auto"
     >
       <template v-for="(opt, idx) in flatFiltered" :key="opt.id">
@@ -25,8 +30,8 @@
           @mousedown.prevent="selectOption(opt)"
           @mousemove="highlightedIndex = idx"
         >
-          <span class="text-sm text-gray-900">{{ opt.label }}</span>
-          <span v-if="opt.sublabel" class="text-xs text-gray-400">{{ opt.sublabel }}</span>
+          <span class="text-sm text-gray-900">{{ item.label }}</span>
+          <span v-if="item.sublabel" class="text-xs text-gray-400">{{ item.sublabel }}</span>
         </li>
       </template>
     </ul>
@@ -34,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 
 export interface AutocompleteOption {
   id: string
@@ -61,24 +66,18 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: AutocompleteValue): void
 }>()
 
-const inputRef = ref<HTMLInputElement | null>(null)
+// Internal display text used to filter options
 const inputText = ref(props.modelValue.text)
 const showDropdown = ref(false)
 const highlightedIndex = ref(-1)
 
-// Sync external modelValue.text → inputText when parent changes it (e.g. modal reset)
+// Sync external modelValue → internal text when the parent resets the field (e.g. modal open)
 watch(
-  () => props.modelValue.text,
-  (text) => {
-    if (text !== inputText.value) inputText.value = text
+  () => props.modelValue,
+  (val) => {
+    if (val.text !== inputText.value) inputText.value = val.text
   },
 )
-
-// Emit free-text value whenever the user types
-watch(inputText, (text) => {
-  emit('update:modelValue', { id: null, text })
-  highlightedIndex.value = -1
-})
 
 const sections = computed(() => {
   const q = inputText.value.trim().toLowerCase()
@@ -99,24 +98,55 @@ const sections = computed(() => {
 
 const flatFiltered = computed(() => sections.value.flatMap((s) => s.items))
 
+// Attaches a stable flat index to each option so the template avoids O(n) indexOf calls
+const indexedSections = computed(() => {
+  let offset = 0
+  return sections.value.map((section) => ({
+    label: section.label,
+    items: section.items.map((item) => ({ item, index: offset++ })),
+  }))
+})
+
 // Delay (ms) to allow mousedown on a dropdown option to fire before blur hides it
 const BLUR_DELAY_MS = 150
+let blurTimer: ReturnType<typeof setTimeout> | null = null
+
+// User typed: always free-text (id = null)
+function onInput(event: Event) {
+  const text = (event.target as HTMLInputElement).value
+  inputText.value = text
+  highlightedIndex.value = -1
+  emit('update:modelValue', { id: null, text })
+}
 
 function onFocus() {
+  if (blurTimer !== null) {
+    clearTimeout(blurTimer)
+    blurTimer = null
+  }
   showDropdown.value = true
   highlightedIndex.value = -1
 }
 
 function onBlur() {
-  setTimeout(() => {
+  blurTimer = setTimeout(() => {
     showDropdown.value = false
+    blurTimer = null
   }, BLUR_DELAY_MS)
 }
 
 function closeDropdown() {
+  if (blurTimer !== null) {
+    clearTimeout(blurTimer)
+    blurTimer = null
+  }
   showDropdown.value = false
   highlightedIndex.value = -1
 }
+
+onUnmounted(() => {
+  if (blurTimer !== null) clearTimeout(blurTimer)
+})
 
 function moveHighlight(direction: 1 | -1) {
   if (!showDropdown.value) {
@@ -136,6 +166,7 @@ function confirmHighlighted() {
   }
 }
 
+// Option picked from list: emit with the real leader id
 function selectOption(opt: AutocompleteOption) {
   inputText.value = opt.label
   emit('update:modelValue', { id: opt.id, text: opt.label })
