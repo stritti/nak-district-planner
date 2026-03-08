@@ -57,7 +57,7 @@ class TestCleanupOldEvents:
             patch(
                 "app.adapters.db.repositories.event.SqlEventRepository",
                 return_value=repo,
-            ) as repo_cls,
+            ),
         ):
             result = cleanup_old_events()
 
