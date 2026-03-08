@@ -37,6 +37,20 @@
           </select>
         </div>
 
+        <div v-if="districtsStore.groups.length > 0">
+          <label class="block text-xs font-medium text-gray-500 mb-1">Gruppe (optional)</label>
+          <select
+            v-model="matrixStore.groupId"
+            class="rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            @change="matrixStore.fetch()"
+          >
+            <option value="">Alle Gruppen</option>
+            <option v-for="g in districtsStore.groups" :key="g.id" :value="g.id">
+              {{ g.name }}
+            </option>
+          </select>
+        </div>
+
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Von</label>
           <input
@@ -262,13 +276,20 @@ onMounted(async () => {
     matrixStore.toDt = to
   }
   // Auto-fetch if district already selected (e.g. navigating back)
-  if (matrixStore.districtId) matrixStore.fetch()
+  if (matrixStore.districtId) {
+    districtsStore.fetchGroups(matrixStore.districtId)
+    matrixStore.fetch()
+  }
 })
 
-function onDistrictChange() {
+async function onDistrictChange() {
   matrixStore.matrix = null
-  if (matrixStore.districtId && matrixStore.fromDt && matrixStore.toDt) {
-    matrixStore.fetch()
+  matrixStore.groupId = ''
+  if (matrixStore.districtId) {
+    await districtsStore.fetchGroups(matrixStore.districtId)
+    if (matrixStore.fromDt && matrixStore.toDt) {
+      matrixStore.fetch()
+    }
   }
 }
 
