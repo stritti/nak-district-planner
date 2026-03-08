@@ -18,7 +18,10 @@ class ServiceAssignmentORM(Base):
     event_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
     )
-    leader_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    leader_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("leaders.id", ondelete="SET NULL"), nullable=True
+    )
+    leader_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[AssignmentStatus] = mapped_column(
         SAEnum(AssignmentStatus, name="assignment_status", create_type=False), nullable=False
     )

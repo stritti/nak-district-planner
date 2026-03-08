@@ -12,6 +12,7 @@ from app.adapters.api.routers import (
     districts,
     events,
     export,
+    leaders,
     service_assignments,
 )
 from app.config import settings
@@ -52,4 +53,5 @@ app.include_router(events.router)
 app.include_router(service_assignments.router)
 app.include_router(calendar_integrations.router)
 app.include_router(districts.router)
+app.include_router(leaders.router)
 app.include_router(export.router, prefix="/api/v1")

@@ -7,6 +7,7 @@ export interface MatrixCell {
   is_gap: boolean
   assignment_id: string | null
   assignment_status: 'OPEN' | 'ASSIGNED' | 'CONFIRMED' | null
+  leader_id: string | null
   leader_name: string | null
 }
 

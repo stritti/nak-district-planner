@@ -17,6 +17,7 @@ def _orm_to_domain(row: ExportTokenORM) -> ExportToken:
         token_type=TokenType(row.token_type),
         district_id=row.district_id,
         congregation_id=row.congregation_id,
+        leader_id=row.leader_id,
         created_at=row.created_at,
     )
 
@@ -33,6 +34,7 @@ class SqlExportTokenRepository:
             token_type=token.token_type,
             district_id=token.district_id,
             congregation_id=token.congregation_id,
+            leader_id=token.leader_id,
             created_at=token.created_at,
         )
         self._session.add(row)

@@ -20,6 +20,7 @@ class ExportToken:
     token_type: TokenType
     district_id: uuid.UUID
     congregation_id: uuid.UUID | None
+    leader_id: uuid.UUID | None
     created_at: datetime
 
     @staticmethod
@@ -28,6 +29,7 @@ class ExportToken:
         token_type: TokenType,
         district_id: uuid.UUID,
         congregation_id: uuid.UUID | None,
+        leader_id: uuid.UUID | None = None,
     ) -> "ExportToken":
         return ExportToken(
             id=uuid.uuid4(),
@@ -36,5 +38,6 @@ class ExportToken:
             token_type=token_type,
             district_id=district_id,
             congregation_id=congregation_id,
+            leader_id=leader_id,
             created_at=datetime.now(tz=timezone.utc),
         )

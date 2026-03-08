@@ -178,7 +178,7 @@
     >
       <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="text-base font-semibold text-gray-900">Dienstleiter zuweisen</h2>
+          <h2 class="text-base font-semibold text-gray-900">Amtstragenden zuweisen</h2>
           <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="closeModal">
             <XMarkIcon class="h-5 w-5" />
           </button>
@@ -190,14 +190,34 @@
           <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
         </p>
 
-        <label class="block text-sm font-medium text-gray-700 mb-1">Name des Dienstleiters</label>
-        <input
-          v-model="modal.leaderName"
-          type="text"
-          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Vor- und Nachname"
-          @keyup.enter="submitAssignment"
-        />
+        <label class="block text-sm font-medium text-gray-700 mb-1">Amtstragender</label>
+        <select
+          v-model="modal.selectedLeaderId"
+          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+          @change="onLeaderSelectChange"
+        >
+          <option value="">Bitte wählen…</option>
+          <option
+            v-for="leader in leadersStore.activeLeaders()"
+            :key="leader.id"
+            :value="leader.id"
+          >
+            {{ leader.rank ? leader.rank + ' ' : '' }}{{ leader.name }}{{ leader.congregation_id ? ` (${congregationName(leader.congregation_id)})` : '' }}
+          </option>
+          <option value="__freetext__">Gastdienstleiter (Freitext)</option>
+        </select>
+
+        <div v-if="modal.selectedLeaderId === '__freetext__'">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Name des Gastdienstleiters</label>
+          <input
+            v-model="modal.leaderName"
+            type="text"
+            class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Vor- und Nachname"
+            @keyup.enter="submitAssignment"
+          />
+        </div>
+
         <p v-if="modal.error" class="text-sm text-red-600 mt-2">{{ modal.error }}</p>
 
         <div class="flex justify-end gap-3 mt-5">
@@ -209,7 +229,7 @@
           </button>
           <button
             class="text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-            :disabled="!modal.leaderName.trim() || modal.saving"
+            :disabled="!canSubmit || modal.saving"
             @click="submitAssignment"
           >
             {{ modal.saving ? 'Speichern…' : 'Zuweisen' }}
@@ -225,10 +245,12 @@ import { computed, onMounted, reactive } from 'vue'
 import { ArrowPathIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '@/stores/matrix'
 import { useDistrictsStore } from '@/stores/districts'
+import { useLeadersStore } from '@/stores/leaders'
 import type { MatrixCell } from '@/api/matrix'
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
+const leadersStore = useLeadersStore()
 
 // ── Preset-Filter ────────────────────────────────────────────────────────────
 
@@ -277,7 +299,11 @@ onMounted(async () => {
   }
   // Auto-fetch if district already selected (e.g. navigating back)
   if (matrixStore.districtId) {
-    districtsStore.fetchGroups(matrixStore.districtId)
+    await Promise.all([
+      districtsStore.fetchGroups(matrixStore.districtId),
+      districtsStore.fetchCongregations(matrixStore.districtId),
+      leadersStore.fetchLeaders(matrixStore.districtId),
+    ])
     matrixStore.fetch()
   }
 })
@@ -286,11 +312,19 @@ async function onDistrictChange() {
   matrixStore.matrix = null
   matrixStore.groupId = ''
   if (matrixStore.districtId) {
-    await districtsStore.fetchGroups(matrixStore.districtId)
+    await Promise.all([
+      districtsStore.fetchGroups(matrixStore.districtId),
+      districtsStore.fetchCongregations(matrixStore.districtId),
+      leadersStore.fetchLeaders(matrixStore.districtId),
+    ])
     if (matrixStore.fromDt && matrixStore.toDt) {
       matrixStore.fetch()
     }
   }
+}
+
+function congregationName(congregationId: string): string {
+  return districtsStore.congregations.find((c) => c.id === congregationId)?.name ?? ''
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -322,10 +356,22 @@ const modal = reactive({
   eventTitle: '',
   date: '',
   congregationName: '',
+  selectedLeaderId: '' as string, // '' = not chosen, '__freetext__' = guest, uuid = leader id
   leaderName: '',
   saving: false,
   error: '',
 })
+
+const canSubmit = computed(() => {
+  if (modal.selectedLeaderId === '__freetext__') return modal.leaderName.trim().length > 0
+  return modal.selectedLeaderId !== ''
+})
+
+function onLeaderSelectChange() {
+  if (modal.selectedLeaderId !== '__freetext__') {
+    modal.leaderName = ''
+  }
+}
 
 function openModal(cell: MatrixCell, date: string, congregationName: string) {
   modal.open = true
@@ -333,9 +379,14 @@ function openModal(cell: MatrixCell, date: string, congregationName: string) {
   modal.eventTitle = cell.event_title ?? ''
   modal.date = date
   modal.congregationName = congregationName
+  modal.selectedLeaderId = ''
   modal.leaderName = ''
   modal.saving = false
   modal.error = ''
+  // Ensure leaders are loaded for this district
+  if (matrixStore.districtId && leadersStore.districtId !== matrixStore.districtId) {
+    leadersStore.fetchLeaders(matrixStore.districtId)
+  }
 }
 
 function closeModal() {
@@ -343,11 +394,15 @@ function closeModal() {
 }
 
 async function submitAssignment() {
-  if (!modal.leaderName.trim()) return
+  if (!canSubmit.value) return
   modal.saving = true
   modal.error = ''
   try {
-    await matrixStore.assign(modal.eventId, modal.leaderName.trim())
+    if (modal.selectedLeaderId === '__freetext__') {
+      await matrixStore.assign(modal.eventId, { leaderName: modal.leaderName.trim() })
+    } else {
+      await matrixStore.assign(modal.eventId, { leaderId: modal.selectedLeaderId })
+    }
     closeModal()
   } catch (e) {
     modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
