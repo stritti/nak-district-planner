@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@heroicons/vue": "^2.2.0",
-    "pinia": "^2.1",
+    "pinia": "^3.0",
     "pinia-plugin-persistedstate": "^4.7.1",
     "vue": "^3.4",
     "vue-router": "^4.3"
