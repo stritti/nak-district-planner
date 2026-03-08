@@ -80,7 +80,7 @@
 
         <button
           class="flex items-center gap-1.5 bg-green-600 text-white text-sm px-4 py-1.5 rounded hover:bg-green-700 disabled:opacity-50"
-          :disabled="!matrixStore.matrix || matrixStore.matrix.dates.length === 0 || exporting"
+          :disabled="!matrixStore.matrix || matrixStore.matrix.dates.length === 0 || matrixStore.loading || exporting"
           @click="triggerMatrixExport"
         >
           <ArrowDownTrayIcon class="h-4 w-4" />
