@@ -23,12 +23,23 @@
       role="listbox"
       class="absolute z-50 left-0 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-56 overflow-y-auto"
     >
-      <template v-for="(opt, idx) in flatFiltered" :key="opt.id">
+      <template v-for="section in indexedSections" :key="section.label ?? '__default__'">
         <li
+          v-if="section.label"
+          class="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 sticky top-0"
+          aria-hidden="true"
+        >
+          {{ section.label }}
+        </li>
+        <li
+          v-for="{ item, index } in section.items"
+          :key="item.id"
+          role="option"
+          :aria-selected="index === highlightedIndex"
           class="flex flex-col px-3 py-2 cursor-pointer select-none"
-          :class="idx === highlightedIndex ? 'bg-blue-100' : 'hover:bg-gray-50'"
-          @mousedown.prevent="selectOption(opt)"
-          @mousemove="highlightedIndex = idx"
+          :class="index === highlightedIndex ? 'bg-blue-100' : 'hover:bg-gray-50'"
+          @mousedown.prevent="selectOption(item)"
+          @mousemove="highlightedIndex = index"
         >
           <span class="text-sm text-gray-900">{{ item.label }}</span>
           <span v-if="item.sublabel" class="text-xs text-gray-400">{{ item.sublabel }}</span>
