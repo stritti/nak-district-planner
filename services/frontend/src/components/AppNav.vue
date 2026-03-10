@@ -25,12 +25,14 @@ import {
   CalendarDaysIcon,
   LinkIcon,
   TableCellsIcon,
+  UsersIcon,
 } from '@heroicons/vue/24/outline'
 
 const links = [
   { to: '/events',          label: 'Ereignisse',        icon: CalendarDaysIcon },
   { to: '/matrix',          label: 'Dienstplan-Matrix', icon: TableCellsIcon },
   { to: '/admin/districts', label: 'Bezirke & Gemeinden', icon: BuildingLibraryIcon },
+  { to: '/admin/leaders',   label: 'Amtstragende',      icon: UsersIcon },
   { to: '/admin/calendars', label: 'Kalender',          icon: ArrowDownTrayIcon },
   { to: '/admin/export',    label: 'Export',            icon: LinkIcon },
 ]

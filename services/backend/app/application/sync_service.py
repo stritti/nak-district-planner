@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.calendar.ical_connector import ICalConnector
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.event import SqlEventRepository
-from app.application.crypto import CryptoError, decrypt_credentials
+from app.application.crypto import decrypt_credentials
 from app.domain.models.calendar_integration import CalendarType
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
 from app.domain.ports.calendar import CalendarConnector

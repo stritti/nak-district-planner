@@ -137,12 +137,19 @@
                 <button
                   v-if="row.cells[date].is_gap"
                   class="w-full text-left"
-                  @click="openModal(row.cells[date], date, row.congregation_name)"
+                  @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
-                  <div class="font-semibold text-red-700">LÜCKE</div>
+                  <div class="flex items-center gap-1 font-bold text-red-700">
+                    <ExclamationTriangleIcon class="h-3.5 w-3.5 shrink-0" />
+                    LÜCKE
+                  </div>
                   <div class="text-red-600 truncate max-w-[100px]">{{ row.cells[date].event_title }}</div>
                 </button>
-                <template v-else>
+                <button
+                  v-else
+                  class="w-full text-left hover:opacity-75"
+                  @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
+                >
                   <div class="font-medium text-gray-800 truncate max-w-[100px]">
                     {{ row.cells[date].event_title }}
                   </div>
@@ -152,7 +159,7 @@
                   <div v-if="row.cells[date].category" class="text-gray-400">
                     {{ row.cells[date].category }}
                   </div>
-                </template>
+                </button>
               </template>
               <template v-else>
                 <span class="text-gray-300">–</span>
@@ -178,7 +185,9 @@
     >
       <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="text-base font-semibold text-gray-900">Dienstleiter zuweisen</h2>
+          <h2 class="text-base font-semibold text-gray-900">
+            {{ modal.isGap ? 'Amtstragenden zuweisen' : 'Zuweisung bearbeiten' }}
+          </h2>
           <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="closeModal">
             <XMarkIcon class="h-5 w-5" />
           </button>
@@ -190,14 +199,15 @@
           <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
         </p>
 
-        <label class="block text-sm font-medium text-gray-700 mb-1">Name des Dienstleiters</label>
-        <input
-          v-model="modal.leaderName"
-          type="text"
-          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Vor- und Nachname"
-          @keyup.enter="submitAssignment"
+        <label class="block text-sm font-medium text-gray-700 mb-1">Amtstragender</label>
+        <AutocompleteInput
+          ref="autocompleteRef"
+          v-model="modal.leaderInput"
+          :options="autocompleteOptions"
+          placeholder="Name eingeben oder auswählen…"
+          class="mb-3"
         />
+
         <p v-if="modal.error" class="text-sm text-red-600 mt-2">{{ modal.error }}</p>
 
         <div class="flex justify-end gap-3 mt-5">
@@ -209,10 +219,10 @@
           </button>
           <button
             class="text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-            :disabled="!modal.leaderName.trim() || modal.saving"
+            :disabled="!canSubmit || modal.saving"
             @click="submitAssignment"
           >
-            {{ modal.saving ? 'Speichern…' : 'Zuweisen' }}
+            {{ modal.saving ? 'Speichern…' : (modal.isGap ? 'Zuweisen' : 'Speichern') }}
           </button>
         </div>
       </div>
@@ -221,14 +231,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
-import { ArrowPathIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { ArrowPathIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '@/stores/matrix'
 import { useDistrictsStore } from '@/stores/districts'
+import { useLeadersStore } from '@/stores/leaders'
 import type { MatrixCell } from '@/api/matrix'
+import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '@/components/AutocompleteInput.vue'
+
+const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
+const leadersStore = useLeadersStore()
 
 // ── Preset-Filter ────────────────────────────────────────────────────────────
 
@@ -277,7 +292,11 @@ onMounted(async () => {
   }
   // Auto-fetch if district already selected (e.g. navigating back)
   if (matrixStore.districtId) {
-    districtsStore.fetchGroups(matrixStore.districtId)
+    await Promise.all([
+      districtsStore.fetchGroups(matrixStore.districtId),
+      districtsStore.fetchCongregations(matrixStore.districtId),
+      leadersStore.fetchLeaders(matrixStore.districtId),
+    ])
     matrixStore.fetch()
   }
 })
@@ -286,11 +305,19 @@ async function onDistrictChange() {
   matrixStore.matrix = null
   matrixStore.groupId = ''
   if (matrixStore.districtId) {
-    await districtsStore.fetchGroups(matrixStore.districtId)
+    await Promise.all([
+      districtsStore.fetchGroups(matrixStore.districtId),
+      districtsStore.fetchCongregations(matrixStore.districtId),
+      leadersStore.fetchLeaders(matrixStore.districtId),
+    ])
     if (matrixStore.fromDt && matrixStore.toDt) {
       matrixStore.fetch()
     }
   }
+}
+
+function congregationName(congregationId: string): string {
+  return districtsStore.congregations.find((c) => c.id === congregationId)?.name ?? ''
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -310,8 +337,8 @@ function formatWeekday(iso: string): string {
 
 function cellClass(cell: MatrixCell | undefined): string {
   if (!cell?.event_id) return 'bg-white'
-  if (cell.is_gap) return 'bg-red-50 cursor-pointer hover:bg-red-100'
-  return 'bg-white'
+  if (cell.is_gap) return 'bg-red-100 cursor-pointer hover:bg-red-200 ring-1 ring-inset ring-red-300'
+  return 'bg-white cursor-pointer'
 }
 
 // ── Assignment Modal ──────────────────────────────────────────────────────────
@@ -322,20 +349,50 @@ const modal = reactive({
   eventTitle: '',
   date: '',
   congregationName: '',
-  leaderName: '',
+  congregationId: '',
+  isGap: true,
+  leaderInput: { id: null, text: '' } as AutocompleteValue,
   saving: false,
   error: '',
 })
 
-function openModal(cell: MatrixCell, date: string, congregationName: string) {
+const canSubmit = computed(() => {
+  return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
+})
+
+const autocompleteOptions = computed((): AutocompleteOption[] => {
+  return leadersStore.activeLeaders().map((l) => ({
+    id: l.id,
+    label: `${l.rank ? l.rank + ' ' : ''}${l.name}`,
+    sublabel: l.congregation_id ? congregationName(l.congregation_id) : undefined,
+    isPriority: l.congregation_id === modal.congregationId,
+  }))
+})
+
+function openModal(cell: MatrixCell, date: string, congregationName: string, congregationId: string) {
   modal.open = true
   modal.eventId = cell.event_id!
   modal.eventTitle = cell.event_title ?? ''
   modal.date = date
   modal.congregationName = congregationName
-  modal.leaderName = ''
+  modal.congregationId = congregationId
+  modal.isGap = cell.is_gap
+  // Pre-fill with existing assignment if present
+  if (cell.leader_id) {
+    modal.leaderInput = { id: cell.leader_id, text: cell.leader_name ?? '' }
+  } else if (cell.leader_name) {
+    modal.leaderInput = { id: null, text: cell.leader_name }
+  } else {
+    modal.leaderInput = { id: null, text: '' }
+  }
   modal.saving = false
   modal.error = ''
+  // Ensure leaders are loaded for this district
+  if (matrixStore.districtId && leadersStore.districtId !== matrixStore.districtId) {
+    leadersStore.fetchLeaders(matrixStore.districtId)
+  }
+  // Focus the autocomplete input once the modal DOM is rendered
+  nextTick(() => autocompleteRef.value?.focus())
 }
 
 function closeModal() {
@@ -343,11 +400,15 @@ function closeModal() {
 }
 
 async function submitAssignment() {
-  if (!modal.leaderName.trim()) return
+  if (!canSubmit.value) return
   modal.saving = true
   modal.error = ''
   try {
-    await matrixStore.assign(modal.eventId, modal.leaderName.trim())
+    if (modal.leaderInput.id !== null) {
+      await matrixStore.assign(modal.eventId, { leaderId: modal.leaderInput.id })
+    } else {
+      await matrixStore.assign(modal.eventId, { leaderName: modal.leaderInput.text.trim() })
+    }
     closeModal()
   } catch (e) {
     modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'

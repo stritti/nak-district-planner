@@ -13,6 +13,7 @@ class ExportTokenCreate(BaseModel):
     token_type: TokenType
     district_id: uuid.UUID
     congregation_id: uuid.UUID | None = None
+    leader_id: uuid.UUID | None = None
 
 
 class ExportTokenResponse(BaseModel):
@@ -22,4 +23,5 @@ class ExportTokenResponse(BaseModel):
     token_type: TokenType
     district_id: uuid.UUID
     congregation_id: uuid.UUID | None
+    leader_id: uuid.UUID | None
     created_at: datetime

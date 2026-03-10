@@ -9,6 +9,7 @@ from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
+from app.domain.models.leader import Leader
 from app.domain.models.service_assignment import ServiceAssignment
 
 
@@ -82,6 +83,14 @@ class EventRepository(ABC):
     @abstractmethod
     async def save(self, event: Event) -> None: ...
 
+    @abstractmethod
+    async def delete_before(self, cutoff: datetime) -> int:
+        """Delete all events whose end_at is before *cutoff*.
+
+        Returns the number of deleted rows.
+        """
+        ...
+
 
 class ServiceAssignmentRepository(ABC):
     @abstractmethod
@@ -95,6 +104,25 @@ class ServiceAssignmentRepository(ABC):
 
     @abstractmethod
     async def save(self, assignment: ServiceAssignment) -> None: ...
+
+
+class LeaderRepository(ABC):
+    @abstractmethod
+    async def get(self, leader_id: uuid.UUID) -> Leader | None: ...
+
+    @abstractmethod
+    async def list_by_district(
+        self,
+        district_id: uuid.UUID,
+        congregation_id: uuid.UUID | None = None,
+        active_only: bool = False,
+    ) -> list[Leader]: ...
+
+    @abstractmethod
+    async def save(self, leader: Leader) -> None: ...
+
+    @abstractmethod
+    async def delete(self, leader_id: uuid.UUID) -> None: ...
 
 
 class CalendarIntegrationRepository(ABC):

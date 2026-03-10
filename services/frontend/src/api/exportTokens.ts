@@ -9,6 +9,7 @@ export interface ExportTokenResponse {
   token_type: TokenType
   district_id: string
   congregation_id: string | null
+  leader_id: string | null
   created_at: string
 }
 
@@ -17,6 +18,7 @@ export interface ExportTokenCreate {
   token_type: TokenType
   district_id: string
   congregation_id?: string | null
+  leader_id?: string | null
 }
 
 export function listExportTokens(district_id?: string): Promise<ExportTokenResponse[]> {
