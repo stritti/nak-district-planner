@@ -21,6 +21,9 @@ Behavioral changes must follow this order unless explicitly re-approved.
 
 Change: `planning-slot-hybrid-sync`
 
+Detailed technical plan:
+- `openspec/architecture/phase-1-planning-model-technical-plan.md`
+
 Scope:
 - Introduce PlanningSeries
 - Introduce PlanningSlot (Aggregate Root)
