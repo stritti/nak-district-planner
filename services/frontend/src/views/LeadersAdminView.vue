@@ -1,13 +1,13 @@
 <template>
   <div class="p-6 max-w-5xl">
-    <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-5">Amtstragende</h1>
+    <h1 class="page-title">Amtstragende</h1>
 
     <!-- Bezirk wählen -->
     <div class="mb-6">
-      <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Bezirk</label>
+      <label class="filter-label">Bezirk</label>
       <select
         v-model="selectedDistrictId"
-        class="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+        class="form-select"
         @change="onDistrictChange"
       >
         <option value="">Bezirk wählen…</option>
@@ -49,18 +49,18 @@
         </div>
 
         <!-- Leaders table -->
-        <div v-else class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div v-else class="card overflow-hidden">
           <table class="w-full text-sm">
-            <thead class="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 font-medium">
+            <thead class="table-thead">
               <tr>
-                <th class="px-4 py-2 text-left">Grad</th>
-                <th class="px-4 py-2 text-left">Name</th>
-                <th class="px-4 py-2 text-left">Beauftragung</th>
-                <th v-if="section.congregationId === null" class="px-4 py-2 text-left">Heimat-Gemeinde</th>
-                <th class="px-4 py-2 text-left">E-Mail</th>
-                <th class="px-4 py-2 text-left">Telefon</th>
-                <th class="px-4 py-2 text-center">Status</th>
-                <th class="px-4 py-2 text-right">Aktionen</th>
+                <th class="table-th py-2">Grad</th>
+                <th class="table-th py-2">Name</th>
+                <th class="table-th py-2">Beauftragung</th>
+                <th v-if="section.congregationId === null" class="table-th py-2">Heimat-Gemeinde</th>
+                <th class="table-th py-2">E-Mail</th>
+                <th class="table-th py-2">Telefon</th>
+                <th class="table-th py-2 text-center">Status</th>
+                <th class="table-th py-2 text-right">Aktionen</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -75,7 +75,7 @@
                     {{ leader.rank ?? '—' }}
                   </span>
                 </td>
-                <td class="px-4 py-2 font-medium text-gray-800 dark:text-gray-200">{{ leader.name }}</td>
+                <td class="table-th py-2 font-medium text-gray-800 dark:text-gray-200">{{ leader.name }}</td>
                 <td class="px-4 py-2">
                   <span
                     v-if="leader.special_role"
@@ -85,37 +85,37 @@
                   </span>
                   <span v-else class="text-gray-300 dark:text-gray-600">—</span>
                 </td>
-                <td v-if="section.congregationId === null" class="px-4 py-2 text-gray-500 dark:text-gray-400">
+                <td v-if="section.congregationId === null" class="table-td py-2">
                   {{ congregationName(leader.congregation_id) || '—' }}
                 </td>
-                <td class="px-4 py-2 text-gray-500 dark:text-gray-400">{{ leader.email || '—' }}</td>
-                <td class="px-4 py-2 text-gray-500 dark:text-gray-400">{{ leader.phone || '—' }}</td>
-                <td class="px-4 py-2 text-center">
+                <td class="table-td py-2">{{ leader.email || '—' }}</td>
+                <td class="table-td py-2">{{ leader.phone || '—' }}</td>
+                <td class="table-th py-2 text-center">
                   <span
-                    class="inline-block px-2 py-0.5 rounded text-xs font-medium"
+                    class="badge rounded"
                     :class="leader.is_active ? 'bg-green-100 dark:bg-green-900/20 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'"
                   >
                     {{ leader.is_active ? 'Aktiv' : 'Inaktiv' }}
                   </span>
                 </td>
-                <td class="px-4 py-2 text-right">
+                <td class="table-th py-2 text-right">
                   <div class="flex items-center justify-end gap-1">
                     <button
-                      class="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      class="btn-icon"
                       title="Bearbeiten"
                       @click="openEditModal(leader)"
                     >
                       <PencilSquareIcon class="h-4 w-4" />
                     </button>
                     <button
-                      class="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+                      class="btn-icon hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400"
                       title="ICS-Export-Token erstellen"
                       @click="openExportModal(leader)"
                     >
                       <LinkIcon class="h-4 w-4" />
                     </button>
                     <button
-                      class="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      class="btn-icon hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                       title="Löschen"
                       @click="confirmDelete(leader)"
                     >
@@ -133,13 +133,13 @@
     <!-- Add modal -->
     <div
       v-if="addModal.open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      class="modal-backdrop"
       @click.self="addModal.open = false"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6">
+      <div class="modal-panel max-w-lg">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Amtstragenden hinzufügen</h2>
-          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="addModal.open = false">
+          <h2 class="modal-title">Amtstragenden hinzufügen</h2>
+          <button class="modal-close" @click="addModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
@@ -155,21 +155,21 @@
 
         <div class="grid grid-cols-2 gap-4 mb-4">
           <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
+            <label class="form-label">Name *</label>
             <input
               v-model="addModal.name"
               type="text"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
               placeholder="Vor- und Nachname"
               @keyup.enter="saveAdd"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Grad *</label>
+            <label class="form-label">Grad *</label>
             <select
               v-model="addModal.rank"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option value="">Grad wählen…</option>
               <option v-for="r in LEADER_RANKS" :key="r.value" :value="r.value">{{ r.label }}</option>
@@ -177,10 +177,10 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Besondere Beauftragung</label>
+            <label class="form-label">Besondere Beauftragung</label>
             <select
               v-model="addModal.special_role"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option :value="null">Keine</option>
               <option v-for="sr in SPECIAL_ROLES" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
@@ -188,21 +188,21 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-Mail</label>
+            <label class="form-label">E-Mail</label>
             <input
               v-model="addModal.email"
               type="email"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
               placeholder="optional"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Telefon</label>
+            <label class="form-label">Telefon</label>
             <input
               v-model="addModal.phone"
               type="text"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
               placeholder="optional"
             />
           </div>
@@ -212,13 +212,13 @@
 
         <div class="flex justify-end gap-3">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
+            class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
             @click="addModal.open = false"
           >
             Abbrechen
           </button>
           <button
-            class="flex items-center gap-1.5 text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            class="btn-primary px-4 py-2"
             :disabled="!addModal.name.trim() || !addModal.rank || saving"
             @click="saveAdd"
           >
@@ -232,32 +232,32 @@
     <!-- Edit modal -->
     <div
       v-if="editModal.open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      class="modal-backdrop"
       @click.self="editModal.open = false"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6">
+      <div class="modal-panel max-w-lg">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Amtstragenden bearbeiten</h2>
-          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="editModal.open = false">
+          <h2 class="modal-title">Amtstragenden bearbeiten</h2>
+          <button class="modal-close" @click="editModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
 
         <div class="grid grid-cols-2 gap-4 mb-4">
           <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
+            <label class="form-label">Name *</label>
             <input
               v-model="editModal.name"
               type="text"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Grad *</label>
+            <label class="form-label">Grad *</label>
             <select
               v-model="editModal.rank"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option value="">Grad wählen…</option>
               <option v-for="r in LEADER_RANKS" :key="r.value" :value="r.value">{{ r.label }}</option>
@@ -265,10 +265,10 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Besondere Beauftragung</label>
+            <label class="form-label">Besondere Beauftragung</label>
             <select
               v-model="editModal.special_role"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option :value="null">Keine</option>
               <option v-for="sr in SPECIAL_ROLES" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
@@ -276,10 +276,10 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Gemeinde</label>
+            <label class="form-label">Gemeinde</label>
             <select
               v-model="editModal.congregation_id"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option :value="null">Bezirksebene</option>
               <option v-for="c in congregations" :key="c.id" :value="c.id">{{ c.name }}</option>
@@ -287,29 +287,29 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-Mail</label>
+            <label class="form-label">E-Mail</label>
             <input
               v-model="editModal.email"
               type="email"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Telefon</label>
+            <label class="form-label">Telefon</label>
             <input
               v-model="editModal.phone"
               type="text"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
 
           <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notizen</label>
+            <label class="form-label">Notizen</label>
             <textarea
               v-model="editModal.notes"
               rows="2"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
         </div>
@@ -323,13 +323,13 @@
 
         <div class="flex justify-end gap-3">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
+            class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
             @click="editModal.open = false"
           >
             Abbrechen
           </button>
           <button
-            class="flex items-center gap-1.5 text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            class="btn-primary px-4 py-2"
             :disabled="!editModal.name.trim() || !editModal.rank || saving"
             @click="saveEdit"
           >
@@ -343,15 +343,15 @@
     <!-- ICS Export modal -->
     <div
       v-if="exportModal.open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      class="modal-backdrop"
       @click.self="exportModal.open = false"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
+      <div class="modal-panel max-w-md">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">
+          <h2 class="modal-title">
             ICS-Export: {{ exportModal.leaderRank }} {{ exportModal.leaderName }}
           </h2>
-          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="exportModal.open = false">
+          <button class="modal-close" @click="exportModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
@@ -365,7 +365,7 @@
               class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono"
             />
             <button
-              class="shrink-0 text-sm px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              class="btn-primary shrink-0 px-3 py-2"
               @click="copyUrl"
             >
               Kopieren
@@ -381,13 +381,13 @@
           <p v-if="exportModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ exportModal.error }}</p>
           <div class="flex justify-end gap-3">
             <button
-              class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
+              class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
               @click="exportModal.open = false"
             >
               Abbrechen
             </button>
             <button
-              class="text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              class="btn-primary px-4 py-2"
               :disabled="saving"
               @click="createExportToken"
             >

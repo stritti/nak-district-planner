@@ -1,9 +1,9 @@
 <template>
   <div class="p-6">
-    <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Dienstplan-Matrix</h1>
+    <h1 class="page-title mb-4">Dienstplan-Matrix</h1>
 
     <!-- Filter-Leiste -->
-    <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-6">
+    <div class="filter-bar mb-6">
 
       <!-- Schnellfilter -->
       <div class="flex items-center gap-2 mb-3">
@@ -24,10 +24,10 @@
       <!-- Bezirk + Datumsfelder -->
       <div class="flex flex-wrap items-end gap-3">
         <div>
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Bezirk</label>
+          <label class="filter-label">Bezirk</label>
           <select
             v-model="matrixStore.districtId"
-            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="form-select"
             @change="onDistrictChange"
           >
             <option value="">Bezirk wählen…</option>
@@ -38,10 +38,10 @@
         </div>
 
         <div v-if="districtsStore.groups.length > 0">
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Gruppe</label>
+          <label class="filter-label">Gruppe</label>
           <select
             v-model="matrixStore.groupId"
-            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="form-select"
             @change="matrixStore.fetch()"
           >
             <option value="">Alle Gruppen</option>
@@ -52,25 +52,25 @@
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Von</label>
+          <label class="filter-label">Von</label>
           <input
             v-model="matrixStore.fromDt"
             type="date"
-            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="form-select"
           />
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Bis</label>
+          <label class="filter-label">Bis</label>
           <input
             v-model="matrixStore.toDt"
             type="date"
-            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="form-select"
           />
         </div>
 
         <button
-          class="flex items-center gap-1.5 bg-blue-600 text-white text-sm px-4 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
+          class="btn-primary px-4 py-1.5"
           :disabled="!matrixStore.districtId || !matrixStore.fromDt || !matrixStore.toDt || matrixStore.loading"
           @click="matrixStore.fetch()"
         >
@@ -173,13 +173,13 @@
     <!-- Assignment Modal -->
     <div
       v-if="modal.open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      class="modal-backdrop"
       @click.self="closeModal"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
+      <div class="modal-panel max-w-md">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Amtstragenden zuweisen</h2>
-          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="closeModal">
+          <h2 class="modal-title">Amtstragenden zuweisen</h2>
+          <button class="modal-close" @click="closeModal">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
@@ -190,10 +190,10 @@
           <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
         </p>
 
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amtstragender</label>
+        <label class="form-label">Amtstragender</label>
         <select
           v-model="modal.selectedLeaderId"
-          class="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+          class="form-input mb-3"
           @change="onLeaderSelectChange"
         >
           <option value="">Bitte wählen…</option>
@@ -208,11 +208,11 @@
         </select>
 
         <div v-if="modal.selectedLeaderId === '__freetext__'">
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name des Gastdienstleiters</label>
+          <label class="form-label">Name des Gastdienstleiters</label>
           <input
             v-model="modal.leaderName"
             type="text"
-            class="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="form-input"
             placeholder="Vor- und Nachname"
             @keyup.enter="submitAssignment"
           />
@@ -221,14 +221,11 @@
         <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modal.error }}</p>
 
         <div class="flex justify-end gap-3 mt-5">
-          <button
-            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
-            @click="closeModal"
-          >
+          <button class="btn-secondary" @click="closeModal">
             Abbrechen
           </button>
           <button
-            class="text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            class="btn-primary px-4 py-2"
             :disabled="!canSubmit || modal.saving"
             @click="submitAssignment"
           >

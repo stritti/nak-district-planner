@@ -16,7 +16,7 @@
 
         <div class="ml-auto">
           <button
-            class="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            class="btn-icon p-2 rounded-md hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
             :title="isDark ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'"
             @click="toggle"
           >

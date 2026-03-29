@@ -21,7 +21,7 @@
     </div>
 
     <!-- Filter-Leiste -->
-    <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-5">
+    <div class="filter-bar mb-5">
 
       <!-- Zeile 1: Schnellfilter (Liste) oder Perioden-Navigation (Woche/Monat) -->
       <div class="flex items-center justify-between mb-3">
@@ -68,10 +68,10 @@
       <div class="flex flex-wrap gap-3">
         <!-- Bezirk -->
         <div>
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Bezirk</label>
+          <label class="filter-label">Bezirk</label>
           <select
             v-model="selectedDistrictId"
-            class="rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800"
+            class="form-select px-2"
             @change="onDistrictChange"
           >
             <option value="">Alle Bezirke</option>
@@ -83,7 +83,7 @@
 
         <!-- Gemeinde -->
         <div>
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Gemeinde</label>
+          <label class="filter-label">Gemeinde</label>
           <select
             v-model="selectedCongregationId"
             :disabled="!selectedDistrictId"
@@ -100,10 +100,10 @@
 
         <!-- Gruppe -->
         <div v-if="districtsStore.groups.length > 0">
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Gruppe (optional)</label>
+          <label class="filter-label">Gruppe (optional)</label>
           <select
             v-model="selectedGroupId"
-            class="rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800"
+            class="form-select px-2"
             @change="onGroupChange"
           >
             <option value="">Alle Gruppen</option>
@@ -115,10 +115,10 @@
 
         <!-- Status -->
         <div>
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Status</label>
+          <label class="filter-label">Status</label>
           <select
             v-model="selectedStatus"
-            class="rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800"
+            class="form-select px-2"
             @change="onFilterChange"
           >
             <option value="">Alle</option>
@@ -131,20 +131,20 @@
         <!-- Datumsfelder: nur in der Listenansicht -->
         <template v-if="viewMode === 'list'">
           <div>
-            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Von</label>
+            <label class="filter-label">Von</label>
             <input
               v-model="fromDate"
               type="date"
-              class="rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800"
+              class="form-select px-2"
               @change="applyFilters"
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Bis</label>
+            <label class="filter-label">Bis</label>
             <input
               v-model="toDate"
               type="date"
-              class="rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:bg-gray-800"
+              class="form-select px-2"
               @change="applyFilters"
             />
           </div>
@@ -154,17 +154,17 @@
 
     <!-- ── Listenansicht ───────────────────────────────────────────────────── -->
     <template v-if="viewMode === 'list'">
-      <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div class="table-container">
         <table class="w-full text-sm">
           <thead>
-            <tr class="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              <th class="px-4 py-3 text-left">Titel</th>
-              <th class="px-4 py-3 text-left">Start</th>
-              <th class="px-4 py-3 text-left">Kategorie</th>
-              <th class="px-4 py-3 text-left">Zuordnung</th>
-              <th class="px-4 py-3 text-left">Status</th>
-              <th class="px-4 py-3 text-left">Quelle</th>
-              <th class="px-4 py-3 text-left"></th>
+            <tr class="table-thead">
+              <th class="table-th">Titel</th>
+              <th class="table-th">Start</th>
+              <th class="table-th">Kategorie</th>
+              <th class="table-th">Zuordnung</th>
+              <th class="table-th">Status</th>
+              <th class="table-th">Quelle</th>
+              <th class="table-th"></th>
             </tr>
           </thead>
           <tbody>
@@ -181,12 +181,12 @@
               v-else
               v-for="event in eventsStore.items"
               :key="event.id"
-              class="border-b border-gray-100 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              class="table-tr"
             >
-              <td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{{ event.title }}</td>
-              <td class="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{{ formatDt(event.start_at) }}</td>
-              <td class="px-4 py-3 text-gray-600 dark:text-gray-400">{{ event.category ?? '—' }}</td>
-              <td class="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
+              <td class="table-th font-medium text-gray-900 dark:text-gray-100">{{ event.title }}</td>
+              <td class="table-td whitespace-nowrap">{{ formatDt(event.start_at) }}</td>
+              <td class="table-td">{{ event.category ?? '—' }}</td>
+              <td class="table-td text-xs">
                 <span>{{ districtName(event.district_id) }}</span>
                 <template v-if="event.congregation_id">
                   <span class="text-gray-400 dark:text-gray-500"> › </span>
@@ -195,13 +195,13 @@
                 <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
               </td>
               <td class="px-4 py-3">
-                <span :class="statusClass(event.status)" class="px-2 py-0.5 rounded-full text-xs font-medium">
+                <span :class="statusClass(event.status)" class="badge">
                   {{ statusLabel(event.status) }}
                 </span>
               </td>
               <td class="px-4 py-3">
                 <span
-                  class="px-2 py-0.5 rounded-full text-xs font-medium"
+                  class="badge"
                   :class="event.source === 'EXTERNAL' ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'"
                 >
                   {{ event.source === 'EXTERNAL' ? 'Import' : 'Intern' }}
@@ -209,7 +209,7 @@
               </td>
               <td class="px-4 py-2 text-right">
                 <button
-                  class="p-1.5 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  class="btn-icon border border-gray-300 dark:border-gray-600"
                   title="Zuordnung bearbeiten"
                   @click="openEdit(event)"
                 >
@@ -229,14 +229,14 @@
         <span>Seite {{ eventsStore.currentPage }} von {{ eventsStore.totalPages }}</span>
         <div class="flex gap-2">
           <button
-            class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage <= 1"
             @click="eventsStore.goToPage(eventsStore.currentPage - 1); eventsStore.fetch()"
           >
             ← Zurück
           </button>
           <button
-            class="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage >= eventsStore.totalPages"
             @click="eventsStore.goToPage(eventsStore.currentPage + 1); eventsStore.fetch()"
           >
@@ -248,7 +248,7 @@
 
     <!-- ── Wochenansicht ──────────────────────────────────────────────────── -->
     <template v-else-if="viewMode === 'week'">
-      <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto">
+      <div class="table-container overflow-x-auto">
         <div v-if="calendarLoading" class="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Laden…</div>
         <div v-else class="grid grid-cols-7 divide-x divide-gray-200 dark:divide-gray-700 min-w-[700px]">
           <div v-for="day in weekDays" :key="day.iso" class="min-w-[100px]">
@@ -297,7 +297,7 @@
 
     <!-- ── Monatsansicht ──────────────────────────────────────────────────── -->
     <template v-else-if="viewMode === 'month'">
-      <div class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto">
+      <div class="table-container overflow-x-auto">
         <!-- Wochentag-Header -->
         <div class="grid grid-cols-7 divide-x divide-gray-200 dark:divide-gray-700 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 min-w-[560px]">
           <div
@@ -364,13 +364,13 @@
     <!-- ── Zuordnungs-Modal (alle Ansichten) ──────────────────────────────── -->
     <div
       v-if="editTarget"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      class="modal-backdrop"
       @click.self="editTarget = null"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
+      <div class="modal-panel max-w-md">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Termin zuordnen</h2>
-          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="editTarget = null">
+          <h2 class="modal-title">Termin zuordnen</h2>
+          <button class="modal-close" @click="editTarget = null">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
@@ -378,31 +378,31 @@
 
         <div class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bezirk</label>
+            <label class="form-label">Bezirk</label>
             <select
               v-model="editForm.district_id"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">{{ d.name }}</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="form-label">
               Gemeinde <span class="text-gray-400 dark:text-gray-500 font-normal">(leer = Bezirksebene)</span>
             </label>
             <select
               v-model="editForm.congregation_id"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option value="">Bezirksebene</option>
               <option v-for="c in editCongregations" :key="c.id" :value="c.id">{{ c.name }}</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+            <label class="form-label">Status</label>
             <select
               v-model="editForm.status"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option value="DRAFT">Entwurf</option>
               <option value="PUBLISHED">Veröffentlicht</option>
@@ -410,14 +410,14 @@
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="form-label">
               Kategorie <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
             </label>
             <input
               v-model="editForm.category"
               type="text"
               placeholder="z. B. Gottesdienst"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
         </div>
@@ -425,13 +425,13 @@
         <p v-if="editError" class="text-sm text-red-600 dark:text-red-400 mt-3">{{ editError }}</p>
         <div class="flex justify-end gap-3 mt-6">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
+            class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
             @click="editTarget = null"
           >
             Abbrechen
           </button>
           <button
-            class="text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            class="btn-primary px-4 py-2"
             :disabled="editSaving"
             @click="saveEdit"
           >

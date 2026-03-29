@@ -1,9 +1,9 @@
 <template>
   <div class="p-6 max-w-4xl">
     <div class="flex items-center justify-between mb-5">
-      <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Kalender-Integrationen</h1>
+      <h1 class="page-title mb-0">Kalender-Integrationen</h1>
       <button
-        class="flex items-center gap-1.5 text-sm bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700"
+        class="btn-primary"
         @click="openForm"
       >
         <PlusIcon class="h-4 w-4" />
@@ -15,7 +15,7 @@
     <div class="mb-5">
       <select
         v-model="filterDistrictId"
-        class="border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+        class="form-select"
         @change="load"
       >
         <option value="">Alle Bezirke</option>
@@ -33,17 +33,17 @@
       <div
         v-for="item in integrations"
         :key="item.id"
-        class="border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3"
+        class="card px-4 py-3"
       >
         <div class="flex items-start justify-between gap-4">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
               <span class="font-medium text-gray-900 dark:text-gray-100">{{ item.name }}</span>
-              <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="typeBadge(item.type)">
+              <span class="badge" :class="typeBadge(item.type)">
                 {{ item.type }}
               </span>
               <span
-                class="text-xs px-2 py-0.5 rounded-full font-medium"
+                class="badge"
                 :class="item.is_active ? 'bg-green-100 dark:bg-green-900/20 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'"
               >
                 {{ item.is_active ? 'Aktiv' : 'Inaktiv' }}
@@ -75,7 +75,7 @@
           <div class="flex flex-col items-end gap-2 shrink-0">
             <div class="flex items-center gap-1.5">
               <button
-                class="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                class="btn-icon flex items-center gap-1 text-xs px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 disabled:opacity-50"
                 :disabled="syncingId === item.id"
                 title="Jetzt synchronisieren"
                 @click="sync(item.id)"
@@ -84,14 +84,14 @@
                 <span>{{ syncingId === item.id ? 'Läuft…' : 'Sync' }}</span>
               </button>
               <button
-                class="p-1.5 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-800"
+                class="btn-icon border border-gray-300 dark:border-gray-600"
                 title="Bearbeiten"
                 @click="openEdit(item)"
               >
                 <PencilSquareIcon class="h-4 w-4" />
               </button>
               <button
-                class="p-1.5 border border-red-200 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 hover:text-red-700"
+                class="btn-icon border border-red-200 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                 title="Löschen"
                 @click="confirmDelete(item)"
               >
@@ -114,7 +114,7 @@
     <div v-else class="text-sm text-gray-500 dark:text-gray-400">Noch keine Integrationen angelegt.</div>
 
     <!-- Feiertage Import -->
-    <div class="mt-8 border border-gray-200 dark:border-gray-700 rounded-lg">
+    <div class="mt-8 card">
       <button
         class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg"
         @click="feiertageOpen = !feiertageOpen"
@@ -133,10 +133,10 @@
         <div class="flex flex-wrap gap-3 items-end">
           <!-- District -->
           <div>
-            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Bezirk</label>
+            <label class="filter-label text-gray-600 dark:text-gray-400">Bezirk</label>
             <select
               v-model="feiertageForm.districtId"
-              class="border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-select"
             >
               <option value="">Bitte wählen…</option>
               <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
@@ -147,22 +147,22 @@
 
           <!-- Year -->
           <div>
-            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Jahr</label>
+            <label class="filter-label text-gray-600 dark:text-gray-400">Jahr</label>
             <input
               v-model.number="feiertageForm.year"
               type="number" min="2020" max="2035"
-              class="border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-select w-24"
             />
           </div>
 
           <!-- State -->
           <div>
-            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label class="filter-label text-gray-600 dark:text-gray-400">
               Bundesland <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
             </label>
             <select
               v-model="feiertageForm.stateCode"
-              class="border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-select"
             >
               <option value="">Nur bundesweite Feiertage</option>
               <option v-for="(name, code) in DE_STATES" :key="code" :value="code">
@@ -172,7 +172,7 @@
           </div>
 
           <button
-            class="flex items-center gap-1.5 bg-blue-600 text-white text-sm px-4 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
+            class="btn-primary px-4 py-1.5"
             :disabled="!feiertageForm.districtId || feiertageImporting"
             @click="runFeiertageImport"
           >
@@ -193,13 +193,13 @@
     <!-- Delete confirmation modal -->
     <div
       v-if="deleteTarget"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      class="modal-backdrop"
       @click.self="deleteTarget = null"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm p-6">
+      <div class="modal-panel max-w-sm">
         <div class="flex items-center justify-between mb-2">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Integration löschen?</h2>
-          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="deleteTarget = null">
+          <h2 class="modal-title">Integration löschen?</h2>
+          <button class="modal-close" @click="deleteTarget = null">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
@@ -218,7 +218,7 @@
             Abbrechen
           </button>
           <button
-            class="text-sm px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+            class="btn-primary px-4 py-2 bg-red-600 hover:bg-red-700"
             :disabled="deleting"
             @click="executeDelete"
           >
@@ -231,13 +231,13 @@
     <!-- Edit modal -->
     <div
       v-if="editTarget"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      class="modal-backdrop"
       @click.self="editTarget = null"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6 overflow-y-auto max-h-[90vh]">
+      <div class="modal-panel max-w-lg overflow-y-auto max-h-[90vh]">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Integration bearbeiten</h2>
-          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="editTarget = null">
+          <h2 class="modal-title">Integration bearbeiten</h2>
+          <button class="modal-close" @click="editTarget = null">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
@@ -246,23 +246,23 @@
         <div class="space-y-4">
           <!-- Name -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+            <label class="form-label">Name</label>
             <input
               v-model="editForm.name"
               type="text"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
 
           <!-- Credentials — ICS -->
           <template v-if="editTarget.type === 'ICS'">
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kalender-URL (.ics)</label>
+              <label class="form-label">Kalender-URL (.ics)</label>
               <input
                 v-model="editForm.creds.url"
                 type="url"
                 placeholder="https://example.com/calendar.ics"
-                class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+                class="form-input"
               />
             </div>
           </template>
@@ -270,23 +270,23 @@
           <!-- Credentials — CalDAV -->
           <template v-else-if="editTarget.type === 'CALDAV'">
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Server-URL</label>
+              <label class="form-label">Server-URL</label>
               <input
                 v-model="editForm.creds.url"
                 type="url"
-                class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+                class="form-input"
               />
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Benutzername</label>
+                <label class="form-label">Benutzername</label>
                 <input v-model="editForm.creds.username" type="text"
-                  class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100" />
+                  class="form-input" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Passwort</label>
+                <label class="form-label">Passwort</label>
                 <input v-model="editForm.creds.password" type="password"
-                  class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100" />
+                  class="form-input" />
               </div>
             </div>
           </template>
@@ -294,36 +294,36 @@
           <!-- Credentials — Google / Microsoft -->
           <template v-else>
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Zugangsdaten (JSON)</label>
+              <label class="form-label">Zugangsdaten (JSON)</label>
               <textarea
                 v-model="editForm.credsJson"
                 rows="4"
                 placeholder='{"access_token": "...", "refresh_token": "..."}'
-                class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+                class="form-input font-mono"
               />
             </div>
           </template>
 
           <!-- Sync interval -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sync-Intervall (Minuten)</label>
+            <label class="form-label">Sync-Intervall (Minuten)</label>
             <input
               v-model.number="editForm.sync_interval"
               type="number" min="1" max="10080"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
 
           <!-- Default category -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="form-label">
               Standard-Kategorie <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
             </label>
             <input
               v-model="editForm.default_category"
               type="text"
               placeholder="z.B. Feiertag"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
         </div>
@@ -335,7 +335,7 @@
             Abbrechen
           </button>
           <button
-            class="text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            class="btn-primary px-4 py-2"
             :disabled="editSaving"
             @click="saveEdit"
           >
@@ -348,13 +348,13 @@
     <!-- Create modal -->
     <div
       v-if="formOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      class="modal-backdrop"
       @click.self="closeForm"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6 overflow-y-auto max-h-[90vh]">
+      <div class="modal-panel max-w-lg overflow-y-auto max-h-[90vh]">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Neue Kalender-Integration</h2>
-          <button class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500" @click="closeForm">
+          <h2 class="modal-title">Neue Kalender-Integration</h2>
+          <button class="modal-close" @click="closeForm">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
@@ -362,10 +362,10 @@
         <div class="space-y-4">
           <!-- District -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bezirk</label>
+            <label class="form-label">Bezirk</label>
             <select
               v-model="form.district_id"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option value="">Bitte wählen…</option>
               <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
@@ -376,12 +376,12 @@
 
           <!-- Congregation (optional) -->
           <div v-if="form.district_id">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="form-label">
               Gemeinde <span class="text-gray-400 dark:text-gray-500 font-normal">(optional — leer = Bezirksebene)</span>
             </label>
             <select
               v-model="form.congregation_id"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option value="">Bezirksebene</option>
               <option v-for="c in formCongregations" :key="c.id" :value="c.id">
@@ -392,21 +392,21 @@
 
           <!-- Name -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+            <label class="form-label">Name</label>
             <input
               v-model="form.name"
               type="text"
               placeholder="z. B. Gemeinde-Kalender Nord"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
 
           <!-- Type -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Typ</label>
+            <label class="form-label">Typ</label>
             <select
               v-model="form.type"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             >
               <option value="ICS">ICS (öffentliche URL)</option>
               <option value="CALDAV">CalDAV (mit Anmeldedaten)</option>
@@ -418,12 +418,12 @@
           <!-- Credentials — ICS -->
           <template v-if="form.type === 'ICS'">
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kalender-URL (.ics)</label>
+              <label class="form-label">Kalender-URL (.ics)</label>
               <input
                 v-model="form.creds.url"
                 type="url"
                 placeholder="https://example.com/calendar.ics"
-                class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+                class="form-input"
               />
             </div>
           </template>
@@ -431,29 +431,29 @@
           <!-- Credentials — CalDAV -->
           <template v-else-if="form.type === 'CALDAV'">
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Server-URL</label>
+              <label class="form-label">Server-URL</label>
               <input
                 v-model="form.creds.url"
                 type="url"
                 placeholder="https://caldav.example.com/calendar/"
-                class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+                class="form-input"
               />
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Benutzername</label>
+                <label class="form-label">Benutzername</label>
                 <input
                   v-model="form.creds.username"
                   type="text"
-                  class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+                  class="form-input"
                 />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Passwort</label>
+                <label class="form-label">Passwort</label>
                 <input
                   v-model="form.creds.password"
                   type="password"
-                  class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+                  class="form-input"
                 />
               </div>
             </div>
@@ -466,19 +466,19 @@
               Du kannst die Zugangsdaten als JSON hinterlegen (für manuelle Token-Verwaltung).
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Zugangsdaten (JSON)</label>
+              <label class="form-label">Zugangsdaten (JSON)</label>
               <textarea
                 v-model="form.credsJson"
                 rows="4"
                 placeholder='{"access_token": "...", "refresh_token": "..."}'
-                class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+                class="form-input font-mono"
               />
             </div>
           </template>
 
           <!-- Sync interval -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="form-label">
               Sync-Intervall (Minuten)
             </label>
             <input
@@ -486,13 +486,13 @@
               type="number"
               min="1"
               max="10080"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
 
           <!-- Capabilities -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fähigkeiten</label>
+            <label class="form-label">Fähigkeiten</label>
             <div class="flex gap-4">
               <label v-for="cap in ALL_CAPABILITIES" :key="cap" class="flex items-center gap-1.5 text-sm">
                 <input
@@ -508,14 +508,14 @@
 
           <!-- Default category -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label class="form-label">
               Standard-Kategorie <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
             </label>
             <input
               v-model="form.default_category"
               type="text"
               placeholder="z.B. Feiertag"
-              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              class="form-input"
             />
           </div>
         </div>
@@ -524,13 +524,13 @@
 
         <div class="flex justify-end gap-3 mt-6">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
+            class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
             @click="closeForm"
           >
             Abbrechen
           </button>
           <button
-            class="text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            class="btn-primary px-4 py-2"
             :disabled="!formValid || saving"
             @click="submit"
           >
