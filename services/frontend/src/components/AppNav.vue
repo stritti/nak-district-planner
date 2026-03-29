@@ -18,6 +18,8 @@
           <button
             class="btn-icon p-2 rounded-md hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
             :title="isDark ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'"
+            :aria-label="isDark ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'"
+            :aria-pressed="isDark"
             @click="toggle"
           >
             <SunIcon v-if="isDark" class="h-4 w-4" />
