@@ -92,7 +92,7 @@
                 <td class="table-td py-2">{{ leader.phone || '—' }}</td>
                 <td class="table-td py-2 text-center">
                   <span
-                    class="badge rounded"
+                    class="badge"
                     :class="leader.is_active ? 'bg-green-100 dark:bg-green-900/20 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'"
                   >
                     {{ leader.is_active ? 'Aktiv' : 'Inaktiv' }}
