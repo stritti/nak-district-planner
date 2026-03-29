@@ -125,9 +125,6 @@
             </template>
             <template v-else>
               <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{ group.name }}</span>
-              <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <!-- Actually the li/div above needs "group" class for hover, let's add it -->
-              </div>
               <div class="flex items-center gap-1">
                 <button class="p-1 rounded text-gray-300 dark:text-gray-600 hover:text-gray-600" @click="startEditGroup(group)">
                   <PencilSquareIcon class="h-3 w-3" />
