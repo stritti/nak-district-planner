@@ -8,8 +8,9 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },
-      { text: 'Guide', link: '/getting-started' },
-      { text: 'Use Cases', link: '/use-cases' }
+      { text: 'Erste Schritte', link: '/getting-started' },
+      { text: 'Use Cases', link: '/use-cases' },
+      { text: 'Rollenkonzept', link: '/roles' }
     ],
 
     sidebar: [
@@ -18,6 +19,13 @@ export default defineConfig({
         items: [
           { text: 'Erste Schritte', link: '/getting-started' },
           { text: 'Use Cases', link: '/use-cases' }
+        ]
+      },
+      {
+        text: 'Sicherheit & Berechtigungen',
+        items: [
+          { text: 'Rollenkonzept', link: '/roles' },
+          { text: 'Authentifizierung (veraltet)', link: '/auth-keycloak' }
         ]
       }
     ],
