@@ -183,7 +183,7 @@
               :key="event.id"
               class="table-tr"
             >
-              <td class="table-th font-medium text-gray-900 dark:text-gray-100">{{ event.title }}</td>
+              <td class="table-td font-medium text-gray-900 dark:text-gray-100">{{ event.title }}</td>
               <td class="table-td whitespace-nowrap">{{ formatDt(event.start_at) }}</td>
               <td class="table-td">{{ event.category ?? '—' }}</td>
               <td class="table-td text-xs">

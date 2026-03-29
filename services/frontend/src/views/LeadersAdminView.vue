@@ -75,7 +75,7 @@
                     {{ leader.rank ?? '—' }}
                   </span>
                 </td>
-                <td class="table-th py-2 font-medium text-gray-800 dark:text-gray-200">{{ leader.name }}</td>
+                <td class="table-td py-2 font-medium text-gray-800 dark:text-gray-200">{{ leader.name }}</td>
                 <td class="px-4 py-2">
                   <span
                     v-if="leader.special_role"
@@ -90,7 +90,7 @@
                 </td>
                 <td class="table-td py-2">{{ leader.email || '—' }}</td>
                 <td class="table-td py-2">{{ leader.phone || '—' }}</td>
-                <td class="table-th py-2 text-center">
+                <td class="table-td py-2 text-center">
                   <span
                     class="badge rounded"
                     :class="leader.is_active ? 'bg-green-100 dark:bg-green-900/20 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'"
@@ -98,7 +98,7 @@
                     {{ leader.is_active ? 'Aktiv' : 'Inaktiv' }}
                   </span>
                 </td>
-                <td class="table-th py-2 text-right">
+                <td class="table-td py-2 text-right">
                   <div class="flex items-center justify-end gap-1">
                     <button
                       class="btn-icon"
