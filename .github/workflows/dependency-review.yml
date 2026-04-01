@@ -28,3 +28,5 @@ jobs:
           comment-summary-in-pr: always
           # Deny licenses that are incompatible with this project
           deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+          # Retry if dependency snapshots are not yet available for the head SHA
+          retry-on-snapshot-warnings: true
