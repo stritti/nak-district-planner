@@ -24,7 +24,7 @@
     "@vue/test-utils": "^2.4",
     "@vue/tsconfig": "^0.5",
     "autoprefixer": "^10.4",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-plugin-vue": "^10",
     "happy-dom": "^20.0",
     "postcss": "^8.4",
