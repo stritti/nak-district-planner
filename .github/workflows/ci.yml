@@ -135,3 +135,33 @@ jobs:
 
       - name: Build Docs
         run: bun run docs:build
+
+  frontend-dependency-submission:
+    name: Frontend Dependency Submission
+    runs-on: ubuntu-latest
+    # Only run on pull_request so the snapshot is available for dependency-review
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: services/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Generate package-lock.json
+        # bun.lock is not yet natively parsed by GitHub's dependency graph,
+        # so we generate a package-lock.json (metadata only, no node_modules)
+        # which GitHub's dependency submission API can process.
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Submit dependency snapshot
+        uses: advanced-security/npm-dependency-submission-action@v1
+        with:
+          working-directory: services/frontend
