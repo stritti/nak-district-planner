@@ -58,10 +58,7 @@ git commit -m "feat(matrix): Gottesdienst-Zuweisung per Drag & Drop"
 git commit -m "fix(api): Datumsformat bei ICS-Export korrigiert"
 
 # Breaking Change → Major-Bump (1.0.0 → 2.0.0)
-git commit -m "feat(auth)!: JWT-basiertes Auth erfordert Header-Änderung
-
-BREAKING CHANGE: X-API-Key Header wurde durch Authorization: Bearer ersetzt"
-
+git commit -m "feat(auth)!: JWT-basiertes Auth erfordert Header-Änderung" -m "BREAKING CHANGE: X-API-Key Header wurde durch Authorization: Bearer ersetzt"
 # Nur Doku, kein Version-Bump wird erzeugt (nur Patch)
 git commit -m "docs: Release-Prozess dokumentiert"
 ```
