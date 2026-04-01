@@ -26,6 +26,7 @@
     "@vue/tsconfig": "^0.5",
     "eslint": "^9",
     "eslint-plugin-vue": "^10",
+    "vue-eslint-parser": "^10.0.0",
     "happy-dom": "^20.0",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.4",
