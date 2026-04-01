@@ -28,6 +28,12 @@ export default defineConfig({
             { text: 'Rollenkonzept', link: '/roles' },
             { text: 'Authentifizierung (veraltet)', link: '/auth-keycloak' }
           ]
+        },
+        {
+          text: 'Betrieb & Monitoring',
+          items: [
+            { text: 'OpenTelemetry', link: '/opentelemetry' }
+          ]
         }
       ],
 
