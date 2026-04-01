@@ -89,3 +89,4 @@ tmp/
 # ============================================================
 megalinter-reports/
 .claude/settings.local.json
+docs/.vitepress/cache/

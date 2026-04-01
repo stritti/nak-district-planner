@@ -22,13 +22,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Full history for accurate blame/diff info
           fetch-depth: 0
 
       - name: Run MegaLinter
-        uses: oxsecurity/megalinter@v8
+        uses: oxsecurity/megalinter@v9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Validate only files changed in the PR/push (faster)
@@ -39,7 +39,7 @@ jobs:
           MEGALINTER_CONFIG: .mega-linter.yml
 
       - name: Archive MegaLinter reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: megalinter-reports
