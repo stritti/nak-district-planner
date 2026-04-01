@@ -20,7 +20,10 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.calendar.caldav_connector import CalDAVConnector
+from app.adapters.calendar.google_connector import GoogleCalendarConnector
 from app.adapters.calendar.ical_connector import ICalConnector
+from app.adapters.calendar.microsoft_connector import MicrosoftGraphCalendarConnector
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.application.crypto import decrypt_credentials
@@ -32,6 +35,12 @@ from app.domain.ports.calendar import CalendarConnector
 def _get_connector(calendar_type: CalendarType) -> CalendarConnector:
     if calendar_type == CalendarType.ICS:
         return ICalConnector()
+    elif calendar_type == CalendarType.GOOGLE:
+        return GoogleCalendarConnector()
+    elif calendar_type == CalendarType.MICROSOFT:
+        return MicrosoftGraphCalendarConnector()
+    elif calendar_type == CalendarType.CALDAV:
+        return CalDAVConnector()
     raise NotImplementedError(f"No connector implemented for {calendar_type}")
 
 
