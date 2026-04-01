@@ -79,7 +79,7 @@ async def update_leader(
     leader = await repo.get(leader_id)
     if not leader or leader.district_id != district_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragender nicht gefunden"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
@@ -114,6 +114,6 @@ async def delete_leader(
     leader = await repo.get(leader_id)
     if not leader or leader.district_id != district_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragender nicht gefunden"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
     await repo.delete(leader_id)
