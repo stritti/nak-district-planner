@@ -59,7 +59,7 @@ git commit -m "fix(api): Datumsformat bei ICS-Export korrigiert"
 
 # Breaking Change → Major-Bump (1.0.0 → 2.0.0)
 git commit -m "feat(auth)!: JWT-basiertes Auth erfordert Header-Änderung" -m "BREAKING CHANGE: X-API-Key Header wurde durch Authorization: Bearer ersetzt"
-# Nur Doku, kein Version-Bump wird erzeugt (nur Patch)
+# Nur Doku → Patch-Bump (kein Minor-/Major-Bump)
 git commit -m "docs: Release-Prozess dokumentiert"
 ```
 
