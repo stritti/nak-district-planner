@@ -6,6 +6,7 @@ vi.mock('./client')
 
 describe('listEvents', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.mocked(client.apiFetch).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 })
   })
 
