@@ -58,11 +58,9 @@ git commit -m "feat(matrix): Gottesdienst-Zuweisung per Drag & Drop"
 git commit -m "fix(api): Datumsformat bei ICS-Export korrigiert"
 
 # Breaking Change → Major-Bump (1.0.0 → 2.0.0)
-git commit -m "feat(auth)!: JWT-basiertes Auth erfordert Header-Änderung
+git commit -m "feat(auth)!: JWT-basiertes Auth erfordert Header-Änderung" -m "BREAKING CHANGE: X-API-Key Header wurde durch Authorization: Bearer ersetzt"
 
-BREAKING CHANGE: X-API-Key Header wurde durch Authorization: Bearer ersetzt"
-
-# Nur Doku, kein Version-Bump wird erzeugt (nur Patch)
+# Nur Doku → Patch-Bump (kein Minor-/Major-Bump)
 git commit -m "docs: Release-Prozess dokumentiert"
 ```
 
@@ -83,7 +81,7 @@ googleapis/release-please-action
      ├─── Kein neuer Commit mit relevantem Typ
      │         → Nichts passiert
      │
-     └─── Neuer relevantem Commit erkannt
+     └─── Neuer relevanter Commit erkannt
                │
                ├─── Release-PR existiert noch nicht
                │         → Release-PR wird erstellt / aktualisiert
@@ -152,9 +150,7 @@ ghcr.io/stritti/nak-district-planner/frontend:1.2.0
 
 ## Manuelles Auslösen
 
-Die Release-Pipeline läuft vollautomatisch bei jedem Push auf `main`. Es ist **kein manuelles Eingreifen** erforderlich, außer dem Mergen des Release-PRs.
-
-Wenn du einen Release direkt auslösen möchtest (ohne auf einen neuen Commit zu warten), kannst du den Workflow über die GitHub-UI unter **Actions → Release → Run workflow** starten.
+Ein direktes Auslösen über die GitHub-UI ist derzeit nicht konfiguriert; Releases werden ausschließlich durch Pushes auf `main` gestartet.
 
 ---
 
