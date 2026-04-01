@@ -14,7 +14,7 @@ OpenTelemetry ist per Standard **deaktiviert**. Es entstehen keinerlei Overhead 
 Alle Einstellungen werden über Umgebungsvariablen gesteuert (oder in der `.env`-Datei gesetzt):
 
 | Variable | Standard | Beschreibung |
-|---|---|---|
+| --- | --- | --- |
 | `OTEL_ENABLED` | `false` | Tracing aktivieren (`true` / `false`) |
 | `OTEL_SERVICE_NAME` | `nak-district-planner-backend` | Name des Service im Tracing-Backend |
 | `OTEL_ENDPOINT` | `http://localhost:4318` | Basis-URL des OTLP/HTTP-Collectors |
@@ -26,7 +26,7 @@ Die Spans werden an `{OTEL_ENDPOINT}/v1/traces` exportiert.
 Wenn Tracing aktiviert ist, werden folgende Komponenten automatisch instrumentiert:
 
 | Komponente | Beschreibung |
-|---|---|
+| --- | --- |
 | **FastAPI** | Alle eingehenden HTTP-Anfragen mit Route, Methode und Status-Code |
 | **SQLAlchemy** | Datenbankabfragen als Spans mit SQL-Statement |
 | **HTTPX** | Ausgehende HTTP-Aufrufe (z. B. externe Kalender-Provider) |
@@ -65,7 +65,7 @@ services:
       - OTEL_ENDPOINT=http://jaeger:4318
 ```
 
-Anschließend steht die Jaeger-UI unter [http://localhost:16686](http://localhost:16686) zur Verfügung.
+Anschließend steht die Jaeger-UI unter `http://localhost:16686` zur Verfügung.
 
 ::: tip Grafana Tempo
 Alternativ kann [Grafana Tempo](https://grafana.com/oss/tempo/) als Collector genutzt werden. Der OTLP/HTTP-Endpoint
@@ -76,8 +76,7 @@ ist identisch – nur `OTEL_ENDPOINT` muss auf den Tempo-Dienst zeigen.
 
 Die Telemetrie-Initialisierung erfolgt zentral in `app/telemetry.py`:
 
-```
-setup_telemetry(fastapi_app, sqlalchemy_engine)
+```text
   ├── TracerProvider
   │     └── BatchSpanProcessor → OTLPSpanExporter (OTLP/HTTP)
   ├── FastAPIInstrumentor   (wenn fastapi_app übergeben)
