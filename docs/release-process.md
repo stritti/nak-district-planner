@@ -154,7 +154,7 @@ ghcr.io/stritti/nak-district-planner/frontend:1.2.0
 
 Die Release-Pipeline läuft vollautomatisch bei jedem Push auf `main`. Es ist **kein manuelles Eingreifen** erforderlich, außer dem Mergen des Release-PRs.
 
-Wenn du einen Release direkt auslösen möchtest (ohne auf einen neuen Commit zu warten), kannst du den Workflow über die GitHub-UI unter **Actions → Release → Run workflow** starten.
+Ein direktes Auslösen über die GitHub-UI ist derzeit nicht konfiguriert; Releases werden ausschließlich durch Pushes auf `main` gestartet.
 
 ---
 
