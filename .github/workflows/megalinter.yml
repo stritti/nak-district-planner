@@ -39,7 +39,7 @@ jobs:
           MEGALINTER_CONFIG: .mega-linter.yml
 
       - name: Archive MegaLinter reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: megalinter-reports
