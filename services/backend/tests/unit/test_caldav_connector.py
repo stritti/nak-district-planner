@@ -7,10 +7,9 @@ we'll focus on testing the basic structure and error handling.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import httpx
-import pytest
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash
 
@@ -20,14 +19,6 @@ CREDS = {
     "username": "user",
     "password": "pass",
 }
-
-
-def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:
-    """Local copy of the content hash function for testing."""
-    import hashlib
-
-    payload = f"{uid}|{start_at.isoformat()}|{end_at.isoformat()}|{title}"
-    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def test_content_hash_deterministic() -> None:
