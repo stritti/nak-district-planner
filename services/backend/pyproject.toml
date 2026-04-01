@@ -19,6 +19,12 @@ dependencies = [
     "passlib[bcrypt]>=1.7",
     "httpx>=0.27",
     "icalendar>=5.0",
+    "opentelemetry-sdk>=1.25",
+    "opentelemetry-exporter-otlp-proto-http>=1.25",
+    "opentelemetry-instrumentation-fastapi>=0.46b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.46b0",
+    "opentelemetry-instrumentation-httpx>=0.46b0",
+    "opentelemetry-instrumentation-celery>=0.46b0",
 ]
 
 [project.optional-dependencies]

@@ -10,5 +10,10 @@ class Settings(BaseSettings):
     api_key: str = "replace-with-a-random-api-key"
     app_env: str = "development"
 
+    # OpenTelemetry
+    otel_enabled: bool = False
+    otel_service_name: str = "nak-district-planner-backend"
+    otel_endpoint: str = "http://localhost:4318"
+
 
 settings = Settings()

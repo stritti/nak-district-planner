@@ -16,6 +16,7 @@ from app.adapters.api.routers import (
     service_assignments,
 )
 from app.config import settings
+from app.telemetry import setup_telemetry
 
 
 @asynccontextmanager
@@ -34,6 +35,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+setup_telemetry(fastapi_app=app)
 
 
 @app.exception_handler(Exception)

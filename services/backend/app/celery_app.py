@@ -3,6 +3,8 @@ import os
 from celery import Celery
 from celery.schedules import crontab, timedelta
 
+from app.telemetry import setup_telemetry
+
 celery = Celery(
     "nak_planner",
     broker=os.environ.get("REDIS_URL", "redis://redis:6379/0"),
@@ -36,3 +38,5 @@ celery.conf.update(
         },
     },
 )
+
+setup_telemetry()
