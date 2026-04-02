@@ -15,6 +15,7 @@ services:
       KC_HOSTNAME_URL: ${KC_HOSTNAME_URL:-https://auth2.5tritti.de}
       KC_PROXY: edge
       KC_HTTP_RELATIVE_PATH: /
+      KC_HTTP_ENABLED: "true"
       # Logging
       KC_LOG_LEVEL: info
     depends_on:
