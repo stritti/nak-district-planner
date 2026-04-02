@@ -7,19 +7,50 @@ Keycloak ist ein separater Stack, der unabhängig vom NAK-Planner läuft und von
 - VPS mit Docker + Docker Compose
 - Traefik läuft bereits und managed `auth.5tritti.de`
 - Traefik-Netzwerk heißt `traefik` (oder anpassen in `docker-compose.yml`)
+- Python 3 (für automatisiertes Setup)
 
-## Schritt 1: Keycloak-Stack vorbereiten
+## Quick Start (Automatisiert)
+
+Das ist die empfohlene Methode. Alles wird automatisiert:
 
 ```bash
 # Auf dem VPS
 cd /opt/keycloak-deploy  # oder anderer Ort
+cp keycloak-deploy/* .
+
+# Oder wenn du schon eine Kopie hast:
+./deploy_keycloak.sh /opt/keycloak-deploy https://auth.5tritti.de <admin-password>
+```
+
+Das Script macht alles:
+1. ✓ Docker Compose Up
+2. ✓ Wartet bis Keycloak ready ist
+3. ✓ Erstellt Realm "nak-planner"
+4. ✓ Erstellt Client "nak-planner-api"
+5. ✓ Erstellt Test-User
+6. ✓ Zeigt Client Secret (zum Copy-Paste)
+7. ✓ Exportiert Realm-Config
+
+**Nach dem Script:** Kopiere den angezeigten CLIENT_SECRET in deine NAK-Planner `.env`.
+
+---
+
+## Manual Setup (falls Automatisierung nicht funktioniert)
+
+### Schritt 1: Keycloak-Stack vorbereiten
+
+```bash
+# Auf dem VPS
+cd /opt/keycloak-deploy  # oder anderer Ort
+
+# Option A: Aus Git
 git clone <dein-repo> .
 
-# oder kopieren:
+# Option B: Datei für Datei kopieren
 cp keycloak-deploy/* /opt/keycloak-deploy/
 ```
 
-## Schritt 2: Umgebungsvariablen setzen
+### Schritt 2: Umgebungsvariablen setzen
 
 ```bash
 cp .env.example .env
@@ -32,7 +63,7 @@ KEYCLOAK_ADMIN_PASSWORD=<starkes-passwort>
 KEYCLOAK_DB_PASSWORD=<starkes-passwort>
 ```
 
-## Schritt 3: Docker-Compose starten
+### Schritt 3: Docker-Compose starten
 
 ```bash
 docker compose up -d
