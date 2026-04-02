@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.adapters.api.deps import ApiKeyGuard, DbSession
+from app.adapters.api.deps import CurrentUser, DbSession
 from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationCreate,
     CalendarIntegrationListResponse,
@@ -44,7 +44,7 @@ def _to_response(integration: CalendarIntegration) -> CalendarIntegrationRespons
 @router.post("", response_model=CalendarIntegrationResponse, status_code=status.HTTP_201_CREATED)
 async def create_calendar_integration(
     body: CalendarIntegrationCreate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> CalendarIntegrationResponse:
     credentials_enc = encrypt_credentials(body.credentials)
@@ -65,7 +65,7 @@ async def create_calendar_integration(
 
 @router.get("", response_model=CalendarIntegrationListResponse)
 async def list_calendar_integrations(
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
     district_id: uuid.UUID | None = None,
 ) -> CalendarIntegrationListResponse:
@@ -83,7 +83,7 @@ async def list_calendar_integrations(
 @router.post("/{integration_id}/sync", response_model=SyncResult)
 async def trigger_sync(
     integration_id: uuid.UUID,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> SyncResult:
     """Trigger an immediate synchronisation for one integration (UC-02).
@@ -113,7 +113,7 @@ async def trigger_sync(
 async def update_calendar_integration(
     integration_id: uuid.UUID,
     body: CalendarIntegrationUpdate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> CalendarIntegrationResponse:
     repo = SqlCalendarIntegrationRepository(db)
@@ -143,7 +143,7 @@ async def update_calendar_integration(
 @router.delete("/{integration_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_calendar_integration(
     integration_id: uuid.UUID,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> None:
     repo = SqlCalendarIntegrationRepository(db)

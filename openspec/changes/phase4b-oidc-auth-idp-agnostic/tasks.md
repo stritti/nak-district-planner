@@ -29,10 +29,10 @@
 ## 4. Backend: API Endpoint Updates
 
 - [x] 4.1 Create `GET /api/v1/auth/me` endpoint (returns current user info)
-- [ ] 4.2 Update all `/api/v1/` endpoints to use `get_current_user` dependency instead of `verify_api_key`
-- [ ] 4.3 Remove old `verify_api_key` function and `X-API-Key` header validation
-- [ ] 4.4 Update API documentation/OpenAPI schema (Bearer token instead of API key)
-- [ ] 4.5 Write integration tests for protected endpoints with JWT
+- [x] 4.2 Update all `/api/v1/` endpoints to use `get_current_user` dependency instead of `verify_api_key`
+- [x] 4.3 Remove old `verify_api_key` function and `X-API-Key` header validation
+- [x] 4.4 Update API documentation/OpenAPI schema (Bearer token instead of API key)
+- [x] 4.5 Write integration tests for protected endpoints with JWT
 
 ## 5. Frontend: OIDC Composable
 

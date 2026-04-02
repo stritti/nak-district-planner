@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.adapters.api.deps import ApiKeyGuard, DbSession
+from app.adapters.api.deps import CurrentUser, DbSession
 import httpx
 
 from app.adapters.api.schemas.district import (
@@ -64,14 +64,14 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
 
 
 @router.post("", response_model=DistrictResponse, status_code=status.HTTP_201_CREATED)
-async def create_district(body: DistrictCreate, _: ApiKeyGuard, db: DbSession) -> DistrictResponse:
+async def create_district(body: DistrictCreate, _: CurrentUser, db: DbSession) -> DistrictResponse:
     district = District.create(name=body.name, state_code=body.state_code)
     await SqlDistrictRepository(db).save(district)
     return _district_response(district)
 
 
 @router.get("", response_model=list[DistrictResponse])
-async def list_districts(_: ApiKeyGuard, db: DbSession) -> list[DistrictResponse]:
+async def list_districts(_: CurrentUser, db: DbSession) -> list[DistrictResponse]:
     districts = await SqlDistrictRepository(db).list_all()
     return [_district_response(d) for d in districts]
 
@@ -80,7 +80,7 @@ async def list_districts(_: ApiKeyGuard, db: DbSession) -> list[DistrictResponse
 async def update_district(
     district_id: uuid.UUID,
     body: DistrictUpdate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> DistrictResponse:
     repo = SqlDistrictRepository(db)
@@ -118,7 +118,7 @@ def _district_response(d: District) -> DistrictResponse:
 async def create_congregation(
     district_id: uuid.UUID,
     body: CongregationCreate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> CongregationResponse:
     if not await SqlDistrictRepository(db).get(district_id):
@@ -139,7 +139,7 @@ async def create_congregation(
 @router.get("/{district_id}/congregations", response_model=list[CongregationResponse])
 async def list_congregations(
     district_id: uuid.UUID,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
     group_id: uuid.UUID | None = Query(None),
 ) -> list[CongregationResponse]:
@@ -156,7 +156,7 @@ async def update_congregation(
     district_id: uuid.UUID,
     congregation_id: uuid.UUID,
     body: CongregationUpdate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> CongregationResponse:
     repo = SqlCongregationRepository(db)
@@ -197,7 +197,7 @@ def _cong_response(c: Congregation) -> CongregationResponse:
 async def create_group(
     district_id: uuid.UUID,
     body: CongregationGroupCreate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> CongregationGroupResponse:
     if not await SqlDistrictRepository(db).get(district_id):
@@ -210,7 +210,7 @@ async def create_group(
 @router.get("/{district_id}/groups", response_model=list[CongregationGroupResponse])
 async def list_groups(
     district_id: uuid.UUID,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> list[CongregationGroupResponse]:
     if not await SqlDistrictRepository(db).get(district_id):
@@ -224,7 +224,7 @@ async def update_group(
     district_id: uuid.UUID,
     group_id: uuid.UUID,
     body: CongregationGroupUpdate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> CongregationGroupResponse:
     repo = SqlCongregationGroupRepository(db)
@@ -242,7 +242,7 @@ async def update_group(
 async def delete_group(
     district_id: uuid.UUID,
     group_id: uuid.UUID,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> None:
     repo = SqlCongregationGroupRepository(db)
@@ -268,7 +268,7 @@ def _group_response(g: CongregationGroup) -> CongregationGroupResponse:
 @router.get("/{district_id}/matrix", response_model=MatrixResponse)
 async def get_matrix(
     district_id: uuid.UUID,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
     from_dt: datetime = Query(...),
     to_dt: datetime = Query(...),
@@ -392,7 +392,7 @@ async def get_matrix(
 
 
 @router.get("/{district_id}/feiertage/states")
-async def list_de_states(_: ApiKeyGuard) -> dict[str, str]:
+async def list_de_states(_: CurrentUser) -> dict[str, str]:
     """Return mapping of 2-letter state codes to German names."""
     return DE_STATES
 
@@ -401,7 +401,7 @@ async def list_de_states(_: ApiKeyGuard) -> dict[str, str]:
 async def import_feiertage_endpoint(
     district_id: uuid.UUID,
     body: FeiertageImportRequest,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> FeiertageImportResult:
     """Import German public holidays from Nager.Date API into the district (idempotent)."""

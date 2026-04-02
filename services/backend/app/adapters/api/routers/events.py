@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.adapters.api.deps import ApiKeyGuard, DbSession
+from app.adapters.api.deps import CurrentUser, DbSession
 from app.adapters.api.schemas.event import (
     EventCreate,
     EventListResponse,
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/v1/events", tags=["events"])
 @router.post("", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
 async def create_event(
     body: EventCreate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> EventResponse:
     event = Event.create(
@@ -61,7 +61,7 @@ async def create_event(
 
 @router.get("", response_model=EventListResponse)
 async def list_events(
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
     district_id: uuid.UUID | None = Query(None),
     congregation_id: uuid.UUID | None = Query(None),
@@ -116,7 +116,7 @@ async def list_events(
 async def update_event(
     event_id: uuid.UUID,
     body: EventUpdate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> EventResponse:
     """Reassign district/congregation or change status/category of an existing event."""

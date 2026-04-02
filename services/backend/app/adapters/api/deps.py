@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
-from app.config import settings
 from app.domain.models.user import User
 
 logger = logging.getLogger(__name__)

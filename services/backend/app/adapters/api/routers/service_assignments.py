@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.adapters.api.deps import ApiKeyGuard, DbSession
+from app.adapters.api.deps import CurrentUser, DbSession
 from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentCreate,
     ServiceAssignmentResponse,
@@ -37,7 +37,7 @@ def _assignment_response(assignment: ServiceAssignment) -> ServiceAssignmentResp
 async def create_assignment(
     event_id: uuid.UUID,
     body: ServiceAssignmentCreate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> ServiceAssignmentResponse:
     if not await SqlEventRepository(db).get(event_id):
@@ -56,7 +56,7 @@ async def create_assignment(
 @router.get("", response_model=list[ServiceAssignmentResponse])
 async def list_assignments(
     event_id: uuid.UUID,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> list[ServiceAssignmentResponse]:
     if not await SqlEventRepository(db).get(event_id):
@@ -71,7 +71,7 @@ async def update_assignment(
     event_id: uuid.UUID,
     assignment_id: uuid.UUID,
     body: ServiceAssignmentUpdate,
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
 ) -> ServiceAssignmentResponse:
     repo = SqlServiceAssignmentRepository(db)
