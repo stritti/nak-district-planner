@@ -12,10 +12,12 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-changeme}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-changeme}
-      KC_HOSTNAME_URL: ${KC_HOSTNAME_URL:-https://auth2.5tritti.de}
+      KC_HOSTNAME: ${KC_HOSTNAME:-auth2.5tritti.de}
+      KC_HOSTNAME_PROTOCOL: https
+      KC_HOSTNAME_PORT: 443
       KC_PROXY: edge
-      KC_HTTP_RELATIVE_PATH: /
       KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
       # Logging
       KC_LOG_LEVEL: info
     depends_on:

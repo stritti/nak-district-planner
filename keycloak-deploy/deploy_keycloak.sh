@@ -97,10 +97,13 @@ print_header "Step 4: Updating environment variables"
 DB_PASSWORD=$(echo $RANDOM | md5sum | cut -c1-16)
 
 # Use sed to update passwords in .env
-# Note: Using | as delimiter for URLs with /
+# Note: Using | as delimiter for special characters
+# Extract hostname from URL (e.g. https://auth2.5tritti.de -> auth2.5tritti.de)
+HOSTNAME=$(echo "$KEYCLOAK_URL" | sed 's|https://||g' | sed 's|http://||g' | cut -d'/' -f1)
+
 sed -i.bak "s|KEYCLOAK_ADMIN_PASSWORD=.*|KEYCLOAK_ADMIN_PASSWORD=$ADMIN_PASSWORD|" .env
 sed -i.bak "s|KEYCLOAK_DB_PASSWORD=.*|KEYCLOAK_DB_PASSWORD=$DB_PASSWORD|" .env
-sed -i.bak "s|KC_HOSTNAME_URL=.*|KC_HOSTNAME_URL=$KEYCLOAK_URL|" .env
+sed -i.bak "s|KC_HOSTNAME=.*|KC_HOSTNAME=$HOSTNAME|" .env
 
 print_success ".env updated with credentials"
 
