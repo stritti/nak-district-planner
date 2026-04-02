@@ -63,7 +63,7 @@ Siehe [../../openspec/changes/phase4a-jwt-auth-minimal/](../../openspec/changes/
 - **Database:** PostgreSQL 15
 - **Port:** 8080 (via Traefik TLS)
 - **Auth:** HTTP (internal) + TLS (Traefik)
-- **Networks:** `traefik` (public), `backend` (internal)
+- **Networks:** `traefik_net` (public), `backend` (internal)
 
 ## Support
 

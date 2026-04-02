@@ -43,7 +43,7 @@ docker compose up -d
 
 ### Traefik network missing
 ```bash
-docker network create traefik
+docker network create traefik_net
 docker compose up -d
 ```
 

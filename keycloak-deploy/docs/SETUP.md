@@ -6,7 +6,7 @@ Keycloak ist ein separater Stack, der unabhängig vom NAK-Planner läuft und von
 
 - VPS mit Docker + Docker Compose
 - Traefik läuft bereits und managed `auth.5tritti.de`
-- Traefik-Netzwerk heißt `traefik` (oder anpassen in `docker compose.yml`)
+- Traefik-Netzwerk heißt `traefik_net` (oder anpassen in `docker-compose.yml`)
 - Python 3 (für automatisiertes Setup)
 
 ## Quick Start (Automatisiert)
@@ -184,8 +184,8 @@ Häufige Fehler:
 ### Traefik findet Keycloak nicht
 
 ```bash
-docker compose logs keycloak | grep "traefik"
-docker network inspect traefik  # Ist keycloak-Container im Netzwerk?
+docker compose logs keycloak | grep "traefik_net"
+docker network inspect traefik_net  # Ist keycloak-Container im Netzwerk?
 ```
 
 ### JWKS-Endpoint 404

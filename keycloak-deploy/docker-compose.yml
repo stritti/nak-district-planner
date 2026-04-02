@@ -21,7 +21,7 @@ services:
       db:
         condition: service_healthy
     networks:
-      - traefik
+      - traefik_net
       - backend
     labels:
       - traefik.enable=true
@@ -52,8 +52,8 @@ volumes:
   keycloak_db:
 
 networks:
-  traefik:
+  traefik_net:
     external: true
-    name: traefik
+    name: traefik_net
   backend:
     driver: bridge

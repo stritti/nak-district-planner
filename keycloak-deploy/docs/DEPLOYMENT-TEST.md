@@ -37,12 +37,12 @@ python3 -c "import requests; print(f'requests {requests.__version__} installed')
 ### Step 3: Verify Traefik Network Exists
 ```bash
 # Check if traefik network exists
-docker network ls | grep traefik
-# Expected: Should show a 'traefik' network
+docker network ls | grep traefik_net
+# Expected: Should show a 'traefik_net' network
 
 # If not found, you may need to:
 # - Start Traefik first: docker compose -f path/to/traefik/docker compose.yml up -d
-# - Or create it manually: docker network create traefik
+# - Or create it manually: docker network create traefik_net
 ```
 
 **Status:** ✅ / ❌
@@ -134,9 +134,9 @@ Next steps:
 **If deployment fails:**
 - Check logs: `docker compose logs -f keycloak`
 - Common issues:
-  - Traefik network doesn't exist: Create it with `docker network create traefik`
-  - Port already in use: Change `KC_HOSTNAME_URL` in `.env`
-  - Keycloak won't start: Wait longer (first start can take 2 minutes), or check health: `curl http://localhost:8080/health`
+   - Traefik network doesn't exist: Create it with `docker network create traefik_net`
+   - Port already in use: Change `KC_HOSTNAME_URL` in `.env`
+   - Keycloak won't start: Wait longer (first start can take 2 minutes), or check health: `curl http://localhost:8080/health`
 
 ---
 
@@ -374,8 +374,8 @@ Fill out this summary:
 - **Fix 3:** Ensure database is healthy: `docker compose logs db`
 
 ### Traefik network not found
-- **Symptom:** Script fails at Step 7 with "network 'traefik' not found"
-- **Fix:** Create network: `docker network create traefik`
+- **Symptom:** Script fails at Step 7 with "network 'traefik_net' not found"
+- **Fix:** Create network: `docker network create traefik_net`
 - **Or:** Start Traefik first from your main docker compose
 
 ### JWKS endpoint returns 404

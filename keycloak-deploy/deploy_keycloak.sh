@@ -134,11 +134,11 @@ fi
 # Step 7: Check Traefik network
 print_header "Step 8: Checking Traefik network"
 
-if docker network inspect traefik > /dev/null 2>&1; then
+if docker network inspect traefik_net > /dev/null 2>&1; then
     print_success "Traefik network found"
 else
-    print_error "Traefik network 'traefik' not found"
-    print_warning "Make sure Traefik is running and network is named 'traefik'"
+    print_error "Traefik network 'traefik_net' not found"
+    print_warning "Make sure Traefik is running and network is named 'traefik_net'"
     exit 1
 fi
 
