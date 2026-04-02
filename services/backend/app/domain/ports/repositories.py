@@ -11,6 +11,7 @@ from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.leader import Leader
 from app.domain.models.service_assignment import ServiceAssignment
+from app.domain.models.user import User
 
 
 class DistrictRepository(ABC):
@@ -142,3 +143,25 @@ class CalendarIntegrationRepository(ABC):
 
     @abstractmethod
     async def delete(self, integration_id: uuid.UUID) -> None: ...
+
+
+class UserRepository(ABC):
+    @abstractmethod
+    async def get_by_sub(self, sub: str) -> User | None:
+        """Get user by OIDC subject (user ID from IDP)."""
+        ...
+
+    @abstractmethod
+    async def get_by_email(self, email: str) -> User | None:
+        """Get user by email address."""
+        ...
+
+    @abstractmethod
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        """Get user by internal UUID."""
+        ...
+
+    @abstractmethod
+    async def save(self, user: User) -> None:
+        """Create or update user."""
+        ...

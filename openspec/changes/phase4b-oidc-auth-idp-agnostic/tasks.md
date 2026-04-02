@@ -18,10 +18,10 @@
 
 ## 3. Backend: User Model and get_current_user()
 
-- [ ] 3.1 Create/update `services/backend/app/domain/models/user.py` (sub, email, displayname)
-- [ ] 3.2 Create `services/backend/app/adapters/db/models.py` with User ORM model
-- [ ] 3.3 Create Alembic migration for user table
-- [ ] 3.4 Create `services/backend/app/adapters/db/repositories/user_repository.py`
+- [x] 3.1 Create/update `services/backend/app/domain/models/user.py` (sub, email, displayname)
+- [x] 3.2 Create `services/backend/app/adapters/db/models.py` with User ORM model
+- [x] 3.3 Create Alembic migration for user table
+- [x] 3.4 Create `services/backend/app/adapters/db/repositories/user_repository.py`
 - [ ] 3.5 Implement `get_current_user()` in `services/backend/app/adapters/api/deps.py`
 - [ ] 3.6 Auto-create user on first login (in get_current_user)
 - [ ] 3.7 Write tests for user auto-creation and get_current_user()
