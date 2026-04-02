@@ -26,6 +26,9 @@ onMounted(() => {
   if (authStore.token) {
     oidc.setToken(authStore.token, authStore.user)
   }
+  
+  // Setup logout listener
+  authStore.setupLogoutListener()
 })
 
 // Listen for token refresh events

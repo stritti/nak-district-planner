@@ -9,7 +9,7 @@
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { OIDCToken, OIDCUser } from '@/composables/useOIDC'
 
 export const useAuthStore = defineStore(
@@ -65,6 +65,15 @@ export const useAuthStore = defineStore(
       if (refreshTimer.value) clearTimeout(refreshTimer.value)
     }
 
+    // Listen for logout events from useOIDC
+    function setupLogoutListener() {
+      if (typeof window === 'undefined') return
+      
+      window.addEventListener('oidc:logout', () => {
+        clearAuth()
+      })
+    }
+
     return {
       // State - return refs directly for proper reactivity
       token,
@@ -76,6 +85,7 @@ export const useAuthStore = defineStore(
       setToken,
       getToken,
       clearAuth,
+      setupLogoutListener,
     }
   },
   {

@@ -139,197 +139,275 @@ export function useOIDC(router?: Router) {
     }
   }
 
-  // Task 5.3: Authorization URL with PKCE
-  async function getAuthorizationUrl(): Promise<string> {
-    await loadDiscovery()
-    if (!discovery.value) throw new Error('Discovery not loaded')
+   // Task 5.3: Authorization URL with PKCE
+   async function getAuthorizationUrl(): Promise<string> {
+     await loadDiscovery()
+     if (!discovery.value) throw new Error('Discovery not loaded')
 
-    const codeVerifier = generateCodeVerifier()
-    const codeChallenge = await generateCodeChallenge(codeVerifier)
-    const state = generateState()
+     const codeVerifier = generateCodeVerifier()
+     const codeChallenge = await generateCodeChallenge(codeVerifier)
+     const state = generateState()
 
-    // Store in sessionStorage (cleared on browser close)
-    sessionStorage.setItem('oidc_code_verifier', codeVerifier)
-    sessionStorage.setItem('oidc_state', state)
+     // Store in sessionStorage (cleared on browser close)
+     sessionStorage.setItem('oidc_code_verifier', codeVerifier)
+     sessionStorage.setItem('oidc_state', state)
 
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: 'code',
-      scope: 'openid profile email',
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
-      state,
-    })
+     const params = new URLSearchParams({
+       client_id: clientId,
+       redirect_uri: redirectUri,
+       response_type: 'code',
+       scope: 'openid profile email',
+       code_challenge: codeChallenge,
+       code_challenge_method: 'S256',
+       state,
+     })
 
-    return `${discovery.value.authorization_endpoint}?${params.toString()}`
-  }
+     const authUrl = `${discovery.value.authorization_endpoint}?${params.toString()}`
+     
+     // Log for debugging
+     console.debug('OIDC Authorization URL:', {
+       discovery_url: discoveryUrl,
+       client_id: clientId,
+       redirect_uri: redirectUri,
+       code_challenge_method: 'S256',
+       scope: 'openid profile email',
+       state: state.substring(0, 20) + '...',
+       code_verifier: codeVerifier.substring(0, 20) + '...',
+       auth_endpoint: discovery.value.authorization_endpoint,
+     })
 
-  // Task 5.4: Code Exchange for Tokens
-  async function exchangeCodeForToken(code: string): Promise<void> {
-    await loadDiscovery()
-    if (!discovery.value) throw new Error('Discovery not loaded')
+     console.warn('⚠️ About to redirect to Keycloak. Ensure your browser allows third-party cookies.')
+     console.warn('   This auth flow requires Keycloak session cookies to persist.')
 
-    const codeVerifier = sessionStorage.getItem('oidc_code_verifier')
-    if (!codeVerifier) throw new Error('Code verifier not found')
+     return authUrl
+   }
 
-    try {
-      isLoading.value = true
-      error.value = null
+   // Task 5.4: Code Exchange for Tokens
+   async function exchangeCodeForToken(code: string): Promise<void> {
+     await loadDiscovery()
+     if (!discovery.value) throw new Error('Discovery not loaded')
 
-      const params = new URLSearchParams({
-        client_id: clientId,
-        code,
-        code_verifier: codeVerifier,
-        grant_type: 'authorization_code',
-        redirect_uri: redirectUri,
-      })
+     const codeVerifier = sessionStorage.getItem('oidc_code_verifier')
+     if (!codeVerifier) throw new Error('Code verifier not found')
 
-      const res = await fetch(discovery.value.token_endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-      })
+     try {
+       isLoading.value = true
+       error.value = null
 
-      if (!res.ok) {
-        const errorBody = await res.text()
-        throw new Error(`Token exchange failed: ${errorBody}`)
-      }
+       const params = new URLSearchParams({
+         client_id: clientId,
+         code,
+         code_verifier: codeVerifier,
+         grant_type: 'authorization_code',
+         redirect_uri: redirectUri,
+       })
 
-      const data = await res.json()
-      const payload = parseJwt(data.id_token || data.access_token)
+       console.debug('Token exchange request:', {
+         token_endpoint: discovery.value.token_endpoint,
+         client_id: clientId,
+         code: code.substring(0, 20) + '...',
+         code_verifier: codeVerifier.substring(0, 20) + '...',
+         redirect_uri: redirectUri,
+         grant_type: 'authorization_code',
+       })
 
-      token.value = {
-        accessToken: data.access_token,
-        idToken: data.id_token,
-        refreshToken: data.refresh_token,
-        expiresAt: Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
-      }
+       const res = await fetch(discovery.value.token_endpoint, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+         body: params.toString(),
+       })
 
-      user.value = {
-        sub: (payload.sub as string) || '',
-        email: (payload.email as string) || undefined,
-        name: (payload.name as string) || undefined,
-        picture: (payload.picture as string) || undefined,
-      }
-
-      // Clean up session storage
-      sessionStorage.removeItem('oidc_code_verifier')
-      sessionStorage.removeItem('oidc_state')
-
-      // Start refresh timer (5min before expiry)
-      setupRefreshTimer()
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Token exchange failed'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  // Task 5.5: Token Refresh Logic
-  async function refreshToken(): Promise<void> {
-    if (!token.value?.refreshToken) {
-      await logout()
-      return
-    }
-
-    await loadDiscovery()
-    if (!discovery.value) throw new Error('Discovery not loaded')
-
-    try {
-      const params = new URLSearchParams({
-        client_id: clientId,
-        grant_type: 'refresh_token',
-        refresh_token: token.value.refreshToken,
-      })
-
-      const res = await fetch(discovery.value.token_endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-      })
-
-      if (!res.ok) {
-        // Refresh failed - logout user
-        await logout()
-        return
-      }
-
-      const data = await res.json()
-      const payload = parseJwt(data.id_token || data.access_token)
-
-      token.value = {
-        accessToken: data.access_token,
-        idToken: data.id_token,
-        refreshToken: data.refresh_token || token.value.refreshToken,
-        expiresAt: Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
-      }
-
-      if (payload.email) {
-        user.value = {
-          ...user.value!,
-          email: (payload.email as string),
+        if (!res.ok) {
+          const errorBody = await res.text()
+          let errorJson = {}
+          try {
+            errorJson = JSON.parse(errorBody)
+          } catch {}
+          
+          // For debugging: log what we sent
+          const requestBody = params.toString()
+          console.error('Token exchange failed:', {
+            status: res.status,
+            statusText: res.statusText,
+            error: errorJson,
+            client_id: clientId,
+            redirect_uri: redirectUri,
+            code_verifier_length: codeVerifier.length,
+            code_length: code.length,
+            endpoint: discovery.value.token_endpoint,
+            request_body: requestBody,
+          })
+          throw new Error(`Token exchange failed (${res.status}): ${JSON.stringify(errorJson)}`)
         }
-      }
-    } catch (err) {
-      console.error('Token refresh failed:', err)
-      await logout()
-    }
-  }
 
-  // Setup auto-refresh timer (5min before expiry)
-  function setupRefreshTimer(): void {
-    if (refreshTimer.value) clearTimeout(refreshTimer.value)
+       const data = await res.json()
+       const payload = parseJwt(data.id_token || data.access_token)
 
-    if (!token.value) return
+       token.value = {
+         accessToken: data.access_token,
+         idToken: data.id_token,
+         refreshToken: data.refresh_token,
+         expiresAt: Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
+       }
 
-    // Refresh 5 minutes before expiry
-    const refreshAt = (token.value.expiresAt - 300) * 1000
-    const now = Date.now()
-    const delay = Math.max(refreshAt - now, 0)
+       user.value = {
+         sub: (payload.sub as string) || '',
+         email: (payload.email as string) || undefined,
+         name: (payload.name as string) || undefined,
+         picture: (payload.picture as string) || undefined,
+       }
 
-    refreshTimer.value = setTimeout(() => {
-      refreshToken()
-      setupRefreshTimer() // Reschedule
-    }, delay)
-  }
+       // Clean up session storage
+       sessionStorage.removeItem('oidc_code_verifier')
+       sessionStorage.removeItem('oidc_state')
 
-  // Task 5.6: Logout
-  async function logout(): Promise<void> {
-    try {
-      // Optional: Call revocation endpoint if available
-      if (token.value?.accessToken && discovery.value?.revocation_endpoint) {
-        const params = new URLSearchParams({
-          client_id: clientId,
-          token: token.value.accessToken,
-        })
+       // Start refresh timer (5min before expiry)
+       setupRefreshTimer()
+     } catch (err) {
+       error.value = err instanceof Error ? err.message : 'Token exchange failed'
+       throw err
+     } finally {
+       isLoading.value = false
+     }
+   }
 
-        await fetch(discovery.value.revocation_endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString(),
-        }).catch(() => {
-          // Ignore revocation errors
-        })
-      }
-    } finally {
-      // Always clear local state
-      token.value = null
-      user.value = null
-      if (refreshTimer.value) clearTimeout(refreshTimer.value)
-      sessionStorage.removeItem('oidc_code_verifier')
-      sessionStorage.removeItem('oidc_state')
-      
-      // Try to navigate, but don't fail if router isn't ready yet
-      try {
-        const rt = getRouter()
-        await rt.push('/login')
-      } catch (err) {
-        console.debug('Could not navigate to login (router may not be ready):', err)
-      }
-    }
-  }
+   // Task 5.5: Token Refresh Logic
+   async function refreshToken(): Promise<void> {
+     if (!token.value?.refreshToken) {
+       console.warn('No refresh token available, logging out')
+       await logout()
+       return
+     }
+
+     await loadDiscovery()
+     if (!discovery.value) throw new Error('Discovery not loaded')
+
+     try {
+       const params = new URLSearchParams({
+         client_id: clientId,
+         grant_type: 'refresh_token',
+         refresh_token: token.value.refreshToken,
+       })
+
+       const res = await fetch(discovery.value.token_endpoint, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+         body: params.toString(),
+       })
+
+       if (!res.ok) {
+         const errorBody = await res.json().catch(() => ({ error: 'Unknown error' }))
+         console.error('Token refresh failed:', {
+           status: res.status,
+           error: errorBody.error,
+           error_description: errorBody.error_description,
+           clientId,
+           endpoint: discovery.value.token_endpoint,
+         })
+         
+         // If the error is "invalid_grant" or "Session doesn't have required client",
+         // the token/session is stale (realm was reset, client was recreated, etc.)
+         // Force logout and require fresh login
+         if (
+           errorBody.error === 'invalid_grant' || 
+           errorBody.error_description?.includes('Session') ||
+           errorBody.error_description?.includes('required client')
+         ) {
+           console.warn('Session stale or client invalid - forcing fresh login')
+         }
+         
+         // Refresh failed - logout user
+         await logout()
+         return
+       }
+
+       const data = await res.json()
+       const payload = parseJwt(data.id_token || data.access_token)
+
+       // Ensure we still have a token before updating
+       if (!token.value) {
+         console.warn('Token was cleared during refresh, aborting')
+         return
+       }
+
+       token.value = {
+         accessToken: data.access_token,
+         idToken: data.id_token,
+         refreshToken: data.refresh_token || token.value.refreshToken,
+         expiresAt: Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
+       }
+
+       if (payload.email) {
+         user.value = {
+           ...user.value!,
+           email: (payload.email as string),
+         }
+       }
+
+       // Reschedule timer only if refresh succeeded
+       setupRefreshTimer()
+     } catch (err) {
+       console.error('Token refresh error:', err)
+       await logout()
+     }
+   }
+
+   // Setup auto-refresh timer (5min before expiry)
+   function setupRefreshTimer(): void {
+     if (refreshTimer.value) clearTimeout(refreshTimer.value)
+
+     if (!token.value) return
+
+     // Refresh 5 minutes before expiry
+     const refreshAt = (token.value.expiresAt - 300) * 1000
+     const now = Date.now()
+     const delay = Math.max(refreshAt - now, 0)
+
+     refreshTimer.value = setTimeout(() => {
+       refreshToken()
+     }, delay)
+   }
+
+   // Task 5.6: Logout
+   async function logout(): Promise<void> {
+     try {
+       // Optional: Call revocation endpoint if available
+       if (token.value?.accessToken && discovery.value?.revocation_endpoint) {
+         const params = new URLSearchParams({
+           client_id: clientId,
+           token: token.value.accessToken,
+         })
+
+         await fetch(discovery.value.revocation_endpoint, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+           body: params.toString(),
+         }).catch(() => {
+           // Ignore revocation errors
+         })
+       }
+     } finally {
+       // Always clear local state
+       token.value = null
+       user.value = null
+       if (refreshTimer.value) clearTimeout(refreshTimer.value)
+       sessionStorage.removeItem('oidc_code_verifier')
+       sessionStorage.removeItem('oidc_state')
+       
+       // Emit event so Auth Store can also clear (for persist: true cleanup)
+       if (typeof window !== 'undefined') {
+         window.dispatchEvent(new Event('oidc:logout'))
+       }
+       
+       // Try to navigate, but don't fail if router isn't ready yet
+       try {
+         const rt = getRouter()
+         await rt.push('/login')
+       } catch (err) {
+         console.debug('Could not navigate to login (router may not be ready):', err)
+       }
+     }
+   }
 
   // Task 5.7: Restore token from authStore (called from store)
   function setToken(t: OIDCToken | null, u: OIDCUser | null = null): void {

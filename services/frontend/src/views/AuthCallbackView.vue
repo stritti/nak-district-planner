@@ -47,6 +47,12 @@ async function handleCallback() {
     const code = route.query.code as string
     const state = route.query.state as string
 
+    console.debug('Auth Callback received:', {
+      code: code ? code.substring(0, 20) + '...' : 'missing',
+      state: state ? state.substring(0, 20) + '...' : 'missing',
+      url: route.fullPath,
+    })
+
     if (!code) {
       error.value = 'Kein Autorisierungscode in der Antwort gefunden'
       return
@@ -54,12 +60,19 @@ async function handleCallback() {
 
     // Verify state parameter
     const storedState = sessionStorage.getItem('oidc_state')
+    console.debug('State validation:', {
+      received: state ? state.substring(0, 20) + '...' : 'missing',
+      stored: storedState ? storedState.substring(0, 20) + '...' : 'missing',
+      match: state === storedState,
+    })
+
     if (state !== storedState) {
       error.value = 'State-Parameter stimmt nicht überein'
       return
     }
 
     // Task 6.2: Exchange code for tokens
+    console.debug('Exchanging code for tokens...')
     await oidc.exchangeCodeForToken(code)
 
     if (!oidc.token.value || !oidc.user.value) {
@@ -67,7 +80,8 @@ async function handleCallback() {
       return
     }
 
-     // Task 7.2: Store in Pinia store (persistent)
+    console.debug('Token exchange successful, storing in auth store')
+    // Task 7.2: Store in Pinia store (persistent)
     authStore.setToken(oidc.token.value, oidc.user.value)
 
     success.value = true
@@ -76,7 +90,9 @@ async function handleCallback() {
     await new Promise((resolve) => setTimeout(resolve, 500))
     await router.push('/events')
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Authentifizierung fehlgeschlagen'
+    const errorMsg = err instanceof Error ? err.message : 'Authentifizierung fehlgeschlagen'
+    error.value = errorMsg
+    console.error('Auth callback error:', errorMsg, err)
   } finally {
     loading.value = false
   }
