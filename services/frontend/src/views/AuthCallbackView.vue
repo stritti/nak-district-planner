@@ -67,12 +67,8 @@ async function handleCallback() {
       return
     }
 
-    // Task 7.2: Store in Pinia store (persistent)
+     // Task 7.2: Store in Pinia store (persistent)
     authStore.setToken(oidc.token.value, oidc.user.value)
-    
-    // Debug: Check if token is actually stored
-    console.log('Token stored in authStore:', authStore.token)
-    console.log('isAuthenticated:', authStore.isAuthenticated)
 
     success.value = true
 
