@@ -6,7 +6,7 @@ import * as client from './client'
 
 describe('listEvents', () => {
   beforeEach(() => {
-    vi.mocked(client.apiFetch).mockReset()
+    vi.clearAllMocks()
     vi.mocked(client.apiFetch).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 })
   })
 

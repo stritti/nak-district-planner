@@ -11,7 +11,8 @@ export default defineConfig({
         { text: 'Home', link: '/' },
         { text: 'Erste Schritte', link: '/getting-started' },
         { text: 'Use Cases', link: '/use-cases' },
-        { text: 'Rollenkonzept', link: '/roles' }
+        { text: 'Rollenkonzept', link: '/roles' },
+        { text: 'Release', link: '/release-process' }
       ],
 
       sidebar: [
@@ -27,6 +28,12 @@ export default defineConfig({
           items: [
             { text: 'Rollenkonzept', link: '/roles' },
             { text: 'Authentifizierung (veraltet)', link: '/auth-keycloak' }
+          ]
+        },
+        {
+          text: 'Entwicklung',
+          items: [
+            { text: 'Release-Prozess', link: '/release-process' }
           ]
         }
       ],
