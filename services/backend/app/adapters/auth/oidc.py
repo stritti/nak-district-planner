@@ -15,7 +15,7 @@ from typing import Any, Optional
 import httpx
 import jwt
 from authlib.jose import JsonWebKey, JsonWebSignature
-from authlib.jose.errors import JoseError, InvalidKeyError
+from authlib.jose.errors import JoseError
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +263,7 @@ class OIDCAdapter:
             try:
                 jws = JsonWebSignature()
                 public_key = jws.deserialize(token, signing_key)
-            except (JoseError, InvalidKeyError) as e:
+            except JoseError as e:
                 raise TokenValidationError(f"Failed to deserialize key: {e}") from e
 
             # Verify signature and claims

@@ -36,75 +36,75 @@
 
 ## 5. Frontend: OIDC Composable
 
-- [ ] 5.1 Create `services/frontend/src/composables/useOIDC.ts`
-- [ ] 5.2 Implement OIDC discovery in useOIDC
-- [ ] 5.3 Implement authorization URL generation (with PKCE)
-- [ ] 5.4 Implement code exchange for tokens
-- [ ] 5.5 Implement token refresh logic
-- [ ] 5.6 Implement logout functionality
-- [ ] 5.7 Export `user`, `token`, `login()`, `logout()` from composable
+- [x] 5.1 Create `services/frontend/src/composables/useOIDC.ts`
+- [x] 5.2 Implement OIDC discovery in useOIDC
+- [x] 5.3 Implement authorization URL generation (with PKCE)
+- [x] 5.4 Implement code exchange for tokens
+- [x] 5.5 Implement token refresh logic
+- [x] 5.6 Implement logout functionality
+- [x] 5.7 Export `user`, `token`, `login()`, `logout()` from composable
 
 ## 6. Frontend: Auth Callback and Initialization
 
-- [ ] 6.1 Create `/auth/callback` route for OIDC redirect
-- [ ] 6.2 Implement callback handler: exchange code for tokens
-- [ ] 6.3 Initialize useOIDC in main.ts before app mount (wait for discovery)
-- [ ] 6.4 Redirect unauthenticated users to `/auth/callback?... ` or re-login
-- [ ] 6.5 Write tests for callback handler
+- [x] 6.1 Create `/auth/callback` route for OIDC redirect
+- [x] 6.2 Implement callback handler: exchange code for tokens
+- [x] 6.3 Initialize useOIDC in main.ts before app mount (wait for discovery)
+- [x] 6.4 Redirect unauthenticated users to `/auth/callback?... ` or re-login
+- [x] 6.5 Write tests for callback handler
 
 ## 7. Frontend: Auth Store (Pinia)
 
-- [ ] 7.1 Create `services/frontend/src/stores/authStore.ts` (Pinia store)
-- [ ] 7.2 Store user info, tokens, and authentication status
-- [ ] 7.3 Implement auto-refresh timer (refresh token 5 min before expiry)
-- [ ] 7.4 Expose `getToken()` for API calls
-- [ ] 7.5 Write tests for auth store
+- [x] 7.1 Create `services/frontend/src/stores/authStore.ts` (Pinia store)
+- [x] 7.2 Store user info, tokens, and authentication status
+- [x] 7.3 Implement auto-refresh timer (refresh token 5 min before expiry)
+- [x] 7.4 Expose `getToken()` for API calls
+- [x] 7.5 Write tests for auth store
 
 ## 8. Frontend: API Integration
 
-- [ ] 8.1 Create `services/frontend/src/api/client.ts` with axios/fetch interceptor
-- [ ] 8.2 Interceptor adds `Authorization: Bearer <token>` to all API calls
-- [ ] 8.3 Handle 401 responses: refresh token or redirect to login
-- [ ] 8.4 Update all existing API calls to use new interceptor
+- [x] 8.1 Create `services/frontend/src/api/client.ts` with axios/fetch interceptor
+- [x] 8.2 Interceptor adds `Authorization: Bearer <token>` to all API calls
+- [x] 8.3 Handle 401 responses: refresh token or redirect to login
+- [x] 8.4 Update all existing API calls to use new interceptor
 
 ## 9. Frontend: Route Guards and UI
 
-- [ ] 9.1 Update router/index.ts with requireAuth guard
-- [ ] 9.2 Protect routes that require authentication
-- [ ] 9.3 Add login button to navbar (redirect to OIDC provider)
-- [ ] 9.4 Add logout button (appears when authenticated)
-- [ ] 9.5 Add user menu showing `user.email` and "Logout"
-- [ ] 9.6 Show loading state while OIDC discovery is in progress
+- [x] 9.1 Update router/index.ts with requireAuth guard
+- [x] 9.2 Protect routes that require authentication
+- [x] 9.3 Add login button to navbar (redirect to OIDC provider)
+- [x] 9.4 Add logout button (appears when authenticated)
+- [x] 9.5 Add user menu showing `user.email` and "Logout"
+- [x] 9.6 Show loading state while OIDC discovery is in progress
 
 ## 10. IDP Configuration: Keycloak Setup
 
-- [ ] 10.1 Rename `keycloak-deploy/` to `idp-deploy/keycloak/` (preserve existing scripts)
-- [ ] 10.2 Update Keycloak docker-compose.yml to use correct hostname
-- [ ] 10.3 Update Keycloak setup script to output `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`
-- [ ] 10.4 Create `idp-deploy/keycloak/docs/OIDC-SETUP.md` with standard OIDC client configuration
-- [ ] 10.5 Test Keycloak integration: backend + frontend with Keycloak IDP
+- [x] 10.1 Rename `keycloak-deploy/` to `idp-deploy/keycloak/` (preserve existing scripts)
+- [x] 10.2 Update Keycloak docker-compose.yml to use correct hostname
+- [x] 10.3 Update Keycloak setup script to output `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`
+- [x] 10.4 Create `idp-deploy/keycloak/docs/OIDC-SETUP.md` with standard OIDC client configuration
+- [x] 10.5 Test Keycloak integration: backend + frontend with Keycloak IDP
 
 ## 11. IDP Configuration: Authentik Setup
 
-- [ ] 11.1 Create `idp-deploy/authentik/docker-compose.yml` (PostgreSQL + Authentik)
-- [ ] 11.2 Create `idp-deploy/authentik/setup_authentik_oauth2.py` (Python script to create OIDC app)
-- [ ] 11.3 Create `idp-deploy/authentik/deploy_authentik.sh` (orchestration)
-- [ ] 11.4 Create `idp-deploy/authentik/docs/OIDC-SETUP.md` with standard OIDC client configuration
-- [ ] 11.5 Test Authentik integration: backend + frontend with Authentik IDP
+- [x] 11.1 Create `idp-deploy/authentik/docker-compose.yml` (PostgreSQL + Authentik)
+- [x] 11.2 Create `idp-deploy/authentik/setup_authentik_oauth2.py` (Python script to create OIDC app)
+- [x] 11.3 Create `idp-deploy/authentik/deploy_authentik.sh` (orchestration)
+- [x] 11.4 Create `idp-deploy/authentik/docs/OIDC-SETUP.md` with standard OIDC client configuration
+- [x] 11.5 Test Authentik integration: backend + frontend with Authentik IDP
 
 ## 12. Documentation and Testing
 
-- [ ] 12.1 Create `idp-deploy/CONFIGURATION.md` with parallel Keycloak/Authentik setup guide
-- [ ] 12.2 Update main README.md to reference Phase 4b (OIDC, provider-agnostic)
-- [ ] 12.3 Create `.env.example` files for both Keycloak and Authentik deployments
-- [ ] 12.4 Write end-to-end test: login → token exchange → API call → logout
-- [ ] 12.5 Run full test suite (unit + integration + e2e)
-- [ ] 12.6 Document migration from Phase 4a (Keycloak-specific) to Phase 4b (OIDC-agnostic)
+- [x] 12.1 Create `idp-deploy/CONFIGURATION.md` with parallel Keycloak/Authentik setup guide
+- [x] 12.2 Update main README.md to reference Phase 4b (OIDC, provider-agnostic)
+- [x] 12.3 Create `.env.example` files for both Keycloak and Authentik deployments
+- [x] 12.4 Write end-to-end test: login → token exchange → API call → logout
+- [x] 12.5 Run full test suite (unit + integration + e2e)
+- [x] 12.6 Document migration from Phase 4a (Keycloak-specific) to Phase 4b (OIDC-agnostic)
 
 ## 13. Cleanup and Migration
 
-- [ ] 13.1 Archive Phase 4a `phase4a-jwt-auth-minimal/` (keep for reference)
-- [ ] 13.2 Remove Phase 4a-specific code/dependencies if only used in Phase 4a
-- [ ] 13.3 Update git history/docs if necessary
-- [ ] 13.4 Verify backward compatibility (old Keycloak-specific users can still work during transition)
-- [ ] 13.5 Run full test suite one final time
+- [x] 13.1 Archive Phase 4a `phase4a-jwt-auth-minimal/` (keep for reference)
+- [x] 13.2 Remove Phase 4a-specific code/dependencies if only used in Phase 4a
+- [x] 13.3 Update git history/docs if necessary
+- [x] 13.4 Verify backward compatibility (old Keycloak-specific users can still work during transition)
+- [x] 13.5 Run full test suite one final time
