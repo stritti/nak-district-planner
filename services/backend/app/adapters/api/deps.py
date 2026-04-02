@@ -2,7 +2,7 @@ import logging
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Security, status
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
@@ -26,7 +26,7 @@ def set_oidc_adapter(adapter: OIDCAdapter) -> None:
 
 
 async def get_current_user(
-    credentials: HTTPAuthCredentials | None = Security(_bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
     session: AsyncSession = Depends(get_db_session),
 ) -> User:
     """

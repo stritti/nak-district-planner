@@ -1,0 +1,103 @@
+version: "3.8"
+
+services:
+  authentik-postgres:
+    image: postgres:16-alpine
+    container_name: authentik-postgres
+    environment:
+      POSTGRES_DB: ${AUTHENTIK_POSTGRES_NAME:-authentik}
+      POSTGRES_USER: ${AUTHENTIK_POSTGRES_USER:-authentik}
+      POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-authentik_dev_pw}
+    volumes:
+      - authentik_postgres:/var/lib/postgresql/data
+    networks:
+      - idp_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  authentik-redis:
+    image: redis:7-alpine
+    container_name: authentik-redis
+    networks:
+      - idp_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  authentik:
+    image: ghcr.io/goauthentik/server:2024.4
+    command: server
+    container_name: authentik-server
+    environment:
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRES_NAME:-authentik}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRES_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-authentik_dev_pw}
+      
+      # Secret key for session encryption (generate: openssl rand -base64 32)
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-InsecureSecretKeyChangeInProduction}
+      
+      # Log level
+      AUTHENTIK_LOG_LEVEL: ${AUTHENTIK_LOG_LEVEL:-info}
+      
+      # Hostname (used for OIDC discovery)
+      AUTHENTIK_URL_SCHEME: http  # Change to https in production
+      AUTHENTIK_URL_HOST: ${AUTHENTIK_HOSTNAME:-localhost:9000}
+      
+    ports:
+      - "9000:9000"  # HTTP - for local dev
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    networks:
+      - idp_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/-/health/live/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2024.4
+    command: worker
+    container_name: authentik-worker
+    environment:
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRES_NAME:-authentik}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRES_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-authentik_dev_pw}
+      
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-InsecureSecretKeyChangeInProduction}
+      AUTHENTIK_LOG_LEVEL: ${AUTHENTIK_LOG_LEVEL:-info}
+      AUTHENTIK_URL_SCHEME: http
+      AUTHENTIK_URL_HOST: ${AUTHENTIK_HOSTNAME:-localhost:9000}
+      
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    networks:
+      - idp_net
+    restart: unless-stopped
+
+volumes:
+  authentik_postgres:
+    driver: local
+
+networks:
+  idp_net:
+    driver: bridge
