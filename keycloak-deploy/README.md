@@ -51,7 +51,7 @@ Siehe [../../openspec/changes/phase4a-jwt-auth-minimal/](../../openspec/changes/
 
 ## Technische Details
 
-- **Image:** `quay.io/keycloak/keycloak:24`
+- **Image:** `quay.io/keycloak/keycloak:26.5.6` (Latest)
 - **Database:** PostgreSQL 15
 - **Port:** 8080 (via Traefik TLS)
 - **Auth:** HTTP (internal) + TLS (Traefik)

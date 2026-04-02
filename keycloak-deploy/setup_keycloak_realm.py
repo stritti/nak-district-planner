@@ -9,6 +9,11 @@ Automatisiert den Setup eines Keycloak-Realms für NAK Planner:
 - Erstellt Test-User
 - Exportiert Realm-Config
 
+Requirements:
+  - Python 3.11+
+  - requests library (pip install requests)
+  - Keycloak 26.5.6+ läuft und ist erreichbar
+
 Usage:
     python3 setup_keycloak_realm.py --keycloak-url https://auth.5tritti.de \
         --admin-user admin --admin-password changeme
