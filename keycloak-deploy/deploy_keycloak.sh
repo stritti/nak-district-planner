@@ -100,14 +100,20 @@ sed -i.bak "s|KC_HOSTNAME_URL=.*|KC_HOSTNAME_URL=$KEYCLOAK_URL|" .env
 
 print_success ".env updated with credentials"
 
-# Step 5: Start Docker Compose
-print_header "Step 5: Starting Keycloak & PostgreSQL containers"
+# Step 5: Build Keycloak (required for --optimized flag)
+print_header "Step 5: Building Keycloak (optimization phase)"
+
+docker-compose run --rm keycloak build --db=postgres
+print_success "Keycloak build complete"
+
+# Step 6: Start Docker Compose with optimized build
+print_header "Step 6: Starting Keycloak & PostgreSQL containers"
 
 docker-compose up -d
 print_success "Containers started"
 
-# Step 6: Wait for Keycloak to be ready
-print_header "Step 6: Waiting for Keycloak to start (this may take 30-60 seconds)"
+# Step 7: Wait for Keycloak to be ready
+print_header "Step 7: Waiting for Keycloak to start (this may take 30-60 seconds)"
 
 max_retries=60
 retry_count=0
@@ -130,7 +136,7 @@ if [ $retry_count -eq $max_retries ]; then
 fi
 
 # Step 7: Check Traefik network
-print_header "Step 7: Checking Traefik network"
+print_header "Step 8: Checking Traefik network"
 
 if docker network inspect traefik > /dev/null 2>&1; then
     print_success "Traefik network found"
@@ -141,7 +147,7 @@ else
 fi
 
 # Step 8: Run Realm Setup Script
-print_header "Step 8: Setting up Keycloak Realm"
+print_header "Step 9: Setting up Keycloak Realm"
 
 if [ -f "setup_keycloak_realm.py" ]; then
     # Check if Python is available

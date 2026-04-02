@@ -3,7 +3,7 @@ version: '3.8'
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.5.6
-    command: start --auto-build
+    command: start --optimized
     environment:
       KC_DB: postgres
       KC_DB_URL_HOST: db

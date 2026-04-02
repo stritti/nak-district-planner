@@ -11,7 +11,7 @@ Keycloak ist ein separater Stack, der unabhängig vom NAK-Planner läuft und von
 
 ## Quick Start (Automatisiert)
 
-Das ist die empfohlene Methode. Alles wird automatisiert:
+Das ist die empfohlene Methode. Das Script führt einen Build-Schritt durch und konfiguriert alles automatisch:
 
 ```bash
 # Auf dem VPS
@@ -23,13 +23,14 @@ cp keycloak-deploy/* .
 ```
 
 Das Script macht alles:
-1. ✓ Docker Compose Up
-2. ✓ Wartet bis Keycloak ready ist
-3. ✓ Erstellt Realm "nak-planner"
-4. ✓ Erstellt Client "nak-planner-api"
-5. ✓ Erstellt Test-User
-6. ✓ Zeigt Client Secret (zum Copy-Paste)
-7. ✓ Exportiert Realm-Config
+1. ✓ Keycloak Build (mit PostgreSQL-Optimierung)
+2. ✓ Docker Compose Up
+3. ✓ Wartet bis Keycloak ready ist
+4. ✓ Erstellt Realm "nak-planner"
+5. ✓ Erstellt Client "nak-planner-api"
+6. ✓ Erstellt Test-User
+7. ✓ Zeigt Client Secret (zum Copy-Paste)
+8. ✓ Exportiert Realm-Config
 
 **Nach dem Script:** Kopiere den angezeigten CLIENT_SECRET in deine NAK-Planner `.env`.
 
@@ -63,7 +64,17 @@ KEYCLOAK_ADMIN_PASSWORD=<starkes-passwort>
 KEYCLOAK_DB_PASSWORD=<starkes-passwort>
 ```
 
-### Schritt 3: Docker-Compose starten
+### Schritt 3: Keycloak Build (Optimierung)
+
+**Wichtig für Keycloak 26+:** Der Build-Schritt optimiert Keycloak für Deployment.
+
+```bash
+docker compose run --rm keycloak build --db=postgres
+```
+
+Dies wird vom automatisierten Script (`deploy_keycloak.sh`) bereits erledigt.
+
+### Schritt 4: Docker-Compose starten
 
 ```bash
 docker compose up -d
@@ -80,7 +91,7 @@ Warte bis diese Nachricht erscheint:
 Keycloak ... version X.X.X is now running
 ```
 
-## Schritt 4: Keycloak Admin Console erreichbar?
+## Schritt 5: Keycloak Admin Console erreichbar?
 
 Öffne in deinem Browser:
 ```
@@ -91,13 +102,13 @@ Login mit:
 - Username: `admin` (oder `KEYCLOAK_ADMIN` aus `.env`)
 - Password: `changeme` (oder `KEYCLOAK_ADMIN_PASSWORD` aus `.env`)
 
-## Schritt 5: Realm erstellen
+## Schritt 6: Realm erstellen
 
 1. Klick auf "Keycloak" (oben links) → "Create Realm"
 2. Name: `nak-planner`
 3. Click "Create"
 
-## Schritt 6: Client erstellen
+## Schritt 7: Client erstellen
 
 1. Im Realm `nak-planner`: Geh zu "Clients"
 2. Click "Create client"
@@ -134,7 +145,7 @@ Diesen Wert speicherst du für die NAK-Planner `.env`:
 KEYCLOAK_CLIENT_SECRET=<copied-secret>
 ```
 
-## Schritt 7: Test User erstellen
+## Schritt 8: Test User erstellen
 
 1. Im Realm `nak-planner`: Geh zu "Users"
 2. Click "Add user"
@@ -151,7 +162,7 @@ Im gerade erstellten User → Tab "Credentials":
 - Temporary: OFF
 - Save
 
-## Schritt 8: JWKS-Endpoint verifizieren
+## Schritt 9: JWKS-Endpoint verifizieren
 
 Öffne in deinem Browser oder curl:
 
@@ -161,7 +172,7 @@ curl https://auth.5tritti.de/realms/nak-planner/.well-known/jwks.json
 
 Du solltest ein JSON mit `keys: [...]` sehen.
 
-## Schritt 9: Keycloak Realm exportieren (Backup)
+## Schritt 10: Keycloak Realm exportieren (Backup)
 
 Admin Console → Realm settings → Action dropdown → "Export"
 
