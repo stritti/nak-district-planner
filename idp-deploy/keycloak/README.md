@@ -1,72 +1,104 @@
-# Keycloak Deploy
+# Keycloak OIDC Setup
 
-Standalone Keycloak-Stack für NAK Planner und andere Projekte.
+Keycloak is a mature, open-source identity and access management platform. This directory contains everything needed to deploy and configure Keycloak for NAK Planner.
 
-**Keycloak** ist ein OpenID Connect / OAuth 2.0 Identity Provider. Dieser Stack ermöglicht:
-- JWT-basierte Authentifizierung
-- Zentrale Benutzerverwaltung
-- Wiederverwendung durch mehrere Projekte
-- Integration mit Traefik für TLS + Domain Management
-
-## Quick Start
+## Quick Start (5 minutes)
 
 ```bash
-cp .env.example .env
-# Bearbeite .env mit starken Passwörtern
-
+# 1. Start Keycloak
 docker compose up -d
-docker compose logs -f keycloak  # Warte auf "is now running"
+
+# 2. Wait for it to be ready (check logs)
+docker compose logs -f keycloak | grep "Started"
+
+# 3. Setup realm and OIDC client
+python3 setup_keycloak_realm.py --keycloak-url http://localhost:8080 \
+  --admin-password admin_dev_pw
+
+# 4. Copy OIDC settings from script output to frontend .env.local
+# 5. Start frontend and test at http://localhost:5173/login
 ```
 
-Öffne dann: `https://auth.5tritti.de/admin/`
+## Files
 
-Siehe [SETUP.md](docs/SETUP.md) für detaillierte Schritte.
+- **docker-compose.yml** — Production-ready Keycloak + PostgreSQL
+- **setup_keycloak_realm.py** — Automated OIDC realm setup
+- **deploy_keycloak.sh** — VPS deployment script
+- **OIDC-SETUP.md** — Complete guide with troubleshooting
+- **.env.example** — Environment configuration template
 
-## Testing Deployment
+## Documentation
 
-Nach dem Start, folge [DEPLOYMENT-TEST.md](docs/DEPLOYMENT-TEST.md) um:
-- ✅ Keycloak Health & JWKS Endpoint zu verifizieren
-- ✅ Realm & Client korrekt eingestellt sind
-- ✅ OAuth Token Endpoint funktioniert
-- ✅ CLIENT_SECRET zu erfassen für Backend .env
+Start with **OIDC-SETUP.md** for comprehensive guide including:
+- Development setup
+- Production deployment
+- Realm management
+- User management
+- Troubleshooting
 
-## Directory Structure
+## Configuration
 
+Edit `.env` before starting:
+
+```env
+KEYCLOAK_DB_PASSWORD=changeme
+KC_BOOTSTRAP_ADMIN_PASSWORD=changeme
+KC_HOSTNAME=localhost
 ```
-keycloak-deploy/
-├── docker-compose.yml          # Keycloak + PostgreSQL
-├── .env.example                # Environment template
-├── docs/
-│   ├── SETUP.md               # Deployment guide
-│   └── REALM-MIGRATION.md     # Realm import/export
-└── config/
-    └── realm-export.json      # (Optional) Realm backup
+
+Generate strong passwords:
+```bash
+openssl rand -base64 16
 ```
 
-## Integration mit NAK Planner
+## Admin Console
 
-Nach dem Keycloak-Setup, configure NAK Planner:
+Access at: http://localhost:8080/admin/
+- Username: admin
+- Password: (from .env KC_BOOTSTRAP_ADMIN_PASSWORD)
+
+## OIDC Integration
+
+Once setup is complete, frontend uses:
+- Discovery: http://localhost:8080/realms/nak-planner/.well-known/openid-configuration
+- Client ID: nak-planner-frontend
+- Client Type: Public (PKCE)
+
+## Production
+
+See OIDC-SETUP.md section "Production Deployment (VPS)" for:
+- Full deployment guide
+- Traefik integration
+- SSL certificate setup
+- Monitoring
+
+Or run automated script:
+```bash
+./deploy_keycloak.sh /opt/keycloak https://auth.example.com your_password
+```
+
+## Logs
 
 ```bash
-# In nak-district-planner/.env
-KEYCLOAK_URL=https://auth.5tritti.de
-KEYCLOAK_REALM=nak-planner
-KEYCLOAK_CLIENT_ID=nak-planner-api
-KEYCLOAK_CLIENT_SECRET=<copied-from-keycloak>
+docker compose logs -f keycloak     # Live logs
+docker compose logs keycloak | grep ERROR  # Errors only
 ```
 
-Siehe [../../openspec/changes/phase4a-jwt-auth-minimal/](../../openspec/changes/phase4a-jwt-auth-minimal/) für Backend/Frontend-Integration.
+## Health Check
 
-## Technische Details
+```bash
+curl http://localhost:8080/health/ready
+# Should return 200 when ready
+```
 
-- **Image:** `quay.io/keycloak/keycloak:26.5.6` (Latest)
-- **Database:** PostgreSQL 15
-- **Port:** 8080 (via Traefik TLS)
-- **Auth:** HTTP (internal) + TLS (Traefik)
-- **Networks:** `traefik_net` (public), `backend` (internal)
+## Next Steps
 
-## Support
+1. Review OIDC-SETUP.md for complete guide
+2. Run setup script
+3. Configure frontend .env.local
+4. Test login flow
+5. Deploy to production
 
-Fehler oder Fragen? Siehe:
-- [Keycloak Docs](https://www.keycloak.org/documentation)
-- [SETUP.md](docs/SETUP.md) Troubleshooting-Section
+## Questions?
+
+See troubleshooting in OIDC-SETUP.md
