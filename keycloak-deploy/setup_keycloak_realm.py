@@ -300,6 +300,37 @@ def main():
     args = parser.parse_args()
 
     try:
+        # Wait for Keycloak to be ready before attempting setup
+        print(f"\n{'=' * 60}\nWaiting for Keycloak to be ready...\n{'=' * 60}\n")
+
+        max_retries = 30
+        retry_count = 0
+        keycloak_ready = False
+
+        while retry_count < max_retries:
+            try:
+                response = requests.get(f"{args.keycloak_url}/health", timeout=5)
+                if response.status_code == 200:
+                    print(f"✓ Keycloak health check passed")
+                    keycloak_ready = True
+                    break
+            except requests.exceptions.RequestException:
+                pass
+
+            retry_count += 1
+            print(
+                f"  Attempt {retry_count}/{max_retries}: Waiting for Keycloak...",
+                end="\r",
+            )
+            time.sleep(2)
+
+        if not keycloak_ready:
+            print(f"\n✗ Keycloak did not become ready after {max_retries * 2} seconds")
+            print(f"  Check if Keycloak is running: docker compose logs -f keycloak")
+            sys.exit(1)
+
+        print()  # newline after progress indicator
+
         # Initialize admin client
         admin = KeycloakAdminClient(
             keycloak_url=args.keycloak_url,
@@ -361,7 +392,7 @@ def main():
             f"1. Copy the CLIENT SECRET above to nak-district-planner/.env:\n"
             f"   KEYCLOAK_CLIENT_SECRET=<copied-secret>\n"
         )
-        print(f"2. Test login at: https://auth.5tritti.de/")
+        print(f"2. Test login at: {args.keycloak_url}/")
         print(f"3. Update backend .env and start deployment\n")
 
     except KeyboardInterrupt:
