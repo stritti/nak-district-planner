@@ -138,7 +138,7 @@
     >
       <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900">Amtstragenden hinzufügen</h2>
+          <h2 class="text-base font-semibold text-gray-900">Amtstragende:n hinzufügen</h2>
           <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="addModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
@@ -237,7 +237,7 @@
     >
       <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900">Amtstragenden bearbeiten</h2>
+          <h2 class="text-base font-semibold text-gray-900">Amtstragende:n bearbeiten</h2>
           <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="editModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
@@ -596,7 +596,7 @@ async function saveEdit() {
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 async function confirmDelete(leader: LeaderResponse) {
-  if (!confirm(`Amtstragenden "${leader.rank ? leader.rank + ' ' : ''}${leader.name}" wirklich löschen?`)) return
+  if (!confirm(`Amtstragende:n "${leader.rank ? leader.rank + ' ' : ''}${leader.name}" wirklich löschen?`)) return
   saving.value = true
   try {
     await deleteLeader(selectedDistrictId.value, leader.id)

@@ -5,6 +5,7 @@
 
 Idempotent: UIDs sind stabil — wiederholter Import überschreibt nur bei Änderungen.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -86,7 +87,14 @@ def _content_hash(date: str, name: str) -> str:
 
 
 def _external_uid(district_id: uuid.UUID, date: str, name: str) -> str:
-    slug = name.lower().replace(" ", "-").replace("/", "-").replace("ä", "ae").replace("ö", "oe").replace("ü", "ue")
+    slug = (
+        name.lower()
+        .replace(" ", "-")
+        .replace("/", "-")
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+    )
     return f"feiertag-DE-{district_id}-{date}-{slug}"
 
 
@@ -123,9 +131,9 @@ async def import_feiertage(
 
     # Include national holidays (counties=None) and state-specific ones matching state_code
     relevant = [
-        h for h in holidays
-        if h.get("counties") is None
-        or (de_county and de_county in (h.get("counties") or []))
+        h
+        for h in holidays
+        if h.get("counties") is None or (de_county and de_county in (h.get("counties") or []))
     ]
 
     event_repo = SqlEventRepository(session)

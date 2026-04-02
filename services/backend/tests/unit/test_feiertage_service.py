@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-import pytest
 
 from app.application.feiertage_service import (
     _content_hash,
@@ -17,7 +16,6 @@ from app.application.feiertage_service import (
     import_feiertage,
     import_kirchliche_festtage,
 )
-from app.domain.models.event import EventSource, EventStatus, EventVisibility
 
 
 class TestEasterSunday:

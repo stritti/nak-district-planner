@@ -77,6 +77,15 @@
           <ArrowPathIcon class="h-4 w-4" :class="matrixStore.loading ? 'animate-spin' : ''" />
           Anzeigen
         </button>
+
+        <button
+          class="flex items-center gap-1.5 bg-green-600 text-white text-sm px-4 py-1.5 rounded hover:bg-green-700 disabled:opacity-50"
+          :disabled="!matrixStore.matrix || matrixStore.matrix.dates.length === 0 || matrixStore.loading || exporting"
+          @click="triggerMatrixExport"
+        >
+          <ArrowDownTrayIcon class="h-4 w-4" />
+          {{ exporting ? 'Exportiere…' : 'Excel' }}
+        </button>
       </div>
     </div>
 
@@ -186,7 +195,7 @@
       <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
         <div class="flex items-center justify-between mb-1">
           <h2 class="text-base font-semibold text-gray-900">
-            {{ modal.isGap ? 'Amtstragenden zuweisen' : 'Zuweisung bearbeiten' }}
+            {{ modal.isGap ? 'Amtstragende:n zuweisen' : 'Zuweisung bearbeiten' }}
           </h2>
           <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="closeModal">
             <XMarkIcon class="h-5 w-5" />
@@ -199,7 +208,7 @@
           <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
         </p>
 
-        <label class="block text-sm font-medium text-gray-700 mb-1">Amtstragender</label>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Amtstragende:r</label>
         <AutocompleteInput
           ref="autocompleteRef"
           v-model="modal.leaderInput"
@@ -232,11 +241,12 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { ArrowPathIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '@/stores/matrix'
 import { useDistrictsStore } from '@/stores/districts'
 import { useLeadersStore } from '@/stores/leaders'
 import type { MatrixCell } from '@/api/matrix'
+import { exportMatrixToExcel } from '@/composables/useExcelExport'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '@/components/AutocompleteInput.vue'
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
@@ -414,6 +424,20 @@ async function submitAssignment() {
     modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
   } finally {
     modal.saving = false
+  }
+}
+
+// ── Excel Export ──────────────────────────────────────────────────────────────
+
+const exporting = ref(false)
+
+async function triggerMatrixExport() {
+  if (!matrixStore.matrix) return
+  exporting.value = true
+  try {
+    await exportMatrixToExcel(matrixStore.matrix, matrixStore.fromDt, matrixStore.toDt)
+  } finally {
+    exporting.value = false
   }
 }
 </script>
