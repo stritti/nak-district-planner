@@ -6,12 +6,12 @@ Keycloak ist ein separater Stack, der unabhängig vom NAK-Planner läuft und von
 
 - VPS mit Docker + Docker Compose
 - Traefik läuft bereits und managed `auth.5tritti.de`
-- Traefik-Netzwerk heißt `traefik` (oder anpassen in `docker-compose.yml`)
+- Traefik-Netzwerk heißt `traefik` (oder anpassen in `docker compose.yml`)
 - Python 3 (für automatisiertes Setup)
 
 ## Quick Start (Automatisiert)
 
-Das ist die empfohlene Methode. Das Script führt einen Build-Schritt durch und konfiguriert alles automatisch:
+Das ist die empfohlene Methode. Das Script startet Keycloak und konfiguriert alles automatisch:
 
 ```bash
 # Auf dem VPS
@@ -23,14 +23,13 @@ cp keycloak-deploy/* .
 ```
 
 Das Script macht alles:
-1. ✓ Keycloak Build (mit PostgreSQL-Optimierung)
-2. ✓ Docker Compose Up
-3. ✓ Wartet bis Keycloak ready ist
-4. ✓ Erstellt Realm "nak-planner"
-5. ✓ Erstellt Client "nak-planner-api"
-6. ✓ Erstellt Test-User
-7. ✓ Zeigt Client Secret (zum Copy-Paste)
-8. ✓ Exportiert Realm-Config
+1. ✓ Docker Compose Up
+2. ✓ Wartet bis Keycloak ready ist (erste Start dauert länger → Auto-Build)
+3. ✓ Erstellt Realm "nak-planner"
+4. ✓ Erstellt Client "nak-planner-api"
+5. ✓ Erstellt Test-User
+6. ✓ Zeigt Client Secret (zum Copy-Paste)
+7. ✓ Exportiert Realm-Config
 
 **Nach dem Script:** Kopiere den angezeigten CLIENT_SECRET in deine NAK-Planner `.env`.
 
@@ -64,17 +63,7 @@ KEYCLOAK_ADMIN_PASSWORD=<starkes-passwort>
 KEYCLOAK_DB_PASSWORD=<starkes-passwort>
 ```
 
-### Schritt 3: Keycloak Build (Optimierung)
-
-**Wichtig für Keycloak 26+:** Der Build-Schritt optimiert Keycloak für Deployment.
-
-```bash
-docker compose run --rm keycloak build --db=postgres
-```
-
-Dies wird vom automatisierten Script (`deploy_keycloak.sh`) bereits erledigt.
-
-### Schritt 4: Docker-Compose starten
+### Schritt 3: Docker-Compose starten
 
 ```bash
 docker compose up -d
@@ -86,12 +75,12 @@ Verifiziere, dass Keycloak startet:
 docker compose logs -f keycloak
 ```
 
-Warte bis diese Nachricht erscheint:
+Auf dem ersten Start führt Keycloak automatisch eine Optimierungs-Phase durch (Build). Dies kann 30-60 Sekunden dauern. Warte bis diese Nachricht erscheint:
 ```
 Keycloak ... version X.X.X is now running
 ```
 
-## Schritt 5: Keycloak Admin Console erreichbar?
+## Schritt 4: Keycloak Admin Console erreichbar?
 
 Öffne in deinem Browser:
 ```
@@ -102,7 +91,7 @@ Login mit:
 - Username: `admin` (oder `KEYCLOAK_ADMIN` aus `.env`)
 - Password: `changeme` (oder `KEYCLOAK_ADMIN_PASSWORD` aus `.env`)
 
-## Schritt 6: Realm erstellen
+## Schritt 5: Realm erstellen
 
 1. Klick auf "Keycloak" (oben links) → "Create Realm"
 2. Name: `nak-planner`

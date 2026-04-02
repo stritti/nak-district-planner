@@ -4,15 +4,15 @@ This guide walks you through testing the Keycloak deployment on your VPS. Follow
 
 ## Prerequisites Verification
 
-### Step 1: Verify Docker & Docker Compose
+### Step 1: Verify Docker & Compose Plugin
 ```bash
 # Check Docker
 docker --version
 # Expected: Docker version 20.10+ 
 
-# Check Docker Compose
-docker-compose --version
-# Expected: Docker Compose version 1.29+ or 2.0+
+# Check Docker Compose Plugin (built into Docker)
+docker compose version
+# Expected: Docker Compose version 2.0+
 
 # Verify you can run Docker commands without sudo (optional but recommended)
 docker ps
@@ -41,7 +41,7 @@ docker network ls | grep traefik
 # Expected: Should show a 'traefik' network
 
 # If not found, you may need to:
-# - Start Traefik first: docker compose -f path/to/traefik/docker-compose.yml up -d
+# - Start Traefik first: docker compose -f path/to/traefik/docker compose.yml up -d
 # - Or create it manually: docker network create traefik
 ```
 
@@ -97,7 +97,7 @@ chmod +x deploy_keycloak.sh
 # 1. Check Docker & Docker Compose
 # 2. Create directory structure
 # 3. Update .env with passwords
-# 4. Start containers: docker-compose up -d
+# 4. Start containers: docker compose up -d
 # 5. Wait for Keycloak to be ready (60-120s on first start)
 # 6. Verify Traefik network
 # 7. Run setup_keycloak_realm.py
@@ -132,7 +132,7 @@ Next steps:
 **Status:** ✅ / ❌
 
 **If deployment fails:**
-- Check logs: `docker-compose logs -f keycloak`
+- Check logs: `docker compose logs -f keycloak`
 - Common issues:
   - Traefik network doesn't exist: Create it with `docker network create traefik`
   - Port already in use: Change `KC_HOSTNAME_URL` in `.env`
@@ -147,7 +147,7 @@ Next steps:
 cd /opt/keycloak-test
 
 # See all running containers
-docker-compose ps
+docker compose ps
 
 # Expected output:
 # NAME                      STATUS              PORTS
@@ -155,7 +155,7 @@ docker-compose ps
 # keycloak-test-db-1        Up X minutes        5432/tcp
 
 # View logs
-docker-compose logs -f keycloak
+docker compose logs -f keycloak
 
 # Expected: You should see messages like:
 # "Started Keycloak in X seconds"
@@ -369,14 +369,14 @@ Fill out this summary:
 
 ### Keycloak won't start
 - **Symptom:** Containers start but Keycloak keeps restarting
-- **Fix 1:** Check logs: `docker-compose logs keycloak`
+- **Fix 1:** Check logs: `docker compose logs keycloak`
 - **Fix 2:** Increase wait time in script (line 112-113 in `deploy_keycloak.sh`)
-- **Fix 3:** Ensure database is healthy: `docker-compose logs db`
+- **Fix 3:** Ensure database is healthy: `docker compose logs db`
 
 ### Traefik network not found
 - **Symptom:** Script fails at Step 7 with "network 'traefik' not found"
 - **Fix:** Create network: `docker network create traefik`
-- **Or:** Start Traefik first from your main docker-compose
+- **Or:** Start Traefik first from your main docker compose
 
 ### JWKS endpoint returns 404
 - **Symptom:** `curl https://auth.5tritti.de/realms/nak-planner/.well-known/jwks.json` returns 404
@@ -386,11 +386,11 @@ Fill out this summary:
 ### Admin credentials not working
 - **Symptom:** Can't login to admin console with admin/MyTestPassword123
 - **Fix:** Check `.env` file: `KEYCLOAK_ADMIN_PASSWORD=MyTestPassword123`
-- **Or:** Recreate containers: `docker-compose down -v && docker-compose up -d`
+- **Or:** Recreate containers: `docker compose down -v && docker compose up -d`
 
 ### CLIENT_SECRET not printed
 - **Symptom:** Script completes but no SECRET is shown
-- **Fix:** Script may have had an error. Check: `docker-compose logs keycloak`
+- **Fix:** Script may have had an error. Check: `docker compose logs keycloak`
 - **Or:** Get it from Admin Console (Step 11 alternative method)
 
 ---

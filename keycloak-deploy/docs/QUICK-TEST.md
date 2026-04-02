@@ -16,7 +16,7 @@ chmod +x deploy_keycloak.sh && \
 
 ```bash
 # 1. Containers running?
-docker-compose ps
+docker compose ps
 
 # 2. Keycloak healthy?
 curl https://auth.5tritti.de/health | jq .
@@ -36,15 +36,15 @@ curl -X POST https://auth.5tritti.de/realms/nak-planner/protocol/openid-connect/
 
 ### Containers won't start
 ```bash
-docker-compose logs keycloak
-docker-compose down -v  # Clean restart
-docker-compose up -d
+docker compose logs keycloak
+docker compose down -v  # Clean restart
+docker compose up -d
 ```
 
 ### Traefik network missing
 ```bash
 docker network create traefik
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Need CLIENT_SECRET again
@@ -60,7 +60,7 @@ docker exec <db-container> psql -U keycloak keycloak -c "SELECT client_secret FR
 
 ## Success Checklist
 
-- ✅ Containers: `docker-compose ps` shows keycloak + db running
+- ✅ Containers: `docker compose ps` shows keycloak + db running
 - ✅ Health: `curl https://auth.5tritti.de/health` returns 200
 - ✅ JWKS: `curl https://auth.5tritti.de/realms/nak-planner/.well-known/jwks.json` returns keys
 - ✅ Token: Can request token with test user credentials

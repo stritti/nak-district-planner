@@ -53,11 +53,11 @@ if ! command -v docker &> /dev/null; then
 fi
 print_success "Docker is installed"
 
-if ! command -v docker-compose &> /dev/null; then
-    print_error "Docker Compose not found. Please install Docker Compose."
+if ! command -v docker &> /dev/null; then
+    print_error "docker command not found. Please install Docker."
     exit 1
 fi
-print_success "Docker Compose is installed"
+print_success "Docker is available (includes compose plugin)"
 
 # Step 2: Setup directory
 print_header "Step 2: Setting up keycloak-deploy directory"
@@ -100,22 +100,18 @@ sed -i.bak "s|KC_HOSTNAME_URL=.*|KC_HOSTNAME_URL=$KEYCLOAK_URL|" .env
 
 print_success ".env updated with credentials"
 
-# Step 5: Build Keycloak (required for --optimized flag)
-print_header "Step 5: Building Keycloak (optimization phase)"
+# Step 5: Start Docker Compose
+# Note: Keycloak 26 automatically builds on first start with 'start' command
+print_header "Step 5: Starting Keycloak & PostgreSQL containers"
 
-docker-compose run --rm keycloak build --db=postgres
-print_success "Keycloak build complete"
-
-# Step 6: Start Docker Compose with optimized build
-print_header "Step 6: Starting Keycloak & PostgreSQL containers"
-
-docker-compose up -d
+docker compose up -d
 print_success "Containers started"
 
-# Step 7: Wait for Keycloak to be ready
-print_header "Step 7: Waiting for Keycloak to start (this may take 30-60 seconds)"
+# Step 6: Wait for Keycloak to be ready
+# First start may take longer due to automatic build phase
+print_header "Step 6: Waiting for Keycloak to start (this may take 60-120 seconds on first start)"
 
-max_retries=60
+max_retries=120
 retry_count=0
 
 while [ $retry_count -lt $max_retries ]; do
@@ -131,7 +127,7 @@ done
 
 if [ $retry_count -eq $max_retries ]; then
     print_error "Keycloak did not start within timeout"
-    echo "Check logs with: docker-compose logs -f keycloak"
+    echo "Check logs with: docker compose logs -f keycloak"
     exit 1
 fi
 
@@ -188,6 +184,6 @@ echo "3. Verify JWKS endpoint:"
 echo "   curl $KEYCLOAK_URL/realms/nak-planner/.well-known/jwks.json"
 echo ""
 echo "Troubleshooting:"
-echo "  - Logs: docker-compose logs -f keycloak"
+echo "  - Logs: docker compose logs -f keycloak"
 echo "  - Health: curl $KEYCLOAK_URL/health"
 echo ""
