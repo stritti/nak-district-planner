@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import httpx
 
-from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash
+from app.adapters.calendar.caldav_connector import CalDAVConnector
 
 
 CREDS = {
