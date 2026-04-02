@@ -1,9 +1,8 @@
-version: '3.8'
 
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.5.6
-    command: start
+    image: quay.io/keycloak/keycloak:26.5
+    command: start #--optimized
     environment:
       KC_DB: postgres
       KC_DB_URL_HOST: db
@@ -12,12 +11,19 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-changeme}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-changeme}
-      KC_HOSTNAME: ${KC_HOSTNAME:-auth2.5tritti.de}
-      KC_HOSTNAME_PROTOCOL: https
-      KC_HOSTNAME_PORT: 443
+
+    
+      KC_HTTP_RELATIVE_PATH: /
+      
+      KC_CACHE: local
+      
       KC_PROXY: edge
-      KC_HTTP_ENABLED: "true"
       KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME: ${KC_HOSTNAME:-localhost}
+      KC_HOSTNAME_STRICT: 'true'
+      KC_HTTP_ENABLED: 'true'
+      KC_STRICT_HTTPS: 'true'
+      
       # Logging
       KC_LOG_LEVEL: info
     depends_on:
@@ -25,10 +31,11 @@ services:
         condition: service_healthy
     networks:
       - traefik_net
-      - backend
+      - keycloak_net
     labels:
       - traefik.enable=true
-      - traefik.http.routers.keycloak.rule=Host(`auth2.5tritti.de`)
+      - traefik.docker.network=traefik_net    
+      - traefik.http.routers.keycloak.rule=Host(`${KC_HOSTNAME:-localhost}`)
       - traefik.http.routers.keycloak.entrypoints=websecure
       - traefik.http.routers.keycloak.tls=true
       - traefik.http.routers.keycloak.tls.certresolver=letsencrypt
@@ -36,27 +43,25 @@ services:
       - traefik.http.services.keycloak.loadbalancer.server.scheme=http
 
   db:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak}
       POSTGRES_USER: ${KEYCLOAK_DB_USER:-keycloak}
       POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-changeme}
     volumes:
-      - keycloak_db:/var/lib/postgresql/data
+      - ./keycloak_db:/var/lib/postgresql/data
     networks:
-      - backend
+      - keycloak_net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak} -d ${KEYCLOAK_DB_NAME:-keycloak}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-volumes:
-  keycloak_db:
 
 networks:
   traefik_net:
     external: true
-    name: traefik_net
-  backend:
+
+  keycloak_net:
     driver: bridge
