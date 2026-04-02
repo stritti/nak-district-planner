@@ -22,13 +22,13 @@
 - [x] 3.2 Create `services/backend/app/adapters/db/models.py` with User ORM model
 - [x] 3.3 Create Alembic migration for user table
 - [x] 3.4 Create `services/backend/app/adapters/db/repositories/user_repository.py`
-- [ ] 3.5 Implement `get_current_user()` in `services/backend/app/adapters/api/deps.py`
-- [ ] 3.6 Auto-create user on first login (in get_current_user)
-- [ ] 3.7 Write tests for user auto-creation and get_current_user()
+- [x] 3.5 Implement `get_current_user()` in `services/backend/app/adapters/api/deps.py`
+- [x] 3.6 Auto-create user on first login (in get_current_user)
+- [x] 3.7 Write tests for user auto-creation and get_current_user()
 
 ## 4. Backend: API Endpoint Updates
 
-- [ ] 4.1 Create `GET /api/v1/auth/me` endpoint (returns current user info)
+- [x] 4.1 Create `GET /api/v1/auth/me` endpoint (returns current user info)
 - [ ] 4.2 Update all `/api/v1/` endpoints to use `get_current_user` dependency instead of `verify_api_key`
 - [ ] 4.3 Remove old `verify_api_key` function and `X-API-Key` header validation
 - [ ] 4.4 Update API documentation/OpenAPI schema (Bearer token instead of API key)
