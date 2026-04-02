@@ -385,7 +385,7 @@ Fill out this summary:
 
 ### Admin credentials not working
 - **Symptom:** Can't login to admin console with admin/MyTestPassword123
-- **Fix:** Check `.env` file: `KEYCLOAK_ADMIN_PASSWORD=MyTestPassword123`
+- **Fix:** Check `.env` file: `KC_BOOTSTRAP_ADMIN_PASSWORD=MyTestPassword123`
 - **Or:** Recreate containers: `docker compose down -v && docker compose up -d`
 
 ### CLIENT_SECRET not printed

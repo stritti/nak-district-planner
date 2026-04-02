@@ -16,7 +16,7 @@ Requirements:
 
 Usage:
     python3 setup_keycloak_realm.py --keycloak-url https://auth.5tritti.de \
-        --admin-user admin --admin-password changeme
+        --admin-user <KC_BOOTSTRAP_ADMIN_USERNAME> --admin-password <KC_BOOTSTRAP_ADMIN_PASSWORD>
 """
 
 import argparse

@@ -59,7 +59,8 @@ cp .env.example .env
 Bearbeite `.env` und setze starke Passwörter:
 
 ```bash
-KEYCLOAK_ADMIN_PASSWORD=<starkes-passwort>
+KC_BOOTSTRAP_ADMIN_USERNAME=admin
+KC_BOOTSTRAP_ADMIN_PASSWORD=<starkes-passwort>
 KEYCLOAK_DB_PASSWORD=<starkes-passwort>
 ```
 
@@ -88,8 +89,8 @@ https://auth.5tritti.de/admin/
 ```
 
 Login mit:
-- Username: `admin` (oder `KEYCLOAK_ADMIN` aus `.env`)
-- Password: `changeme` (oder `KEYCLOAK_ADMIN_PASSWORD` aus `.env`)
+- Username: `admin` (oder `KC_BOOTSTRAP_ADMIN_USERNAME` aus `.env`)
+- Password: `changeme` (oder `KC_BOOTSTRAP_ADMIN_PASSWORD` aus `.env`)
 
 ## Schritt 5: Realm erstellen
 

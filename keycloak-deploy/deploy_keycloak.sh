@@ -101,7 +101,7 @@ DB_PASSWORD=$(echo $RANDOM | md5sum | cut -c1-16)
 # Extract hostname from URL (e.g. https://auth2.5tritti.de -> auth2.5tritti.de)
 HOSTNAME=$(echo "$KEYCLOAK_URL" | sed 's|https://||g' | sed 's|http://||g' | cut -d'/' -f1)
 
-sed -i.bak "s|KEYCLOAK_ADMIN_PASSWORD=.*|KEYCLOAK_ADMIN_PASSWORD=$ADMIN_PASSWORD|" .env
+sed -i.bak "s|KC_BOOTSTRAP_ADMIN_PASSWORD=.*|KC_BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASSWORD|" .env
 sed -i.bak "s|KEYCLOAK_DB_PASSWORD=.*|KEYCLOAK_DB_PASSWORD=$DB_PASSWORD|" .env
 sed -i.bak "s|KC_HOSTNAME=.*|KC_HOSTNAME=$HOSTNAME|" .env
 
