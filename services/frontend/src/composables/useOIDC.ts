@@ -93,7 +93,15 @@ const clientId = import.meta.env.VITE_OIDC_CLIENT_ID || ''
 const redirectUri = import.meta.env.VITE_OIDC_REDIRECT_URI || ''
 
 export function useOIDC() {
-  const router = useRouter()
+  let router: ReturnType<typeof useRouter> | null = null
+  
+  // Lazy-initialize router to avoid issues during app startup
+  function getRouter(): ReturnType<typeof useRouter> {
+    if (!router) {
+      router = useRouter()
+    }
+    return router
+  }
 
   // State
   const token = ref<OIDCToken | null>(null)
@@ -220,7 +228,7 @@ export function useOIDC() {
   // Task 5.5: Token Refresh Logic
   async function refreshToken(): Promise<void> {
     if (!token.value?.refreshToken) {
-      logout()
+      await logout()
       return
     }
 
@@ -242,7 +250,7 @@ export function useOIDC() {
 
       if (!res.ok) {
         // Refresh failed - logout user
-        logout()
+        await logout()
         return
       }
 
@@ -264,7 +272,7 @@ export function useOIDC() {
       }
     } catch (err) {
       console.error('Token refresh failed:', err)
-      logout()
+      await logout()
     }
   }
 
@@ -310,7 +318,14 @@ export function useOIDC() {
       if (refreshTimer.value) clearTimeout(refreshTimer.value)
       sessionStorage.removeItem('oidc_code_verifier')
       sessionStorage.removeItem('oidc_state')
-      await router.push('/login')
+      
+      // Try to navigate, but don't fail if router isn't ready yet
+      try {
+        const rt = getRouter()
+        await rt.push('/login')
+      } catch (err) {
+        console.debug('Could not navigate to login (router may not be ready):', err)
+      }
     }
   }
 
