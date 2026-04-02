@@ -93,9 +93,13 @@ fi
 # Step 4: Update .env with passwords
 print_header "Step 4: Updating environment variables"
 
+# Generate random DB password
+DB_PASSWORD=$(echo $RANDOM | md5sum | cut -c1-16)
+
 # Use sed to update passwords in .env
-sed -i.bak "s/KEYCLOAK_ADMIN_PASSWORD=.*/KEYCLOAK_ADMIN_PASSWORD=$ADMIN_PASSWORD/" .env
-sed -i.bak "s/KEYCLOAK_DB_PASSWORD=.*/KEYCLOAK_DB_PASSWORD=$(echo $RANDOM | md5sum | cut -c1-16)/" .env
+# Note: Using | as delimiter for URLs with /
+sed -i.bak "s|KEYCLOAK_ADMIN_PASSWORD=.*|KEYCLOAK_ADMIN_PASSWORD=$ADMIN_PASSWORD|" .env
+sed -i.bak "s|KEYCLOAK_DB_PASSWORD=.*|KEYCLOAK_DB_PASSWORD=$DB_PASSWORD|" .env
 sed -i.bak "s|KC_HOSTNAME_URL=.*|KC_HOSTNAME_URL=$KEYCLOAK_URL|" .env
 
 print_success ".env updated with credentials"
