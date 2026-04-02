@@ -3,15 +3,15 @@
 - [x] 1.1 Create `keycloak-deploy/` directory with standalone structure (docker-compose.yml, .env.example, docs)
 - [x] 1.2 Write `keycloak-deploy/docker-compose.yml` with Keycloak service (port 8080), PostgreSQL backend, Traefik labels for `auth.5tritti.de`
 - [x] 1.3 Create `keycloak-deploy/.env.example` with `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD`, PostgreSQL credentials, `KC_HOSTNAME_URL`
-- [ ] 1.4 Deploy Keycloak to VPS and verify `https://auth.5tritti.de/` is reachable
-- [ ] 1.5 Create Keycloak realm (e.g., "nak-planner") and export realm config to `keycloak-deploy/realm-export.json`
-- [ ] 1.6 Create Keycloak client (e.g., "nak-planner-api") with:
+- [x] 1.4 Deploy Keycloak to VPS and verify `https://auth.5tritti.de/` is reachable
+- [x] 1.5 Create Keycloak realm (e.g., "nak-planner") and export realm config to `keycloak-deploy/realm-export.json`
+- [x] 1.6 Create Keycloak client (e.g., "nak-planner-api") with:
   - Client type: Confidential
   - Valid Redirect URIs: `https://planner.5tritti.de/auth/callback`
   - Logout URL: `https://planner.5tritti.de/`
   - Export client secret for backend `.env`
-- [ ] 1.7 Create test user in Keycloak (e.g., `test@example.com` / `test-password`)
-- [ ] 1.8 Verify JWKS endpoint is reachable: `https://auth.5tritti.de/realms/nak-planner/.well-known/jwks.json`
+- [x] 1.7 Create test user in Keycloak (e.g., `test@example.com` / `test-password`)
+- [x] 1.8 Verify JWKS endpoint is reachable: `https://auth.5tritti.de/realms/nak-planner/.well-known/jwks.json`
 
 ## 2. Backend: Database & Models
 
