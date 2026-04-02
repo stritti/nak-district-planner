@@ -60,8 +60,21 @@ class KeycloakAdminClient:
             "password": self.admin_password,
         }
 
-        response = requests.post(url, data=data, timeout=10)
-        response.raise_for_status()
+        try:
+            response = requests.post(url, data=data, timeout=10)
+            response.raise_for_status()
+        except requests.exceptions.ConnectionError as e:
+            print(f"\n✗ Cannot connect to Keycloak at {self.keycloak_url}")
+            print(f"  Error: {e}")
+            print(f"  Make sure Keycloak is running and the URL is correct.")
+            raise
+        except requests.exceptions.HTTPError as e:
+            print(f"\n✗ Keycloak returned error: {response.status_code}")
+            print(f"  URL: {url}")
+            print(f"  Response: {response.text}")
+            print(f"  This usually means Keycloak is still starting up.")
+            print(f"  Please wait 30 seconds and try again.")
+            raise
 
         token_data = response.json()
         self.token = token_data["access_token"]

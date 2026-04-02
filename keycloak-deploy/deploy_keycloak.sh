@@ -115,23 +115,56 @@ print_success "Containers started"
 # First start may take longer due to automatic build phase
 print_header "Step 6: Waiting for Keycloak to start (this may take 60-120 seconds on first start)"
 
+# First, wait for HTTP endpoint to respond
 max_retries=120
 retry_count=0
 
 while [ $retry_count -lt $max_retries ]; do
     if curl -s "$KEYCLOAK_URL/" > /dev/null 2>&1; then
-        print_success "Keycloak is ready!"
+        print_success "Keycloak HTTP endpoint is responding"
         break
     fi
     
     retry_count=$((retry_count + 1))
-    echo -ne "  Attempt $retry_count/$max_retries... \r"
+    echo -ne "  Waiting for HTTP endpoint... Attempt $retry_count/$max_retries\r"
     sleep 1
 done
 
 if [ $retry_count -eq $max_retries ]; then
-    print_error "Keycloak did not start within timeout"
+    print_error "Keycloak HTTP endpoint did not respond within timeout"
     echo "Check logs with: docker compose logs -f keycloak"
+    exit 1
+fi
+
+# Second, wait for authentication endpoint to be ready (indicates full initialization)
+print_header "Step 6b: Waiting for Keycloak authentication to be ready"
+
+retry_count=0
+max_retries=60
+
+while [ $retry_count -lt $max_retries ]; do
+    # Try to get a token - this will only work when Keycloak is fully ready
+    response=$(curl -s -w "\n%{http_code}" -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d 'client_id=admin-cli&grant_type=password&username=admin&password=dummy' 2>&1)
+    
+    http_code=$(echo "$response" | tail -n1)
+    
+    # Keycloak is ready if we get 400 (bad credentials) instead of 404 or 502
+    if [ "$http_code" = "400" ] || [ "$http_code" = "200" ]; then
+        print_success "Keycloak authentication endpoint is ready!"
+        break
+    fi
+    
+    retry_count=$((retry_count + 1))
+    echo -ne "  Waiting for auth endpoint... Attempt $retry_count/$max_retries (HTTP $http_code)\r"
+    sleep 1
+done
+
+if [ $retry_count -eq $max_retries ]; then
+    print_error "Keycloak authentication endpoint did not become ready"
+    echo "Check logs with: docker compose logs -f keycloak"
+    echo "Last HTTP code: $http_code"
     exit 1
 fi
 
