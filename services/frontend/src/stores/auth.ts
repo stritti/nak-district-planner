@@ -66,9 +66,9 @@ export const useAuthStore = defineStore(
     }
 
     return {
-      // State (exposed as computed for reactivity)
-      token: computed(() => token.value),
-      user: computed(() => user.value),
+      // State - return refs directly for proper reactivity
+      token,
+      user,
       isAuthenticated,
       isTokenExpired,
 
