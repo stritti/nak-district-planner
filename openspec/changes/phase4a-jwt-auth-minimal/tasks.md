@@ -1,8 +1,8 @@
 ## 1. Keycloak Infrastructure
 
-- [ ] 1.1 Create `keycloak-deploy/` directory with standalone structure (docker-compose.yml, .env.example, docs)
-- [ ] 1.2 Write `keycloak-deploy/docker-compose.yml` with Keycloak service (port 8080), PostgreSQL backend, Traefik labels for `auth.5tritti.de`
-- [ ] 1.3 Create `keycloak-deploy/.env.example` with `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD`, PostgreSQL credentials, `KC_HOSTNAME_URL`
+- [x] 1.1 Create `keycloak-deploy/` directory with standalone structure (docker-compose.yml, .env.example, docs)
+- [x] 1.2 Write `keycloak-deploy/docker-compose.yml` with Keycloak service (port 8080), PostgreSQL backend, Traefik labels for `auth.5tritti.de`
+- [x] 1.3 Create `keycloak-deploy/.env.example` with `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD`, PostgreSQL credentials, `KC_HOSTNAME_URL`
 - [ ] 1.4 Deploy Keycloak to VPS and verify `https://auth.5tritti.de/` is reachable
 - [ ] 1.5 Create Keycloak realm (e.g., "nak-planner") and export realm config to `keycloak-deploy/realm-export.json`
 - [ ] 1.6 Create Keycloak client (e.g., "nak-planner-api") with:

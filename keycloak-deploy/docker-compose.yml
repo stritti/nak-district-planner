@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24
+    command: start --auto-build
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: db
+      KC_DB_URL_DATABASE: ${KEYCLOAK_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-changeme}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-changeme}
+      KC_HOSTNAME_URL: ${KC_HOSTNAME_URL:-https://auth.5tritti.de}
+      KC_PROXY: edge
+      KC_HTTP_RELATIVE_PATH: /
+      # Logging
+      KC_LOG_LEVEL: info
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - traefik
+      - backend
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.keycloak.rule=Host(`auth.5tritti.de`)
+      - traefik.http.routers.keycloak.entrypoints=websecure
+      - traefik.http.routers.keycloak.tls=true
+      - traefik.http.routers.keycloak.tls.certresolver=letsencrypt
+      - traefik.http.services.keycloak.loadbalancer.server.port=8080
+      - traefik.http.services.keycloak.loadbalancer.server.scheme=http
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak}
+      POSTGRES_USER: ${KEYCLOAK_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-changeme}
+    volumes:
+      - keycloak_db:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak} -d ${KEYCLOAK_DB_NAME:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  keycloak_db:
+
+networks:
+  traefik:
+    external: true
+    name: traefik
+  backend:
+    driver: bridge
