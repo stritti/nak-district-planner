@@ -8,6 +8,7 @@ from enum import Enum
 
 class LeaderRank(str, Enum):
     """Kirchliche Ränge in aufsteigender Reihenfolge."""
+
     DIAKON = "Di."
     PRIESTER = "Pr."
     EVANGELIST = "Ev."
@@ -22,6 +23,7 @@ class LeaderRank(str, Enum):
 
 class SpecialRole(str, Enum):
     """Besondere Beauftragung."""
+
     GEMEINDEVORSTEHER = "Gemeindevorsteher"
     BEZIRKSVORSTEHER = "Bezirksvorsteher"
 

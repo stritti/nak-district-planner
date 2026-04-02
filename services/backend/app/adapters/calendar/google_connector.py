@@ -9,7 +9,7 @@ Credentials format: {"access_token": "ya29.a0AfH6SMB..."}
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx

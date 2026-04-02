@@ -7,12 +7,11 @@ we'll focus on testing the basic structure and error handling.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import httpx
-import pytest
 
-from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash
+from app.adapters.calendar.caldav_connector import CalDAVConnector
 
 
 CREDS = {

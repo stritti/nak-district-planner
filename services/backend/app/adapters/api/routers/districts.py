@@ -22,7 +22,11 @@ from app.adapters.api.schemas.district import (
     FeiertageImportResult,
     ServiceTime,
 )
-from app.application.feiertage_service import DE_STATES, import_feiertage, import_kirchliche_festtage
+from app.application.feiertage_service import (
+    DE_STATES,
+    import_feiertage,
+    import_kirchliche_festtage,
+)
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
 from app.adapters.db.repositories import (
     SqlCongregationRepository,
@@ -74,7 +78,10 @@ async def list_districts(_: ApiKeyGuard, db: DbSession) -> list[DistrictResponse
 
 @router.patch("/{district_id}", response_model=DistrictResponse)
 async def update_district(
-    district_id: uuid.UUID, body: DistrictUpdate, _: ApiKeyGuard, db: DbSession,
+    district_id: uuid.UUID,
+    body: DistrictUpdate,
+    _: ApiKeyGuard,
+    db: DbSession,
 ) -> DistrictResponse:
     repo = SqlDistrictRepository(db)
     district = await repo.get(district_id)
@@ -92,8 +99,11 @@ async def update_district(
 
 def _district_response(d: District) -> DistrictResponse:
     return DistrictResponse(
-        id=d.id, name=d.name, state_code=d.state_code,
-        created_at=d.created_at, updated_at=d.updated_at,
+        id=d.id,
+        name=d.name,
+        state_code=d.state_code,
+        created_at=d.created_at,
+        updated_at=d.updated_at,
     )
 
 
@@ -106,7 +116,10 @@ def _district_response(d: District) -> DistrictResponse:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_congregation(
-    district_id: uuid.UUID, body: CongregationCreate, _: ApiKeyGuard, db: DbSession,
+    district_id: uuid.UUID,
+    body: CongregationCreate,
+    _: ApiKeyGuard,
+    db: DbSession,
 ) -> CongregationResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
@@ -138,9 +151,7 @@ async def list_congregations(
     return [_cong_response(c) for c in congregations]
 
 
-@router.patch(
-    "/{district_id}/congregations/{congregation_id}", response_model=CongregationResponse
-)
+@router.patch("/{district_id}/congregations/{congregation_id}", response_model=CongregationResponse)
 async def update_congregation(
     district_id: uuid.UUID,
     congregation_id: uuid.UUID,
@@ -184,7 +195,10 @@ def _cong_response(c: Congregation) -> CongregationResponse:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_group(
-    district_id: uuid.UUID, body: CongregationGroupCreate, _: ApiKeyGuard, db: DbSession,
+    district_id: uuid.UUID,
+    body: CongregationGroupCreate,
+    _: ApiKeyGuard,
+    db: DbSession,
 ) -> CongregationGroupResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
@@ -195,7 +209,9 @@ async def create_group(
 
 @router.get("/{district_id}/groups", response_model=list[CongregationGroupResponse])
 async def list_groups(
-    district_id: uuid.UUID, _: ApiKeyGuard, db: DbSession,
+    district_id: uuid.UUID,
+    _: ApiKeyGuard,
+    db: DbSession,
 ) -> list[CongregationGroupResponse]:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
@@ -224,7 +240,10 @@ async def update_group(
 
 @router.delete("/{district_id}/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_group(
-    district_id: uuid.UUID, group_id: uuid.UUID, _: ApiKeyGuard, db: DbSession,
+    district_id: uuid.UUID,
+    group_id: uuid.UUID,
+    _: ApiKeyGuard,
+    db: DbSession,
 ) -> None:
     repo = SqlCongregationGroupRepository(db)
     group = await repo.get(group_id)
@@ -271,7 +290,11 @@ async def get_matrix(
 
     # Load all events for the district in the date range (single query)
     events, _ = await SqlEventRepository(db).list(
-        district_id=district_id, from_dt=from_dt, to_dt=to_dt, limit=5000, offset=0,
+        district_id=district_id,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        limit=5000,
+        offset=0,
     )
 
     # Build holidays dict and collect Feiertag dates for the column set
@@ -354,11 +377,13 @@ async def get_matrix(
                 leader_name=leader_name,
             )
 
-        rows.append(MatrixRow(
-            congregation_id=congregation.id,
-            congregation_name=congregation.name,
-            cells=cells,
-        ))
+        rows.append(
+            MatrixRow(
+                congregation_id=congregation.id,
+                congregation_name=congregation.name,
+                cells=cells,
+            )
+        )
 
     return MatrixResponse(dates=sorted_dates, rows=rows, holidays=holidays)
 
@@ -410,7 +435,9 @@ async def import_feiertage_endpoint(
 
     # 2. Kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag) — immer
     r = await import_kirchliche_festtage(
-        district_id=district_id, year=body.year, session=db,
+        district_id=district_id,
+        year=body.year,
+        session=db,
     )
     for k in totals:
         totals[k] += r[k]

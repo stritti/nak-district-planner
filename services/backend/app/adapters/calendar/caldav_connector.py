@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import httpx
 
@@ -93,7 +92,6 @@ class CalDAVConnector(CalendarConnector):
         # Parse the multi-status response
         # This is simplified - a production implementation would properly parse XML
         # For now, we'll look for calendar-data elements
-        import re
         from xml.etree import ElementTree as ET
 
         try:
@@ -126,7 +124,7 @@ class CalDAVConnector(CalendarConnector):
                 from icalendar import Calendar as ICalendar
 
                 cal = ICalendar.from_ical(cal_data.encode("utf-8"))
-            except Exception as exc:
+            except Exception:
                 # Skip invalid iCalendar data
                 continue
 

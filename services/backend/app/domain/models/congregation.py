@@ -35,7 +35,9 @@ class Congregation:
             id=uuid.uuid4(),
             name=name,
             district_id=district_id,
-            service_times=service_times if service_times is not None else list(DEFAULT_SERVICE_TIMES),
+            service_times=service_times
+            if service_times is not None
+            else list(DEFAULT_SERVICE_TIMES),
             created_at=now,
             updated_at=now,
             group_id=group_id,
