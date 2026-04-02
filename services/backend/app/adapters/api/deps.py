@@ -1,13 +1,16 @@
 import logging
-from typing import Annotated
+from typing import Annotated, NamedTuple
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
+from app.adapters.auth.jwt_claims import extract_memberships_from_claims
+from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
+from app.domain.models.membership import Membership
 from app.domain.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,20 @@ def set_oidc_adapter(adapter: OIDCAdapter) -> None:
     """Set the global OIDC adapter instance (called from main.py)."""
     global _oidc_adapter
     _oidc_adapter = adapter
+
+
+# Context for passing token claims through dependency chain
+_token_claims_context: dict = {}
+
+
+def set_token_claims(claims: dict) -> None:
+    """Store token claims in context for use in dependent functions."""
+    _token_claims_context.update(claims)
+
+
+def get_token_claims() -> dict:
+    """Get current token claims from context."""
+    return _token_claims_context.copy()
 
 
 async def get_current_user(
@@ -58,6 +75,9 @@ async def get_current_user(
     try:
         # Validate token and extract claims
         token_claims = await _oidc_adapter.validate_token(token)
+        # Store claims in context for dependent functions
+        set_token_claims(token_claims)
+
         user_info = _oidc_adapter.extract_user_info(token_claims)
 
         # Get or create user in database
@@ -102,6 +122,46 @@ async def get_current_user(
         ) from e
 
 
+class CurrentUserContext(NamedTuple):
+    """User context with RBAC information."""
+
+    user: User
+    memberships: list[Membership]
+
+    # Properties for easy access in authorization checks
+    @property
+    def user_sub(self) -> str:
+        return self.user.sub
+
+
+async def get_current_user_with_memberships(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> CurrentUserContext:
+    """
+    Dependency to get current user with their role memberships.
+
+    Used for endpoints that require role-based authorization.
+
+    Memberships are loaded from:
+    1. JWT claims (if OIDC provider includes custom membership claim)
+    2. Database lookup (fallback)
+    """
+    # Try to extract memberships from JWT claims first
+    token_claims = get_token_claims()
+    memberships = extract_memberships_from_claims(token_claims)
+
+    # If no memberships in JWT claims, fetch from database
+    if not memberships:
+        membership_repo = SqlMembershipRepository(session)
+        memberships = await membership_repo.get_all_by_user(user.sub)
+
+    return CurrentUserContext(user=user, memberships=memberships)
+
+
 # Type aliases for dependency injection
 CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUserWithMemberships = Annotated[
+    CurrentUserContext, Depends(get_current_user_with_memberships)
+]
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]

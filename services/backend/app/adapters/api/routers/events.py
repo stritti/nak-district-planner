@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.adapters.api.deps import CurrentUser, DbSession
+from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
+)
 from app.adapters.api.schemas.event import (
     EventCreate,
     EventListResponse,
@@ -14,6 +18,7 @@ from app.adapters.api.schemas.event import (
 )
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.domain.models.event import Event, EventStatus
+from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
@@ -21,9 +26,15 @@ router = APIRouter(prefix="/api/v1/events", tags=["events"])
 @router.post("", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
 async def create_event(
     body: EventCreate,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> EventResponse:
+    # Check if user has PLANNER role (or higher) in the district
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, body.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
     event = Event.create(
         title=body.title,
         description=body.description,
@@ -116,7 +127,7 @@ async def list_events(
 async def update_event(
     event_id: uuid.UUID,
     body: EventUpdate,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> EventResponse:
     """Reassign district/congregation or change status/category of an existing event."""
@@ -125,9 +136,25 @@ async def update_event(
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
+    # Check if user has PLANNER role (or higher) in the current district
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    # If reassigning to a different district, check access there too
     fields = body.model_fields_set
-    if "district_id" in fields and body.district_id is not None:
+    if (
+        "district_id" in fields
+        and body.district_id is not None
+        and body.district_id != event.district_id
+    ):
+        try:
+            assert_has_role_in_district(auth, Role.PLANNER, body.district_id)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
         event.district_id = body.district_id
+
     if "congregation_id" in fields:
         event.congregation_id = body.congregation_id  # None = district-level
     if "status" in fields and body.status is not None:
