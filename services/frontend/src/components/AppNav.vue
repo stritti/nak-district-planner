@@ -106,7 +106,7 @@ import { useOIDC } from '@/composables/useOIDC'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const oidc = useOIDC()
+const oidc = useOIDC(router)
 
 const menuOpen = ref(false)
 

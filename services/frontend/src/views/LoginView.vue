@@ -71,7 +71,7 @@ import { useRouter } from 'vue-router'
 import { useOIDC } from '@/composables/useOIDC'
 
 const router = useRouter()
-const oidc = useOIDC()
+const oidc = useOIDC(router)
 
 const email = ref('')
 const isLoading = ref(false)

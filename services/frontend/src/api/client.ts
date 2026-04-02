@@ -23,10 +23,20 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   // Task 8.3: Handle 401 and refresh token
   if (res.status === 401) {
     // Token might be expired or invalid
-    const { useOIDC } = await import('@/composables/useOIDC')
-    const oidc = useOIDC()
-
     try {
+      const { useOIDC } = await import('@/composables/useOIDC')
+      const { useRouter } = await import('vue-router')
+      
+      // Get router instance (may be undefined if called outside component context)
+      let routerInstance
+      try {
+        routerInstance = useRouter()
+      } catch {
+        // Router not available in this context, that's ok
+      }
+      
+      const oidc = useOIDC(routerInstance)
+
       // Try to refresh token
       await oidc.refreshToken()
 

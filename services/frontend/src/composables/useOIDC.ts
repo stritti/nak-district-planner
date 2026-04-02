@@ -11,7 +11,7 @@
  */
 
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, type Router } from 'vue-router'
 
 // Types
 export interface OIDCToken {
@@ -92,15 +92,17 @@ const discoveryUrl = import.meta.env.VITE_OIDC_DISCOVERY_URL || ''
 const clientId = import.meta.env.VITE_OIDC_CLIENT_ID || ''
 const redirectUri = import.meta.env.VITE_OIDC_REDIRECT_URI || ''
 
-export function useOIDC() {
-  let router: ReturnType<typeof useRouter> | null = null
+export function useOIDC(router?: Router) {
+  let _router: Router | null = router || null
   
-  // Lazy-initialize router to avoid issues during app startup
-  function getRouter(): ReturnType<typeof useRouter> {
-    if (!router) {
-      router = useRouter()
+  // Get or initialize router
+  // If passed as parameter, use it directly (avoids useRouter() inject)
+  // Otherwise, call useRouter() only when first needed (still in component context)
+  function getRouter(): Router {
+    if (!_router) {
+      _router = useRouter()
     }
-    return router
+    return _router
   }
 
   // State

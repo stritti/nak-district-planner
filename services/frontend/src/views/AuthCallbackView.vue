@@ -31,7 +31,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
-const oidc = useOIDC()
+const oidc = useOIDC(router)
 const authStore = useAuthStore()
 
 const loading = ref(true)
