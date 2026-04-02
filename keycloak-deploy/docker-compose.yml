@@ -1,8 +1,9 @@
+version: '3.8'
 
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.5
-    command: start --optimized
+    image: quay.io/keycloak/keycloak:26.5.6
+    command: start
     environment:
       KC_DB: postgres
       KC_DB_URL_HOST: db
@@ -21,7 +22,7 @@ services:
         condition: service_healthy
     networks:
       - traefik_net
-      - keycloak_net
+      - backend
     labels:
       - traefik.enable=true
       - traefik.http.routers.keycloak.rule=Host(`auth2.5tritti.de`)
@@ -32,25 +33,27 @@ services:
       - traefik.http.services.keycloak.loadbalancer.server.scheme=http
 
   db:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     environment:
       POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak}
       POSTGRES_USER: ${KEYCLOAK_DB_USER:-keycloak}
       POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-changeme}
     volumes:
-      - ./keycloak_db:/var/lib/postgresql/data
+      - keycloak_db:/var/lib/postgresql/data
     networks:
-      - keycloak_net
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak} -d ${KEYCLOAK_DB_NAME:-keycloak}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+volumes:
+  keycloak_db:
 
 networks:
   traefik_net:
     external: true
-
-  keycloak_net:
+    name: traefik_net
+  backend:
     driver: bridge
