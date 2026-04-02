@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { vi } from 'vitest'
+vi.mock('./client')
+import { describe, it, expect, beforeEach } from 'vitest'
 import { listEvents, updateEvent } from './events'
 import * as client from './client'
-
-vi.mock('./client')
 
 describe('listEvents', () => {
   beforeEach(() => {
@@ -20,14 +20,15 @@ describe('listEvents', () => {
     expect(client.apiFetch).toHaveBeenCalledWith('/api/v1/events?district_id=abc')
   })
 
-  it('appends multiple query params', async () => {
-    await listEvents({ district_id: 'abc', status: 'PUBLISHED', limit: 10, offset: 20 })
-    const url = vi.mocked(client.apiFetch).mock.calls[0][0] as string
-    expect(url).toContain('district_id=abc')
-    expect(url).toContain('status=PUBLISHED')
-    expect(url).toContain('limit=10')
-    expect(url).toContain('offset=20')
-  })
+   it('appends multiple query params', async () => {
+     await listEvents({ district_id: 'abc', status: 'PUBLISHED', limit: 10, offset: 20 })
+     const url = vi.mocked(client.apiFetch).mock.calls[0][0] as string
+     console.log('Generated URL:', url)  // Debug output
+     expect(url).toContain('district_id=abc')
+     expect(url).toContain('status=PUBLISHED')
+     expect(url).toContain('limit=10')
+     expect(url).toContain('offset=20')
+   })
 
   it('omits undefined params', async () => {
     await listEvents({ congregation_id: undefined, limit: 5 })
