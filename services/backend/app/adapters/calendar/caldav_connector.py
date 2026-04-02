@@ -11,7 +11,7 @@ or with bearer token: {"url": "...", "access_token": "token"}
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import httpx
 
