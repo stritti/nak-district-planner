@@ -22,6 +22,14 @@ docker compose logs -f keycloak  # Warte auf "is now running"
 
 Siehe [SETUP.md](docs/SETUP.md) für detaillierte Schritte.
 
+## Testing Deployment
+
+Nach dem Start, folge [DEPLOYMENT-TEST.md](docs/DEPLOYMENT-TEST.md) um:
+- ✅ Keycloak Health & JWKS Endpoint zu verifizieren
+- ✅ Realm & Client korrekt eingestellt sind
+- ✅ OAuth Token Endpoint funktioniert
+- ✅ CLIENT_SECRET zu erfassen für Backend .env
+
 ## Directory Structure
 
 ```
