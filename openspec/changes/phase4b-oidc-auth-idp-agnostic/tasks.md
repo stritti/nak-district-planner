@@ -1,20 +1,20 @@
 ## 1. Dependency and Configuration Setup
 
-- [ ] 1.1 Add `authlib` and `httpx` to `services/backend/pyproject.toml`
-- [ ] 1.2 Update `.env.example` with `OIDC_*` variables (remove `KEYCLOAK_*`)
-- [ ] 1.3 Create `services/backend/app/config.py` with OIDC configuration from env vars
-- [ ] 1.4 Add `@vueuse/core` to `services/frontend/package.json`
-- [ ] 1.5 Create frontend `.env.example` with `VITE_OIDC_*` variables
+- [x] 1.1 Add `authlib` and `httpx` to `services/backend/pyproject.toml`
+- [x] 1.2 Update `.env.example` with `OIDC_*` variables (remove `KEYCLOAK_*`)
+- [x] 1.3 Create `services/backend/app/config.py` with OIDC configuration from env vars
+- [x] 1.4 Add `@vueuse/core` to `services/frontend/package.json`
+- [x] 1.5 Create frontend `.env.example` with `VITE_OIDC_*` variables
 
 ## 2. Backend: OIDCAdapter Implementation
 
-- [ ] 2.1 Create `services/backend/app/adapters/auth/oidc.py` with `OIDCAdapter` class
-- [ ] 2.2 Implement OIDC discovery: fetch `/.well-known/openid-configuration`
-- [ ] 2.3 Implement JWKS fetching and caching (1-hour TTL)
-- [ ] 2.4 Implement JWT validation: signature, issuer, expiration, audience claims
-- [ ] 2.5 Implement error handling: connection errors, invalid tokens, cache miss fallbacks
-- [ ] 2.6 Write unit tests for OIDCAdapter (mocked OIDC provider)
-- [ ] 2.7 Add OIDC_ISSUER environment variable validation
+- [x] 2.1 Create `services/backend/app/adapters/auth/oidc.py` with `OIDCAdapter` class
+- [x] 2.2 Implement OIDC discovery: fetch `/.well-known/openid-configuration`
+- [x] 2.3 Implement JWKS fetching and caching (1-hour TTL)
+- [x] 2.4 Implement JWT validation: signature, issuer, expiration, audience claims
+- [x] 2.5 Implement error handling: connection errors, invalid tokens, cache miss fallbacks
+- [x] 2.6 Write unit tests for OIDCAdapter (mocked OIDC provider)
+- [x] 2.7 Add OIDC_ISSUER environment variable validation
 
 ## 3. Backend: User Model and get_current_user()
 
