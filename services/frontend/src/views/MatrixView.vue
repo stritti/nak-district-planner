@@ -195,7 +195,7 @@
       <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
         <div class="flex items-center justify-between mb-1">
           <h2 class="text-base font-semibold text-gray-900">
-            {{ modal.isGap ? 'Amtstragenden zuweisen' : 'Zuweisung bearbeiten' }}
+            {{ modal.isGap ? 'Amtstragende:n zuweisen' : 'Zuweisung bearbeiten' }}
           </h2>
           <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="closeModal">
             <XMarkIcon class="h-5 w-5" />
@@ -208,7 +208,7 @@
           <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
         </p>
 
-        <label class="block text-sm font-medium text-gray-700 mb-1">Amtstragender</label>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Amtstragende:r</label>
         <AutocompleteInput
           ref="autocompleteRef"
           v-model="modal.leaderInput"
