@@ -3,13 +3,13 @@ import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 
 import App from './App.vue'
-import { router } from './router'
+import { router, getRouterPinia } from './router'
 import { useOIDC } from './composables/useOIDC'
 import { useAuthStore } from './stores/auth'
 import './assets/main.css'
 
-const pinia = createPinia()
-pinia.use(piniaPluginPersistedstate)
+// Use the pinia instance from the router module to ensure consistency
+const pinia = getRouterPinia()
 
 const app = createApp(App)
 app.use(pinia)
