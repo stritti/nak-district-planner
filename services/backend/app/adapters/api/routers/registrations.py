@@ -115,7 +115,11 @@ async def submit_registration(
         user_sub=user_sub,
     )
     await SqlLeaderRegistrationRepository(db).save(reg)
-    logger.info(f"New registration submitted: {reg.id} ({reg.name}) for district {district_id}")
+    logger.info(
+        "New registration submitted: registration_id=%s district_id=%s",
+        reg.id,
+        district_id,
+    )
     return _to_response(reg)
 
 
