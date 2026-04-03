@@ -8,7 +8,7 @@ from icalendar import Calendar
 from icalendar import Event as ICalEvent
 from sqlalchemy import select
 
-from app.adapters.api.deps import ApiKeyGuard, DbSession
+from app.adapters.api.deps import CurrentUser, DbSession
 from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportTokenResponse
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
@@ -30,7 +30,7 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 async def create_export_token(
-    _: ApiKeyGuard, body: ExportTokenCreate, session: DbSession
+    _: CurrentUser, body: ExportTokenCreate, session: DbSession
 ) -> ExportTokenResponse:
     token = ExportToken.create(
         label=body.label,
@@ -49,7 +49,7 @@ async def create_export_token(
     response_model=list[ExportTokenResponse],
 )
 async def list_export_tokens(
-    _: ApiKeyGuard,
+    _: CurrentUser,
     session: DbSession,
     district_id: uuid.UUID | None = None,
 ) -> list[ExportTokenResponse]:
@@ -62,7 +62,7 @@ async def list_export_tokens(
     "/export-tokens/{token_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_export_token(_: ApiKeyGuard, token_id: uuid.UUID, session: DbSession) -> None:
+async def delete_export_token(_: CurrentUser, token_id: uuid.UUID, session: DbSession) -> None:
     repo = SqlExportTokenRepository(session)
     deleted = await repo.delete(token_id)
     if not deleted:

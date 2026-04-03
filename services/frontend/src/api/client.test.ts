@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { apiFetch } from './client'
+import { setActivePinia, createPinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 
 function makeResponse(
   body: unknown,
@@ -24,6 +26,7 @@ function makeResponse(
 describe('apiFetch', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
+    setActivePinia(createPinia())
   })
 
   it('returns parsed JSON on success', async () => {
@@ -34,7 +37,7 @@ describe('apiFetch', () => {
     expect(result).toEqual(data)
   })
 
-  it('includes Content-Type and X-API-Key headers', async () => {
+  it('includes Content-Type header', async () => {
     vi.mocked(fetch).mockResolvedValue(makeResponse({}) as unknown as Response)
 
     await apiFetch('/api/v1/test')
@@ -42,7 +45,34 @@ describe('apiFetch', () => {
     const [, options] = vi.mocked(fetch).mock.calls[0]
     const headers = (options as RequestInit).headers as Record<string, string>
     expect(headers['Content-Type']).toBe('application/json')
-    expect('X-API-Key' in headers).toBe(true)
+  })
+
+  it('includes Authorization header when token is present', async () => {
+    const authStore = useAuthStore()
+    const mockToken = {
+      accessToken: 'test_token_123',
+      idToken: 'test_id_token',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }
+    authStore.setToken(mockToken)
+
+    vi.mocked(fetch).mockResolvedValue(makeResponse({}) as unknown as Response)
+
+    await apiFetch('/api/v1/test')
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]
+    const headers = (options as RequestInit).headers as Record<string, string>
+    expect(headers['Authorization']).toBe('Bearer test_token_123')
+  })
+
+  it('does not include Authorization header when no token', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeResponse({}) as unknown as Response)
+
+    await apiFetch('/api/v1/test')
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]
+    const headers = (options as RequestInit).headers as Record<string, string>
+    expect(headers['Authorization']).toBeUndefined()
   })
 
   it('throws on non-ok response', async () => {
@@ -74,11 +104,11 @@ describe('apiFetch', () => {
   it('merges extra headers from options', async () => {
     vi.mocked(fetch).mockResolvedValue(makeResponse({}) as unknown as Response)
 
-    await apiFetch('/api/v1/test', { headers: { Authorization: 'Bearer token' } })
+    await apiFetch('/api/v1/test', { headers: { 'X-Custom': 'value' } })
 
     const [, options] = vi.mocked(fetch).mock.calls[0]
     const headers = (options as RequestInit).headers as Record<string, string>
-    expect(headers['Authorization']).toBe('Bearer token')
+    expect(headers['X-Custom']).toBe('value')
     expect(headers['Content-Type']).toBe('application/json')
   })
 })

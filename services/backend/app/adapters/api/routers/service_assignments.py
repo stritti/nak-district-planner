@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.adapters.api.deps import ApiKeyGuard, DbSession
+from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
+)
 from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentCreate,
     ServiceAssignmentResponse,
@@ -13,6 +17,7 @@ from app.adapters.api.schemas.service_assignment import (
 )
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
+from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
 
 router = APIRouter(
@@ -37,11 +42,19 @@ def _assignment_response(assignment: ServiceAssignment) -> ServiceAssignmentResp
 async def create_assignment(
     event_id: uuid.UUID,
     body: ServiceAssignmentCreate,
-    _: ApiKeyGuard,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> ServiceAssignmentResponse:
-    if not await SqlEventRepository(db).get(event_id):
+    event_repo = SqlEventRepository(db)
+    event = await event_repo.get(event_id)
+    if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+
+    # Check if user has PLANNER role (or higher) in the district
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     assignment = ServiceAssignment.create(
         event_id=event_id,
@@ -56,11 +69,19 @@ async def create_assignment(
 @router.get("", response_model=list[ServiceAssignmentResponse])
 async def list_assignments(
     event_id: uuid.UUID,
-    _: ApiKeyGuard,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> list[ServiceAssignmentResponse]:
-    if not await SqlEventRepository(db).get(event_id):
+    event_repo = SqlEventRepository(db)
+    event = await event_repo.get(event_id)
+    if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+
+    # Check if user has VIEWER role (or higher) in the district
+    try:
+        assert_has_role_in_district(auth, Role.VIEWER, event.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     assignments = await SqlServiceAssignmentRepository(db).list_by_event(event_id)
     return [_assignment_response(a) for a in assignments]
@@ -71,7 +92,7 @@ async def update_assignment(
     event_id: uuid.UUID,
     assignment_id: uuid.UUID,
     body: ServiceAssignmentUpdate,
-    _: ApiKeyGuard,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> ServiceAssignmentResponse:
     repo = SqlServiceAssignmentRepository(db)
@@ -80,6 +101,18 @@ async def update_assignment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
+
+    # Get the event to check district access
+    event_repo = SqlEventRepository(db)
+    event = await event_repo.get(assignment.event_id)
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+
+    # Check if user has PLANNER role (or higher) in the district
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     fields = body.model_fields_set
     if "leader_id" in fields:

@@ -8,5 +8,19 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import AppNav from '@/components/AppNav.vue'
+import { useOIDC } from '@/composables/useOIDC'
+
+// Get router instance in component context (safe for inject)
+const router = useRouter()
+
+// Task 6.3: Initialize useOIDC in component context, passing router to avoid inject issues
+const oidc = useOIDC(router)
+
+// Restore token from persisted store
+onMounted(() => {
+  oidc.initialize()
+})
 </script>

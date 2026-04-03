@@ -6,7 +6,11 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.adapters.api.deps import ApiKeyGuard, DbSession
+from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
+)
 from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationCreate,
     CalendarIntegrationListResponse,
@@ -18,6 +22,7 @@ from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegra
 from app.application.crypto import CryptoError, encrypt_credentials
 from app.application.sync_service import run_sync
 from app.domain.models.calendar_integration import CalendarIntegration
+from app.domain.models.role import Role
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +49,15 @@ def _to_response(integration: CalendarIntegration) -> CalendarIntegrationRespons
 @router.post("", response_model=CalendarIntegrationResponse, status_code=status.HTTP_201_CREATED)
 async def create_calendar_integration(
     body: CalendarIntegrationCreate,
-    _: ApiKeyGuard,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> CalendarIntegrationResponse:
+    # Check if user has DISTRICT_ADMIN role in the district
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
     credentials_enc = encrypt_credentials(body.credentials)
     integration = CalendarIntegration.create(
         district_id=body.district_id,
@@ -65,7 +76,7 @@ async def create_calendar_integration(
 
 @router.get("", response_model=CalendarIntegrationListResponse)
 async def list_calendar_integrations(
-    _: ApiKeyGuard,
+    _: CurrentUser,
     db: DbSession,
     district_id: uuid.UUID | None = None,
 ) -> CalendarIntegrationListResponse:
@@ -83,7 +94,7 @@ async def list_calendar_integrations(
 @router.post("/{integration_id}/sync", response_model=SyncResult)
 async def trigger_sync(
     integration_id: uuid.UUID,
-    _: ApiKeyGuard,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> SyncResult:
     """Trigger an immediate synchronisation for one integration (UC-02).
@@ -96,6 +107,12 @@ async def trigger_sync(
     integration = await repo.get(integration_id)
     if integration is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
+
+    # Check if user has DISTRICT_ADMIN role in the district (sync requires admin access)
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     try:
         summary = await run_sync(integration_id, db)
@@ -113,7 +130,7 @@ async def trigger_sync(
 async def update_calendar_integration(
     integration_id: uuid.UUID,
     body: CalendarIntegrationUpdate,
-    _: ApiKeyGuard,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> CalendarIntegrationResponse:
     repo = SqlCalendarIntegrationRepository(db)
@@ -122,6 +139,12 @@ async def update_calendar_integration(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden"
         )
+
+    # Check if user has DISTRICT_ADMIN role in the district
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
@@ -143,12 +166,20 @@ async def update_calendar_integration(
 @router.delete("/{integration_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_calendar_integration(
     integration_id: uuid.UUID,
-    _: ApiKeyGuard,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> None:
     repo = SqlCalendarIntegrationRepository(db)
-    if not await repo.get(integration_id):
+    integration = await repo.get(integration_id)
+    if not integration:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden"
         )
+
+    # Check if user has DISTRICT_ADMIN role in the district
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
     await repo.delete(integration_id)

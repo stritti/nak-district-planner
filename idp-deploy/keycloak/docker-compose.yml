@@ -1,0 +1,93 @@
+version: "3.8"
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5
+    command: start
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: db
+      KC_DB_URL_DATABASE: ${KEYCLOAK_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-changeme}
+      
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-changeme}
+    
+      # HTTP Configuration
+      KC_HTTP_RELATIVE_PATH: /
+      KC_HTTP_ENABLED: 'true'
+      
+      # HTTPS & Hostname Configuration
+      KC_HOSTNAME: auth.5tritti.de
+      KC_HOSTNAME_STRICT: 'false'
+      
+      # CRITICAL: Traefik handles HTTPS, but Keycloak must know about it
+      # Set to 'false' because Traefik terminates HTTPS
+      KC_STRICT_HTTPS: 'false'
+      
+      # Cache Configuration
+      KC_CACHE: local
+      
+      # CRITICAL: Reverse Proxy Configuration
+      KC_PROXY: edge
+      KC_PROXY_HEADERS: xforwarded
+      KC_PROXY_ADDRESS_FORWARDING: 'true'
+      
+      # CRITICAL: Cookie Configuration for cross-origin
+      # These settings ensure cookies are set properly behind Traefik
+      KC_SPI_COOKIES_HTTP_ONLY: 'true'
+      KC_SPI_COOKIES_SECURE: 'false'  # Traefik handles HTTPS, not Keycloak
+      KC_SPI_COOKIES_SAME_SITE: 'Lax'
+      
+      # Session Configuration
+      KC_SESSION_CACHE: distributed
+      KC_DISTRIBUTED_CACHE_STORE: default
+      
+      # Logging
+      KC_LOG_LEVEL: info
+      
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - traefik_net
+      - keycloak_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik_net    
+      - traefik.http.routers.keycloak.rule=Host(`auth.5tritti.de`)
+      - traefik.http.routers.keycloak.entrypoints=websecure
+      - traefik.http.routers.keycloak.tls=true
+      - traefik.http.routers.keycloak.tls.certresolver=letsencrypt
+      - traefik.http.services.keycloak.loadbalancer.server.port=8080
+      - traefik.http.services.keycloak.loadbalancer.server.scheme=http
+      # IMPORTANT: Pass X-Forwarded headers to Keycloak
+      - traefik.http.middlewares.keycloak-headers.headers.customrequestheaders.X-Forwarded-Proto=https
+      - traefik.http.middlewares.keycloak-headers.headers.customrequestheaders.X-Forwarded-Host=auth.5tritti.de
+      - traefik.http.routers.keycloak.middlewares=keycloak-headers
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak}
+      POSTGRES_USER: ${KEYCLOAK_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-changeme}
+    volumes:
+      - ./keycloak_db:/var/lib/postgresql/data
+    networks:
+      - keycloak_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak} -d ${KEYCLOAK_DB_NAME:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+networks:
+  traefik_net:
+    external: true
+
+  keycloak_net:
+    driver: bridge
+
