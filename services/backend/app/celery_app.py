@@ -3,6 +3,7 @@ import os
 from celery import Celery
 from celery.schedules import crontab, timedelta
 
+from app.adapters.db.session import engine
 from app.telemetry import setup_telemetry
 
 celery = Celery(
@@ -39,4 +40,4 @@ celery.conf.update(
     },
 )
 
-setup_telemetry()
+setup_telemetry(sqlalchemy_engine=engine)

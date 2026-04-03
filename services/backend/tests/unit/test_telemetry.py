@@ -114,6 +114,26 @@ class TestSetupTelemetryEnabled:
 
             mock_exp.assert_called_once_with(endpoint="http://collector:4318/v1/traces")
 
+    def test_otlp_exporter_strips_trailing_slash(self):
+        """A trailing slash in OTEL_ENDPOINT must not produce a double slash in the URL."""
+        mock_settings = _make_settings(endpoint="http://collector:4318/")
+
+        with (
+            patch("app.telemetry.settings", mock_settings),
+            patch("app.telemetry.Resource.create"),
+            patch("app.telemetry.TracerProvider"),
+            patch("app.telemetry.trace.set_tracer_provider"),
+            patch("app.telemetry.OTLPSpanExporter") as mock_exp,
+            patch("app.telemetry.BatchSpanProcessor"),
+            patch("app.telemetry.FastAPIInstrumentor"),
+            patch("app.telemetry.SQLAlchemyInstrumentor"),
+            patch("app.telemetry.HTTPXClientInstrumentor"),
+            patch("app.telemetry.CeleryInstrumentor"),
+        ):
+            setup_telemetry()
+
+            mock_exp.assert_called_once_with(endpoint="http://collector:4318/v1/traces")
+
     def test_batch_span_processor_added_to_provider(self):
         """A BatchSpanProcessor wrapping the exporter must be added to the provider."""
         mock_settings = _make_settings()
@@ -244,3 +264,24 @@ class TestSetupTelemetryEnabled:
 
             mock_httpx_instance.instrument.assert_called_once()
             mock_celery_instance.instrument.assert_called_once()
+
+    def test_idempotent_when_already_initialized(self):
+        """setup_telemetry() must be a no-op when a custom TracerProvider is already set."""
+        mock_settings = _make_settings()
+
+        # Return a non-ProxyTracerProvider to simulate an already-initialized state.
+        with (
+            patch("app.telemetry.settings", mock_settings),
+            patch("app.telemetry.trace.get_tracer_provider", return_value=MagicMock()),
+            patch("app.telemetry.TracerProvider") as mock_tp,
+            patch("app.telemetry.trace.set_tracer_provider"),
+            patch("app.telemetry.OTLPSpanExporter"),
+            patch("app.telemetry.BatchSpanProcessor"),
+            patch("app.telemetry.FastAPIInstrumentor"),
+            patch("app.telemetry.SQLAlchemyInstrumentor"),
+            patch("app.telemetry.HTTPXClientInstrumentor"),
+            patch("app.telemetry.CeleryInstrumentor"),
+        ):
+            setup_telemetry()
+
+            mock_tp.assert_not_called()

@@ -1,8 +1,11 @@
 """OpenTelemetry setup for the NAK District Planner backend.
 
-Initialises a TracerProvider with an OTLP/HTTP exporter and automatically
-instruments FastAPI, SQLAlchemy, HTTPX, and Celery when telemetry is enabled.
-All instrumentation is skipped when ``settings.otel_enabled`` is ``False``.
+Initialises a TracerProvider with an OTLP/HTTP exporter when telemetry is
+enabled.  HTTPX and Celery are instrumented automatically, while FastAPI and
+SQLAlchemy are only instrumented when the corresponding objects are passed to
+``setup_telemetry()``.  All instrumentation is skipped when
+``settings.otel_enabled`` is ``False`` or when a non-default TracerProvider is
+already registered (idempotency guard).
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.trace import ProxyTracerProvider
 
 from app.config import settings
 
@@ -43,9 +47,17 @@ def setup_telemetry(
         logger.debug("OpenTelemetry is disabled (OTEL_ENABLED=false).")
         return
 
+    # Idempotency: skip if a custom TracerProvider is already registered.
+    # This prevents duplicate spans when the function is called more than once
+    # (e.g. hot-reload, multiple imports, or test suites).
+    if not isinstance(trace.get_tracer_provider(), ProxyTracerProvider):
+        logger.debug("OpenTelemetry already initialized; skipping.")
+        return
+
+    otel_base_endpoint = settings.otel_endpoint.rstrip("/")
     resource = Resource.create({SERVICE_NAME: settings.otel_service_name})
 
-    exporter = OTLPSpanExporter(endpoint=f"{settings.otel_endpoint}/v1/traces")
+    exporter = OTLPSpanExporter(endpoint=f"{otel_base_endpoint}/v1/traces")
     provider = TracerProvider(resource=resource)
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
@@ -67,5 +79,5 @@ def setup_telemetry(
     logger.info(
         "OpenTelemetry tracing active — service=%s endpoint=%s",
         settings.otel_service_name,
-        settings.otel_endpoint,
+        otel_base_endpoint,
     )
