@@ -22,24 +22,11 @@
         <!-- Login Form -->
         <div v-else>
           <form @submit.prevent="handleLogin" class="space-y-6">
-            <div>
-              <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
-                E-Mail oder Benutzername
-              </label>
-              <input
-                id="email"
-                v-model="email"
-                type="text"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                placeholder="name@example.com"
-              />
-            </div>
-
             <button
               type="submit"
               class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium transition-colors"
             >
-              Mit OIDC anmelden
+              Mit Single Sign-on anmelden
             </button>
           </form>
 
@@ -73,7 +60,6 @@ import { useOIDC } from '@/composables/useOIDC'
 const router = useRouter()
 const oidc = useOIDC(router)
 
-const email = ref('')
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 

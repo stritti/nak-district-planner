@@ -27,12 +27,10 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useOIDC } from '@/composables/useOIDC'
-import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const oidc = useOIDC(router)
-const authStore = useAuthStore()
 
 const loading = ref(true)
 const success = ref(false)
@@ -42,6 +40,15 @@ async function handleCallback() {
   try {
     loading.value = true
     error.value = null
+
+    const providerError = route.query.error as string | undefined
+    const providerErrorDescription = route.query.error_description as string | undefined
+    if (providerError) {
+      error.value = providerErrorDescription
+        ? `${providerError}: ${providerErrorDescription}`
+        : providerError
+      return
+    }
 
     // Get authorization code from URL
     const code = route.query.code as string
@@ -72,17 +79,12 @@ async function handleCallback() {
     }
 
     // Task 6.2: Exchange code for tokens
-    console.debug('Exchanging code for tokens...')
     await oidc.exchangeCodeForToken(code)
 
     if (!oidc.token.value || !oidc.user.value) {
       error.value = 'Token-Austausch fehlgeschlagen'
       return
     }
-
-    console.debug('Token exchange successful, storing in auth store')
-    // Task 7.2: Store in Pinia store (persistent)
-    authStore.setToken(oidc.token.value, oidc.user.value)
 
     success.value = true
 

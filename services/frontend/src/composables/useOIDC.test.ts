@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { useOIDC } from '@/composables/useOIDC'
 
 // Mock Vue Router
@@ -13,7 +14,17 @@ vi.mock('vue-router', () => ({
 }))
 
 describe('useOIDC', () => {
+  function createOidc() {
+    return useOIDC(undefined, {
+      discoveryUrl: 'https://auth.example.com/.well-known/openid-configuration',
+      clientId: 'frontend-test-client',
+      redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid profile email',
+    })
+  }
+
   beforeEach(() => {
+    setActivePinia(createPinia())
     sessionStorage.clear()
     vi.clearAllMocks()
   })
@@ -36,7 +47,7 @@ describe('useOIDC', () => {
       )
     )
 
-    const { getAuthorizationUrl } = useOIDC()
+    const { getAuthorizationUrl } = createOidc()
     const url = await getAuthorizationUrl()
 
     expect(url).toContain('code_challenge=')
@@ -58,7 +69,7 @@ describe('useOIDC', () => {
       )
     )
 
-    const { getAuthorizationUrl } = useOIDC()
+    const { getAuthorizationUrl } = createOidc()
     const url = await getAuthorizationUrl()
 
     expect(url).toContain('https://auth.example.com/authorize')
@@ -82,7 +93,7 @@ describe('useOIDC', () => {
       )
     )
 
-    const { getAuthorizationUrl } = useOIDC()
+    const { getAuthorizationUrl } = createOidc()
     await getAuthorizationUrl()
 
     expect(sessionStorage.getItem('oidc_code_verifier')).toBeTruthy()
@@ -112,7 +123,7 @@ describe('useOIDC', () => {
       )
     )
 
-    const { exchangeCodeForToken } = useOIDC()
+    const { exchangeCodeForToken } = createOidc()
 
     await expect(exchangeCodeForToken('auth_code_123')).rejects.toThrow()
   })
