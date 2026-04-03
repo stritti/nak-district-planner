@@ -5,6 +5,7 @@ from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
+from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "SqlEventRepository",
     "SqlExportTokenRepository",
     "SqlLeaderRepository",
+    "SqlLeaderRegistrationRepository",
     "SqlServiceAssignmentRepository",
 ]
