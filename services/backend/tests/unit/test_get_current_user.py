@@ -4,7 +4,6 @@ Tests for user authentication dependencies (get_current_user, user auto-creation
 Tests cover JWT validation, user creation, and dependency injection.
 """
 
-import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.api.deps import get_current_user, set_oidc_adapter
 from app.adapters.auth.oidc import OIDCAdapter
-from app.adapters.db.repositories.user import SqlUserRepository
 from app.domain.models.user import User
 
 

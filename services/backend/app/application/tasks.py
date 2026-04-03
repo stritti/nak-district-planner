@@ -186,3 +186,52 @@ def auto_import_feiertage() -> dict:
         }
 
     return asyncio.run(_run())
+
+
+@celery.task(name="import_feiertage")
+def import_feiertage_task(district_id: str, year: int, state_code: str | None = None) -> dict:
+    """Import German public holidays (Feiertage) for a single district and year.
+
+    This is an on-demand task for a specific district/year combination.
+    Import is idempotent — safe to run multiple times.
+    """
+    from app.adapters.db.session import AsyncSessionLocal
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as session:
+            from app.application.feiertage_service import import_feiertage
+
+            result = await import_feiertage(
+                district_id=uuid.UUID(district_id),
+                year=year,
+                state_code=state_code,
+                session=session,
+            )
+            await session.commit()
+            return result
+
+    return asyncio.run(_run())
+
+
+@celery.task(name="import_kirchliche_festtage")
+def import_kirchliche_festtage_task(district_id: str, year: int) -> dict:
+    """Import kirchliche Festtage (Palm Sunday, Easter, Pentecost) for a single district and year.
+
+    This is an on-demand task for a specific district/year combination.
+    Import is idempotent — safe to run multiple times.
+    """
+    from app.adapters.db.session import AsyncSessionLocal
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as session:
+            from app.application.feiertage_service import import_kirchliche_festtage
+
+            result = await import_kirchliche_festtage(
+                district_id=uuid.UUID(district_id),
+                year=year,
+                session=session,
+            )
+            await session.commit()
+            return result
+
+    return asyncio.run(_run())

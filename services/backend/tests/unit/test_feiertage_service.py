@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 from app.application.feiertage_service import (
@@ -187,6 +187,7 @@ class TestImportKirchlicheFesttage:
             start_at=datetime(2026, 4, 5, 0, 0, 0, tzinfo=timezone.utc),
             end_at=datetime(2026, 4, 5, 23, 59, 59, tzinfo=timezone.utc),
             district_id=district_id,
+            content_hash=_content_hash("2026-04-05", "Ostersonntag"),
         )
 
         event_repo_mock = AsyncMock()
@@ -250,7 +251,7 @@ class TestImportFeiertage:
         district_id = uuid.uuid4()
         session = AsyncMock()
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.json.return_value = [
             {
                 "date": "2026-04-02",
@@ -286,7 +287,7 @@ class TestImportFeiertage:
         district_id = uuid.uuid4()
         session = AsyncMock()
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         # Response with national holiday + state-specific holiday
         mock_response.json.return_value = [
             {
