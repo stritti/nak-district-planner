@@ -153,7 +153,5 @@ class SqlEventRepository(EventRepository):
 
         Returns the number of deleted rows.
         """
-        result = await self._session.execute(
-            delete(EventORM).where(EventORM.end_at < cutoff)
-        )
+        result = await self._session.execute(delete(EventORM).where(EventORM.end_at < cutoff))
         return result.rowcount

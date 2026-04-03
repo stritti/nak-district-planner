@@ -125,4 +125,3 @@ class TestCleanupOldEvents:
         assert cutoff.year == 2022
         assert cutoff.month == 2
         assert cutoff.day == 28
-

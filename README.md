@@ -338,3 +338,90 @@ curl "http://localhost/api/v1/events?district_id=<uuid>&limit=50" \
 ```
 
 Interaktive API-Dokumentation (nur Entwicklung): <http://localhost:8000/docs>
+
+---
+
+## Phase 4b: OIDC Authentication
+
+NAK Planner supports OpenID Connect (OIDC) authentication with a choice of two identity providers:
+
+- **Keycloak** — Mature, feature-rich Java-based IAM
+- **Authentik** — Modern, lightweight Python-based authentication platform
+
+Both support the **Authorization Code Flow with PKCE** for secure frontend authentication.
+
+### Quick Start
+
+#### 1. Choose an Identity Provider
+
+**Option A: Keycloak** (recommended for enterprises)
+```bash
+cd idp-deploy/keycloak
+docker compose up -d
+python3 setup_keycloak_realm.py --keycloak-url http://localhost:8080 --admin-password admin_dev_pw
+```
+
+**Option B: Authentik** (recommended for simple setups)
+```bash
+cd idp-deploy/authentik
+docker compose up -d
+python3 setup_authentik_oauth2.py --authentik-url http://localhost:9000 --bootstrap-token akadmin:insecure
+```
+
+#### 2. Configure Frontend
+
+Copy OIDC settings from setup script output to `services/frontend/.env.local`:
+
+```env
+VITE_OIDC_DISCOVERY_URL=http://localhost:8080/realms/nak-planner/.well-known/openid-configuration
+VITE_OIDC_CLIENT_ID=nak-planner-frontend
+VITE_OIDC_REDIRECT_URI=http://localhost:5173/auth/callback
+```
+
+#### 3. Start Frontend
+
+```bash
+cd services/frontend
+bun install
+bun run dev
+```
+
+Open <http://localhost:5173/login> and click "Login with OIDC"
+
+Test credentials: `testuser` / `testpassword123`
+
+### Production Deployment
+
+#### Keycloak Production
+```bash
+bash idp-deploy/keycloak/deploy_keycloak.sh \
+  /opt/keycloak \
+  https://auth.example.com \
+  your_secure_admin_password
+```
+
+#### Authentik Production
+```bash
+SECRET_KEY=$(openssl rand -base64 32)
+bash idp-deploy/authentik/deploy_authentik.sh \
+  /opt/authentik \
+  https://auth.example.com \
+  "$SECRET_KEY"
+```
+
+### Documentation
+
+- **Detailed Configuration**: See `idp-deploy/CONFIGURATION.md`
+- **Keycloak Setup**: See `idp-deploy/keycloak/OIDC-SETUP.md`
+- **Authentik Setup**: See `idp-deploy/authentik/OIDC-SETUP.md`
+- **Frontend OIDC**: See `services/frontend/src/composables/useOIDC.ts`
+
+### Features
+
+- ✅ **PKCE Flow** (RFC 7636) for secure SPAs
+- ✅ **Automatic Token Refresh** (5 min before expiry)
+- ✅ **401 Error Handling** with silent token refresh
+- ✅ **Logout with Token Revocation**
+- ✅ **JWT Token Parsing** for user claims
+- ✅ **Session Storage** for PKCE verifier (auto-cleared on close)
+- ✅ **IDP-Agnostic** (works with both Keycloak and Authentik)

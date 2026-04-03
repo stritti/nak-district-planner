@@ -2,12 +2,15 @@ import sys
 import traceback
 from contextlib import asynccontextmanager
 
+import httpx
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.adapters.api import deps
 from app.adapters.api.routers import (
+    auth,
     calendar_integrations,
     districts,
     events,
@@ -15,6 +18,7 @@ from app.adapters.api.routers import (
     leaders,
     service_assignments,
 )
+from app.adapters.auth.oidc import OIDCAdapter
 from app.config import settings
 
 
@@ -22,10 +26,36 @@ from app.config import settings
 async def lifespan(app: FastAPI):
     import asyncio
 
+    # Run migrations
     cfg = Config("alembic.ini")
     # env.py uses asyncio.run() internally — must run in a thread without an active loop
     await asyncio.to_thread(command.upgrade, cfg, "head")
+
+    # Initialize OIDC adapter
+    httpx_client = httpx.AsyncClient()
+    oidc_adapter = OIDCAdapter(
+        discovery_url=settings.oidc_discovery_url,
+        client_id=settings.oidc_client_id,
+        client_secret=settings.oidc_client_secret,
+        issuer=settings.oidc_issuer,
+        httpx_client=httpx_client,
+    )
+
+    # Perform OIDC discovery early to ensure provider is reachable
+    try:
+        await oidc_adapter.discover()
+        print(f"✓ OIDC discovery successful: {oidc_adapter.issuer}")
+    except Exception as e:
+        print(f"⚠ OIDC discovery failed: {e}")
+        # Continue anyway, it might work at runtime
+
+    # Set global OIDC adapter for use in dependencies
+    deps.set_oidc_adapter(oidc_adapter)
+
     yield
+
+    # Cleanup
+    await oidc_adapter.close()
 
 
 app = FastAPI(
@@ -49,6 +79,8 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+# Register routers
+app.include_router(auth.router)
 app.include_router(events.router)
 app.include_router(service_assignments.router)
 app.include_router(calendar_integrations.router)

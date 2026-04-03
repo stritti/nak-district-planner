@@ -138,7 +138,7 @@
     >
       <div class="modal-panel max-w-lg">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="modal-title">Amtstragenden hinzufügen</h2>
+          <h2 class="modal-title">Amtstragende:n hinzufügen</h2>
           <button class="modal-close" @click="addModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
@@ -237,7 +237,7 @@
     >
       <div class="modal-panel max-w-lg">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="modal-title">Amtstragenden bearbeiten</h2>
+          <h2 class="modal-title">Amtstragende:n bearbeiten</h2>
           <button class="modal-close" @click="editModal.open = false">
             <XMarkIcon class="h-5 w-5" />
           </button>
@@ -596,7 +596,7 @@ async function saveEdit() {
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 async function confirmDelete(leader: LeaderResponse) {
-  if (!confirm(`Amtstragenden "${leader.rank ? leader.rank + ' ' : ''}${leader.name}" wirklich löschen?`)) return
+  if (!confirm(`Amtstragende:n "${leader.rank ? leader.rank + ' ' : ''}${leader.name}" wirklich löschen?`)) return
   saving.value = true
   try {
     await deleteLeader(selectedDistrictId.value, leader.id)

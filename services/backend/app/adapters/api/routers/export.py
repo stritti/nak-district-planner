@@ -8,12 +8,13 @@ from icalendar import Calendar
 from icalendar import Event as ICalEvent
 from sqlalchemy import select
 
-from app.adapters.api.deps import ApiKeyGuard, DbSession
+from app.adapters.api.deps import CurrentUser, DbSession
 from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportTokenResponse
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
+from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.event import EventStatus
 from app.domain.models.export_token import ExportToken, TokenType
@@ -29,7 +30,7 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 async def create_export_token(
-    _: ApiKeyGuard, body: ExportTokenCreate, session: DbSession
+    _: CurrentUser, body: ExportTokenCreate, session: DbSession
 ) -> ExportTokenResponse:
     token = ExportToken.create(
         label=body.label,
@@ -48,7 +49,7 @@ async def create_export_token(
     response_model=list[ExportTokenResponse],
 )
 async def list_export_tokens(
-    _: ApiKeyGuard,
+    _: CurrentUser,
     session: DbSession,
     district_id: uuid.UUID | None = None,
 ) -> list[ExportTokenResponse]:
@@ -61,7 +62,7 @@ async def list_export_tokens(
     "/export-tokens/{token_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_export_token(_: ApiKeyGuard, token_id: uuid.UUID, session: DbSession) -> None:
+async def delete_export_token(_: CurrentUser, token_id: uuid.UUID, session: DbSession) -> None:
     repo = SqlExportTokenRepository(session)
     deleted = await repo.delete(token_id)
     if not deleted:
@@ -122,13 +123,37 @@ async def export_calendar_ics(token_str: str, session: DbSession) -> Response:
             offset=0,
         )
 
-    # Load assignments in one batch query (for non-leader tokens)
+    # Load assignments in one batch query
     sa_repo = SqlServiceAssignmentRepository(session)
     assignments = await sa_repo.list_by_events([e.id for e in events])
+
+    # For leader tokens: keep only assignments for this specific leader
+    if export_token.leader_id:
+        assignments = [a for a in assignments if a.leader_id == export_token.leader_id]
+
+    # Batch-load leaders so leader_id-only assignments can be resolved to a display name
+    if export_token.district_id:
+        leader_repo = SqlLeaderRepository(session)
+        leaders = await leader_repo.list_by_district(export_token.district_id)
+        leaders_by_id = {ldr.id: ldr for ldr in leaders}
+    else:
+        leaders_by_id = {}
+
+    # Build assignment_map: prefer non-empty leader_name; fall back to leader_id lookup
     assignment_map: dict[uuid.UUID, str | None] = {}
     for a in assignments:
-        if a.event_id not in assignment_map:
-            assignment_map[a.event_id] = a.leader_name
+        display_name: str | None = None
+        if a.leader_name:
+            display_name = a.leader_name
+        elif a.leader_id and a.leader_id in leaders_by_id:
+            ldr = leaders_by_id[a.leader_id]
+            rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
+            display_name = f"{rank_prefix}{ldr.name}"
+
+        # For each event keep the best name (non-None wins over None)
+        existing = assignment_map.get(a.event_id)
+        if a.event_id not in assignment_map or (display_name is not None and existing is None):
+            assignment_map[a.event_id] = display_name
 
     # Load congregation names for LOCATION field
     cong_result = await session.execute(

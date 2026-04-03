@@ -105,7 +105,7 @@ const sections = computed(() => {
   const result: { label: string | null; items: AutocompleteOption[] }[] = []
   if (priority.length > 0) result.push({ label: 'Eigene Gemeinde', items: priority })
   if (other.length > 0)
-    result.push({ label: priority.length > 0 ? 'Weitere Amtsträger' : null, items: other })
+    result.push({ label: priority.length > 0 ? 'Weitere Amtstragende' : null, items: other })
   return result
 })
 

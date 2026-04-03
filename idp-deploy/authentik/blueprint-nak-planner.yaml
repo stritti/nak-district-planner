@@ -1,0 +1,227 @@
+# Authentik Blueprint für NAK Planner OIDC
+# 
+# Blueprint importieren:
+#   1. Authentik Admin Console öffnen: http://localhost:9000/if/admin/
+#   2. Admin → System → Blueprints
+#   3. "Create" → diese Datei uploaden und aktivieren
+#
+# Oder über CLI/API:
+#   curl -X POST http://authentik:9000/api/v3/blueprints/instances/ \
+#     -H "Authorization: Bearer YOUR_TOKEN" \
+#     -H "Content-Type: application/yaml" \
+#     -d @blueprint-nak-planner.yaml
+
+version: 1
+metadata:
+  name: NAK Planner OIDC Blueprint
+  description: Complete OIDC setup for NAK District Planner
+  labels:
+    app: nak-planner
+    version: "1.0"
+
+context:
+  # These can be overridden when importing the blueprint
+  frontend_url: http://localhost:5173
+  authentik_url: http://authentik:9000
+  provider_name: "NAK Planner OIDC"
+  client_id: "nak-planner-frontend"
+  app_name: "NAK Planner"
+  app_slug: "nak-planner"
+
+entries:
+  # ============================================================================
+  # 1. OIDC/OAuth2 Provider
+  # ============================================================================
+  - model: authentik_core.provider
+    identifiers:
+      name: "{{ context.provider_name }}"
+    attrs:
+      name: "{{ context.provider_name }}"
+      protocol: openid-connect
+      authorization_flow: "default-provider-authorization-implicit-consent"
+      property_mappings:
+        - "authentik default OIDC Mapping: OpenID 'profile'"
+        - "authentik default OIDC Mapping: OpenID 'email'"
+
+  # OpenID Connect specific settings
+  - model: authentik_providers_openidconnect.openidconnectprovider
+    identifiers:
+      name: "{{ context.provider_name }}"
+    attrs:
+      name: "{{ context.provider_name }}"
+      client_type: public  # PKCE flow - no client secret in browser
+      client_id: "{{ context.client_id }}"
+      redirect_uris: |
+        {{ context.frontend_url }}/auth/callback
+        http://localhost:5173/auth/callback
+        https://localhost:3000/auth/callback
+      rsa_key: null  # Auto-generate
+      encryption_key: null
+      force_https: false  # Set to true in production
+      allow_unsafe_redirect_uris: true  # For localhost dev
+      include_claims_in_id_token: true
+      token_bearer_introspection: true
+
+  # ============================================================================
+  # 2. Authorize/Consent Flow (allow all authenticated users)
+  # ============================================================================
+  - model: authentik_flows.flow
+    identifiers:
+      slug: "nak-planner-authorize-flow"
+    attrs:
+      name: "NAK Planner Authorization Flow"
+      slug: "nak-planner-authorize-flow"
+      title: "Authorize NAK Planner"
+      description: "Authorization flow for NAK District Planner"
+      designation: authorization
+      authentication: "This step will be performed by the user before they can authorize."
+
+  # Redirect to provider stage
+  - model: authentik_stages_redirect.redirectstage
+    identifiers:
+      name: "nak-planner-redirect"
+    attrs:
+      name: "nak-planner-redirect"
+      url: "{{ context.authentik_url }}/application/o/authorize/"
+
+  # Consent approval stage
+  - model: authentik_stages_consent.consentstage
+    identifiers:
+      name: "nak-planner-consent"
+    attrs:
+      name: "nak-planner-consent"
+      mode: permanent  # Remember consent
+
+  # ============================================================================
+  # 3. Application (NAK Planner)
+  # ============================================================================
+  - model: authentik_core.application
+    identifiers:
+      slug: "{{ context.app_slug }}"
+    attrs:
+      name: "{{ context.app_name }}"
+      slug: "{{ context.app_slug }}"
+      provider_ref: "{{ context.provider_name }}"  # Link to OIDC provider
+      meta_icon: "https://nak.de/favicon.ico"  # Optional: your app logo
+      comment: "NAK District Planner (Bezirksplaner)"
+      group: "{{ context.app_name }}"  # Group in admin interface
+
+  # ============================================================================
+  # 4. Credentials Policy (optional: enforce 2FA for admins)
+  # ============================================================================
+  - model: authentik_policies_password_expiry.passwordexpirrypolicy
+    identifiers:
+      name: "nak-password-expiry"
+    attrs:
+      name: "nak-password-expiry"
+      days: 365
+      deny_only: false  # Allow access but warn about expiry
+
+  # ============================================================================
+  # 5. User (Test/Demo User)
+  # ============================================================================
+  - model: authentik_core.user
+    identifiers:
+      username: "testuser"
+    attrs:
+      username: "testuser"
+      name: "Test User"
+      email: "test@nak-planner.local"
+      groups:
+        - "nak-planner-users"
+    # Password will be set via separate API call or manually
+
+  # ============================================================================
+  # 6. Group (Application Users)
+  # ============================================================================
+  - model: authentik_core.group
+    identifiers:
+      name: "nak-planner-users"
+    attrs:
+      name: "nak-planner-users"
+      parent: null
+
+  # ============================================================================
+  # 7. Application Access Policy (who can use this app)
+  # ============================================================================
+  - model: authentik_policies_expression.expressionpolicy
+    identifiers:
+      name: "nak-planner-access-policy"
+    attrs:
+      name: "nak-planner-access-policy"
+      expression: |
+        # Allow all authenticated users by default
+        return True
+        
+        # Optional: restrict to specific groups:
+        # return user.groups.filter(name="nak-planner-users").exists()
+
+  # ============================================================================
+  # 8. Email Configuration (SMTP for password resets, 2FA, etc.)
+  # ============================================================================
+  # Note: Configure via System Settings GUI
+  # This is documented here for reference
+  
+  # ============================================================================
+  # 9. Recovery Codes & Backup Stage (for security)
+  # ============================================================================
+  - model: authentik_stages_authenticator_static.authenticatorstaticstage
+    identifiers:
+      name: "nak-static-codes"
+    attrs:
+      name: "nak-static-codes"
+      configure_flow: null  # Optional: backup codes configuration flow
+
+  # ============================================================================
+  # 10. DOCUMENTATION & DEPLOYMENT NOTES
+  # ============================================================================
+  # 
+  # OIDC Configuration URL:
+  #   http://authentik:9000/application/o/.well-known/openid-configuration
+  #
+  # JWKS Endpoint (for token verification):
+  #   http://authentik:9000/application/o/jwks/
+  #
+  # Frontend .env.local:
+  #   VITE_OIDC_DISCOVERY_URL=http://authentik:9000/application/o/.well-known/openid-configuration
+  #   VITE_OIDC_CLIENT_ID=nak-planner-frontend
+  #   VITE_OIDC_REDIRECT_URI=http://localhost:5173/auth/callback
+  #
+  # Backend .env:
+  #   OIDC_DISCOVERY_URL=http://authentik:9000/application/o/.well-known/openid-configuration
+  #   OIDC_JWKS_URL=http://authentik:9000/application/o/jwks/
+  #   OIDC_CLIENT_ID=nak-planner-frontend
+  #   OIDC_ISSUER=http://authentik:9000/application/o/nak-planner/
+  #
+  # Admin Access:
+  #   - Username: akadmin
+  #   - Password: (set via KC_BOOTSTRAP_PASSWORD or admin panel)
+  #   - URL: http://authentik:9000/if/admin/
+  #
+  # Testing the Flow:
+  #   1. Start Authentik: docker compose up -d
+  #   2. Import this blueprint
+  #   3. Create a test user (or modify testuser password via admin)
+  #   4. Go to: http://localhost:5173/login
+  #   5. Should redirect to Authentik OIDC flow
+  #   6. Login with testuser
+  #   7. Should redirect back to http://localhost:5173/auth/callback
+  #   8. Frontend should store JWT token in localStorage
+  #
+  # Troubleshooting:
+  #   - Check logs: docker compose logs -f authentik
+  #   - Health check: curl http://localhost:9000/-/health/live/
+  #   - OIDC discovery: curl http://localhost:9000/application/o/.well-known/openid-configuration
+  #   - Test PKCE flow manually with OAuth.io or similar
+  #
+  # Security Checklist (Production):
+  #   ✓ Change akadmin password
+  #   ✓ Enable HTTPS (force_https: true)
+  #   ✓ Disable allow_unsafe_redirect_uris (localhost only)
+  #   ✓ Configure SMTP for password resets
+  #   ✓ Enable 2FA policies
+  #   ✓ Configure backup codes
+  #   ✓ Review audit logs regularly
+  #   ✓ Keep Authentik updated
+  #   ✓ Use secrets management for credentials
+  #

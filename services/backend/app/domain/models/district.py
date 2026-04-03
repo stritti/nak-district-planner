@@ -16,4 +16,6 @@ class District:
     @classmethod
     def create(cls, *, name: str, state_code: str | None = None) -> District:
         now = datetime.now(timezone.utc)
-        return cls(id=uuid.uuid4(), name=name, created_at=now, updated_at=now, state_code=state_code)
+        return cls(
+            id=uuid.uuid4(), name=name, created_at=now, updated_at=now, state_code=state_code
+        )
