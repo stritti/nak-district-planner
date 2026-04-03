@@ -5,7 +5,7 @@ Traces werden per OTLP/HTTP an einen konfigurierbaren Collector exportiert und k
 (z. B. Jaeger, Grafana Tempo, Honeycomb) visualisiert werden.
 
 ::: info Standard
-OpenTelemetry ist per Standard **deaktiviert**. Es entstehen keinerlei Overhead oder Netzwerkverbindungen, solange
+OpenTelemetry ist per Standard **deaktiviert**. Es entsteht keinerlei Overhead oder Netzwerkverbindungen, solange
 `OTEL_ENABLED` nicht explizit auf `true` gesetzt wird.
 :::
 
