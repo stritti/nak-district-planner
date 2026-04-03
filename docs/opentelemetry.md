@@ -13,11 +13,11 @@ OpenTelemetry ist per Standard **deaktiviert**. Es entsteht keinerlei Overhead o
 
 Alle Einstellungen werden über Umgebungsvariablen gesteuert (oder in der `.env`-Datei gesetzt):
 
-| Variable | Standard | Beschreibung |
-| --- | --- | --- |
-| `OTEL_ENABLED` | `false` | Tracing aktivieren (`true` / `false`) |
-| `OTEL_SERVICE_NAME` | `nak-district-planner-backend` | Name des Service im Tracing-Backend |
-| `OTEL_ENDPOINT` | `http://localhost:4318` | Basis-URL des OTLP/HTTP-Collectors |
+| Variable             | Standard                          | Beschreibung                                     |
+| -------------------- | --------------------------------- | ------------------------------------------------ |
+| `OTEL_ENABLED`       | `false`                           | Tracing aktivieren (`true` / `false`)            |
+| `OTEL_SERVICE_NAME`  | `nak-district-planner-backend`    | Name des Service im Tracing-Backend              |
+| `OTEL_ENDPOINT`      | `http://localhost:4318`           | Basis-URL des OTLP/HTTP-Collectors               |
 
 Die Spans werden an `{OTEL_ENDPOINT}/v1/traces` exportiert.
 
@@ -25,12 +25,12 @@ Die Spans werden an `{OTEL_ENDPOINT}/v1/traces` exportiert.
 
 Wenn Tracing aktiviert ist, werden folgende Komponenten automatisch instrumentiert:
 
-| Komponente | Beschreibung |
-| --- | --- |
-| **FastAPI** | Alle eingehenden HTTP-Anfragen mit Route, Methode und Status-Code |
-| **SQLAlchemy** | Datenbankabfragen als Spans mit SQL-Statement |
-| **HTTPX** | Ausgehende HTTP-Aufrufe (z. B. externe Kalender-Provider) |
-| **Celery** | Hintergrundtasks (Sync, Feiertags-Import, Cleanup) |
+| Komponente              | Beschreibung                                                            |
+| ----------------------- | ----------------------------------------------------------------------- |
+| **FastAPI**             | Alle eingehenden HTTP-Anfragen mit Route, Methode und Status-Code       |
+| **SQLAlchemy**          | Datenbankabfragen als Spans mit SQL-Statement                           |
+| **HTTPX**               | Ausgehende HTTP-Aufrufe (z. B. externe Kalender-Provider)               |
+| **Celery**              | Hintergrundtasks (Sync, Feiertags-Import, Cleanup)                      |
 
 ## Aktivierung
 
