@@ -19,6 +19,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import jwt
 from fastapi import APIRouter, HTTPException, Query, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -94,8 +95,6 @@ async def submit_registration(
     user_sub: str | None = None
     if credentials:
         try:
-            import jwt  # PyJWT
-
             unverified = jwt.decode(
                 credentials.credentials,
                 options={"verify_signature": False},
