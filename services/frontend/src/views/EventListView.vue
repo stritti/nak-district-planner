@@ -3,8 +3,8 @@
     <!-- Header -->
     <div class="flex items-center justify-between mb-5">
       <div class="flex items-center gap-3">
-        <h1 class="text-lg font-semibold text-gray-900">Ereignisse</h1>
-        <span v-if="viewMode === 'list'" class="text-sm text-gray-400">{{ eventsStore.total }} gesamt</span>
+        <h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Ereignisse</h1>
+        <span v-if="viewMode === 'list'" class="text-sm text-gray-400 dark:text-gray-500">{{ eventsStore.total }} gesamt</span>
       </div>
       <div class="flex items-center gap-2">
         <!-- Excel Export (list mode only) -->
@@ -20,14 +20,14 @@
           <p v-if="exportWarning" class="text-xs text-amber-600">{{ exportWarning }}</p>
         </div>
         <!-- View toggle -->
-        <div class="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+        <div class="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden text-sm">
           <button
             v-for="m in VIEW_MODES"
             :key="m.key"
             class="px-3 py-1.5 transition-colors"
             :class="viewMode === m.key
               ? 'bg-blue-600 text-white'
-              : 'text-gray-600 hover:bg-gray-50'"
+              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'"
             @click="setViewMode(m.key)"
           >
             {{ m.label }}
@@ -37,20 +37,18 @@
     </div>
 
     <!-- Filter-Leiste -->
-    <div class="bg-white rounded-lg border border-gray-200 p-4 mb-5">
+    <div class="filter-bar mb-5">
 
       <!-- Zeile 1: Schnellfilter (Liste) oder Perioden-Navigation (Woche/Monat) -->
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-2">
           <template v-if="viewMode === 'list'">
-            <span class="text-xs text-gray-400 font-medium mr-1">Schnellfilter:</span>
+            <span class="text-xs text-gray-400 dark:text-gray-500 font-medium mr-1">Schnellfilter:</span>
             <button
               v-for="preset in presets"
               :key="preset.key"
               class="text-xs px-3 py-1 rounded-full border transition-colors"
-              :class="activePreset === preset.key
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600'"
+              :class="activePreset === preset.key ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400 hover:text-blue-600'"
               @click="setPreset(preset.key)"
             >
               {{ preset.label }}
@@ -58,22 +56,22 @@
           </template>
           <template v-else>
             <button
-              class="p-1.5 rounded border border-gray-300 hover:bg-gray-50 text-gray-600"
+              class="p-1.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
               @click="prevPeriod"
             >
               <ChevronLeftIcon class="h-4 w-4" />
             </button>
-            <span class="text-sm font-medium text-gray-800 min-w-[160px] text-center">
+            <span class="text-sm font-medium text-gray-800 dark:text-gray-200 min-w-[160px] text-center">
               {{ periodLabel }}
             </span>
             <button
-              class="p-1.5 rounded border border-gray-300 hover:bg-gray-50 text-gray-600"
+              class="p-1.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
               @click="nextPeriod"
             >
               <ChevronRightIcon class="h-4 w-4" />
             </button>
             <button
-              class="text-xs px-3 py-1 rounded-full border border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600"
+              class="text-xs px-3 py-1 rounded-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400 hover:text-blue-600"
               @click="goToToday"
             >
               Heute
@@ -86,10 +84,10 @@
       <div class="flex flex-wrap gap-3">
         <!-- Bezirk -->
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Bezirk</label>
+          <label class="filter-label">Bezirk</label>
           <select
             v-model="selectedDistrictId"
-            class="rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="form-select px-2"
             @change="onDistrictChange"
           >
             <option value="">Alle Bezirke</option>
@@ -101,11 +99,11 @@
 
         <!-- Gemeinde -->
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Gemeinde</label>
+          <label class="filter-label">Gemeinde</label>
           <select
             v-model="selectedCongregationId"
             :disabled="!selectedDistrictId"
-            class="rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+            class="rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:bg-gray-800"
             @change="onFilterChange"
           >
             <option value="">Alle Gemeinden</option>
@@ -118,10 +116,10 @@
 
         <!-- Gruppe -->
         <div v-if="districtsStore.groups.length > 0">
-          <label class="block text-xs font-medium text-gray-500 mb-1">Gruppe (optional)</label>
+          <label class="filter-label">Gruppe (optional)</label>
           <select
             v-model="selectedGroupId"
-            class="rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="form-select px-2"
             @change="onGroupChange"
           >
             <option value="">Alle Gruppen</option>
@@ -133,10 +131,10 @@
 
         <!-- Status -->
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Status</label>
+          <label class="filter-label">Status</label>
           <select
             v-model="selectedStatus"
-            class="rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="form-select px-2"
             @change="onFilterChange"
           >
             <option value="">Alle</option>
@@ -149,20 +147,20 @@
         <!-- Datumsfelder: nur in der Listenansicht -->
         <template v-if="viewMode === 'list'">
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1">Von</label>
+            <label class="filter-label">Von</label>
             <input
               v-model="fromDate"
               type="date"
-              class="rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="form-select px-2"
               @change="applyFilters"
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1">Bis</label>
+            <label class="filter-label">Bis</label>
             <input
               v-model="toDate"
               type="date"
-              class="rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="form-select px-2"
               @change="applyFilters"
             />
           </div>
@@ -172,62 +170,62 @@
 
     <!-- ── Listenansicht ───────────────────────────────────────────────────── -->
     <template v-if="viewMode === 'list'">
-      <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div class="table-container">
         <table class="w-full text-sm">
           <thead>
-            <tr class="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wide">
-              <th class="px-4 py-3 text-left">Titel</th>
-              <th class="px-4 py-3 text-left">Start</th>
-              <th class="px-4 py-3 text-left">Kategorie</th>
-              <th class="px-4 py-3 text-left">Zuordnung</th>
-              <th class="px-4 py-3 text-left">Status</th>
-              <th class="px-4 py-3 text-left">Quelle</th>
-              <th class="px-4 py-3 text-left"></th>
+            <tr class="table-thead">
+              <th class="table-th">Titel</th>
+              <th class="table-th">Start</th>
+              <th class="table-th">Kategorie</th>
+              <th class="table-th">Zuordnung</th>
+              <th class="table-th">Status</th>
+              <th class="table-th">Quelle</th>
+              <th class="table-th"></th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="eventsStore.loading">
-              <td colspan="7" class="px-4 py-10 text-center text-gray-400 text-sm">Laden…</td>
+              <td colspan="7" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
             </tr>
             <tr v-else-if="eventsStore.error">
               <td colspan="7" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
             </tr>
             <tr v-else-if="eventsStore.items.length === 0">
-              <td colspan="7" class="px-4 py-10 text-center text-gray-400 text-sm">Keine Ereignisse gefunden.</td>
+              <td colspan="7" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
             </tr>
             <tr
               v-else
               v-for="event in eventsStore.items"
               :key="event.id"
-              class="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors"
+              class="table-tr"
             >
-              <td class="px-4 py-3 font-medium text-gray-900">{{ event.title }}</td>
-              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">{{ formatDt(event.start_at) }}</td>
-              <td class="px-4 py-3 text-gray-600">{{ event.category ?? '—' }}</td>
-              <td class="px-4 py-3 text-gray-600 text-xs">
+              <td class="table-td font-medium text-gray-900 dark:text-gray-100">{{ event.title }}</td>
+              <td class="table-td whitespace-nowrap">{{ formatDt(event.start_at) }}</td>
+              <td class="table-td">{{ event.category ?? '—' }}</td>
+              <td class="table-td text-xs">
                 <span>{{ districtName(event.district_id) }}</span>
                 <template v-if="event.congregation_id">
-                  <span class="text-gray-400"> › </span>
+                  <span class="text-gray-400 dark:text-gray-500"> › </span>
                   <span>{{ congregationName(event.congregation_id) }}</span>
                 </template>
-                <span v-else class="ml-1 text-gray-400">(Bezirk)</span>
+                <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
               </td>
               <td class="px-4 py-3">
-                <span :class="statusClass(event.status)" class="px-2 py-0.5 rounded-full text-xs font-medium">
+                <span :class="statusClass(event.status)" class="badge">
                   {{ statusLabel(event.status) }}
                 </span>
               </td>
               <td class="px-4 py-3">
                 <span
-                  class="px-2 py-0.5 rounded-full text-xs font-medium"
-                  :class="event.source === 'EXTERNAL' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'"
+                  class="badge"
+                  :class="event.source === 'EXTERNAL' ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'"
                 >
                   {{ event.source === 'EXTERNAL' ? 'Import' : 'Intern' }}
                 </span>
               </td>
               <td class="px-4 py-2 text-right">
                 <button
-                  class="p-1.5 border border-gray-300 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+                  class="btn-icon border border-gray-300 dark:border-gray-600"
                   title="Zuordnung bearbeiten"
                   @click="openEdit(event)"
                 >
@@ -242,19 +240,19 @@
       <!-- Pagination -->
       <div
         v-if="eventsStore.totalPages > 1"
-        class="mt-4 flex items-center justify-between text-sm text-gray-600"
+        class="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400"
       >
         <span>Seite {{ eventsStore.currentPage }} von {{ eventsStore.totalPages }}</span>
         <div class="flex gap-2">
           <button
-            class="px-3 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage <= 1"
             @click="eventsStore.goToPage(eventsStore.currentPage - 1); eventsStore.fetch()"
           >
             ← Zurück
           </button>
           <button
-            class="px-3 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage >= eventsStore.totalPages"
             @click="eventsStore.goToPage(eventsStore.currentPage + 1); eventsStore.fetch()"
           >
@@ -266,17 +264,17 @@
 
     <!-- ── Wochenansicht ──────────────────────────────────────────────────── -->
     <template v-else-if="viewMode === 'week'">
-      <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-        <div v-if="calendarLoading" class="py-12 text-center text-sm text-gray-400">Laden…</div>
-        <div v-else class="grid grid-cols-7 divide-x divide-gray-200 min-w-[700px]">
+      <div class="table-container overflow-x-auto">
+        <div v-if="calendarLoading" class="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Laden…</div>
+        <div v-else class="grid grid-cols-7 divide-x divide-gray-200 dark:divide-gray-700 min-w-[700px]">
           <div v-for="day in weekDays" :key="day.iso" class="min-w-[100px]">
             <!-- Spaltenkopf -->
             <div
-              class="px-2 py-2 text-center border-b border-gray-200 text-xs font-medium"
-              :class="day.isToday ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-600'"
+              class="px-2 py-2 text-center border-b border-gray-200 dark:border-gray-700 text-xs font-medium"
+              :class="day.isToday ? 'bg-blue-600 text-white' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400'"
             >
               <div>{{ day.weekdayShort }}</div>
-              <div class="text-base font-semibold" :class="day.isToday ? 'text-white' : 'text-gray-900'">
+              <div class="text-base font-semibold" :class="day.isToday ? 'text-white' : 'text-gray-900 dark:text-gray-100'">
                 {{ day.day }}
               </div>
             </div>
@@ -287,7 +285,7 @@
                 <div
                   v-for="name in calendarHolidays[day.iso]"
                   :key="name"
-                  class="rounded px-1.5 py-1 text-xs leading-tight bg-amber-100 text-amber-800 font-medium"
+                  class="rounded px-1.5 py-1 text-xs leading-tight bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 font-medium"
                 >{{ name }}</div>
               </template>
               <!-- Reguläre Events -->
@@ -305,7 +303,7 @@
               </template>
               <div
                 v-if="!calendarHolidays[day.iso]?.length && !eventsByDate[day.iso]?.filter(e => e.category !== 'Feiertag').length"
-                class="text-gray-200 text-xs text-center pt-4"
+                class="text-gray-200 dark:text-gray-700 text-xs text-center pt-4"
               >–</div>
             </div>
           </div>
@@ -315,33 +313,31 @@
 
     <!-- ── Monatsansicht ──────────────────────────────────────────────────── -->
     <template v-else-if="viewMode === 'month'">
-      <div class="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+      <div class="table-container overflow-x-auto">
         <!-- Wochentag-Header -->
-        <div class="grid grid-cols-7 divide-x divide-gray-200 border-b border-gray-200 bg-gray-50 min-w-[560px]">
+        <div class="grid grid-cols-7 divide-x divide-gray-200 dark:divide-gray-700 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 min-w-[560px]">
           <div
             v-for="wd in WEEKDAY_LABELS"
             :key="wd"
-            class="py-2 text-center text-xs font-medium text-gray-500"
+            class="py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400"
           >
             {{ wd }}
           </div>
         </div>
 
-        <div v-if="calendarLoading" class="py-12 text-center text-sm text-gray-400">Laden…</div>
-        <div v-else class="grid grid-cols-7 divide-x divide-gray-200 min-w-[560px]">
+        <div v-if="calendarLoading" class="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Laden…</div>
+        <div v-else class="grid grid-cols-7 divide-x divide-gray-200 dark:divide-gray-700 min-w-[560px]">
           <div
             v-for="day in calendarDays"
             :key="day.iso"
-            class="border-b border-gray-200 min-h-[100px] p-1"
-            :class="day.currentMonth ? 'bg-white' : 'bg-gray-50'"
+            class="border-b border-gray-200 dark:border-gray-700 min-h-[100px] p-1"
+            :class="day.currentMonth ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'"
           >
             <!-- Tagesnummer -->
             <div class="flex items-center justify-between mb-1">
               <span
                 class="inline-flex items-center justify-center w-6 h-6 text-xs font-medium rounded-full"
-                :class="day.isToday
-                  ? 'bg-blue-600 text-white'
-                  : day.currentMonth ? 'text-gray-800' : 'text-gray-400'"
+                :class="day.isToday ? 'bg-blue-600 text-white' : day.currentMonth ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'"
               >
                 {{ day.day }}
               </span>
@@ -352,7 +348,7 @@
               <div
                 v-for="name in calendarHolidays[day.iso]"
                 :key="name"
-                class="text-[10px] leading-tight px-1 py-0.5 rounded bg-amber-100 text-amber-800 font-medium mb-0.5 truncate"
+                class="text-[10px] leading-tight px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 font-medium mb-0.5 truncate"
               >
                 {{ name }}
               </div>
@@ -371,7 +367,7 @@
               </div>
               <div
                 v-if="eventsByDate[day.iso].filter(e => e.category !== 'Feiertag').length > 3"
-                class="text-[10px] text-gray-400 px-1"
+                class="text-[10px] text-gray-400 dark:text-gray-500 px-1"
               >
                 +{{ eventsByDate[day.iso].filter(e => e.category !== 'Feiertag').length - 3 }} weitere
               </div>
@@ -384,45 +380,45 @@
     <!-- ── Zuordnungs-Modal (alle Ansichten) ──────────────────────────────── -->
     <div
       v-if="editTarget"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      class="modal-backdrop"
       @click.self="editTarget = null"
     >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+      <div class="modal-panel max-w-md">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="text-base font-semibold text-gray-900">Termin zuordnen</h2>
-          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="editTarget = null">
+          <h2 class="modal-title">Termin zuordnen</h2>
+          <button class="modal-close" @click="editTarget = null">
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
-        <p class="text-sm text-gray-500 mb-4 truncate">{{ editTarget.title }}</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 truncate">{{ editTarget.title }}</p>
 
         <div class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Bezirk</label>
+            <label class="form-label">Bezirk</label>
             <select
               v-model="editForm.district_id"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="form-input"
             >
               <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">{{ d.name }}</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              Gemeinde <span class="text-gray-400 font-normal">(leer = Bezirksebene)</span>
+            <label class="form-label">
+              Gemeinde <span class="text-gray-400 dark:text-gray-500 font-normal">(leer = Bezirksebene)</span>
             </label>
             <select
               v-model="editForm.congregation_id"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="form-input"
             >
               <option value="">Bezirksebene</option>
               <option v-for="c in editCongregations" :key="c.id" :value="c.id">{{ c.name }}</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <label class="form-label">Status</label>
             <select
               v-model="editForm.status"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="form-input"
             >
               <option value="DRAFT">Entwurf</option>
               <option value="PUBLISHED">Veröffentlicht</option>
@@ -430,28 +426,28 @@
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              Kategorie <span class="text-gray-400 font-normal">(optional)</span>
+            <label class="form-label">
+              Kategorie <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
             </label>
             <input
               v-model="editForm.category"
               type="text"
               placeholder="z. B. Gottesdienst"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="form-input"
             />
           </div>
         </div>
 
-        <p v-if="editError" class="text-sm text-red-600 mt-3">{{ editError }}</p>
+        <p v-if="editError" class="text-sm text-red-600 dark:text-red-400 mt-3">{{ editError }}</p>
         <div class="flex justify-end gap-3 mt-6">
           <button
-            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
             @click="editTarget = null"
           >
             Abbrechen
           </button>
           <button
-            class="text-sm px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            class="btn-primary px-4 py-2"
             :disabled="editSaving"
             @click="saveEdit"
           >

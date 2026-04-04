@@ -5,7 +5,7 @@
     "": {
       "name": "nak-district-planner-docs",
       "devDependencies": {
-        "@stritti/vitepress-plugin-openspec": "^0.5",
+        "@stritti/vitepress-plugin-openspec": "^0.6.1",
         "vitepress": "^1.6.4",
       },
     },
@@ -179,7 +179,7 @@
 
     "@shikijs/vscode-textmate": ["@shikijs/vscode-textmate@10.0.2", "", {}, "sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg=="],
 
-    "@stritti/vitepress-plugin-openspec": ["@stritti/vitepress-plugin-openspec@0.5.0", "", { "dependencies": { "js-yaml": "^4.1.1", "picocolors": "^1.1.1" }, "peerDependencies": { "vite": ">=5.0.0", "vitepress": ">=1.0.0" }, "optionalPeers": ["vitepress"] }, "sha512-bh4rncCdu4CyGVYXBd775khUQ04SdOcj3YqHuh0mDDo2u4d1JWoqmEb/OLfUB3zASyDG1z8jiz3ayBg8o+ee5g=="],
+    "@stritti/vitepress-plugin-openspec": ["@stritti/vitepress-plugin-openspec@0.6.1", "", { "dependencies": { "js-yaml": "^4.1.1", "picocolors": "^1.1.1" }, "peerDependencies": { "vite": ">=5.0.0", "vitepress": ">=1.0.0" }, "optionalPeers": ["vitepress"] }, "sha512-MuU7f7zKFGG6kAB6I1fQ3qjofGgsRZUTobEwGUJ9+QtcaJml7qoGvolptyjn9WGQ/X5COeIyz8vuRAkth1rPHQ=="],
 
     "@types/estree": ["@types/estree@1.0.8", "", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
 

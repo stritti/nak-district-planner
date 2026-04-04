@@ -5,7 +5,6 @@ Tests use mocked OIDC provider responses to ensure provider-agnostic behavior.
 """
 
 import json
-
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -107,8 +106,8 @@ class TestOIDCDiscovery:
     @pytest.mark.asyncio
     async def test_discover_invalid_json(self, oidc_adapter, mock_httpx_client):
         """Test discovery fails on invalid JSON response."""
-        mock_response = MagicMock()
-        mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
+        mock_response = AsyncMock()
+        mock_response.json = MagicMock(side_effect=json.JSONDecodeError("Invalid JSON", "", 0))
         mock_httpx_client.get.return_value = mock_response
 
         with pytest.raises(OIDCDiscoveryError):

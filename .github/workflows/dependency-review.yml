@@ -26,7 +26,8 @@ jobs:
           fail-on-severity: high
           # Comment summary on the PR
           comment-summary-in-pr: always
-          # Deny licenses that are incompatible with this project
-          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
-          # Retry if dependency snapshots are not yet available for the head SHA
+          # Deny licenses that are incompatible with this project (SPDX identifiers)
+          deny-license-ids: GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later
+          # Retry if no dependency snapshot exists yet for this commit
           retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 120

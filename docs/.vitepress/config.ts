@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitepress'
 import { withOpenSpec } from '@stritti/vitepress-plugin-openspec'
 
-export default withOpenSpec(
-  defineConfig({
+export default defineConfig(
+  withOpenSpec({
     lang: 'de-DE',
     title: 'NAK District Planner',
     description: 'Dokumentation für den Bezirksplaner der Neuapostolischen Kirche',
@@ -32,15 +32,17 @@ export default withOpenSpec(
         },
         {
           text: 'Entwicklung',
-          items: [{ text: 'Release-Prozess', link: '/release-process' }]
-        },
-        {
-          text: 'Betrieb & Monitoring',
-          items: [{ text: 'OpenTelemetry', link: '/opentelemetry' }]
+          items: [
+            { text: 'Release-Prozess', link: '/release-process' }
+          ]
         }
       ],
 
-      socialLinks: [{ icon: 'github', link: 'https://github.com/stritti/nak-district-planner' }]
+      socialLinks: [
+        { icon: 'github', link: 'https://github.com/stritti/nak-district-planner' }
+      ]
     }
+  }, {
+    specDir: '../openspec'
   })
 )

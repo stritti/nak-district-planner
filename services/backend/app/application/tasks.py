@@ -47,31 +47,37 @@ def sync_all_active_integrations() -> dict:
 
     Iterates all active integrations, skips those synced more recently than
     their configured sync_interval, and dispatches individual sync tasks.
+
+    Returns a summary dict: {"discovered": int, "skipped": int, "queued": int}
     """
     from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
     from app.adapters.db.session import AsyncSessionLocal
 
-    async def _get_due() -> list[str]:
+    async def _run() -> dict:
         async with AsyncSessionLocal() as session:
             repo = SqlCalendarIntegrationRepository(session)
             integrations = await repo.list_active()
             now = datetime.now(timezone.utc)
-            due = []
+            discovered = len(integrations)
+            skipped = 0
+            queued = 0
             for integration in integrations:
+                integration_id = str(integration.id)
                 if integration.last_synced_at is None:
-                    due.append(str(integration.id))
+                    sync_calendar_integration.delay(integration_id)
+                    queued += 1
                     continue
                 elapsed = (now - integration.last_synced_at).total_seconds() / 60
                 if elapsed >= integration.sync_interval:
-                    due.append(str(integration.id))
-            return due
+                    sync_calendar_integration.delay(integration_id)
+                    queued += 1
+                else:
+                    skipped += 1
+            return {"discovered": discovered, "skipped": skipped, "queued": queued}
 
-    due_ids = asyncio.run(_get_due())
-    for integration_id in due_ids:
-        sync_calendar_integration.delay(integration_id)
-
-    logger.info("Dispatched sync for %d integration(s)", len(due_ids))
-    return {"dispatched": len(due_ids)}
+    result = asyncio.run(_run())
+    logger.info("Dispatched sync for %d integration(s)", result["queued"])
+    return result
 
 
 @celery.task(name="cleanup_old_events")
@@ -188,19 +194,23 @@ def auto_import_feiertage() -> dict:
     return asyncio.run(_run())
 
 
-@celery.task(name="import_feiertage")
+@celery.task(name="import_feiertage_task")
 def import_feiertage_task(district_id: str, year: int, state_code: str | None = None) -> dict:
-    """Import German public holidays (Feiertage) for a single district and year.
+    """Import German public holidays for a district and year.
 
-    This is an on-demand task for a specific district/year combination.
-    Import is idempotent — safe to run multiple times.
+    Args:
+        district_id: Target district UUID as string.
+        year: Calendar year (e.g. 2026).
+        state_code: 2-letter German state code (e.g. "BY") or None.
+
+    Returns:
+        dict with created/updated/skipped counts.
     """
     from app.adapters.db.session import AsyncSessionLocal
+    from app.application.feiertage_service import import_feiertage
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as session:
-            from app.application.feiertage_service import import_feiertage
-
             result = await import_feiertage(
                 district_id=uuid.UUID(district_id),
                 year=year,
@@ -210,22 +220,28 @@ def import_feiertage_task(district_id: str, year: int, state_code: str | None = 
             await session.commit()
             return result
 
-    return asyncio.run(_run())
+    result = asyncio.run(_run())
+    logger.info("import_feiertage_task: district=%s year=%d %s", district_id, year, result)
+    return result
 
 
-@celery.task(name="import_kirchliche_festtage")
+@celery.task(name="import_kirchliche_festtage_task")
 def import_kirchliche_festtage_task(district_id: str, year: int) -> dict:
-    """Import kirchliche Festtage (Palm Sunday, Easter, Pentecost) for a single district and year.
+    """Import NAK kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag,
+    Entschlafenen-Gottesdienste) for a district and year.
 
-    This is an on-demand task for a specific district/year combination.
-    Import is idempotent — safe to run multiple times.
+    Args:
+        district_id: Target district UUID as string.
+        year: Calendar year (e.g. 2026).
+
+    Returns:
+        dict with created/updated/skipped counts.
     """
     from app.adapters.db.session import AsyncSessionLocal
+    from app.application.feiertage_service import import_kirchliche_festtage
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as session:
-            from app.application.feiertage_service import import_kirchliche_festtage
-
             result = await import_kirchliche_festtage(
                 district_id=uuid.UUID(district_id),
                 year=year,
@@ -234,4 +250,8 @@ def import_kirchliche_festtage_task(district_id: str, year: int) -> dict:
             await session.commit()
             return result
 
-    return asyncio.run(_run())
+    result = asyncio.run(_run())
+    logger.info(
+        "import_kirchliche_festtage_task: district=%s year=%d %s", district_id, year, result
+    )
+    return result
