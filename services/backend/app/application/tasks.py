@@ -48,36 +48,32 @@ def sync_all_active_integrations() -> dict:
     Iterates all active integrations, skips those synced more recently than
     their configured sync_interval, and dispatches individual sync tasks.
 
-    Returns a summary dict: {"discovered": int, "skipped": int, "queued": int}
+    Returns a summary dict: {"dispatched": int}
     """
     from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
     from app.adapters.db.session import AsyncSessionLocal
 
-    async def _run() -> dict:
+    async def _run() -> list[str]:
         async with AsyncSessionLocal() as session:
             repo = SqlCalendarIntegrationRepository(session)
             integrations = await repo.list_active()
             now = datetime.now(timezone.utc)
-            discovered = len(integrations)
-            skipped = 0
-            queued = 0
+            ids_to_sync: list[str] = []
             for integration in integrations:
                 integration_id = str(integration.id)
                 if integration.last_synced_at is None:
-                    sync_calendar_integration.delay(integration_id)
-                    queued += 1
+                    ids_to_sync.append(integration_id)
                     continue
                 elapsed = (now - integration.last_synced_at).total_seconds() / 60
                 if elapsed >= integration.sync_interval:
-                    sync_calendar_integration.delay(integration_id)
-                    queued += 1
-                else:
-                    skipped += 1
-            return {"discovered": discovered, "skipped": skipped, "queued": queued}
+                    ids_to_sync.append(integration_id)
+            return ids_to_sync
 
-    result = asyncio.run(_run())
-    logger.info("Dispatched sync for %d integration(s)", result["queued"])
-    return result
+    ids = asyncio.run(_run())
+    for integration_id in ids:
+        sync_calendar_integration.delay(integration_id)
+    logger.info("Dispatched sync for %d integration(s)", len(ids))
+    return {"dispatched": len(ids)}
 
 
 @celery.task(name="cleanup_old_events")
