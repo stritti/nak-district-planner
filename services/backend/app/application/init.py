@@ -7,10 +7,6 @@ This module can be extended to seed other canonical data as needed.
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.db.repositories.membership import SqlMembershipRepository
-from app.domain.models.membership import Membership, ScopeType
-from app.domain.models.role import Role
-
 
 async def seed_canonical_roles(session: AsyncSession) -> None:
     """
