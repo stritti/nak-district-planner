@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 import { withOpenSpec } from '@stritti/vitepress-plugin-openspec'
 
-export default defineConfig({
+export default defineConfig(
   withOpenSpec({
     lang: 'de-DE',
     title: 'NAK District Planner',
@@ -42,5 +42,7 @@ export default defineConfig({
         { icon: 'github', link: 'https://github.com/stritti/nak-district-planner' }
       ]
     }
+  }, {
+    specDir: '../openspec'
   })
-})
+)
