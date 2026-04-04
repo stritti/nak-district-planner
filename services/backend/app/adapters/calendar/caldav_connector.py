@@ -92,7 +92,7 @@ class CalDAVConnector(CalendarConnector):
         # Parse the multi-status response
         # This is simplified - a production implementation would properly parse XML
         # For now, we'll look for calendar-data elements
-        from xml.etree import ElementTree as ET
+        import defusedxml.ElementTree as ET
 
         try:
             root = ET.fromstring(response.content)

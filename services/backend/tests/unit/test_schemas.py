@@ -213,13 +213,13 @@ class TestLeaderSchema:
             LeaderCreate(**data)
 
     def test_leader_create_missing_rank(self):
-        """LeaderCreate without rank should fail."""
+        """LeaderCreate without rank should succeed with rank defaulting to None."""
         data = {
             "name": "Pastor Schmidt",
             "congregation_id": str(uuid.uuid4()),
         }
-        with pytest.raises(ValidationError):
-            LeaderCreate(**data)
+        leader = LeaderCreate(**data)
+        assert leader.rank is None
 
     def test_leader_response_creation(self):
         """LeaderResponse should accept valid data."""

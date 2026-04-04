@@ -20,7 +20,9 @@ from app.adapters.api.routers import (
     service_assignments,
 )
 from app.adapters.auth.oidc import OIDCAdapter
+from app.adapters.db.session import engine
 from app.config import settings
+from app.telemetry import setup_telemetry
 
 
 @asynccontextmanager
@@ -65,6 +67,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
 
 
 @app.exception_handler(Exception)

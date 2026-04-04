@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
 
+    # OpenTelemetry
+    otel_enabled: bool = False
+    otel_service_name: str = "nak-district-planner-backend"
+    otel_endpoint: str = "http://localhost:4318"
+
     # OIDC Configuration (provider-agnostic)
     oidc_discovery_url: str = "https://oidc.example.com/.well-known/openid-configuration"
     oidc_client_id: str = "replace-with-oidc-client-id"
