@@ -19,6 +19,33 @@
     <div v-else-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
 
     <template v-else>
+      <!-- Tab bar -->
+      <div class="flex gap-1 mb-6 border-b border-gray-200">
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-t transition-colors"
+          :class="activeTab === 'leaders'
+            ? 'border-b-2 border-blue-600 text-blue-600'
+            : 'text-gray-500 hover:text-gray-800'"
+          @click="activeTab = 'leaders'"
+        >
+          Amtstragende
+        </button>
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-t transition-colors flex items-center gap-1.5"
+          :class="activeTab === 'registrations'
+            ? 'border-b-2 border-blue-600 text-blue-600'
+            : 'text-gray-500 hover:text-gray-800'"
+          @click="switchToRegistrations"
+        >
+          Registrierungen
+          <span
+            v-if="pendingCount > 0"
+            class="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700"
+          >{{ pendingCount }}</span>
+        </button>
+      </div>
+      <!-- Leaders tab -->
+      <template v-if="activeTab === 'leaders'">
       <div v-for="section in sections" :key="section.id" class="mb-8">
         <!-- Section header -->
         <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-gray-200 dark:border-gray-700">
@@ -129,8 +156,190 @@
         </div>
       </div>
     </template>
+    <!-- /Leaders tab -->
 
-    <!-- Add modal -->
+    <!-- Registrations tab -->
+    <template v-else-if="activeTab === 'registrations'">
+      <div v-if="regLoading" class="text-sm text-gray-500">Lade Registrierungen…</div>
+
+      <div v-else-if="registrations.length === 0" class="text-sm text-gray-400 py-4">
+        Keine Registrierungsanfragen vorhanden.
+      </div>
+
+      <div v-else class="border border-gray-200 rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-xs text-gray-500 font-medium">
+            <tr>
+              <th class="px-4 py-2 text-left">Name</th>
+              <th class="px-4 py-2 text-left">E-Mail</th>
+              <th class="px-4 py-2 text-left">Grad</th>
+              <th class="px-4 py-2 text-left">Gemeinde (Wunsch)</th>
+              <th class="px-4 py-2 text-left">Status</th>
+              <th class="px-4 py-2 text-left">Eingereicht</th>
+              <th class="px-4 py-2 text-right">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr
+              v-for="reg in registrations"
+              :key="reg.id"
+              class="hover:bg-gray-50"
+            >
+              <td class="px-4 py-2 font-medium text-gray-800">{{ reg.name }}</td>
+              <td class="px-4 py-2 text-gray-500">{{ reg.email }}</td>
+              <td class="px-4 py-2">
+                <span v-if="reg.rank" class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                  {{ reg.rank }}
+                </span>
+                <span v-else class="text-gray-300">—</span>
+              </td>
+              <td class="px-4 py-2 text-gray-500">{{ congregationName(reg.congregation_id) || '—' }}</td>
+              <td class="px-4 py-2">
+                <span
+                  class="inline-block px-2 py-0.5 rounded text-xs font-medium"
+                  :class="{
+                    'bg-amber-100 text-amber-700': reg.status === 'PENDING',
+                    'bg-green-100 text-green-700': reg.status === 'APPROVED',
+                    'bg-red-100 text-red-600': reg.status === 'REJECTED',
+                  }"
+                >
+                  {{ { PENDING: 'Ausstehend', APPROVED: 'Genehmigt', REJECTED: 'Abgelehnt' }[reg.status] }}
+                </span>
+              </td>
+              <td class="px-4 py-2 text-gray-400 text-xs">
+                {{ new Date(reg.created_at).toLocaleDateString('de-DE') }}
+              </td>
+              <td class="px-4 py-2">
+                <div class="flex items-center justify-end gap-1">
+                  <template v-if="reg.status === 'PENDING'">
+                    <button
+                      class="flex items-center gap-1 text-xs text-green-700 hover:text-green-900 px-2 py-1 rounded hover:bg-green-50"
+                      title="Genehmigen"
+                      @click="openApproveModal(reg)"
+                    >
+                      <CheckIcon class="h-3.5 w-3.5" />
+                      Genehmigen
+                    </button>
+                    <button
+                      class="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50"
+                      title="Ablehnen"
+                      @click="openRejectModal(reg)"
+                    >
+                      <XMarkIcon class="h-3.5 w-3.5" />
+                      Ablehnen
+                    </button>
+                  </template>
+                  <button
+                    class="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50"
+                    title="Löschen"
+                    @click="confirmDeleteReg(reg)"
+                  >
+                    <TrashIcon class="h-4 w-4" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
+    <!-- /Registrations tab -->
+
+    <!-- Approve registration modal -->
+    <div
+      v-if="approveModal.open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="approveModal.open = false"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold text-gray-900">Registrierung genehmigen</h2>
+          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="approveModal.open = false">
+            <XMarkIcon class="h-5 w-5" />
+          </button>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">
+          <strong>{{ approveModal.name }}</strong> ({{ approveModal.email }}) wird als Amtstragende:r hinzugefügt.
+          Sie können Grad und Gemeinde vor der Genehmigung anpassen.
+        </p>
+        <div class="space-y-3 mb-4">
+          <div>
+            <label class="form-label">Grad</label>
+            <select v-model="approveModal.rank" class="form-select w-full">
+              <option :value="null">— kein Grad —</option>
+              <option v-for="r in LEADER_RANKS" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Gemeinde</label>
+            <select v-model="approveModal.congregation_id" class="form-select w-full">
+              <option :value="null">— Bezirksebene —</option>
+              <option v-for="c in congregations" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Beauftragung</label>
+            <select v-model="approveModal.special_role" class="form-select w-full">
+              <option :value="null">— keine —</option>
+              <option v-for="r in SPECIAL_ROLES" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
+          </div>
+        </div>
+        <p v-if="approveModal.error" class="text-sm text-red-600 mb-3">{{ approveModal.error }}</p>
+        <div class="flex justify-end gap-3">
+          <button
+            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            @click="approveModal.open = false"
+          >Abbrechen</button>
+          <button
+            class="text-sm px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+            :disabled="saving"
+            @click="doApprove"
+          >Genehmigen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reject registration modal -->
+    <div
+      v-if="rejectModal.open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="rejectModal.open = false"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold text-gray-900">Registrierung ablehnen</h2>
+          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="rejectModal.open = false">
+            <XMarkIcon class="h-5 w-5" />
+          </button>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">
+          Die Registrierung von <strong>{{ rejectModal.name }}</strong> wird abgelehnt.
+        </p>
+        <div class="mb-4">
+          <label class="form-label">Begründung (optional)</label>
+          <textarea
+            v-model="rejectModal.reason"
+            rows="3"
+            class="form-input w-full resize-none"
+            placeholder="Grund für die Ablehnung…"
+          />
+        </div>
+        <p v-if="rejectModal.error" class="text-sm text-red-600 mb-3">{{ rejectModal.error }}</p>
+        <div class="flex justify-end gap-3">
+          <button
+            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            @click="rejectModal.open = false"
+          >Abbrechen</button>
+          <button
+            class="text-sm px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+            :disabled="saving"
+            @click="doReject"
+          >Ablehnen</button>
+        </div>
+      </div>
+    </div>
+
     <div
       v-if="addModal.open"
       class="modal-backdrop"
@@ -397,6 +606,7 @@
         </template>
       </div>
     </div>
+    </template><!-- closes v-else (district selected) -->
   </div>
 </template>
 
@@ -425,6 +635,13 @@ import {
   type SpecialRole,
 } from '@/api/leaders'
 import { createExportToken as apiCreateExportToken } from '@/api/exportTokens'
+import {
+  approveRegistration,
+  deleteRegistration,
+  listRegistrations,
+  rejectRegistration,
+  type RegistrationResponse,
+} from '@/api/registrations'
 
 const districts = ref<DistrictResponse[]>([])
 const congregations = ref<CongregationResponse[]>([])
@@ -432,6 +649,123 @@ const leaders = ref<LeaderResponse[]>([])
 const selectedDistrictId = ref('')
 const loading = ref(false)
 const saving = ref(false)
+
+// ── Tab state ──────────────────────────────────────────────────────────────────
+
+const activeTab = ref<'leaders' | 'registrations'>('leaders')
+
+// ── Registrations ─────────────────────────────────────────────────────────────
+
+const registrations = ref<RegistrationResponse[]>([])
+const regLoading = ref(false)
+
+const pendingCount = computed(
+  () => registrations.value.filter((r) => r.status === 'PENDING').length,
+)
+
+async function loadRegistrations() {
+  if (!selectedDistrictId.value) return
+  regLoading.value = true
+  try {
+    registrations.value = await listRegistrations(selectedDistrictId.value)
+  } finally {
+    regLoading.value = false
+  }
+}
+
+async function switchToRegistrations() {
+  activeTab.value = 'registrations'
+  await loadRegistrations()
+}
+
+// Approve modal
+const approveModal = reactive({
+  open: false,
+  registrationId: '',
+  name: '',
+  email: '',
+  rank: null as string | null,
+  congregation_id: null as string | null,
+  special_role: null as string | null,
+  error: '',
+})
+
+function openApproveModal(reg: RegistrationResponse) {
+  approveModal.open = true
+  approveModal.registrationId = reg.id
+  approveModal.name = reg.name
+  approveModal.email = reg.email
+  approveModal.rank = reg.rank
+  approveModal.congregation_id = reg.congregation_id
+  approveModal.special_role = reg.special_role
+  approveModal.error = ''
+}
+
+async function doApprove() {
+  saving.value = true
+  approveModal.error = ''
+  try {
+    const updated = await approveRegistration(selectedDistrictId.value, approveModal.registrationId, {
+      congregation_id: approveModal.congregation_id,
+      rank: approveModal.rank as LeaderRank | null,
+      special_role: approveModal.special_role as SpecialRole | null,
+    })
+    const idx = registrations.value.findIndex((r) => r.id === approveModal.registrationId)
+    if (idx !== -1) registrations.value[idx] = updated
+    approveModal.open = false
+    // Refresh leaders list in background so the new leader appears if user switches tab
+    listLeaders(selectedDistrictId.value).then((l) => (leaders.value = l))
+  } catch (e) {
+    approveModal.error = e instanceof Error ? e.message : 'Fehler beim Genehmigen'
+  } finally {
+    saving.value = false
+  }
+}
+
+// Reject modal
+const rejectModal = reactive({
+  open: false,
+  registrationId: '',
+  name: '',
+  reason: '',
+  error: '',
+})
+
+function openRejectModal(reg: RegistrationResponse) {
+  rejectModal.open = true
+  rejectModal.registrationId = reg.id
+  rejectModal.name = reg.name
+  rejectModal.reason = ''
+  rejectModal.error = ''
+}
+
+async function doReject() {
+  saving.value = true
+  rejectModal.error = ''
+  try {
+    const updated = await rejectRegistration(selectedDistrictId.value, rejectModal.registrationId, {
+      reason: rejectModal.reason || null,
+    })
+    const idx = registrations.value.findIndex((r) => r.id === rejectModal.registrationId)
+    if (idx !== -1) registrations.value[idx] = updated
+    rejectModal.open = false
+  } catch (e) {
+    rejectModal.error = e instanceof Error ? e.message : 'Fehler beim Ablehnen'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function confirmDeleteReg(reg: RegistrationResponse) {
+  if (!confirm(`Registrierung von "${reg.name}" wirklich löschen?`)) return
+  saving.value = true
+  try {
+    await deleteRegistration(selectedDistrictId.value, reg.id)
+    registrations.value = registrations.value.filter((r) => r.id !== reg.id)
+  } finally {
+    saving.value = false
+  }
+}
 
 // ── Sections ──────────────────────────────────────────────────────────────────
 
@@ -481,6 +815,8 @@ onMounted(async () => {
 
 async function onDistrictChange() {
   if (!selectedDistrictId.value) return
+  activeTab.value = 'leaders'
+  registrations.value = []
   loading.value = true
   try {
     ;[leaders.value, congregations.value] = await Promise.all([

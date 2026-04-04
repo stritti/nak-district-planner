@@ -16,6 +16,7 @@ from app.adapters.api.routers import (
     events,
     export,
     leaders,
+    registrations,
     service_assignments,
 )
 from app.adapters.auth.oidc import OIDCAdapter
@@ -86,4 +87,6 @@ app.include_router(service_assignments.router)
 app.include_router(calendar_integrations.router)
 app.include_router(districts.router)
 app.include_router(leaders.router)
+app.include_router(registrations.public_router)
+app.include_router(registrations.router)
 app.include_router(export.router, prefix="/api/v1")

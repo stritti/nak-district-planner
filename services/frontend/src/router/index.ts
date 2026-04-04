@@ -9,6 +9,7 @@ import CalendarIntegrationsView from '@/views/CalendarIntegrationsView.vue'
 import ExportTokensView from '@/views/ExportTokensView.vue'
 import AuthCallbackView from '@/views/AuthCallbackView.vue'
 import LoginView from '@/views/LoginView.vue'
+import RegistrationView from '@/views/RegistrationView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 // Create a standalone pinia instance for router guards (not using the app instance)
@@ -101,6 +102,12 @@ export const router = createRouter({
       name: 'admin-export',
       component: ExportTokensView,
       beforeEnter: requireAuth,
+    },
+    {
+      // Public self-registration page — no auth required
+      path: '/register',
+      name: 'register',
+      component: RegistrationView,
     },
   ],
 })
