@@ -42,5 +42,7 @@ export default defineConfig(
         { icon: 'github', link: 'https://github.com/stritti/nak-district-planner' }
       ]
     }
+  }, {
+    specDir: '../openspec'
   })
 )

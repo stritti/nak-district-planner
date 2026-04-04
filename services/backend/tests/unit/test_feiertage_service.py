@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 from app.application.feiertage_service import (
@@ -188,6 +188,8 @@ class TestImportKirchlicheFesttage:
             end_at=datetime(2026, 4, 5, 23, 59, 59, tzinfo=timezone.utc),
             district_id=district_id,
         )
+        # Set content_hash to match what import_kirchliche_festtage will compute
+        existing_event.content_hash = _content_hash("2026-04-05", "Ostersonntag")
 
         event_repo_mock = AsyncMock()
         # First call returns None (for other events), then returns existing
@@ -251,18 +253,20 @@ class TestImportFeiertage:
         session = AsyncMock()
 
         mock_response = AsyncMock()
-        mock_response.json.return_value = [
-            {
-                "date": "2026-04-02",
-                "localName": "Gründonnerstag",
-                "name": "Maundy Thursday",
-                "countryCode": "DE",
-                "fixed": False,
-                "counties": None,
-                "launchYear": 1700,
-                "types": ["Public"],
-            }
-        ]
+        mock_response.json = MagicMock(
+            return_value=[
+                {
+                    "date": "2026-04-02",
+                    "localName": "Gründonnerstag",
+                    "name": "Maundy Thursday",
+                    "countryCode": "DE",
+                    "fixed": False,
+                    "counties": None,
+                    "launchYear": 1700,
+                    "types": ["Public"],
+                }
+            ]
+        )
 
         event_repo_mock = AsyncMock()
         event_repo_mock.get_by_external_uid_district.return_value = None
@@ -288,18 +292,20 @@ class TestImportFeiertage:
 
         mock_response = AsyncMock()
         # Response with national holiday + state-specific holiday
-        mock_response.json.return_value = [
-            {
-                "date": "2026-01-01",
-                "localName": "Neujahr",
-                "counties": None,  # National
-            },
-            {
-                "date": "2026-11-01",
-                "localName": "Allerheiligen",
-                "counties": ["DE-BW", "DE-BY"],  # Only in BW and BY
-            },
-        ]
+        mock_response.json = MagicMock(
+            return_value=[
+                {
+                    "date": "2026-01-01",
+                    "localName": "Neujahr",
+                    "counties": None,  # National
+                },
+                {
+                    "date": "2026-11-01",
+                    "localName": "Allerheiligen",
+                    "counties": ["DE-BW", "DE-BY"],  # Only in BW and BY
+                },
+            ]
+        )
 
         event_repo_mock = AsyncMock()
         event_repo_mock.get_by_external_uid_district.return_value = None
