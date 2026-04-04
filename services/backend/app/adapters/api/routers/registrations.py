@@ -261,9 +261,8 @@ async def approve_registration(
     await reg_repo.save(reg)
 
     logger.info(
-        "Registration %s approved by %s; leader %s created.",
+        "Registration %s approved; leader %s created.",
         registration_id,
-        auth.user_sub,
         leader.id,
     )
     return _to_response(reg)
@@ -303,7 +302,7 @@ async def reject_registration(
     reg.updated_at = datetime.now(timezone.utc)
     await reg_repo.save(reg)
 
-    logger.info("Registration %s rejected by %s.", registration_id, auth.user_sub)
+    logger.info("Registration %s rejected.", registration_id)
     return _to_response(reg)
 
 
