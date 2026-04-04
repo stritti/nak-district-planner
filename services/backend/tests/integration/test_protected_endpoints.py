@@ -174,3 +174,95 @@ class TestTokenHeader:
                 # Note: TestClient might normalize this, but real clients will vary
                 if response.status_code != 401:
                     assert response.status_code == 200
+
+
+class TestRegistrationEndpoints:
+    """Test the registration workflow public/private endpoint split."""
+
+    # ── Public lookup endpoints ───────────────────────────────────────────────
+
+    def test_list_districts_public_no_auth(self):
+        """GET /api/v1/public/districts must work without a token."""
+        client = TestClient(app)
+        with patch(
+            "app.adapters.db.repositories.district.SqlDistrictRepository.list_all",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            response = client.get("/api/v1/public/districts")
+        assert response.status_code == 200
+
+    def test_list_congregations_public_no_auth(self):
+        """GET /api/v1/public/districts/{id}/congregations must work without a token."""
+        import uuid
+
+        district_id = uuid.uuid4()
+        client = TestClient(app)
+        with patch(
+            "app.adapters.db.repositories.district.SqlDistrictRepository.get",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = client.get(f"/api/v1/public/districts/{district_id}/congregations")
+        # 404 because district not found, but NOT 401 (no auth required)
+        assert response.status_code == 404
+
+    # ── Public submission endpoint ────────────────────────────────────────────
+
+    def test_submit_registration_no_auth(self):
+        """POST .../registrations must be reachable without a token (no 401)."""
+        import uuid
+
+        district_id = uuid.uuid4()
+        client = TestClient(app)
+        with patch(
+            "app.adapters.db.repositories.district.SqlDistrictRepository.get",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            response = client.post(
+                f"/api/v1/districts/{district_id}/registrations",
+                json={"name": "Max Muster", "email": "max@example.com"},
+            )
+        # 404 because district not found, but NOT 401 (no auth required)
+        assert response.status_code == 404
+
+    # ── Admin endpoints require auth ──────────────────────────────────────────
+
+    def test_list_registrations_requires_auth(self):
+        """GET .../registrations must return 401 without a token."""
+        import uuid
+
+        client = TestClient(app)
+        response = client.get(f"/api/v1/districts/{uuid.uuid4()}/registrations")
+        assert response.status_code == 401
+
+    def test_approve_registration_requires_auth(self):
+        """POST .../registrations/{id}/approve must return 401 without a token."""
+        import uuid
+
+        client = TestClient(app)
+        response = client.post(
+            f"/api/v1/districts/{uuid.uuid4()}/registrations/{uuid.uuid4()}/approve",
+            json={},
+        )
+        assert response.status_code == 401
+
+    def test_reject_registration_requires_auth(self):
+        """POST .../registrations/{id}/reject must return 401 without a token."""
+        import uuid
+
+        client = TestClient(app)
+        response = client.post(
+            f"/api/v1/districts/{uuid.uuid4()}/registrations/{uuid.uuid4()}/reject",
+            json={},
+        )
+        assert response.status_code == 401
+
+    def test_delete_registration_requires_auth(self):
+        """DELETE .../registrations/{id} must return 401 without a token."""
+        import uuid
+
+        client = TestClient(app)
+        response = client.delete(f"/api/v1/districts/{uuid.uuid4()}/registrations/{uuid.uuid4()}")
+        assert response.status_code == 401

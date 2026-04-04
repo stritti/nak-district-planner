@@ -170,17 +170,21 @@ class UserRepository(ABC):
 
 class LeaderRegistrationRepository(ABC):
     @abstractmethod
-    async def get(self, registration_id: uuid.UUID) -> LeaderRegistration | None: ...
+    async def get(self, registration_id: uuid.UUID) -> LeaderRegistration | None:
+        pass
 
     @abstractmethod
     async def list_by_district(
         self,
         district_id: uuid.UUID,
         status: RegistrationStatus | None = None,
-    ) -> list[LeaderRegistration]: ...
+    ) -> list[LeaderRegistration]:
+        pass
 
     @abstractmethod
-    async def save(self, registration: LeaderRegistration) -> None: ...
+    async def save(self, registration: LeaderRegistration) -> None:
+        pass
 
     @abstractmethod
-    async def delete(self, registration_id: uuid.UUID) -> None: ...
+    async def delete(self, registration_id: uuid.UUID) -> None:
+        pass

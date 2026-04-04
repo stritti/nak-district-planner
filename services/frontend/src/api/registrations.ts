@@ -40,12 +40,56 @@ export interface RegistrationReject {
   reason?: string | null
 }
 
+/** Minimal district info from the public endpoint. */
+export interface PublicDistrictInfo {
+  id: string
+  name: string
+}
+
+/** Minimal congregation info from the public endpoint. */
+export interface PublicCongregationInfo {
+  id: string
+  name: string
+}
+
+/**
+ * Unauthenticated fetch helper for public endpoints.
+ * Avoids the auth-aware `apiFetch` wrapper, which would attempt token refresh
+ * and potentially redirect unauthenticated users to login.
+ */
+async function publicFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers as Record<string, string>) },
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`${res.status} ${res.statusText}${text ? ': ' + text : ''}`)
+  }
+  if (res.status === 204 || res.headers.get('content-length') === '0') {
+    return undefined as T
+  }
+  return res.json() as Promise<T>
+}
+
+/** List all districts — public, no auth required. */
+export function listDistrictsPublic(): Promise<PublicDistrictInfo[]> {
+  return publicFetch<PublicDistrictInfo[]>('/api/v1/public/districts')
+}
+
+/** List congregations for a district — public, no auth required. */
+export function listCongregationsPublic(districtId: string): Promise<PublicCongregationInfo[]> {
+  return publicFetch<PublicCongregationInfo[]>(
+    `/api/v1/public/districts/${districtId}/congregations`,
+  )
+}
+
 /** Submit a self-registration (public — no auth required). */
 export function submitRegistration(
   districtId: string,
   body: RegistrationCreate,
 ): Promise<RegistrationResponse> {
-  return apiFetch<RegistrationResponse>(
+  return publicFetch<RegistrationResponse>(
     `/api/v1/districts/${districtId}/registrations`,
     {
       method: 'POST',

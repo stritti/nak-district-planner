@@ -146,29 +146,20 @@ import { ref, watch } from 'vue'
 import { CheckCircleIcon } from '@heroicons/vue/24/outline'
 import { LEADER_RANKS, SPECIAL_ROLES } from '@/api/leaders'
 import type { LeaderRank, SpecialRole } from '@/api/leaders'
-import { listDistricts, listCongregations } from '@/api/districts'
-import type { DistrictResponse, CongregationResponse } from '@/api/districts'
-
-// For public calls we skip the auth wrapper and use raw fetch
-async function publicPost<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${res.statusText}${text ? ': ' + text : ''}`)
-  }
-  return res.json() as Promise<T>
-}
+import {
+  listDistrictsPublic,
+  listCongregationsPublic,
+  submitRegistration,
+  type PublicDistrictInfo,
+  type PublicCongregationInfo,
+} from '@/api/registrations'
 
 const submitted = ref(false)
 const submitting = ref(false)
 const error = ref<string | null>(null)
 
-const districts = ref<DistrictResponse[]>([])
-const congregations = ref<CongregationResponse[]>([])
+const districts = ref<PublicDistrictInfo[]>([])
+const congregations = ref<PublicCongregationInfo[]>([])
 
 const form = ref<{
   district_id: string
@@ -190,8 +181,8 @@ const form = ref<{
   notes: '',
 })
 
-// Load districts on mount (public, no auth needed)
-listDistricts()
+// Load districts on mount — uses the public (unauthenticated) endpoint
+listDistrictsPublic()
   .then((d) => (districts.value = d))
   .catch(() => {
     error.value = 'Bezirke konnten nicht geladen werden. Bitte Seite neu laden.'
@@ -207,7 +198,7 @@ watch(
       return
     }
     try {
-      congregations.value = await listCongregations(id)
+      congregations.value = await listCongregationsPublic(id)
     } catch {
       congregations.value = []
     }
@@ -219,7 +210,7 @@ async function handleSubmit() {
   error.value = null
   submitting.value = true
   try {
-    await publicPost(`/api/v1/districts/${form.value.district_id}/registrations`, {
+    await submitRegistration(form.value.district_id, {
       name: form.value.name,
       email: form.value.email,
       rank: form.value.rank || null,

@@ -1,14 +1,15 @@
 """
 Registration workflow API routes.
 
-Public:
-  POST /api/v1/districts/{district_id}/registrations
-      — Submit a self-registration request (no auth required).
+Public (no auth):
+  GET  /api/v1/public/districts                              — list districts (for registration form)
+  GET  /api/v1/public/districts/{district_id}/congregations  — list congregations (for registration form)
+  POST /api/v1/districts/{district_id}/registrations         — submit self-registration
 
 District-admin only:
-  GET  /api/v1/districts/{district_id}/registrations
-  POST /api/v1/districts/{district_id}/registrations/{id}/approve
-  POST /api/v1/districts/{district_id}/registrations/{id}/reject
+  GET    /api/v1/districts/{district_id}/registrations
+  POST   /api/v1/districts/{district_id}/registrations/{id}/approve
+  POST   /api/v1/districts/{district_id}/registrations/{id}/reject
   DELETE /api/v1/districts/{district_id}/registrations/{id}
 """
 
@@ -22,6 +23,7 @@ from typing import Optional
 import jwt
 from fastapi import APIRouter, HTTPException, Query, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
@@ -31,6 +33,7 @@ from app.adapters.api.schemas.registration import (
     RegistrationReject,
     RegistrationResponse,
 )
+from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
@@ -39,6 +42,53 @@ from app.domain.models.leader_registration import LeaderRegistration, Registrati
 from app.domain.models.role import Role
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Public lookup router — minimal data for the self-registration form
+# ---------------------------------------------------------------------------
+
+
+class PublicDistrictInfo(BaseModel):
+    """Minimal district info returned by the public listing endpoint."""
+
+    id: uuid.UUID
+    name: str
+
+
+class PublicCongregationInfo(BaseModel):
+    """Minimal congregation info returned by the public listing endpoint."""
+
+    id: uuid.UUID
+    name: str
+
+
+public_router = APIRouter(prefix="/api/v1/public", tags=["registrations-public"])
+
+
+@public_router.get("/districts", response_model=list[PublicDistrictInfo])
+async def list_districts_public(db: DbSession) -> list[PublicDistrictInfo]:
+    """List all districts — public endpoint for the self-registration form."""
+    districts = await SqlDistrictRepository(db).list_all()
+    return [PublicDistrictInfo(id=d.id, name=d.name) for d in districts]
+
+
+@public_router.get(
+    "/districts/{district_id}/congregations",
+    response_model=list[PublicCongregationInfo],
+)
+async def list_congregations_public(
+    district_id: uuid.UUID, db: DbSession
+) -> list[PublicCongregationInfo]:
+    """List congregations for a district — public endpoint for the self-registration form."""
+    if not await SqlDistrictRepository(db).get(district_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    congregations = await SqlCongregationRepository(db).list_by_district(district_id)
+    return [PublicCongregationInfo(id=c.id, name=c.name) for c in congregations]
+
+
+# ---------------------------------------------------------------------------
+# Registration router (per-district)
+# ---------------------------------------------------------------------------
 
 router = APIRouter(
     prefix="/api/v1/districts/{district_id}/registrations",
@@ -211,7 +261,10 @@ async def approve_registration(
     await reg_repo.save(reg)
 
     logger.info(
-        f"Registration {registration_id} approved by {auth.user_sub}; leader {leader.id} created."
+        "Registration %s approved by %s; leader %s created.",
+        registration_id,
+        auth.user_sub,
+        leader.id,
     )
     return _to_response(reg)
 
@@ -250,7 +303,7 @@ async def reject_registration(
     reg.updated_at = datetime.now(timezone.utc)
     await reg_repo.save(reg)
 
-    logger.info(f"Registration {registration_id} rejected by {auth.user_sub}.")
+    logger.info("Registration %s rejected by %s.", registration_id, auth.user_sub)
     return _to_response(reg)
 
 
