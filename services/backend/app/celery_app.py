@@ -11,8 +11,8 @@ def _make_sync_db_url(async_url: str) -> str:
     prefix = "postgresql+asyncpg://"
     if not async_url.startswith(prefix):
         raise ValueError(
-            f"DATABASE_URL must start with '{prefix}' for Celery broker derivation, "
-            f"got: {async_url!r}"
+            f"DATABASE_URL must start with '{prefix}' for Celery broker derivation "
+            f"(got scheme: {async_url.split('://')[0]!r})"
         )
     return "postgresql+psycopg2://" + async_url[len(prefix) :]
 
