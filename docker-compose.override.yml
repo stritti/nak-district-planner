@@ -2,8 +2,8 @@
 #
 # ENV-Strategie:
 #   .env              → enthält localhost-URLs (für "uv run uvicorn" direkt auf dem Host)
-#   dieses Override   → überschreibt DATABASE_URL/REDIS_URL in den Containern mit
-#                       den Docker-internen Hostnamen (db, redis)
+#   dieses Override   → überschreibt DATABASE_URL in den Containern mit
+#                       den Docker-internen Hostnamen (db)
 #
 # Ergebnis: nur eine .env-Datei, kein manuelles Umschalten.
 services:
@@ -17,7 +17,6 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
-      REDIS_URL: "redis://redis:6379/0"
 
   worker:
     command: uv run celery -A app.celery_app worker --loglevel=debug
@@ -25,12 +24,7 @@ services:
       - ./services/backend/app:/app/app
     environment:
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
-      REDIS_URL: "redis://redis:6379/0"
 
   db:
     ports:
       - "5432:5432"
-
-  redis:
-    ports:
-      - "6379:6379"
