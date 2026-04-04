@@ -14,8 +14,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.adapters.db.base import Base
-from app.domain.models.membership import ScopeType
-from app.domain.models.role import Role
 
 
 class MembershipORM(Base):
