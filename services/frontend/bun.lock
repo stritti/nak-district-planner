@@ -13,7 +13,7 @@
         "vue-router": "^4.3",
       },
       "devDependencies": {
-        "@pinia/testing": "^0.1",
+        "@pinia/testing": "^1.0",
         "@tailwindcss/vite": "^4.2.1",
         "@vitejs/plugin-vue": "^6.0",
         "@vue/test-utils": "^2.4",
@@ -130,7 +130,7 @@
 
     "@one-ini/wasm": ["@one-ini/wasm@0.1.1", "", {}, "sha512-XuySG1E38YScSJoMlqovLru4KTUNSjgVTIjyh7qMX6aNN5HY5Ct5LhRJdxO79JtTzKfzV/bnWpz+zquYrISsvw=="],
 
-    "@pinia/testing": ["@pinia/testing@0.1.7", "", { "dependencies": { "vue-demi": "^0.14.10" }, "peerDependencies": { "pinia": ">=2.2.6" } }, "sha512-xcDq6Ry/kNhZ5bsUMl7DeoFXwdume1NYzDggCiDUDKoPQ6Mo0eH9VU7bJvBtlurqe6byAntWoX5IhVFqWzRz/Q=="],
+    "@pinia/testing": ["@pinia/testing@1.0.3", "", { "peerDependencies": { "pinia": ">=3.0.4" } }, "sha512-g+qR49GNdI1Z8rZxKrQC3GN+LfnGTNf5Kk8Nz5Cz6mIGva5WRS+ffPXQfzhA0nu6TveWzPNYTjGl4nJqd3Cu9Q=="],
 
     "@pkgjs/parseargs": ["@pkgjs/parseargs@0.11.0", "", {}, "sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg=="],
 
