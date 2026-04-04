@@ -28,7 +28,6 @@ dependencies = [
     "opentelemetry-instrumentation-sqlalchemy>=0.46b0",
     "opentelemetry-instrumentation-httpx>=0.46b0",
     "opentelemetry-instrumentation-celery>=0.46b0",
-    "python-jose[cryptography]>=3.5.0",
     "requests>=2.33.1",
 ]
 
