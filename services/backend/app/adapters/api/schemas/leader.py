@@ -10,7 +10,7 @@ from app.domain.models.leader import LeaderRank, SpecialRole
 
 class LeaderCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    rank: LeaderRank
+    rank: LeaderRank | None = None
     congregation_id: uuid.UUID | None = None
     special_role: SpecialRole | None = None
     email: str | None = None
