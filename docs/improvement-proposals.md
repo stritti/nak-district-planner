@@ -5,7 +5,7 @@ OpenSpec-Spezifikationen. Es identifiziert Vereinfachungspotenziale, architekton
 Refactoring-Möglichkeiten sowie UX-Verbesserungen und dient als Planungsgrundlage für die
 Weiterentwicklung.
 
-> **Status:** Entwurf – Stand April 2026  
+> **Status:** Entwurf – Stand April 2026
 > **Basis:** OpenSpec-Änderungen `uc-01` bis `uc-06`, `planning-slot-hybrid-sync`,
 > `introduce-rbac-permissions-model`, `harden-calendar-sync-algorithm`,
 > `introduce-non-functional-baseline`, `phase4b-oidc-auth-idp-agnostic`
@@ -16,34 +16,42 @@ Weiterentwicklung.
 
 ### Überblick
 
-| Feature | Spezifiziert | Implementiert | Anmerkung |
-| ------- | :---: | :---: | --------- |
-| OAuth/OIDC-Login | ✅ | ✅ | Phase 4b vollständig, provider-agnostisch |
-| Bezirk & Gemeinde (CRUD) | ✅ | ✅ | Inkl. Hierarchie |
-| Event-CRUD | ✅ | ✅ | Phase-1-Refactor geplant |
-| Kalender-Integration (ICS/CalDAV) | ✅ | ✅ | Voll funktionsfähig |
-| Kalender-Integration (Google/Microsoft) | ✅ | 🟡 | Nur Stubs – OAuth-Flows ausstehend |
-| Zyklischer Sync (Celery) | ✅ | ✅ | Hash-basierte Deduplizierung |
-| Dienstplanung-Matrix | ✅ | ✅ | Inkl. LÜCKE-Visualisierung & Modal |
-| Feiertags-Import | ✅ | ✅ | Nager.Date + Gauss-Algorithmus |
-| ICS-Export (Token-basiert) | ✅ | ✅ | Stabile UIDs, PUBLIC/INTERNAL |
-| Event-Verteilung (applicability) | ✅ | ✅ | Virtuell, keine Duplizierung |
-| **PlanningSlot / PlanningSeries** | ✅ | ❌ | Phase 1 – kritisches Fundament |
-| **EventInstance (Soll/Ist)** | ✅ | ❌ | Phase 1 – Abhängigkeit von PlanningSlot |
-| **ExternalEventCandidate & Review** | ✅ | ❌ | Phase 1 |
-| **RBAC-Durchsetzung** | ✅ | 🟡 | Modelle vorhanden, Guards unvollständig |
-| **Sync-Zustandsmaschine (Harden)** | ✅ | ❌ | Phase 4 – abhängig von Phase 1 |
-| **ExternalEventLink** | ✅ | ❌ | Phase 3 |
-| **In-App-Benachrichtigungen** | ✅ | ❌ | Phase 1 |
-| **Rate-Limiting (public Endpoints)** | ✅ | ❌ | Phase 5 |
-| **Audit-Logging (vollständig)** | ✅ | 🟡 | Infrastruktur vorhanden, nicht umfassend |
-| **Performance-Monitoring / SLOs** | ✅ | ❌ | Phase 5 |
+| Feature | Spezifiziert | Implementiert | OpenSpec-Change | Anmerkung |
+| ------- | :---: | :---: | --- | --------- |
+| OAuth/OIDC-Login | ✅ | ✅ | `phase4b-oidc-auth-idp-agnostic` | Provider-agnostisch |
+| Bezirk & Gemeinde (CRUD) | ✅ | ✅ | – | Inkl. Hierarchie |
+| Event-CRUD | ✅ | ✅ | – | Phase-1-Refactor geplant |
+| Kalender-Integration (ICS/CalDAV) | ✅ | ✅ | `uc-01-kalender-anbindung` | Voll funktionsfähig |
+| Kalender-Integration (Google/Microsoft) | ✅ | 🟡 | `uc-01-kalender-anbindung` | Nur Stubs – OAuth-Flows ausstehend |
+| Zyklischer Sync (Celery) | ✅ | ✅ | `uc-02-zyklischer-sync` | Hash-basierte Deduplizierung |
+| Dienstplanung-Matrix | ✅ | ✅ | `uc-03-dienstplanung-matrix` | Inkl. LÜCKE & Modal |
+| Feiertags-Import | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Nager.Date + Gauss |
+| ICS-Export (Token-basiert) | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Stabile UIDs, PUBLIC/INTERNAL |
+| Event-Verteilung (applicability) | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Virtuell, keine Duplizierung |
+| **PlanningSlot / PlanningSeries** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 – kritisches Fundament |
+| **EventInstance (Soll/Ist)** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
+| **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
+| **RBAC-Durchsetzung** | ✅ | 🟡 | `introduce-rbac-permissions-model` | Modelle vorhanden, Guards unvollständig |
+| **Sync-Zustandsmaschine (Harden)** | ✅ | ❌ | `harden-calendar-sync-algorithm` | Phase 4 |
+| **ExternalEventLink** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 3 |
+| **In-App-Benachrichtigungen** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
+| **Rate-Limiting (public Endpoints)** | ✅ | ❌ | `introduce-non-functional-baseline` | Phase 5 |
+| **Audit-Logging (vollständig)** | ✅ | 🟡 | `introduce-non-functional-baseline` | Infrastruktur vorhanden |
+| **Performance-Monitoring / SLOs** | ✅ | ❌ | `introduce-non-functional-baseline` | Phase 5 |
+| **UX-Feedback-System (Toast)** | – | ❌ | **`ux-improvements`** | Neu spezifiziert |
+| **Sync-Status sichtbar** | – | ❌ | **`ux-improvements`** | Neu spezifiziert |
+| **Bestätigungsdialoge** | – | ❌ | **`ux-improvements`** | Neu spezifiziert |
+| **Matrix UX (Skeleton, Sticky, Filter)** | – | ❌ | **`ux-improvements`** | Neu spezifiziert |
+| **Connector-Registry + Code-Qualität** | – | ❌ | **`code-quality`** | Neu spezifiziert |
+| **Frontend HTTP-Client + View-Split** | – | ❌ | **`code-quality`** | Neu spezifiziert |
 
 ---
 
 ## 2. Vereinfachungspotenziale
 
 ### 2.1 Connector-Factory im Sync-Service
+
+**Status:** → OpenSpec-Change [`code-quality`](../openspec/changes/code-quality/proposal.md)
 
 **Aktuell:** Die Funktion `_get_connector()` in `sync_service.py` enthält eine manuelle
 `if/elif`-Kette für jeden Kalender-Typ.
@@ -80,18 +88,21 @@ def _get_connector(calendar_type: CalendarType) -> CalendarConnector:
 
 ### 2.2 OAuth-Stubs (Google, Microsoft) klar kennzeichnen
 
+**Status:** → OpenSpec-Change [`code-quality`](../openspec/changes/code-quality/proposal.md)
+
 **Aktuell:** `GoogleCalendarConnector` und `MicrosoftGraphCalendarConnector` existieren als
 fast leere Stubs ohne deutliche Warnung.
 
-**Vereinfachung:** Entweder die Stubs mit expliziten `NotImplementedError`-Nachrichten versehen
-und in der UI deaktivieren, oder als Platzhalter im Integrations-Formular mit dem Badge
-„Coming soon" kennzeichnen.
+**Vereinfachung:** Stubs mit expliziten `NotImplementedError`-Nachrichten versehen und in der
+UI mit dem Badge „In Kürze verfügbar" kennzeichnen und deaktivieren.
 
 **Aufwand:** Gering. **Priorität:** Mittel – verhindert Verwirrung bei Nutzern und Entwicklern.
 
 ---
 
 ### 2.3 Celery-Async-Bridge dokumentieren
+
+**Status:** Keine eigene OpenSpec-Spezifikation (Kommentar im Code genügt).
 
 **Aktuell:** Celery-Tasks rufen `asyncio.run()` auf, um async-Anwendungslogik synchron
 auszuführen. Dieses Bridge-Pattern ist bewusst gewählt, aber nicht dokumentiert.
@@ -105,6 +116,8 @@ Entwicklern zu vermeiden.
 ---
 
 ### 2.4 Frontend-API-Client konsolidieren
+
+**Status:** → OpenSpec-Change [`code-quality`](../openspec/changes/code-quality/proposal.md)
 
 **Aktuell:** Jede Ressource hat eine separate API-Datei
 (`api/events.ts`, `api/districts.ts`, `api/leaders.ts`, …). Es gibt keine zentrale
@@ -120,6 +133,8 @@ Die ressourcenspezifischen Dateien bleiben, delegieren aber an den Client.
 
 ### 2.5 Verschlüsselung: SQLAlchemy-Spaltentyp statt manueller Decorator-Logik
 
+**Status:** Keine eigene OpenSpec-Spezifikation (aktueller Ansatz korrekt und sicher).
+
 **Aktuell:** Credentials werden vor dem Speichern manuell mit `encrypt_credentials()` /
 `decrypt_credentials()` aus `application/crypto.py` ver-/entschlüsselt.
 
@@ -134,6 +149,9 @@ durchführen – ohne manuelle Aufrufe in jedem Service.
 ## 3. Architektonische Lücken
 
 ### 3.1 🔴 KRITISCH: PlanningSlot / PlanningSeries fehlt
+
+**Status:** → OpenSpec-Change
+[`planning-slot-hybrid-sync`](../openspec/changes/planning-slot-hybrid-sync/proposal.md)
 
 **Beschreibung:** Das aktuelle `Event`-Modell vermischt Planungs- (Soll), Ausführungs- (Ist)
 und Sync-Metadaten. Die Architektur sieht eine Trennung in:
@@ -159,12 +177,15 @@ PlanningSeries
 3. Bestehende `Event`-Daten migrieren
 4. Matrix-API anpassen (basiert dann auf `PlanningSlot`)
 
-**Referenz:** `openspec/architecture/phase-1-planning-model-technical-plan.md`  
+**Referenz:** `openspec/architecture/phase-1-planning-model-technical-plan.md`
 **Priorität:** 🔴 Kritisch – blockiert Phase 3 und 4 der Roadmap.
 
 ---
 
 ### 3.2 🔴 KRITISCH: RBAC-Durchsetzung unvollständig
+
+**Status:** → OpenSpec-Change
+[`introduce-rbac-permissions-model`](../openspec/changes/introduce-rbac-permissions-model/proposal.md)
 
 **Beschreibung:** Das RBAC-Modell (`User`, `Membership`, `Role`) ist vorhanden. JWT-Claims
 enthalten Memberships. Jedoch fehlen konsistente Authorization-Guards in den
@@ -177,16 +198,19 @@ Application-Layer-Services.
 
 **Maßnahmen:**
 
-- Alle Service-Methoden mit `@require_role(...)` oder equivalent absichern
+- Alle Service-Methoden mit `@require_role(...)` oder äquivalent absichern
 - Automatisierte Tests für Berechtigungsmatrix hinzufügen
 - Matrix: `PLANNER`-Rolle für ServiceAssignment-Mutations prüfen
 
-**Referenz:** `openspec/changes/introduce-rbac-permissions-model/`  
+**Referenz:** `openspec/changes/introduce-rbac-permissions-model/`
 **Priorität:** 🔴 Kritisch.
 
 ---
 
 ### 3.3 🟠 MITTEL: ExternalEventCandidate & Review-Workflow fehlt
+
+**Status:** → OpenSpec-Change
+[`planning-slot-hybrid-sync`](../openspec/changes/planning-slot-hybrid-sync/proposal.md)
 
 **Beschreibung:** Laut Spezifikation sollen neue externe Events nicht automatisch als
 `Event` angelegt werden, sondern zunächst als `ExternalEventCandidate` zur manuellen
@@ -206,12 +230,16 @@ Prüfung bereitstehen.
 - Sync-Service auf Kandidaten-Erstellung umstellen
 - Review-UI in der Frontend-App hinzufügen
 
-**Referenz:** `openspec/changes/planning-slot-hybrid-sync/`  
+**Referenz:** `openspec/changes/planning-slot-hybrid-sync/`
 **Priorität:** 🟠 Mittel (nach Phase 1).
 
 ---
 
 ### 3.4 🟠 MITTEL: Benachrichtigungssystem fehlt
+
+**Status:** → OpenSpec-Change
+[`planning-slot-hybrid-sync`](../openspec/changes/planning-slot-hybrid-sync/proposal.md)
+(Spec: `in-app-notifications`)
 
 **Beschreibung:** Governance-relevante Ereignisse (externe Erkennung, Sync-Konflikte,
 ausstehende Reviews) sollen als persistente In-App-Benachrichtigungen angezeigt werden.
@@ -230,6 +258,9 @@ ausstehende Reviews) sollen als persistente In-App-Benachrichtigungen angezeigt 
 
 ### 3.5 🟠 MITTEL: Rate-Limiting auf öffentlichen Endpoints fehlt
 
+**Status:** → OpenSpec-Change
+[`introduce-non-functional-baseline`](../openspec/changes/introduce-non-functional-baseline/proposal.md)
+
 **Beschreibung:** Der Endpoint `GET /api/v1/export/{token}/calendar.ics` ist öffentlich
 zugänglich. Ohne Rate-Limiting ist er anfällig für Missbrauch.
 
@@ -239,12 +270,15 @@ zugänglich. Ohne Rate-Limiting ist er anfällig für Missbrauch.
 - Mindestens: 60 Anfragen/Minute pro IP auf `/api/v1/export/*`
 - Ggf. auch auf `POST /api/v1/public/districts/{id}/registrations`
 
-**Referenz:** `openspec/changes/introduce-non-functional-baseline/`  
+**Referenz:** `openspec/changes/introduce-non-functional-baseline/`
 **Priorität:** 🟠 Mittel.
 
 ---
 
 ### 3.6 🟡 NIEDRIG: ExternalEventLink fehlt
+
+**Status:** → OpenSpec-Change
+[`planning-slot-hybrid-sync`](../openspec/changes/planning-slot-hybrid-sync/proposal.md)
 
 **Beschreibung:** Der `ExternalEventLink` (Mapping zwischen externem Provider-Event
 und internem PlanningSlot) ist spezifiziert, aber noch nicht implementiert.
@@ -259,8 +293,10 @@ Link-Objekt mit Revision-Markierungen.
 
 ### 3.7 🟡 NIEDRIG: Kein Health-Check-Endpoint
 
-**Beschreibung:** Es gibt keinen standardisierten Health-Check-Endpoint (z.B. `GET /health`
-oder `GET /api/v1/health`), der DB- und Redis-Verbindungsstatus zurückgibt.
+**Status:** → OpenSpec-Change [`code-quality`](../openspec/changes/code-quality/proposal.md)
+
+**Beschreibung:** Es gibt keinen standardisierten Health-Check-Endpoint (z.B. `GET /health`),
+der DB- und Redis-Verbindungsstatus zurückgibt.
 
 **Maßnahmen:**
 
@@ -275,6 +311,8 @@ oder `GET /api/v1/health`), der DB- und Redis-Verbindungsstatus zurückgibt.
 
 ### 4.1 Große View-Komponenten aufteilen
 
+**Status:** → OpenSpec-Change [`code-quality`](../openspec/changes/code-quality/proposal.md)
+
 Mehrere Frontend-Views sind sehr lang und erledigen zu viele Aufgaben:
 
 | View | Zeilen | Empfehlung |
@@ -283,12 +321,14 @@ Mehrere Frontend-Views sind sehr lang und erledigen zu viele Aufgaben:
 | `CalendarIntegrationsView.vue` | 852 | Aufteilen in `IntegrationCard.vue`, `IntegrationFormModal.vue` |
 | `MatrixView.vue` | 440 | Aufteilen in `MatrixFilters.vue`, `MatrixTable.vue`, `AssignmentModal.vue` |
 
-**Vorteile:** Bessere Testbarkeit, Wiederverwendbarkeit, einfachere Code-Reviews.  
+**Vorteile:** Bessere Testbarkeit, Wiederverwendbarkeit, einfachere Code-Reviews.
 **Aufwand:** Mittel pro View. **Priorität:** Mittel.
 
 ---
 
 ### 4.2 Sync-Service aufteilen
+
+**Status:** → OpenSpec-Change [`code-quality`](../openspec/changes/code-quality/proposal.md)
 
 `sync_service.py` übernimmt mehrere Verantwortlichkeiten:
 
@@ -312,6 +352,8 @@ application/
 
 ### 4.3 Application-Layer: Typisierte Ergebnis-Objekte
 
+**Status:** → OpenSpec-Change [`code-quality`](../openspec/changes/code-quality/proposal.md)
+
 **Aktuell:** Services geben `dict[str, int]` zurück (z.B. `{"created": 2, "updated": 1}`).
 
 **Empfehlung:** Pydantic-Dataclasses oder `@dataclass`-Objekte mit klar benannten Feldern
@@ -326,12 +368,14 @@ class SyncResult:
     errors: list[str] = field(default_factory=list)
 ```
 
-**Vorteil:** Typprüfung bei Compile-Zeit, bessere IDE-Unterstützung, selbstdokumentierend.  
+**Vorteil:** Typprüfung bei Compile-Zeit, bessere IDE-Unterstützung, selbstdokumentierend.
 **Aufwand:** Gering. **Priorität:** Niedrig.
 
 ---
 
 ### 4.4 API-Router: Konsistentes Dependency-Injection-Muster
+
+**Status:** → OpenSpec-Change [`code-quality`](../openspec/changes/code-quality/proposal.md)
 
 **Aktuell:** Einige Router verwenden `Depends(get_session)` direkt, andere erhalten
 Sessions über zwischengeschaltete Service-Funktionen ohne klares Muster.
@@ -353,6 +397,8 @@ async def get_matrix(
 
 ### 4.5 Domain-Modell: Enum-Werte explizit dokumentieren
 
+**Status:** Keine eigene OpenSpec-Spezifikation (minimale Code-Änderung).
+
 Die Enums (`EventStatus`, `EventSource`, `ServiceAssignmentStatus`, usw.) haben
 korrekte Werte, aber keine Docstrings. Da sie für Governance-Entscheidungen
 kritisch sind, sollten sie dokumentiert werden.
@@ -364,6 +410,9 @@ kritisch sind, sollten sie dokumentiert werden.
 ## 5. UX-Verbesserungen
 
 ### 5.1 🔴 Fehlendes globales Feedback-System (Toast/Notification)
+
+**Status:** → OpenSpec-Change
+[`ux-improvements`](../openspec/changes/ux-improvements/proposal.md)
 
 **Problem:** Fehler werden inline angezeigt, Erfolgsmeldungen erscheinen in vielen Fällen gar
 nicht. Nutzer erhalten kein konsistentes Feedback nach Aktionen (z.B. „Leader gespeichert",
@@ -377,6 +426,9 @@ Pinia-Store) einführen. Alle API-Aktionen lösen Success/Error-Toasts aus.
 ---
 
 ### 5.2 🔴 Kalender-Integration: Sync-Status nicht sichtbar
+
+**Status:** → OpenSpec-Change
+[`ux-improvements`](../openspec/changes/ux-improvements/proposal.md)
 
 **Problem:** In der Kalenderintegrationsansicht ist nicht ersichtlich:
 
@@ -397,6 +449,9 @@ Pinia-Store) einführen. Alle API-Aktionen lösen Success/Error-Toasts aus.
 
 ### 5.3 🟠 Matrix-Ansicht: Keine Ladeanimation / Skeleton-Screen
 
+**Status:** → OpenSpec-Change
+[`ux-improvements`](../openspec/changes/ux-improvements/proposal.md)
+
 **Problem:** Beim Laden der Matrix erscheint nur der Text „Lade…". Bei großen Datensätzen
 (viele Gemeinden, langer Zeitraum) ist dies unzureichend.
 
@@ -408,6 +463,9 @@ Pinia-Store) einführen. Alle API-Aktionen lösen Success/Error-Toasts aus.
 ---
 
 ### 5.4 🟠 Matrix-Ansicht: Horizontaler Scroll nicht erkennbar
+
+**Status:** → OpenSpec-Change
+[`ux-improvements`](../openspec/changes/ux-improvements/proposal.md)
 
 **Problem:** Bei vielen Spalten (langer Zeitraum) ist horizontales Scrollen nötig, aber
 nicht offensichtlich. Insbesondere auf Touch-Geräten.
@@ -424,6 +482,9 @@ nicht offensichtlich. Insbesondere auf Touch-Geräten.
 
 ### 5.5 🟠 Keine Bestätigungsdialoge für destruktive Aktionen
 
+**Status:** → OpenSpec-Change
+[`ux-improvements`](../openspec/changes/ux-improvements/proposal.md)
+
 **Problem:** Aktionen wie „Integration löschen", „Registrierung ablehnen" oder
 „Event stornieren" werden ohne Rückfrage ausgeführt.
 
@@ -439,6 +500,9 @@ nicht offensichtlich. Insbesondere auf Touch-Geräten.
 
 ### 5.6 🟠 Export-Token: Kein „In Zwischenablage kopieren"-Button
 
+**Status:** → OpenSpec-Change
+[`ux-improvements`](../openspec/changes/ux-improvements/proposal.md)
+
 **Problem:** Export-Tokens und ICS-URLs werden angezeigt, müssen aber manuell kopiert
 werden.
 
@@ -450,6 +514,9 @@ kurzfristiger „Kopiert!"-Feedback-Badge).
 ---
 
 ### 5.7 🟡 Fehlende Leer-Zustände (Empty States)
+
+**Status:** → OpenSpec-Change
+[`ux-improvements`](../openspec/changes/ux-improvements/proposal.md)
 
 **Problem:** Wenn keine Events, keine Integrationen oder keine Leader vorhanden sind,
 erscheinen leere Tabellen ohne erklärenden Text.
@@ -465,6 +532,9 @@ erscheinen leere Tabellen ohne erklärenden Text.
 
 ### 5.8 🟡 Matrix: Kein Filter nach Gemeinde
 
+**Status:** → OpenSpec-Change
+[`ux-improvements`](../openspec/changes/ux-improvements/proposal.md)
+
 **Problem:** Bei Bezirken mit vielen Gemeinden ist es nicht möglich, die Matrix auf
 eine einzelne Gemeinde zu filtern.
 
@@ -477,11 +547,13 @@ angezeigten Zeilen der Matrix filtert (clientseitig, kein API-Aufruf nötig).
 
 ### 5.9 🟡 Mobile Responsiveness der Matrix
 
+**Status:** Keine eigene OpenSpec-Spezifikation (kurzfristiger Hinweis genügt).
+
 **Problem:** Die Dienstplan-Matrix ist auf Mobilgeräten kaum nutzbar (zu breite Tabelle,
 kleine Touch-Ziele).
 
 **Lösung (kurzfristig):** Deutlicher Hinweis in der UI, dass die Matrix für Desktop
-optimiert ist.  
+optimiert ist.
 **Lösung (mittelfristig):** Alternative Monats-/Listenansicht für Mobilgeräte einführen.
 
 **Aufwand:** Gering (Hinweis) / Hoch (Alternativansicht). **Priorität:** 🟡 Niedrig.
@@ -489,6 +561,8 @@ optimiert ist.
 ---
 
 ### 5.10 🟡 Registrierungsprozess: Kein E-Mail-Bestätigungsfeedback
+
+**Status:** Keine eigene OpenSpec-Spezifikation (UI-Text-Änderung).
 
 **Problem:** Nach der Registrierung als Leader erhält der Nutzer keine Rückmeldung,
 dass eine Bestätigungs-E-Mail gesendet wurde (falls diese Funktion geplant ist) oder
@@ -505,45 +579,61 @@ klarer Instruktion: „Ihre Anfrage wurde eingereicht. Der Bezirksadmin wird ben
 
 ### Sofort (nächster Sprint)
 
-| # | Maßnahme | Aufwand | Bereich |
-| - | -------- | ------- | ------- |
-| 1 | RBAC-Guards in allen Services vervollständigen | Mittel | Backend |
-| 2 | Globales Toast/Feedback-System | Mittel | Frontend |
-| 3 | Kalender-Integration: Sync-Status anzeigen | Mittel | Frontend/Backend |
-| 4 | Bestätigungsdialoge für destruktive Aktionen | Gering | Frontend |
+| # | Maßnahme | OpenSpec-Change | Aufwand | Bereich |
+| - | -------- | --- | ------- | ------- |
+| 1 | RBAC-Guards in allen Services vervollständigen | `introduce-rbac-permissions-model` | Mittel | Backend |
+| 2 | Globales Toast/Feedback-System | `ux-improvements` | Mittel | Frontend |
+| 3 | Kalender-Integration: Sync-Status anzeigen | `ux-improvements` | Mittel | Frontend/Backend |
+| 4 | Bestätigungsdialoge für destruktive Aktionen | `ux-improvements` | Gering | Frontend |
 
 ### Kurzfristig (Phase 1 – 1–2 Wochen)
 
-| # | Maßnahme | Aufwand | Bereich |
-| - | -------- | ------- | ------- |
-| 5 | PlanningSlot + PlanningSeries einführen (Feature-Flag) | Hoch | Backend |
-| 6 | EventInstance & Soll/Ist-Trennung | Hoch | Backend |
-| 7 | ExternalEventCandidate + Review-Workflow | Mittel | Backend/Frontend |
-| 8 | Benachrichtigungssystem (Modell + UI-Basis) | Mittel | Backend/Frontend |
+| # | Maßnahme | OpenSpec-Change | Aufwand | Bereich |
+| - | -------- | --- | ------- | ------- |
+| 5 | PlanningSlot + PlanningSeries einführen (Feature-Flag) | `planning-slot-hybrid-sync` | Hoch | Backend |
+| 6 | EventInstance & Soll/Ist-Trennung | `planning-slot-hybrid-sync` | Hoch | Backend |
+| 7 | ExternalEventCandidate + Review-Workflow | `planning-slot-hybrid-sync` | Mittel | Backend/Frontend |
+| 8 | Benachrichtigungssystem (Modell + UI-Basis) | `planning-slot-hybrid-sync` | Mittel | Backend/Frontend |
 
 ### Mittelfristig (Phasen 2–3)
 
-| # | Maßnahme | Aufwand | Bereich |
-| - | -------- | ------- | ------- |
-| 9 | Große View-Komponenten aufteilen | Mittel | Frontend |
-| 10 | ExternalEventLink-Modell + Sync-Metadata | Mittel | Backend |
-| 11 | Rate-Limiting auf öffentlichen Endpoints | Gering | Backend/Infra |
-| 12 | Copy-to-Clipboard für Export-Tokens | Gering | Frontend |
-| 13 | Matrix: sticky Spalte + Scroll-Schatten | Gering | Frontend |
+| # | Maßnahme | OpenSpec-Change | Aufwand | Bereich |
+| - | -------- | --- | ------- | ------- |
+| 9 | Frontend HTTP-Client + View-Decomposition | `code-quality` | Mittel | Frontend |
+| 10 | Connector-Registry + SyncResult-Typisierung | `code-quality` | Gering | Backend |
+| 11 | Health-Check-Endpoint | `code-quality` | Gering | Backend/Infra |
+| 12 | ExternalEventLink-Modell + Sync-Metadata | `planning-slot-hybrid-sync` | Mittel | Backend |
+| 13 | Rate-Limiting auf öffentlichen Endpoints | `introduce-non-functional-baseline` | Gering | Backend/Infra |
+| 14 | Copy-to-Clipboard für Export-Tokens | `ux-improvements` | Gering | Frontend |
+| 15 | Matrix: sticky Spalte + Scroll-Schatten + Gemeinde-Filter | `ux-improvements` | Gering | Frontend |
+| 16 | Leer-Zustände (Empty States) | `ux-improvements` | Gering | Frontend |
 
 ### Langfristig (Phase 4–5)
 
-| # | Maßnahme | Aufwand | Bereich |
-| - | -------- | ------- | ------- |
-| 14 | Hardened Sync Engine aktivieren | Hoch | Backend |
-| 15 | Vollständiges Audit-Logging | Mittel | Backend |
-| 16 | Performance-Monitoring & SLOs | Mittel | Backend/Infra |
-| 17 | Matrix: Mobile Alternativansicht | Hoch | Frontend |
-| 18 | Google/Microsoft OAuth-Flows vollständig | Hoch | Backend |
+| # | Maßnahme | OpenSpec-Change | Aufwand | Bereich |
+| - | -------- | --- | ------- | ------- |
+| 17 | Hardened Sync Engine aktivieren | `harden-calendar-sync-algorithm` | Hoch | Backend |
+| 18 | Vollständiges Audit-Logging | `introduce-non-functional-baseline` | Mittel | Backend |
+| 19 | Performance-Monitoring & SLOs | `introduce-non-functional-baseline` | Mittel | Backend/Infra |
+| 20 | Matrix: Mobile Alternativansicht | – | Hoch | Frontend |
+| 21 | Google/Microsoft OAuth-Flows vollständig | `uc-01-kalender-anbindung` | Hoch | Backend |
 
 ---
 
-## 7. Verwandte Dokumente
+## 7. OpenSpec-Changes Übersicht
+
+| Change | Beschreibung | Priorität |
+| --- | --- | --- |
+| [`planning-slot-hybrid-sync`](../openspec/changes/planning-slot-hybrid-sync/proposal.md) | PlanningSlot-Modell, EventInstance, ExternalEventCandidate, Notifications | 🔴 Kritisch |
+| [`introduce-rbac-permissions-model`](../openspec/changes/introduce-rbac-permissions-model/proposal.md) | RBAC-Guards vollständig durchsetzen | 🔴 Kritisch |
+| [`ux-improvements`](../openspec/changes/ux-improvements/proposal.md) | Toast, Sync-Status, Confirm-Dialoge, Matrix-UX | 🟠 Hoch |
+| [`code-quality`](../openspec/changes/code-quality/proposal.md) | Connector-Registry, HTTP-Client, View-Split, Health-Check | 🟡 Mittel |
+| [`introduce-non-functional-baseline`](../openspec/changes/introduce-non-functional-baseline/proposal.md) | Rate-Limiting, Audit-Logging, Performance-SLOs | 🟡 Mittel |
+| [`harden-calendar-sync-algorithm`](../openspec/changes/harden-calendar-sync-algorithm/proposal.md) | Sync-Zustandsmaschine | 🟡 Phase 4 |
+
+---
+
+## 8. Verwandte Dokumente
 
 - [OpenSpec Architecture Overview](../openspec/architecture/overview.md)
 - [Implementation Roadmap](../openspec/architecture/implementation-roadmap.md)
@@ -553,3 +643,5 @@ klarer Instruktion: „Ihre Anfrage wurde eingereicht. Der Bezirksadmin wird ben
 - OpenSpec Change: [`introduce-rbac-permissions-model`](../openspec/changes/introduce-rbac-permissions-model/proposal.md)
 - OpenSpec Change: [`harden-calendar-sync-algorithm`](../openspec/changes/harden-calendar-sync-algorithm/proposal.md)
 - OpenSpec Change: [`introduce-non-functional-baseline`](../openspec/changes/introduce-non-functional-baseline/proposal.md)
+- OpenSpec Change: [`ux-improvements`](../openspec/changes/ux-improvements/proposal.md)
+- OpenSpec Change: [`code-quality`](../openspec/changes/code-quality/proposal.md)
