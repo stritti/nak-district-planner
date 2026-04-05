@@ -17,7 +17,7 @@ Weiterentwicklung.
 ### Überblick
 
 | Feature | Spezifiziert | Implementiert | Anmerkung |
-|---------|:---:|:---:|-----------|
+| ------- | :---: | :---: | --------- |
 | OAuth/OIDC-Login | ✅ | ✅ | Phase 4b vollständig, provider-agnostisch |
 | Bezirk & Gemeinde (CRUD) | ✅ | ✅ | Inkl. Hierarchie |
 | Event-CRUD | ✅ | ✅ | Phase-1-Refactor geplant |
@@ -138,7 +138,7 @@ durchführen – ohne manuelle Aufrufe in jedem Service.
 **Beschreibung:** Das aktuelle `Event`-Modell vermischt Planungs- (Soll), Ausführungs- (Ist)
 und Sync-Metadaten. Die Architektur sieht eine Trennung in:
 
-```
+```text
 PlanningSeries
    └── PlanningSlot (Aggregat-Root)
          ├── EventInstance (Ist-Zustand)
@@ -147,11 +147,13 @@ PlanningSeries
 ```
 
 **Auswirkung:**
+
 - Keine saubere Trennung zwischen „was geplant war" und „was tatsächlich stattfand"
 - Externe Systeme können Planungsdaten unkontrolliert überschreiben
 - Sync-Zustandsmaschine (Phase 4) kann nicht ohne dieses Fundament aktiviert werden
 
 **Nächste Schritte:**
+
 1. Migration gemäß `openspec/changes/planning-slot-hybrid-sync/` planen
 2. Feature-Flag `USE_PLANNING_SLOT_MODEL` aktivieren
 3. Bestehende `Event`-Daten migrieren
@@ -169,10 +171,12 @@ enthalten Memberships. Jedoch fehlen konsistente Authorization-Guards in den
 Application-Layer-Services.
 
 **Auswirkung:**
+
 - Einzelne Endpoints erlauben ggf. unberechtigt Schreibzugriff
 - Governance-Risiko: Daten können von falschen Rollen mutiert werden
 
 **Maßnahmen:**
+
 - Alle Service-Methoden mit `@require_role(...)` oder equivalent absichern
 - Automatisierte Tests für Berechtigungsmatrix hinzufügen
 - Matrix: `PLANNER`-Rolle für ServiceAssignment-Mutations prüfen
@@ -191,11 +195,13 @@ Prüfung bereitstehen.
 **Aktueller Zustand:** Neue externe Events werden direkt als `Event (source=EXTERNAL, status=DRAFT)` gespeichert.
 
 **Auswirkung:**
+
 - Kein Review-Prozess für externe Ereignisse
 - Kein Governance-Filter für unbekannte externe Quellen
 - Benachrichtigungssystem (das noch fehlt) kann nicht angebunden werden
 
 **Maßnahmen:**
+
 - `ExternalEventCandidate`-Modell und -Repository einführen
 - Sync-Service auf Kandidaten-Erstellung umstellen
 - Review-UI in der Frontend-App hinzufügen
@@ -213,6 +219,7 @@ ausstehende Reviews) sollen als persistente In-App-Benachrichtigungen angezeigt 
 **Aktueller Zustand:** Kein Benachrichtigungsmodell, keine UI-Komponente.
 
 **Maßnahmen:**
+
 - `Notification`-Modell (district_id, type, payload, read_at) einführen
 - Domain-Events (`ExternalEventDetected`, `SyncConflictOccurred`) erzeugen Notifications
 - Frontend: Notification-Badge im Header mit Dropdown-Liste
@@ -227,6 +234,7 @@ ausstehende Reviews) sollen als persistente In-App-Benachrichtigungen angezeigt 
 zugänglich. Ohne Rate-Limiting ist er anfällig für Missbrauch.
 
 **Maßnahmen:**
+
 - SlowAPI oder ein nginx-basiertes Rate-Limit einführen
 - Mindestens: 60 Anfragen/Minute pro IP auf `/api/v1/export/*`
 - Ggf. auch auf `POST /api/v1/public/districts/{id}/registrations`
@@ -255,6 +263,7 @@ Link-Objekt mit Revision-Markierungen.
 oder `GET /api/v1/health`), der DB- und Redis-Verbindungsstatus zurückgibt.
 
 **Maßnahmen:**
+
 - Einfachen `GET /health`-Endpoint hinzufügen, der DB-Ping und Redis-Ping prüft
 - In Docker Compose als `healthcheck` referenzieren
 
@@ -269,7 +278,7 @@ oder `GET /api/v1/health`), der DB- und Redis-Verbindungsstatus zurückgibt.
 Mehrere Frontend-Views sind sehr lang und erledigen zu viele Aufgaben:
 
 | View | Zeilen | Empfehlung |
-|------|-------:|------------|
+| ---- | ------: | ---------- |
 | `EventListView.vue` | 870 | Aufteilen in `EventFilters.vue`, `EventTable.vue`, `EventFormModal.vue` |
 | `CalendarIntegrationsView.vue` | 852 | Aufteilen in `IntegrationCard.vue`, `IntegrationFormModal.vue` |
 | `MatrixView.vue` | 440 | Aufteilen in `MatrixFilters.vue`, `MatrixTable.vue`, `AssignmentModal.vue` |
@@ -282,13 +291,14 @@ Mehrere Frontend-Views sind sehr lang und erledigen zu viele Aufgaben:
 ### 4.2 Sync-Service aufteilen
 
 `sync_service.py` übernimmt mehrere Verantwortlichkeiten:
+
 - Provider-Auswahl (Factory)
 - Sync-Algorithmus (Diff-Logik)
 - Ergebnis-Aggregation
 
 **Empfehlung:** In separate Module aufteilen:
 
-```
+```text
 application/
   sync/
     connector_factory.py    # _get_connector() + Registry
@@ -369,11 +379,13 @@ Pinia-Store) einführen. Alle API-Aktionen lösen Success/Error-Toasts aus.
 ### 5.2 🔴 Kalender-Integration: Sync-Status nicht sichtbar
 
 **Problem:** In der Kalenderintegrationsansicht ist nicht ersichtlich:
+
 - Wann hat der letzte Sync stattgefunden?
 - War der letzte Sync erfolgreich?
 - Wie viele Events wurden beim letzten Sync erstellt/aktualisiert?
 
 **Lösung:**
+
 - `last_synced_at` und einen optionalen `last_sync_result`-JSON-Wert am `CalendarIntegration`-
   Objekt anzeigen
 - Farbcodierter Status-Badge: Grün (Sync OK), Gelb (Sync veraltet), Rot (Sync fehlgeschlagen)
@@ -401,6 +413,7 @@ Pinia-Store) einführen. Alle API-Aktionen lösen Success/Error-Toasts aus.
 nicht offensichtlich. Insbesondere auf Touch-Geräten.
 
 **Lösung:**
+
 - Scroll-Schatten (CSS box-shadow) am linken/rechten Rand des Tabellen-Containers
 - „sticky" erste Spalte (Gemeinde-Name), damit der Kontext beim Scrollen erhalten bleibt
 - Scroll-Indikator-Pfeil am rechten Rand
@@ -415,6 +428,7 @@ nicht offensichtlich. Insbesondere auf Touch-Geräten.
 „Event stornieren" werden ohne Rückfrage ausgeführt.
 
 **Lösung:** Einfaches Bestätigungsmodal (`ConfirmModal.vue`) mit:
+
 - Beschreibung der Aktion
 - Warnung (rot) bei unumkehrbaren Aktionen
 - „Bestätigen" / „Abbrechen"-Buttons
@@ -441,6 +455,7 @@ kurzfristiger „Kopiert!"-Feedback-Badge).
 erscheinen leere Tabellen ohne erklärenden Text.
 
 **Lösung:** Aussagekräftige „Empty State"-Komponente mit:
+
 - Erklärungstext („Noch keine Kalender-Integration vorhanden")
 - Direktem CTA-Button („Integration hinzufügen")
 
@@ -491,7 +506,7 @@ klarer Instruktion: „Ihre Anfrage wurde eingereicht. Der Bezirksadmin wird ben
 ### Sofort (nächster Sprint)
 
 | # | Maßnahme | Aufwand | Bereich |
-|---|----------|---------|---------|
+| - | -------- | ------- | ------- |
 | 1 | RBAC-Guards in allen Services vervollständigen | Mittel | Backend |
 | 2 | Globales Toast/Feedback-System | Mittel | Frontend |
 | 3 | Kalender-Integration: Sync-Status anzeigen | Mittel | Frontend/Backend |
@@ -500,7 +515,7 @@ klarer Instruktion: „Ihre Anfrage wurde eingereicht. Der Bezirksadmin wird ben
 ### Kurzfristig (Phase 1 – 1–2 Wochen)
 
 | # | Maßnahme | Aufwand | Bereich |
-|---|----------|---------|---------|
+| - | -------- | ------- | ------- |
 | 5 | PlanningSlot + PlanningSeries einführen (Feature-Flag) | Hoch | Backend |
 | 6 | EventInstance & Soll/Ist-Trennung | Hoch | Backend |
 | 7 | ExternalEventCandidate + Review-Workflow | Mittel | Backend/Frontend |
@@ -509,7 +524,7 @@ klarer Instruktion: „Ihre Anfrage wurde eingereicht. Der Bezirksadmin wird ben
 ### Mittelfristig (Phasen 2–3)
 
 | # | Maßnahme | Aufwand | Bereich |
-|---|----------|---------|---------|
+| - | -------- | ------- | ------- |
 | 9 | Große View-Komponenten aufteilen | Mittel | Frontend |
 | 10 | ExternalEventLink-Modell + Sync-Metadata | Mittel | Backend |
 | 11 | Rate-Limiting auf öffentlichen Endpoints | Gering | Backend/Infra |
@@ -519,7 +534,7 @@ klarer Instruktion: „Ihre Anfrage wurde eingereicht. Der Bezirksadmin wird ben
 ### Langfristig (Phase 4–5)
 
 | # | Maßnahme | Aufwand | Bereich |
-|---|----------|---------|---------|
+| - | -------- | ------- | ------- |
 | 14 | Hardened Sync Engine aktivieren | Hoch | Backend |
 | 15 | Vollständiges Audit-Logging | Mittel | Backend |
 | 16 | Performance-Monitoring & SLOs | Mittel | Backend/Infra |
