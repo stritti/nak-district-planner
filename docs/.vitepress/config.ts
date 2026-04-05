@@ -12,6 +12,7 @@ export default defineConfig(
         { text: 'Erste Schritte', link: '/getting-started' },
         { text: 'Use Cases', link: '/use-cases' },
         { text: 'Rollenkonzept', link: '/roles' },
+        { text: 'Verbesserungen', link: '/improvement-proposals' },
         { text: 'Release', link: '/release-process' }
       ],
 
@@ -33,7 +34,8 @@ export default defineConfig(
         {
           text: 'Entwicklung',
           items: [
-            { text: 'Release-Prozess', link: '/release-process' }
+            { text: 'Release-Prozess', link: '/release-process' },
+            { text: 'Verbesserungsvorschläge', link: '/improvement-proposals' }
           ]
         }
       ],
