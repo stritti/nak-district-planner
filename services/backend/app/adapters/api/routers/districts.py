@@ -402,9 +402,19 @@ async def get_matrix(
                 event_title=event.title if event is not None else instance.title if instance else None,
                 category=event.category if event is not None else slot.category if slot is not None else None,
                 is_gap=assignment is None,
-                planned_time=slot.planning_time if slot is not None else event.start_at.timetz().replace(tzinfo=None),
-                actual_start_at=instance.actual_start_at if instance is not None else event.start_at,
-                actual_end_at=instance.actual_end_at if instance is not None else event.end_at,
+                planned_time=(
+                    slot.planning_time
+                    if slot is not None
+                    else event.start_at.timetz().replace(tzinfo=None)
+                ),
+                actual_start_at=(
+                    instance.actual_start_at
+                    if instance is not None
+                    else event.start_at if event is not None else None
+                ),
+                actual_end_at=(
+                    instance.actual_end_at if instance is not None else event.end_at if event is not None else None
+                ),
                 has_deviation=instance.deviation_flag if instance is not None else False,
                 assignment_id=assignment.id if assignment else None,
                 assignment_status=assignment.status if assignment else None,
