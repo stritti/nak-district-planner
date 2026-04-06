@@ -1,22 +1,23 @@
 # Phase 1 Technical Plan: Planning Model Refactor
 
 This document defines the concrete technical execution plan for Phase 1 of the
-implementation roadmap (`planning-slot-hybrid-sync`), including schema changes,
-compatibility strategy, validation, and rollback for a pre-production rollout.
+implementation roadmap (`planning-slot-hybrid-sync`) for a consolidated
+fresh-install baseline.
 
 ---
 
 ## 1. Phase 1 Goal
 
-Introduce the new planning model foundation without changing sync behavior yet.
+Introduce the planning model foundation without rollout flags or historical
+migration paths.
 
 In scope:
 - `PlanningSeries` (template layer)
 - `PlanningSlot` (aggregate root)
 - `EventInstance` (actual execution)
-- Move `ServiceAssignment` ownership from `event_id` to `planning_slot_id`
-- Keep legacy APIs operational during transition
-- Dual-write newly created or modified events into the new model during transition
+- Move `ServiceAssignment` ownership to `planning_slot_id`
+- Keep the existing event API surface operational while it persists the
+  canonical planning model
 
 Out of scope:
 - Hardened sync state machine activation
@@ -30,7 +31,7 @@ Out of scope:
 Existing core persistence:
 - `events` table with both planning + execution + sync fields
 - `service_assignments` references `events.id`
-- Matrix endpoint reads from `events` + `service_assignments`
+- Matrix endpoint previously read from `events` + `service_assignments`
 
 Existing risks:
 - Event model is overloaded
@@ -48,8 +49,8 @@ Existing risks:
 - `district_id` UUID FK districts
 - `congregation_id` UUID FK congregations (nullable)
 - `category` VARCHAR(255) nullable
-- `default_planning_time` TIME WITH TIME ZONE or TIME (project standard)
-- `recurrence_pattern` JSONB (lightweight rule)
+- `default_planning_time` TIME
+- `recurrence_pattern` JSONB
 - `active_from` DATE nullable
 - `active_until` DATE nullable
 - `is_active` BOOLEAN not null default true
@@ -62,13 +63,13 @@ Existing risks:
 - `congregation_id` UUID FK congregations nullable
 - `category` VARCHAR(255) nullable
 - `planning_date` DATE not null
-- `planning_time` TIME WITH TIME ZONE or TIME not null
+- `planning_time` TIME not null
 - `status` ENUM (`ACTIVE`, `CANCELLED`) not null
 - `created_at`, `updated_at`
 
 3. `event_instances`
 - `id` UUID PK
-- `planning_slot_id` UUID FK planning_slots unique not null (Phase 1: 1:1)
+- `planning_slot_id` UUID FK planning_slots unique not null
 - `title` VARCHAR(500) not null
 - `description` TEXT nullable
 - `actual_start_at` TIMESTAMPTZ not null
@@ -81,58 +82,45 @@ Existing risks:
 ### 3.2 Existing Table Changes
 
 `service_assignments`:
-- add `planning_slot_id` UUID FK planning_slots nullable (step 1)
-- keep `event_id` during transition
-- set `planning_slot_id` NOT NULL once native slot writes are complete
-- remove `event_id` (step 3, after cutover)
+- add `planning_slot_id` UUID FK planning_slots NOT NULL
+- keep `event_id` only as API compatibility linkage for now
 
 ---
 
-## 4. Rollout Strategy (Expand -> Prospective Dual Write -> Contract)
+## 4. Consolidated Implementation Strategy
 
-### Step A: Expand (non-breaking)
+### Step A: Schema foundation
 
-Alembic migration A:
+Alembic migration:
 - Create new enum `planning_slot_status`
 - Create `planning_series`, `planning_slots`, `event_instances`
-- Add `planning_slot_id` to `service_assignments` (nullable)
+- Add `planning_slot_id` to `service_assignments` (required)
 - Add indexes:
   - `ix_planning_slots_district_date`
   - `ix_planning_slots_congregation_date`
   - unique `uq_event_instances_planning_slot_id`
 
-No existing read/write path changed.
+The migration targets fresh installs and does not backfill legacy rows.
 
-### Step B: Prospective population (no mandatory backfill)
+### Step B: Canonical writes
 
 Application behavior:
-1. Leave existing `events` rows untouched.
-2. Dual-write new or edited events into `planning_slots` + `event_instances`.
-3. Populate `service_assignments.planning_slot_id` for newly created or edited assignments.
-4. If old development data must remain visible, add a one-off import script later instead of
-   making the migration mandatory.
+1. Event create/update flows persist into `events`, `planning_slots`, and
+   `event_instances`.
+2. `service_assignments.planning_slot_id` is populated for every new assignment.
+3. No feature flags gate the planning-model write path.
 
-### Step C: Compatibility Cutover
+### Step C: Canonical reads
 
-Introduce feature flag `USE_PLANNING_SLOT_MODEL` in backend config.
-
-Flag OFF (default initially):
-- Existing API/repositories keep reading legacy `events` path.
-
-Flag ON:
-- Matrix read path uses `planning_slots` + `event_instances` + `service_assignments.planning_slot_id`.
-- Event create/update endpoints keep dual-writing while native slot writes are introduced incrementally.
-
-### Step D: Contract (after stabilization)
-
-Alembic migration C (post-verification):
-- Set `service_assignments.planning_slot_id` NOT NULL
-- Drop `service_assignments.event_id`
-- Keep `events` table for one release as rollback buffer OR archive then remove
+1. Matrix read path uses `planning_slots` + `event_instances` +
+   `service_assignments.planning_slot_id`.
+2. Existing list/get event endpoints continue serving the current API contract
+   while the planning model is already the canonical source for matrix and
+   assignment behavior.
 
 ---
 
-## 5. Repository and API Cutover Plan
+## 5. Repository and API Shape
 
 ### 5.1 New Repositories
 
@@ -141,103 +129,66 @@ Add:
 - `PlanningSlotRepository`
 - `EventInstanceRepository`
 
-Temporary bridge adapter:
-- map legacy `EventRepository` methods onto `planning_slots + event_instances` when flag is ON.
+Bridge behavior:
+- `EventRepository.save` also persists `PlanningSlot` and `EventInstance`
 
 ### 5.2 API Compatibility
 
-Phase 1 keeps external API contract stable where possible.
+Phase 1 keeps external event APIs stable where possible.
 
 Internal translation:
-- `EventResponse.start_at/end_at` served from `EventInstance.actual_*`
-- `category`, `district_id`, `congregation_id` served from `PlanningSlot`
-
-Matrix endpoint:
-- switch to slot-based source when flag is ON
+- `EventResponse.start_at/end_at` continues to use event-facing semantics
+- Matrix payload uses `PlanningSlot`/`EventInstance` directly
+- Assignment ownership is keyed by `planning_slot_id`
 
 ---
 
-## 6. Feature Flags
+## 6. Data Validation Checklist
 
-Introduce config flags:
-- `USE_PLANNING_SLOT_MODEL` (primary cutover)
-- `ENABLE_DUAL_WRITE_EVENTS` (default true during transition)
-
-Dual write behavior (if enabled):
-- create/update in new model and legacy `events` until cutover confidence is reached.
-
----
-
-## 7. Data Validation Checklist
-
-Must pass before enabling flag in production:
+Must pass on a fresh-install deployment:
 
 1. Referential integrity:
 - no orphan `event_instances`
 - no orphan `service_assignments.planning_slot_id`
 
-2. Dual-write correctness:
-- newly created/updated events create matching `planning_slots` and `event_instances`
+2. Canonical write correctness:
+- newly created/updated events create matching `planning_slots` and
+  `event_instances`
 
-3. Matrix behavior (sample districts with slot data):
+3. Matrix behavior:
 - gaps and occupied cells render correctly from `planning_slots`
 
 4. API compatibility:
-- list and get endpoints continue to serve legacy business values until the API contract changes
+- existing event and assignment endpoints keep working with the consolidated
+  persistence model
 
 ---
 
-## 8. Testing Plan
+## 7. Testing Plan
 
 ### Unit tests
 - domain constructors for `PlanningSeries`, `PlanningSlot`, `EventInstance`
-- mapping logic legacy -> new model
+- mapping logic event -> planning model
 
 ### Integration tests
-- migration creates the new schema without mutating existing `events`
-- matrix output under flag ON with slot-backed data
+- migration creates the new schema for a fresh database
+- matrix output with slot-backed data
 - assignment CRUD with `planning_slot_id` linkage
 
 ### Smoke tests
-- create event (dual-write enabled)
-- update event (dual-write enabled)
+- create event
+- update event
 - list matrix
 - create assignment
 
 ---
 
-## 9. Rollout Plan
-
-1. Deploy migration A (expand)
-2. Deploy app with `ENABLE_DUAL_WRITE_EVENTS=true` and `USE_PLANNING_SLOT_MODEL=false`
-3. Create or edit planning data in the target environment
-4. Enable `USE_PLANNING_SLOT_MODEL=true` once the matrix can be served from slot-backed data
-5. Introduce native slot writes
-6. Remove legacy event reads/writes after stabilization
-
----
-
-## 10. Rollback Plan
-
-If major issue appears after flag ON:
-- turn `USE_PLANNING_SLOT_MODEL` OFF
-- continue serving legacy `events`
-- keep new tables for diagnosis
-
-If schema issue before contract migration:
-- rollback application only (no destructive DB rollback required)
-
-No destructive table drops until the new slot-based write path is the default.
-
----
-
-## 11. Ownership and Exit Criteria
+## 8. Ownership and Exit Criteria
 
 Phase 1 is complete when:
-- New model is live behind flag
-- Matrix uses slot-based source in the active environment
-- Assignment ownership moved to `planning_slot_id`
-- Historical data migration remains optional unless required by a later production rollout
+- New model is live as the default planning path
+- Matrix uses slot-based source
+- Assignment ownership uses `planning_slot_id`
 - Validation checklist passes
 
 ---

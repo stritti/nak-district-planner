@@ -167,19 +167,16 @@ PlanningSeries
 **Umsetzung:**
 
 - Neue Domain-Modelle `PlanningSeries`, `PlanningSlot` und `EventInstance`
-- Alembic-Migration für das neue Planungsschema; Alt-Datenmigration bleibt in der
-  Vorproduktionsphase optional
-- `service_assignments.planning_slot_id` als neue Eigentumsbeziehung
-- Matrix-API kann hinter `USE_PLANNING_SLOT_MODEL` auf `PlanningSlot` basieren und liefert
-  zusätzlich Soll/Ist-Zeitinformationen
+- Alembic-Migration für das neue Planungsschema ohne Legacy-Backfill-Pfad
+- `service_assignments.planning_slot_id` als konsolidierte Eigentumsbeziehung
+- Matrix-API liest direkt aus `PlanningSlot`/`EventInstance` und liefert zusätzlich
+  Soll/Ist-Zeitinformationen
 
 **Verbleibende Folgearbeiten im selben OpenSpec-Change:**
 
-1. Assignment-Ownership vollständig auf `planning_slot_id` umstellen
-2. Klären, ob für bestehende Entwicklungsdaten überhaupt ein einmaliger Import benötigt wird
-3. ExternalEventCandidate-Workflow ergänzen
-4. Benachrichtigungen und Review-UI abschließen
-5. Hybrid-Sync-Regeln auf Feld-Ebene vervollständigen
+1. ExternalEventCandidate-Workflow ergänzen
+2. Benachrichtigungen und Review-UI abschließen
+3. Hybrid-Sync-Regeln auf Feld-Ebene vervollständigen
 
 **Referenz:** `openspec/architecture/phase-1-planning-model-technical-plan.md`
 **Bewertung:** Kritisches Fundament umgesetzt; die restlichen Arbeiten betreffen Folgephasen desselben Changes.

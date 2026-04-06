@@ -15,7 +15,7 @@
 - [x] 2.3 Create migration for event_instances table
 - [ ] 2.4 Create migration for external_event_candidates table
 - [ ] 2.5 Create migration for notifications table
-- [ ] 2.6 Decide whether a one-off import for pre-existing development data is still needed
+- [x] 2.6 Consolidate schema for fresh installs without legacy migration flags or backfill
 
 ## 3. Sync Engine
 

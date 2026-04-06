@@ -8,8 +8,6 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://nak:changeme@db:5432/nak_planner"
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
-    use_planning_slot_model: bool = False
-    enable_dual_write_events: bool = True
 
     # OpenTelemetry
     otel_enabled: bool = False

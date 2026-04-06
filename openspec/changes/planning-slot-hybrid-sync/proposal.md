@@ -31,5 +31,5 @@ None.
 - Sync engine logic and conflict handling.
 - Matrix API and frontend rendering.
 - Introduction of notification storage and API endpoints.
-- Introduce the PlanningSlot-based model alongside the legacy event model; pre-production
-  environments may skip historical data migration and populate the new model prospectively.
+- Establish the PlanningSlot/EventInstance model as the default planning backbone for fresh
+  installations without rollout flags or historical migration requirements.

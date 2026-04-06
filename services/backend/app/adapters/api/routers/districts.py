@@ -38,7 +38,6 @@ from app.adapters.db.repositories import (
     SqlPlanningSlotRepository,
     SqlServiceAssignmentRepository,
 )
-from app.config import settings
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
@@ -314,52 +313,32 @@ async def get_matrix(
     all_dates.update(holidays.keys())  # kirchliche Feiertage immer als Spalten
     sorted_dates = sorted(all_dates)
 
-    # Filter Gottesdienst events for the matrix cells (include district-level)
-    gottesdienst_events = [e for e in events if e.category == "Gottesdienst"]
-
-    # Build lookup: (congregation_id, date) → event
-    event_by_cong_date: dict[tuple[uuid.UUID, str], object] = {}
-    for event in gottesdienst_events:
-        # Use district_id as key for district-level events
-        cong_id = event.congregation_id or event.district_id
-        key = (cong_id, event.start_at.date().isoformat())
-        if key not in event_by_cong_date:
-            event_by_cong_date[key] = event
-
-    # Load all assignments for found events in one batch
-    event_ids = [e.id for e in gottesdienst_events]
-    assignment_lookup_ids = list(event_ids)
-
     # Batch-load leaders for this district
     leaders = await SqlLeaderRepository(db).list_by_district(district_id)
     leaders_by_id = {leader.id: leader for leader in leaders}
 
-    slot_by_cong_date: dict[tuple[uuid.UUID, str], object] = {}
-    instance_by_slot_id: dict[uuid.UUID, object] = {}
-    if settings.use_planning_slot_model:
-        slots = await SqlPlanningSlotRepository(db).list_for_date_range(
-            district_id=district_id,
-            from_date=from_date,
-            to_date=to_date,
-        )
-        if slots:
-            slot_by_cong_date = {
-                ((slot.congregation_id or slot.district_id), slot.planning_date.isoformat()): slot
-                for slot in slots
-                if slot.category == "Gottesdienst"
-            }
-            instances = await SqlEventInstanceRepository(db).list_by_planning_slots(
-                [slot.id for slot in slots]
-            )
-            instance_by_slot_id = {instance.planning_slot_id: instance for instance in instances}
-            assignment_lookup_ids.extend(slot.id for slot in slots)
+    slots = await SqlPlanningSlotRepository(db).list_for_date_range(
+        district_id=district_id,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    gottesdienst_slots = [slot for slot in slots if slot.category == "Gottesdienst"]
+    slot_by_cong_date = {
+        ((slot.congregation_id or slot.district_id), slot.planning_date.isoformat()): slot
+        for slot in gottesdienst_slots
+    }
+    instances = await SqlEventInstanceRepository(db).list_by_planning_slots(
+        [slot.id for slot in gottesdienst_slots]
+    )
+    instance_by_slot_id = {instance.planning_slot_id: instance for instance in instances}
 
-    assignments = await SqlServiceAssignmentRepository(db).list_by_events(assignment_lookup_ids)
-    assignment_by_event: dict[uuid.UUID, object] = {}
+    assignments = await SqlServiceAssignmentRepository(db).list_by_events(
+        [slot.id for slot in gottesdienst_slots]
+    )
+    assignment_by_slot_id: dict[uuid.UUID, object] = {}
     for a in assignments:
-        assignment_key = a.planning_slot_id or a.event_id
-        if assignment_key not in assignment_by_event:
-            assignment_by_event[assignment_key] = a
+        if a.planning_slot_id not in assignment_by_slot_id:
+            assignment_by_slot_id[a.planning_slot_id] = a
 
     # Build matrix rows
     rows: list[MatrixRow] = []
@@ -375,16 +354,13 @@ async def get_matrix(
                 continue
 
             slot = slot_by_cong_date.get((congregation.id, date_key))
-            instance = instance_by_slot_id.get(slot.id) if slot is not None else None
-            event = event_by_cong_date.get((congregation.id, date_key)) if slot is None else None
-
-            if slot is None and event is None:
+            if slot is None:
                 # Im Zeitplan erwartet, aber noch kein Event angelegt
                 cells[date_key] = MatrixCell()
                 continue
 
-            assignment_key = slot.id if slot is not None else event.id
-            assignment = assignment_by_event.get(assignment_key)
+            instance = instance_by_slot_id.get(slot.id)
+            assignment = assignment_by_slot_id.get(slot.id)
             # Resolve leader name from leader_id if leader_name is not set directly
             leader_name: str | None = None
             leader_id = None
@@ -397,44 +373,14 @@ async def get_matrix(
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
-                event_id=instance.id
-                if instance is not None
-                else event.id
-                if event is not None
-                else None,
-                planning_slot_id=slot.id if slot is not None else None,
-                event_title=event.title
-                if event is not None
-                else instance.title
-                if instance
-                else None,
-                category=event.category
-                if event is not None
-                else slot.category
-                if slot is not None
-                else None,
+                event_id=instance.id if instance is not None else slot.id,
+                planning_slot_id=slot.id,
+                event_title=instance.title if instance is not None else None,
+                category=slot.category,
                 is_gap=assignment is None,
-                planned_time=(
-                    slot.planning_time
-                    if slot is not None
-                    else event.start_at.timetz().replace(tzinfo=None)
-                    if event is not None
-                    else None
-                ),
-                actual_start_at=(
-                    instance.actual_start_at
-                    if instance is not None
-                    else event.start_at
-                    if event is not None
-                    else None
-                ),
-                actual_end_at=(
-                    instance.actual_end_at
-                    if instance is not None
-                    else event.end_at
-                    if event is not None
-                    else None
-                ),
+                planned_time=slot.planning_time,
+                actual_start_at=instance.actual_start_at if instance is not None else None,
+                actual_end_at=instance.actual_end_at if instance is not None else None,
                 has_deviation=instance.deviation_flag if instance is not None else False,
                 assignment_id=assignment.id if assignment else None,
                 assignment_status=assignment.status if assignment else None,

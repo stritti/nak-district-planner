@@ -10,7 +10,7 @@ The current event model mixes planning structure, execution time, and sync metad
 - Implement explicit field-authoritative hybrid sync.
 - Introduce review-based ingestion for external new events.
 - Add persistent in-app notifications.
-- Keep rollout simple for pre-production environments and avoid mandatory historical data migration.
+- Keep the implementation on a single canonical planning path for fresh installations.
 
 **Non-Goals:**
 - Full RRULE support.
@@ -60,19 +60,21 @@ External changes never mutate series.
 ## Risks / Trade-offs
 
 [Model Complexity] → Clear aggregate boundaries and phased implementation.
-[Coexistence Complexity] → Run the new model alongside legacy events until native write paths are complete.
+[Bridge Complexity] → Keep the existing event write surface temporarily, but persist planning data
+unconditionally so matrix and assignments have a single backend source.
 [Sync Edge Cases] → Strict structural authority to prevent drift.
 [Notification Noise] → Auto-matching exact matches to reduce false alerts.
 
-## Rollout Plan
+## Implementation Shape
 
-1. Introduce new tables alongside the existing event model.
-2. Dual-write newly created or edited events into `PlanningSlot` + `EventInstance`.
-3. Switch matrix reads to `PlanningSlot` once enough planning data exists for the target environment.
-4. Add an optional one-off import only if old development data must be preserved.
-5. Deprecate the old event structure after native write paths are complete.
+1. Introduce `planning_series`, `planning_slots`, and `event_instances` as the canonical planning
+   tables.
+2. Persist new or edited events into `PlanningSlot` + `EventInstance` unconditionally.
+3. Read matrix cells and assignment ownership from `PlanningSlot`.
+4. Omit historical migration support because the installation can be recreated from scratch.
 
-Rollback: keep the legacy `events` table active until the new write paths are fully adopted.
+The legacy `events` table remains only as an API compatibility surface until dedicated planning
+write flows are added.
 
 ## Open Questions
 

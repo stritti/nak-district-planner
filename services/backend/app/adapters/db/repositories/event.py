@@ -14,7 +14,6 @@ from app.application.planning_model_bridge import (
     event_instance_from_event,
     planning_slot_from_event,
 )
-from app.config import settings
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
 from app.domain.ports.repositories import EventRepository
 
@@ -153,9 +152,8 @@ class SqlEventRepository(EventRepository):
         row = _domain_to_orm(event, existing)
         if existing is None:
             self._session.add(row)
-        if settings.enable_dual_write_events:
-            await SqlPlanningSlotRepository(self._session).save(planning_slot_from_event(event))
-            await SqlEventInstanceRepository(self._session).save(event_instance_from_event(event))
+        await SqlPlanningSlotRepository(self._session).save(planning_slot_from_event(event))
+        await SqlEventInstanceRepository(self._session).save(event_instance_from_event(event))
         await self._session.flush()
 
     async def delete_before(self, cutoff: datetime) -> int:

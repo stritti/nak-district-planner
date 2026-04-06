@@ -16,7 +16,7 @@ class AssignmentStatus(str, Enum):
 class ServiceAssignment:
     id: uuid.UUID
     event_id: uuid.UUID
-    planning_slot_id: uuid.UUID | None
+    planning_slot_id: uuid.UUID
     leader_id: uuid.UUID | None
     leader_name: str | None
     status: AssignmentStatus
