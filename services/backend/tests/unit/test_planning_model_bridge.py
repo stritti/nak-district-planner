@@ -3,7 +3,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from app.application.planning_model_bridge import event_instance_from_event, planning_slot_from_event
+from app.application.planning_model_bridge import (
+    event_instance_from_event,
+    planning_slot_from_event,
+)
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
 from app.domain.models.planning_slot import PlanningSlotStatus
 from app.domain.models.service_assignment import ServiceAssignment
