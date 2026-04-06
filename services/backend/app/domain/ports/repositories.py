@@ -127,12 +127,12 @@ class ServiceAssignmentRepository(ABC):
 
     @abstractmethod
     async def list_by_planning_slot(
-        self, planning_slot_id: uuid.UUID
+        self, slot_or_event_id: uuid.UUID
     ) -> list[ServiceAssignment]: ...
 
     @abstractmethod
     async def list_by_planning_slots(
-        self, planning_slot_ids: list[uuid.UUID]
+        self, slot_or_event_ids: list[uuid.UUID]
     ) -> list[ServiceAssignment]: ...
 
     @abstractmethod

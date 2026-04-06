@@ -337,6 +337,7 @@ async def get_matrix(
     )
     assignment_by_slot_id: dict[uuid.UUID, object] = {}
     for a in assignments:
+        # `event_id` is kept as a temporary compatibility key for older assignment rows.
         assignment_key = a.planning_slot_id or a.event_id
         if assignment_key not in assignment_by_slot_id:
             assignment_by_slot_id[assignment_key] = a
