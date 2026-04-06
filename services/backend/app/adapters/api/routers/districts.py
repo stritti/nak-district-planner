@@ -337,8 +337,9 @@ async def get_matrix(
     )
     assignment_by_slot_id: dict[uuid.UUID, object] = {}
     for a in assignments:
-        if a.planning_slot_id is not None and a.planning_slot_id not in assignment_by_slot_id:
-            assignment_by_slot_id[a.planning_slot_id] = a
+        assignment_key = a.planning_slot_id or a.event_id
+        if assignment_key not in assignment_by_slot_id:
+            assignment_by_slot_id[assignment_key] = a
 
     # Build matrix rows
     rows: list[MatrixRow] = []

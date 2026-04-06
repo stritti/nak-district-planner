@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
@@ -34,7 +34,10 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
     async def list_by_event(self, planning_slot_id: uuid.UUID) -> list[ServiceAssignment]:
         result = await self._session.execute(
             select(ServiceAssignmentORM).where(
-                ServiceAssignmentORM.planning_slot_id == planning_slot_id
+                or_(
+                    ServiceAssignmentORM.planning_slot_id == planning_slot_id,
+                    ServiceAssignmentORM.event_id == planning_slot_id,
+                )
             )
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
@@ -44,7 +47,10 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
             return []
         result = await self._session.execute(
             select(ServiceAssignmentORM).where(
-                ServiceAssignmentORM.planning_slot_id.in_(planning_slot_ids)
+                or_(
+                    ServiceAssignmentORM.planning_slot_id.in_(planning_slot_ids),
+                    ServiceAssignmentORM.event_id.in_(planning_slot_ids),
+                )
             )
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
