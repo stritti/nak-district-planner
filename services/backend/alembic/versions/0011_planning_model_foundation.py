@@ -123,7 +123,7 @@ def upgrade() -> None:
 
     op.add_column(
         "service_assignments",
-        sa.Column("planning_slot_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("planning_slot_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
     op.create_foreign_key(
         "fk_service_assignments_planning_slot_id",

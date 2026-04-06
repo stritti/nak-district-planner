@@ -82,7 +82,7 @@ Existing risks:
 ### 3.2 Existing Table Changes
 
 `service_assignments`:
-- add `planning_slot_id` UUID FK planning_slots NOT NULL
+- add `planning_slot_id` UUID FK planning_slots
 - keep `event_id` only as API compatibility linkage for now
 
 ---
@@ -94,7 +94,7 @@ Existing risks:
 Alembic migration:
 - Create new enum `planning_slot_status`
 - Create `planning_series`, `planning_slots`, `event_instances`
-- Add `planning_slot_id` to `service_assignments` (required)
+- Add `planning_slot_id` to `service_assignments`
 - Add indexes:
   - `ix_planning_slots_district_date`
   - `ix_planning_slots_congregation_date`

@@ -31,17 +31,21 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
         row = await self._session.get(ServiceAssignmentORM, assignment_id)
         return _orm_to_domain(row) if row else None
 
-    async def list_by_event(self, event_id: uuid.UUID) -> list[ServiceAssignment]:
+    async def list_by_event(self, planning_slot_id: uuid.UUID) -> list[ServiceAssignment]:
         result = await self._session.execute(
-            select(ServiceAssignmentORM).where(ServiceAssignmentORM.planning_slot_id == event_id)
+            select(ServiceAssignmentORM).where(
+                ServiceAssignmentORM.planning_slot_id == planning_slot_id
+            )
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
-    async def list_by_events(self, event_ids: list[uuid.UUID]) -> list[ServiceAssignment]:
-        if not event_ids:
+    async def list_by_events(self, planning_slot_ids: list[uuid.UUID]) -> list[ServiceAssignment]:
+        if not planning_slot_ids:
             return []
         result = await self._session.execute(
-            select(ServiceAssignmentORM).where(ServiceAssignmentORM.planning_slot_id.in_(event_ids))
+            select(ServiceAssignmentORM).where(
+                ServiceAssignmentORM.planning_slot_id.in_(planning_slot_ids)
+            )
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
