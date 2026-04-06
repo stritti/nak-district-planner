@@ -32,6 +32,7 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
         return _orm_to_domain(row) if row else None
 
     async def list_by_planning_slot(self, slot_or_event_id: uuid.UUID) -> list[ServiceAssignment]:
+        # Check the canonical planning-slot key first, then fall back to legacy event linkage.
         result = await self._session.execute(
             select(ServiceAssignmentORM).where(
                 or_(
@@ -47,6 +48,7 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
     ) -> list[ServiceAssignment]:
         if not slot_or_event_ids:
             return []
+        # Check canonical planning-slot linkage first; `event_id` remains a compatibility fallback.
         result = await self._session.execute(
             select(ServiceAssignmentORM).where(
                 or_(
