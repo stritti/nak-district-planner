@@ -332,7 +332,7 @@ async def get_matrix(
     )
     instance_by_slot_id = {instance.planning_slot_id: instance for instance in instances}
 
-    assignments = await SqlServiceAssignmentRepository(db).list_by_events(
+    assignments = await SqlServiceAssignmentRepository(db).list_by_planning_slots(
         [slot.id for slot in gottesdienst_slots]
     )
     assignment_by_slot_id: dict[uuid.UUID, object] = {}
