@@ -10,7 +10,10 @@ from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.event import EventORM
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-from app.application.planning_model_bridge import event_instance_from_event, planning_slot_from_event
+from app.application.planning_model_bridge import (
+    event_instance_from_event,
+    planning_slot_from_event,
+)
 from app.config import settings
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
 from app.domain.ports.repositories import EventRepository

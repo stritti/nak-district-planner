@@ -397,23 +397,43 @@ async def get_matrix(
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
-                event_id=instance.id if instance is not None else event.id if event is not None else None,
+                event_id=instance.id
+                if instance is not None
+                else event.id
+                if event is not None
+                else None,
                 planning_slot_id=slot.id if slot is not None else None,
-                event_title=event.title if event is not None else instance.title if instance else None,
-                category=event.category if event is not None else slot.category if slot is not None else None,
+                event_title=event.title
+                if event is not None
+                else instance.title
+                if instance
+                else None,
+                category=event.category
+                if event is not None
+                else slot.category
+                if slot is not None
+                else None,
                 is_gap=assignment is None,
                 planned_time=(
                     slot.planning_time
                     if slot is not None
-                    else event.start_at.timetz().replace(tzinfo=None) if event is not None else None
+                    else event.start_at.timetz().replace(tzinfo=None)
+                    if event is not None
+                    else None
                 ),
                 actual_start_at=(
                     instance.actual_start_at
                     if instance is not None
-                    else event.start_at if event is not None else None
+                    else event.start_at
+                    if event is not None
+                    else None
                 ),
                 actual_end_at=(
-                    instance.actual_end_at if instance is not None else event.end_at if event is not None else None
+                    instance.actual_end_at
+                    if instance is not None
+                    else event.end_at
+                    if event is not None
+                    else None
                 ),
                 has_deviation=instance.deviation_flag if instance is not None else False,
                 assignment_id=assignment.id if assignment else None,
