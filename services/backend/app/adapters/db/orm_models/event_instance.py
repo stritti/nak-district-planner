@@ -12,6 +12,8 @@ from app.domain.models.event import EventSource, EventVisibility
 
 
 class EventInstanceORM(Base):
+    """Phase-1 compatibility model: one actual execution row per planning slot."""
+
     __tablename__ = "event_instances"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

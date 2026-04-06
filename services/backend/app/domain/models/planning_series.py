@@ -13,12 +13,12 @@ class PlanningSeries:
     congregation_id: uuid.UUID | None
     category: str | None
     default_planning_time: time
+    created_at: datetime
+    updated_at: datetime
     recurrence_pattern: dict[str, Any] = field(default_factory=dict)
     active_from: date | None = None
     active_until: date | None = None
     is_active: bool = True
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @classmethod
     def create(

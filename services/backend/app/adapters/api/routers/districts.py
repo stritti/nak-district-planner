@@ -375,7 +375,7 @@ async def get_matrix(
                 continue
 
             slot = slot_by_cong_date.get((congregation.id, date_key))
-            instance = instance_by_slot_id.get(slot.id) if slot else None
+            instance = instance_by_slot_id.get(slot.id) if slot is not None else None
             event = event_by_cong_date.get((congregation.id, date_key)) if slot is None else None
 
             if slot is None and event is None:
@@ -397,7 +397,7 @@ async def get_matrix(
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
-                event_id=event.id if event is not None else instance.id if instance is not None else None,
+                event_id=instance.id if instance is not None else event.id if event is not None else None,
                 planning_slot_id=slot.id if slot is not None else None,
                 event_title=event.title if event is not None else instance.title if instance else None,
                 category=event.category if event is not None else slot.category if slot is not None else None,
@@ -405,7 +405,7 @@ async def get_matrix(
                 planned_time=(
                     slot.planning_time
                     if slot is not None
-                    else event.start_at.timetz().replace(tzinfo=None)
+                    else event.start_at.timetz().replace(tzinfo=None) if event is not None else None
                 ),
                 actual_start_at=(
                     instance.actual_start_at

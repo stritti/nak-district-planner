@@ -64,7 +64,7 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
             row = existing
         row.id = assignment.id
         row.event_id = assignment.event_id
-        row.planning_slot_id = assignment.planning_slot_id or assignment.event_id
+        row.planning_slot_id = assignment.planning_slot_id
         row.leader_id = assignment.leader_id
         row.leader_name = assignment.leader_name
         row.status = assignment.status

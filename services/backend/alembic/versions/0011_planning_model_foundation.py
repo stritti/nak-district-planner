@@ -147,7 +147,7 @@ def upgrade() -> None:
             e.congregation_id,
             e.category,
             DATE(e.start_at),
-            CAST(e.start_at AS TIME),
+            CAST(e.start_at AT TIME ZONE 'UTC' AS TIME),
             CASE WHEN e.status = 'CANCELLED' THEN 'CANCELLED' ELSE 'ACTIVE' END::planning_slot_status,
             e.created_at,
             e.updated_at
