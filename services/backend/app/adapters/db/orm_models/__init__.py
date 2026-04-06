@@ -4,9 +4,12 @@ from app.adapters.db.orm_models.congregation import CongregationORM  # noqa: F40
 from app.adapters.db.orm_models.congregation_group import CongregationGroupORM  # noqa: F401
 from app.adapters.db.orm_models.district import DistrictORM  # noqa: F401
 from app.adapters.db.orm_models.event import EventORM  # noqa: F401
+from app.adapters.db.orm_models.event_instance import EventInstanceORM  # noqa: F401
 from app.adapters.db.orm_models.export_token import ExportTokenORM  # noqa: F401
 from app.adapters.db.orm_models.leader import LeaderORM  # noqa: F401
 from app.adapters.db.orm_models.leader_registration import LeaderRegistrationORM  # noqa: F401
 from app.adapters.db.orm_models.membership import MembershipORM  # noqa: F401
+from app.adapters.db.orm_models.planning_series import PlanningSeriesORM  # noqa: F401
+from app.adapters.db.orm_models.planning_slot import PlanningSlotORM  # noqa: F401
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM  # noqa: F401
 from app.adapters.db.orm_models.user import UserORM  # noqa: F401

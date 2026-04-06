@@ -9,7 +9,10 @@ from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
+from app.domain.models.event_instance import EventInstance
 from app.domain.models.leader import Leader
+from app.domain.models.planning_series import PlanningSeries
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
@@ -92,6 +95,30 @@ class EventRepository(ABC):
         Returns the number of deleted rows.
         """
         ...
+
+
+class PlanningSeriesRepository(ABC):
+    @abstractmethod
+    async def get(self, series_id: uuid.UUID) -> PlanningSeries | None: ...
+
+    @abstractmethod
+    async def save(self, series: PlanningSeries) -> None: ...
+
+
+class PlanningSlotRepository(ABC):
+    @abstractmethod
+    async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None: ...
+
+    @abstractmethod
+    async def save(self, slot: PlanningSlot) -> None: ...
+
+
+class EventInstanceRepository(ABC):
+    @abstractmethod
+    async def get(self, instance_id: uuid.UUID) -> EventInstance | None: ...
+
+    @abstractmethod
+    async def save(self, instance: EventInstance) -> None: ...
 
 
 class ServiceAssignmentRepository(ABC):

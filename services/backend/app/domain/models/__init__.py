@@ -6,7 +6,10 @@ from app.domain.models.calendar_integration import (
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.domain.models.event_instance import EventInstance
 from app.domain.models.leader import Leader, LeaderRank, SpecialRole
+from app.domain.models.planning_series import PlanningSeries
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
@@ -14,6 +17,7 @@ __all__ = [
     "District",
     "Congregation",
     "Event",
+    "EventInstance",
     "EventSource",
     "EventStatus",
     "EventVisibility",
@@ -22,6 +26,9 @@ __all__ = [
     "SpecialRole",
     "ServiceAssignment",
     "AssignmentStatus",
+    "PlanningSeries",
+    "PlanningSlot",
+    "PlanningSlotStatus",
     "CalendarIntegration",
     "CalendarType",
     "CalendarCapability",

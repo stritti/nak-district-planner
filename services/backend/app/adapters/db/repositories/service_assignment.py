@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
@@ -14,6 +14,7 @@ def _orm_to_domain(row: ServiceAssignmentORM) -> ServiceAssignment:
     return ServiceAssignment(
         id=row.id,
         event_id=row.event_id,
+        planning_slot_id=row.planning_slot_id,
         leader_id=row.leader_id,
         leader_name=row.leader_name,
         status=AssignmentStatus(row.status),
@@ -32,7 +33,12 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
 
     async def list_by_event(self, event_id: uuid.UUID) -> list[ServiceAssignment]:
         result = await self._session.execute(
-            select(ServiceAssignmentORM).where(ServiceAssignmentORM.event_id == event_id)
+            select(ServiceAssignmentORM).where(
+                or_(
+                    ServiceAssignmentORM.event_id == event_id,
+                    ServiceAssignmentORM.planning_slot_id == event_id,
+                )
+            )
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
@@ -40,7 +46,12 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
         if not event_ids:
             return []
         result = await self._session.execute(
-            select(ServiceAssignmentORM).where(ServiceAssignmentORM.event_id.in_(event_ids))
+            select(ServiceAssignmentORM).where(
+                or_(
+                    ServiceAssignmentORM.event_id.in_(event_ids),
+                    ServiceAssignmentORM.planning_slot_id.in_(event_ids),
+                )
+            )
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
@@ -53,6 +64,7 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
             row = existing
         row.id = assignment.id
         row.event_id = assignment.event_id
+        row.planning_slot_id = assignment.planning_slot_id or assignment.event_id
         row.leader_id = assignment.leader_id
         row.leader_name = assignment.leader_name
         row.status = assignment.status

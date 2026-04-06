@@ -18,6 +18,9 @@ class ServiceAssignmentORM(Base):
     event_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
     )
+    planning_slot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planning_slots.id", ondelete="CASCADE"), nullable=True
+    )
     leader_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("leaders.id", ondelete="SET NULL"), nullable=True
     )

@@ -16,6 +16,7 @@ class AssignmentStatus(str, Enum):
 class ServiceAssignment:
     id: uuid.UUID
     event_id: uuid.UUID
+    planning_slot_id: uuid.UUID | None
     leader_id: uuid.UUID | None
     leader_name: str | None
     status: AssignmentStatus
@@ -27,6 +28,7 @@ class ServiceAssignment:
         cls,
         *,
         event_id: uuid.UUID,
+        planning_slot_id: uuid.UUID | None = None,
         leader_id: uuid.UUID | None = None,
         leader_name: str | None = None,
         status: AssignmentStatus = AssignmentStatus.OPEN,
@@ -37,6 +39,7 @@ class ServiceAssignment:
         return cls(
             id=uuid.uuid4(),
             event_id=event_id,
+            planning_slot_id=planning_slot_id or event_id,
             leader_id=leader_id,
             leader_name=leader_name,
             status=status,
