@@ -1,4 +1,4 @@
-"""Add planning model foundation tables and backfill from legacy events.
+"""Add planning model foundation tables for prospective rollout.
 
 Revision ID: 0011_planning_model_foundation
 Revises: 0010_leader_registrations
@@ -133,58 +133,6 @@ def upgrade() -> None:
         ["id"],
         ondelete="CASCADE",
     )
-
-    op.execute(
-        """
-        INSERT INTO planning_slots (
-            id, series_id, district_id, congregation_id, category, planning_date, planning_time,
-            status, created_at, updated_at
-        )
-        SELECT
-            e.id,
-            NULL,
-            e.district_id,
-            e.congregation_id,
-            e.category,
-            DATE(e.start_at),
-            CAST(e.start_at AT TIME ZONE 'UTC' AS TIME),
-            CASE WHEN e.status = 'CANCELLED' THEN 'CANCELLED' ELSE 'ACTIVE' END::planning_slot_status,
-            e.created_at,
-            e.updated_at
-        FROM events e
-        """
-    )
-
-    op.execute(
-        """
-        INSERT INTO event_instances (
-            id, planning_slot_id, title, description, actual_start_at, actual_end_at,
-            source, visibility, deviation_flag, created_at, updated_at
-        )
-        SELECT
-            e.id,
-            e.id,
-            e.title,
-            e.description,
-            e.start_at,
-            e.end_at,
-            e.source,
-            e.visibility,
-            FALSE,
-            e.created_at,
-            e.updated_at
-        FROM events e
-        """
-    )
-
-    op.execute(
-        """
-        UPDATE service_assignments
-        SET planning_slot_id = event_id
-        WHERE planning_slot_id IS NULL
-        """
-    )
-
 
 def downgrade() -> None:
     op.drop_constraint(

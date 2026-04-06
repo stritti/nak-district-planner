@@ -31,4 +31,5 @@ None.
 - Sync engine logic and conflict handling.
 - Matrix API and frontend rendering.
 - Introduction of notification storage and API endpoints.
-- Migration from existing monolithic event model to PlanningSlot-based model.
+- Introduce the PlanningSlot-based model alongside the legacy event model; pre-production
+  environments may skip historical data migration and populate the new model prospectively.

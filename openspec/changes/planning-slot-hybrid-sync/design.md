@@ -10,7 +10,7 @@ The current event model mixes planning structure, execution time, and sync metad
 - Implement explicit field-authoritative hybrid sync.
 - Introduce review-based ingestion for external new events.
 - Add persistent in-app notifications.
-- Provide a migration path from the existing event model.
+- Keep rollout simple for pre-production environments and avoid mandatory historical data migration.
 
 **Non-Goals:**
 - Full RRULE support.
@@ -60,19 +60,19 @@ External changes never mutate series.
 ## Risks / Trade-offs
 
 [Model Complexity] → Clear aggregate boundaries and phased implementation.
-[Migration Risk] → Incremental migration with data backfill and validation.
+[Coexistence Complexity] → Run the new model alongside legacy events until native write paths are complete.
 [Sync Edge Cases] → Strict structural authority to prevent drift.
 [Notification Noise] → Auto-matching exact matches to reduce false alerts.
 
-## Migration Plan
+## Rollout Plan
 
-1. Introduce new tables alongside existing event model.
-2. Migrate existing events into PlanningSlot + EventInstance.
-3. Backfill sync metadata.
-4. Switch matrix to PlanningSlot source.
-5. Deprecate old event structure.
+1. Introduce new tables alongside the existing event model.
+2. Dual-write newly created or edited events into `PlanningSlot` + `EventInstance`.
+3. Switch matrix reads to `PlanningSlot` once enough planning data exists for the target environment.
+4. Add an optional one-off import only if old development data must be preserved.
+5. Deprecate the old event structure after native write paths are complete.
 
-Rollback: retain original event table until migration validated.
+Rollback: keep the legacy `events` table active until the new write paths are fully adopted.
 
 ## Open Questions
 

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
     use_planning_slot_model: bool = False
-    enable_dual_write_events: bool = False
+    enable_dual_write_events: bool = True
 
     # OpenTelemetry
     otel_enabled: bool = False

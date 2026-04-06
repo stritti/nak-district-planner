@@ -2,7 +2,7 @@
 
 This document defines the concrete technical execution plan for Phase 1 of the
 implementation roadmap (`planning-slot-hybrid-sync`), including schema changes,
-data migration, compatibility strategy, validation, and rollback.
+compatibility strategy, validation, and rollback for a pre-production rollout.
 
 ---
 
@@ -15,8 +15,8 @@ In scope:
 - `PlanningSlot` (aggregate root)
 - `EventInstance` (actual execution)
 - Move `ServiceAssignment` ownership from `event_id` to `planning_slot_id`
-- Backfill existing `events` data into the new model
 - Keep legacy APIs operational during transition
+- Dual-write newly created or modified events into the new model during transition
 
 Out of scope:
 - Hardened sync state machine activation
@@ -82,13 +82,13 @@ Existing risks:
 
 `service_assignments`:
 - add `planning_slot_id` UUID FK planning_slots nullable (step 1)
-- backfill from `event_id` mapping
-- set `planning_slot_id` NOT NULL (step 2)
+- keep `event_id` during transition
+- set `planning_slot_id` NOT NULL once native slot writes are complete
 - remove `event_id` (step 3, after cutover)
 
 ---
 
-## 4. Migration Strategy (Expand -> Backfill -> Contract)
+## 4. Rollout Strategy (Expand -> Prospective Dual Write -> Contract)
 
 ### Step A: Expand (non-breaking)
 
@@ -103,27 +103,14 @@ Alembic migration A:
 
 No existing read/write path changed.
 
-### Step B: Backfill (data migration)
+### Step B: Prospective population (no mandatory backfill)
 
-Backfill script/migration job:
-1. For each row in `events`:
-   - create `planning_slots` row:
-     - `district_id = events.district_id`
-     - `congregation_id = events.congregation_id`
-     - `category = events.category`
-     - `planning_date = date(events.start_at)`
-     - `planning_time = time(events.start_at)`
-     - `status = ACTIVE` unless `events.status = CANCELLED`
-   - create `event_instances` row:
-     - `planning_slot_id = created slot`
-     - `title/description` from event
-     - `actual_start_at = events.start_at`
-     - `actual_end_at = events.end_at`
-     - `source`, `visibility`, timestamps from event
-     - `deviation_flag = false`
-2. Build mapping `event_id -> planning_slot_id` in memory/batch temp table.
-3. Backfill `service_assignments.planning_slot_id` using mapping.
-4. Validation checks (see section 7).
+Application behavior:
+1. Leave existing `events` rows untouched.
+2. Dual-write new or edited events into `planning_slots` + `event_instances`.
+3. Populate `service_assignments.planning_slot_id` for newly created or edited assignments.
+4. If old development data must remain visible, add a one-off import script later instead of
+   making the migration mandatory.
 
 ### Step C: Compatibility Cutover
 
@@ -134,7 +121,7 @@ Flag OFF (default initially):
 
 Flag ON:
 - Matrix read path uses `planning_slots` + `event_instances` + `service_assignments.planning_slot_id`.
-- Event create/update endpoints write to new model (while optional dual-write remains active).
+- Event create/update endpoints keep dual-writing while native slot writes are introduced incrementally.
 
 ### Step D: Contract (after stabilization)
 
@@ -174,7 +161,7 @@ Matrix endpoint:
 
 Introduce config flags:
 - `USE_PLANNING_SLOT_MODEL` (primary cutover)
-- `ENABLE_DUAL_WRITE_EVENTS` (optional safety; default true during transition)
+- `ENABLE_DUAL_WRITE_EVENTS` (default true during transition)
 
 Dual write behavior (if enabled):
 - create/update in new model and legacy `events` until cutover confidence is reached.
@@ -185,21 +172,18 @@ Dual write behavior (if enabled):
 
 Must pass before enabling flag in production:
 
-1. Row count parity:
-- `events` count == `planning_slots` count == `event_instances` count
-
-2. Assignment parity:
-- count of `service_assignments.event_id` mapped rows == count of non-null `planning_slot_id`
-
-3. Referential integrity:
+1. Referential integrity:
 - no orphan `event_instances`
 - no orphan `service_assignments.planning_slot_id`
 
-4. Matrix parity (sample districts):
-- same number of gaps and occupied cells before/after cutover
+2. Dual-write correctness:
+- newly created/updated events create matching `planning_slots` and `event_instances`
 
-5. API parity:
-- list and get endpoints produce equivalent business values
+3. Matrix behavior (sample districts with slot data):
+- gaps and occupied cells render correctly from `planning_slots`
+
+4. API compatibility:
+- list and get endpoints continue to serve legacy business values until the API contract changes
 
 ---
 
@@ -210,13 +194,13 @@ Must pass before enabling flag in production:
 - mapping logic legacy -> new model
 
 ### Integration tests
-- migration backfill correctness
-- matrix output parity under flag OFF vs ON
-- assignment CRUD with planning_slot linkage
+- migration creates the new schema without mutating existing `events`
+- matrix output under flag ON with slot-backed data
+- assignment CRUD with `planning_slot_id` linkage
 
 ### Smoke tests
-- create event
-- update event
+- create event (dual-write enabled)
+- update event (dual-write enabled)
 - list matrix
 - create assignment
 
@@ -225,13 +209,11 @@ Must pass before enabling flag in production:
 ## 9. Rollout Plan
 
 1. Deploy migration A (expand)
-2. Run backfill in staging
-3. Validate parity metrics
-4. Deploy app with flag OFF
-5. Enable flag ON in staging
-6. Validate matrix/API behavior
-7. Enable in production for one district (canary)
-8. Roll out district by district
+2. Deploy app with `ENABLE_DUAL_WRITE_EVENTS=true` and `USE_PLANNING_SLOT_MODEL=false`
+3. Create or edit planning data in the target environment
+4. Enable `USE_PLANNING_SLOT_MODEL=true` once the matrix can be served from slot-backed data
+5. Introduce native slot writes
+6. Remove legacy event reads/writes after stabilization
 
 ---
 
@@ -245,7 +227,7 @@ If major issue appears after flag ON:
 If schema issue before contract migration:
 - rollback application only (no destructive DB rollback required)
 
-No destructive table drops until one stable release cycle completes.
+No destructive table drops until the new slot-based write path is the default.
 
 ---
 
@@ -253,9 +235,9 @@ No destructive table drops until one stable release cycle completes.
 
 Phase 1 is complete when:
 - New model is live behind flag
-- Matrix uses slot-based source in production
+- Matrix uses slot-based source in the active environment
 - Assignment ownership moved to `planning_slot_id`
-- Legacy path is no longer required for normal operation
+- Historical data migration remains optional unless required by a later production rollout
 - Validation checklist passes
 
 ---
