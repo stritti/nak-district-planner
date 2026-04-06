@@ -28,7 +28,7 @@ Weiterentwicklung.
 | Feiertags-Import | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Nager.Date + Gauss |
 | ICS-Export (Token-basiert) | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Stabile UIDs, PUBLIC/INTERNAL |
 | Event-Verteilung (applicability) | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Virtuell, keine Duplizierung |
-| **PlanningSlot / PlanningSeries** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – hinter Feature-Flag + Migration |
+| **PlanningSlot / PlanningSeries** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – konsolidierter Pfad ohne Feature-Flag/Migration |
 | **EventInstance (Soll/Ist)** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – Matrix liefert Plan/Ist-Daten |
 | **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
 | **RBAC-Durchsetzung** | ✅ | 🟡 | `introduce-rbac-permissions-model` | Modelle vorhanden, Guards unvollständig |
