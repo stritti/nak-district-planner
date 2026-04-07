@@ -30,6 +30,8 @@ def _orm_to_domain(row: EventORM) -> Event:
         external_uid=row.external_uid,
         calendar_integration_id=row.calendar_integration_id,
         content_hash=row.content_hash,
+        invitation_source_congregation_id=row.invitation_source_congregation_id,
+        invitation_source_event_id=row.invitation_source_event_id,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -53,6 +55,8 @@ def _domain_to_orm(event: Event, existing: EventORM | None = None) -> EventORM:
     row.external_uid = event.external_uid
     row.calendar_integration_id = event.calendar_integration_id
     row.content_hash = event.content_hash
+    row.invitation_source_congregation_id = event.invitation_source_congregation_id
+    row.invitation_source_event_id = event.invitation_source_event_id
     row.created_at = event.created_at
     row.updated_at = event.updated_at
     return row
@@ -147,6 +151,12 @@ class SqlEventRepository(EventRepository):
         if existing is None:
             self._session.add(row)
         await self._session.flush()
+
+    async def list_linked_by_source_event(self, source_event_id: uuid.UUID) -> list[Event]:
+        result = await self._session.execute(
+            select(EventORM).where(EventORM.invitation_source_event_id == source_event_id)
+        )
+        return [_orm_to_domain(r) for r in result.scalars().all()]
 
     async def delete_before(self, cutoff: datetime) -> int:
         """Delete all events whose end_at is before *cutoff*.

@@ -43,6 +43,8 @@ class Event:
     external_uid: str | None = None
     calendar_integration_id: uuid.UUID | None = None
     content_hash: str | None = None
+    invitation_source_congregation_id: uuid.UUID | None = None
+    invitation_source_event_id: uuid.UUID | None = None
 
     def apply_auto_categorization(self) -> None:
         if "gottesdienst" in self.title.lower():
@@ -67,6 +69,8 @@ class Event:
         external_uid: str | None = None,
         calendar_integration_id: uuid.UUID | None = None,
         content_hash: str | None = None,
+        invitation_source_congregation_id: uuid.UUID | None = None,
+        invitation_source_event_id: uuid.UUID | None = None,
     ) -> Event:
         now = datetime.now(timezone.utc)
 
@@ -90,6 +94,8 @@ class Event:
             external_uid=external_uid,
             calendar_integration_id=calendar_integration_id,
             content_hash=content_hash,
+            invitation_source_congregation_id=invitation_source_congregation_id,
+            invitation_source_event_id=invitation_source_event_id,
             created_at=now,
             updated_at=now,
         )

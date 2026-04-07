@@ -2,14 +2,19 @@ import uuid
 
 from pydantic import BaseModel
 
+from app.domain.models.invitation import InvitationTargetType
 from app.domain.models.service_assignment import AssignmentStatus
 
 
 class MatrixCell(BaseModel):
     event_id: uuid.UUID | None = None
+    assignment_event_id: uuid.UUID | None = None
+    invitation_source_congregation_name: str | None = None
+    invitation_count: int = 0
     event_title: str | None = None
     category: str | None = None
     is_gap: bool = False  # category==Gottesdienst AND no assignment
+    is_assignment_editable: bool = True
     assignment_id: uuid.UUID | None = None
     assignment_status: AssignmentStatus | None = None
     leader_id: uuid.UUID | None = None

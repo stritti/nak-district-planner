@@ -3,7 +3,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.domain.models.invitation import InvitationTargetType
 
 
 class ServiceTime(BaseModel):
@@ -35,12 +37,83 @@ class CongregationCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     service_times: list[ServiceTime] | None = None  # None → Defaults
     group_id: uuid.UUID | None = None
+    invitation_target_type: InvitationTargetType | None = None
+    invitation_target_congregation_id: uuid.UUID | None = None
+    invitation_external_note: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_invitation_target(self) -> "CongregationCreate":
+        if self.invitation_target_type is None:
+            if (
+                self.invitation_target_congregation_id is not None
+                or self.invitation_external_note is not None
+            ):
+                raise ValueError(
+                    "invitation_target_type is required when invitation target values are provided"
+                )
+            return self
+
+        if self.invitation_target_type == InvitationTargetType.DISTRICT_CONGREGATION:
+            if self.invitation_target_congregation_id is None:
+                raise ValueError(
+                    "invitation_target_congregation_id is required for DISTRICT_CONGREGATION"
+                )
+            if self.invitation_external_note is not None:
+                raise ValueError("invitation_external_note must be empty for DISTRICT_CONGREGATION")
+        elif self.invitation_target_type == InvitationTargetType.EXTERNAL_NOTE:
+            if not self.invitation_external_note:
+                raise ValueError("invitation_external_note is required for EXTERNAL_NOTE")
+            if self.invitation_target_congregation_id is not None:
+                raise ValueError(
+                    "invitation_target_congregation_id must be empty for EXTERNAL_NOTE"
+                )
+        return self
 
 
 class CongregationUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     service_times: list[ServiceTime] | None = None
     group_id: uuid.UUID | None = None
+    invitation_target_type: InvitationTargetType | None = None
+    invitation_target_congregation_id: uuid.UUID | None = None
+    invitation_external_note: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_invitation_target(self) -> "CongregationUpdate":
+        target_type_set = "invitation_target_type" in self.model_fields_set
+        target_id_set = "invitation_target_congregation_id" in self.model_fields_set
+        external_set = "invitation_external_note" in self.model_fields_set
+
+        if not (target_type_set or target_id_set or external_set):
+            return self
+
+        if self.invitation_target_type is None:
+            if target_id_set and self.invitation_target_congregation_id is not None:
+                raise ValueError(
+                    "invitation_target_type is required when invitation_target_congregation_id is set"
+                )
+            if external_set and self.invitation_external_note is not None:
+                raise ValueError(
+                    "invitation_target_type is required when invitation_external_note is set"
+                )
+            return self
+
+        if self.invitation_target_type == InvitationTargetType.DISTRICT_CONGREGATION:
+            if self.invitation_target_congregation_id is None:
+                raise ValueError(
+                    "invitation_target_congregation_id is required for DISTRICT_CONGREGATION"
+                )
+            if self.invitation_external_note is not None:
+                raise ValueError("invitation_external_note must be empty for DISTRICT_CONGREGATION")
+        elif self.invitation_target_type == InvitationTargetType.EXTERNAL_NOTE:
+            if not self.invitation_external_note:
+                raise ValueError("invitation_external_note is required for EXTERNAL_NOTE")
+            if self.invitation_target_congregation_id is not None:
+                raise ValueError(
+                    "invitation_target_congregation_id must be empty for EXTERNAL_NOTE"
+                )
+
+        return self
 
 
 class CongregationResponse(BaseModel):
@@ -50,6 +123,9 @@ class CongregationResponse(BaseModel):
     name: str
     district_id: uuid.UUID
     group_id: uuid.UUID | None
+    invitation_target_type: InvitationTargetType | None
+    invitation_target_congregation_id: uuid.UUID | None
+    invitation_external_note: str | None
     service_times: list[ServiceTime]
     created_at: datetime
     updated_at: datetime

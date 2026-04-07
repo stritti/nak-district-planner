@@ -17,11 +17,10 @@ Diese Erweiterung fuehrt ein Einladungsmodell ein, bei dem ein Termin aus einer 
   - Akzeptiert `ACCEPTED` oder `REJECTED`.
   - Bei `ACCEPTED` wird das Ziel-Event mit den vorgeschlagenen Werten ueberschrieben.
 
-- `PATCH /api/v1/districts/{district_id}/matrix/invitation-targets/{congregation_id}`
-  - Setzt Matrix-Einladungsziele je Gemeinde.
-  - Gueltige Typen:
-    - `DISTRICT_CONGREGATION` mit `invitation_target_congregation_id`
-    - `EXTERNAL_NOTE` mit `invitation_external_note`
+- Einladungen werden event-basiert ueber den Zellkontext gepflegt:
+  - Matrix oeffnet den Gottesdienst-Dialog
+  - Dialog speichert Einladung ueber `POST /api/v1/events/{event_id}/invitations`
+  - Keine gemeindeweite Matrix-Route fuer Einladungsziele
 
 ## Event Read Erweiterungen
 
@@ -30,6 +29,12 @@ Diese Erweiterung fuehrt ein Einladungsmodell ein, bei dem ein Termin aus einer 
 - `invitation_source_congregation_id`
 - `invitation_source_congregation_name`
 - `invitation_source_event_id`
+
+`GET /api/v1/districts/{district_id}/matrix` liefert zusaetzlich pro Zelle:
+
+- `assignment_event_id` (Host-Event fuer Dienstleiterpflege)
+- `invitation_source_congregation_name` (Anzeige in der eingeladenen Zelle)
+- `is_assignment_editable` (`false` in eingeladenen Zellen)
 
 Damit kann das Frontend den Hinweis "Einladung von <Gemeinde>" anzeigen.
 
@@ -48,6 +53,3 @@ Schema-Erweiterungen:
 - Neue Felder:
   - `events.invitation_source_congregation_id`
   - `events.invitation_source_event_id`
-  - `congregations.invitation_target_type`
-  - `congregations.invitation_target_congregation_id`
-  - `congregations.invitation_external_note`

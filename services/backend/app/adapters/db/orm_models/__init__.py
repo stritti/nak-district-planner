@@ -8,5 +8,9 @@ from app.adapters.db.orm_models.export_token import ExportTokenORM  # noqa: F401
 from app.adapters.db.orm_models.leader import LeaderORM  # noqa: F401
 from app.adapters.db.orm_models.leader_registration import LeaderRegistrationORM  # noqa: F401
 from app.adapters.db.orm_models.membership import MembershipORM  # noqa: F401
+from app.adapters.db.orm_models.invitation import CongregationInvitationORM  # noqa: F401
+from app.adapters.db.orm_models.invitation_overwrite_request import (  # noqa: F401
+    InvitationOverwriteRequestORM,
+)
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM  # noqa: F401
 from app.adapters.db.orm_models.user import UserORM  # noqa: F401

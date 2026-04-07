@@ -37,6 +37,7 @@ from app.adapters.db.repositories import (
     SqlLeaderRepository,
     SqlServiceAssignmentRepository,
 )
+from app.adapters.db.repositories.invitation import SqlInvitationRepository
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
@@ -160,6 +161,9 @@ async def create_congregation(
         district_id=district_id,
         service_times=service_times,
         group_id=body.group_id,
+        invitation_target_type=body.invitation_target_type,
+        invitation_target_congregation_id=body.invitation_target_congregation_id,
+        invitation_external_note=body.invitation_external_note,
     )
     await SqlCongregationRepository(db).save(congregation)
     await reference_feiertage_for_congregation(
@@ -203,6 +207,12 @@ async def update_congregation(
         congregation.service_times = [st.model_dump() for st in body.service_times]
     if "group_id" in body.model_fields_set:
         congregation.group_id = body.group_id
+    if "invitation_target_type" in body.model_fields_set:
+        congregation.invitation_target_type = body.invitation_target_type
+    if "invitation_target_congregation_id" in body.model_fields_set:
+        congregation.invitation_target_congregation_id = body.invitation_target_congregation_id
+    if "invitation_external_note" in body.model_fields_set:
+        congregation.invitation_external_note = body.invitation_external_note
     congregation.updated_at = datetime.now(timezone.utc)
     await repo.save(congregation)
     return _cong_response(congregation)
@@ -214,6 +224,9 @@ def _cong_response(c: Congregation) -> CongregationResponse:
         name=c.name,
         district_id=c.district_id,
         group_id=c.group_id,
+        invitation_target_type=c.invitation_target_type,
+        invitation_target_congregation_id=c.invitation_target_congregation_id,
+        invitation_external_note=c.invitation_external_note,
         service_times=[ServiceTime(**st) for st in c.service_times],
         created_at=c.created_at,
         updated_at=c.updated_at,
@@ -371,6 +384,26 @@ async def get_matrix(
 
     # Build matrix rows
     rows: list[MatrixRow] = []
+    congregation_name_by_id = {c.id: c.name for c in congregations}
+
+    source_congregation_ids = {
+        e.invitation_source_congregation_id
+        for e in gottesdienst_events
+        if e.invitation_source_congregation_id is not None
+    }
+    source_congregation_names = congregation_name_by_id.copy()
+    if source_congregation_ids:
+        source_congregations = await SqlCongregationRepository(db).list_by_ids(
+            list(source_congregation_ids)
+        )
+        for source in source_congregations:
+            source_congregation_names[source.id] = source.name
+
+    source_event_ids = [e.id for e in gottesdienst_events if e.invitation_source_event_id is None]
+    invitations = await SqlInvitationRepository(db).list_by_source_events(source_event_ids)
+    invitation_by_source_event: dict[uuid.UUID, list] = {}
+    for invitation in invitations:
+        invitation_by_source_event.setdefault(invitation.source_event_id, []).append(invitation)
 
     for congregation in congregations:
         cong_expected = set(expected_by_cong[congregation.id])
@@ -389,6 +422,13 @@ async def get_matrix(
                 continue
 
             assignment = assignment_by_event.get(event.id)
+            is_invitation_copy = event.invitation_source_event_id is not None
+            assignment_event_id = event.id
+            if assignment is None and is_invitation_copy:
+                assignment = assignment_by_event.get(event.invitation_source_event_id)
+                if assignment is not None:
+                    assignment_event_id = event.invitation_source_event_id
+
             # Resolve leader name from leader_id if leader_name is not set directly
             leader_name: str | None = None
             leader_id = None
@@ -402,13 +442,21 @@ async def get_matrix(
                     leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
                 event_id=event.id,
+                assignment_event_id=assignment_event_id,
+                invitation_source_congregation_name=source_congregation_names.get(
+                    event.invitation_source_congregation_id
+                )
+                if event.invitation_source_congregation_id is not None
+                else None,
                 event_title=event.title,
                 category=event.category,
-                is_gap=assignment is None,
+                is_gap=(assignment is None and not is_invitation_copy),
+                is_assignment_editable=not is_invitation_copy,
                 assignment_id=assignment.id if assignment else None,
                 assignment_status=assignment.status if assignment else None,
                 leader_id=leader_id,
                 leader_name=leader_name,
+                invitation_count=len(invitation_by_source_event.get(event.id, [])),
             )
 
         rows.append(

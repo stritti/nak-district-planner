@@ -95,7 +95,7 @@
 
     <!-- Matrix Table -->
     <div
-      v-else-if="matrixStore.matrix && matrixStore.matrix.dates.length > 0"
+      v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length > 0"
       class="overflow-x-auto"
     >
       <table class="border-collapse text-xs">
@@ -146,6 +146,7 @@
                 <button
                   v-if="row.cells[date].is_gap"
                   class="w-full text-left"
+                  :disabled="row.cells[date].is_assignment_editable === false"
                   @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
                   <div class="flex items-center gap-1 font-bold text-red-700 dark:text-red-400">
@@ -153,10 +154,17 @@
                     LÜCKE
                   </div>
                   <div class="text-red-600 dark:text-red-400 truncate max-w-[100px]">{{ row.cells[date].event_title }}</div>
+                  <div
+                    v-if="(row.cells[date].invitation_count ?? 0) > 0"
+                    class="text-[10px] text-sky-700 dark:text-sky-300"
+                  >
+                    Einladungen: {{ row.cells[date].invitation_count }}
+                  </div>
                 </button>
                 <button
                   v-else
                   class="w-full text-left hover:opacity-75"
+                  :disabled="row.cells[date].is_assignment_editable === false"
                   @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
                   <div class="font-medium text-gray-800 dark:text-gray-200 truncate max-w-[100px]">
@@ -167,6 +175,24 @@
                   </div>
                   <div v-if="row.cells[date].category" class="text-gray-400 dark:text-gray-500">
                     {{ row.cells[date].category }}
+                  </div>
+                  <div
+                    v-if="row.cells[date].invitation_source_congregation_name"
+                    class="text-[10px] text-amber-700 dark:text-amber-300"
+                  >
+                    Einladung von {{ row.cells[date].invitation_source_congregation_name }}
+                  </div>
+                  <div
+                    v-if="(row.cells[date].invitation_count ?? 0) > 0"
+                    class="text-[10px] text-sky-700 dark:text-sky-300"
+                  >
+                    Einladungen: {{ row.cells[date].invitation_count }}
+                  </div>
+                  <div
+                    v-if="row.cells[date].is_assignment_editable === false"
+                    class="text-[10px] text-amber-600 dark:text-amber-400"
+                  >
+                    Dienstleiterpflege in Host-Gemeinde
                   </div>
                 </button>
               </template>
@@ -180,7 +206,7 @@
     </div>
 
     <div
-      v-else-if="matrixStore.matrix && matrixStore.matrix.dates.length === 0"
+      v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length === 0"
       class="text-sm text-gray-500 dark:text-gray-400"
     >
       Keine Ereignisse im gewählten Zeitraum.
@@ -208,6 +234,76 @@
           <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
         </p>
 
+        <div class="mb-4 rounded border border-gray-200 dark:border-gray-700 p-3">
+          <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Einladung fuer diesen Gottesdienst</p>
+          <div class="grid grid-cols-1 gap-2">
+            <select v-model="invitation.targetType" class="form-input">
+              <option value="">Kein Einladungsziel</option>
+              <option value="DISTRICT_CONGREGATION">Gemeinde im Bezirk</option>
+              <option value="EXTERNAL_NOTE">Freitext-Hinweis</option>
+            </select>
+
+            <select
+              v-if="invitation.targetType === 'DISTRICT_CONGREGATION'"
+              v-model="invitation.targetCongregationId"
+              class="form-input"
+            >
+              <option value="">Zielgemeinde auswaehlen…</option>
+              <option v-for="cong in invitationTargetOptions" :key="cong.id" :value="cong.id">
+                {{ cong.name }}
+              </option>
+            </select>
+
+            <input
+              v-if="invitation.targetType === 'EXTERNAL_NOTE'"
+              v-model="invitation.externalNote"
+              type="text"
+              class="form-input"
+              placeholder="z. B. Einladung in Nachbarbezirk"
+            />
+
+            <button
+              class="btn-secondary justify-center"
+              :disabled="invitation.saving || !canSubmitInvitation"
+              @click="submitInvitation"
+            >
+              {{ invitation.saving ? 'Speichern…' : 'Einladung anlegen/aktualisieren' }}
+            </button>
+
+            <p v-if="invitation.error" class="text-xs text-red-600 dark:text-red-400">{{ invitation.error }}</p>
+            <p v-if="invitation.success" class="text-xs text-green-700 dark:text-green-400">{{ invitation.success }}</p>
+
+            <div class="mt-2 border-t border-gray-200 dark:border-gray-700 pt-2">
+              <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Bestehende Einladungen</p>
+              <p v-if="invitation.loadingExisting" class="text-xs text-gray-500 dark:text-gray-400">Lade…</p>
+              <p v-else-if="invitation.existing.length === 0" class="text-xs text-gray-500 dark:text-gray-400">
+                Noch keine Einladung gespeichert.
+              </p>
+              <div v-else class="space-y-1">
+                <div
+                  v-for="existingInvitation in invitation.existing"
+                  :key="existingInvitation.id"
+                  class="flex items-center justify-between gap-2 rounded border border-gray-200 dark:border-gray-700 px-2 py-1"
+                >
+                  <button
+                    class="text-left text-xs text-gray-700 dark:text-gray-300 hover:underline"
+                    @click="useExistingInvitation(existingInvitation)"
+                  >
+                    {{ invitationDisplayLabel(existingInvitation) }}
+                  </button>
+                  <button
+                    class="text-xs text-red-600 dark:text-red-400 hover:underline"
+                    :disabled="invitation.saving"
+                    @click="removeInvitation(existingInvitation.id)"
+                  >
+                    Loeschen
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <label class="form-label">Amtstragende:r</label>
         <AutocompleteInput
           ref="autocompleteRef"
@@ -233,6 +329,7 @@
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
@@ -242,6 +339,12 @@ import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, XMarkIcon } 
 import { useMatrixStore } from '@/stores/matrix'
 import { useDistrictsStore } from '@/stores/districts'
 import { useLeadersStore } from '@/stores/leaders'
+import {
+  createInvitations,
+  deleteInvitation,
+  listEventInvitations,
+  type InvitationResponse,
+} from '@/api/invitations'
 import type { MatrixCell } from '@/api/matrix'
 import { exportMatrixToExcel } from '@/composables/useExcelExport'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '@/components/AutocompleteInput.vue'
@@ -299,7 +402,7 @@ onMounted(async () => {
   }
   // Auto-fetch if district already selected (e.g. navigating back)
   if (matrixStore.districtId) {
-    await Promise.all([
+    await Promise.allSettled([
       districtsStore.fetchGroups(matrixStore.districtId),
       districtsStore.fetchCongregations(matrixStore.districtId),
       leadersStore.fetchLeaders(matrixStore.districtId),
@@ -312,7 +415,7 @@ async function onDistrictChange() {
   matrixStore.matrix = null
   matrixStore.groupId = ''
   if (matrixStore.districtId) {
-    await Promise.all([
+    await Promise.allSettled([
       districtsStore.fetchGroups(matrixStore.districtId),
       districtsStore.fetchCongregations(matrixStore.districtId),
       leadersStore.fetchLeaders(matrixStore.districtId),
@@ -345,6 +448,7 @@ function formatWeekday(iso: string): string {
 function cellClass(cell: MatrixCell | undefined): string {
   if (!cell?.event_id) return 'bg-white dark:bg-gray-900'
   if (cell.is_gap) return 'bg-red-100 dark:bg-red-900/20 cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/30 ring-1 ring-inset ring-red-300 dark:ring-red-700'
+  if (cell.is_assignment_editable === false) return 'bg-white dark:bg-gray-900 opacity-80'
   return 'bg-white dark:bg-gray-900 cursor-pointer'
 }
 
@@ -367,6 +471,27 @@ const canSubmit = computed(() => {
   return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
 })
 
+const invitation = reactive({
+  targetType: '' as '' | 'DISTRICT_CONGREGATION' | 'EXTERNAL_NOTE',
+  targetCongregationId: '',
+  externalNote: '',
+  existing: [] as InvitationResponse[],
+  loadingExisting: false,
+  saving: false,
+  error: '',
+  success: '',
+})
+
+const invitationTargetOptions = computed(() => {
+  return districtsStore.congregations.filter((c) => c.id !== modal.congregationId)
+})
+
+const canSubmitInvitation = computed(() => {
+  if (invitation.targetType === 'DISTRICT_CONGREGATION') return !!invitation.targetCongregationId
+  if (invitation.targetType === 'EXTERNAL_NOTE') return invitation.externalNote.trim().length > 0
+  return false
+})
+
 const autocompleteOptions = computed((): AutocompleteOption[] => {
   return leadersStore.activeLeaders().map((l) => ({
     id: l.id,
@@ -378,7 +503,7 @@ const autocompleteOptions = computed((): AutocompleteOption[] => {
 
 function openModal(cell: MatrixCell, date: string, congregationName: string, congregationId: string) {
   modal.open = true
-  modal.eventId = cell.event_id!
+  modal.eventId = cell.assignment_event_id ?? cell.event_id!
   modal.eventTitle = cell.event_title ?? ''
   modal.date = date
   modal.congregationName = congregationName
@@ -394,12 +519,100 @@ function openModal(cell: MatrixCell, date: string, congregationName: string, con
   }
   modal.saving = false
   modal.error = ''
+  invitation.targetType = ''
+  invitation.targetCongregationId = ''
+  invitation.externalNote = ''
+  invitation.existing = []
+  invitation.loadingExisting = false
+  invitation.error = ''
+  invitation.success = ''
   // Ensure leaders are loaded for this district
   if (matrixStore.districtId && leadersStore.districtId !== matrixStore.districtId) {
     leadersStore.fetchLeaders(matrixStore.districtId)
   }
+  void loadEventInvitations()
   // Focus the autocomplete input once the modal DOM is rendered
   nextTick(() => autocompleteRef.value?.focus())
+}
+
+function invitationDisplayLabel(existingInvitation: InvitationResponse): string {
+  if (
+    existingInvitation.target_type === 'DISTRICT_CONGREGATION'
+    && existingInvitation.target_congregation_id
+  ) {
+    const targetName = congregationName(existingInvitation.target_congregation_id)
+    return targetName ? `Gemeinde: ${targetName}` : 'Gemeinde (unbekannt)'
+  }
+  return existingInvitation.external_target_note
+    ? `Extern: ${existingInvitation.external_target_note}`
+    : 'Externe Einladung'
+}
+
+function useExistingInvitation(existingInvitation: InvitationResponse) {
+  if (
+    existingInvitation.target_type === 'DISTRICT_CONGREGATION'
+    && existingInvitation.target_congregation_id
+  ) {
+    invitation.targetType = 'DISTRICT_CONGREGATION'
+    invitation.targetCongregationId = existingInvitation.target_congregation_id
+    invitation.externalNote = ''
+    return
+  }
+  invitation.targetType = 'EXTERNAL_NOTE'
+  invitation.targetCongregationId = ''
+  invitation.externalNote = existingInvitation.external_target_note ?? ''
+}
+
+async function loadEventInvitations() {
+  invitation.loadingExisting = true
+  invitation.error = ''
+  try {
+    invitation.existing = await listEventInvitations(modal.eventId)
+  } catch (e) {
+    invitation.error = e instanceof Error ? e.message : 'Einladungen konnten nicht geladen werden'
+  } finally {
+    invitation.loadingExisting = false
+  }
+}
+
+async function submitInvitation() {
+  invitation.saving = true
+  invitation.error = ''
+  invitation.success = ''
+  try {
+    const payload =
+      invitation.targetType === 'DISTRICT_CONGREGATION'
+        ? {
+            target_type: 'DISTRICT_CONGREGATION' as const,
+            target_congregation_id: invitation.targetCongregationId,
+          }
+        : {
+            target_type: 'EXTERNAL_NOTE' as const,
+            external_target_note: invitation.externalNote.trim(),
+          }
+    await createInvitations(modal.eventId, [payload])
+    invitation.success = 'Einladung gespeichert.'
+    await Promise.all([matrixStore.fetch(), loadEventInvitations()])
+  } catch (e) {
+    invitation.error = e instanceof Error ? e.message : 'Einladung konnte nicht gespeichert werden'
+  } finally {
+    invitation.saving = false
+  }
+}
+
+async function removeInvitation(invitationId: string) {
+  invitation.saving = true
+  invitation.error = ''
+  invitation.success = ''
+  try {
+    await deleteInvitation(invitationId)
+    invitation.success = 'Einladung geloescht.'
+    await Promise.all([matrixStore.fetch(), loadEventInvitations()])
+  } catch (e) {
+    invitation.error = e instanceof Error ? e.message : 'Einladung konnte nicht geloescht werden'
+  } finally {
+    invitation.saving = false
+  }
 }
 
 function closeModal() {

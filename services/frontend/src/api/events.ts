@@ -14,6 +14,9 @@ export interface EventResponse {
   visibility: 'INTERNAL' | 'PUBLIC'
   audiences: string[]
   applicability: string[]
+  invitation_source_congregation_id?: string | null
+  invitation_source_congregation_name?: string | null
+  invitation_source_event_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -38,6 +41,10 @@ export interface EventListParams {
 }
 
 export interface EventUpdate {
+  title?: string
+  description?: string | null
+  start_at?: string
+  end_at?: string
   district_id?: string
   congregation_id?: string | null
   status?: string

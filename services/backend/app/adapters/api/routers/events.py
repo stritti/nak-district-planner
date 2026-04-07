@@ -16,7 +16,9 @@ from app.adapters.api.schemas.event import (
     EventResponse,
     EventUpdate,
 )
+from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event import SqlEventRepository
+from app.application.invitation_service import propagate_source_event_update
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.role import Role
 
@@ -85,6 +87,7 @@ async def list_events(
     offset: int = Query(0, ge=0),
 ) -> EventListResponse:
     repo = SqlEventRepository(db)
+    congregation_repo = SqlCongregationRepository(db)
     events, total = await repo.list(
         district_id=district_id,
         congregation_id=congregation_id,
@@ -96,6 +99,19 @@ async def list_events(
         limit=limit,
         offset=offset,
     )
+
+    invitation_source_ids = list(
+        {
+            e.invitation_source_congregation_id
+            for e in events
+            if e.invitation_source_congregation_id is not None
+        }
+    )
+    source_congregation_names: dict[uuid.UUID, str] = {}
+    if invitation_source_ids:
+        source_congregations = await congregation_repo.list_by_ids(invitation_source_ids)
+        source_congregation_names = {c.id: c.name for c in source_congregations}
+
     return EventListResponse(
         items=[
             EventResponse(
@@ -112,6 +128,13 @@ async def list_events(
                 visibility=e.visibility,
                 audiences=e.audiences,
                 applicability=e.applicability,
+                invitation_source_congregation_id=e.invitation_source_congregation_id,
+                invitation_source_congregation_name=source_congregation_names.get(
+                    e.invitation_source_congregation_id
+                )
+                if e.invitation_source_congregation_id is not None
+                else None,
+                invitation_source_event_id=e.invitation_source_event_id,
                 created_at=e.created_at,
                 updated_at=e.updated_at,
             )
@@ -157,6 +180,14 @@ async def update_event(
 
     if "congregation_id" in fields:
         event.congregation_id = body.congregation_id  # None = district-level
+    if "title" in fields and body.title is not None:
+        event.title = body.title
+    if "description" in fields:
+        event.description = body.description
+    if "start_at" in fields and body.start_at is not None:
+        event.start_at = body.start_at
+    if "end_at" in fields and body.end_at is not None:
+        event.end_at = body.end_at
     if "status" in fields and body.status is not None:
         event.status = body.status
     if "category" in fields:
@@ -164,6 +195,18 @@ async def update_event(
 
     event.updated_at = datetime.now(timezone.utc)
     await repo.save(event)
+
+    propagated_fields = {"title", "description", "start_at", "end_at", "category"}
+    if propagated_fields.intersection(fields) and event.invitation_source_event_id is None:
+        await propagate_source_event_update(db, source_event=event)
+
+    source_name = None
+    if event.invitation_source_congregation_id is not None:
+        source_congregation = await SqlCongregationRepository(db).get(
+            event.invitation_source_congregation_id
+        )
+        source_name = source_congregation.name if source_congregation else None
+
     return EventResponse(
         id=event.id,
         title=event.title,
@@ -178,6 +221,9 @@ async def update_event(
         visibility=event.visibility,
         audiences=event.audiences,
         applicability=event.applicability,
+        invitation_source_congregation_id=event.invitation_source_congregation_id,
+        invitation_source_congregation_name=source_name,
+        invitation_source_event_id=event.invitation_source_event_id,
         created_at=event.created_at,
         updated_at=event.updated_at,
     )

@@ -178,6 +178,7 @@
               <th class="table-th">Start</th>
               <th class="table-th">Kategorie</th>
               <th class="table-th">Zuordnung</th>
+              <th class="table-th">Einladung</th>
               <th class="table-th">Status</th>
               <th class="table-th">Quelle</th>
               <th class="table-th"></th>
@@ -185,13 +186,13 @@
           </thead>
           <tbody>
             <tr v-if="eventsStore.loading">
-              <td colspan="7" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
+              <td colspan="8" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
             </tr>
             <tr v-else-if="eventsStore.error">
-              <td colspan="7" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
+              <td colspan="8" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
             </tr>
             <tr v-else-if="eventsStore.items.length === 0">
-              <td colspan="7" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
+              <td colspan="8" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
             </tr>
             <tr
               v-else
@@ -209,6 +210,12 @@
                   <span>{{ congregationName(event.congregation_id) }}</span>
                 </template>
                 <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
+              </td>
+              <td class="table-td text-xs">
+                <span v-if="event.invitation_source_congregation_name" class="text-amber-700 dark:text-amber-300">
+                  Einladung von {{ event.invitation_source_congregation_name }}
+                </span>
+                <span v-else class="text-gray-400 dark:text-gray-500">—</span>
               </td>
               <td class="px-4 py-3">
                 <span :class="statusClass(event.status)" class="badge">
@@ -391,6 +398,12 @@
           </button>
         </div>
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 truncate">{{ editTarget.title }}</p>
+        <p
+          v-if="editTarget.invitation_source_congregation_name"
+          class="text-xs text-amber-700 dark:text-amber-300 mb-4"
+        >
+          Einladung von {{ editTarget.invitation_source_congregation_name }}
+        </p>
 
         <div class="space-y-4">
           <div>

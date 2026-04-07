@@ -40,7 +40,17 @@ export const useMatrixStore = defineStore('matrix', () => {
     await fetch() // refresh matrix
   }
 
-  return { matrix, loading, error, districtId, groupId, fromDt, toDt, fetch, assign }
+  return {
+    matrix,
+    loading,
+    error,
+    districtId,
+    groupId,
+    fromDt,
+    toDt,
+    fetch,
+    assign,
+  }
 }, {
   persist: { pick: ['districtId', 'groupId', 'fromDt', 'toDt'] },
 })
