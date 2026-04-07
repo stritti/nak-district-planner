@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchMatrix, type MatrixResponse } from '@/api/matrix'
-import { createAssignment } from '@/api/serviceAssignments'
+import { createAssignment, updateAssignment } from '@/api/serviceAssignments'
 import { generateMatrixDraftServices } from '@/api/districts'
 
 export const useMatrixStore = defineStore('matrix', () => {
@@ -35,10 +35,30 @@ export const useMatrixStore = defineStore('matrix', () => {
 
   async function assign(
     eventId: string,
+    assignmentId: string | null,
     options: { leaderId?: string | null; leaderName?: string | null },
   ) {
-    await createAssignment(eventId, options, 'ASSIGNED')
+    if (assignmentId) {
+      await updateAssignment(eventId, assignmentId, options, 'ASSIGNED')
+    } else {
+      await createAssignment(eventId, options, 'ASSIGNED')
+    }
     await fetch() // refresh matrix
+  }
+
+  async function clearAssignment(eventId: string, assignmentId: string | null) {
+    if (!assignmentId) {
+      await fetch()
+      return
+    }
+
+    await updateAssignment(
+      eventId,
+      assignmentId,
+      { leaderId: null, leaderName: null },
+      'OPEN',
+    )
+    await fetch()
   }
 
   async function generateDraftsForCurrentRange() {
@@ -60,6 +80,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     toDt,
     fetch,
     assign,
+    clearAssignment,
     generateDraftsForCurrentRange,
   }
 }, {

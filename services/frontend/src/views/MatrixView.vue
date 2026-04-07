@@ -26,11 +26,9 @@
         <div>
           <label class="filter-label">Bezirk</label>
           <select
-            v-model="matrixStore.districtId"
+            v-model="districtsStore.selectedDistrictId"
             class="form-select"
-            @change="onDistrictChange"
           >
-            <option value="">Bezirk wählen…</option>
             <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
               {{ d.name }}
             </option>
@@ -48,6 +46,18 @@
             <option v-for="g in districtsStore.groups" :key="g.id" :value="g.id">
               {{ g.name }}
             </option>
+          </select>
+        </div>
+
+        <div>
+          <label class="filter-label">Sortierung</label>
+          <select
+            v-model="matrixSortMode"
+            class="form-select"
+            @change="saveSortMode"
+          >
+            <option value="default">Standard</option>
+            <option value="grouped">Nach Gruppen</option>
           </select>
         </div>
 
@@ -175,12 +185,15 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in matrixStore.matrix.rows" :key="row.congregation_id">
+          <tr v-for="row in displayedRows" :key="row.congregation_id">
             <td
               class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-medium text-gray-800 dark:text-gray-200"
               :class="compactMode ? 'px-2 py-2' : 'px-3 py-2'"
             >
               {{ row.congregation_name }}
+              <div v-if="row.group_name" class="text-[10px] font-normal text-gray-500 dark:text-gray-400">
+                {{ row.group_name }}
+              </div>
             </td>
             <td
               v-for="date in matrixStore.matrix.dates"
@@ -398,6 +411,14 @@
         <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modal.error }}</p>
 
         <div class="flex justify-end gap-3 mt-5">
+          <button
+            v-if="!modal.isGap && modal.assignmentId"
+            class="btn-secondary text-red-700 border-red-300 hover:bg-red-50 dark:text-red-300 dark:border-red-700 dark:hover:bg-red-900/20"
+            :disabled="modal.saving"
+            @click="removeAssignmentFromModal"
+          >
+            Entfernen
+          </button>
           <button class="btn-secondary" @click="closeModal">
             Abbrechen
           </button>
@@ -417,7 +438,7 @@
 
 <script setup lang="ts">
 import type { Directive } from 'vue'
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '@/stores/matrix'
 import { useDistrictsStore } from '@/stores/districts'
@@ -429,7 +450,8 @@ import {
   type InvitationResponse,
 } from '@/api/invitations'
 import { updateEvent } from '@/api/events'
-import type { MatrixCell } from '@/api/matrix'
+import type { MatrixCell, MatrixRow } from '@/api/matrix'
+import { sortMatrixRows } from '@/utils/matrixRows'
 import { exportMatrixToExcel } from '@/composables/useExcelExport'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '@/components/AutocompleteInput.vue'
 
@@ -475,7 +497,9 @@ const vOverflowTitle: Directive<OverflowTitleEl, string> = {
 }
 
 const COMPACT_MODE_STORAGE_KEY = 'matrix.compactMode'
+const MATRIX_SORT_MODE_STORAGE_KEY = 'matrix.sortMode'
 const compactMode = ref(false)
+const matrixSortMode = ref<'default' | 'grouped'>('default')
 
 const tableClass = computed(() => {
   return [
@@ -509,6 +533,15 @@ function setCompactMode(enabled: boolean) {
   compactMode.value = enabled
   localStorage.setItem(COMPACT_MODE_STORAGE_KEY, enabled ? '1' : '0')
 }
+
+function saveSortMode() {
+  localStorage.setItem(MATRIX_SORT_MODE_STORAGE_KEY, matrixSortMode.value)
+}
+
+const displayedRows = computed((): MatrixRow[] => {
+  const rows = matrixStore.matrix?.rows ?? []
+  return sortMatrixRows(rows, matrixSortMode.value)
+})
 
 // ── Preset-Filter ────────────────────────────────────────────────────────────
 
@@ -549,7 +582,11 @@ function setPreset(key: string) {
 
 onMounted(async () => {
   compactMode.value = localStorage.getItem(COMPACT_MODE_STORAGE_KEY) === '1'
+  matrixSortMode.value = localStorage.getItem(MATRIX_SORT_MODE_STORAGE_KEY) === 'grouped'
+    ? 'grouped'
+    : 'default'
   if (districtsStore.districts.length === 0) await districtsStore.fetchDistricts()
+  syncDistrictSelectionFromStore()
   // Pre-select current month if no range set yet
   if (!matrixStore.fromDt || !matrixStore.toDt) {
     const { from, to } = monthRange(0)
@@ -568,6 +605,7 @@ onMounted(async () => {
 })
 
 async function onDistrictChange() {
+  matrixStore.districtId = districtsStore.selectedDistrictId
   matrixStore.matrix = null
   matrixStore.groupId = ''
   if (matrixStore.districtId) {
@@ -580,6 +618,19 @@ async function onDistrictChange() {
       matrixStore.fetch()
     }
   }
+}
+
+watch(
+  () => districtsStore.selectedDistrictId,
+  async (districtId) => {
+    if (districtId === matrixStore.districtId) return
+    await onDistrictChange()
+  },
+)
+
+function syncDistrictSelectionFromStore() {
+  districtsStore.ensureSelectedDistrict()
+  matrixStore.districtId = districtsStore.selectedDistrictId
 }
 
 function congregationName(congregationId: string): string {
@@ -613,6 +664,7 @@ function cellClass(cell: MatrixCell | undefined): string {
 const modal = reactive({
   open: false,
   eventId: '',
+  assignmentId: null as string | null,
   eventTitle: '',
   date: '',
   congregationName: '',
@@ -629,7 +681,10 @@ const modal = reactive({
 })
 
 const canSubmit = computed(() => {
-  return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
+  if (modal.isGap) {
+    return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
+  }
+  return true
 })
 
 const invitation = reactive({
@@ -665,6 +720,7 @@ const autocompleteOptions = computed((): AutocompleteOption[] => {
 function openModal(cell: MatrixCell, date: string, congregationName: string, congregationId: string) {
   modal.open = true
   modal.eventId = cell.assignment_event_id ?? cell.event_id!
+  modal.assignmentId = cell.assignment_id
   modal.eventTitle = cell.event_title ?? ''
   modal.date = date
   modal.congregationName = congregationName
@@ -802,14 +858,32 @@ async function submitAssignment() {
   modal.saving = true
   modal.error = ''
   try {
-    if (modal.leaderInput.id !== null) {
-      await matrixStore.assign(modal.eventId, { leaderId: modal.leaderInput.id })
+    const leaderText = modal.leaderInput.text.trim()
+    const hasLeader = modal.leaderInput.id !== null || leaderText.length > 0
+
+    if (!hasLeader) {
+      await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
+    } else if (modal.leaderInput.id !== null) {
+      await matrixStore.assign(modal.eventId, modal.assignmentId, { leaderId: modal.leaderInput.id })
     } else {
-      await matrixStore.assign(modal.eventId, { leaderName: modal.leaderInput.text.trim() })
+      await matrixStore.assign(modal.eventId, modal.assignmentId, { leaderName: leaderText })
     }
     closeModal()
   } catch (e) {
     modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+  } finally {
+    modal.saving = false
+  }
+}
+
+async function removeAssignmentFromModal() {
+  modal.saving = true
+  modal.error = ''
+  try {
+    await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
+    closeModal()
+  } catch (e) {
+    modal.error = e instanceof Error ? e.message : 'Fehler beim Entfernen'
   } finally {
     modal.saving = false
   }
