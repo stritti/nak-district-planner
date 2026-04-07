@@ -24,10 +24,14 @@ jobs:
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
 
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
+          token: ${{ secrets.GH_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
