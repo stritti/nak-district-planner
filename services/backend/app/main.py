@@ -1,3 +1,4 @@
+import logging
 import sys
 import traceback
 from contextlib import asynccontextmanager
@@ -25,9 +26,19 @@ from app.config import settings
 from app.telemetry import setup_telemetry
 
 
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        force=True,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
+
+    configure_logging()
 
     # Run migrations
     cfg = Config("alembic.ini")
@@ -41,6 +52,7 @@ async def lifespan(app: FastAPI):
         client_id=settings.oidc_client_id,
         client_secret=settings.oidc_client_secret,
         issuer=settings.oidc_issuer,
+        audience=settings.oidc_audience,
         httpx_client=httpx_client,
     )
 

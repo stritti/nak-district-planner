@@ -123,7 +123,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         ) from e
     except Exception as e:
-        logger.error(f"Unexpected error in get_current_user: {e}")
+        logger.exception("Unexpected error in get_current_user")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Authentication failed",

@@ -352,8 +352,13 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     if (refreshTimer.value) clearTimeout(refreshTimer.value)
     if (!authStore.token) return
 
-    const refreshAt = (authStore.token.expiresAt - 300) * 1000
-    const delay = Math.max(refreshAt - Date.now(), 0)
+    const nowSeconds = Date.now() / 1000
+    const ttlSeconds = Math.max(authStore.token.expiresAt - nowSeconds, 0)
+
+    // Avoid refresh loops for short-lived tokens.
+    // Refresh at ~80% of lifetime with sane bounds.
+    const refreshLeadSeconds = Math.min(300, Math.max(5, Math.floor(ttlSeconds * 0.2)))
+    const delay = Math.max((ttlSeconds - refreshLeadSeconds) * 1000, 1000)
 
     refreshTimer.value = setTimeout(() => {
       void refreshToken()

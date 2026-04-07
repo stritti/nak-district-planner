@@ -39,14 +39,21 @@ export const useAuthStore = defineStore(
         isSuperadmin.value = false
         return
       }
-      const me = await getCurrentUser()
-      isSuperadmin.value = me.is_superadmin
+      try {
+        const me = await getCurrentUser()
+        isSuperadmin.value = me.is_superadmin
+      } catch (error) {
+        // Non-blocking: auth/session stays valid even if profile flags endpoint fails.
+        isSuperadmin.value = false
+        console.warn('Unable to refresh current user flags', error)
+      }
     }
 
     function getToken(): string | null {
       if (!token.value) return null
       if (isTokenExpired.value) return null
-      return token.value.accessToken
+      // Backend API expects OAuth access token as Bearer token.
+      return token.value.accessToken || token.value.idToken
     }
 
     function clearAuth() {
