@@ -1,7 +1,7 @@
-"""Create users table for OIDC authentication
+"""Create users table for OIDC authentication.
 
-Revision ID: 0008
-Revises: 0007
+Revision ID: 1f8a9b0c3d10
+Revises: 0009
 Create Date: 2026-04-02 00:00:00.000000
 """
 
@@ -13,8 +13,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0008"
-down_revision: Union[str, None] = "0007"
+revision: str = "1f8a9b0c3d10"
+down_revision: Union[str, None] = "0009"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -165,3 +165,8 @@ class UserRepository(ABC):
     async def save(self, user: User) -> None:
         """Create or update user."""
         ...
+
+    @abstractmethod
+    async def has_any_user(self) -> bool:
+        """Check whether at least one user exists."""
+        ...

@@ -6,7 +6,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status
 
 from app.adapters.api.deps import CurrentUser, DbSession
-from app.adapters.api.schemas.leader import LeaderCreate, LeaderResponse, LeaderUpdate
+from app.adapters.api.schemas.leader import (
+    LeaderCreate,
+    LeaderResponse,
+    LeaderSelfLinkRequest,
+    LeaderSelfLinkResponse,
+    LeaderUpdate,
+)
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.domain.models.leader import Leader
@@ -22,6 +28,7 @@ def _leader_response(leader: Leader) -> LeaderResponse:
         rank=leader.rank,
         congregation_id=leader.congregation_id,
         special_role=leader.special_role,
+        user_sub=leader.user_sub,
         email=leader.email,
         phone=leader.phone,
         notes=leader.notes,
@@ -58,6 +65,7 @@ async def create_leader(
         rank=body.rank,
         congregation_id=body.congregation_id,
         special_role=body.special_role,
+        user_sub=body.user_sub,
         email=body.email,
         phone=body.phone,
         notes=body.notes,
@@ -90,6 +98,8 @@ async def update_leader(
         leader.congregation_id = body.congregation_id
     if "special_role" in fields:
         leader.special_role = body.special_role
+    if "user_sub" in fields:
+        leader.user_sub = body.user_sub
     if "email" in fields:
         leader.email = body.email
     if "phone" in fields:
@@ -117,3 +127,65 @@ async def delete_leader(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
     await repo.delete(leader_id)
+
+
+@router.post("/link-self", response_model=LeaderSelfLinkResponse)
+async def link_self_to_leader(
+    district_id: uuid.UUID,
+    body: LeaderSelfLinkRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> LeaderSelfLinkResponse:
+    repo = SqlLeaderRepository(db)
+    target = await repo.get(body.leader_id)
+    if not target or target.district_id != district_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
+        )
+
+    existing_link = await repo.get_by_user_sub(user.sub, district_id=district_id)
+    if existing_link and existing_link.id != target.id:
+        existing_link.user_sub = None
+        existing_link.updated_at = datetime.now(timezone.utc)
+        await repo.save(existing_link)
+
+    if target.user_sub and target.user_sub != user.sub:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Dieses Amt ist bereits mit einem anderen Benutzer verknuepft",
+        )
+
+    target.user_sub = user.sub
+    target.updated_at = datetime.now(timezone.utc)
+    await repo.save(target)
+    return LeaderSelfLinkResponse(linked=True, leader=_leader_response(target))
+
+
+@router.delete("/link-self", response_model=LeaderSelfLinkResponse)
+async def unlink_self_from_leader(
+    district_id: uuid.UUID,
+    user: CurrentUser,
+    db: DbSession,
+) -> LeaderSelfLinkResponse:
+    repo = SqlLeaderRepository(db)
+    linked = await repo.get_by_user_sub(user.sub, district_id=district_id)
+    if not linked:
+        return LeaderSelfLinkResponse(linked=False, leader=None)
+
+    linked.user_sub = None
+    linked.updated_at = datetime.now(timezone.utc)
+    await repo.save(linked)
+    return LeaderSelfLinkResponse(linked=False, leader=None)
+
+
+@router.get("/link-self", response_model=LeaderSelfLinkResponse)
+async def get_self_link(
+    district_id: uuid.UUID,
+    user: CurrentUser,
+    db: DbSession,
+) -> LeaderSelfLinkResponse:
+    repo = SqlLeaderRepository(db)
+    linked = await repo.get_by_user_sub(user.sub, district_id=district_id)
+    if not linked:
+        return LeaderSelfLinkResponse(linked=False, leader=None)
+    return LeaderSelfLinkResponse(linked=True, leader=_leader_response(linked))

@@ -13,6 +13,7 @@ class LeaderCreate(BaseModel):
     rank: LeaderRank | None = None
     congregation_id: uuid.UUID | None = None
     special_role: SpecialRole | None = None
+    user_sub: str | None = None
     email: str | None = None
     phone: str | None = None
     notes: str | None = None
@@ -24,6 +25,7 @@ class LeaderUpdate(BaseModel):
     rank: LeaderRank | None = None
     congregation_id: uuid.UUID | None = None
     special_role: SpecialRole | None = None
+    user_sub: str | None = None
     email: str | None = None
     phone: str | None = None
     notes: str | None = None
@@ -37,9 +39,19 @@ class LeaderResponse(BaseModel):
     rank: LeaderRank | None
     congregation_id: uuid.UUID | None
     special_role: SpecialRole | None
+    user_sub: str | None
     email: str | None
     phone: str | None
     notes: str | None
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class LeaderSelfLinkRequest(BaseModel):
+    leader_id: uuid.UUID
+
+
+class LeaderSelfLinkResponse(BaseModel):
+    linked: bool
+    leader: LeaderResponse | None = None

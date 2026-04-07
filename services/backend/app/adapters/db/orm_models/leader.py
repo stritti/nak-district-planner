@@ -27,6 +27,9 @@ class LeaderORM(Base):
     )
     rank: Mapped[str | None] = mapped_column(sa.String(20), nullable=True)
     special_role: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
+    user_sub: Mapped[str | None] = mapped_column(
+        sa.String(512), sa.ForeignKey("users.sub", ondelete="SET NULL"), nullable=True, index=True
+    )
     email: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
     phone: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(sa.Text, nullable=True)

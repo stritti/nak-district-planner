@@ -45,6 +45,9 @@ def has_role_in_district(
 
     A higher role implicitly grants all permissions of lower roles.
     """
+    if getattr(getattr(auth_context, "user", None), "is_superadmin", False):
+        return True
+
     for membership in auth_context.memberships:
         if membership.scope_type == ScopeType.DISTRICT and membership.scope_id == district_id:
             # Check if user's role is sufficient
@@ -64,6 +67,9 @@ def has_role_in_congregation(
     Direct congregation membership and district-level roles are considered.
     A DISTRICT_ADMIN has all permissions in all congregations within the district.
     """
+    if getattr(getattr(auth_context, "user", None), "is_superadmin", False):
+        return True
+
     for membership in auth_context.memberships:
         # Direct congregation membership
         if (

@@ -19,6 +19,45 @@
     <div v-else-if="loading" class="text-sm text-gray-500">Lade…</div>
 
     <template v-else>
+      <div class="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <h2 class="mb-1 text-sm font-semibold text-blue-900">Eigene Amtsträger-Zuordnung</h2>
+        <p class="mb-3 text-xs text-blue-800/80">
+          Verknüpft den aktuell eingeloggten Benutzer mit einem Amtsträger in diesem Bezirk.
+        </p>
+        <div class="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+          <select
+            v-model="selfSelectedLeaderId"
+            class="w-full rounded border border-blue-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Amtsträger auswählen…</option>
+            <option v-for="leader in activeLeaderOptions" :key="leader.id" :value="leader.id">
+              {{ leader.rank ? `${leader.rank} ` : '' }}{{ leader.name }}
+            </option>
+          </select>
+          <button
+            class="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+            :disabled="!selfSelectedLeaderId || selfLinkLoading"
+            @click="connectSelfLink"
+          >
+            {{ selfLinkLoading ? 'Verknüpfe…' : 'Mit mir verknüpfen' }}
+          </button>
+          <button
+            class="rounded border border-blue-200 bg-white px-4 py-2 text-sm text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+            :disabled="!selfLinkedLeader || selfLinkLoading"
+            @click="removeSelfLink"
+          >
+            Verknüpfung lösen
+          </button>
+        </div>
+        <p v-if="selfLinkedLeader" class="mt-2 text-xs text-blue-900">
+          Aktuell verknüpft mit:
+          <span class="font-medium">{{ selfLinkedLeader.rank ? `${selfLinkedLeader.rank} ` : '' }}{{ selfLinkedLeader.name }}</span>
+          <span class="text-blue-800/70">({{ authStore.user?.email ?? authStore.user?.sub ?? 'aktueller Benutzer' }})</span>
+        </p>
+        <p v-else class="mt-2 text-xs text-blue-900">Aktuell keine Zuordnung gesetzt.</p>
+        <p v-if="selfLinkError" class="mt-2 text-xs text-red-600">{{ selfLinkError }}</p>
+      </div>
+
       <div v-for="section in sections" :key="section.id" class="mb-8">
         <!-- Section header -->
         <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-gray-200">
@@ -416,7 +455,10 @@ import { listDistricts, listCongregations, type DistrictResponse, type Congregat
 import {
   createLeader,
   deleteLeader,
+  getSelfLeaderLink,
+  linkSelfToLeader,
   listLeaders,
+  unlinkSelfFromLeader,
   updateLeader,
   LEADER_RANKS,
   SPECIAL_ROLES,
@@ -425,13 +467,19 @@ import {
   type SpecialRole,
 } from '@/api/leaders'
 import { createExportToken as apiCreateExportToken } from '@/api/exportTokens'
+import { useAuthStore } from '@/stores/auth'
 
+const authStore = useAuthStore()
 const districts = ref<DistrictResponse[]>([])
 const congregations = ref<CongregationResponse[]>([])
 const leaders = ref<LeaderResponse[]>([])
 const selectedDistrictId = ref('')
 const loading = ref(false)
 const saving = ref(false)
+const selfLinkLoading = ref(false)
+const selfLinkError = ref('')
+const selfLinkedLeader = ref<LeaderResponse | null>(null)
+const selfSelectedLeaderId = ref('')
 
 // ── Sections ──────────────────────────────────────────────────────────────────
 
@@ -452,6 +500,12 @@ const sections = computed(() => [
   { id: 'district', label: 'Bezirksebene', congregationId: null as string | null },
   ...congregations.value.map((c) => ({ id: c.id, label: c.name, congregationId: c.id })),
 ])
+
+const activeLeaderOptions = computed(() => {
+  return [...leaders.value]
+    .filter((l) => l.is_active)
+    .sort((a, b) => a.name.localeCompare(b.name))
+})
 
 function leadersForSection(congregationId: string | null): LeaderResponse[] {
   const filtered =
@@ -480,15 +534,64 @@ onMounted(async () => {
 })
 
 async function onDistrictChange() {
-  if (!selectedDistrictId.value) return
+  if (!selectedDistrictId.value) {
+    selfLinkedLeader.value = null
+    selfSelectedLeaderId.value = ''
+    selfLinkError.value = ''
+    return
+  }
   loading.value = true
   try {
     ;[leaders.value, congregations.value] = await Promise.all([
       listLeaders(selectedDistrictId.value),
       listCongregations(selectedDistrictId.value),
     ])
+    await loadSelfLink()
   } finally {
     loading.value = false
+  }
+}
+
+async function loadSelfLink() {
+  if (!selectedDistrictId.value) return
+  selfLinkError.value = ''
+  try {
+    const linked = await getSelfLeaderLink(selectedDistrictId.value)
+    selfLinkedLeader.value = linked.leader
+    selfSelectedLeaderId.value = linked.leader?.id ?? ''
+  } catch (e) {
+    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Laden der Zuordnung'
+  }
+}
+
+async function connectSelfLink() {
+  if (!selectedDistrictId.value || !selfSelectedLeaderId.value) return
+  selfLinkLoading.value = true
+  selfLinkError.value = ''
+  try {
+    const result = await linkSelfToLeader(selectedDistrictId.value, selfSelectedLeaderId.value)
+    selfLinkedLeader.value = result.leader
+    leaders.value = await listLeaders(selectedDistrictId.value)
+  } catch (e) {
+    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Verknüpfen'
+  } finally {
+    selfLinkLoading.value = false
+  }
+}
+
+async function removeSelfLink() {
+  if (!selectedDistrictId.value) return
+  selfLinkLoading.value = true
+  selfLinkError.value = ''
+  try {
+    await unlinkSelfFromLeader(selectedDistrictId.value)
+    selfLinkedLeader.value = null
+    selfSelectedLeaderId.value = ''
+    leaders.value = await listLeaders(selectedDistrictId.value)
+  } catch (e) {
+    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Lösen'
+  } finally {
+    selfLinkLoading.value = false
   }
 }
 

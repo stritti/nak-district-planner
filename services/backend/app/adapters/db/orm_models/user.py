@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,6 +35,7 @@ class UserORM(Base):
     given_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Last name (optional)
     family_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_superadmin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

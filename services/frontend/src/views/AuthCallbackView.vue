@@ -27,10 +27,12 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useOIDC } from '@/composables/useOIDC'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const oidc = useOIDC(router)
+const authStore = useAuthStore()
 
 const loading = ref(true)
 const success = ref(false)
@@ -85,6 +87,8 @@ async function handleCallback() {
       error.value = 'Token-Austausch fehlgeschlagen'
       return
     }
+
+    await authStore.refreshCurrentUserFlags()
 
     success.value = true
 

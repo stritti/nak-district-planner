@@ -77,6 +77,26 @@ docker compose run --no-deps --rm backend alembic revision --autogenerate -m "ku
 > Vor dem Commit immer prüfen, dass sie korrekt ist — Autogenerate erkennt z. B.
 > keine Spalten-Reihenfolgeänderungen und keine serverseitigen Defaults.
 
+Schneller per Makefile:
+
+```bash
+make migrate
+```
+
+---
+
+### 3a. Testdaten seeden (Bezirke, Gemeinden, Amtsträger)
+
+```bash
+make seed
+```
+
+Optional ohne persistente Änderungen:
+
+```bash
+make seed-dry-run
+```
+
 ---
 
 ### 4. Logs & Status
@@ -335,6 +355,16 @@ curl -X POST http://localhost/api/v1/events \
 # Events auflisten
 curl "http://localhost/api/v1/events?district_id=<uuid>&limit=50" \
   -H "X-API-Key: <api-key>"
+
+# Eigenen Benutzer mit Amtstraeger verknuepfen (OIDC Bearer)
+curl -X POST "http://localhost:8000/api/v1/districts/<district_id>/leaders/link-self" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"leader_id":"<leader_uuid>"}'
+
+# Aktuelle eigene Zuordnung abfragen
+curl -X GET "http://localhost:8000/api/v1/districts/<district_id>/leaders/link-self" \
+  -H "Authorization: Bearer <token>"
 ```
 
 Interaktive API-Dokumentation (nur Entwicklung): <http://localhost:8000/docs>
@@ -425,3 +455,9 @@ bash idp-deploy/authentik/deploy_authentik.sh \
 - ✅ **JWT Token Parsing** for user claims
 - ✅ **Session Storage** for PKCE verifier (auto-cleared on close)
 - ✅ **IDP-Agnostic** (works with both Keycloak and Authentik)
+
+### Erster Benutzer / Superadmin
+
+- Wenn `SUPERADMIN_SUB` **gesetzt** ist, bekommt genau dieser OIDC-`sub` globale Superadmin-Rechte.
+- Wenn `SUPERADMIN_SUB` **nicht gesetzt** ist, wird automatisch der **erste jemals angemeldete Benutzer** Superadmin.
+- Superadmin darf alle Bezirks-/Gemeinde-Operationen ohne explizite Memberships ausführen.

@@ -10,6 +10,7 @@ from app.adapters.auth.jwt_claims import extract_memberships_from_claims
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
+from app.config import settings
 from app.domain.models.membership import Membership
 from app.domain.models.user import User
 
@@ -83,6 +84,11 @@ async def get_current_user(
         # Get or create user in database
         user_repo = SqlUserRepository(session)
         existing_user = await user_repo.get_by_sub(user_info["sub"])
+        if settings.superadmin_sub is not None:
+            is_superadmin = user_info["sub"] == settings.superadmin_sub
+        else:
+            has_any_user = await user_repo.has_any_user()
+            is_superadmin = existing_user.is_superadmin if existing_user else (not has_any_user)
 
         if existing_user:
             # Update existing user with latest info from token
@@ -91,6 +97,7 @@ async def get_current_user(
             existing_user.name = user_info["name"]
             existing_user.given_name = user_info["given_name"]
             existing_user.family_name = user_info["family_name"]
+            existing_user.is_superadmin = is_superadmin
             await user_repo.save(existing_user)
             return existing_user
         else:
@@ -102,6 +109,7 @@ async def get_current_user(
                 name=user_info["name"],
                 given_name=user_info["given_name"],
                 family_name=user_info["family_name"],
+                is_superadmin=is_superadmin,
             )
             await user_repo.save(new_user)
             logger.info(f"Auto-created user: {new_user.sub} ({new_user.email})")

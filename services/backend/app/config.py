@@ -18,6 +18,7 @@ class Settings(BaseSettings):
         None  # Can be overridden; typically discovered from OIDC_DISCOVERY_URL
     )
     oidc_scopes: str = "openid profile email"
+    superadmin_sub: str | None = None
 
     @field_validator("oidc_discovery_url", mode="after")
     @classmethod
