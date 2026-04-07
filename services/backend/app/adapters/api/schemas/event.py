@@ -37,6 +37,9 @@ class EventResponse(BaseModel):
     visibility: EventVisibility
     audiences: list[str]
     applicability: list[uuid.UUID]
+    invitation_source_congregation_id: uuid.UUID | None = None
+    invitation_source_congregation_name: str | None = None
+    invitation_source_event_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -46,6 +49,10 @@ class EventResponse(BaseModel):
 class EventUpdate(BaseModel):
     """Partial update — only fields present in the request body are changed."""
 
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    description: str | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
     district_id: uuid.UUID | None = None
     congregation_id: uuid.UUID | None = None
     status: EventStatus | None = None

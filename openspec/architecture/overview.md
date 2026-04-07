@@ -265,4 +265,20 @@ Scope expansion must be introduced via formal OpenSpec change.
 
 ---
 
+## 13. Implementation Analysis & Improvement Proposals
+
+A structured analysis of the current implementation vs. this specification has been documented
+in the project documentation:
+
+- **File:** `docs/improvement-proposals.md`
+- **Topics covered:**
+  - Implementation status matrix (Spec vs. Impl)
+  - Simplification opportunities
+  - Architectural gaps (PlanningSlot, RBAC, Notifications, Rate Limiting)
+  - Refactoring proposals (large views, sync service split, typed results)
+  - UX improvement proposals (toast system, sync status, confirm dialogs)
+  - Prioritized roadmap for addressing the gaps
+
+---
+
 End of Architecture Overview

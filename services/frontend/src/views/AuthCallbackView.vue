@@ -27,10 +27,12 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useOIDC } from '@/composables/useOIDC'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
 const oidc = useOIDC(router)
+const authStore = useAuthStore()
 
 const loading = ref(true)
 const success = ref(false)
@@ -54,12 +56,6 @@ async function handleCallback() {
     const code = route.query.code as string
     const state = route.query.state as string
 
-    console.debug('Auth Callback received:', {
-      code: code ? code.substring(0, 20) + '...' : 'missing',
-      state: state ? state.substring(0, 20) + '...' : 'missing',
-      url: route.fullPath,
-    })
-
     if (!code) {
       error.value = 'Kein Autorisierungscode in der Antwort gefunden'
       return
@@ -67,12 +63,6 @@ async function handleCallback() {
 
     // Verify state parameter
     const storedState = sessionStorage.getItem('oidc_state')
-    console.debug('State validation:', {
-      received: state ? state.substring(0, 20) + '...' : 'missing',
-      stored: storedState ? storedState.substring(0, 20) + '...' : 'missing',
-      match: state === storedState,
-    })
-
     if (state !== storedState) {
       error.value = 'State-Parameter stimmt nicht überein'
       return
@@ -85,6 +75,9 @@ async function handleCallback() {
       error.value = 'Token-Austausch fehlgeschlagen'
       return
     }
+
+    // Optional enrichment call. Authentication is already complete after token exchange.
+    await authStore.refreshCurrentUserFlags()
 
     success.value = true
 

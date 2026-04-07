@@ -29,6 +29,7 @@ class User:
     name: str | None = None
     given_name: str | None = None
     family_name: str | None = None
+    is_superadmin: bool = False
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:

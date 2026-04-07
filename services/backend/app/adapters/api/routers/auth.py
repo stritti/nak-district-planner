@@ -28,4 +28,5 @@ async def get_current_user_info(user: CurrentUser) -> UserOut:
         name=user.name,
         given_name=user.given_name,
         family_name=user.family_name,
+        is_superadmin=user.is_superadmin,
     )

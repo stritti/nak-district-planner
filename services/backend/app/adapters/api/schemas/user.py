@@ -14,3 +14,4 @@ class UserOut(BaseModel):
     name: str | None = Field(default=None, description="Full name")
     given_name: str | None = Field(default=None, description="First name")
     family_name: str | None = Field(default=None, description="Last name")
+    is_superadmin: bool = Field(default=False, description="Global superadmin flag")

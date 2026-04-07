@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     oidc_issuer: str | None = (
         None  # Can be overridden; typically discovered from OIDC_DISCOVERY_URL
     )
+    oidc_audience: str | None = None
     oidc_scopes: str = "openid profile email"
+    superadmin_sub: str | None = None
+    startup_generate_draft_services: bool = False
 
     @model_validator(mode="after")
     def validate_oidc_settings(self) -> "Settings":

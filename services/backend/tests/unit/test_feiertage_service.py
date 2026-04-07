@@ -15,6 +15,7 @@ from app.application.feiertage_service import (
     _parse_day,
     import_feiertage,
     import_kirchliche_festtage,
+    reference_feiertage_for_congregation,
 )
 
 
@@ -324,3 +325,92 @@ class TestImportFeiertage:
 
         # Should create events for both national holiday and BW-specific holiday
         assert result["created"] >= 0
+
+
+class TestReferenceFeiertageForCongregation:
+    """Tests for reference_feiertage_for_congregation() function."""
+
+    async def test_references_only_district_holidays(self):
+        district_id = uuid.uuid4()
+        congregation_id = uuid.uuid4()
+        other_congregation_id = uuid.uuid4()
+        session = AsyncMock()
+
+        from app.domain.models.event import Event
+
+        district_holiday = Event.create(
+            title="Neujahr",
+            start_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            end_at=datetime(2026, 1, 1, 23, 59, 59, tzinfo=timezone.utc),
+            district_id=district_id,
+            category="Feiertag",
+        )
+        district_holiday.applicability = [other_congregation_id]
+
+        congregation_holiday = Event.create(
+            title="Lokaler Feiertag",
+            start_at=datetime(2026, 1, 2, 0, 0, 0, tzinfo=timezone.utc),
+            end_at=datetime(2026, 1, 2, 23, 59, 59, tzinfo=timezone.utc),
+            district_id=district_id,
+            congregation_id=other_congregation_id,
+            category="Feiertag",
+        )
+
+        non_holiday = Event.create(
+            title="Bezirksversammlung",
+            start_at=datetime(2026, 1, 3, 10, 0, 0, tzinfo=timezone.utc),
+            end_at=datetime(2026, 1, 3, 11, 0, 0, tzinfo=timezone.utc),
+            district_id=district_id,
+            category="Sonstiges",
+        )
+
+        event_repo_mock = AsyncMock()
+        event_repo_mock.list.return_value = (
+            [district_holiday, congregation_holiday, non_holiday],
+            3,
+        )
+        event_repo_mock.save.return_value = None
+
+        with patch(
+            "app.application.feiertage_service.SqlEventRepository", return_value=event_repo_mock
+        ):
+            updated = await reference_feiertage_for_congregation(
+                district_id=district_id,
+                congregation_id=congregation_id,
+                session=session,
+            )
+
+        assert updated == 1
+        assert congregation_id in district_holiday.applicability
+        assert event_repo_mock.save.call_count == 1
+
+    async def test_skips_when_already_referenced(self):
+        district_id = uuid.uuid4()
+        congregation_id = uuid.uuid4()
+        session = AsyncMock()
+
+        from app.domain.models.event import Event
+
+        district_holiday = Event.create(
+            title="Neujahr",
+            start_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            end_at=datetime(2026, 1, 1, 23, 59, 59, tzinfo=timezone.utc),
+            district_id=district_id,
+            category="Feiertag",
+        )
+        district_holiday.applicability = [congregation_id]
+
+        event_repo_mock = AsyncMock()
+        event_repo_mock.list.return_value = ([district_holiday], 1)
+
+        with patch(
+            "app.application.feiertage_service.SqlEventRepository", return_value=event_repo_mock
+        ):
+            updated = await reference_feiertage_for_congregation(
+                district_id=district_id,
+                congregation_id=congregation_id,
+                session=session,
+            )
+
+        assert updated == 0
+        event_repo_mock.save.assert_not_called()

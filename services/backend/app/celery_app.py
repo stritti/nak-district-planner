@@ -50,6 +50,11 @@ celery.conf.update(
             "task": "cleanup_old_events",
             "schedule": crontab(day_of_month="1", hour="2", minute="0"),
         },
+        # Daily at 01:10 Europe/Berlin — keep a rolling 8-week draft service window
+        "generate-draft-services-window": {
+            "task": "generate_draft_services_window",
+            "schedule": crontab(hour="1", minute="10"),
+        },
     },
 )
 

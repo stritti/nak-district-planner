@@ -626,7 +626,10 @@ import { listDistricts, listCongregations, type DistrictResponse, type Congregat
 import {
   createLeader,
   deleteLeader,
+  getSelfLeaderLink,
+  linkSelfToLeader,
   listLeaders,
+  unlinkSelfFromLeader,
   updateLeader,
   LEADER_RANKS,
   SPECIAL_ROLES,
@@ -649,6 +652,11 @@ const leaders = ref<LeaderResponse[]>([])
 const selectedDistrictId = ref('')
 const loading = ref(false)
 const saving = ref(false)
+
+const selfLinkedLeader = ref<LeaderResponse | null>(null)
+const selfSelectedLeaderId = ref('')
+const selfLinkLoading = ref(false)
+const selfLinkError = ref('')
 
 // ── Tab state ──────────────────────────────────────────────────────────────────
 
@@ -787,6 +795,12 @@ const sections = computed(() => [
   ...congregations.value.map((c) => ({ id: c.id, label: c.name, congregationId: c.id })),
 ])
 
+const activeLeaderOptions = computed(() => {
+  return [...leaders.value]
+    .filter((l) => l.is_active)
+    .sort((a, b) => a.name.localeCompare(b.name))
+})
+
 function leadersForSection(congregationId: string | null): LeaderResponse[] {
   const filtered =
     congregationId === null
@@ -814,17 +828,64 @@ onMounted(async () => {
 })
 
 async function onDistrictChange() {
-  if (!selectedDistrictId.value) return
-  activeTab.value = 'leaders'
-  registrations.value = []
+  if (!selectedDistrictId.value) {
+    selfLinkedLeader.value = null
+    selfSelectedLeaderId.value = ''
+    selfLinkError.value = ''
+    return
+  }
   loading.value = true
   try {
     ;[leaders.value, congregations.value] = await Promise.all([
       listLeaders(selectedDistrictId.value),
       listCongregations(selectedDistrictId.value),
     ])
+    await loadSelfLink()
   } finally {
     loading.value = false
+  }
+}
+
+async function loadSelfLink() {
+  if (!selectedDistrictId.value) return
+  selfLinkError.value = ''
+  try {
+    const linked = await getSelfLeaderLink(selectedDistrictId.value)
+    selfLinkedLeader.value = linked.leader
+    selfSelectedLeaderId.value = linked.leader?.id ?? ''
+  } catch (e) {
+    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Laden der Zuordnung'
+  }
+}
+
+async function connectSelfLink() {
+  if (!selectedDistrictId.value || !selfSelectedLeaderId.value) return
+  selfLinkLoading.value = true
+  selfLinkError.value = ''
+  try {
+    const result = await linkSelfToLeader(selectedDistrictId.value, selfSelectedLeaderId.value)
+    selfLinkedLeader.value = result.leader
+    leaders.value = await listLeaders(selectedDistrictId.value)
+  } catch (e) {
+    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Verknüpfen'
+  } finally {
+    selfLinkLoading.value = false
+  }
+}
+
+async function removeSelfLink() {
+  if (!selectedDistrictId.value) return
+  selfLinkLoading.value = true
+  selfLinkError.value = ''
+  try {
+    await unlinkSelfFromLeader(selectedDistrictId.value)
+    selfLinkedLeader.value = null
+    selfSelectedLeaderId.value = ''
+    leaders.value = await listLeaders(selectedDistrictId.value)
+  } catch (e) {
+    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Lösen'
+  } finally {
+    selfLinkLoading.value = false
   }
 }
 

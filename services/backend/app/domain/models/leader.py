@@ -36,6 +36,7 @@ class Leader:
     congregation_id: uuid.UUID | None
     rank: LeaderRank | None
     special_role: SpecialRole | None
+    user_sub: str | None
     email: str | None
     phone: str | None
     notes: str | None
@@ -50,6 +51,7 @@ class Leader:
         rank: LeaderRank | None = None,
         congregation_id: uuid.UUID | None = None,
         special_role: SpecialRole | None = None,
+        user_sub: str | None = None,
         email: str | None = None,
         phone: str | None = None,
         notes: str | None = None,
@@ -63,6 +65,7 @@ class Leader:
             congregation_id=congregation_id,
             rank=rank,
             special_role=special_role,
+            user_sub=user_sub,
             email=email,
             phone=phone,
             notes=notes,

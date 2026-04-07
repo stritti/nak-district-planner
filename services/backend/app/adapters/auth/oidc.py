@@ -12,8 +12,7 @@ from typing import Any, Optional
 
 import httpx
 import jwt
-from authlib.jose import JsonWebSignature
-from authlib.jose.errors import JoseError
+from jwt import PyJWK
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +52,10 @@ class OIDCAdapter:
         client_id: str,
         client_secret: str,
         issuer: Optional[str] = None,
+        audience: Optional[str] = None,
         httpx_client: Optional[httpx.AsyncClient] = None,
         jwks_cache_ttl: int = 3600,  # 1 hour
+        clock_skew_seconds: int = 120,
     ):
         """
         Initialize the OIDC adapter.
@@ -65,14 +66,18 @@ class OIDCAdapter:
             client_id: OIDC client ID
             client_secret: OIDC client secret
             issuer: Expected issuer (if not provided, discovered from OIDC config)
+            audience: Expected audience for access tokens (defaults to client_id)
             httpx_client: Optional httpx.AsyncClient for testing
             jwks_cache_ttl: JWKS cache time-to-live in seconds
+            clock_skew_seconds: Allowed clock skew (exp/nbf/iat leeway)
         """
         self.discovery_url = discovery_url
         self.client_id = client_id
         self.client_secret = client_secret
         self.issuer = issuer
+        self.audience = audience
         self.jwks_cache_ttl = jwks_cache_ttl
+        self.clock_skew_seconds = clock_skew_seconds
 
         self._httpx_client = httpx_client
         self._discovery_cache: Optional[dict[str, Any]] = None
@@ -213,6 +218,65 @@ class OIDCAdapter:
         if algorithms is None:
             algorithms = ["RS256", "HS256"]
 
+        jwt_validation_error: TokenValidationError | None = None
+
+        try:
+            return await self._validate_jwt_token(
+                token=token,
+                audience=audience,
+                algorithms=algorithms,
+            )
+        except TokenValidationError as e:
+            jwt_validation_error = e
+            logger.info(f"JWT token validation failed, trying userinfo fallback: {e}")
+
+        # Standards-compatible fallback for opaque access tokens:
+        # validate token by calling provider's userinfo endpoint.
+        try:
+            userinfo_claims = await self._fetch_userinfo_claims(token)
+            logger.info(
+                "Token validated through userinfo endpoint for user: %s",
+                userinfo_claims.get("sub"),
+            )
+            return userinfo_claims
+        except TokenValidationError as e:
+            logger.info(f"userinfo validation failed, trying introspection fallback: {e}")
+            userinfo_validation_error = e
+
+        # RFC 7662 fallback for opaque tokens:
+        # validate token by using provider introspection endpoint.
+        try:
+            introspection_claims = await self._introspect_token(token)
+            logger.info(
+                "Token validated through introspection endpoint for user: %s",
+                introspection_claims.get("sub"),
+            )
+            return introspection_claims
+        except TokenValidationError as e:
+            if jwt_validation_error:
+                raise TokenValidationError(
+                    "JWT validation failed "
+                    f"({jwt_validation_error}); userinfo validation failed ({userinfo_validation_error}); "
+                    f"introspection validation failed ({e})"
+                ) from e
+            raise
+        except Exception as e:
+            if jwt_validation_error:
+                raise TokenValidationError(
+                    "JWT validation failed "
+                    f"({jwt_validation_error}); userinfo validation failed ({userinfo_validation_error}); "
+                    f"introspection validation failed ({e})"
+                ) from e
+            raise TokenValidationError(f"Token validation failed: {e}") from e
+
+    async def _validate_jwt_token(
+        self,
+        token: str,
+        audience: Optional[str],
+        algorithms: list[str],
+    ) -> dict[str, Any]:
+        """Validate JWT token via JWKS (signature + standard claims)."""
+
         try:
             # Decode header to get kid (key ID) without verifying first
             unverified = jwt.decode(token, options={"verify_signature": False})
@@ -257,26 +321,30 @@ class OIDCAdapter:
             if not signing_key:
                 raise TokenValidationError(f"Signing key not found for kid: {kid}")
 
-            # Build the public key from JWKS entry
+            # Build the public key from JWKS entry using PyJWK
             try:
-                jws = JsonWebSignature()
-                jws.deserialize(token, signing_key)
-            except JoseError as e:
-                raise TokenValidationError(f"Failed to deserialize key: {e}") from e
+                pyjwk = PyJWK(signing_key, algorithm=header.get("alg"))
+                signing_key_obj = pyjwk.key
+            except Exception as e:
+                raise TokenValidationError(f"Failed to build signing key from JWKS: {e}") from e
 
             # Verify signature and claims
             decoded = jwt.decode(
                 token,
-                json.dumps(signing_key),  # jwk as json string
+                signing_key_obj,
                 algorithms=algorithms,
-                audience=audience or self.client_id,
+                issuer=self.issuer,
+                leeway=self.clock_skew_seconds,
                 options={
                     "verify_signature": True,
-                    "verify_aud": True,
+                    "verify_aud": False,
                     "verify_exp": True,
                     "verify_iss": True,
                 },
             )
+
+            expected_audience = audience or self.audience or self.client_id
+            self._validate_audience_claims(decoded, expected_audience)
 
             logger.info(f"Token validated successfully for user: {decoded.get('sub')}")
             return decoded
@@ -290,6 +358,112 @@ class OIDCAdapter:
         except Exception as e:
             # Catch-all for unexpected errors
             raise TokenValidationError(f"Token validation failed: {e}") from e
+
+    async def _fetch_userinfo_claims(self, token: str) -> dict[str, Any]:
+        """Validate access token by calling the OIDC userinfo endpoint."""
+        discovery = await self.discover()
+        userinfo_endpoint = discovery.get("userinfo_endpoint")
+        if not userinfo_endpoint:
+            raise TokenValidationError("userinfo endpoint not available in discovery")
+
+        client = await self.get_httpx_client()
+        try:
+            response = await client.get(
+                userinfo_endpoint,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+        except httpx.HTTPError as e:
+            raise TokenValidationError(f"userinfo request failed: {e}") from e
+
+        if response.status_code == 401:
+            raise TokenValidationError("userinfo rejected token (401)")
+        if response.status_code >= 400:
+            raise TokenValidationError(
+                f"userinfo request failed with status {response.status_code}"
+            )
+
+        try:
+            claims = response.json()
+        except json.JSONDecodeError as e:
+            raise TokenValidationError("userinfo response is not valid JSON") from e
+
+        if not isinstance(claims, dict):
+            raise TokenValidationError("userinfo response has invalid shape")
+        if not claims.get("sub"):
+            raise TokenValidationError("userinfo response missing sub claim")
+
+        return claims
+
+    async def _introspect_token(self, token: str) -> dict[str, Any]:
+        """Validate opaque access token via RFC 7662 introspection."""
+        discovery = await self.discover()
+        introspection_endpoint = discovery.get("introspection_endpoint")
+        if not introspection_endpoint:
+            raise TokenValidationError("introspection endpoint not available in discovery")
+
+        client = await self.get_httpx_client()
+        body = {
+            "token": token,
+            "token_type_hint": "access_token",
+        }
+
+        try:
+            response = await client.post(
+                introspection_endpoint,
+                data=body,
+                auth=(self.client_id, self.client_secret),
+                timeout=10,
+            )
+        except httpx.HTTPError as e:
+            raise TokenValidationError(f"introspection request failed: {e}") from e
+
+        if response.status_code >= 400:
+            raise TokenValidationError(
+                f"introspection request failed with status {response.status_code}"
+            )
+
+        try:
+            claims = response.json()
+        except json.JSONDecodeError as e:
+            raise TokenValidationError("introspection response is not valid JSON") from e
+
+        if not isinstance(claims, dict):
+            raise TokenValidationError("introspection response has invalid shape")
+        if not claims.get("active"):
+            raise TokenValidationError("introspection marks token as inactive")
+        if not claims.get("sub"):
+            raise TokenValidationError("introspection response missing sub claim")
+
+        return claims
+
+    def _validate_audience_claims(self, token_claims: dict[str, Any], expected: str) -> None:
+        """
+        Validate token audience in a provider-compatible way.
+
+        Standards background:
+        - access token audience is usually checked via `aud`
+        - ID Tokens can include multiple audiences and use `azp` as authorized party
+
+        We accept the token if either:
+        - `aud` contains the expected audience (string or list)
+        - `azp` matches the expected audience
+        """
+        aud_claim = token_claims.get("aud")
+        azp_claim = token_claims.get("azp")
+
+        aud_matches = False
+        if isinstance(aud_claim, str):
+            aud_matches = aud_claim == expected
+        elif isinstance(aud_claim, list):
+            aud_matches = expected in aud_claim
+
+        azp_matches = isinstance(azp_claim, str) and azp_claim == expected
+
+        if not aud_matches and not azp_matches:
+            raise TokenValidationError(
+                f"Invalid audience: aud={aud_claim!r}, azp={azp_claim!r} (expected {expected!r})"
+            )
 
     def extract_user_info(self, token_claims: dict[str, Any]) -> dict[str, Any]:
         """
@@ -307,10 +481,26 @@ class OIDCAdapter:
         Returns:
             User info dict with keys: sub, email, username, name, ...
         """
+        sub = token_claims.get("sub")
+        if not isinstance(sub, str) or not sub.strip():
+            raise TokenValidationError("Token missing required subject (sub)")
+
+        raw_email = token_claims.get("email")
+        raw_username = token_claims.get("preferred_username")
+
+        email = raw_email if isinstance(raw_email, str) and raw_email.strip() else None
+        username = raw_username if isinstance(raw_username, str) and raw_username.strip() else None
+
+        if username is None:
+            username = email or sub
+
+        if email is None:
+            email = username if "@" in username else f"{sub}@oidc.local"
+
         return {
-            "sub": token_claims.get("sub"),
-            "email": token_claims.get("email"),
-            "username": token_claims.get("preferred_username") or token_claims.get("email"),
+            "sub": sub,
+            "email": email,
+            "username": username,
             "name": token_claims.get("name") or token_claims.get("given_name", ""),
             "given_name": token_claims.get("given_name"),
             "family_name": token_claims.get("family_name"),

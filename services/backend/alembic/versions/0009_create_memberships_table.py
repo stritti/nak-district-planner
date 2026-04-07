@@ -1,7 +1,7 @@
-"""Create memberships table for RBAC
+"""Create memberships table for RBAC.
 
-Revision ID: 0009
-Revises: 0008
+Revision ID: 2a9c4d5e6f70
+Revises: 1f8a9b0c3d10
 Create Date: 2026-04-02 00:00:00.000000
 """
 
@@ -13,8 +13,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0009"
-down_revision: Union[str, None] = "0008"
+revision: str = "2a9c4d5e6f70"
+down_revision: Union[str, None] = "1f8a9b0c3d10"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -62,6 +62,7 @@ docker-compose.local.yml
 # ============================================================
 postgres-data/
 redis-data/
+redis_data/
 *.sqlite
 *.db
 

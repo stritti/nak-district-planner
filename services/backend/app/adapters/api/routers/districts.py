@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.adapters.api.deps import CurrentUser, DbSession
+from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
 import httpx
 
 from app.adapters.api.schemas.district import (
@@ -26,8 +26,10 @@ from app.application.feiertage_service import (
     DE_STATES,
     import_feiertage,
     import_kirchliche_festtage,
+    reference_feiertage_for_congregation,
 )
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
+from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.db.repositories import (
     SqlCongregationRepository,
     SqlCongregationGroupRepository,
@@ -36,9 +38,13 @@ from app.adapters.db.repositories import (
     SqlLeaderRepository,
     SqlServiceAssignmentRepository,
 )
+from app.adapters.db.repositories.invitation import SqlInvitationRepository
+from app.application.draft_service_generation import GenerateDraftServicesUseCase
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
+from app.domain.models.event import EventStatus
+from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
 
@@ -65,8 +71,36 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
 
 @router.post("", response_model=DistrictResponse, status_code=status.HTTP_201_CREATED)
 async def create_district(body: DistrictCreate, _: CurrentUser, db: DbSession) -> DistrictResponse:
-    district = District.create(name=body.name, state_code=body.state_code)
+    state_code = body.state_code.upper() if body.state_code else None
+    if state_code and state_code not in DE_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unbekanntes Bundesland-Kürzel: {state_code}. Gültig: {', '.join(DE_STATES)}",
+        )
+
+    district = District.create(name=body.name, state_code=state_code)
     await SqlDistrictRepository(db).save(district)
+
+    year = datetime.now(timezone.utc).year
+    if district.state_code:
+        try:
+            await import_feiertage(
+                district_id=district.id,
+                year=year,
+                state_code=district.state_code,
+                session=db,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Feiertags-API nicht erreichbar: {exc}",
+            ) from exc
+    await import_kirchliche_festtage(
+        district_id=district.id,
+        year=year,
+        session=db,
+    )
+
     return _district_response(district)
 
 
@@ -123,6 +157,7 @@ async def create_congregation(
 ) -> CongregationResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    await _validate_group_assignment(db, district_id, body.group_id)
     service_times = (
         [st.model_dump() for st in body.service_times] if body.service_times is not None else None
     )
@@ -131,9 +166,21 @@ async def create_congregation(
         district_id=district_id,
         service_times=service_times,
         group_id=body.group_id,
+        invitation_target_type=body.invitation_target_type,
+        invitation_target_congregation_id=body.invitation_target_congregation_id,
+        invitation_external_note=body.invitation_external_note,
     )
     await SqlCongregationRepository(db).save(congregation)
-    return _cong_response(congregation)
+    await reference_feiertage_for_congregation(
+        district_id=district_id,
+        congregation_id=congregation.id,
+        session=db,
+    )
+    group_name = None
+    if congregation.group_id is not None:
+        group = await SqlCongregationGroupRepository(db).get(congregation.group_id)
+        group_name = group.name if group and group.district_id == district_id else None
+    return _cong_response(congregation, group_name=group_name)
 
 
 @router.get("/{district_id}/congregations", response_model=list[CongregationResponse])
@@ -148,7 +195,9 @@ async def list_congregations(
     congregations = await SqlCongregationRepository(db).list_by_district(
         district_id, group_id=group_id
     )
-    return [_cong_response(c) for c in congregations]
+    groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
+    group_names = {group.id: group.name for group in groups}
+    return [_cong_response(c, group_name=group_names.get(c.group_id)) for c in congregations]
 
 
 @router.patch("/{district_id}/congregations/{congregation_id}", response_model=CongregationResponse)
@@ -168,18 +217,48 @@ async def update_congregation(
     if body.service_times is not None:
         congregation.service_times = [st.model_dump() for st in body.service_times]
     if "group_id" in body.model_fields_set:
+        await _validate_group_assignment(db, district_id, body.group_id)
         congregation.group_id = body.group_id
+    if "invitation_target_type" in body.model_fields_set:
+        congregation.invitation_target_type = body.invitation_target_type
+    if "invitation_target_congregation_id" in body.model_fields_set:
+        congregation.invitation_target_congregation_id = body.invitation_target_congregation_id
+    if "invitation_external_note" in body.model_fields_set:
+        congregation.invitation_external_note = body.invitation_external_note
     congregation.updated_at = datetime.now(timezone.utc)
     await repo.save(congregation)
-    return _cong_response(congregation)
+    group_name = None
+    if congregation.group_id is not None:
+        group = await SqlCongregationGroupRepository(db).get(congregation.group_id)
+        group_name = group.name if group and group.district_id == district_id else None
+    return _cong_response(congregation, group_name=group_name)
 
 
-def _cong_response(c: Congregation) -> CongregationResponse:
+async def _validate_group_assignment(
+    db: DbSession,
+    district_id: uuid.UUID,
+    group_id: uuid.UUID | None,
+) -> None:
+    if group_id is None:
+        return
+    group = await SqlCongregationGroupRepository(db).get(group_id)
+    if group is None or group.district_id != district_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Gruppe ist ungueltig oder gehoert nicht zum Bezirk",
+        )
+
+
+def _cong_response(c: Congregation, group_name: str | None = None) -> CongregationResponse:
     return CongregationResponse(
         id=c.id,
         name=c.name,
         district_id=c.district_id,
         group_id=c.group_id,
+        group_name=group_name,
+        invitation_target_type=c.invitation_target_type,
+        invitation_target_congregation_id=c.invitation_target_congregation_id,
+        invitation_external_note=c.invitation_external_note,
         service_times=[ServiceTime(**st) for st in c.service_times],
         created_at=c.created_at,
         updated_at=c.updated_at,
@@ -304,11 +383,14 @@ async def get_matrix(
             date_key = event.start_at.date().isoformat()
             holidays.setdefault(date_key, []).append(event.title)
 
-    # Collect all unique dates: congregation schedules + Feiertag dates
+    # Collect all unique dates: congregation schedules + Feiertag dates + existing service dates
     all_dates: set[str] = set()
     for dates in expected_by_cong.values():
         all_dates.update(dates)
     all_dates.update(holidays.keys())  # kirchliche Feiertage immer als Spalten
+    for event in events:
+        if event.category == "Gottesdienst":
+            all_dates.add(event.start_at.date().isoformat())
     sorted_dates = sorted(all_dates)
 
     # Filter Gottesdienst events for the matrix cells (include district-level)
@@ -337,24 +419,53 @@ async def get_matrix(
 
     # Build matrix rows
     rows: list[MatrixRow] = []
+    groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
+    group_names = {group.id: group.name for group in groups}
+    congregation_name_by_id = {c.id: c.name for c in congregations}
+
+    source_congregation_ids = {
+        e.invitation_source_congregation_id
+        for e in gottesdienst_events
+        if e.invitation_source_congregation_id is not None
+    }
+    source_congregation_names = congregation_name_by_id.copy()
+    if source_congregation_ids:
+        source_congregations = await SqlCongregationRepository(db).list_by_ids(
+            list(source_congregation_ids)
+        )
+        for source in source_congregations:
+            source_congregation_names[source.id] = source.name
+
+    source_event_ids = [e.id for e in gottesdienst_events if e.invitation_source_event_id is None]
+    invitations = await SqlInvitationRepository(db).list_by_source_events(source_event_ids)
+    invitation_by_source_event: dict[uuid.UUID, list] = {}
+    for invitation in invitations:
+        invitation_by_source_event.setdefault(invitation.source_event_id, []).append(invitation)
 
     for congregation in congregations:
         cong_expected = set(expected_by_cong[congregation.id])
         cells: dict[str, MatrixCell] = {}
 
         for date_key in sorted_dates:
-            if date_key not in cong_expected:
-                # Feiertag-Spalte oder anderer Bezirks-Termin — nicht im Gemeinde-Zeitplan
+            event = event_by_cong_date.get((congregation.id, date_key))
+            if event is None and date_key not in cong_expected:
+                # Neither expected by schedule nor explicitly present as event.
                 cells[date_key] = MatrixCell()
                 continue
 
-            event = event_by_cong_date.get((congregation.id, date_key))
             if event is None:
                 # Im Zeitplan erwartet, aber noch kein Event angelegt
                 cells[date_key] = MatrixCell()
                 continue
 
             assignment = assignment_by_event.get(event.id)
+            is_invitation_copy = event.invitation_source_event_id is not None
+            assignment_event_id = event.id
+            if assignment is None and is_invitation_copy:
+                assignment = assignment_by_event.get(event.invitation_source_event_id)
+                if assignment is not None:
+                    assignment_event_id = event.invitation_source_event_id
+
             # Resolve leader name from leader_id if leader_name is not set directly
             leader_name: str | None = None
             leader_id = None
@@ -368,24 +479,97 @@ async def get_matrix(
                     leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
                 event_id=event.id,
+                assignment_event_id=assignment_event_id,
+                invitation_source_congregation_name=source_congregation_names.get(
+                    event.invitation_source_congregation_id
+                )
+                if event.invitation_source_congregation_id is not None
+                else None,
                 event_title=event.title,
+                event_start_at=event.start_at,
+                event_end_at=event.end_at,
                 category=event.category,
-                is_gap=assignment is None,
+                is_gap=(assignment is None and not is_invitation_copy),
+                is_assignment_editable=not is_invitation_copy,
                 assignment_id=assignment.id if assignment else None,
                 assignment_status=assignment.status if assignment else None,
                 leader_id=leader_id,
                 leader_name=leader_name,
+                invitation_count=len(invitation_by_source_event.get(event.id, [])),
             )
 
         rows.append(
             MatrixRow(
                 congregation_id=congregation.id,
                 congregation_name=congregation.name,
+                group_id=congregation.group_id,
+                group_name=group_names.get(congregation.group_id),
                 cells=cells,
             )
         )
 
     return MatrixResponse(dates=sorted_dates, rows=rows, holidays=holidays)
+
+
+@router.post("/{district_id}/matrix/generate-drafts")
+async def generate_matrix_drafts(
+    district_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    from_dt: datetime = Query(...),
+    to_dt: datetime = Query(...),
+) -> dict[str, int]:
+    district = await SqlDistrictRepository(db).get(district_id)
+    if not district:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, district_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+    from_date = from_dt.date()
+    to_date = to_dt.date()
+    if to_date < from_date:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="to_dt muss groesser oder gleich from_dt sein",
+        )
+
+    use_case = GenerateDraftServicesUseCase(
+        district_repo=SqlDistrictRepository(db),
+        congregation_repo=SqlCongregationRepository(db),
+        event_repo=SqlEventRepository(db),
+    )
+    full_result = await use_case.run_for_window(
+        from_date=from_date,
+        to_date_exclusive=to_date + timedelta(days=1),
+        district_ids={district_id},
+    )
+    await db.commit()
+
+    district_congregations = await SqlCongregationRepository(db).list_by_district(district_id)
+    district_congregation_ids = {c.id for c in district_congregations}
+    events, _ = await SqlEventRepository(db).list(
+        district_id=district_id,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        limit=5000,
+        offset=0,
+    )
+    generated_in_range = sum(
+        1
+        for event in events
+        if event.congregation_id in district_congregation_ids
+        and event.status == EventStatus.DRAFT
+        and event.category == "Gottesdienst"
+        and event.generation_slot_key is not None
+    )
+
+    return {
+        **full_result,
+        "generated_in_requested_range": generated_in_range,
+    }
 
 
 # ── Feiertage ─────────────────────────────────────────────────────────────────

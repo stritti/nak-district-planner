@@ -253,6 +253,9 @@ class TestTokenValidation:
     @pytest.mark.asyncio
     async def test_validate_token_invalid_token(self, oidc_adapter, mock_httpx_client):
         """Test validation with invalid token."""
+        oidc_adapter._fetch_userinfo_claims = AsyncMock(
+            side_effect=TokenValidationError("userinfo invalid")
+        )
         with pytest.raises(TokenValidationError):
             await oidc_adapter.validate_token("invalid-token")
 
@@ -262,3 +265,38 @@ class TestTokenValidation:
         # This test is limited due to JWT signing complexity
         # In production, integration tests with real OIDC provider are recommended
         pass
+
+    @pytest.mark.asyncio
+    async def test_validate_token_falls_back_to_userinfo(self, oidc_adapter):
+        """Opaque/non-JWT access tokens should be validated via userinfo endpoint."""
+        oidc_adapter._validate_jwt_token = AsyncMock(side_effect=TokenValidationError("not a jwt"))
+        oidc_adapter._fetch_userinfo_claims = AsyncMock(
+            return_value={
+                "sub": "user-opaque-123",
+                "email": "opaque@example.com",
+            }
+        )
+
+        claims = await oidc_adapter.validate_token("opaque-access-token")
+
+        assert claims["sub"] == "user-opaque-123"
+        oidc_adapter._fetch_userinfo_claims.assert_called_once_with("opaque-access-token")
+
+    @pytest.mark.asyncio
+    async def test_validate_token_raises_when_jwt_and_userinfo_fail(self, oidc_adapter):
+        """Validation should fail if both JWT and userinfo checks fail."""
+        oidc_adapter._validate_jwt_token = AsyncMock(
+            side_effect=TokenValidationError("jwt invalid")
+        )
+        oidc_adapter._fetch_userinfo_claims = AsyncMock(
+            side_effect=TokenValidationError("userinfo invalid")
+        )
+
+        with pytest.raises(TokenValidationError):
+            await oidc_adapter.validate_token("bad-token")
+
+    def test_validate_audience_claims_accepts_azp(self, oidc_adapter):
+        """Audience validation accepts azp when aud does not match directly."""
+        claims = {"aud": ["some-api"], "azp": "test-client"}
+
+        oidc_adapter._validate_audience_claims(claims, "test-client")

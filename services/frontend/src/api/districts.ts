@@ -18,6 +18,7 @@ export interface CongregationResponse {
   name: string
   district_id: string
   group_id: string | null
+  group_name?: string | null
   service_times: ServiceTime[]
   created_at: string
   updated_at: string
@@ -81,7 +82,11 @@ export function createCongregation(
 export function updateCongregation(
   districtId: string,
   congregationId: string,
-  payload: { name?: string; service_times?: ServiceTime[]; group_id?: string | null },
+  payload: {
+    name?: string
+    service_times?: ServiceTime[]
+    group_id?: string | null
+  },
 ): Promise<CongregationResponse> {
   return apiFetch(`/api/v1/districts/${districtId}/congregations/${congregationId}`, {
     method: 'PATCH',
@@ -125,6 +130,16 @@ export interface FeiertageImportResult {
   skipped: number
 }
 
+export interface MatrixDraftGenerationResult {
+  districts: number
+  congregations: number
+  created: number
+  skipped_existing: number
+  adopted_existing: number
+  invalid_configurations: number
+  generated_in_requested_range: number
+}
+
 export function listDeStates(districtId: string): Promise<Record<string, string>> {
   return apiFetch(`/api/v1/districts/${districtId}/feiertage/states`)
 }
@@ -137,5 +152,16 @@ export function importFeiertage(
   return apiFetch(`/api/v1/districts/${districtId}/feiertage`, {
     method: 'POST',
     body: JSON.stringify({ year, state_code: stateCode }),
+  })
+}
+
+export function generateMatrixDraftServices(
+  districtId: string,
+  fromDt: string,
+  toDt: string,
+): Promise<MatrixDraftGenerationResult> {
+  const params = new URLSearchParams({ from_dt: fromDt, to_dt: toDt })
+  return apiFetch(`/api/v1/districts/${districtId}/matrix/generate-drafts?${params}`, {
+    method: 'POST',
   })
 }

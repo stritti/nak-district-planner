@@ -233,3 +233,33 @@ async def import_kirchliche_festtage(
             skipped += 1
 
     return {"created": created, "updated": updated, "skipped": skipped}
+
+
+async def reference_feiertage_for_congregation(
+    district_id: uuid.UUID,
+    congregation_id: uuid.UUID,
+    session: AsyncSession,
+) -> int:
+    """Reference all district holiday events for a congregation.
+
+    Adds the congregation ID to `applicability` for district-level Feiertag events.
+    Existing references are kept untouched.
+
+    Returns:
+        Number of events that were updated.
+    """
+    event_repo = SqlEventRepository(session)
+    events, _ = await event_repo.list(district_id=district_id, limit=10000, offset=0)
+
+    updated = 0
+    for event in events:
+        if event.category != "Feiertag" or event.congregation_id is not None:
+            continue
+        if congregation_id in event.applicability:
+            continue
+        event.applicability = [*event.applicability, congregation_id]
+        event.updated_at = datetime.now(timezone.utc)
+        await event_repo.save(event)
+        updated += 1
+
+    return updated
