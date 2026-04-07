@@ -1,9 +1,9 @@
 <template>
-  <div class="p-6">
+  <div class="p-2 sm:p-4">
     <h1 class="page-title mb-4">Dienstplan-Matrix</h1>
 
     <!-- Filter-Leiste -->
-    <div class="filter-bar mb-6">
+    <div class="filter-bar mb-4">
 
       <!-- Schnellfilter -->
       <div class="flex items-center gap-2 mb-3">
@@ -95,6 +95,27 @@
           <ArrowPathIcon class="h-4 w-4" :class="generatingDrafts ? 'animate-spin' : ''" />
           {{ generatingDrafts ? 'Generiere…' : 'Entwuerfe erzeugen' }}
         </button>
+
+        <div class="ml-auto inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+          <button
+            class="px-3 py-1.5 text-xs font-medium transition-colors"
+            :class="!compactMode
+              ? 'bg-blue-600 text-white'
+              : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'"
+            @click="setCompactMode(false)"
+          >
+            Normal
+          </button>
+          <button
+            class="px-3 py-1.5 text-xs font-medium transition-colors"
+            :class="compactMode
+              ? 'bg-blue-600 text-white'
+              : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'"
+            @click="setCompactMode(true)"
+          >
+            Kompakt
+          </button>
+        </div>
       </div>
 
       <p v-if="generationMessage" class="mt-2 text-xs text-green-700 dark:text-green-400">
@@ -114,19 +135,25 @@
       v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length > 0"
       class="overflow-x-auto"
     >
-      <table class="border-collapse text-xs">
+      <table :class="tableClass">
         <thead>
           <tr>
-            <th class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300 min-w-[140px]">
+            <th
+              class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-left font-medium text-gray-700 dark:text-gray-300"
+              :class="compactMode ? 'px-2 py-2 w-[120px] min-w-[120px]' : 'px-3 py-2 w-[170px] min-w-[170px]'"
+            >
               Gemeinde
             </th>
             <th
               v-for="date in matrixStore.matrix.dates"
               :key="date"
-              class="border px-2 py-2 text-center font-medium min-w-[110px]"
-              :class="matrixStore.matrix.holidays[date]?.length
-                ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200'
-                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'"
+              class="border text-center font-medium"
+              :class="[
+                compactMode ? 'px-1.5 py-2 min-w-[92px]' : 'px-2.5 py-2 min-w-[118px]',
+                matrixStore.matrix.holidays[date]?.length
+                  ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200'
+                  : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300',
+              ]"
             >
               <div class="text-[11px] font-normal" :class="matrixStore.matrix.holidays[date]?.length ? 'text-amber-500 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'">
                 {{ formatWeekday(date) }}
@@ -149,14 +176,17 @@
         </thead>
         <tbody>
           <tr v-for="row in matrixStore.matrix.rows" :key="row.congregation_id">
-            <td class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 px-3 py-2 font-medium text-gray-800 dark:text-gray-200">
+            <td
+              class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-medium text-gray-800 dark:text-gray-200"
+              :class="compactMode ? 'px-2 py-2' : 'px-3 py-2'"
+            >
               {{ row.congregation_name }}
             </td>
             <td
               v-for="date in matrixStore.matrix.dates"
               :key="date"
-              class="border border-gray-300 dark:border-gray-600 px-2 py-1.5 align-top"
-              :class="cellClass(row.cells[date])"
+              class="border border-gray-300 dark:border-gray-600 align-top"
+              :class="[compactMode ? 'px-1.5 py-1.5' : 'px-2.5 py-2', cellClass(row.cells[date])]"
             >
               <template v-if="row.cells[date]?.event_id">
                 <button
@@ -169,7 +199,12 @@
                     <ExclamationTriangleIcon class="h-3.5 w-3.5 shrink-0" />
                     LÜCKE
                   </div>
-                  <div class="text-red-600 dark:text-red-400 truncate max-w-[100px]">{{ row.cells[date].event_title }}</div>
+                   <div
+                     v-overflow-title="row.cells[date].event_title ?? ''"
+                     :class="gapTitleClass"
+                   >
+                     {{ row.cells[date].event_title }}
+                   </div>
                   <div
                     v-if="(row.cells[date].invitation_count ?? 0) > 0"
                     class="text-[10px] text-sky-700 dark:text-sky-300"
@@ -183,10 +218,17 @@
                   :disabled="row.cells[date].is_assignment_editable === false"
                   @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
-                  <div class="font-medium text-gray-800 dark:text-gray-200 truncate max-w-[100px]">
+                  <div
+                    v-overflow-title="row.cells[date].event_title ?? ''"
+                    :class="eventTitleClass"
+                  >
                     {{ row.cells[date].event_title }}
                   </div>
-                  <div v-if="row.cells[date].leader_name" class="text-gray-500 dark:text-gray-400 truncate max-w-[100px]">
+                  <div
+                    v-if="row.cells[date].leader_name"
+                    v-overflow-title="row.cells[date].leader_name ?? ''"
+                    :class="leaderNameClass"
+                  >
                     {{ row.cells[date].leader_name }}
                   </div>
                   <div v-if="row.cells[date].category" class="text-gray-400 dark:text-gray-500">
@@ -374,6 +416,7 @@
 </template>
 
 <script setup lang="ts">
+import type { Directive } from 'vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '@/stores/matrix'
@@ -395,6 +438,77 @@ const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
 const leadersStore = useLeadersStore()
+
+type OverflowTitleEl = HTMLElement & {
+  __overflowTitleHandler__?: () => void
+}
+
+function applyOverflowTitle(el: OverflowTitleEl, value: string) {
+  const text = value.trim()
+  if (!text) {
+    el.removeAttribute('title')
+    return
+  }
+  if (el.scrollWidth > el.clientWidth) {
+    el.setAttribute('title', text)
+    return
+  }
+  el.removeAttribute('title')
+}
+
+const vOverflowTitle: Directive<OverflowTitleEl, string> = {
+  mounted(el, binding) {
+    const handler = () => applyOverflowTitle(el, binding.value ?? '')
+    el.__overflowTitleHandler__ = handler
+    requestAnimationFrame(handler)
+    el.addEventListener('mouseenter', handler)
+  },
+  updated(el, binding) {
+    requestAnimationFrame(() => applyOverflowTitle(el, binding.value ?? ''))
+  },
+  unmounted(el) {
+    if (el.__overflowTitleHandler__) {
+      el.removeEventListener('mouseenter', el.__overflowTitleHandler__)
+      delete el.__overflowTitleHandler__
+    }
+  },
+}
+
+const COMPACT_MODE_STORAGE_KEY = 'matrix.compactMode'
+const compactMode = ref(false)
+
+const tableClass = computed(() => {
+  return [
+    'w-full table-fixed border-collapse',
+    compactMode.value ? 'text-[11px] matrix-table--compact' : 'text-xs matrix-table--normal',
+  ]
+})
+
+const gapTitleClass = computed(() => {
+  return [
+    'matrix-ellipsis matrix-cell-gap text-red-600 dark:text-red-400',
+    compactMode.value ? 'text-[10px]' : 'text-[11px]',
+  ]
+})
+
+const eventTitleClass = computed(() => {
+  return [
+    'matrix-ellipsis matrix-cell-title font-medium text-gray-800 dark:text-gray-200',
+    compactMode.value ? 'text-[10px]' : 'text-[11px]',
+  ]
+})
+
+const leaderNameClass = computed(() => {
+  return [
+    'matrix-ellipsis matrix-cell-subtitle text-gray-500 dark:text-gray-400',
+    compactMode.value ? 'text-[10px]' : 'text-[11px]',
+  ]
+})
+
+function setCompactMode(enabled: boolean) {
+  compactMode.value = enabled
+  localStorage.setItem(COMPACT_MODE_STORAGE_KEY, enabled ? '1' : '0')
+}
 
 // ── Preset-Filter ────────────────────────────────────────────────────────────
 
@@ -434,6 +548,7 @@ function setPreset(key: string) {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
+  compactMode.value = localStorage.getItem(COMPACT_MODE_STORAGE_KEY) === '1'
   if (districtsStore.districts.length === 0) await districtsStore.fetchDistricts()
   // Pre-select current month if no range set yet
   if (!matrixStore.fromDt || !matrixStore.toDt) {
@@ -765,3 +880,62 @@ async function moveServiceDateTime() {
   }
 }
 </script>
+
+<style scoped>
+.matrix-ellipsis {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matrix-table--normal .matrix-cell-gap {
+  max-width: 14ch;
+}
+
+.matrix-table--normal .matrix-cell-title {
+  max-width: 16ch;
+}
+
+.matrix-table--normal .matrix-cell-subtitle {
+  max-width: 18ch;
+}
+
+.matrix-table--compact .matrix-cell-gap {
+  max-width: 11ch;
+}
+
+.matrix-table--compact .matrix-cell-title {
+  max-width: 12ch;
+}
+
+.matrix-table--compact .matrix-cell-subtitle {
+  max-width: 13ch;
+}
+
+@media (min-width: 1280px) {
+  .matrix-table--normal .matrix-cell-gap {
+    max-width: 18ch;
+  }
+
+  .matrix-table--normal .matrix-cell-title {
+    max-width: 22ch;
+  }
+
+  .matrix-table--normal .matrix-cell-subtitle {
+    max-width: 24ch;
+  }
+
+  .matrix-table--compact .matrix-cell-gap {
+    max-width: 13ch;
+  }
+
+  .matrix-table--compact .matrix-cell-title {
+    max-width: 14ch;
+  }
+
+  .matrix-table--compact .matrix-cell-subtitle {
+    max-width: 15ch;
+  }
+}
+</style>
