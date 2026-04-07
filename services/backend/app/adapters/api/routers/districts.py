@@ -26,6 +26,7 @@ from app.application.feiertage_service import (
     DE_STATES,
     import_feiertage,
     import_kirchliche_festtage,
+    reference_feiertage_for_congregation,
 )
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
 from app.adapters.db.repositories import (
@@ -65,8 +66,36 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
 
 @router.post("", response_model=DistrictResponse, status_code=status.HTTP_201_CREATED)
 async def create_district(body: DistrictCreate, _: CurrentUser, db: DbSession) -> DistrictResponse:
-    district = District.create(name=body.name, state_code=body.state_code)
+    state_code = body.state_code.upper() if body.state_code else None
+    if state_code and state_code not in DE_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unbekanntes Bundesland-Kürzel: {state_code}. Gültig: {', '.join(DE_STATES)}",
+        )
+
+    district = District.create(name=body.name, state_code=state_code)
     await SqlDistrictRepository(db).save(district)
+
+    year = datetime.now(timezone.utc).year
+    if district.state_code:
+        try:
+            await import_feiertage(
+                district_id=district.id,
+                year=year,
+                state_code=district.state_code,
+                session=db,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Feiertags-API nicht erreichbar: {exc}",
+            ) from exc
+    await import_kirchliche_festtage(
+        district_id=district.id,
+        year=year,
+        session=db,
+    )
+
     return _district_response(district)
 
 
@@ -133,6 +162,11 @@ async def create_congregation(
         group_id=body.group_id,
     )
     await SqlCongregationRepository(db).save(congregation)
+    await reference_feiertage_for_congregation(
+        district_id=district_id,
+        congregation_id=congregation.id,
+        session=db,
+    )
     return _cong_response(congregation)
 
 
