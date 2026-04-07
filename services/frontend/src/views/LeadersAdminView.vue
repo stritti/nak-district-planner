@@ -646,13 +646,17 @@ import {
   type RegistrationResponse,
 } from '@/api/registrations'
 
-const authStore = useAuthStore()
 const districts = ref<DistrictResponse[]>([])
 const congregations = ref<CongregationResponse[]>([])
 const leaders = ref<LeaderResponse[]>([])
 const selectedDistrictId = ref('')
 const loading = ref(false)
 const saving = ref(false)
+
+const selfLinkedLeader = ref<LeaderResponse | null>(null)
+const selfSelectedLeaderId = ref('')
+const selfLinkLoading = ref(false)
+const selfLinkError = ref('')
 
 // ── Tab state ──────────────────────────────────────────────────────────────────
 
