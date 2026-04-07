@@ -43,9 +43,9 @@
       <div class="text-center mt-6">
         <p class="text-sm text-gray-600">
           Noch kein Konto?
-          <a href="#" class="text-blue-500 hover:text-blue-600 font-medium">
-            Administrator kontaktieren
-          </a>
+          <RouterLink to="/register" class="text-blue-500 hover:text-blue-600 font-medium">
+            Jetzt registrieren
+          </RouterLink>
         </p>
       </div>
     </div>

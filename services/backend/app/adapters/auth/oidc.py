@@ -5,16 +5,14 @@ Handles OIDC discovery, JWKS fetching/caching, and JWT validation.
 Works with any OIDC-compliant provider (Keycloak, Authentik, Okta, etc.)
 """
 
-import asyncio
-import hashlib
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import httpx
 import jwt
-from authlib.jose import JsonWebKey, JsonWebSignature
+from authlib.jose import JsonWebSignature
 from authlib.jose.errors import JoseError
 
 logger = logging.getLogger(__name__)
@@ -187,7 +185,7 @@ class OIDCAdapter:
 
             # Fallback: return cached JWKS if available
             if self._jwks_cache is not None:
-                logger.warning(f"Using stale JWKS cache due to parse error")
+                logger.warning("Using stale JWKS cache due to parse error")
                 return self._jwks_cache
 
             raise JWKSFetchError(msg) from e
@@ -262,7 +260,7 @@ class OIDCAdapter:
             # Build the public key from JWKS entry
             try:
                 jws = JsonWebSignature()
-                public_key = jws.deserialize(token, signing_key)
+                jws.deserialize(token, signing_key)
             except JoseError as e:
                 raise TokenValidationError(f"Failed to deserialize key: {e}") from e
 

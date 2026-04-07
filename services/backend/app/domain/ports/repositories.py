@@ -10,6 +10,7 @@ from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.leader import Leader
+from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
 
@@ -170,3 +171,25 @@ class UserRepository(ABC):
     async def has_any_user(self) -> bool:
         """Check whether at least one user exists."""
         ...
+
+
+class LeaderRegistrationRepository(ABC):
+    @abstractmethod
+    async def get(self, registration_id: uuid.UUID) -> LeaderRegistration | None:
+        pass
+
+    @abstractmethod
+    async def list_by_district(
+        self,
+        district_id: uuid.UUID,
+        status: RegistrationStatus | None = None,
+    ) -> list[LeaderRegistration]:
+        pass
+
+    @abstractmethod
+    async def save(self, registration: LeaderRegistration) -> None:
+        pass
+
+    @abstractmethod
+    async def delete(self, registration_id: uuid.UUID) -> None:
+        pass

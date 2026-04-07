@@ -16,10 +16,13 @@ from app.adapters.api.routers import (
     events,
     export,
     leaders,
+    registrations,
     service_assignments,
 )
 from app.adapters.auth.oidc import OIDCAdapter
+from app.adapters.db.session import engine
 from app.config import settings
+from app.telemetry import setup_telemetry
 
 
 @asynccontextmanager
@@ -65,6 +68,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
+
 
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
@@ -86,4 +91,6 @@ app.include_router(service_assignments.router)
 app.include_router(calendar_integrations.router)
 app.include_router(districts.router)
 app.include_router(leaders.router)
+app.include_router(registrations.public_router)
+app.include_router(registrations.router)
 app.include_router(export.router, prefix="/api/v1")

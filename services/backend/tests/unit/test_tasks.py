@@ -64,17 +64,21 @@ class TestSyncAllActiveIntegrationsTask:
         # This is more of an integration test, but we can test the basic flow
         from app.application.tasks import sync_all_active_integrations
 
-        with patch("app.application.tasks.asyncio.run") as mock_asyncio_run:
-            mock_asyncio_run.return_value = {
-                "discovered": 2,
-                "skipped": 0,
-                "queued": 2,
-            }
+        fake_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+
+        with (
+            patch("app.application.tasks.asyncio.run") as mock_asyncio_run,
+            patch("app.application.tasks.sync_calendar_integration") as mock_task,
+        ):
+            mock_asyncio_run.return_value = fake_ids
+            mock_task.delay = MagicMock()
 
             result = sync_all_active_integrations()
 
         assert result is not None
+        assert result["dispatched"] == len(fake_ids)
         mock_asyncio_run.assert_called_once()
+        assert mock_task.delay.call_count == len(fake_ids)
 
 
 class TestImportFeiertageTask:

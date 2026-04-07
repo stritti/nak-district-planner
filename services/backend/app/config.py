@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,9 +6,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = "postgresql+asyncpg://nak:changeme@db:5432/nak_planner"
-    redis_url: str = "redis://redis:6379/0"
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
+
+    # OpenTelemetry
+    otel_enabled: bool = False
+    otel_service_name: str = "nak-district-planner-backend"
+    otel_endpoint: str = "http://localhost:4318"
 
     # OIDC Configuration (provider-agnostic)
     oidc_discovery_url: str = "https://oidc.example.com/.well-known/openid-configuration"
@@ -20,31 +24,20 @@ class Settings(BaseSettings):
     oidc_scopes: str = "openid profile email"
     superadmin_sub: str | None = None
 
-    @field_validator("oidc_discovery_url", mode="after")
-    @classmethod
-    def validate_oidc_discovery_url(cls, v: str) -> str:
-        """Validate OIDC discovery URL is not a placeholder."""
-        if v == "https://oidc.example.com/.well-known/openid-configuration":
+    @model_validator(mode="after")
+    def validate_oidc_settings(self) -> "Settings":
+        """Validate OIDC settings are properly configured in production."""
+        if self.app_env != "production":
+            return self
+        if self.oidc_discovery_url == "https://oidc.example.com/.well-known/openid-configuration":
             raise ValueError("OIDC_DISCOVERY_URL must be configured (not example.com)")
-        if not v.startswith("http"):
+        if not self.oidc_discovery_url.startswith("http"):
             raise ValueError("OIDC_DISCOVERY_URL must be a valid HTTP(S) URL")
-        return v
-
-    @field_validator("oidc_client_id", mode="after")
-    @classmethod
-    def validate_oidc_client_id(cls, v: str) -> str:
-        """Validate OIDC client ID is configured."""
-        if v == "replace-with-oidc-client-id":
+        if self.oidc_client_id == "replace-with-oidc-client-id":
             raise ValueError("OIDC_CLIENT_ID must be configured (not a placeholder)")
-        return v
-
-    @field_validator("oidc_client_secret", mode="after")
-    @classmethod
-    def validate_oidc_client_secret(cls, v: str) -> str:
-        """Validate OIDC client secret is configured."""
-        if v == "replace-with-oidc-client-secret":
+        if self.oidc_client_secret == "replace-with-oidc-client-secret":
             raise ValueError("OIDC_CLIENT_SECRET must be configured (not a placeholder)")
-        return v
+        return self
 
     def get_oidc_scopes_list(self) -> list[str]:
         """Parse OIDC_SCOPES string into list"""

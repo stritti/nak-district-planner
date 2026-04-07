@@ -42,7 +42,7 @@ jobs:
         run: uv run pytest tests/unit/ -v --tb=short --cov=app --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage report
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         if: always()
         with:
           files: services/backend/coverage.xml
@@ -123,6 +123,9 @@ jobs:
   docs-build:
     name: Docs Build Check (VitePress)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
 
     steps:
       - uses: actions/checkout@v6
@@ -131,7 +134,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Build Docs
-        run: bun run docs:build
+        run: bun run build
