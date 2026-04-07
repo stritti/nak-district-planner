@@ -137,54 +137,32 @@
           </div>
         </div>
 
-        <!-- New congregation inline form -->
-        <div
-          v-if="newCongregationDistrictId === district.id"
-          class="px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20 flex items-center gap-2"
-        >
-          <input
-            ref="newCongInput"
-            v-model="newCongName"
-            placeholder="Name der Gemeinde"
-            class="form-input w-56 py-1 px-2"
-            @keyup.enter="saveCongregation(district.id)"
-            @keyup.escape="cancelNewCong"
-          />
-          <button
-            class="p-1.5 rounded text-green-600 hover:bg-green-100 disabled:opacity-40"
-            :disabled="!newCongName.trim() || saving"
-            title="Hinzufügen"
-            @click="saveCongregation(district.id)"
-          >
-            <CheckIcon class="h-4 w-4" />
-          </button>
-          <button class="p-1.5 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600" title="Abbrechen" @click="cancelNewCong">
-            <XMarkIcon class="h-4 w-4" />
-          </button>
-          <span v-if="inlineError" class="text-xs text-red-600 dark:text-red-400">{{ inlineError }}</span>
-        </div>
-
         <!-- Congregation list -->
         <ul v-if="congregationsByDistrict[district.id]?.length" class="divide-y divide-gray-100 dark:divide-gray-700">
-          <li
-            v-for="cong in congregationsByDistrict[district.id]"
-            :key="cong.id"
-            class="flex items-center justify-between px-4 py-2"
-          >
-            <div>
-              <span class="text-sm text-gray-700 dark:text-gray-300">{{ cong.name }}</span>
-              <span class="ml-2 text-xs text-gray-400 dark:text-gray-500">{{ formatServiceTimes(cong.service_times) }}</span>
-            </div>
-            <button
-              class="btn-icon"
-              title="Gemeinde bearbeiten"
-              @click="openEditCong(district.id, cong)"
+          <template v-for="section in congregationSections(district.id)" :key="section.key">
+            <li v-if="section.title" class="px-4 py-2 bg-gray-50 dark:bg-gray-800/60">
+              <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ section.title }}</span>
+            </li>
+            <li
+              v-for="cong in section.items"
+              :key="cong.id"
+              class="flex items-center justify-between px-4 py-2"
             >
-              <PencilSquareIcon class="h-4 w-4" />
-            </button>
-          </li>
+              <div>
+                <span class="text-sm text-gray-700 dark:text-gray-300">{{ cong.name }}</span>
+                <span class="ml-2 text-xs text-gray-400 dark:text-gray-500">{{ formatServiceTimes(cong.service_times) }}</span>
+              </div>
+              <button
+                class="btn-icon"
+                title="Gemeinde bearbeiten"
+                @click="openEditCong(district.id, cong)"
+              >
+                <PencilSquareIcon class="h-4 w-4" />
+              </button>
+            </li>
+          </template>
         </ul>
-        <div v-else-if="!newCongregationDistrictId || newCongregationDistrictId !== district.id" class="px-4 py-2 text-xs text-gray-400 dark:text-gray-500">
+        <div v-else class="px-4 py-2 text-xs text-gray-400 dark:text-gray-500">
           Noch keine Gemeinden.
         </div>
       </div>
@@ -241,6 +219,89 @@
             class="btn-primary px-4 py-2"
             :disabled="!newDistrictName.trim() || saving"
             @click="saveNewDistrict"
+          >
+            <CheckIcon class="h-4 w-4" />
+            {{ saving ? 'Speichern…' : 'Anlegen' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- New congregation modal -->
+    <div
+      v-if="newCongModal.open"
+      class="modal-backdrop"
+      @click.self="closeNewCong"
+    >
+      <div class="modal-panel max-w-md">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="modal-title">Neue Gemeinde</h2>
+          <button class="modal-close" @click="closeNewCong">
+            <XMarkIcon class="h-5 w-5" />
+          </button>
+        </div>
+
+        <label class="form-label">Name</label>
+        <input
+          v-model="newCongModal.name"
+          type="text"
+          class="form-input mb-4"
+          placeholder="z. B. Gemeinde Mitte"
+        />
+
+        <label class="form-label">Gruppe (optional)</label>
+        <select v-model="newCongModal.groupId" class="form-input mb-5">
+          <option :value="null">Keine Gruppe</option>
+          <option
+            v-for="g in groupsByDistrict[newCongModal.districtId]"
+            :key="g.id"
+            :value="g.id"
+          >
+            {{ g.name }}
+          </option>
+        </select>
+
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Gottesdienst-Zeiten</label>
+          <button class="flex items-center gap-1 text-xs text-blue-600 hover:underline" @click="addNewCongServiceTime">
+            <PlusIcon class="h-3.5 w-3.5" />
+            Hinzufuegen
+          </button>
+        </div>
+
+        <div class="space-y-2 mb-5">
+          <div
+            v-for="(st, idx) in newCongModal.serviceTimes"
+            :key="idx"
+            class="flex items-center gap-2"
+          >
+            <select v-model="st.weekday" class="form-select px-2 py-1.5">
+              <option v-for="wd in WEEKDAYS" :key="wd.value" :value="wd.value">{{ wd.label }}</option>
+            </select>
+            <input v-model="st.time" type="time" class="form-select px-2 py-1.5" />
+            <button
+              class="p-1 rounded text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+              title="Entfernen"
+              @click="removeNewCongServiceTime(idx)"
+            >
+              <TrashIcon class="h-4 w-4" />
+            </button>
+          </div>
+          <p v-if="newCongModal.serviceTimes.length === 0" class="text-xs text-gray-400 dark:text-gray-500">
+            Standardzeiten werden verwendet.
+          </p>
+        </div>
+
+        <p v-if="newCongModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ newCongModal.error }}</p>
+
+        <div class="flex justify-end gap-3">
+          <button class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800" @click="closeNewCong">
+            Abbrechen
+          </button>
+          <button
+            class="btn-primary px-4 py-2"
+            :disabled="!newCongModal.name.trim() || saving"
+            @click="saveCongregation"
           >
             <CheckIcon class="h-4 w-4" />
             {{ saving ? 'Speichern…' : 'Anlegen' }}
@@ -371,6 +432,7 @@ import {
   type DistrictResponse,
   type ServiceTime,
 } from '@/api/districts'
+import { buildCongregationSections } from '@/utils/congregationGrouping'
 
 const DE_STATES: Record<string, string> = {
   BB: 'Brandenburg', BE: 'Berlin', BW: 'Baden-Württemberg', BY: 'Bayern',
@@ -407,15 +469,19 @@ const groupsByDistrict = reactive<Record<string, CongregationGroupResponse[]>>({
 const loadingDistricts = ref(false)
 const globalError = ref('')
 const saving = ref(false)
-const inlineError = ref('')
 const modalError = ref('')
 
 const editingDistrictId = ref<string | null>(null)
 const editName = ref('')
 
-const newCongregationDistrictId = ref<string | null>(null)
-const newCongName = ref('')
-const newCongInput = ref<HTMLInputElement | null>(null)
+const newCongModal = reactive({
+  open: false,
+  districtId: '',
+  name: '',
+  groupId: null as string | null,
+  serviceTimes: [] as EditableServiceTime[],
+  error: '',
+})
 
 const newDistrictOpen = ref(false)
 const newDistrictName = ref('')
@@ -443,6 +509,13 @@ function openEditCong(districtId: string, cong: CongregationResponse) {
   editCongModal.groupId = cong.group_id
   editCongModal.serviceTimes = cong.service_times.map((st) => ({ ...st }))
   editCongModal.error = ''
+}
+
+function congregationSections(districtId: string) {
+  return buildCongregationSections(
+    congregationsByDistrict[districtId] ?? [],
+    groupsByDistrict[districtId] ?? [],
+  )
 }
 
 function closeEditCong() {
@@ -558,34 +631,48 @@ async function saveNewDistrict() {
 
 function openNewCongregation(districtId: string) {
   cancelEdit()
-  newCongName.value = ''
-  inlineError.value = ''
-  newCongregationDistrictId.value = districtId
-  nextTick(() => newCongInput.value?.focus())
+  newCongModal.open = true
+  newCongModal.districtId = districtId
+  newCongModal.name = ''
+  newCongModal.groupId = null
+  newCongModal.serviceTimes = []
+  newCongModal.error = ''
 }
 
-async function saveCongregation(districtId: string) {
-  if (!newCongName.value.trim()) return
+function addNewCongServiceTime() {
+  newCongModal.serviceTimes.push({ weekday: 6, time: '09:30' })
+}
+
+function removeNewCongServiceTime(idx: number) {
+  newCongModal.serviceTimes.splice(idx, 1)
+}
+
+function closeNewCong() {
+  newCongModal.open = false
+}
+
+async function saveCongregation() {
+  if (!newCongModal.name.trim()) return
   saving.value = true
-  inlineError.value = ''
+  newCongModal.error = ''
   try {
-    const created = await createCongregation(districtId, newCongName.value.trim())
+    const created = await createCongregation(
+      newCongModal.districtId,
+      newCongModal.name.trim(),
+      newCongModal.serviceTimes.length > 0 ? newCongModal.serviceTimes : undefined,
+      newCongModal.groupId,
+    )
+    const districtId = newCongModal.districtId
     congregationsByDistrict[districtId] = [
       ...(congregationsByDistrict[districtId] ?? []),
       created,
     ].sort((a, b) => a.name.localeCompare(b.name))
-    cancelNewCong()
+    closeNewCong()
   } catch (e) {
-    inlineError.value = e instanceof Error ? e.message : 'Fehler'
+    newCongModal.error = e instanceof Error ? e.message : 'Fehler'
   } finally {
     saving.value = false
   }
-}
-
-function cancelNewCong() {
-  newCongregationDistrictId.value = null
-  newCongName.value = ''
-  inlineError.value = ''
 }
 
 // ── Groups ───────────────────────────────────────────────────────────────────

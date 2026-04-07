@@ -18,6 +18,7 @@ export interface CongregationResponse {
   name: string
   district_id: string
   group_id: string | null
+  group_name?: string | null
   service_times: ServiceTime[]
   created_at: string
   updated_at: string
@@ -81,7 +82,11 @@ export function createCongregation(
 export function updateCongregation(
   districtId: string,
   congregationId: string,
-  payload: { name?: string; service_times?: ServiceTime[]; group_id?: string | null },
+  payload: {
+    name?: string
+    service_times?: ServiceTime[]
+    group_id?: string | null
+  },
 ): Promise<CongregationResponse> {
   return apiFetch(`/api/v1/districts/${districtId}/congregations/${congregationId}`, {
     method: 'PATCH',

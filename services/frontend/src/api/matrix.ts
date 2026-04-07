@@ -20,6 +20,8 @@ export interface MatrixCell {
 export interface MatrixRow {
   congregation_id: string
   congregation_name: string
+  group_id?: string | null
+  group_name?: string | null
   cells: Record<string, MatrixCell>
 }
 

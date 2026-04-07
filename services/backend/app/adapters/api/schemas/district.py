@@ -123,6 +123,7 @@ class CongregationResponse(BaseModel):
     name: str
     district_id: uuid.UUID
     group_id: uuid.UUID | None
+    group_name: str | None = None
     invitation_target_type: InvitationTargetType | None
     invitation_target_congregation_id: uuid.UUID | None
     invitation_external_note: str | None

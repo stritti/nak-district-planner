@@ -86,11 +86,9 @@
         <div>
           <label class="filter-label">Bezirk</label>
           <select
-            v-model="selectedDistrictId"
+            v-model="districtsStore.selectedDistrictId"
             class="form-select px-2"
-            @change="onDistrictChange"
           >
-            <option value="">Alle Bezirke</option>
             <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
               {{ d.name }}
             </option>
@@ -102,7 +100,7 @@
           <label class="filter-label">Gemeinde</label>
           <select
             v-model="selectedCongregationId"
-            :disabled="!selectedDistrictId"
+            :disabled="!districtsStore.selectedDistrictId"
             class="rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:bg-gray-800"
             @change="onFilterChange"
           >
@@ -576,7 +574,7 @@ async function fetchCalendar() {
       to   = localDate(gridEnd)   + 'T23:59:59'
     }
     const params: EventListParams = { from_dt: from, to_dt: to, limit: 500, offset: 0 }
-    if (selectedDistrictId.value)     params.district_id     = selectedDistrictId.value
+    if (districtsStore.selectedDistrictId) params.district_id = districtsStore.selectedDistrictId
     if (selectedCongregationId.value === 'DISTRICT_ONLY') {
       params.only_district_level = true
     } else if (selectedCongregationId.value) {
@@ -588,8 +586,14 @@ async function fetchCalendar() {
     let events = res.items
 
     // Bei Gemeinde-Filter: Feiertage des Bezirks zusätzlich laden (keine congregation_id-Einschränkung)
-    if (selectedCongregationId.value && selectedDistrictId.value) {
-      const feierRes = await listEvents({ district_id: selectedDistrictId.value, from_dt: from, to_dt: to, limit: 500, offset: 0 })
+    if (selectedCongregationId.value && districtsStore.selectedDistrictId) {
+      const feierRes = await listEvents({
+        district_id: districtsStore.selectedDistrictId,
+        from_dt: from,
+        to_dt: to,
+        limit: 500,
+        offset: 0,
+      })
       const existing = new Set(events.map(e => e.id))
       const feiertage = feierRes.items.filter(e => e.category === 'Feiertag' && !existing.has(e.id))
       events = [...events, ...feiertage]
@@ -679,7 +683,6 @@ const periodLabel = computed(() => {
 
 // ── Filter ───────────────────────────────────────────────────────────────────
 
-const selectedDistrictId    = ref('')
 const selectedCongregationId = ref('')
 const selectedGroupId        = ref('')
 const selectedStatus         = ref('')
@@ -720,14 +723,21 @@ async function onDistrictChange() {
   selectedCongregationId.value = ''
   selectedGroupId.value = ''
   districtsStore.clearCongregations()
-  if (selectedDistrictId.value) {
+  if (districtsStore.selectedDistrictId) {
     await Promise.all([
-      districtsStore.fetchCongregations(selectedDistrictId.value),
-      districtsStore.fetchGroups(selectedDistrictId.value),
+      districtsStore.fetchCongregations(districtsStore.selectedDistrictId),
+      districtsStore.fetchGroups(districtsStore.selectedDistrictId),
     ])
   }
   onFilterChange()
 }
+
+watch(
+  () => districtsStore.selectedDistrictId,
+  async () => {
+    await onDistrictChange()
+  },
+)
 
 function onGroupChange() {
   selectedCongregationId.value = ''
@@ -742,7 +752,7 @@ function onFilterChange() {
 function applyFilters() {
   const isDistrictOnly = selectedCongregationId.value === 'DISTRICT_ONLY'
   eventsStore.setFilter({
-    district_id:    selectedDistrictId.value || undefined,
+    district_id:    districtsStore.selectedDistrictId || undefined,
     congregation_id: (!isDistrictOnly && selectedCongregationId.value) ? selectedCongregationId.value : undefined,
     group_id:        selectedGroupId.value || undefined,
     only_district_level: isDistrictOnly,
@@ -759,9 +769,15 @@ const allCongregations = ref<CongregationResponse[]>([])
 
 onMounted(async () => {
   await districtsStore.fetchDistricts()
+  if (districtsStore.selectedDistrictId) {
+    await Promise.all([
+      districtsStore.fetchCongregations(districtsStore.selectedDistrictId),
+      districtsStore.fetchGroups(districtsStore.selectedDistrictId),
+    ])
+  }
   const all = await Promise.all(districtsStore.districts.map((d) => listCongregations(d.id)))
   allCongregations.value = all.flat()
-  await eventsStore.fetch()
+  applyFilters()
 })
 
 watch(() => eventsStore.filters.offset, () => eventsStore.fetch())

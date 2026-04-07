@@ -27,6 +27,8 @@ class MatrixCell(BaseModel):
 class MatrixRow(BaseModel):
     congregation_id: uuid.UUID
     congregation_name: str
+    group_id: uuid.UUID | None = None
+    group_name: str | None = None
     cells: dict[str, MatrixCell]  # "YYYY-MM-DD" → cell
 
 

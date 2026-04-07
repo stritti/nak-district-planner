@@ -157,6 +157,7 @@ async def create_congregation(
 ) -> CongregationResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    await _validate_group_assignment(db, district_id, body.group_id)
     service_times = (
         [st.model_dump() for st in body.service_times] if body.service_times is not None else None
     )
@@ -175,7 +176,11 @@ async def create_congregation(
         congregation_id=congregation.id,
         session=db,
     )
-    return _cong_response(congregation)
+    group_name = None
+    if congregation.group_id is not None:
+        group = await SqlCongregationGroupRepository(db).get(congregation.group_id)
+        group_name = group.name if group and group.district_id == district_id else None
+    return _cong_response(congregation, group_name=group_name)
 
 
 @router.get("/{district_id}/congregations", response_model=list[CongregationResponse])
@@ -190,7 +195,9 @@ async def list_congregations(
     congregations = await SqlCongregationRepository(db).list_by_district(
         district_id, group_id=group_id
     )
-    return [_cong_response(c) for c in congregations]
+    groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
+    group_names = {group.id: group.name for group in groups}
+    return [_cong_response(c, group_name=group_names.get(c.group_id)) for c in congregations]
 
 
 @router.patch("/{district_id}/congregations/{congregation_id}", response_model=CongregationResponse)
@@ -210,6 +217,7 @@ async def update_congregation(
     if body.service_times is not None:
         congregation.service_times = [st.model_dump() for st in body.service_times]
     if "group_id" in body.model_fields_set:
+        await _validate_group_assignment(db, district_id, body.group_id)
         congregation.group_id = body.group_id
     if "invitation_target_type" in body.model_fields_set:
         congregation.invitation_target_type = body.invitation_target_type
@@ -219,15 +227,35 @@ async def update_congregation(
         congregation.invitation_external_note = body.invitation_external_note
     congregation.updated_at = datetime.now(timezone.utc)
     await repo.save(congregation)
-    return _cong_response(congregation)
+    group_name = None
+    if congregation.group_id is not None:
+        group = await SqlCongregationGroupRepository(db).get(congregation.group_id)
+        group_name = group.name if group and group.district_id == district_id else None
+    return _cong_response(congregation, group_name=group_name)
 
 
-def _cong_response(c: Congregation) -> CongregationResponse:
+async def _validate_group_assignment(
+    db: DbSession,
+    district_id: uuid.UUID,
+    group_id: uuid.UUID | None,
+) -> None:
+    if group_id is None:
+        return
+    group = await SqlCongregationGroupRepository(db).get(group_id)
+    if group is None or group.district_id != district_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Gruppe ist ungueltig oder gehoert nicht zum Bezirk",
+        )
+
+
+def _cong_response(c: Congregation, group_name: str | None = None) -> CongregationResponse:
     return CongregationResponse(
         id=c.id,
         name=c.name,
         district_id=c.district_id,
         group_id=c.group_id,
+        group_name=group_name,
         invitation_target_type=c.invitation_target_type,
         invitation_target_congregation_id=c.invitation_target_congregation_id,
         invitation_external_note=c.invitation_external_note,
@@ -391,6 +419,8 @@ async def get_matrix(
 
     # Build matrix rows
     rows: list[MatrixRow] = []
+    groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
+    group_names = {group.id: group.name for group in groups}
     congregation_name_by_id = {c.id: c.name for c in congregations}
 
     source_congregation_ids = {
@@ -472,6 +502,8 @@ async def get_matrix(
             MatrixRow(
                 congregation_id=congregation.id,
                 congregation_name=congregation.name,
+                group_id=congregation.group_id,
+                group_name=group_names.get(congregation.group_id),
                 cells=cells,
             )
         )
