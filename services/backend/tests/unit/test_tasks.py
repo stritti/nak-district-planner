@@ -117,3 +117,26 @@ class TestImportKirchlicheFesttageTask:
 
         assert result is not None
         mock_asyncio_run.assert_called_once()
+
+
+class TestGenerateDraftServicesWindowTask:
+    """Tests for generate_draft_services_window Celery task."""
+
+    def test_generate_draft_services_window_success(self):
+        from app.application.tasks import generate_draft_services_window
+
+        with patch("app.application.tasks.asyncio.run") as mock_asyncio_run:
+            mock_asyncio_run.return_value = {
+                "districts": 2,
+                "congregations": 9,
+                "created": 16,
+                "skipped_existing": 30,
+                "adopted_existing": 1,
+                "invalid_configurations": 0,
+            }
+
+            result = generate_draft_services_window()
+
+        assert result["created"] == 16
+        assert result["skipped_existing"] == 30
+        mock_asyncio_run.assert_called_once()

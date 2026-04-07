@@ -125,6 +125,16 @@ export interface FeiertageImportResult {
   skipped: number
 }
 
+export interface MatrixDraftGenerationResult {
+  districts: number
+  congregations: number
+  created: number
+  skipped_existing: number
+  adopted_existing: number
+  invalid_configurations: number
+  generated_in_requested_range: number
+}
+
 export function listDeStates(districtId: string): Promise<Record<string, string>> {
   return apiFetch(`/api/v1/districts/${districtId}/feiertage/states`)
 }
@@ -137,5 +147,16 @@ export function importFeiertage(
   return apiFetch(`/api/v1/districts/${districtId}/feiertage`, {
     method: 'POST',
     body: JSON.stringify({ year, state_code: stateCode }),
+  })
+}
+
+export function generateMatrixDraftServices(
+  districtId: string,
+  fromDt: string,
+  toDt: string,
+): Promise<MatrixDraftGenerationResult> {
+  const params = new URLSearchParams({ from_dt: fromDt, to_dt: toDt })
+  return apiFetch(`/api/v1/districts/${districtId}/matrix/generate-drafts?${params}`, {
+    method: 'POST',
   })
 }

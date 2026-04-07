@@ -11,6 +11,7 @@ from app.application.invitation_service import (
     apply_overwrite_decision,
     create_invitations_for_event,
     propagate_source_event_update,
+    sync_linked_invitation_event_schedule,
 )
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
 from app.domain.models.invitation import (
@@ -61,6 +62,7 @@ async def test_create_invitations_creates_linked_event_for_internal_target():
         congregation_repo_cls.return_value = congregation_repo
 
         invitation_repo = MagicMock()
+        invitation_repo.list_by_source_event = AsyncMock(return_value=[])
         invitation_repo.save = AsyncMock()
         invitation_repo_cls.return_value = invitation_repo
 
@@ -166,3 +168,45 @@ async def test_apply_overwrite_decision_accept_updates_target_event():
         assert updated.status == OverwriteDecisionStatus.ACCEPTED
         assert target_event.title == "Neuer Titel"
         event_repo.save.assert_called_once_with(target_event)
+
+
+@pytest.mark.asyncio
+async def test_sync_linked_invitation_event_schedule_updates_linked_events():
+    session = MagicMock()
+    source_event = _event(congregation_id=uuid.uuid4())
+    moved_start = datetime(2026, 5, 14, 18, 0, tzinfo=timezone.utc)
+    moved_end = datetime(2026, 5, 14, 19, 30, tzinfo=timezone.utc)
+    source_event.start_at = moved_start
+    source_event.end_at = moved_end
+
+    linked_event = _event(congregation_id=uuid.uuid4())
+    invitation = CongregationInvitation.create(
+        source_event_id=source_event.id,
+        source_congregation_id=source_event.congregation_id,
+        target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+        target_congregation_id=linked_event.congregation_id,
+        linked_event_id=linked_event.id,
+    )
+
+    with (
+        patch("app.application.invitation_service.SqlInvitationRepository") as invitation_repo_cls,
+        patch("app.application.invitation_service.SqlEventRepository") as event_repo_cls,
+    ):
+        invitation_repo = MagicMock()
+        invitation_repo.list_by_source_event = AsyncMock(return_value=[invitation])
+        invitation_repo_cls.return_value = invitation_repo
+
+        event_repo = MagicMock()
+        event_repo.get = AsyncMock(return_value=linked_event)
+        event_repo.save = AsyncMock()
+        event_repo_cls.return_value = event_repo
+
+        updated_count = await sync_linked_invitation_event_schedule(
+            session,
+            source_event=source_event,
+        )
+
+        assert updated_count == 1
+        assert linked_event.start_at == moved_start
+        assert linked_event.end_at == moved_end
+        event_repo.save.assert_called_once_with(linked_event)

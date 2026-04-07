@@ -47,6 +47,7 @@ class EventORM(Base):
         nullable=True,
     )
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    generation_slot_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     invitation_source_congregation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("congregations.id", ondelete="SET NULL"), nullable=True
     )

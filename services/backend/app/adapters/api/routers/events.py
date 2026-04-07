@@ -18,7 +18,10 @@ from app.adapters.api.schemas.event import (
 )
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event import SqlEventRepository
-from app.application.invitation_service import propagate_source_event_update
+from app.application.invitation_service import (
+    propagate_source_event_update,
+    sync_linked_invitation_event_schedule,
+)
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.role import Role
 
@@ -195,6 +198,9 @@ async def update_event(
 
     event.updated_at = datetime.now(timezone.utc)
     await repo.save(event)
+
+    if {"start_at", "end_at"}.intersection(fields) and event.invitation_source_event_id is None:
+        await sync_linked_invitation_event_schedule(db, source_event=event)
 
     propagated_fields = {"title", "description", "start_at", "end_at", "category"}
     if propagated_fields.intersection(fields) and event.invitation_source_event_id is None:

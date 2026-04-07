@@ -138,6 +138,42 @@ async def delete_invitation(
     return True
 
 
+async def sync_linked_invitation_event_schedule(
+    session: AsyncSession,
+    *,
+    source_event: Event,
+) -> int:
+    invitation_repo = SqlInvitationRepository(session)
+    event_repo = SqlEventRepository(session)
+
+    invitations = await invitation_repo.list_by_source_event(source_event.id)
+    if not invitations:
+        return 0
+
+    updated = 0
+    for invitation in invitations:
+        if invitation.linked_event_id is None:
+            continue
+
+        target_event = await event_repo.get(invitation.linked_event_id)
+        if target_event is None:
+            continue
+
+        if (
+            target_event.start_at == source_event.start_at
+            and target_event.end_at == source_event.end_at
+        ):
+            continue
+
+        target_event.start_at = source_event.start_at
+        target_event.end_at = source_event.end_at
+        target_event.updated_at = datetime.now(timezone.utc)
+        await event_repo.save(target_event)
+        updated += 1
+
+    return updated
+
+
 async def propagate_source_event_update(
     session: AsyncSession,
     *,

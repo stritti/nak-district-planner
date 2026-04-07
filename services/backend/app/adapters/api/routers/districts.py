@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.adapters.api.deps import CurrentUser, DbSession
+from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
 import httpx
 
 from app.adapters.api.schemas.district import (
@@ -29,6 +29,7 @@ from app.application.feiertage_service import (
     reference_feiertage_for_congregation,
 )
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
+from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.db.repositories import (
     SqlCongregationRepository,
     SqlCongregationGroupRepository,
@@ -38,9 +39,12 @@ from app.adapters.db.repositories import (
     SqlServiceAssignmentRepository,
 )
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
+from app.application.draft_service_generation import GenerateDraftServicesUseCase
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
+from app.domain.models.event import EventStatus
+from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
 
@@ -351,11 +355,14 @@ async def get_matrix(
             date_key = event.start_at.date().isoformat()
             holidays.setdefault(date_key, []).append(event.title)
 
-    # Collect all unique dates: congregation schedules + Feiertag dates
+    # Collect all unique dates: congregation schedules + Feiertag dates + existing service dates
     all_dates: set[str] = set()
     for dates in expected_by_cong.values():
         all_dates.update(dates)
     all_dates.update(holidays.keys())  # kirchliche Feiertage immer als Spalten
+    for event in events:
+        if event.category == "Gottesdienst":
+            all_dates.add(event.start_at.date().isoformat())
     sorted_dates = sorted(all_dates)
 
     # Filter Gottesdienst events for the matrix cells (include district-level)
@@ -410,12 +417,12 @@ async def get_matrix(
         cells: dict[str, MatrixCell] = {}
 
         for date_key in sorted_dates:
-            if date_key not in cong_expected:
-                # Feiertag-Spalte oder anderer Bezirks-Termin — nicht im Gemeinde-Zeitplan
+            event = event_by_cong_date.get((congregation.id, date_key))
+            if event is None and date_key not in cong_expected:
+                # Neither expected by schedule nor explicitly present as event.
                 cells[date_key] = MatrixCell()
                 continue
 
-            event = event_by_cong_date.get((congregation.id, date_key))
             if event is None:
                 # Im Zeitplan erwartet, aber noch kein Event angelegt
                 cells[date_key] = MatrixCell()
@@ -449,6 +456,8 @@ async def get_matrix(
                 if event.invitation_source_congregation_id is not None
                 else None,
                 event_title=event.title,
+                event_start_at=event.start_at,
+                event_end_at=event.end_at,
                 category=event.category,
                 is_gap=(assignment is None and not is_invitation_copy),
                 is_assignment_editable=not is_invitation_copy,
@@ -468,6 +477,67 @@ async def get_matrix(
         )
 
     return MatrixResponse(dates=sorted_dates, rows=rows, holidays=holidays)
+
+
+@router.post("/{district_id}/matrix/generate-drafts")
+async def generate_matrix_drafts(
+    district_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    from_dt: datetime = Query(...),
+    to_dt: datetime = Query(...),
+) -> dict[str, int]:
+    district = await SqlDistrictRepository(db).get(district_id)
+    if not district:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, district_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+    from_date = from_dt.date()
+    to_date = to_dt.date()
+    if to_date < from_date:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="to_dt muss groesser oder gleich from_dt sein",
+        )
+
+    use_case = GenerateDraftServicesUseCase(
+        district_repo=SqlDistrictRepository(db),
+        congregation_repo=SqlCongregationRepository(db),
+        event_repo=SqlEventRepository(db),
+    )
+    full_result = await use_case.run_for_window(
+        from_date=from_date,
+        to_date_exclusive=to_date + timedelta(days=1),
+        district_ids={district_id},
+    )
+    await db.commit()
+
+    district_congregations = await SqlCongregationRepository(db).list_by_district(district_id)
+    district_congregation_ids = {c.id for c in district_congregations}
+    events, _ = await SqlEventRepository(db).list(
+        district_id=district_id,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        limit=5000,
+        offset=0,
+    )
+    generated_in_range = sum(
+        1
+        for event in events
+        if event.congregation_id in district_congregation_ids
+        and event.status == EventStatus.DRAFT
+        and event.category == "Gottesdienst"
+        and event.generation_slot_key is not None
+    )
+
+    return {
+        **full_result,
+        "generated_in_requested_range": generated_in_range,
+    }
 
 
 # ── Feiertage ─────────────────────────────────────────────────────────────────

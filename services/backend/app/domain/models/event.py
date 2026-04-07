@@ -43,6 +43,7 @@ class Event:
     external_uid: str | None = None
     calendar_integration_id: uuid.UUID | None = None
     content_hash: str | None = None
+    generation_slot_key: str | None = None
     invitation_source_congregation_id: uuid.UUID | None = None
     invitation_source_event_id: uuid.UUID | None = None
 
@@ -69,6 +70,7 @@ class Event:
         external_uid: str | None = None,
         calendar_integration_id: uuid.UUID | None = None,
         content_hash: str | None = None,
+        generation_slot_key: str | None = None,
         invitation_source_congregation_id: uuid.UUID | None = None,
         invitation_source_event_id: uuid.UUID | None = None,
     ) -> Event:
@@ -94,6 +96,7 @@ class Event:
             external_uid=external_uid,
             calendar_integration_id=calendar_integration_id,
             content_hash=content_hash,
+            generation_slot_key=generation_slot_key,
             invitation_source_congregation_id=invitation_source_congregation_id,
             invitation_source_event_id=invitation_source_event_id,
             created_at=now,

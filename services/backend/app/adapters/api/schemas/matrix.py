@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -12,6 +13,8 @@ class MatrixCell(BaseModel):
     invitation_source_congregation_name: str | None = None
     invitation_count: int = 0
     event_title: str | None = None
+    event_start_at: datetime | None = None
+    event_end_at: datetime | None = None
     category: str | None = None
     is_gap: bool = False  # category==Gottesdienst AND no assignment
     is_assignment_editable: bool = True

@@ -86,7 +86,23 @@
           <ArrowDownTrayIcon class="h-4 w-4" />
           {{ exporting ? 'Exportiere…' : 'Excel' }}
         </button>
+
+        <button
+          class="flex items-center gap-1.5 bg-indigo-600 text-white text-sm px-4 py-1.5 rounded hover:bg-indigo-700 disabled:opacity-50"
+          :disabled="!matrixStore.districtId || !matrixStore.fromDt || !matrixStore.toDt || matrixStore.loading || generatingDrafts"
+          @click="triggerRangeDraftGeneration"
+        >
+          <ArrowPathIcon class="h-4 w-4" :class="generatingDrafts ? 'animate-spin' : ''" />
+          {{ generatingDrafts ? 'Generiere…' : 'Entwuerfe erzeugen' }}
+        </button>
       </div>
+
+      <p v-if="generationMessage" class="mt-2 text-xs text-green-700 dark:text-green-400">
+        {{ generationMessage }}
+      </p>
+      <p v-if="generationError" class="mt-2 text-xs text-red-600 dark:text-red-400">
+        {{ generationError }}
+      </p>
     </div>
 
     <!-- Loading / Error -->
@@ -304,6 +320,30 @@
           </div>
         </div>
 
+        <div class="mb-4 rounded border border-gray-200 dark:border-gray-700 p-3">
+          <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Gottesdienst verschieben</p>
+          <div class="grid grid-cols-3 gap-2">
+            <input v-model="modal.moveDate" type="date" class="form-input col-span-2" />
+            <input v-model="modal.moveTime" type="time" class="form-input" />
+            <input
+              v-model.number="modal.moveDurationMinutes"
+              type="number"
+              min="15"
+              step="15"
+              class="form-input col-span-2"
+              placeholder="Dauer in Minuten"
+            />
+            <button
+              class="btn-secondary justify-center"
+              :disabled="modal.moveSaving"
+              @click="moveServiceDateTime"
+            >
+              {{ modal.moveSaving ? 'Verschiebe…' : 'Termin verschieben' }}
+            </button>
+          </div>
+          <p v-if="modal.moveError" class="text-xs text-red-600 dark:text-red-400 mt-2">{{ modal.moveError }}</p>
+        </div>
+
         <label class="form-label">Amtstragende:r</label>
         <AutocompleteInput
           ref="autocompleteRef"
@@ -345,6 +385,7 @@ import {
   listEventInvitations,
   type InvitationResponse,
 } from '@/api/invitations'
+import { updateEvent } from '@/api/events'
 import type { MatrixCell } from '@/api/matrix'
 import { exportMatrixToExcel } from '@/composables/useExcelExport'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '@/components/AutocompleteInput.vue'
@@ -465,6 +506,11 @@ const modal = reactive({
   leaderInput: { id: null, text: '' } as AutocompleteValue,
   saving: false,
   error: '',
+  moveDate: '',
+  moveTime: '',
+  moveDurationMinutes: 90,
+  moveSaving: false,
+  moveError: '',
 })
 
 const canSubmit = computed(() => {
@@ -519,6 +565,23 @@ function openModal(cell: MatrixCell, date: string, congregationName: string, con
   }
   modal.saving = false
   modal.error = ''
+  modal.moveSaving = false
+  modal.moveError = ''
+  modal.moveDate = date
+  if (cell.event_start_at) {
+    const start = new Date(cell.event_start_at)
+    modal.moveTime = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`
+  } else {
+    modal.moveTime = '20:00'
+  }
+  if (cell.event_start_at && cell.event_end_at) {
+    const start = new Date(cell.event_start_at)
+    const end = new Date(cell.event_end_at)
+    const duration = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000))
+    modal.moveDurationMinutes = duration
+  } else {
+    modal.moveDurationMinutes = 90
+  }
   invitation.targetType = ''
   invitation.targetCongregationId = ''
   invitation.externalNote = ''
@@ -640,6 +703,9 @@ async function submitAssignment() {
 // ── Excel Export ──────────────────────────────────────────────────────────────
 
 const exporting = ref(false)
+const generatingDrafts = ref(false)
+const generationMessage = ref('')
+const generationError = ref('')
 
 async function triggerMatrixExport() {
   if (!matrixStore.matrix) return
@@ -648,6 +714,54 @@ async function triggerMatrixExport() {
     await exportMatrixToExcel(matrixStore.matrix, matrixStore.fromDt, matrixStore.toDt)
   } finally {
     exporting.value = false
+  }
+}
+
+async function triggerRangeDraftGeneration() {
+  generationMessage.value = ''
+  generationError.value = ''
+  generatingDrafts.value = true
+  try {
+    const result = await matrixStore.generateDraftsForCurrentRange()
+    generationMessage.value = `Entwuerfe erzeugt: ${result.created}, bereits vorhanden: ${result.skipped_existing}, im Bereich vorhanden: ${result.generated_in_requested_range}`
+  } catch (e) {
+    generationError.value = e instanceof Error ? e.message : 'Entwurfsgenerierung fehlgeschlagen'
+  } finally {
+    generatingDrafts.value = false
+  }
+}
+
+function combineLocalDateTime(dateText: string, timeText: string): Date {
+  const [year, month, day] = dateText.split('-').map(Number)
+  const [hour, minute] = timeText.split(':').map(Number)
+  return new Date(year, month - 1, day, hour, minute, 0, 0)
+}
+
+async function moveServiceDateTime() {
+  if (!modal.eventId || !modal.moveDate || !modal.moveTime) {
+    modal.moveError = 'Datum und Uhrzeit sind erforderlich.'
+    return
+  }
+  if (!Number.isFinite(modal.moveDurationMinutes) || modal.moveDurationMinutes < 15) {
+    modal.moveError = 'Dauer muss mindestens 15 Minuten betragen.'
+    return
+  }
+
+  modal.moveSaving = true
+  modal.moveError = ''
+  try {
+    const localStart = combineLocalDateTime(modal.moveDate, modal.moveTime)
+    const localEnd = new Date(localStart.getTime() + modal.moveDurationMinutes * 60000)
+    await updateEvent(modal.eventId, {
+      start_at: localStart.toISOString(),
+      end_at: localEnd.toISOString(),
+    })
+    await matrixStore.fetch()
+    closeModal()
+  } catch (e) {
+    modal.moveError = e instanceof Error ? e.message : 'Verschieben fehlgeschlagen'
+  } finally {
+    modal.moveSaving = false
   }
 }
 </script>

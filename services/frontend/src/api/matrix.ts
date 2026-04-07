@@ -6,6 +6,8 @@ export interface MatrixCell {
   invitation_source_congregation_name?: string | null
   invitation_count?: number
   event_title: string | null
+  event_start_at?: string | null
+  event_end_at?: string | null
   category: string | null
   is_gap: boolean
   is_assignment_editable?: boolean

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchMatrix, type MatrixResponse } from '@/api/matrix'
 import { createAssignment } from '@/api/serviceAssignments'
+import { generateMatrixDraftServices } from '@/api/districts'
 
 export const useMatrixStore = defineStore('matrix', () => {
   const matrix = ref<MatrixResponse | null>(null)
@@ -40,6 +41,15 @@ export const useMatrixStore = defineStore('matrix', () => {
     await fetch() // refresh matrix
   }
 
+  async function generateDraftsForCurrentRange() {
+    if (!districtId.value || !fromDt.value || !toDt.value) {
+      throw new Error('Bezirk und Zeitraum sind erforderlich')
+    }
+    const result = await generateMatrixDraftServices(districtId.value, fromDt.value, toDt.value)
+    await fetch()
+    return result
+  }
+
   return {
     matrix,
     loading,
@@ -50,6 +60,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     toDt,
     fetch,
     assign,
+    generateDraftsForCurrentRange,
   }
 }, {
   persist: { pick: ['districtId', 'groupId', 'fromDt', 'toDt'] },

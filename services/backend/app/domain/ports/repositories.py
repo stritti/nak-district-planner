@@ -94,6 +94,25 @@ class EventRepository(ABC):
     async def list_linked_by_source_event(self, source_event_id: uuid.UUID) -> list[Event]: ...
 
     @abstractmethod
+    async def get_by_generation_slot_key(
+        self,
+        *,
+        district_id: uuid.UUID,
+        congregation_id: uuid.UUID,
+        generation_slot_key: str,
+    ) -> Event | None: ...
+
+    @abstractmethod
+    async def get_matching_draft_service_slot(
+        self,
+        *,
+        district_id: uuid.UUID,
+        congregation_id: uuid.UUID,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> Event | None: ...
+
+    @abstractmethod
     async def save(self, event: Event) -> None: ...
 
     @abstractmethod
