@@ -16,7 +16,7 @@
       <select
         v-model="filterDistrictId"
         class="form-select"
-        @change="load"
+        @change="onFilterDistrictChange"
       >
         <option value="">Alle Bezirke</option>
         <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
@@ -587,10 +587,20 @@ const ALL_CAPABILITIES: CalendarCapability[] = ['READ', 'WRITE', 'WEBHOOK']
 
 onMounted(async () => {
   if (districtsStore.districts.length === 0) await districtsStore.fetchDistricts()
+  if (districtsStore.selectedDistrictId) {
+    filterDistrictId.value = districtsStore.selectedDistrictId
+  }
   const all = await Promise.all(districtsStore.districts.map((d) => listCongregations(d.id)))
   allCongregations.value = all.flat()
   await load()
 })
+
+async function onFilterDistrictChange() {
+  if (filterDistrictId.value) {
+    districtsStore.setSelectedDistrict(filterDistrictId.value)
+  }
+  await load()
+}
 
 async function load() {
   loading.value = true

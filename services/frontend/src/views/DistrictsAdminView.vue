@@ -22,7 +22,13 @@
         class="card overflow-hidden"
       >
         <!-- District header -->
-        <div class="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800">
+        <div
+          class="flex items-center justify-between px-4 py-3 cursor-pointer"
+          :class="districtsStore.selectedDistrictId === district.id
+            ? 'bg-blue-50 dark:bg-blue-900/20'
+            : 'bg-gray-50 dark:bg-gray-800'"
+          @click="selectDistrict(district.id)"
+        >
           <template v-if="editingDistrictId === district.id">
             <input
               v-model="editName"
@@ -433,6 +439,9 @@ import {
   type ServiceTime,
 } from '@/api/districts'
 import { buildCongregationSections } from '@/utils/congregationGrouping'
+import { useDistrictsStore } from '@/stores/districts'
+
+const districtsStore = useDistrictsStore()
 
 const DE_STATES: Record<string, string> = {
   BB: 'Brandenburg', BE: 'Berlin', BW: 'Baden-Württemberg', BY: 'Bayern',
@@ -567,6 +576,8 @@ async function loadAll() {
   globalError.value = ''
   try {
     districts.value = await listDistricts()
+    districtsStore.districts = districts.value
+    districtsStore.ensureSelectedDistrict()
     await Promise.all(
       districts.value.map(async (d) => {
         congregationsByDistrict[d.id] = await listCongregations(d.id)
@@ -618,6 +629,8 @@ async function saveNewDistrict() {
       newDistrictStateCode.value || null,
     )
     districts.value.push(created)
+    districtsStore.districts = districts.value
+    districtsStore.ensureSelectedDistrict()
     congregationsByDistrict[created.id] = []
     newDistrictOpen.value = false
   } catch (e) {
@@ -627,9 +640,14 @@ async function saveNewDistrict() {
   }
 }
 
+function selectDistrict(districtId: string) {
+  districtsStore.setSelectedDistrict(districtId)
+}
+
 // ── Congregations ─────────────────────────────────────────────────────────────
 
 function openNewCongregation(districtId: string) {
+  selectDistrict(districtId)
   cancelEdit()
   newCongModal.open = true
   newCongModal.districtId = districtId
@@ -685,6 +703,7 @@ const editingGroupId = ref<string | null>(null)
 const editGroupName = ref('')
 
 function openNewGroup(districtId: string) {
+  selectDistrict(districtId)
   cancelEdit()
   newGroupName.value = ''
   newGroupDistrictId.value = districtId
