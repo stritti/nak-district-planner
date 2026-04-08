@@ -93,6 +93,9 @@ Rollback: Guard-Activation per Feature-Flag deaktivieren, neue Approval-Pflicht 
 
 ## Open Questions
 
-1. Soll ein Approval mehrere Memberships in einem Schritt setzen koennen oder initial genau eine?
-2. Welche Standardrolle soll im Admin-UI vorbelegt sein (VIEWER oder PLANNER)?
-3. Soll ein vorhandener aber invalider Bearer-Token beim Registrieren hart mit `401` abgewiesen werden oder als "nicht vorhanden" behandelt werden?
+Keine.
+
+Festgelegte Defaults fuer die Umsetzung:
+1. Ein Approval setzt initial genau eine Membership.
+2. Die Standardrolle im Admin-UI ist `PLANNER`.
+3. Ein vorhandener, aber invalider Bearer-Token wird beim Registrieren hart mit `401` abgewiesen.
