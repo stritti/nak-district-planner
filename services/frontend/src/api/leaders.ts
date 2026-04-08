@@ -29,12 +29,18 @@ export interface LeaderResponse {
   rank: LeaderRank | null
   congregation_id: string | null
   special_role: SpecialRole | null
+  user_sub: string | null
   email: string | null
   phone: string | null
   notes: string | null
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface LeaderSelfLinkResponse {
+  linked: boolean
+  leader: LeaderResponse | null
 }
 
 export interface LeaderCreate {
@@ -83,6 +89,23 @@ export function updateLeader(
 
 export function deleteLeader(districtId: string, leaderId: string): Promise<void> {
   return apiFetch<void>(`/api/v1/districts/${districtId}/leaders/${leaderId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function getSelfLeaderLink(districtId: string): Promise<LeaderSelfLinkResponse> {
+  return apiFetch<LeaderSelfLinkResponse>(`/api/v1/districts/${districtId}/leaders/link-self`)
+}
+
+export function linkSelfToLeader(districtId: string, leaderId: string): Promise<LeaderSelfLinkResponse> {
+  return apiFetch<LeaderSelfLinkResponse>(`/api/v1/districts/${districtId}/leaders/link-self`, {
+    method: 'POST',
+    body: JSON.stringify({ leader_id: leaderId }),
+  })
+}
+
+export function unlinkSelfFromLeader(districtId: string): Promise<LeaderSelfLinkResponse> {
+  return apiFetch<LeaderSelfLinkResponse>(`/api/v1/districts/${districtId}/leaders/link-self`, {
     method: 'DELETE',
   })
 }

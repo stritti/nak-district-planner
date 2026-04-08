@@ -18,6 +18,7 @@ def _orm_to_domain(row: LeaderORM) -> Leader:
         congregation_id=row.congregation_id,
         rank=LeaderRank(row.rank) if row.rank else None,
         special_role=SpecialRole(row.special_role) if row.special_role else None,
+        user_sub=row.user_sub,
         email=row.email,
         phone=row.phone,
         notes=row.notes,
@@ -50,6 +51,18 @@ class SqlLeaderRepository(LeaderRepository):
         result = await self._session.execute(stmt)
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
+    async def get_by_user_sub(
+        self,
+        user_sub: str,
+        district_id: uuid.UUID | None = None,
+    ) -> Leader | None:
+        stmt = select(LeaderORM).where(LeaderORM.user_sub == user_sub)
+        if district_id is not None:
+            stmt = stmt.where(LeaderORM.district_id == district_id)
+        result = await self._session.execute(stmt.order_by(LeaderORM.updated_at.desc()))
+        row = result.scalars().first()
+        return _orm_to_domain(row) if row else None
+
     async def save(self, leader: Leader) -> None:
         existing = await self._session.get(LeaderORM, leader.id)
         if existing is None:
@@ -63,6 +76,7 @@ class SqlLeaderRepository(LeaderRepository):
         row.congregation_id = leader.congregation_id
         row.rank = leader.rank.value if leader.rank else None
         row.special_role = leader.special_role.value if leader.special_role else None
+        row.user_sub = leader.user_sub
         row.email = leader.email
         row.phone = leader.phone
         row.notes = leader.notes

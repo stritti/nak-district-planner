@@ -7,6 +7,12 @@ from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
 from app.domain.models.event_instance import EventInstance
+from app.domain.models.invitation import (
+    CongregationInvitation,
+    InvitationOverwriteRequest,
+    InvitationTargetType,
+    OverwriteDecisionStatus,
+)
 from app.domain.models.leader import Leader, LeaderRank, SpecialRole
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
@@ -21,6 +27,10 @@ __all__ = [
     "EventSource",
     "EventStatus",
     "EventVisibility",
+    "CongregationInvitation",
+    "InvitationOverwriteRequest",
+    "InvitationTargetType",
+    "OverwriteDecisionStatus",
     "Leader",
     "LeaderRank",
     "SpecialRole",

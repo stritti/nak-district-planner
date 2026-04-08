@@ -251,3 +251,41 @@ def import_kirchliche_festtage_task(district_id: str, year: int) -> dict:
         "import_kirchliche_festtage_task: district=%s year=%d %s", district_id, year, result
     )
     return result
+
+
+@celery.task(name="generate_draft_services_window")
+def generate_draft_services_window() -> dict:
+    """Generate draft worship services for the rolling next 8 weeks.
+
+    Safe to run repeatedly: generation is idempotent and does not recreate
+    moved generated events because it keys by immutable slot identity.
+    """
+    from app.adapters.db.repositories.congregation import SqlCongregationRepository
+    from app.adapters.db.repositories.district import SqlDistrictRepository
+    from app.adapters.db.repositories.event import SqlEventRepository
+    from app.adapters.db.session import AsyncSessionLocal
+    from app.application.draft_service_generation import GenerateDraftServicesUseCase
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as session:
+            use_case = GenerateDraftServicesUseCase(
+                district_repo=SqlDistrictRepository(session),
+                congregation_repo=SqlCongregationRepository(session),
+                event_repo=SqlEventRepository(session),
+            )
+            result = await use_case.run()
+            await session.commit()
+            return result
+
+    result = asyncio.run(_run())
+    logger.info(
+        "generate_draft_services_window: districts=%d congregations=%d created=%d "
+        "skipped_existing=%d adopted_existing=%d invalid_configurations=%d",
+        result["districts"],
+        result["congregations"],
+        result["created"],
+        result["skipped_existing"],
+        result["adopted_existing"],
+        result["invalid_configurations"],
+    )
+    return result

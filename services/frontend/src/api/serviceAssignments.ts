@@ -24,3 +24,22 @@ export function createAssignment(
     }),
   })
 }
+
+export function updateAssignment(
+  eventId: string,
+  assignmentId: string,
+  options: { leaderId?: string | null; leaderName?: string | null },
+  assignmentStatus?: 'OPEN' | 'ASSIGNED' | 'CONFIRMED',
+): Promise<ServiceAssignmentResponse> {
+  return apiFetch<ServiceAssignmentResponse>(
+    `/api/v1/events/${eventId}/assignments/${assignmentId}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        leader_id: options.leaderId ?? null,
+        leader_name: options.leaderName ?? null,
+        ...(assignmentStatus ? { status: assignmentStatus } : {}),
+      }),
+    },
+  )
+}

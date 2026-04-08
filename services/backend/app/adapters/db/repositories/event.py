@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.event import EventORM
+from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.planning_model_bridge import (
@@ -36,6 +37,9 @@ def _orm_to_domain(row: EventORM) -> Event:
         external_uid=row.external_uid,
         calendar_integration_id=row.calendar_integration_id,
         content_hash=row.content_hash,
+        generation_slot_key=row.generation_slot_key,
+        invitation_source_congregation_id=row.invitation_source_congregation_id,
+        invitation_source_event_id=row.invitation_source_event_id,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -59,6 +63,9 @@ def _domain_to_orm(event: Event, existing: EventORM | None = None) -> EventORM:
     row.external_uid = event.external_uid
     row.calendar_integration_id = event.calendar_integration_id
     row.content_hash = event.content_hash
+    row.generation_slot_key = event.generation_slot_key
+    row.invitation_source_congregation_id = event.invitation_source_congregation_id
+    row.invitation_source_event_id = event.invitation_source_event_id
     row.created_at = event.created_at
     row.updated_at = event.updated_at
     return row
@@ -156,10 +163,58 @@ class SqlEventRepository(EventRepository):
         await SqlEventInstanceRepository(self._session).save(event_instance_from_event(event))
         await self._session.flush()
 
+    async def list_linked_by_source_event(self, source_event_id: uuid.UUID) -> list[Event]:
+        result = await self._session.execute(
+            select(EventORM).where(EventORM.invitation_source_event_id == source_event_id)
+        )
+        return [_orm_to_domain(r) for r in result.scalars().all()]
+
+    async def get_by_generation_slot_key(
+        self,
+        *,
+        district_id: uuid.UUID,
+        congregation_id: uuid.UUID,
+        generation_slot_key: str,
+    ) -> Event | None:
+        result = await self._session.execute(
+            select(EventORM).where(
+                EventORM.district_id == district_id,
+                EventORM.congregation_id == congregation_id,
+                EventORM.generation_slot_key == generation_slot_key,
+            )
+        )
+        row = result.scalar_one_or_none()
+        return _orm_to_domain(row) if row else None
+
+    async def get_matching_draft_service_slot(
+        self,
+        *,
+        district_id: uuid.UUID,
+        congregation_id: uuid.UUID,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> Event | None:
+        result = await self._session.execute(
+            select(EventORM).where(
+                EventORM.district_id == district_id,
+                EventORM.congregation_id == congregation_id,
+                EventORM.category == "Gottesdienst",
+                EventORM.status == EventStatus.DRAFT,
+                EventORM.start_at == start_at,
+                EventORM.end_at == end_at,
+            )
+        )
+        row = result.scalar_one_or_none()
+        return _orm_to_domain(row) if row else None
+
     async def delete_before(self, cutoff: datetime) -> int:
         """Delete all events whose end_at is before *cutoff*.
 
         Returns the number of deleted rows.
         """
+        stale_event_ids = select(EventORM.id).where(EventORM.end_at < cutoff)
+        await self._session.execute(
+            delete(PlanningSlotORM).where(PlanningSlotORM.id.in_(stale_event_ids))
+        )
         result = await self._session.execute(delete(EventORM).where(EventORM.end_at < cutoff))
         return result.rowcount

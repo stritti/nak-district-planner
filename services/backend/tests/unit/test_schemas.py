@@ -14,6 +14,8 @@ from app.adapters.api.schemas.event import (
     EventResponse,
 )
 from app.adapters.api.schemas.district import (
+    CongregationCreate,
+    CongregationUpdate,
     DistrictCreate,
     DistrictResponse,
 )
@@ -187,6 +189,20 @@ class TestDistrictSchema:
         response = DistrictResponse(**data)
         assert response.id == district_id
         assert response.name == "Bezirk München"
+
+
+class TestCongregationSchema:
+    def test_congregation_create_with_group(self):
+        payload = CongregationCreate(name="Gemeinde A", group_id=uuid.uuid4())
+        assert payload.group_id is not None
+
+    def test_congregation_create_without_group(self):
+        payload = CongregationCreate(name="Gemeinde B")
+        assert payload.group_id is None
+
+    def test_congregation_update_accepts_group_reset(self):
+        payload = CongregationUpdate(group_id=None)
+        assert "group_id" in payload.model_fields_set
 
 
 class TestLeaderSchema:

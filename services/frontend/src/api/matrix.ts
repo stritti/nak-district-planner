@@ -2,9 +2,20 @@ import { apiFetch } from './client'
 
 export interface MatrixCell {
   event_id: string | null
+  planning_slot_id?: string | null
+  assignment_event_id?: string | null
+  invitation_source_congregation_name?: string | null
+  invitation_count?: number
   event_title: string | null
+  event_start_at?: string | null
+  event_end_at?: string | null
   category: string | null
   is_gap: boolean
+  planned_time?: string | null
+  actual_start_at?: string | null
+  actual_end_at?: string | null
+  has_deviation?: boolean
+  is_assignment_editable?: boolean
   assignment_id: string | null
   assignment_status: 'OPEN' | 'ASSIGNED' | 'CONFIRMED' | null
   leader_id: string | null
@@ -14,6 +25,8 @@ export interface MatrixCell {
 export interface MatrixRow {
   congregation_id: string
   congregation_name: string
+  group_id?: string | null
+  group_name?: string | null
   cells: Record<string, MatrixCell>
 }
 

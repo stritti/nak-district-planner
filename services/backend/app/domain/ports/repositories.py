@@ -14,6 +14,11 @@ from app.domain.models.leader import Leader
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
+from app.domain.models.invitation import (
+    CongregationInvitation,
+    InvitationOverwriteRequest,
+    OverwriteDecisionStatus,
+)
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
 
@@ -53,6 +58,9 @@ class CongregationRepository(ABC):
     ) -> list[Congregation]: ...
 
     @abstractmethod
+    async def list_by_ids(self, congregation_ids: list[uuid.UUID]) -> list[Congregation]: ...
+
+    @abstractmethod
     async def save(self, congregation: Congregation) -> None: ...
 
 
@@ -83,6 +91,28 @@ class EventRepository(ABC):
     @abstractmethod
     async def get_by_external_uid_district(
         self, external_uid: str, district_id: uuid.UUID
+    ) -> Event | None: ...
+
+    @abstractmethod
+    async def list_linked_by_source_event(self, source_event_id: uuid.UUID) -> list[Event]: ...
+
+    @abstractmethod
+    async def get_by_generation_slot_key(
+        self,
+        *,
+        district_id: uuid.UUID,
+        congregation_id: uuid.UUID,
+        generation_slot_key: str,
+    ) -> Event | None: ...
+
+    @abstractmethod
+    async def get_matching_draft_service_slot(
+        self,
+        *,
+        district_id: uuid.UUID,
+        congregation_id: uuid.UUID,
+        start_at: datetime,
+        end_at: datetime,
     ) -> Event | None: ...
 
     @abstractmethod
@@ -137,6 +167,52 @@ class ServiceAssignmentRepository(ABC):
 
     @abstractmethod
     async def save(self, assignment: ServiceAssignment) -> None: ...
+
+
+class InvitationRepository(ABC):
+    @abstractmethod
+    async def get(self, invitation_id: uuid.UUID) -> CongregationInvitation | None: ...
+
+    @abstractmethod
+    async def list_by_source_event(
+        self, source_event_id: uuid.UUID
+    ) -> list[CongregationInvitation]: ...
+
+    @abstractmethod
+    async def list_by_source_events(
+        self, source_event_ids: list[uuid.UUID]
+    ) -> list[CongregationInvitation]: ...
+
+    @abstractmethod
+    async def save(self, invitation: CongregationInvitation) -> None: ...
+
+    @abstractmethod
+    async def delete(self, invitation_id: uuid.UUID) -> None: ...
+
+
+class InvitationOverwriteRequestRepository(ABC):
+    @abstractmethod
+    async def get(self, request_id: uuid.UUID) -> InvitationOverwriteRequest | None: ...
+
+    @abstractmethod
+    async def list_open_by_district(
+        self, district_id: uuid.UUID
+    ) -> list[InvitationOverwriteRequest]: ...
+
+    @abstractmethod
+    async def list_open_by_source_event(
+        self, source_event_id: uuid.UUID
+    ) -> list[InvitationOverwriteRequest]: ...
+
+    @abstractmethod
+    async def save(self, request: InvitationOverwriteRequest) -> None: ...
+
+    @abstractmethod
+    async def set_status(
+        self,
+        request_id: uuid.UUID,
+        status: OverwriteDecisionStatus,
+    ) -> InvitationOverwriteRequest | None: ...
 
 
 class LeaderRepository(ABC):
@@ -196,6 +272,11 @@ class UserRepository(ABC):
     @abstractmethod
     async def save(self, user: User) -> None:
         """Create or update user."""
+        ...
+
+    @abstractmethod
+    async def has_any_user(self) -> bool:
+        """Check whether at least one user exists."""
         ...
 
 

@@ -26,6 +26,7 @@ def _orm_to_domain(row: UserORM) -> User:
         name=row.name,
         given_name=row.given_name,
         family_name=row.family_name,
+        is_superadmin=row.is_superadmin,
         created_at=row.created_at,
     )
 
@@ -39,6 +40,7 @@ def _domain_to_orm(user: User) -> UserORM:
     orm.name = user.name
     orm.given_name = user.given_name
     orm.family_name = user.family_name
+    orm.is_superadmin = user.is_superadmin
     orm.created_at = user.created_at or datetime.now(timezone.utc)
     orm.updated_at = datetime.now(timezone.utc)
     return orm
@@ -85,6 +87,11 @@ class SqlUserRepository(UserRepository):
             orm.name = user.name
             orm.given_name = user.given_name
             orm.family_name = user.family_name
+            orm.is_superadmin = user.is_superadmin
             orm.updated_at = datetime.now(timezone.utc)
 
         await self._session.flush()
+
+    async def has_any_user(self) -> bool:
+        result = await self._session.execute(select(UserORM.id).limit(1))
+        return result.scalar_one_or_none() is not None

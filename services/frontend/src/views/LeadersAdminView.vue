@@ -4,16 +4,16 @@
 
     <!-- Bezirk wählen -->
     <div class="mb-6">
-      <label class="filter-label">Bezirk</label>
-      <select
-        v-model="selectedDistrictId"
-        class="form-select"
-        @change="onDistrictChange"
-      >
-        <option value="">Bezirk wählen…</option>
-        <option v-for="d in districts" :key="d.id" :value="d.id">{{ d.name }}</option>
-      </select>
-    </div>
+        <label class="filter-label">Bezirk</label>
+        <select
+          v-model="selectedDistrictId"
+          class="form-select"
+          @change="onDistrictChange"
+        >
+          <option value="">Bezirk wählen…</option>
+          <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">{{ d.name }}</option>
+        </select>
+      </div>
 
     <div v-if="!selectedDistrictId" class="text-sm text-gray-400 dark:text-gray-500">Bitte Bezirk wählen.</div>
     <div v-else-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
@@ -622,11 +622,14 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
-import { listDistricts, listCongregations, type DistrictResponse, type CongregationResponse } from '@/api/districts'
+import { listCongregations, type CongregationResponse } from '@/api/districts'
 import {
   createLeader,
   deleteLeader,
+  getSelfLeaderLink,
+  linkSelfToLeader,
   listLeaders,
+  unlinkSelfFromLeader,
   updateLeader,
   LEADER_RANKS,
   SPECIAL_ROLES,
@@ -642,13 +645,22 @@ import {
   rejectRegistration,
   type RegistrationResponse,
 } from '@/api/registrations'
+import { useDistrictsStore } from '@/stores/districts'
 
-const districts = ref<DistrictResponse[]>([])
+const districtsStore = useDistrictsStore()
 const congregations = ref<CongregationResponse[]>([])
 const leaders = ref<LeaderResponse[]>([])
-const selectedDistrictId = ref('')
+const selectedDistrictId = computed({
+  get: () => districtsStore.selectedDistrictId,
+  set: (value: string) => districtsStore.setSelectedDistrict(value),
+})
 const loading = ref(false)
 const saving = ref(false)
+
+const selfLinkedLeader = ref<LeaderResponse | null>(null)
+const selfSelectedLeaderId = ref('')
+const selfLinkLoading = ref(false)
+const selfLinkError = ref('')
 
 // ── Tab state ──────────────────────────────────────────────────────────────────
 
@@ -787,6 +799,12 @@ const sections = computed(() => [
   ...congregations.value.map((c) => ({ id: c.id, label: c.name, congregationId: c.id })),
 ])
 
+const activeLeaderOptions = computed(() => {
+  return [...leaders.value]
+    .filter((l) => l.is_active)
+    .sort((a, b) => a.name.localeCompare(b.name))
+})
+
 function leadersForSection(congregationId: string | null): LeaderResponse[] {
   const filtered =
     congregationId === null
@@ -810,21 +828,71 @@ function congregationName(id: string | null): string {
 // ── Load ──────────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
-  districts.value = await listDistricts()
+  await districtsStore.fetchDistricts()
+  if (selectedDistrictId.value) {
+    await onDistrictChange()
+  }
 })
 
 async function onDistrictChange() {
-  if (!selectedDistrictId.value) return
-  activeTab.value = 'leaders'
-  registrations.value = []
+  if (!selectedDistrictId.value) {
+    selfLinkedLeader.value = null
+    selfSelectedLeaderId.value = ''
+    selfLinkError.value = ''
+    return
+  }
   loading.value = true
   try {
     ;[leaders.value, congregations.value] = await Promise.all([
       listLeaders(selectedDistrictId.value),
       listCongregations(selectedDistrictId.value),
     ])
+    await loadSelfLink()
   } finally {
     loading.value = false
+  }
+}
+
+async function loadSelfLink() {
+  if (!selectedDistrictId.value) return
+  selfLinkError.value = ''
+  try {
+    const linked = await getSelfLeaderLink(selectedDistrictId.value)
+    selfLinkedLeader.value = linked.leader
+    selfSelectedLeaderId.value = linked.leader?.id ?? ''
+  } catch (e) {
+    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Laden der Zuordnung'
+  }
+}
+
+async function connectSelfLink() {
+  if (!selectedDistrictId.value || !selfSelectedLeaderId.value) return
+  selfLinkLoading.value = true
+  selfLinkError.value = ''
+  try {
+    const result = await linkSelfToLeader(selectedDistrictId.value, selfSelectedLeaderId.value)
+    selfLinkedLeader.value = result.leader
+    leaders.value = await listLeaders(selectedDistrictId.value)
+  } catch (e) {
+    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Verknüpfen'
+  } finally {
+    selfLinkLoading.value = false
+  }
+}
+
+async function removeSelfLink() {
+  if (!selectedDistrictId.value) return
+  selfLinkLoading.value = true
+  selfLinkError.value = ''
+  try {
+    await unlinkSelfFromLeader(selectedDistrictId.value)
+    selfLinkedLeader.value = null
+    selfSelectedLeaderId.value = ''
+    leaders.value = await listLeaders(selectedDistrictId.value)
+  } catch (e) {
+    selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Lösen'
+  } finally {
+    selfLinkLoading.value = false
   }
 }
 

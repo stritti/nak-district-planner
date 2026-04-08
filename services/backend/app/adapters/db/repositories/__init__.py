@@ -5,6 +5,10 @@ from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
+from app.adapters.db.repositories.invitation import SqlInvitationRepository
+from app.adapters.db.repositories.invitation_overwrite_request import (
+    SqlInvitationOverwriteRequestRepository,
+)
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
@@ -19,6 +23,8 @@ __all__ = [
     "SqlEventRepository",
     "SqlEventInstanceRepository",
     "SqlExportTokenRepository",
+    "SqlInvitationRepository",
+    "SqlInvitationOverwriteRequestRepository",
     "SqlLeaderRepository",
     "SqlLeaderRegistrationRepository",
     "SqlPlanningSeriesRepository",

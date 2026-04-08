@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchMatrix, type MatrixResponse } from '@/api/matrix'
-import { createAssignment } from '@/api/serviceAssignments'
+import { createAssignment, updateAssignment } from '@/api/serviceAssignments'
+import { generateMatrixDraftServices } from '@/api/districts'
 
 export const useMatrixStore = defineStore('matrix', () => {
   const matrix = ref<MatrixResponse | null>(null)
@@ -34,13 +35,54 @@ export const useMatrixStore = defineStore('matrix', () => {
 
   async function assign(
     eventId: string,
+    assignmentId: string | null,
     options: { leaderId?: string | null; leaderName?: string | null },
   ) {
-    await createAssignment(eventId, options, 'ASSIGNED')
+    if (assignmentId) {
+      await updateAssignment(eventId, assignmentId, options, 'ASSIGNED')
+    } else {
+      await createAssignment(eventId, options, 'ASSIGNED')
+    }
     await fetch() // refresh matrix
   }
 
-  return { matrix, loading, error, districtId, groupId, fromDt, toDt, fetch, assign }
+  async function clearAssignment(eventId: string, assignmentId: string | null) {
+    if (!assignmentId) {
+      await fetch()
+      return
+    }
+
+    await updateAssignment(
+      eventId,
+      assignmentId,
+      { leaderId: null, leaderName: null },
+      'OPEN',
+    )
+    await fetch()
+  }
+
+  async function generateDraftsForCurrentRange() {
+    if (!districtId.value || !fromDt.value || !toDt.value) {
+      throw new Error('Bezirk und Zeitraum sind erforderlich')
+    }
+    const result = await generateMatrixDraftServices(districtId.value, fromDt.value, toDt.value)
+    await fetch()
+    return result
+  }
+
+  return {
+    matrix,
+    loading,
+    error,
+    districtId,
+    groupId,
+    fromDt,
+    toDt,
+    fetch,
+    assign,
+    clearAssignment,
+    generateDraftsForCurrentRange,
+  }
 }, {
   persist: { pick: ['districtId', 'groupId', 'fromDt', 'toDt'] },
 })

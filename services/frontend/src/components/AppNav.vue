@@ -16,6 +16,12 @@
               <component :is="link.icon" class="h-4 w-4 shrink-0" />
               {{ link.label }}
             </RouterLink>
+            <span
+              v-if="authStore.isSuperadmin"
+              class="ml-2 inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"
+            >
+              Superadmin
+            </span>
           </template>
         </div>
 
@@ -141,4 +147,3 @@ async function handleLogout() {
   await router.push('/login')
 }
 </script>
-
