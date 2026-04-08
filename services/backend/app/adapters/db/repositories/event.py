@@ -212,9 +212,11 @@ class SqlEventRepository(EventRepository):
 
         Returns the number of deleted rows.
         """
-        stale_event_ids = select(EventORM.id).where(EventORM.end_at < cutoff)
+        # `planning_slot_from_event()` keeps the bridge IDs aligned (`slot.id == event.id`),
+        # so the stale event ID set is also the stale planning-slot ID set.
+        stale_bridge_ids = select(EventORM.id).where(EventORM.end_at < cutoff)
         await self._session.execute(
-            delete(PlanningSlotORM).where(PlanningSlotORM.id.in_(stale_event_ids))
+            delete(PlanningSlotORM).where(PlanningSlotORM.id.in_(stale_bridge_ids))
         )
         result = await self._session.execute(delete(EventORM).where(EventORM.end_at < cutoff))
         return result.rowcount
