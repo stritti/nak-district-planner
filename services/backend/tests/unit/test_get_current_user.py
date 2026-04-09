@@ -196,6 +196,48 @@ class TestUserCreationFlow:
             user = await get_current_user(mock_credentials, mock_session)
 
             # Verify minimal user was created
-            assert user.sub == "user-789"
-            assert user.email == "user@example.com"
-            assert user.username == "user@example.com"
+        assert user.sub == "user-789"
+        assert user.email == "user@example.com"
+        assert user.username == "user@example.com"
+
+
+class TestGetCurrentUserWithMemberships:
+    @pytest.mark.asyncio
+    async def test_links_single_approved_unlinked_registration_by_email(self):
+        from app.adapters.api.deps import get_current_user_with_memberships
+        from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
+        from app.domain.models.membership import ScopeType
+        from app.domain.models.role import Role
+
+        user = User(sub="oidc|u1", email="link@example.com", username="link")
+
+        registration = LeaderRegistration.create(
+            district_id=__import__("uuid").uuid4(),
+            name="Link Me",
+            email="link@example.com",
+            user_sub=None,
+        )
+        registration.status = RegistrationStatus.APPROVED
+        registration.assigned_role = Role.PLANNER
+        registration.assigned_scope_type = ScopeType.DISTRICT
+        registration.assigned_scope_id = __import__("uuid").uuid4()
+
+        with (
+            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as RegRepo,
+            patch("app.adapters.api.deps.SqlMembershipRepository") as MemRepo,
+        ):
+            reg_repo = AsyncMock()
+            reg_repo.list_approved_unlinked_by_email.return_value = [registration]
+            reg_repo.save = AsyncMock()
+            RegRepo.return_value = reg_repo
+
+            mem_repo = AsyncMock()
+            mem_repo.get_all_by_user.side_effect = [[], [object()]]
+            mem_repo.upsert_by_scope = AsyncMock()
+            MemRepo.return_value = mem_repo
+
+            ctx = await get_current_user_with_memberships(user=user, session=AsyncMock())
+
+            reg_repo.save.assert_called_once()
+            mem_repo.upsert_by_scope.assert_called_once()
+            assert len(ctx.memberships) == 1

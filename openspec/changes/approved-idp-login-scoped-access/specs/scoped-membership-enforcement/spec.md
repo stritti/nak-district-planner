@@ -45,3 +45,16 @@ The system SHALL provide an authenticated endpoint that returns effective member
 - **WHEN** authenticated client has no memberships and is not superadmin
 - **THEN** endpoint responds successfully with an empty membership list
 - **AND** client can show "Freigabe ausstehend" state
+
+### Requirement: Pending registration visibility SHALL be prominent for admin roles
+The system SHALL provide immediate visibility of open registrations for superadmin and district-admin users after login.
+
+#### Scenario: Superadmin logs in with open registrations
+- **WHEN** authenticated superadmin has open registrations in one or more districts
+- **THEN** client receives pending counts via overview endpoint
+- **AND** global UI shows a prominent open-registration indicator
+
+#### Scenario: District admin logs in with open registrations in managed districts
+- **WHEN** authenticated district admin has open registrations in districts where they hold `DISTRICT_ADMIN`
+- **THEN** overview returns counts for those districts only
+- **AND** global UI shows a prominent open-registration indicator

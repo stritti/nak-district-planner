@@ -9,6 +9,8 @@ Benutzer koennen sich bereits registrieren und sich per OIDC authentifizieren. E
 - Stelle sicher, dass unfreigegebene Benutzer trotz erfolgreichem Login keine geschuetzten Fach-Endpunkte nutzen koennen.
 - Verknuepfe den Registrierungs-/Freigabeflow robust mit `user_sub`, inklusive validierter Token-Verarbeitung beim Self-Registration-Flow.
 - Ergaenze API- und UI-Signale fuer den Zustand "Freigabe ausstehend".
+- Fuehre optionales IDP-Provisioning bei Genehmigung ein (Invite/Create via konfigurierbarem Provisioning-Endpoint) und speichere Provisioning-Status in der Registrierung.
+- Zeige Superadmins und Bezirksadministratoren direkt nach Login eine prominente Anzeige fuer offene Registrierungen.
 
 ## Capabilities
 
@@ -21,7 +23,7 @@ Benutzer koennen sich bereits registrieren und sich per OIDC authentifizieren. E
 ## Impact
 
 - Backend: Registrierung/Freigabe-Endpunkte, Membership-Zuweisung, Authorisierungsguards.
-- Domain/DB: Erweiterte Freigabe-Metadaten und Zuordnungsfelder in Registration.
-- Frontend: Admin-Freigabemaske mit Rollen-/Scope-Auswahl und Benutzerstatus "Freigabe ausstehend".
+- Domain/DB: Erweiterte Freigabe-Metadaten, Zuordnungsfelder und IDP-Provisioning-Status in Registration.
+- Frontend: Admin-Freigabemaske mit Rollen-/Scope-Auswahl, Provisioning-Status und Benutzerstatus "Freigabe ausstehend".
 - Security: Strikter Zugriff erst nach Freigabe, klare Scope-Grenzen pro Bezirk/Gemeinde.
 - Tests/Dokumentation: Neue Unit-, Integrations- und E2E-Faelle fuer Approval- und Scope-Verhalten.

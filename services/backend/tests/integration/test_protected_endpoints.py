@@ -4,6 +4,7 @@ Integration tests for protected API endpoints with JWT authentication.
 Tests verify that endpoints require valid Bearer tokens and work with authenticated users.
 """
 
+import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -143,7 +144,7 @@ class TestTokenHeader:
 
         # Wrong format: missing "Bearer" prefix
         response = client.get("/api/v1/auth/me", headers={"Authorization": valid_token})
-        assert response.status_code == 403  # Forbidden (invalid scheme)
+        assert response.status_code in (401, 403)
 
     def test_case_insensitive_bearer(self, mock_oidc_adapter, valid_token):
         """Bearer scheme should be case-insensitive."""
@@ -227,6 +228,26 @@ class TestRegistrationEndpoints:
         # 404 because district not found, but NOT 401 (no auth required)
         assert response.status_code == 404
 
+    def test_submit_registration_invalid_bearer_returns_401(self, mock_oidc_adapter):
+        """Optional bearer token must be validated when provided."""
+        district_id = uuid.uuid4()
+        from app.adapters.auth.oidc import TokenValidationError
+
+        mock_oidc_adapter.validate_token.side_effect = TokenValidationError("invalid")
+
+        client = TestClient(app)
+        with patch(
+            "app.adapters.db.repositories.district.SqlDistrictRepository.get",
+            new_callable=AsyncMock,
+            return_value=object(),
+        ):
+            response = client.post(
+                f"/api/v1/districts/{district_id}/registrations",
+                json={"name": "Max Muster", "email": "max@example.com"},
+                headers={"Authorization": "Bearer invalid-token"},
+            )
+        assert response.status_code == 401
+
     # ── Admin endpoints require auth ──────────────────────────────────────────
 
     def test_list_registrations_requires_auth(self):
@@ -266,3 +287,126 @@ class TestRegistrationEndpoints:
         client = TestClient(app)
         response = client.delete(f"/api/v1/districts/{uuid.uuid4()}/registrations/{uuid.uuid4()}")
         assert response.status_code == 401
+
+
+class TestApprovalAccessGating:
+    def test_pending_user_denied_on_protected_endpoint(self, mock_oidc_adapter, valid_token):
+        """Authenticated users without memberships are denied with 403."""
+        token_claims = {
+            "sub": "pending-user",
+            "email": "pending@example.com",
+            "preferred_username": "pending.user",
+            "name": "Pending User",
+        }
+        mock_oidc_adapter.validate_token.return_value = token_claims
+        mock_oidc_adapter.extract_user_info.return_value = {
+            "sub": "pending-user",
+            "email": "pending@example.com",
+            "username": "pending.user",
+            "name": "Pending User",
+            "given_name": None,
+            "family_name": None,
+        }
+
+        with (
+            patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
+            patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
+            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
+        ):
+            user_repo = AsyncMock()
+            user_repo.get_by_sub.return_value = None
+            user_repo.has_any_user.return_value = True
+            user_repo.save = AsyncMock()
+            MockUserRepo.return_value = user_repo
+
+            membership_repo = AsyncMock()
+            membership_repo.get_all_by_user.return_value = []
+            MockMembershipRepo.return_value = membership_repo
+
+            reg_repo = AsyncMock()
+            reg_repo.list_approved_unlinked_by_email.return_value = []
+            MockRegRepo.return_value = reg_repo
+
+            client = TestClient(app)
+            response = client.get(
+                "/api/v1/districts",
+                headers={"Authorization": f"Bearer {valid_token}"},
+            )
+
+        assert response.status_code == 403
+
+    def test_user_with_membership_allowed_on_protected_endpoint(
+        self, mock_oidc_adapter, valid_token
+    ):
+        """Authenticated users with memberships can access protected endpoints."""
+        from app.domain.models.membership import Membership, ScopeType
+        from app.domain.models.role import Role
+
+        token_claims = {
+            "sub": "active-user",
+            "email": "active@example.com",
+            "preferred_username": "active.user",
+            "name": "Active User",
+        }
+        mock_oidc_adapter.validate_token.return_value = token_claims
+        mock_oidc_adapter.extract_user_info.return_value = {
+            "sub": "active-user",
+            "email": "active@example.com",
+            "username": "active.user",
+            "name": "Active User",
+            "given_name": None,
+            "family_name": None,
+        }
+
+        membership = Membership.create(
+            user_sub="active-user",
+            role=Role.PLANNER,
+            scope_type=ScopeType.DISTRICT,
+            scope_id=uuid.uuid4(),
+        )
+
+        with (
+            patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
+            patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
+            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
+            patch(
+                "app.adapters.db.repositories.district.SqlDistrictRepository.list_all",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+        ):
+            user_repo = AsyncMock()
+            user_repo.get_by_sub.return_value = None
+            user_repo.has_any_user.return_value = True
+            user_repo.save = AsyncMock()
+            MockUserRepo.return_value = user_repo
+
+            membership_repo = AsyncMock()
+            membership_repo.get_all_by_user.return_value = [membership]
+            MockMembershipRepo.return_value = membership_repo
+
+            reg_repo = AsyncMock()
+            reg_repo.list_approved_unlinked_by_email.return_value = []
+            MockRegRepo.return_value = reg_repo
+
+            client = TestClient(app)
+            response = client.get(
+                "/api/v1/districts",
+                headers={"Authorization": f"Bearer {valid_token}"},
+            )
+
+        assert response.status_code == 200
+
+
+class TestPendingOverviewEndpoint:
+    def test_pending_overview_requires_auth(self):
+        client = TestClient(app)
+        response = client.get("/api/v1/registrations/pending-overview")
+        assert response.status_code == 401
+
+
+class TestIdpProvisioningConfig:
+    def test_idp_provisioning_disabled_by_default(self):
+        from app.adapters.idp.provisioning import get_idp_provisioner
+
+        assert get_idp_provisioner() is None

@@ -25,6 +25,19 @@ The system SHALL require explicit authorization assignment during approval. Appr
 - **THEN** system creates or updates a membership for the approved user
 - **AND** future authorization checks use that membership for access decisions
 
+### Requirement: Approval SHOULD support optional IDP provisioning
+When enabled by configuration, the system SHOULD notify a provisioning endpoint at approval time so the user can be invited/created in the external IDP.
+
+#### Scenario: Provisioning enabled and endpoint succeeds
+- **WHEN** a registration is approved and provisioning is enabled
+- **THEN** system calls the configured provisioning endpoint with registration and scope metadata
+- **AND** stores provisioning status on the registration
+
+#### Scenario: Provisioning endpoint fails
+- **WHEN** provisioning is enabled and endpoint call fails
+- **THEN** approval remains successful for internal authorization state
+- **AND** registration stores provisioning error details for operators
+
 ### Requirement: Registration user linkage SHALL be secure
 If a bearer token is provided in the self-registration request, the system MUST validate it before using its `sub` claim for user linkage.
 

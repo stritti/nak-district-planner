@@ -22,6 +22,16 @@
             >
               Superadmin
             </span>
+            <RouterLink
+              v-if="authStore.pendingRegistrationsCount > 0"
+              to="/admin/leaders"
+              class="ml-2 inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100"
+            >
+              Registrierungen offen
+              <span class="inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] text-white">
+                {{ authStore.pendingRegistrationsCount }}
+              </span>
+            </RouterLink>
           </template>
         </div>
 
@@ -89,6 +99,12 @@
                   <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                     <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ authStore.user?.name || 'Benutzer' }}</p>
                     <p class="text-xs text-gray-500 dark:text-gray-400">{{ authStore.user?.email }}</p>
+                    <p
+                      v-if="authStore.pendingRegistrationsCount > 0"
+                      class="mt-2 text-xs font-medium text-rose-700"
+                    >
+                      {{ authStore.pendingRegistrationsCount }} ausstehende Registrierung{{ authStore.pendingRegistrationsCount === 1 ? '' : 'en' }}
+                    </p>
                   </div>
 
                   <button

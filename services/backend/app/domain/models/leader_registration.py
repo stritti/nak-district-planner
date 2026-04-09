@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from app.domain.models.leader import LeaderRank, SpecialRole
+from app.domain.models.membership import ScopeType
+from app.domain.models.role import Role
 
 
 class RegistrationStatus(str, Enum):
@@ -44,6 +46,14 @@ class LeaderRegistration:
     rejection_reason: str | None
     # OIDC subject of the registrant, if they were logged in when submitting
     user_sub: str | None
+    assigned_role: Role | None
+    assigned_scope_type: ScopeType | None
+    assigned_scope_id: uuid.UUID | None
+    approved_by_sub: str | None
+    approved_at: datetime | None
+    idp_provision_status: str | None
+    idp_provision_error: str | None
+    idp_provisioned_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -74,6 +84,14 @@ class LeaderRegistration:
             status=RegistrationStatus.PENDING,
             rejection_reason=None,
             user_sub=user_sub,
+            assigned_role=None,
+            assigned_scope_type=None,
+            assigned_scope_id=None,
+            approved_by_sub=None,
+            approved_at=None,
+            idp_provision_status=None,
+            idp_provision_error=None,
+            idp_provisioned_at=None,
             created_at=now,
             updated_at=now,
         )

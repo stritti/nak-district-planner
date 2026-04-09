@@ -7,6 +7,8 @@ from pydantic import BaseModel, EmailStr, Field
 
 from app.domain.models.leader import LeaderRank, SpecialRole
 from app.domain.models.leader_registration import RegistrationStatus
+from app.domain.models.membership import ScopeType
+from app.domain.models.role import Role
 
 
 class RegistrationCreate(BaseModel):
@@ -24,6 +26,9 @@ class RegistrationCreate(BaseModel):
 class RegistrationApprove(BaseModel):
     """Admin payload when approving a registration."""
 
+    role: Role
+    scope_type: ScopeType
+    scope_id: uuid.UUID
     congregation_id: uuid.UUID | None = None
     rank: LeaderRank | None = None
     special_role: SpecialRole | None = None
@@ -48,5 +53,13 @@ class RegistrationResponse(BaseModel):
     status: RegistrationStatus
     rejection_reason: str | None
     user_sub: str | None
+    assigned_role: Role | None
+    assigned_scope_type: ScopeType | None
+    assigned_scope_id: uuid.UUID | None
+    approved_by_sub: str | None
+    approved_at: datetime | None
+    idp_provision_status: str | None
+    idp_provision_error: str | None
+    idp_provisioned_at: datetime | None
     created_at: datetime
     updated_at: datetime

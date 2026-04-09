@@ -15,6 +15,8 @@ from app.adapters.api.schemas.registration import (
     RegistrationResponse,
 )
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
+from app.domain.models.membership import ScopeType
+from app.domain.models.role import Role
 
 
 class TestRegistrationCreateSchema:
@@ -69,15 +71,23 @@ class TestRegistrationCreateSchema:
 
 
 class TestRegistrationApproveSchema:
-    def test_empty_body(self):
-        """All fields optional."""
-        body = RegistrationApprove()
-        assert body.congregation_id is None
-        assert body.rank is None
-        assert body.special_role is None
+    def test_required_assignment_fields(self):
+        body = RegistrationApprove(
+            role=Role.PLANNER,
+            scope_type=ScopeType.DISTRICT,
+            scope_id=uuid.uuid4(),
+        )
+        assert body.role == Role.PLANNER
+        assert body.scope_type == ScopeType.DISTRICT
 
     def test_with_congregation(self):
-        body = RegistrationApprove(congregation_id=uuid.uuid4(), rank="Di.")
+        body = RegistrationApprove(
+            role=Role.PLANNER,
+            scope_type=ScopeType.CONGREGATION,
+            scope_id=uuid.uuid4(),
+            congregation_id=uuid.uuid4(),
+            rank="Di.",
+        )
         assert body.rank == "Di."
 
 
@@ -91,6 +101,28 @@ class TestRegistrationRejectSchema:
         assert body.reason == "Keine freie Stelle"
 
 
+class TestPendingOverviewSchema:
+    def test_registration_pending_count_response(self):
+        from app.adapters.api.routers.registrations import RegistrationPendingCountResponse
+
+        row = RegistrationPendingCountResponse(district_id=uuid.uuid4(), pending=2)
+        assert row.pending == 2
+
+    def test_registration_pending_overview_response(self):
+        from app.adapters.api.routers.registrations import (
+            RegistrationPendingCountResponse,
+            RegistrationPendingOverviewResponse,
+        )
+
+        district_id = uuid.uuid4()
+        payload = RegistrationPendingOverviewResponse(
+            total_pending=2,
+            by_district=[RegistrationPendingCountResponse(district_id=district_id, pending=2)],
+        )
+        assert payload.total_pending == 2
+        assert payload.by_district[0].district_id == district_id
+
+
 class TestLeaderRegistrationDomainModel:
     def test_create_sets_pending_status(self):
         """LeaderRegistration.create() always starts with PENDING status."""
@@ -102,6 +134,14 @@ class TestLeaderRegistrationDomainModel:
         assert reg.status == RegistrationStatus.PENDING
         assert reg.rejection_reason is None
         assert reg.user_sub is None
+        assert reg.assigned_role is None
+        assert reg.assigned_scope_type is None
+        assert reg.assigned_scope_id is None
+        assert reg.approved_by_sub is None
+        assert reg.approved_at is None
+        assert reg.idp_provision_status is None
+        assert reg.idp_provision_error is None
+        assert reg.idp_provisioned_at is None
         assert isinstance(reg.id, uuid.UUID)
 
     def test_create_with_user_sub(self):
@@ -141,6 +181,14 @@ class TestRegistrationResponseSchema:
             "status": "PENDING",
             "rejection_reason": None,
             "user_sub": None,
+            "assigned_role": None,
+            "assigned_scope_type": None,
+            "assigned_scope_id": None,
+            "approved_by_sub": None,
+            "approved_at": None,
+            "idp_provision_status": None,
+            "idp_provision_error": None,
+            "idp_provisioned_at": None,
             "created_at": now,
             "updated_at": now,
         }

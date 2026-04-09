@@ -11,7 +11,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { OIDCToken, OIDCUser } from '@/composables/useOIDC'
-import { getCurrentUser } from '@/api/auth'
+import { getAccessContext, getCurrentUser, type MembershipAccess } from '@/api/auth'
+import { getPendingRegistrationsOverview } from '@/api/registrations'
 
 export const useAuthStore = defineStore(
   'auth',
@@ -20,6 +21,9 @@ export const useAuthStore = defineStore(
     const token = ref<OIDCToken | null>(null)
     const user = ref<OIDCUser | null>(null)
     const isSuperadmin = ref(false)
+    const accessStatus = ref<'ACTIVE' | 'PENDING_APPROVAL'>('PENDING_APPROVAL')
+    const memberships = ref<MembershipAccess[]>([])
+    const pendingRegistrationsCount = ref(0)
 
     // Computed
     const isAuthenticated = computed(() => token.value !== null)
@@ -42,9 +46,27 @@ export const useAuthStore = defineStore(
       try {
         const me = await getCurrentUser()
         isSuperadmin.value = me.is_superadmin
+        const access = await getAccessContext()
+        accessStatus.value = access.status
+        memberships.value = access.memberships
+
+        // Show prominent pending-registration hint for superadmins and district admins.
+        const canSeePendingRegistrations =
+          isSuperadmin.value ||
+          access.memberships.some((m) => m.role === 'DISTRICT_ADMIN')
+
+        if (canSeePendingRegistrations) {
+          const overview = await getPendingRegistrationsOverview()
+          pendingRegistrationsCount.value = overview.total_pending
+        } else {
+          pendingRegistrationsCount.value = 0
+        }
       } catch (error) {
         // Non-blocking: auth/session stays valid even if profile flags endpoint fails.
         isSuperadmin.value = false
+        accessStatus.value = 'PENDING_APPROVAL'
+        memberships.value = []
+        pendingRegistrationsCount.value = 0
         console.warn('Unable to refresh current user flags', error)
       }
     }
@@ -60,6 +82,9 @@ export const useAuthStore = defineStore(
       token.value = null
       user.value = null
       isSuperadmin.value = false
+      accessStatus.value = 'PENDING_APPROVAL'
+      memberships.value = []
+      pendingRegistrationsCount.value = 0
     }
 
     return {
@@ -67,6 +92,9 @@ export const useAuthStore = defineStore(
       token,
       user,
       isSuperadmin,
+      accessStatus,
+      memberships,
+      pendingRegistrationsCount,
       isAuthenticated,
       isTokenExpired,
 
