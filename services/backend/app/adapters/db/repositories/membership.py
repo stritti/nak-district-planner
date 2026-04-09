@@ -122,6 +122,32 @@ class SqlMembershipRepository:
 
         await self._session.flush()
 
+    async def upsert_by_scope(
+        self,
+        *,
+        user_sub: str,
+        scope_type: ScopeType,
+        scope_id: uuid.UUID,
+        role: Role,
+    ) -> Membership:
+        """Idempotently create or update membership by user and scope."""
+        existing = await self.get_by_user_and_scope(user_sub, scope_type, scope_id)
+        now = datetime.now(timezone.utc)
+        if existing is None:
+            membership = Membership.create(
+                user_sub=user_sub,
+                role=role,
+                scope_type=scope_type,
+                scope_id=scope_id,
+            )
+            await self.save(membership)
+            return membership
+
+        existing.role = role
+        existing.updated_at = now
+        await self.save(existing)
+        return existing
+
     async def delete(self, membership_id: uuid.UUID) -> None:
         """Delete membership by ID."""
         await self._session.execute(select(MembershipORM).where(MembershipORM.id == membership_id))

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from typing import Annotated, NamedTuple
 
 from fastapi import Depends, HTTPException, Security, status
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.auth.jwt_claims import extract_memberships_from_claims
+from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
@@ -23,10 +25,15 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 _oidc_adapter: OIDCAdapter | None = None
 
 
-def set_oidc_adapter(adapter: OIDCAdapter) -> None:
+def set_oidc_adapter(adapter: OIDCAdapter | None) -> None:
     """Set the global OIDC adapter instance (called from main.py)."""
     global _oidc_adapter
     _oidc_adapter = adapter
+
+
+def get_oidc_adapter() -> OIDCAdapter | None:
+    """Get the currently configured global OIDC adapter instance."""
+    return _oidc_adapter
 
 
 # Context for passing token claims through dependency chain
@@ -160,16 +167,69 @@ async def get_current_user_with_memberships(
     memberships = extract_memberships_from_claims(token_claims)
 
     # If no memberships in JWT claims, fetch from database
+    membership_repo = SqlMembershipRepository(session)
     if not memberships:
-        membership_repo = SqlMembershipRepository(session)
         memberships = await membership_repo.get_all_by_user(user.sub)
+
+    # Secure post-login linking strategy for approved registrations without user_sub:
+    # if there is exactly one approved+unlinked registration for this email,
+    # link it to this user and materialize its assigned membership.
+    if user.email:
+        reg_repo = SqlLeaderRegistrationRepository(session)
+        candidates = await reg_repo.list_approved_unlinked_by_email(user.email)
+        if len(candidates) == 1:
+            registration = candidates[0]
+            registration.user_sub = user.sub
+            registration.updated_at = datetime.now(timezone.utc)
+            await reg_repo.save(registration)
+            if (
+                registration.assigned_role is not None
+                and registration.assigned_scope_type is not None
+                and registration.assigned_scope_id is not None
+            ):
+                await membership_repo.upsert_by_scope(
+                    user_sub=user.sub,
+                    role=registration.assigned_role,
+                    scope_type=registration.assigned_scope_type,
+                    scope_id=registration.assigned_scope_id,
+                )
+            memberships = await membership_repo.get_all_by_user(user.sub)
+        elif len(candidates) > 1:
+            logger.warning(
+                "Multiple approved unlinked registrations for email=%s; skipping auto-link",
+                user.email,
+            )
 
     return CurrentUserContext(user=user, memberships=memberships)
 
 
+async def require_membership_access(
+    auth: CurrentUserContext = Depends(get_current_user_with_memberships),
+) -> CurrentUserContext:
+    """Require authenticated users to have effective memberships (except superadmin)."""
+    if auth.user.is_superadmin:
+        return auth
+    if not auth.memberships:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Freigabe ausstehend: kein Zugriff ohne zugewiesene Berechtigung.",
+        )
+    return auth
+
+
+async def get_current_active_user(
+    auth: CurrentUserContext = Depends(require_membership_access),
+) -> User:
+    """Return authenticated and approved user entity."""
+    return auth.user
+
+
 # Type aliases for dependency injection
-CurrentUser = Annotated[User, Depends(get_current_user)]
-CurrentUserWithMemberships = Annotated[
+AuthenticatedUser = Annotated[User, Depends(get_current_user)]
+CurrentUser = Annotated[User, Depends(get_current_active_user)]
+RawCurrentUserWithMemberships = Annotated[
     CurrentUserContext, Depends(get_current_user_with_memberships)
 ]
+CurrentUserWithMemberships = Annotated[CurrentUserContext, Depends(require_membership_access)]
+CurrentActiveUser = Annotated[CurrentUserContext, Depends(require_membership_access)]
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]

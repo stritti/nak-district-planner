@@ -195,16 +195,31 @@
               </td>
               <td class="px-4 py-2 text-gray-500">{{ congregationName(reg.congregation_id) || '—' }}</td>
               <td class="px-4 py-2">
-                <span
-                  class="inline-block px-2 py-0.5 rounded text-xs font-medium"
-                  :class="{
-                    'bg-amber-100 text-amber-700': reg.status === 'PENDING',
-                    'bg-green-100 text-green-700': reg.status === 'APPROVED',
-                    'bg-red-100 text-red-600': reg.status === 'REJECTED',
-                  }"
+                <div class="flex items-center gap-1.5">
+                  <span
+                    class="inline-block px-2 py-0.5 rounded text-xs font-medium"
+                    :class="{
+                      'bg-amber-100 text-amber-700': reg.status === 'PENDING',
+                      'bg-green-100 text-green-700': reg.status === 'APPROVED',
+                      'bg-red-100 text-red-600': reg.status === 'REJECTED',
+                    }"
+                  >
+                    {{ { PENDING: 'Ausstehend', APPROVED: 'Genehmigt', REJECTED: 'Abgelehnt' }[reg.status] }}
+                  </span>
+                  <span
+                    v-if="reg.status === 'APPROVED' && reg.idp_provision_status"
+                    class="inline-block px-2 py-0.5 rounded text-xs font-medium"
+                    :class="reg.idp_provision_status === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-sky-100 text-sky-700'"
+                  >
+                    IDP: {{ reg.idp_provision_status }}
+                  </span>
+                </div>
+                <p
+                  v-if="reg.idp_provision_error"
+                  class="text-xs text-red-600 mt-1"
                 >
-                  {{ { PENDING: 'Ausstehend', APPROVED: 'Genehmigt', REJECTED: 'Abgelehnt' }[reg.status] }}
-                </span>
+                  {{ reg.idp_provision_error }}
+                </p>
               </td>
               <td class="px-4 py-2 text-gray-400 text-xs">
                 {{ new Date(reg.created_at).toLocaleDateString('de-DE') }}
@@ -263,6 +278,22 @@
           Sie können Grad und Gemeinde vor der Genehmigung anpassen.
         </p>
         <div class="space-y-3 mb-4">
+          <div>
+            <label class="form-label">Rolle</label>
+            <select v-model="approveModal.role" class="form-select w-full">
+              <option value="DISTRICT_ADMIN">DISTRICT_ADMIN</option>
+              <option value="CONGREGATION_ADMIN">CONGREGATION_ADMIN</option>
+              <option value="PLANNER">PLANNER</option>
+              <option value="VIEWER">VIEWER</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Geltungsbereich</label>
+            <select v-model="approveModal.scope_type" class="form-select w-full">
+              <option value="DISTRICT">Bezirk</option>
+              <option value="CONGREGATION">Gemeinde</option>
+            </select>
+          </div>
           <div>
             <label class="form-label">Grad</label>
             <select v-model="approveModal.rank" class="form-select w-full">
@@ -696,6 +727,8 @@ const approveModal = reactive({
   registrationId: '',
   name: '',
   email: '',
+  role: 'PLANNER' as 'DISTRICT_ADMIN' | 'CONGREGATION_ADMIN' | 'PLANNER' | 'VIEWER',
+  scope_type: 'DISTRICT' as 'DISTRICT' | 'CONGREGATION',
   rank: null as string | null,
   congregation_id: null as string | null,
   special_role: null as string | null,
@@ -707,6 +740,8 @@ function openApproveModal(reg: RegistrationResponse) {
   approveModal.registrationId = reg.id
   approveModal.name = reg.name
   approveModal.email = reg.email
+  approveModal.role = reg.assigned_role ?? 'PLANNER'
+  approveModal.scope_type = reg.assigned_scope_type ?? 'DISTRICT'
   approveModal.rank = reg.rank
   approveModal.congregation_id = reg.congregation_id
   approveModal.special_role = reg.special_role
@@ -717,7 +752,27 @@ async function doApprove() {
   saving.value = true
   approveModal.error = ''
   try {
+    if (!selectedDistrictId.value) {
+      approveModal.error = 'Kein Bezirk ausgewählt.'
+      return
+    }
+    if (approveModal.scope_type === 'CONGREGATION' && !approveModal.congregation_id) {
+      approveModal.error = 'Für CONGREGATION muss eine Gemeinde ausgewählt werden.'
+      return
+    }
+
+    const scopeId =
+      approveModal.scope_type === 'DISTRICT' ? selectedDistrictId.value : approveModal.congregation_id
+
+    if (!scopeId) {
+      approveModal.error = 'Scope-ID konnte nicht bestimmt werden.'
+      return
+    }
+
     const updated = await approveRegistration(selectedDistrictId.value, approveModal.registrationId, {
+      role: approveModal.role,
+      scope_type: approveModal.scope_type,
+      scope_id: scopeId,
       congregation_id: approveModal.congregation_id,
       rank: approveModal.rank as LeaderRank | null,
       special_role: approveModal.special_role as SpecialRole | null,

@@ -249,6 +249,7 @@ class TestLeaderSchema:
             "congregation_id": congregation_id,
             "district_id": district_id,
             "special_role": None,
+            "user_sub": None,
             "email": "schmidt@example.com",
             "phone": None,
             "notes": None,

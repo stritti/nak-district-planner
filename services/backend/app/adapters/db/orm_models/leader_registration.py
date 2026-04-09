@@ -37,5 +37,15 @@ class LeaderRegistrationORM(Base):
     rejection_reason: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     # Linked OIDC subject, if the user was authenticated at the time of registration
     user_sub: Mapped[str | None] = mapped_column(sa.String(512), nullable=True)
+    assigned_role: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
+    assigned_scope_type: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
+    assigned_scope_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    approved_by_sub: Mapped[str | None] = mapped_column(sa.String(512), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    idp_provision_status: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
+    idp_provision_error: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    idp_provisioned_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)

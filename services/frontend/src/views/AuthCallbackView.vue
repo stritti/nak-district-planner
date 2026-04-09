@@ -76,7 +76,7 @@ async function handleCallback() {
       return
     }
 
-    // Optional enrichment call. Authentication is already complete after token exchange.
+    // Load role and access context (ACTIVE/PENDING_APPROVAL) for UX.
     await authStore.refreshCurrentUserFlags()
 
     success.value = true

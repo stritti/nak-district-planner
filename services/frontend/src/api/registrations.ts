@@ -1,6 +1,8 @@
 import { apiFetch } from './client'
 import type { LeaderRank, SpecialRole } from './leaders'
 
+type ScopeType = 'DISTRICT' | 'CONGREGATION'
+
 export type RegistrationStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 export interface RegistrationResponse {
@@ -16,6 +18,14 @@ export interface RegistrationResponse {
   status: RegistrationStatus
   rejection_reason: string | null
   user_sub: string | null
+  assigned_role: 'DISTRICT_ADMIN' | 'CONGREGATION_ADMIN' | 'PLANNER' | 'VIEWER' | null
+  assigned_scope_type: ScopeType | null
+  assigned_scope_id: string | null
+  approved_by_sub: string | null
+  approved_at: string | null
+  idp_provision_status: string | null
+  idp_provision_error: string | null
+  idp_provisioned_at: string | null
   created_at: string
   updated_at: string
 }
@@ -31,6 +41,9 @@ export interface RegistrationCreate {
 }
 
 export interface RegistrationApprove {
+  role: 'DISTRICT_ADMIN' | 'CONGREGATION_ADMIN' | 'PLANNER' | 'VIEWER'
+  scope_type: ScopeType
+  scope_id: string
   congregation_id?: string | null
   rank?: LeaderRank | null
   special_role?: SpecialRole | null
@@ -38,6 +51,16 @@ export interface RegistrationApprove {
 
 export interface RegistrationReject {
   reason?: string | null
+}
+
+export interface RegistrationPendingCount {
+  district_id: string
+  pending: number
+}
+
+export interface RegistrationPendingOverview {
+  total_pending: number
+  by_district: RegistrationPendingCount[]
 }
 
 /** Minimal district info from the public endpoint. */
@@ -113,7 +136,7 @@ export function listRegistrations(
 export function approveRegistration(
   districtId: string,
   registrationId: string,
-  body: RegistrationApprove = {},
+  body: RegistrationApprove,
 ): Promise<RegistrationResponse> {
   return apiFetch<RegistrationResponse>(
     `/api/v1/districts/${districtId}/registrations/${registrationId}/approve`,
@@ -145,4 +168,8 @@ export function deleteRegistration(districtId: string, registrationId: string): 
     `/api/v1/districts/${districtId}/registrations/${registrationId}`,
     { method: 'DELETE' },
   )
+}
+
+export function getPendingRegistrationsOverview(): Promise<RegistrationPendingOverview> {
+  return apiFetch<RegistrationPendingOverview>('/api/v1/registrations/pending-overview')
 }

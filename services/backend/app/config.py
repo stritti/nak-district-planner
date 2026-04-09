@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     oidc_audience: str | None = None
     oidc_scopes: str = "openid profile email"
     superadmin_sub: str | None = None
+    idp_provisioning_enabled: bool = False
+    idp_provisioning_endpoint: str | None = None
+    idp_provisioning_api_key: str | None = None
+    idp_provisioning_timeout_seconds: float = 10.0
     startup_generate_draft_services: bool = False
 
     @model_validator(mode="after")
