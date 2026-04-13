@@ -12,7 +12,9 @@ from app.adapters.auth.claims_validation import (
     validate_token_claim_consistency,
 )
 from app.adapters.auth.notifications import can_act_on_notification, can_view_notification
-from app.adapters.idp.provisioning import HttpIdpProvisioningAdapter, IdpProvisioningError
+from app.adapters.idp.base import IdpProvisioningError
+from app.adapters.idp.keycloak_provisioner import KeycloakProvisioningAdapter
+from app.adapters.idp.webhook_provisioner import HttpIdpProvisioningAdapter
 from app.application.init import seed_canonical_roles
 from app.config import Settings
 from app.domain.models.membership import Membership, ScopeType
@@ -90,7 +92,7 @@ async def test_idp_provisioning_adapter_success_and_failures() -> None:
 
     client_ctx = AsyncMock()
     client_ctx.__aenter__.return_value.post = AsyncMock(return_value=response)
-    with patch("app.adapters.idp.provisioning.httpx.AsyncClient", return_value=client_ctx):
+    with patch("app.adapters.idp.webhook_provisioner.httpx.AsyncClient", return_value=client_ctx):
         result = await adapter.provision_user(
             email="u@example.com",
             name="User",
@@ -107,7 +109,7 @@ async def test_idp_provisioning_adapter_success_and_failures() -> None:
     bad.text = "err"
     client_ctx2 = AsyncMock()
     client_ctx2.__aenter__.return_value.post = AsyncMock(return_value=bad)
-    with patch("app.adapters.idp.provisioning.httpx.AsyncClient", return_value=client_ctx2):
+    with patch("app.adapters.idp.webhook_provisioner.httpx.AsyncClient", return_value=client_ctx2):
         with pytest.raises(IdpProvisioningError):
             await adapter.provision_user(
                 email="u@example.com",
@@ -118,6 +120,85 @@ async def test_idp_provisioning_adapter_success_and_failures() -> None:
                 scope_type="DISTRICT",
                 scope_id=str(uuid.uuid4()),
             )
+
+
+@pytest.mark.asyncio
+async def test_keycloak_provisioning_adapter_create_and_invite() -> None:
+    adapter = KeycloakProvisioningAdapter(
+        base_url="https://kc.example.com",
+        realm="nak-planner",
+        admin_username="admin",
+        admin_password="secret",
+        timeout_seconds=2,
+        invite_on_approval=True,
+    )
+
+    token_resp = MagicMock(status_code=200)
+    token_resp.json.return_value = {"access_token": "t"}
+
+    lookup_empty = MagicMock(status_code=200)
+    lookup_empty.json.return_value = []
+
+    create_resp = MagicMock(
+        status_code=201, headers={"Location": "https://kc/admin/realms/nak/users/u123"}
+    )
+
+    invite_resp = MagicMock(status_code=204, text="")
+
+    client_ctx = AsyncMock()
+    c = client_ctx.__aenter__.return_value
+    c.post = AsyncMock(side_effect=[token_resp, create_resp])
+    c.get = AsyncMock(return_value=lookup_empty)
+    c.put = AsyncMock(return_value=invite_resp)
+
+    with patch("app.adapters.idp.keycloak_provisioner.httpx.AsyncClient", return_value=client_ctx):
+        result = await adapter.provision_user(
+            email="u@example.com",
+            name="User Name",
+            district_id=str(uuid.uuid4()),
+            registration_id=str(uuid.uuid4()),
+            role="PLANNER",
+            scope_type="DISTRICT",
+            scope_id=str(uuid.uuid4()),
+        )
+    assert result.status == "CREATED_INVITED"
+    assert result.user_sub == "u123"
+
+
+@pytest.mark.asyncio
+async def test_keycloak_provisioning_adapter_existing_user() -> None:
+    adapter = KeycloakProvisioningAdapter(
+        base_url="https://kc.example.com",
+        realm="nak-planner",
+        admin_username="admin",
+        admin_password="secret",
+        timeout_seconds=2,
+        invite_on_approval=False,
+    )
+
+    token_resp = MagicMock(status_code=200)
+    token_resp.json.return_value = {"access_token": "t"}
+
+    lookup_existing = MagicMock(status_code=200)
+    lookup_existing.json.return_value = [{"id": "existing-1"}]
+
+    client_ctx = AsyncMock()
+    c = client_ctx.__aenter__.return_value
+    c.post = AsyncMock(return_value=token_resp)
+    c.get = AsyncMock(return_value=lookup_existing)
+
+    with patch("app.adapters.idp.keycloak_provisioner.httpx.AsyncClient", return_value=client_ctx):
+        result = await adapter.provision_user(
+            email="u@example.com",
+            name="User",
+            district_id=str(uuid.uuid4()),
+            registration_id=str(uuid.uuid4()),
+            role="PLANNER",
+            scope_type="DISTRICT",
+            scope_id=str(uuid.uuid4()),
+        )
+    assert result.status == "EXISTING"
+    assert result.user_sub == "existing-1"
 
 
 def test_settings_parsing_and_validation() -> None:
