@@ -4,20 +4,23 @@ layout: home
 hero:
   name: "NAK District Planner"
   text: "Bezirksplaner der Neuapostolischen Kirche"
-  tagline: "Digitale Planung und Verwaltung für Gebietskirchen und Bezirke."
+  tagline: "Digitale Planung und Verwaltung fuer Bezirke und Gemeinden."
   actions:
     - theme: brand
       text: Erste Schritte
       link: /getting-started
     - theme: alt
+      text: Dokumentationslandkarte
+      link: /documentation-map
+    - theme: alt
       text: GitHub
-      link: https://github.com/vuejs/vitepress
+      link: https://github.com/stritti/nak-district-planner
 
 features:
-  - title: "Intuitive Planung"
-    details: "Verwalten Sie Bezirke und Gemeinden mit einer modernen Benutzeroberfläche."
-  - title: "Zukunftssicher"
-    details: "Basierend auf modernsten Web-Technologien wie Vue 3 und Vite."
-  - title: "Lokalisierung"
-    details: "Vollständige Unterstützung für Deutsch und weitere Sprachen."
+  - title: "Verbindliche Architektur"
+    details: "Hexagonale Architektur mit OpenSpec als strukturiertem Aenderungsprozess."
+  - title: "Betrieb & Sicherheit"
+    details: "OIDC, Rollenmodell, Release-Prozess und Security-Baseline sind dokumentiert."
+  - title: "Fachliche Tiefe"
+    details: "Use Cases fuer Sync, Matrixplanung, Feiertage und ICS-Export sind beschrieben."
 ---
