@@ -176,7 +176,7 @@
 
     "@rolldown/binding-win32-x64-msvc": ["@rolldown/binding-win32-x64-msvc@1.0.0-rc.15", "", { "os": "win32", "cpu": "x64" }, "sha512-3P2A8L+x75qavWLe/Dll3EYBJLQmtkJN8rfh+U/eR3MqMgL/h98PhYI+JFfXuDPgPeCB7iZAKiqii5vqOvnA0g=="],
 
-    "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-rc.2", "", {}, "sha512-izyXV/v+cHiRfozX62W9htOAvwMo4/bXKDrQ+vom1L1qRuexPock/7VZDAhnpHCLNejd3NJ6hiab+tO0D44Rgw=="],
+    "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-rc.13", "", {}, "sha512-3ngTAv6F/Py35BsYbeeLeecvhMKdsKm4AoOETVhAA+Qc8nrA2I0kF7oa93mE9qnIurngOSpMnQ0x2nQY2FPviA=="],
 
     "@rollup/rollup-android-arm-eabi": ["@rollup/rollup-android-arm-eabi@4.59.0", "", { "os": "android", "cpu": "arm" }, "sha512-upnNBkA6ZH2VKGcBj9Fyl9IGNPULcjXRlg0LLeaioQWueH30p6IXtJEbKAgvyv+mJaMxSm1l6xwDXYjpEMiLMg=="],
 
@@ -300,7 +300,7 @@
 
     "@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.56.1", "", { "dependencies": { "@typescript-eslint/types": "8.56.1", "eslint-visitor-keys": "^5.0.0" } }, "sha512-KiROIzYdEV85YygXw6BI/Dx4fnBlFQu6Mq4QE4MOH9fFnhohw6wX/OAvDY2/C+ut0I3RSPKenvZJIVYqJNkhEw=="],
 
-    "@vitejs/plugin-vue": ["@vitejs/plugin-vue@6.0.5", "", { "dependencies": { "@rolldown/pluginutils": "1.0.0-rc.2" }, "peerDependencies": { "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0", "vue": "^3.2.25" } }, "sha512-bL3AxKuQySfk1iGcBsQnoRVexTPJq0Z/ixFVM8OhVJAP6ZXXXLtM7NFKWhLl30Kg7uTBqIaPXbh+nuQCuBDedg=="],
+    "@vitejs/plugin-vue": ["@vitejs/plugin-vue@6.0.6", "", { "dependencies": { "@rolldown/pluginutils": "1.0.0-rc.13" }, "peerDependencies": { "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0", "vue": "^3.2.25" } }, "sha512-u9HHgfrq3AjXlysn0eINFnWQOJQLO9WN6VprZ8FXl7A2bYisv3Hui9Ij+7QZ41F/WYWarHjwBbXtD7dKg3uxbg=="],
 
     "@vitest/expect": ["@vitest/expect@4.1.4", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "@types/chai": "^5.2.2", "@vitest/spy": "4.1.4", "@vitest/utils": "4.1.4", "chai": "^6.2.2", "tinyrainbow": "^3.1.0" } }, "sha512-iPBpra+VDuXmBFI3FMKHSFXp3Gx5HfmSCE8X67Dn+bwephCnQCaB7qWK2ldHa+8ncN8hJU8VTMcxjPpyMkUjww=="],
 
