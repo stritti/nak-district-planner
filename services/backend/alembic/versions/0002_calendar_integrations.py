@@ -12,6 +12,7 @@ Changes:
 - Unique index on (calendar_integration_id, external_uid) for sync deduplication
 - Index on calendar_integrations.district_id
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
@@ -28,9 +29,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # --- New ENUM: calendar_type ---
-    calendar_type = postgresql.ENUM(
-        "GOOGLE", "MICROSOFT", "CALDAV", "ICS", name="calendar_type"
-    )
+    calendar_type = postgresql.ENUM("GOOGLE", "MICROSOFT", "CALDAV", "ICS", name="calendar_type")
     calendar_type.create(op.get_bind(), checkfirst=True)
 
     # --- New table: calendar_integrations ---
@@ -44,9 +43,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column(
-            "type", postgresql.ENUM(name="calendar_type", create_type=False), nullable=False
-        ),
+        sa.Column("type", postgresql.ENUM(name="calendar_type", create_type=False), nullable=False),
         sa.Column("credentials_enc", sa.Text, nullable=False),
         sa.Column("sync_interval", sa.Integer, nullable=False, server_default="60"),
         sa.Column(

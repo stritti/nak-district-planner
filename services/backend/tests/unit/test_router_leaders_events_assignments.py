@@ -19,7 +19,6 @@ from app.adapters.api.schemas.service_assignment import (
 from app.domain.models.district import District
 from app.domain.models.event import Event
 from app.domain.models.leader import Leader
-from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
 
