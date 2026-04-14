@@ -9,7 +9,7 @@ Diese Erweiterung fuehrt ein Einladungsmodell ein, bei dem ein Termin aus einer 
   - Interne Ziele (`DISTRICT_CONGREGATION`) erzeugen verknuepfte Ziel-Events.
   - Externe Ziele (`EXTERNAL_NOTE`) speichern nur Freitext-Hinweise.
 
-- `GET /api/v1/invitations/overwrite-requests?district_id=<uuid>`
+- `GET /api/v1/invitations/overwrite-requests?district_id={uuid}`
   - Listet offene Ueberschreibungsanfragen (`PENDING_OVERWRITE`) fuer einen Bezirk.
   - Enthalten sind aktuelle und vorgeschlagene Eventwerte.
 
@@ -36,7 +36,7 @@ Diese Erweiterung fuehrt ein Einladungsmodell ein, bei dem ein Termin aus einer 
 - `invitation_source_congregation_name` (Anzeige in der eingeladenen Zelle)
 - `is_assignment_editable` (`false` in eingeladenen Zellen)
 
-Damit kann das Frontend den Hinweis "Einladung von <Gemeinde>" anzeigen.
+Damit kann das Frontend den Hinweis "Einladung von &lt;Gemeinde&gt;" anzeigen.
 
 ## Migration
 

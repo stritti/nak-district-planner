@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-03-02 00:00:00.000000
 
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
@@ -76,9 +77,17 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("category", sa.String(255), nullable=True),
-        sa.Column("source", postgresql.ENUM(name="event_source", create_type=False), nullable=False),
-        sa.Column("status", postgresql.ENUM(name="event_status", create_type=False), nullable=False),
-        sa.Column("visibility", postgresql.ENUM(name="event_visibility", create_type=False), nullable=False),
+        sa.Column(
+            "source", postgresql.ENUM(name="event_source", create_type=False), nullable=False
+        ),
+        sa.Column(
+            "status", postgresql.ENUM(name="event_status", create_type=False), nullable=False
+        ),
+        sa.Column(
+            "visibility",
+            postgresql.ENUM(name="event_visibility", create_type=False),
+            nullable=False,
+        ),
         sa.Column("audiences", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"),
         sa.Column(
             "applicability",
@@ -101,7 +110,9 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("leader_name", sa.String(255), nullable=False),
-        sa.Column("status", postgresql.ENUM(name="assignment_status", create_type=False), nullable=False),
+        sa.Column(
+            "status", postgresql.ENUM(name="assignment_status", create_type=False), nullable=False
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )

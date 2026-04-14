@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.adapters.db.repositories.calendar_integration import (
-    SqlCalendarIntegrationRepository,
     _domain_to_orm as ci_domain_to_orm,
     _orm_to_domain as ci_orm_to_domain,
 )
@@ -60,7 +59,6 @@ from app.domain.models.calendar_integration import (
     CalendarType,
 )
 from app.domain.models.congregation import Congregation
-from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.export_token import ExportToken, TokenType
@@ -81,7 +79,6 @@ async def test_repository_mapping_helpers() -> None:
     now = datetime.now(timezone.utc)
     district_id = uuid.uuid4()
     congregation_id = uuid.uuid4()
-    user_id = uuid.uuid4()
 
     d = district_orm_to_domain(
         _row(id=district_id, name="D", state_code="BY", created_at=now, updated_at=now)

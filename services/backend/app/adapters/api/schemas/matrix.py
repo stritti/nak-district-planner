@@ -3,7 +3,6 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.domain.models.invitation import InvitationTargetType
 from app.domain.models.service_assignment import AssignmentStatus
 
 
