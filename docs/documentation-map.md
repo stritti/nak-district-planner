@@ -31,12 +31,10 @@ Implementierungsstatus wird in `docs/architecture-status.md` zusammengefasst.
 
 ## 3. Historische Dokumente
 
-Diese Dokumente dienen als Kontext zu abgeschlossenen oder ersetzten Phasen.
+Derzeit sind keine historischen Dokumente als aktive Seiten verlinkt.
 
-- `docs/auth-keycloak.md` (explizit veraltet)
-
-Regel: Inhalte aus historischen Dokumenten duerfen nicht als alleinige Grundlage fuer
-neue Implementierung dienen. Bei Konflikten gilt Abschnitt 1.
+Regel: Historische Inhalte duerfen nicht als alleinige Grundlage fuer neue
+Implementierung dienen. Bei Konflikten gilt Abschnitt 1.
 
 ## 4. Entscheidungsregel bei Widerspruechen
 
@@ -53,5 +51,5 @@ Wenn Aussagen kollidieren, gilt folgende Reihenfolge:
   verlinktes, verbindliches Dokument aktualisiert werden.
 - PRs mit Architektur- oder Security-Impact enthalten einen Abschnitt
   "Dokumentation aktualisiert".
-- Veraltete Seiten werden sichtbar als "veraltet" markiert und in den Legacy-Bereich
-  verschoben.
+- Veraltete Seiten werden entweder entfernt oder als Legacy klar getrennt
+  ausserhalb der aktiven Navigationsstruktur abgelegt.

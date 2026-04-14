@@ -39,8 +39,7 @@ export default defineConfig(
           text: 'Sicherheit & Berechtigungen',
           items: [
             { text: 'Rollenkonzept', link: '/roles' },
-            { text: 'Security Baseline', link: '/security-baseline' },
-            { text: 'Authentifizierung (veraltet)', link: '/auth-keycloak' }
+            { text: 'Security Baseline', link: '/security-baseline' }
           ]
         },
         {
