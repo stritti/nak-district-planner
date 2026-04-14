@@ -230,6 +230,7 @@ For help with specific IDP:
 - **Keycloak:** See `keycloak/OIDC-SETUP.md` troubleshooting section
 - **Authentik:** See `authentik/OIDC-SETUP.md` troubleshooting section
 
-For Phase 4b OIDC implementation details:
-- See `../PHASE_4B_SUMMARY.md` (architecture & features)
-- See `../MIGRATION_GUIDE.md` (Phase 4a → 4b migration)
+For OIDC implementation details:
+- See `../docs/security-baseline.md`
+- See `../docs/documentation-map.md`
+- See `../MIGRATION_GUIDE.md` (Phase 4a -> 4b migration)

@@ -36,8 +36,11 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
             "username": self._admin_username,
             "password": self._admin_password,
         }
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            response = await client.post(token_url, data=data)
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                response = await client.post(token_url, data=data)
+        except httpx.HTTPError as exc:
+            raise IdpProvisioningError("Keycloak admin token request failed") from exc
         if response.status_code >= 400:
             raise IdpProvisioningError(
                 f"Keycloak admin token request failed: {response.status_code} {response.text}"
@@ -55,8 +58,11 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
         users_url = f"{self._base_url}/admin/realms/{self._realm}/users"
         headers = {"Authorization": f"Bearer {token}"}
         params = {"email": email, "exact": "true"}
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            response = await client.get(users_url, headers=headers, params=params)
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                response = await client.get(users_url, headers=headers, params=params)
+        except httpx.HTTPError as exc:
+            raise IdpProvisioningError("Keycloak user lookup failed") from exc
         if response.status_code >= 400:
             raise IdpProvisioningError(
                 f"Keycloak user lookup failed: {response.status_code} {response.text}"
@@ -90,8 +96,11 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
         if last_name:
             payload["lastName"] = last_name
 
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            response = await client.post(users_url, headers=headers, json=payload)
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                response = await client.post(users_url, headers=headers, json=payload)
+        except httpx.HTTPError as exc:
+            raise IdpProvisioningError("Keycloak user creation failed") from exc
 
         if response.status_code not in (201, 409):
             raise IdpProvisioningError(
@@ -124,8 +133,11 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
             "Content-Type": "application/json",
         }
         required_actions = ["VERIFY_EMAIL", "UPDATE_PASSWORD"]
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            response = await client.put(actions_url, headers=headers, json=required_actions)
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                response = await client.put(actions_url, headers=headers, json=required_actions)
+        except httpx.HTTPError as exc:
+            raise IdpProvisioningError("Keycloak invite email failed") from exc
         if response.status_code >= 400:
             raise IdpProvisioningError(
                 f"Keycloak invite email failed: {response.status_code} {response.text}"

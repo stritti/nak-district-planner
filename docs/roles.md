@@ -1,6 +1,8 @@
 # Rollenkonzept
 
-Dieses Dokument definiert das Rollenkonzept für den NAK Bezirksplaner und ist die verbindliche Grundlage für die Implementierung in Phase 4 (Authentifizierung & Autorisierung). Es löst das frühere Dokument [`auth-keycloak.md`](./auth-keycloak.md) vollständig ab.
+Dieses Dokument definiert das Rollenkonzept fuer den NAK Bezirksplaner und ist die
+verbindliche Grundlage fuer die Implementierung in Phase 4 (Authentifizierung &
+Autorisierung).
 
 ::: info Status
 Alle Designentscheidungen sind getroffen. Dieses Dokument ist implementierungsbereit.

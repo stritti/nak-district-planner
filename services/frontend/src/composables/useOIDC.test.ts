@@ -8,6 +8,8 @@ import { useOIDC } from '@/composables/useOIDC'
 
 // Mock Vue Router
 vi.mock('vue-router', () => ({
+  createRouter: vi.fn(),
+  createWebHistory: vi.fn(),
   useRouter: () => ({
     push: vi.fn(),
   }),

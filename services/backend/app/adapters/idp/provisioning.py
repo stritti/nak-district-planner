@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.adapters.idp.base import IdpProvisioner
+from app.adapters.idp.base import IdpProvisioner, IdpProvisioningError
 from app.adapters.idp.keycloak_provisioner import KeycloakProvisioningAdapter
 from app.adapters.idp.webhook_provisioner import HttpIdpProvisioningAdapter
 from app.config import settings
@@ -36,3 +36,6 @@ def get_idp_provisioner() -> IdpProvisioner | None:
             timeout_seconds=settings.idp_provisioning_timeout_seconds,
         )
     return None
+
+
+__all__ = ["IdpProvisioningError", "get_idp_provisioner"]
