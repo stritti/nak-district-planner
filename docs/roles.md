@@ -12,7 +12,7 @@ Alle Designentscheidungen sind getroffen. Dieses Dokument ist implementierungsbe
 
 Der NAK Bezirksplaner ist eine mandantenfähige Anwendung. Die Mandanten-Hierarchie ist:
 
-```
+```text
 System (globaler Admin)
   └── Bezirk (District)
         ├── Gemeindegruppe (CongregationGroup)  [optional]
@@ -211,7 +211,7 @@ Das Backend verifiziert ausschließlich JWT-Access-Tokens, die von Keycloak ausg
 
 ### 4.2 Datenbankmodell
 
-```
+```text
 User
   id, keycloak_sub (UNIQUE), email, display_name, is_active, created_at,
   district_id (FK → District, nullable — nur NULL für system_admin)
@@ -300,7 +300,7 @@ async def require_role(
 
 Sicherheitsrelevante Aktionen werden in einer `AuditLog`-Tabelle festgehalten:
 
-```
+```bash
 AuditLog
   id, timestamp, user_id (FK), action (enum), resource_type, resource_id,
   district_id (nullable), congregation_id (nullable), details (JSON)

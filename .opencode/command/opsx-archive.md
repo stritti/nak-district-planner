@@ -86,7 +86,7 @@ Archive a completed change in the experimental workflow.
 
 **Output On Success**
 
-```
+```text
 ## Archive Complete
 
 **Change:** <change-name>
@@ -99,7 +99,7 @@ All artifacts complete. All tasks complete.
 
 **Output On Success (No Delta Specs)**
 
-```
+```text
 ## Archive Complete
 
 **Change:** <change-name>
@@ -112,7 +112,7 @@ All artifacts complete. All tasks complete.
 
 **Output On Success With Warnings**
 
-```
+```text
 ## Archive Complete (with warnings)
 
 **Change:** <change-name>
@@ -130,7 +130,7 @@ Review the archive if this was not intentional.
 
 **Output On Error (Archive Exists)**
 
-```
+```text
 ## Archive Failed
 
 **Change:** <change-name>

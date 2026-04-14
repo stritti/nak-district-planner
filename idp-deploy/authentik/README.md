@@ -78,14 +78,14 @@ openssl rand -base64 32
 
 ## Admin Console
 
-Access at: http://localhost:9000/if/admin/
+Access at: <http://localhost:9000/if/admin/>
 - Username: akadmin
 - Password: insecure (default, CHANGE IN PRODUCTION)
 
 ## OIDC Integration
 
 Once setup is complete, frontend uses:
-- Discovery: http://localhost:9000/application/o/.well-known/openid-configuration
+- Discovery: <http://localhost:9000/application/o/.well-known/openid-configuration>
 - Client ID: nak-planner-frontend
 - Client Type: Public (PKCE)
 

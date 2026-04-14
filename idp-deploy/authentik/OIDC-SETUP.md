@@ -100,7 +100,7 @@ VPS deployment orchestration (see "VPS Deployment" section).
 
 The setup script creates a **Public OAuth2 Client** with:
 
-```
+```text
 Client ID: nak-planner-frontend
 Client Type: Public (no secret)
 Flow: Authorization Code with PKCE
@@ -112,7 +112,7 @@ Logout URIs: (configured in provider)
 
 ### OIDC Discovery Endpoint
 
-```
+```text
 GET http://localhost:9000/application/o/.well-known/openid-configuration
 ```
 
@@ -122,7 +122,7 @@ Returns standard OpenID Connect discovery endpoints.
 
 Access Authentik administration:
 
-```
+```text
 http://localhost:9000/if/admin/
 Username: akadmin
 Password: insecure (default, CHANGE IN PRODUCTION)
@@ -264,7 +264,7 @@ python3 setup_authentik_oauth2.py \
 ```
 
 ### Redirect URI mismatch
-```
+```env
 Error: redirect_uri mismatch
 
 Solution:

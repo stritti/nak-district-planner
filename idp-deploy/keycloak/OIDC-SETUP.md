@@ -105,7 +105,7 @@ VPS deployment orchestration (see "VPS Deployment" section below).
 
 The setup script creates a **Public Client** with these settings:
 
-```
+```text
 Client ID: nak-planner-frontend
 Access Type: Public (no client secret)
 Flow: Authorization Code with PKCE
@@ -121,14 +121,14 @@ Logout URIs:
 
 - **Public Client**: No client_secret stored in browser (secure)
 - **PKCE** (RFC 7636): Proof Key for Public Clients prevents authorization code interception
-- **Frontend Benefits**: 
+- **Frontend Benefits**:
   - No backend required to exchange code
   - Code stored securely in sessionStorage
   - Resilient to CSRF attacks
 
 ### OIDC Discovery Endpoint
 
-```
+```text
 GET http://localhost:8080/realms/nak-planner/.well-known/openid-configuration
 ```
 
@@ -143,7 +143,7 @@ Returns:
 
 ### Access Admin Console
 
-```
+```env
 http://localhost:8080/admin/
 Username: admin
 Password: (from .env KC_BOOTSTRAP_ADMIN_PASSWORD)
@@ -289,7 +289,7 @@ python3 setup_keycloak_realm.py \
 ```
 
 ### Frontend redirect_uri mismatch
-```
+```env
 Error: redirect_uri mismatch
 
 Solution:

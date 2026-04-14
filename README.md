@@ -322,7 +322,7 @@ docker exec -i nak-district-planner-db-1 \
 
 ## Projektstruktur (Kurzübersicht)
 
-```
+```text
 nak-district-planner/
 ├── docker-compose.yml           # Produktion
 ├── docker-compose.override.yml  # Dev-Ergänzungen (automatisch)

@@ -56,7 +56,7 @@ SECRET_KEY=$(openssl rand -base64 32)
 Both IDPs provide these standard endpoints:
 
 ### Keycloak Endpoints
-```
+```text
 Discovery: http://localhost:8080/realms/nak-planner/.well-known/openid-configuration
 Authorization: http://localhost:8080/realms/nak-planner/protocol/openid-connect/auth
 Token: http://localhost:8080/realms/nak-planner/protocol/openid-connect/token
@@ -66,7 +66,7 @@ JWKS: http://localhost:8080/realms/nak-planner/protocol/openid-connect/certs
 ```
 
 ### Authentik Endpoints
-```
+```text
 Discovery: http://localhost:9000/application/o/.well-known/openid-configuration
 Authorization: http://localhost:9000/application/o/authorize/
 Token: http://localhost:9000/application/o/token/
@@ -102,7 +102,7 @@ await login()  // Redirects to either Keycloak or Authentik
 
 ## Directory Structure
 
-```
+```text
 idp-deploy/
 ├── keycloak/
 │   ├── docker-compose.yml          # Dev-optimized
