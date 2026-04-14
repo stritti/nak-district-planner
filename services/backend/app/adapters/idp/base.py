@@ -25,4 +25,5 @@ class IdpProvisioner(Protocol):
         role: str,
         scope_type: str,
         scope_id: str,
-    ) -> IdpProvisionResult: ...
+    ) -> IdpProvisionResult:
+        pass
