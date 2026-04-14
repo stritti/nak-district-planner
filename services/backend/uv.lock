@@ -1016,7 +1016,7 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.62b0" },
     { name = "opentelemetry-instrumentation-sqlalchemy", specifier = ">=0.46b0" },
     { name = "opentelemetry-sdk", specifier = ">=1.25" },
-    { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7" },
+    { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7.4" },
     { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.2" },
