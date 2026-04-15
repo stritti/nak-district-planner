@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       release_as:
@@ -18,7 +21,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ── Step 1: Manage the Release PR and create the GitHub Release ────────────
   release-please:
     name: Create Release PR / GitHub Release
     runs-on: ubuntu-latest
@@ -26,10 +28,8 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
-
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -37,8 +37,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          release-as: ${{ github.event.inputs.release_as }}
 
-  # ── Step 2: Build & publish versioned Docker images after a release ────────
   release-docker:
     name: Build & Publish Release Docker Images
     needs: release-please
@@ -58,7 +58,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Backend ────────────────────────────────────────────────────────────
       - name: Extract Docker metadata (backend)
         id: meta-backend
         uses: docker/metadata-action@v6
@@ -80,7 +79,6 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
-      # ── Frontend ───────────────────────────────────────────────────────────
       - name: Extract Docker metadata (frontend)
         id: meta-frontend
         uses: docker/metadata-action@v6

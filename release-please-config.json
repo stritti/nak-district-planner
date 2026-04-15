@@ -6,6 +6,7 @@
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
+      "skip-release-pulls": true,
       "extra-files": [
         "services/frontend/package.json",
         {
