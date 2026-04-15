@@ -1,9 +1,12 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      release_as:
+        description: 'Release version (e.g., 0.2.0). Leave empty for auto-detection.'
+        required: false
+        type: string
 
 permissions:
   contents: write
