@@ -63,7 +63,6 @@ const oidc = useOIDC(router)
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
-// Task 9.6: Loading-State during Discovery
 async function handleLogin() {
   try {
     error.value = null

@@ -34,7 +34,6 @@ const mainClass = computed(() => {
   return 'max-w-7xl mx-auto px-4 py-6'
 })
 
-// Task 6.3: Initialize useOIDC in component context, passing router to avoid inject issues
 const oidc = useOIDC(router)
 
 // Restore token from persisted store
