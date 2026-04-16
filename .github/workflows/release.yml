@@ -2,100 +2,171 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (e.g., 0.2.0). Only used for manual runs.'
-        required: false
-        type: string
+    branches:
+      - main
 
 permissions:
   contents: write
   packages: write
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+env:
+  NODE_VERSION: '24'
 
 jobs:
   release:
-    name: Create Release
+    name: Analyze Commits & Create Release
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_release: ${{ steps.check.outputs.should_release }}
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Determine version
+      - name: Get latest tag
+        id: latest_tag
+        run: |
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$TAG" ]; then
+            TAG="v0.0.0"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Install changelog tools
+        run: |
+          npm install -g conventional-changelog-conventionalcommits
+
+      - name: Analyze commits
+        id: check
+        run: |
+          COMMITS=$(git log ${{ steps.latest_tag.outputs.tag }}..HEAD --format="%s" | head -100)
+          echo "Commits since last release:"
+          echo "$COMMITS"
+          echo "---"
+
+          # Parse commits for conventional commit types
+          FEAT=false
+          FIX=false
+          BREAKING=false
+
+          while IFS= read -r msg; do
+            if echo "$msg" | grep -qi "^feat"; then FEAT=true; fi
+            if echo "$msg" | grep -qi "^fix"; then FIX=true; fi
+            if echo "$msg" | grep -qi "BREAKING CHANGE\|!:\|breaking change"; then BREAKING=true; fi
+          done <<< "$COMMITS"
+
+          echo "feat=$FEAT" >> $GITHUB_OUTPUT
+          echo "fix=$FIX" >> $GITHUB_OUTPUT
+          echo "breaking=$BREAKING" >> $GITHUB_OUTPUT
+
+          # Determine if we should release
+          SHOULD_RELEASE="false"
+          if [ "$BREAKING" = true ] || [ "$FEAT" = true ] || [ "$FIX" = true ]; then
+            SHOULD_RELEASE="true"
+          fi
+          echo "should_release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
+
+      - name: Calculate next version
         id: version
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION="${GITHUB_REF#refs/tags/v}"
+          CURRENT=${{ steps.latest_tag.outputs.tag }}
+          VERSION="${CURRENT#v}"
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+
+          if [ "${{ steps.check.outputs.breaking }}" = true ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "${{ steps.check.outputs.feat }}" = true ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          elif [ "${{ steps.check.outputs.fix }}" = true ]; then
+            PATCH=$((PATCH + 1))
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Update version in package.json
-        run: node -e "const pkg=require('./package.json'); pkg.version='${{ steps.version.outputs.version }}'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2)+'\n');"
-
-      - name: Update version in services/frontend/package.json
-        run: node -e "const pkg=require('./services/frontend/package.json'); pkg.version='${{ steps.version.outputs.version }}'; require('fs').writeFileSync('./services/frontend/package.json', JSON.stringify(pkg, null, 2)+'\n');"
-
-      - name: Update version in services/backend/pyproject.toml
-        run: |
-          sed -i 's/^version = ".*"/version = "${{ steps.version.outputs.version }}"/' services/backend/pyproject.toml
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "current=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Generate changelog
         run: |
-          if [ -f CHANGELOG.md ]; then
-            node -e "
-              const fs = require('fs');
-              const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
-              const version = '${{ steps.version.outputs.version }}';
-              const date = new Date().toISOString().split('T')[0];
-              const header = '## [${{ steps.version.outputs.tag }}] - $date\n\n';
-              const newContent = header + changelog;
-              fs.writeFileSync('CHANGELOG.md', newContent);
-            "
-          fi
+          npx conventional-changelog-conventionalcommits \
+            --preset conventionalcommits \
+            --infile CHANGELOG.md \
+            --release-count 1 \
+            --tag-prefix v
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          body_path: CHANGELOG.md
-          draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update versions
+        run: |
+          NEW_VER="${{ steps.version.outputs.version }}"
+          
+          # Update root package.json
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            pkg.version = '$NEW_VER';
+            fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
 
-      - name: Commit version updates
+          # Update services/frontend/package.json
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('./services/frontend/package.json', 'utf8'));
+            pkg.version = '$NEW_VER';
+            fs.writeFileSync('./services/frontend/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+          # Update services/backend/pyproject.toml
+          sed -i "s/^version = \".*\"/version = \"$NEW_VER\"/" services/backend/pyproject.toml
+
+      - name: Create Release Commit and Tag
+        if: steps.check.outputs.should_release == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add package.json services/frontend/package.json services/backend/pyproject.toml CHANGELOG.md
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}" || true
-          git push
 
-  release-docker:
-    name: Build & Publish Docker Images
+          TAG="${{ steps.version.outputs.tag }}"
+          
+          # Stage all changes
+          git add -A
+          
+          # Commit
+          git commit -m "chore: release $TAG"
+          
+          # Create tag
+          git tag -a "$TAG" -m "Release $TAG"
+          
+          # Push with tags (use CI skip to prevent loops)
+          git push origin main --follow-tags
+
+  docker-build:
+    name: Build Docker Images
     needs: release
+    if: needs.release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
         service: [backend, frontend]
+        include:
+          - service: backend
+            context: services/backend
+          - service: frontend
+            context: services/frontend
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release.outputs.tag }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -121,7 +192,7 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
-          context: services/${{ matrix.service }}
+          context: ${{ matrix.context }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
