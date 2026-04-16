@@ -74,12 +74,12 @@ Run comprehensive quality checks to verify code changes.
 
 **Output On Success**
 
-```
+```text
 ## Quality Checks ✓
 
 **Backend:**
 - ruff check:       OK
-- ruff format:      OK  
+- ruff format:      OK
 - pytest:           OK (N tests passed)
 - bandit:           OK (0 issues)
 
@@ -96,7 +96,7 @@ All checks passed!
 
 **Output On Failure**
 
-```
+```text
 ## Quality Checks ✗
 
 **Backend:**

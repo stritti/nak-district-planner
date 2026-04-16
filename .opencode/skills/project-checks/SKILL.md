@@ -47,7 +47,7 @@ Run fast project quality checks to verify code changes. Use `quality-checks` ski
 
 **Output On Success**
 
-```
+```text
 ## Project Checks ✓
 
 **Backend:**
@@ -68,7 +68,7 @@ All checks passed!
 
 **Output On Failure**
 
-```
+```text
 ## Project Checks ✗
 
 **Backend:**

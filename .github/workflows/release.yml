@@ -48,7 +48,7 @@ jobs:
         id: check
         run: |
           TAG="${{ steps.latest_tag.outputs.tag }}"
-          
+
           # Get commits since last tag or since beginning
           if [ "$TAG" = "HEAD" ] || ! git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "No previous tag found, analyzing all commits"
@@ -56,7 +56,7 @@ jobs:
           else
             COMMITS=$(git log "$TAG..HEAD" --format="%s" | head -100)
           fi
-          
+
           echo "Commits since last release:"
           echo "$COMMITS"
           echo "---"
@@ -88,7 +88,7 @@ jobs:
         id: version
         run: |
           TAG="${{ steps.latest_tag.outputs.tag }}"
-          
+
           # Try to extract version from tag
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             CURRENT="${TAG#v}"
@@ -137,7 +137,7 @@ jobs:
           # Create a basic changelog entry
           TAG="${{ steps.version.outputs.tag }}"
           DATE=$(date +%Y-%m-%d)
-          
+
           {
             echo "## [$TAG] - $DATE"
             echo ""
@@ -150,11 +150,11 @@ jobs:
             echo "### Other Changes"
             git log --format="* %s (%h)" | grep -vi "^.*feat\|^.*fix" | head -10 || echo "* (None)"
           } > release_notes.md
-          
+
           # Read and escape for output
           CONTENT=$(cat release_notes.md | head -30 | tr '\n' ' ' | sed 's/"/\\"/g')
           echo "content=$CONTENT" >> $GITHUB_OUTPUT
-          
+
           # Prepend to CHANGELOG.md
           {
             cat release_notes.md
@@ -167,7 +167,7 @@ jobs:
         if: steps.check.outputs.should_release == 'true'
         run: |
           NEW_VER="${{ steps.version.outputs.version }}"
-          
+
           # Update root package.json
           node -e "
             const fs = require('fs');
@@ -194,16 +194,16 @@ jobs:
           git config --local user.name "github-actions[bot]"
 
           TAG="${{ steps.version.outputs.tag }}"
-          
+
           # Stage all changes
           git add -A
-          
+
           # Commit
           git commit -m "chore: release $TAG"
-          
+
           # Create tag
           git tag -a "$TAG" -m "Release $TAG"
-          
+
           # Push with tags
           git push origin main --follow-tags
 
