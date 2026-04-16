@@ -38,6 +38,7 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           release-as: ${{ github.event.inputs.release_as }}
+          skip-release-pulls: true
 
   release-docker:
     name: Build & Publish Release Docker Images
