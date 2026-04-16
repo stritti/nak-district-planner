@@ -2,18 +2,17 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
-      release_as:
-        description: 'Release version (e.g., 0.2.0). Leave empty for auto-detection.'
+      version:
+        description: 'Version to release (e.g., 0.2.0). Only used for manual runs.'
         required: false
         type: string
 
 permissions:
   contents: write
-  pull-requests: write
   packages: write
 
 concurrency:
@@ -21,30 +20,79 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-please:
-    name: Create Release PR / GitHub Release
+  release:
+    name: Create Release
     runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          release-as: ${{ github.event.inputs.release_as }}
-          skip-release-pulls: true
+          node-version: '24'
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update version in package.json
+        run: node -e "const pkg=require('./package.json'); pkg.version='${{ steps.version.outputs.version }}'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2)+'\n');"
+
+      - name: Update version in services/frontend/package.json
+        run: node -e "const pkg=require('./services/frontend/package.json'); pkg.version='${{ steps.version.outputs.version }}'; require('fs').writeFileSync('./services/frontend/package.json', JSON.stringify(pkg, null, 2)+'\n');"
+
+      - name: Update version in services/backend/pyproject.toml
+        run: |
+          sed -i 's/^version = ".*"/version = "${{ steps.version.outputs.version }}"/' services/backend/pyproject.toml
+
+      - name: Generate changelog
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            node -e "
+              const fs = require('fs');
+              const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+              const version = '${{ steps.version.outputs.version }}';
+              const date = new Date().toISOString().split('T')[0];
+              const header = '## [${{ steps.version.outputs.tag }}] - $date\n\n';
+              const newContent = header + changelog;
+              fs.writeFileSync('CHANGELOG.md', newContent);
+            "
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit version updates
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add package.json services/frontend/package.json services/backend/pyproject.toml CHANGELOG.md
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}" || true
+          git push
 
   release-docker:
-    name: Build & Publish Release Docker Images
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    name: Build & Publish Docker Images
+    needs: release
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [backend, frontend]
 
     steps:
       - uses: actions/checkout@v6
@@ -59,44 +107,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata (backend)
-        id: meta-backend
+      - name: Extract Docker metadata
+        id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}/backend
+          images: ghcr.io/${{ github.repository }}/${{ matrix.service }}
           tags: |
-            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.version }}
-            type=semver,pattern={{major}},value=${{ needs.release-please.outputs.version }}
+            type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.release.outputs.version }}
             type=raw,value=latest
 
-      - name: Build and push backend image
+      - name: Build and push image
         uses: docker/build-push-action@v7
         with:
-          context: services/backend
+          context: services/${{ matrix.service }}
           push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
-
-      - name: Extract Docker metadata (frontend)
-        id: meta-frontend
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository }}/frontend
-          tags: |
-            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.version }}
-            type=semver,pattern={{major}},value=${{ needs.release-please.outputs.version }}
-            type=raw,value=latest
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v7
-        with:
-          context: services/frontend
-          push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
