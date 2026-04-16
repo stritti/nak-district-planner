@@ -1,13 +1,13 @@
 ---
 name: project-checks
-description: Run project quality checks after code changes. Executes linting, type checking, and tests for both backend and frontend.
+description: Run fast project quality checks after code changes. Executes Ruff, ESLint, type checking, and tests for both backend and frontend.
 license: MIT
 metadata:
   author: Claude
-  version: "1.0"
+  version: "2.0"
 ---
 
-Run project quality checks to verify code changes.
+Run fast project quality checks to verify code changes. Use `quality-checks` skill for comprehensive checks including MegaLinter, Bandit, and Docker.
 
 **Input**: None required. Checks both backend and frontend.
 
@@ -16,18 +16,24 @@ Run project quality checks to verify code changes.
 1. **Backend Checks (services/backend/)**
 
    Run these commands:
-   - `uv run ruff check app/` — Python linting
-   - `uv run ruff format --check app/` — Python formatting
+   - `uv run ruff check app/ tests/` — Python linting
+   - `uv run ruff format --check app/ tests/` — Python formatting
    - `uv run pytest tests/unit/ -v` — Unit tests
 
 2. **Frontend Checks (services/frontend/)**
 
    Run these commands:
    - `bun run lint` — ESLint for Vue/TypeScript
-   - `bunx vue-tsc --noEmit` — TypeScript type checking
+   - `bun run build` — TypeScript + Vue build check
    - `bun run test` — Vitest unit tests
 
-3. **Aggregate Results**
+3. **Docker Compose Validation**
+
+   ```bash
+   docker compose config --quiet
+   ```
+
+4. **Aggregate Results**
 
    If any check fails:
    - Display which checks failed
@@ -45,13 +51,17 @@ Run project quality checks to verify code changes.
 ## Project Checks ✓
 
 **Backend:**
-- ruff:     OK
-- pytest:   OK (N tests passed)
+- ruff check:       OK
+- ruff format:      OK
+- pytest:          OK (N tests passed)
 
 **Frontend:**
-- ESLint:   OK
-- vue-tsc:  OK
-- vitest:   OK (N tests passed)
+- ESLint:           OK
+- build:            OK
+- Vitest:           OK (N tests passed)
+
+**Infrastructure:**
+- Docker Compose:   OK
 
 All checks passed!
 ```
@@ -62,19 +72,21 @@ All checks passed!
 ## Project Checks ✗
 
 **Backend:**
-- ruff:     ✗ FAILED
-- pytest:   OK/PASSED
+- ruff check:       ✗ FAILED
+- pytest:           OK (N tests passed)
 
 **Frontend:**
-- ESLint:   OK/PASSED
-- vue-tsc:  ✗ FAILED
-- vitest:   OK/PASSED
+- ESLint:           ✗ FAILED
+- build:            OK
 
-Failed checks: ruff, vue-tsc
+**Infrastructure:**
+- Docker Compose:    OK
+
+Failed checks: ruff check, ESLint
 
 Run the following for details:
-  cd services/backend && uv run ruff check app/
-  cd services/frontend && bunx vue-tsc --noEmit
+  cd services/backend && uv run ruff check app/ tests/
+  cd services/frontend && bun run lint
 ```
 
 **Guardrails**
