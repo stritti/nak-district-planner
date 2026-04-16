@@ -19,6 +19,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       should_release: ${{ steps.check.outputs.should_release }}
+      changelog_content: ${{ steps.changelog.outputs.content }}
 
     steps:
       - uses: actions/checkout@v4
@@ -33,20 +34,29 @@ jobs:
       - name: Get latest tag
         id: latest_tag
         run: |
+          # Get the most recent tag or first commit if no tags
           TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$TAG" ]; then
-            TAG="v0.0.0"
+            # No tags exist - use first commit
+            TAG=$(git rev-list --max-parents=0 HEAD --format="%(refname:short)" 2>/dev/null | head -1)
+            [ -z "$TAG" ] && TAG="HEAD"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Install changelog tools
-        run: |
-          npm install -g conventional-changelog-conventionalcommits
+          echo "has_tags=true" >> $GITHUB_OUTPUT
 
       - name: Analyze commits
         id: check
         run: |
-          COMMITS=$(git log ${{ steps.latest_tag.outputs.tag }}..HEAD --format="%s" | head -100)
+          TAG="${{ steps.latest_tag.outputs.tag }}"
+          
+          # Get commits since last tag or since beginning
+          if [ "$TAG" = "HEAD" ] || ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "No previous tag found, analyzing all commits"
+            COMMITS=$(git log --format="%s" | head -100)
+          else
+            COMMITS=$(git log "$TAG..HEAD" --format="%s" | head -100)
+          fi
+          
           echo "Commits since last release:"
           echo "$COMMITS"
           echo "---"
@@ -57,6 +67,7 @@ jobs:
           BREAKING=false
 
           while IFS= read -r msg; do
+            [ -z "$msg" ] && continue
             if echo "$msg" | grep -qi "^feat"; then FEAT=true; fi
             if echo "$msg" | grep -qi "^fix"; then FIX=true; fi
             if echo "$msg" | grep -qi "BREAKING CHANGE\|!:\|breaking change"; then BREAKING=true; fi
@@ -66,8 +77,8 @@ jobs:
           echo "fix=$FIX" >> $GITHUB_OUTPUT
           echo "breaking=$BREAKING" >> $GITHUB_OUTPUT
 
-          # Determine if we should release
-          SHOULD_RELEASE="false"
+          # Determine if we should release (default to true if we have any significant commits)
+          SHOULD_RELEASE="true"
           if [ "$BREAKING" = true ] || [ "$FEAT" = true ] || [ "$FIX" = true ]; then
             SHOULD_RELEASE="true"
           fi
@@ -76,11 +87,26 @@ jobs:
       - name: Calculate next version
         id: version
         run: |
-          CURRENT=${{ steps.latest_tag.outputs.tag }}
-          VERSION="${CURRENT#v}"
-          MAJOR=$(echo $VERSION | cut -d. -f1)
-          MINOR=$(echo $VERSION | cut -d. -f2)
-          PATCH=$(echo $VERSION | cut -d. -f3)
+          TAG="${{ steps.latest_tag.outputs.tag }}"
+          
+          # Try to extract version from tag
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            CURRENT="${TAG#v}"
+            # Check if it looks like a semver
+            if echo "$CURRENT" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+              MAJOR=$(echo $CURRENT | cut -d. -f1)
+              MINOR=$(echo $CURRENT | cut -d. -f2)
+              PATCH=$(echo $CURRENT | cut -d. -f3)
+            else
+              MAJOR=0
+              MINOR=0
+              PATCH=0
+            fi
+          else
+            MAJOR=0
+            MINOR=0
+            PATCH=0
+          fi
 
           if [ "${{ steps.check.outputs.breaking }}" = true ]; then
             MAJOR=$((MAJOR + 1))
@@ -91,22 +117,54 @@ jobs:
             PATCH=0
           elif [ "${{ steps.check.outputs.fix }}" = true ]; then
             PATCH=$((PATCH + 1))
+          else
+            # No significant changes - patch bump
+            PATCH=$((PATCH + 1))
           fi
 
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "current=$VERSION" >> $GITHUB_OUTPUT
+          echo "current=$MAJOR.$MINOR.$PATCH" >> $GITHUB_OUTPUT
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Generate changelog
+      - name: Install changelog generator
         run: |
-          npx conventional-changelog-conventionalcommits \
-            --preset conventionalcommits \
-            --infile CHANGELOG.md \
-            --release-count 1 \
-            --tag-prefix v
+          npm install -g changelogen
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Create a basic changelog entry
+          TAG="${{ steps.version.outputs.tag }}"
+          DATE=$(date +%Y-%m-%d)
+          
+          {
+            echo "## [$TAG] - $DATE"
+            echo ""
+            echo "### Features"
+            git log --format="* %s (%h)" | grep -i "^.*feat" | head -10 || echo "* (None)"
+            echo ""
+            echo "### Bug Fixes"
+            git log --format="* %s (%h)" | grep -i "^.*fix" | head -10 || echo "* (None)"
+            echo ""
+            echo "### Other Changes"
+            git log --format="* %s (%h)" | grep -vi "^.*feat\|^.*fix" | head -10 || echo "* (None)"
+          } > release_notes.md
+          
+          # Read and escape for output
+          CONTENT=$(cat release_notes.md | head -30 | tr '\n' ' ' | sed 's/"/\\"/g')
+          echo "content=$CONTENT" >> $GITHUB_OUTPUT
+          
+          # Prepend to CHANGELOG.md
+          {
+            cat release_notes.md
+            echo ""
+            cat CHANGELOG.md 2>/dev/null || echo "# Changelog"
+          } > CHANGELOG_NEW.md
+          mv CHANGELOG_NEW.md CHANGELOG.md
 
       - name: Update versions
+        if: steps.check.outputs.should_release == 'true'
         run: |
           NEW_VER="${{ steps.version.outputs.version }}"
           
@@ -146,7 +204,7 @@ jobs:
           # Create tag
           git tag -a "$TAG" -m "Release $TAG"
           
-          # Push with tags (use CI skip to prevent loops)
+          # Push with tags
           git push origin main --follow-tags
 
   docker-build:
