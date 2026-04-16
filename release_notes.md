@@ -1,4 +1,4 @@
-## [v0.1.0] - 2026-04-16
+## [v0.1.1] - 2026-04-16
 
 ### Features
 * feat: add pluggable IDP provisioning layer (63d5e66)
@@ -13,6 +13,7 @@
 * feat: enhance OIDC authentication with multi-strategy token validation and configurable logging (441acb8)
 
 ### Bug Fixes
+* fix(ci): add timezone import and enhance quality-check skills (fe58787)
 * fix(ci): fix release workflow issues (1866464)
 * fix(ci): complete rewrite of release workflow with conventional commits (1f8cd3b)
 * fix(ci): switch to tag-based releases (b18d75c)
@@ -22,9 +23,9 @@
 * fix: remove ignore (074ebdb)
 * fix: synchronize active district selection across admin views (8a46758)
 * fix: allow replacing and clearing matrix assignments (9ff2072)
-* fix(release): use PAT token for release-please and opt into Node.js 24 (#61) (29ceb22)
 
 ### Other Changes
+* chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
 * cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
@@ -34,4 +35,3 @@
 * build(deps-dev): Bump typescript-eslint in /services/frontend (#74) (0a0b536)
 * chore: standardize markdown formatting and update documentation references across the repository (a75b6a9)
 * chore: clean up whitespace and update yamllint configuration (ba4f5bf)
-* chore: update release-please token to use GITHUB_TOKEN (3936d60)
