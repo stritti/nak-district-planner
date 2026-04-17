@@ -1,6 +1,7 @@
-## [v0.1.3] - 2026-04-17
+## [v0.2.0] - 2026-04-17
 
 ### Features
+* feat: add checks skill for code quality verification (eadd177)
 * feat: add pluggable IDP provisioning layer (63d5e66)
 * feat: add approval-based IDP onboarding and pending alerts (06b84c3)
 * feat: add openspec configuration for auto-generating 8-week draft services (a0565a6)
@@ -10,7 +11,6 @@
 * feat: add draft generation and matrix move workflow (e45f958)
 * feat: add event-based invitation workflow in service matrix (6875958)
 * feat: add state variables for self-linking leaders in LeadersAdminView (e33f6b6)
-* feat: enhance OIDC authentication with multi-strategy token validation and configurable logging (441acb8)
 
 ### Bug Fixes
 * fix(ci): remove trailing spaces and fix markdown lint issues (d06e62b)
@@ -25,6 +25,7 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* chore: release v0.1.3 (3fd5b7e)
 * Merge branch 'main' of github.com:stritti/nak-district-planner (2cd035f)
 * docs: expand developer guide with installation, environment usage, and security aspects (0b606c7)
 * chore: release v0.1.2 (f5abcc4)
@@ -34,4 +35,3 @@
 * cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
-* build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
