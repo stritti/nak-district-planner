@@ -1,4 +1,4 @@
-## [v0.1.1] - 2026-04-16
+## [v0.1.2] - 2026-04-16
 
 ### Features
 * feat: add pluggable IDP provisioning layer (63d5e66)
@@ -13,6 +13,7 @@
 * feat: enhance OIDC authentication with multi-strategy token validation and configurable logging (441acb8)
 
 ### Bug Fixes
+* fix(ci): remove trailing spaces and fix markdown lint issues (d06e62b)
 * fix(ci): add timezone import and enhance quality-check skills (fe58787)
 * fix(ci): fix release workflow issues (1866464)
 * fix(ci): complete rewrite of release workflow with conventional commits (1f8cd3b)
@@ -22,9 +23,9 @@
 * fix(ci): change release workflow trigger from push to workflow_dispatch (d24686b)
 * fix: remove ignore (074ebdb)
 * fix: synchronize active district selection across admin views (8a46758)
-* fix: allow replacing and clearing matrix assignments (9ff2072)
 
 ### Other Changes
+* chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
 * cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
@@ -34,4 +35,3 @@
 * build(deps-dev): Update setuptools requirement in /services/backend (#76) (5cdb2d0)
 * build(deps-dev): Bump typescript-eslint in /services/frontend (#74) (0a0b536)
 * chore: standardize markdown formatting and update documentation references across the repository (a75b6a9)
-* chore: clean up whitespace and update yamllint configuration (ba4f5bf)
