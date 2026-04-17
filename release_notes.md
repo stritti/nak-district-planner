@@ -1,4 +1,4 @@
-## [v0.1.2] - 2026-04-16
+## [v0.1.3] - 2026-04-17
 
 ### Features
 * feat: add pluggable IDP provisioning layer (63d5e66)
@@ -25,6 +25,9 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* Merge branch 'main' of github.com:stritti/nak-district-planner (2cd035f)
+* docs: expand developer guide with installation, environment usage, and security aspects (0b606c7)
+* chore: release v0.1.2 (f5abcc4)
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
@@ -32,6 +35,3 @@
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
-* build(deps-dev): Update setuptools requirement in /services/backend (#76) (5cdb2d0)
-* build(deps-dev): Bump typescript-eslint in /services/frontend (#74) (0a0b536)
-* chore: standardize markdown formatting and update documentation references across the repository (a75b6a9)
