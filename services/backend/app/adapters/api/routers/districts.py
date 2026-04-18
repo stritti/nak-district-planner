@@ -349,18 +349,27 @@ async def get_matrix(
     district_id: uuid.UUID,
     _: CurrentUser,
     db: DbSession,
-    from_dt: datetime = Query(...),
-    to_dt: datetime = Query(...),
+    from_dt: datetime | None = Query(None),
+    to_dt: datetime | None = Query(None),
     group_id: uuid.UUID | None = Query(None),
 ) -> MatrixResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
 
+    now = datetime.now(timezone.utc)
+    effective_from_dt = from_dt or now
+    effective_to_dt = to_dt or (effective_from_dt + timedelta(days=28))
+    if effective_to_dt < effective_from_dt:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="to_dt muss groesser oder gleich from_dt sein",
+        )
+
     congregations = await SqlCongregationRepository(db).list_by_district(
         district_id, group_id=group_id
     )
-    from_date = from_dt.date()
-    to_date = to_dt.date()
+    from_date = effective_from_dt.date()
+    to_date = effective_to_dt.date()
 
     # Compute expected Gottesdienst-Dates per congregation from their schedule
     expected_by_cong: dict[uuid.UUID, list[str]] = {
@@ -370,8 +379,8 @@ async def get_matrix(
     # Load all events for the district in the date range (single query)
     events, _ = await SqlEventRepository(db).list(
         district_id=district_id,
-        from_dt=from_dt,
-        to_dt=to_dt,
+        from_dt=effective_from_dt,
+        to_dt=effective_to_dt,
         limit=5000,
         offset=0,
     )

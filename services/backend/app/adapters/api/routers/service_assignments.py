@@ -124,3 +124,30 @@ async def update_assignment(
     assignment.updated_at = datetime.now(timezone.utc)
     await repo.save(assignment)
     return _assignment_response(assignment)
+
+
+@router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_assignment(
+    event_id: uuid.UUID,
+    assignment_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+) -> None:
+    repo = SqlServiceAssignmentRepository(db)
+    assignment = await repo.get(assignment_id)
+    if not assignment or assignment.event_id != event_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
+        )
+
+    event_repo = SqlEventRepository(db)
+    event = await event_repo.get(assignment.event_id)
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    await repo.delete(assignment_id)
