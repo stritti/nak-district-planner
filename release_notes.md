@@ -1,4 +1,4 @@
-## [v0.2.7] - 2026-04-19
+## [v0.2.8] - 2026-04-19
 
 ### Features
 * feat: add checks skill for code quality verification (eadd177)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* build(deps): Bump authlib (#91) (8a9119f)
+* chore: release v0.2.7 (fd60fe3)
 * build(deps): Update celery[sqlalchemy] requirement in /services/backend (#86) (3c8fed3)
 * chore: release v0.2.6 (fbfa5af)
 * build(deps): Bump actions/checkout from 4 to 6 (#85) (0bd1ef6)
@@ -33,5 +35,3 @@
 * chore: release v0.2.4 (3947c9b)
 * build(deps): Update passlib[bcrypt] requirement in /services/backend (#82) (a6a5657)
 * chore: release v0.2.3 (bb58188)
-* build(deps): Bump vue from 3.5.31 to 3.5.32 in /services/frontend (#81) (240511c)
-* chore: release v0.2.2 (fa81fa1)
