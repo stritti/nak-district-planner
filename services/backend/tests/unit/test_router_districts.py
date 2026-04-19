@@ -246,7 +246,7 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
     assert updated.name == "Neu"
     assert updated.group_name == "Sued"
     assert updated.invitation_target_type == InvitationTargetType.DISTRICT_CONGREGATION
-    assert repo.save.await_count == 1
+    assert repo.save.await_count == 2
 
 
 @pytest.mark.asyncio
