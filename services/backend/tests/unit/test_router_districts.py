@@ -181,7 +181,8 @@ async def test_create_congregation_sets_group_name_when_group_matches_district()
         cong_repo = AsyncMock()
         cong_repo_cls.return_value = cong_repo
 
-        group = MagicMock(id=group_id, name="Nord", district_id=district_id)
+        group = CongregationGroup.create(name="Nord", district_id=district_id)
+        group.id = group_id
         group_repo = AsyncMock()
         group_repo.get.return_value = group
         group_repo_cls.return_value = group_repo
@@ -212,7 +213,8 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
         repo.get.return_value = congregation
         repo_cls.return_value = repo
 
-        group = MagicMock(id=group_id, name="Sued", district_id=district_id)
+        group = CongregationGroup.create(name="Sued", district_id=district_id)
+        group.id = group_id
         group_repo = AsyncMock()
         group_repo.get.return_value = group
         group_repo_cls.return_value = group_repo
@@ -226,6 +228,15 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
                 group_id=group_id,
                 invitation_target_type=InvitationTargetType.DISTRICT_CONGREGATION,
                 invitation_target_congregation_id=uuid.uuid4(),
+            ),
+            object(),
+            AsyncMock(),
+        )
+        await r.update_congregation(
+            district_id,
+            congregation.id,
+            CongregationUpdate(
+                invitation_target_type=InvitationTargetType.EXTERNAL_NOTE,
                 invitation_external_note="Hinweis",
             ),
             object(),

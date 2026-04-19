@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.adapters.api.routers import auth as r
-from app.domain.models.membership import Membership
+from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
 
 
@@ -38,7 +38,7 @@ async def test_get_access_context_for_memberships_and_pending_approval() -> None
             Membership.create(
                 user_sub="user-sub",
                 role=Role.PLANNER,
-                scope_type=Role.ScopeType.DISTRICT,
+                scope_type=ScopeType.DISTRICT,
                 scope_id=district_id,
             )
         ],
