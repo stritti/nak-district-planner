@@ -1,4 +1,4 @@
-## [v0.2.9] - 2026-04-19
+## [v0.2.10] - 2026-04-19
 
 ### Features
 * feat: add checks skill for code quality verification (eadd177)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* build(deps-dev): Bump eslint from 10.0.3 to 10.2.1 in /services/frontend (#88) (f0a5bc5)
+* chore: release v0.2.9 (698f1b3)
 * build(deps): Update pydantic[email] requirement in /services/backend (#89) (572b7ef)
 * chore: release v0.2.8 (ea072cf)
 * build(deps): Bump authlib (#91) (8a9119f)
@@ -33,5 +35,3 @@
 * chore: release v0.2.6 (fbfa5af)
 * build(deps): Bump actions/checkout from 4 to 6 (#85) (0bd1ef6)
 * chore: release v0.2.5 (c03a9f8)
-* build(deps): Bump actions/setup-node from 4 to 6 (#84) (5951602)
-* chore: release v0.2.4 (3947c9b)
