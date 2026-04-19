@@ -1,4 +1,4 @@
-## [v0.2.4] - 2026-04-19
+## [v0.2.5] - 2026-04-19
 
 ### Features
 * feat: add checks skill for code quality verification (eadd177)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* build(deps): Bump actions/setup-node from 4 to 6 (#84) (5951602)
+* chore: release v0.2.4 (3947c9b)
 * build(deps): Update passlib[bcrypt] requirement in /services/backend (#82) (a6a5657)
 * chore: release v0.2.3 (bb58188)
 * build(deps): Bump vue from 3.5.31 to 3.5.32 in /services/frontend (#81) (240511c)
@@ -33,5 +35,3 @@
 * chore: release v0.2.1 (7f1f6af)
 * build(deps-dev): Bump pytest from 9.0.2 to 9.0.3 in /services/backend (#71) (9f8c92b)
 * chore: release v0.2.0 (0b05755)
-* chore: release v0.1.3 (3fd5b7e)
-* Merge branch 'main' of github.com:stritti/nak-district-planner (2cd035f)
