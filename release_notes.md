@@ -1,4 +1,4 @@
-## [v0.2.6] - 2026-04-19
+## [v0.2.7] - 2026-04-19
 
 ### Features
 * feat: add checks skill for code quality verification (eadd177)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* build(deps): Update celery[sqlalchemy] requirement in /services/backend (#86) (3c8fed3)
+* chore: release v0.2.6 (fbfa5af)
 * build(deps): Bump actions/checkout from 4 to 6 (#85) (0bd1ef6)
 * chore: release v0.2.5 (c03a9f8)
 * build(deps): Bump actions/setup-node from 4 to 6 (#84) (5951602)
@@ -33,5 +35,3 @@
 * chore: release v0.2.3 (bb58188)
 * build(deps): Bump vue from 3.5.31 to 3.5.32 in /services/frontend (#81) (240511c)
 * chore: release v0.2.2 (fa81fa1)
-* build(deps-dev): Bump happy-dom in /services/frontend (#79) (4ef4445)
-* chore: release v0.2.1 (7f1f6af)
