@@ -321,7 +321,71 @@ async def test_get_matrix_defaults_to_4_weeks_when_range_missing() -> None:
     assert result.rows
     call_kwargs = event_repo.list.await_args.kwargs
     assert call_kwargs["to_dt"] > call_kwargs["from_dt"]
-    assert call_kwargs["to_dt"] - call_kwargs["from_dt"] == timedelta(days=28)
+    assert call_kwargs["from_dt"].tzinfo is timezone.utc
+    assert call_kwargs["to_dt"].tzinfo is timezone.utc
+    assert call_kwargs["from_dt"].time() == datetime.min.time()
+    assert call_kwargs["to_dt"].time() == datetime.max.time()
+    assert (call_kwargs["to_dt"].date() - call_kwargs["from_dt"].date()).days == 27
+
+
+@pytest.mark.asyncio
+async def test_get_matrix_derives_from_dt_from_to_dt_when_missing() -> None:
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(name="G", district_id=district_id)
+    db = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlInvitationRepository") as inv_repo_cls,
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        cong_repo = AsyncMock()
+        cong_repo.list_by_district.return_value = [congregation]
+        cong_repo.list_by_ids.return_value = []
+        cong_repo_cls.return_value = cong_repo
+
+        event_repo = AsyncMock()
+        event_repo.list.return_value = ([], 0)
+        event_repo_cls.return_value = event_repo
+
+        sa_repo = AsyncMock()
+        sa_repo.list_by_events.return_value = []
+        sa_repo_cls.return_value = sa_repo
+
+        leader_repo = AsyncMock()
+        leader_repo.list_by_district.return_value = []
+        leader_repo_cls.return_value = leader_repo
+
+        group_repo = AsyncMock()
+        group_repo.list_by_district.return_value = []
+        group_repo_cls.return_value = group_repo
+
+        inv_repo = AsyncMock()
+        inv_repo.list_by_source_events.return_value = []
+        inv_repo_cls.return_value = inv_repo
+
+        await r.get_matrix(
+            district_id,
+            object(),
+            db,
+            from_dt=None,
+            to_dt=datetime(2025, 6, 15, 14, 30, tzinfo=timezone.utc),
+            group_id=None,
+        )
+
+    call_kwargs = event_repo.list.await_args.kwargs
+    assert call_kwargs["to_dt"] == datetime(2025, 6, 15, 14, 30, tzinfo=timezone.utc)
+    assert call_kwargs["from_dt"] == datetime(2025, 5, 19, 0, 0, tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio
@@ -374,8 +438,8 @@ async def test_get_matrix_normalizes_naive_query_datetimes_to_utc() -> None:
             district_id,
             object(),
             db,
-            from_dt=None,
-            to_dt=datetime(2026, 5, 1, 0, 0),
+            from_dt=datetime(2030, 4, 1, 12, 0),
+            to_dt=datetime(2030, 4, 15, 18, 45),
             group_id=None,
         )
 
