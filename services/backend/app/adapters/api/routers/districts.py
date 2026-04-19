@@ -377,7 +377,7 @@ async def get_matrix(
     elif utc_to_dt is None:
         start_date = utc_from_dt.date()
         end_date = start_date + timedelta(days=27)
-        effective_from_dt = utc_from_dt
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
         effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
     else:
         effective_from_dt = utc_from_dt
