@@ -1,6 +1,7 @@
-## [v0.1.3] - 2026-04-17
+## [v0.2.10] - 2026-04-19
 
 ### Features
+* feat: add checks skill for code quality verification (eadd177)
 * feat: add pluggable IDP provisioning layer (63d5e66)
 * feat: add approval-based IDP onboarding and pending alerts (06b84c3)
 * feat: add openspec configuration for auto-generating 8-week draft services (a0565a6)
@@ -10,7 +11,6 @@
 * feat: add draft generation and matrix move workflow (e45f958)
 * feat: add event-based invitation workflow in service matrix (6875958)
 * feat: add state variables for self-linking leaders in LeadersAdminView (e33f6b6)
-* feat: enhance OIDC authentication with multi-strategy token validation and configurable logging (441acb8)
 
 ### Bug Fixes
 * fix(ci): remove trailing spaces and fix markdown lint issues (d06e62b)
@@ -25,13 +25,13 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
-* Merge branch 'main' of github.com:stritti/nak-district-planner (2cd035f)
-* docs: expand developer guide with installation, environment usage, and security aspects (0b606c7)
-* chore: release v0.1.2 (f5abcc4)
-* chore: release v0.1.1 (06b51a0)
-* chore: release v0.1.0 (0b81fb3)
-* chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
-* Add project-checks skill and ruff/vue-tsc dependencies (d876312)
-* build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
-* build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
+* build(deps-dev): Bump eslint from 10.0.3 to 10.2.1 in /services/frontend (#88) (f0a5bc5)
+* chore: release v0.2.9 (698f1b3)
+* build(deps): Update pydantic[email] requirement in /services/backend (#89) (572b7ef)
+* chore: release v0.2.8 (ea072cf)
+* build(deps): Bump authlib (#91) (8a9119f)
+* chore: release v0.2.7 (fd60fe3)
+* build(deps): Update celery[sqlalchemy] requirement in /services/backend (#86) (3c8fed3)
+* chore: release v0.2.6 (fbfa5af)
+* build(deps): Bump actions/checkout from 4 to 6 (#85) (0bd1ef6)
+* chore: release v0.2.5 (c03a9f8)
