@@ -212,7 +212,9 @@ async def test_group_crud_success_paths() -> None:
     db = AsyncMock()
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
-        patch("app.adapters.api.routers.districts.SqlCongregationGroupRepository") as group_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
     ):
         district_repo = AsyncMock()
         district_repo.get.return_value = District.create(name="D")
