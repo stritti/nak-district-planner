@@ -1,4 +1,4 @@
-## [v0.2.0] - 2026-04-17
+## [v0.2.1] - 2026-04-19
 
 ### Features
 * feat: add checks skill for code quality verification (eadd177)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* build(deps-dev): Bump pytest from 9.0.2 to 9.0.3 in /services/backend (#71) (9f8c92b)
+* chore: release v0.2.0 (0b05755)
 * chore: release v0.1.3 (3fd5b7e)
 * Merge branch 'main' of github.com:stritti/nak-district-planner (2cd035f)
 * docs: expand developer guide with installation, environment usage, and security aspects (0b606c7)
@@ -33,5 +35,3 @@
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
 * cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
-* Add project-checks skill and ruff/vue-tsc dependencies (d876312)
-* build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
