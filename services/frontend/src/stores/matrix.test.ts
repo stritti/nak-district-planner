@@ -59,7 +59,6 @@ describe('useMatrixStore', () => {
       'e1',
       'a1',
       { leaderId: 'l1' },
-      'ASSIGNED',
     )
   })
 

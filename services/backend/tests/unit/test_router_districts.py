@@ -754,7 +754,7 @@ async def test_get_matrix_derives_from_dt_from_to_dt_when_missing() -> None:
         )
 
     call_kwargs = event_repo.list.await_args.kwargs
-    assert call_kwargs["to_dt"] == datetime(2025, 6, 15, 14, 30, tzinfo=timezone.utc)
+    assert call_kwargs["to_dt"] == datetime(2025, 6, 15, 23, 59, 59, 999999, tzinfo=timezone.utc)
     assert call_kwargs["from_dt"] == datetime(2025, 5, 19, 0, 0, tzinfo=timezone.utc)
 
 
