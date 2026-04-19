@@ -356,9 +356,16 @@ async def get_matrix(
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
 
+    def _ensure_utc(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
     now = datetime.now(timezone.utc)
-    effective_from_dt = from_dt or now
-    effective_to_dt = to_dt or (effective_from_dt + timedelta(days=28))
+    effective_from_dt = _ensure_utc(from_dt) if from_dt is not None else now
+    effective_to_dt = (
+        _ensure_utc(to_dt) if to_dt is not None else (effective_from_dt + timedelta(days=28))
+    )
     if effective_to_dt < effective_from_dt:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

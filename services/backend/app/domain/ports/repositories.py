@@ -138,7 +138,8 @@ class ServiceAssignmentRepository(ABC):
     async def save(self, assignment: ServiceAssignment) -> None: ...
 
     @abstractmethod
-    async def delete(self, assignment_id: uuid.UUID) -> None: ...
+    async def delete(self, assignment_id: uuid.UUID) -> None:
+        pass
 
 
 class InvitationRepository(ABC):
