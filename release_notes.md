@@ -1,4 +1,4 @@
-## [v0.2.1] - 2026-04-19
+## [v0.2.2] - 2026-04-19
 
 ### Features
 * feat: add checks skill for code quality verification (eadd177)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* build(deps-dev): Bump happy-dom in /services/frontend (#79) (4ef4445)
+* chore: release v0.2.1 (7f1f6af)
 * build(deps-dev): Bump pytest from 9.0.2 to 9.0.3 in /services/backend (#71) (9f8c92b)
 * chore: release v0.2.0 (0b05755)
 * chore: release v0.1.3 (3fd5b7e)
@@ -33,5 +35,3 @@
 * chore: release v0.1.2 (f5abcc4)
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
-* chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
