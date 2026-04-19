@@ -17,6 +17,7 @@ from app.adapters.api.schemas.district import (
     FeiertageImportRequest,
 )
 from app.domain.models.congregation import Congregation
+from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.invitation import CongregationInvitation, InvitationTargetType
@@ -217,13 +218,7 @@ async def test_group_crud_success_paths() -> None:
         district_repo.get.return_value = District.create(name="D")
         district_repo_cls.return_value = district_repo
 
-        created_group = MagicMock(
-            id=uuid.uuid4(),
-            name="Nord",
-            district_id=district_id,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
+        created_group = CongregationGroup.create(name="Nord", district_id=district_id)
         group_repo = AsyncMock()
         group_repo.list_by_district.return_value = [created_group]
         group_repo.get.return_value = created_group
