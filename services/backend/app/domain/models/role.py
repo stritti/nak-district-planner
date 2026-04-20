@@ -1,3 +1,5 @@
+"""app/domain/models/role.py: Module."""
+
 from enum import Enum
 
 

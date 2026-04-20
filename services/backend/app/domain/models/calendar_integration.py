@@ -1,3 +1,5 @@
+"""app/domain/models/calendar_integration.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -7,6 +9,8 @@ from enum import Enum
 
 
 class CalendarType(str, Enum):
+    """CalendarType domain model."""
+
     GOOGLE = "GOOGLE"
     MICROSOFT = "MICROSOFT"
     CALDAV = "CALDAV"
@@ -14,6 +18,8 @@ class CalendarType(str, Enum):
 
 
 class CalendarCapability(str, Enum):
+    """CalendarCapability domain model."""
+
     READ = "READ"
     WRITE = "WRITE"
     WEBHOOK = "WEBHOOK"

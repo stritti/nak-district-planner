@@ -1,3 +1,5 @@
+"""app/adapters/db/orm_models/service_assignment.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -12,6 +14,8 @@ from app.domain.models.service_assignment import AssignmentStatus
 
 
 class ServiceAssignmentORM(Base):
+    """ORM model for serviceassignmentorm."""
+
     __tablename__ = "service_assignments"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

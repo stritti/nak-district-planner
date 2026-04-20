@@ -1,3 +1,5 @@
+"""app/domain/models/membership.py: Module."""
+
 from __future__ import annotations
 
 import uuid

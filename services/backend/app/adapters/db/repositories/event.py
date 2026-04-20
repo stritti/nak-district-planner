@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/event.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -65,6 +67,8 @@ def _domain_to_orm(event: Event, existing: EventORM | None = None) -> EventORM:
 
 
 class SqlEventRepository(EventRepository):
+    """SQLAlchemy repository for Event."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

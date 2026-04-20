@@ -1,3 +1,5 @@
+"""app/main.py: Module."""
+
 import logging
 import sys
 import traceback

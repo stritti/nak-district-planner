@@ -1,3 +1,5 @@
+"""app/adapters/idp/keycloak_provisioner.py: Module."""
+
 from __future__ import annotations
 
 import re

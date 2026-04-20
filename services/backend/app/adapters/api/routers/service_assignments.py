@@ -1,3 +1,5 @@
+"""app/adapters/api/routers/service_assignments.py: Module."""
+
 from __future__ import annotations
 
 import uuid

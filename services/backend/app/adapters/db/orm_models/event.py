@@ -1,3 +1,5 @@
+"""app/adapters/db/orm_models/event.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -12,6 +14,8 @@ from app.domain.models.event import EventSource, EventStatus, EventVisibility
 
 
 class EventORM(Base):
+    """ORM model for eventorm."""
+
     __tablename__ = "events"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

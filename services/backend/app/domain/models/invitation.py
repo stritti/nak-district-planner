@@ -1,3 +1,5 @@
+"""app/domain/models/invitation.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -7,11 +9,15 @@ from enum import Enum
 
 
 class InvitationTargetType(str, Enum):
+    """InvitationTargetType domain model."""
+
     DISTRICT_CONGREGATION = "DISTRICT_CONGREGATION"
     EXTERNAL_NOTE = "EXTERNAL_NOTE"
 
 
 class OverwriteDecisionStatus(str, Enum):
+    """OverwriteDecisionStatus domain model."""
+
     PENDING_OVERWRITE = "PENDING_OVERWRITE"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"

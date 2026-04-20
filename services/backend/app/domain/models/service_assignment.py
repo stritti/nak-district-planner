@@ -1,3 +1,5 @@
+"""app/domain/models/service_assignment.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -7,6 +9,8 @@ from enum import Enum
 
 
 class AssignmentStatus(str, Enum):
+    """AssignmentStatus domain model."""
+
     OPEN = "OPEN"
     ASSIGNED = "ASSIGNED"
     CONFIRMED = "CONFIRMED"

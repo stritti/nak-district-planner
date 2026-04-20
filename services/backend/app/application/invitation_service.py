@@ -1,3 +1,5 @@
+"""app/application/invitation_service.py: Module."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/service_assignment.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -23,6 +25,8 @@ def _orm_to_domain(row: ServiceAssignmentORM) -> ServiceAssignment:
 
 
 class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
+    """SQLAlchemy repository for ServiceAssignment."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

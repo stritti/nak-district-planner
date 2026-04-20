@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/invitation_overwrite_request.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -31,6 +33,8 @@ def _orm_to_domain(row: InvitationOverwriteRequestORM) -> InvitationOverwriteReq
 
 
 class SqlInvitationOverwriteRequestRepository(InvitationOverwriteRequestRepository):
+    """SQLAlchemy repository for InvitationOverwriteRequest."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

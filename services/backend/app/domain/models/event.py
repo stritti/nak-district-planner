@@ -1,3 +1,5 @@
+"""app/domain/models/event.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -7,17 +9,23 @@ from enum import Enum
 
 
 class EventSource(str, Enum):
+    """EventSource domain model."""
+
     INTERNAL = "INTERNAL"
     EXTERNAL = "EXTERNAL"
 
 
 class EventStatus(str, Enum):
+    """EventStatus domain model."""
+
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
     CANCELLED = "CANCELLED"  # set by sync when the external source marks event deleted
 
 
 class EventVisibility(str, Enum):
+    """EventVisibility domain model."""
+
     INTERNAL = "INTERNAL"
     PUBLIC = "PUBLIC"
 

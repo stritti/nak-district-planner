@@ -1,3 +1,5 @@
+"""app/adapters/api/routers/leaders.py: Module."""
+
 from __future__ import annotations
 
 import uuid

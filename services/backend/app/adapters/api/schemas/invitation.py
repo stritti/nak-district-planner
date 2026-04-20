@@ -1,3 +1,5 @@
+"""app/adapters/api/schemas/invitation.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -8,6 +10,8 @@ from app.domain.models.invitation import InvitationTargetType, OverwriteDecision
 
 
 class InvitationTargetCreate(BaseModel):
+    """InvitationTargetCreate."""
+
     target_type: InvitationTargetType
     target_congregation_id: uuid.UUID | None = None
     external_target_note: str | None = Field(default=None, min_length=1, max_length=500)
@@ -28,10 +32,14 @@ class InvitationTargetCreate(BaseModel):
 
 
 class InvitationCreate(BaseModel):
+    """InvitationCreate."""
+
     targets: list[InvitationTargetCreate] = Field(min_length=1)
 
 
 class InvitationResponse(BaseModel):
+    """InvitationResponse."""
+
     id: uuid.UUID
     source_event_id: uuid.UUID
     source_congregation_id: uuid.UUID
@@ -44,6 +52,8 @@ class InvitationResponse(BaseModel):
 
 
 class OverwriteRequestResponse(BaseModel):
+    """OverwriteRequestResponse."""
+
     id: uuid.UUID
     invitation_id: uuid.UUID
     source_event_id: uuid.UUID
@@ -68,6 +78,8 @@ class OverwriteRequestResponse(BaseModel):
 
 
 class OverwriteDecisionRequest(BaseModel):
+    """OverwriteDecisionRequest."""
+
     decision: OverwriteDecisionStatus
 
     @field_validator("decision")

@@ -1,3 +1,5 @@
+"""app/adapters/db/orm_models/calendar_integration.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -12,6 +14,8 @@ from app.domain.models.calendar_integration import CalendarType
 
 
 class CalendarIntegrationORM(Base):
+    """ORM model for calendarintegrationorm."""
+
     __tablename__ = "calendar_integrations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

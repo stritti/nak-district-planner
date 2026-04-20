@@ -1,3 +1,5 @@
+"""app/adapters/db/orm_models/invitation.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -12,6 +14,8 @@ from app.domain.models.invitation import InvitationTargetType
 
 
 class CongregationInvitationORM(Base):
+    """ORM model for congregationinvitationorm."""
+
     __tablename__ = "congregation_invitations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

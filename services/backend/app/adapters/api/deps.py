@@ -1,3 +1,5 @@
+"""app/adapters/api/deps.py: Module."""
+
 import logging
 from datetime import datetime, timezone
 from typing import Annotated, NamedTuple

@@ -1,3 +1,5 @@
+"""app/domain/models/export_token.py: Module."""
+
 from __future__ import annotations
 
 import secrets
@@ -8,6 +10,8 @@ from enum import Enum
 
 
 class TokenType(str, Enum):
+    """TokenType domain model."""
+
     PUBLIC = "PUBLIC"  # leader names anonymized
     INTERNAL = "INTERNAL"  # full leader names visible
 

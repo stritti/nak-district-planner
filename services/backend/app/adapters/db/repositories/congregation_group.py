@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/congregation_group.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -21,6 +23,8 @@ def _orm_to_domain(row: CongregationGroupORM) -> CongregationGroup:
 
 
 class SqlCongregationGroupRepository(CongregationGroupRepository):
+    """SQLAlchemy repository for CongregationGroup."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

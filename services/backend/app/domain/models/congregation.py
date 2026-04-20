@@ -1,3 +1,5 @@
+"""app/domain/models/congregation.py: Module."""
+
 from __future__ import annotations
 
 import uuid

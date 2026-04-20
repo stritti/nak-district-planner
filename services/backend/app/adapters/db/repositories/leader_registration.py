@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/leader_registration.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -41,6 +43,8 @@ def _orm_to_domain(row: LeaderRegistrationORM) -> LeaderRegistration:
 
 
 class SqlLeaderRegistrationRepository(LeaderRegistrationRepository):
+    """SQLAlchemy repository for LeaderRegistration."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

@@ -1,3 +1,5 @@
+"""app/adapters/idp/webhook_provisioner.py: Module."""
+
 from __future__ import annotations
 
 from typing import Any

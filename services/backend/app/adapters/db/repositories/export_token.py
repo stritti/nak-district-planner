@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/export_token.py: Module."""
+
 from __future__ import annotations
 
 import uuid
