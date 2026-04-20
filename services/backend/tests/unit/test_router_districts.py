@@ -23,7 +23,25 @@ from app.domain.models.event import Event, EventStatus
 from app.domain.models.invitation import CongregationInvitation, InvitationTargetType
 from app.domain.models.leader import Leader
 from app.domain.models.leader import LeaderRank
+from app.domain.models.membership import Membership, ScopeType
+from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
+
+
+def _superadmin_user() -> object:
+    return type("U", (), {"is_superadmin": True})()
+
+
+def _superadmin_auth() -> object:
+    return type(
+        "A",
+        (),
+        {
+            "user_sub": "superadmin",
+            "memberships": [],
+            "user": type("U", (), {"is_superadmin": True})(),
+        },
+    )()
 
 
 @pytest.mark.asyncio
@@ -38,7 +56,7 @@ async def test_expected_dates_includes_matching_weekdays() -> None:
 async def test_create_district_rejects_unknown_state() -> None:
     with pytest.raises(HTTPException) as exc:
         await r.create_district(
-            DistrictCreate(name="Bezirk", state_code="zz"), object(), AsyncMock()
+            DistrictCreate(name="Bezirk", state_code="zz"), _superadmin_user(), AsyncMock()
         )
     assert exc.value.status_code == 422
 
@@ -57,7 +75,9 @@ async def test_create_district_handles_holiday_api_error() -> None:
         repo = AsyncMock()
         repo_cls.return_value = repo
         with pytest.raises(HTTPException) as exc:
-            await r.create_district(DistrictCreate(name="Bezirk", state_code="BY"), object(), db)
+            await r.create_district(
+                DistrictCreate(name="Bezirk", state_code="BY"), _superadmin_user(), db
+            )
         assert exc.value.status_code == 502
 
 
@@ -76,10 +96,23 @@ async def test_create_district_success() -> None:
     ):
         repo = AsyncMock()
         repo_cls.return_value = repo
-        out = await r.create_district(DistrictCreate(name="Bezirk", state_code="BY"), object(), db)
+        out = await r.create_district(
+            DistrictCreate(name="Bezirk", state_code="BY"), _superadmin_user(), db
+        )
     assert out.name == "Bezirk"
     assert out.state_code == "BY"
     assert import_feiertage.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_create_district_requires_superadmin() -> None:
+    with pytest.raises(HTTPException) as exc:
+        await r.create_district(
+            DistrictCreate(name="Bezirk", state_code="BY"),
+            object(),
+            AsyncMock(),
+        )
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -89,7 +122,9 @@ async def test_update_district_not_found() -> None:
         repo.get.return_value = None
         repo_cls.return_value = repo
         with pytest.raises(HTTPException) as exc:
-            await r.update_district(uuid.uuid4(), DistrictUpdate(name="X"), object(), AsyncMock())
+            await r.update_district(
+                uuid.uuid4(), DistrictUpdate(name="X"), _superadmin_auth(), AsyncMock()
+            )
     assert exc.value.status_code == 404
 
 
@@ -105,19 +140,52 @@ async def test_list_and_update_district_success() -> None:
         repo.get.return_value = district
         repo_cls.return_value = repo
 
-        listed = await r.list_districts(object(), AsyncMock())
-        updated = await r.update_district(
-            district_id,
-            DistrictUpdate(name="Neu", state_code="BW"),
-            object(),
-            AsyncMock(),
-        )
+        listed = await r.list_districts(_superadmin_auth(), AsyncMock())
+        with patch("app.adapters.api.routers.districts.assert_has_role_in_district"):
+            updated = await r.update_district(
+                district_id,
+                DistrictUpdate(name="Neu", state_code="BW"),
+                _superadmin_auth(),
+                AsyncMock(),
+            )
 
-    assert len(listed) == 1
+        assert len(listed) == 1
     assert listed[0].name == "Alt"
     assert updated.name == "Neu"
     assert updated.state_code == "BW"
     assert repo.save.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_list_districts_filters_for_non_superadmin() -> None:
+    district_a = District.create(name="A", state_code="BY")
+    district_b = District.create(name="B", state_code="BW")
+    auth = type(
+        "A",
+        (),
+        {
+            "user_sub": "user-1",
+            "memberships": [
+                Membership.create(
+                    user_sub="user-1",
+                    role=Role.VIEWER,
+                    scope_type=ScopeType.DISTRICT,
+                    scope_id=district_a.id,
+                )
+            ],
+            "user": type("U", (), {"is_superadmin": False})(),
+        },
+    )()
+
+    with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as repo_cls:
+        repo = AsyncMock()
+        repo.list_all.return_value = [district_a, district_b]
+        repo_cls.return_value = repo
+
+        listed = await r.list_districts(auth, AsyncMock())
+
+    assert len(listed) == 1
+    assert listed[0].id == district_a.id
 
 
 @pytest.mark.asyncio
@@ -126,6 +194,7 @@ async def test_create_and_list_congregations_success() -> None:
     db = AsyncMock()
     cong = Congregation.create(name="Gemeinde A", district_id=district_id)
     with (
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
         patch(
@@ -153,7 +222,7 @@ async def test_create_and_list_congregations_success() -> None:
             object(),
             db,
         )
-        listed = await r.list_congregations(district_id, object(), db)
+        listed = await r.list_congregations(district_id, _superadmin_auth(), db)
     assert created.name == "Gemeinde A"
     assert len(listed) == 1
 
@@ -164,6 +233,7 @@ async def test_create_congregation_sets_group_name_when_group_matches_district()
     group_id = uuid.uuid4()
     db = AsyncMock()
     with (
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
         patch(
@@ -204,6 +274,7 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
     group_id = uuid.uuid4()
 
     with (
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
@@ -291,7 +362,7 @@ async def test_create_and_list_congregations_not_found_paths() -> None:
         with pytest.raises(HTTPException) as create_exc:
             await r.create_congregation(district_id, CongregationCreate(name="G"), object(), db)
         with pytest.raises(HTTPException) as list_exc:
-            await r.list_congregations(district_id, object(), db)
+            await r.list_congregations(district_id, _superadmin_auth(), db)
 
     assert create_exc.value.status_code == 404
     assert list_exc.value.status_code == 404
@@ -302,6 +373,7 @@ async def test_group_crud_success_paths() -> None:
     district_id = uuid.uuid4()
     db = AsyncMock()
     with (
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
@@ -324,7 +396,7 @@ async def test_group_crud_success_paths() -> None:
             created = await r.create_group(
                 district_id, r.CongregationGroupCreate(name="Nord"), object(), db
             )
-        listed = await r.list_groups(district_id, object(), db)
+        listed = await r.list_groups(district_id, _superadmin_auth(), db)
         updated = await r.update_group(
             district_id,
             created_group.id,
@@ -358,7 +430,7 @@ async def test_group_crud_not_found_paths() -> None:
         with pytest.raises(HTTPException):
             await r.create_group(district_id, r.CongregationGroupCreate(name="G"), object(), db)
         with pytest.raises(HTTPException):
-            await r.list_groups(district_id, object(), db)
+            await r.list_groups(district_id, _superadmin_auth(), db)
 
         district_repo.get.return_value = District.create(name="D")
         group_repo = AsyncMock()
@@ -435,7 +507,7 @@ async def test_get_matrix_success() -> None:
 
         result = await r.get_matrix(
             district_id,
-            object(),
+            _superadmin_auth(),
             AsyncMock(),
             from_dt=now - timedelta(days=2),
             to_dt=now + timedelta(days=2),
@@ -457,7 +529,14 @@ async def test_get_matrix_not_found_and_invalid_range() -> None:
         district_repo_cls.return_value = district_repo
 
         with pytest.raises(HTTPException) as not_found_exc:
-            await r.get_matrix(district_id, object(), db, from_dt=None, to_dt=None, group_id=None)
+            await r.get_matrix(
+                district_id,
+                _superadmin_auth(),
+                db,
+                from_dt=None,
+                to_dt=None,
+                group_id=None,
+            )
     assert not_found_exc.value.status_code == 404
 
     with (
@@ -475,7 +554,7 @@ async def test_get_matrix_not_found_and_invalid_range() -> None:
         with pytest.raises(HTTPException) as range_exc:
             await r.get_matrix(
                 district_id,
-                object(),
+                _superadmin_auth(),
                 db,
                 from_dt=datetime(2030, 5, 2, tzinfo=timezone.utc),
                 to_dt=datetime(2030, 5, 1, tzinfo=timezone.utc),
@@ -578,7 +657,7 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
 
         result = await r.get_matrix(
             district_id,
-            object(),
+            _superadmin_auth(),
             AsyncMock(),
             from_dt=start - timedelta(days=1),
             to_dt=start + timedelta(days=2),
@@ -681,7 +760,7 @@ async def test_get_matrix_defaults_to_4_weeks_when_range_missing() -> None:
 
         result = await r.get_matrix(
             district_id,
-            object(),
+            _superadmin_auth(),
             db,
             from_dt=None,
             to_dt=None,
@@ -746,7 +825,7 @@ async def test_get_matrix_derives_from_dt_from_to_dt_when_missing() -> None:
 
         await r.get_matrix(
             district_id,
-            object(),
+            _superadmin_auth(),
             db,
             from_dt=None,
             to_dt=datetime(2025, 6, 15, 14, 30, tzinfo=timezone.utc),
@@ -807,7 +886,7 @@ async def test_get_matrix_derives_to_dt_from_from_dt_when_missing() -> None:
         from_dt = datetime(2025, 7, 3, 9, 15, tzinfo=timezone.utc)
         await r.get_matrix(
             district_id,
-            object(),
+            _superadmin_auth(),
             db,
             from_dt=from_dt,
             to_dt=None,
@@ -867,7 +946,7 @@ async def test_get_matrix_normalizes_naive_query_datetimes_to_utc() -> None:
 
         await r.get_matrix(
             district_id,
-            object(),
+            _superadmin_auth(),
             db,
             from_dt=datetime(2030, 4, 1, 12, 0),
             to_dt=datetime(2030, 4, 15, 18, 45),
@@ -949,6 +1028,7 @@ async def test_import_feiertage_endpoint_paths() -> None:
     db = AsyncMock()
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
         patch(
             "app.adapters.api.routers.districts.import_feiertage",
             new=AsyncMock(return_value={"created": 1, "updated": 0, "skipped": 0}),
@@ -978,13 +1058,14 @@ async def test_import_feiertage_endpoint_invalid_state() -> None:
         district_repo = AsyncMock()
         district_repo.get.return_value = District.create(name="D")
         district_repo_cls.return_value = district_repo
-        with pytest.raises(HTTPException) as exc:
-            await r.import_feiertage_endpoint(
-                uuid.uuid4(),
-                FeiertageImportRequest(year=2026, state_code="ZZ"),
-                object(),
-                AsyncMock(),
-            )
+        with patch("app.adapters.api.routers.districts.assert_has_role_in_district"):
+            with pytest.raises(HTTPException) as exc:
+                await r.import_feiertage_endpoint(
+                    uuid.uuid4(),
+                    FeiertageImportRequest(year=2026, state_code="ZZ"),
+                    object(),
+                    AsyncMock(),
+                )
     assert exc.value.status_code == 422
 
 
@@ -1009,6 +1090,7 @@ async def test_import_feiertage_endpoint_not_found_and_http_error() -> None:
 
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
         patch(
             "app.adapters.api.routers.districts.import_feiertage",
             new=AsyncMock(side_effect=httpx.HTTPError("boom")),

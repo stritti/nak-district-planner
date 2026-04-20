@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_district,
@@ -73,10 +73,22 @@ async def create_calendar_integration(
 
 @router.get("", response_model=CalendarIntegrationListResponse)
 async def list_calendar_integrations(
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
     district_id: uuid.UUID | None = None,
 ) -> CalendarIntegrationListResponse:
+    if district_id is None and not auth.user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="district_id ist erforderlich, außer für Superadmin.",
+        )
+
+    if district_id is not None:
+        try:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
     repo = SqlCalendarIntegrationRepository(db)
     if district_id is not None:
         items = await repo.list_by_district(district_id)
