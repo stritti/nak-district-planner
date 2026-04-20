@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -349,18 +349,51 @@ async def get_matrix(
     district_id: uuid.UUID,
     _: CurrentUser,
     db: DbSession,
-    from_dt: datetime = Query(...),
-    to_dt: datetime = Query(...),
+    from_dt: datetime | None = Query(None),
+    to_dt: datetime | None = Query(None),
     group_id: uuid.UUID | None = Query(None),
 ) -> MatrixResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
 
+    def _ensure_utc(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    utc_from_dt = _ensure_utc(from_dt) if from_dt is not None else None
+    utc_to_dt = _ensure_utc(to_dt) if to_dt is not None else None
+
+    if utc_from_dt is None and utc_to_dt is None:
+        start_date = datetime.now(timezone.utc).date()
+        end_date = start_date + timedelta(days=27)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+    elif utc_from_dt is None:
+        end_date = utc_to_dt.date()
+        start_date = end_date - timedelta(days=27)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+    elif utc_to_dt is None:
+        start_date = utc_from_dt.date()
+        end_date = start_date + timedelta(days=27)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+    else:
+        effective_from_dt = utc_from_dt
+        effective_to_dt = utc_to_dt
+
+    if effective_to_dt < effective_from_dt:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="to_dt muss groesser oder gleich from_dt sein",
+        )
+
     congregations = await SqlCongregationRepository(db).list_by_district(
         district_id, group_id=group_id
     )
-    from_date = from_dt.date()
-    to_date = to_dt.date()
+    from_date = effective_from_dt.date()
+    to_date = effective_to_dt.date()
 
     # Compute expected Gottesdienst-Dates per congregation from their schedule
     expected_by_cong: dict[uuid.UUID, list[str]] = {
@@ -370,8 +403,8 @@ async def get_matrix(
     # Load all events for the district in the date range (single query)
     events, _ = await SqlEventRepository(db).list(
         district_id=district_id,
-        from_dt=from_dt,
-        to_dt=to_dt,
+        from_dt=effective_from_dt,
+        to_dt=effective_to_dt,
         limit=5000,
         offset=0,
     )
