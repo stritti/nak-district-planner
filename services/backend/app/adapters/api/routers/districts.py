@@ -82,7 +82,9 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
 
 
 @router.post("", response_model=DistrictResponse, status_code=status.HTTP_201_CREATED)
-async def create_district(body: DistrictCreate, user: CurrentUser, db: DbSession) -> DistrictResponse:
+async def create_district(
+    body: DistrictCreate, user: CurrentUser, db: DbSession
+) -> DistrictResponse:
     _assert_superadmin(user)
 
     state_code = body.state_code.upper() if body.state_code else None
