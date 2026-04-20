@@ -149,7 +149,7 @@ async def test_list_and_update_district_success() -> None:
                 AsyncMock(),
             )
 
-    assert len(listed) == 1
+        assert len(listed) == 1
     assert listed[0].name == "Alt"
     assert updated.name == "Neu"
     assert updated.state_code == "BW"
