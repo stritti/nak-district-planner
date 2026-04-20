@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.adapters.api.deps import CurrentUser, DbSession
+from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
+from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.api.schemas.leader import (
     LeaderCreate,
     LeaderResponse,
@@ -16,6 +17,7 @@ from app.adapters.api.schemas.leader import (
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.domain.models.leader import Leader
+from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/leaders", tags=["leaders"])
 
@@ -41,11 +43,15 @@ def _leader_response(leader: Leader) -> LeaderResponse:
 @router.get("", response_model=list[LeaderResponse])
 async def list_leaders(
     district_id: uuid.UUID,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> list[LeaderResponse]:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.VIEWER, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     leaders = await SqlLeaderRepository(db).list_by_district(district_id)
     return [_leader_response(leader) for leader in leaders]
 
@@ -54,11 +60,15 @@ async def list_leaders(
 async def create_leader(
     district_id: uuid.UUID,
     body: LeaderCreate,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> LeaderResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     leader = Leader.create(
         name=body.name,
         district_id=district_id,
@@ -80,7 +90,7 @@ async def update_leader(
     district_id: uuid.UUID,
     leader_id: uuid.UUID,
     body: LeaderUpdate,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> LeaderResponse:
     repo = SqlLeaderRepository(db)
@@ -89,6 +99,10 @@ async def update_leader(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
         leader.name = body.name
@@ -117,7 +131,7 @@ async def update_leader(
 async def delete_leader(
     district_id: uuid.UUID,
     leader_id: uuid.UUID,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> None:
     repo = SqlLeaderRepository(db)
@@ -126,6 +140,10 @@ async def delete_leader(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     await repo.delete(leader_id)
 
 

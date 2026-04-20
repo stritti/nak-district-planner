@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_district,
@@ -77,18 +77,48 @@ async def create_event(
 
 @router.get("", response_model=EventListResponse)
 async def list_events(
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
     district_id: uuid.UUID | None = Query(None),
     congregation_id: uuid.UUID | None = Query(None),
     group_id: uuid.UUID | None = Query(None),
     only_district_level: bool = Query(False),
-    status: EventStatus | None = Query(None),
+    status_filter: EventStatus | None = Query(None, alias="status"),
     from_dt: datetime | None = Query(None),
     to_dt: datetime | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> EventListResponse:
+    if district_id is None and not auth.user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="district_id ist erforderlich, außer für Superadmin.",
+        )
+    if district_id is not None:
+        try:
+            assert_has_role_in_district(auth, Role.VIEWER, district_id)
+        except PermissionError as e:
+            if congregation_id is None:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+            congregation_repo = SqlCongregationRepository(db)
+            congregation = await congregation_repo.get(congregation_id)
+            if congregation is None or congregation.district_id != district_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Gemeinde nicht gefunden",
+                )
+
+            try:
+                assert_has_role_in_district(
+                    auth,
+                    Role.VIEWER,
+                    district_id,
+                    congregation_ids_in_district={congregation_id},
+                )
+            except PermissionError:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
     repo = SqlEventRepository(db)
     congregation_repo = SqlCongregationRepository(db)
     events, total = await repo.list(
@@ -96,7 +126,7 @@ async def list_events(
         congregation_id=congregation_id,
         group_id=group_id,
         only_district_level=only_district_level,
-        status=status,
+        status=status_filter,
         from_dt=from_dt,
         to_dt=to_dt,
         limit=limit,

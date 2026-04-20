@@ -29,7 +29,11 @@ from app.application.feiertage_service import (
     reference_feiertage_for_congregation,
 )
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
-from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
+    get_districts_where_user_has_role,
+)
 from app.adapters.db.repositories import (
     SqlCongregationRepository,
     SqlCongregationGroupRepository,
@@ -47,6 +51,14 @@ from app.domain.models.event import EventStatus
 from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
+
+
+def _assert_superadmin(user: CurrentUser) -> None:
+    if not getattr(user, "is_superadmin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nur Superadmin darf Bezirke anlegen",
+        )
 
 
 def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -> list[str]:
@@ -70,7 +82,9 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
 
 
 @router.post("", response_model=DistrictResponse, status_code=status.HTTP_201_CREATED)
-async def create_district(body: DistrictCreate, _: CurrentUser, db: DbSession) -> DistrictResponse:
+async def create_district(body: DistrictCreate, user: CurrentUser, db: DbSession) -> DistrictResponse:
+    _assert_superadmin(user)
+
     state_code = body.state_code.upper() if body.state_code else None
     if state_code and state_code not in DE_STATES:
         raise HTTPException(
@@ -105,8 +119,11 @@ async def create_district(body: DistrictCreate, _: CurrentUser, db: DbSession) -
 
 
 @router.get("", response_model=list[DistrictResponse])
-async def list_districts(_: CurrentUser, db: DbSession) -> list[DistrictResponse]:
+async def list_districts(auth: CurrentUserWithMemberships, db: DbSession) -> list[DistrictResponse]:
     districts = await SqlDistrictRepository(db).list_all()
+    if not auth.user.is_superadmin:
+        allowed_district_ids = set(get_districts_where_user_has_role(auth, Role.VIEWER))
+        districts = [district for district in districts if district.id in allowed_district_ids]
     return [_district_response(d) for d in districts]
 
 
@@ -114,13 +131,17 @@ async def list_districts(_: CurrentUser, db: DbSession) -> list[DistrictResponse
 async def update_district(
     district_id: uuid.UUID,
     body: DistrictUpdate,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> DistrictResponse:
     repo = SqlDistrictRepository(db)
     district = await repo.get(district_id)
     if not district:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
         district.name = body.name
@@ -152,11 +173,15 @@ def _district_response(d: District) -> DistrictResponse:
 async def create_congregation(
     district_id: uuid.UUID,
     body: CongregationCreate,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> CongregationResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     await _validate_group_assignment(db, district_id, body.group_id)
     service_times = (
         [st.model_dump() for st in body.service_times] if body.service_times is not None else None
@@ -186,12 +211,16 @@ async def create_congregation(
 @router.get("/{district_id}/congregations", response_model=list[CongregationResponse])
 async def list_congregations(
     district_id: uuid.UUID,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
     group_id: uuid.UUID | None = Query(None),
 ) -> list[CongregationResponse]:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.VIEWER, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     congregations = await SqlCongregationRepository(db).list_by_district(
         district_id, group_id=group_id
     )
@@ -205,13 +234,17 @@ async def update_congregation(
     district_id: uuid.UUID,
     congregation_id: uuid.UUID,
     body: CongregationUpdate,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> CongregationResponse:
     repo = SqlCongregationRepository(db)
     congregation = await repo.get(congregation_id)
     if not congregation or congregation.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gemeinde nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     if body.name is not None:
         congregation.name = body.name
     if body.service_times is not None:
@@ -276,11 +309,15 @@ def _cong_response(c: Congregation, group_name: str | None = None) -> Congregati
 async def create_group(
     district_id: uuid.UUID,
     body: CongregationGroupCreate,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> CongregationGroupResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     group = CongregationGroup.create(name=body.name, district_id=district_id)
     await SqlCongregationGroupRepository(db).save(group)
     return _group_response(group)
@@ -289,11 +326,15 @@ async def create_group(
 @router.get("/{district_id}/groups", response_model=list[CongregationGroupResponse])
 async def list_groups(
     district_id: uuid.UUID,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> list[CongregationGroupResponse]:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.VIEWER, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
     return [_group_response(g) for g in groups]
 
@@ -303,13 +344,17 @@ async def update_group(
     district_id: uuid.UUID,
     group_id: uuid.UUID,
     body: CongregationGroupUpdate,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> CongregationGroupResponse:
     repo = SqlCongregationGroupRepository(db)
     group = await repo.get(group_id)
     if not group or group.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gruppe nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     if body.name is not None:
         group.name = body.name
     group.updated_at = datetime.now(timezone.utc)
@@ -321,13 +366,17 @@ async def update_group(
 async def delete_group(
     district_id: uuid.UUID,
     group_id: uuid.UUID,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> None:
     repo = SqlCongregationGroupRepository(db)
     group = await repo.get(group_id)
     if not group or group.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gruppe nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     await repo.delete(group_id)
 
 
@@ -347,7 +396,7 @@ def _group_response(g: CongregationGroup) -> CongregationGroupResponse:
 @router.get("/{district_id}/matrix", response_model=MatrixResponse)
 async def get_matrix(
     district_id: uuid.UUID,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
     from_dt: datetime | None = Query(None),
     to_dt: datetime | None = Query(None),
@@ -355,6 +404,10 @@ async def get_matrix(
 ) -> MatrixResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.VIEWER, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     def _ensure_utc(dt: datetime) -> datetime:
         if dt.tzinfo is None:
@@ -618,12 +671,16 @@ async def list_de_states(_: CurrentUser) -> dict[str, str]:
 async def import_feiertage_endpoint(
     district_id: uuid.UUID,
     body: FeiertageImportRequest,
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> FeiertageImportResult:
     """Import German public holidays from Nager.Date API into the district (idempotent)."""
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     if body.state_code and body.state_code.upper() not in DE_STATES:
         raise HTTPException(

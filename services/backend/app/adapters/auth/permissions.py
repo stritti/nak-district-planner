@@ -33,6 +33,7 @@ def has_role_in_district(
     auth_context: AuthContext,
     required_role: Role,
     district_id: uuid.UUID,
+    congregation_ids_in_district: set[uuid.UUID] | None = None,
 ) -> bool:
     """
     Check if user has the required role (or higher) in a district.
@@ -53,6 +54,16 @@ def has_role_in_district(
             # Check if user's role is sufficient
             if _role_hierarchy(membership.role) >= _role_hierarchy(required_role):
                 return True
+
+    if congregation_ids_in_district:
+        for membership in auth_context.memberships:
+            if (
+                membership.scope_type == ScopeType.CONGREGATION
+                and membership.scope_id in congregation_ids_in_district
+                and _role_hierarchy(membership.role) >= _role_hierarchy(required_role)
+            ):
+                return True
+
     return False
 
 
@@ -85,11 +96,17 @@ def assert_has_role_in_district(
     auth_context: AuthContext,
     required_role: Role,
     district_id: uuid.UUID,
+    congregation_ids_in_district: set[uuid.UUID] | None = None,
 ) -> None:
     """
     Raise PermissionError if user lacks required role in district.
     """
-    if not has_role_in_district(auth_context, required_role, district_id):
+    if not has_role_in_district(
+        auth_context,
+        required_role,
+        district_id,
+        congregation_ids_in_district=congregation_ids_in_district,
+    ):
         raise PermissionError(
             f"User {auth_context.user_sub} lacks {required_role.value} role in district {district_id}"
         )
