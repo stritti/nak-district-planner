@@ -1,5 +1,4 @@
-"""
-LeaderRegistration domain model — represents a self-registration request from a
+"""LeaderRegistration domain model — represents a self-registration request from a
 new Amtstragender (service person) awaiting district-admin review.
 """
 
@@ -7,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from app.domain.models.leader import LeaderRank, SpecialRole
@@ -25,8 +24,7 @@ class RegistrationStatus(str, Enum):
 
 @dataclass
 class LeaderRegistration:
-    """
-    A registration request submitted by a prospective Amtstragender.
+    """A registration request submitted by a prospective Amtstragender.
 
     The registrant fills in their details and optionally indicates which
     congregation they belong to.  A district administrator then approves
@@ -70,7 +68,7 @@ class LeaderRegistration:
         notes: str | None = None,
         user_sub: str | None = None,
     ) -> "LeaderRegistration":
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return LeaderRegistration(
             id=uuid.uuid4(),
             district_id=district_id,

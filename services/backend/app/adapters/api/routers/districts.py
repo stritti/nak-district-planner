@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
-import httpx
-
 from app.adapters.api.schemas.district import (
     CongregationCreate,
     CongregationGroupCreate,
@@ -24,12 +23,6 @@ from app.adapters.api.schemas.district import (
     FeiertageImportResult,
     ServiceTime,
 )
-from app.application.feiertage_service import (
-    DE_STATES,
-    import_feiertage,
-    import_kirchliche_festtage,
-    reference_feiertage_for_congregation,
-)
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
 from app.adapters.auth.permissions import (
     PermissionError,
@@ -37,8 +30,8 @@ from app.adapters.auth.permissions import (
     get_districts_where_user_has_role,
 )
 from app.adapters.db.repositories import (
-    SqlCongregationRepository,
     SqlCongregationGroupRepository,
+    SqlCongregationRepository,
     SqlDistrictRepository,
     SqlEventRepository,
     SqlLeaderRepository,
@@ -46,6 +39,12 @@ from app.adapters.db.repositories import (
 )
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
+from app.application.feiertage_service import (
+    DE_STATES,
+    import_feiertage,
+    import_kirchliche_festtage,
+    reference_feiertage_for_congregation,
+)
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
@@ -99,7 +98,7 @@ async def create_district(
     district = District.create(name=body.name, state_code=state_code)
     await SqlDistrictRepository(db).save(district)
 
-    year = datetime.now(timezone.utc).year
+    year = datetime.now(UTC).year
     if district.state_code:
         try:
             await import_feiertage(
@@ -151,7 +150,7 @@ async def update_district(
         district.name = body.name
     if "state_code" in fields:
         district.state_code = body.state_code
-    district.updated_at = datetime.now(timezone.utc)
+    district.updated_at = datetime.now(UTC)
     await repo.save(district)
     return _district_response(district)
 
@@ -262,7 +261,7 @@ async def update_congregation(
         congregation.invitation_target_congregation_id = body.invitation_target_congregation_id
     if "invitation_external_note" in body.model_fields_set:
         congregation.invitation_external_note = body.invitation_external_note
-    congregation.updated_at = datetime.now(timezone.utc)
+    congregation.updated_at = datetime.now(UTC)
     await repo.save(congregation)
     group_name = None
     if congregation.group_id is not None:
@@ -361,7 +360,7 @@ async def update_group(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     if body.name is not None:
         group.name = body.name
-    group.updated_at = datetime.now(timezone.utc)
+    group.updated_at = datetime.now(UTC)
     await repo.save(group)
     return _group_response(group)
 
@@ -415,27 +414,27 @@ async def get_matrix(
 
     def _ensure_utc(dt: datetime) -> datetime:
         if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
 
     utc_from_dt = _ensure_utc(from_dt) if from_dt is not None else None
     utc_to_dt = _ensure_utc(to_dt) if to_dt is not None else None
 
     if utc_from_dt is None and utc_to_dt is None:
-        start_date = datetime.now(timezone.utc).date()
+        start_date = datetime.now(UTC).date()
         end_date = start_date + timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_from_dt is None:
         end_date = utc_to_dt.date()
         start_date = end_date - timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_to_dt is None:
         start_date = utc_from_dt.date()
         end_date = start_date + timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     else:
         effective_from_dt = utc_from_dt
         effective_to_dt = utc_to_dt
@@ -448,27 +447,27 @@ async def get_matrix(
 
     def _ensure_utc(dt: datetime) -> datetime:
         if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
 
     utc_from_dt = _ensure_utc(from_dt) if from_dt is not None else None
     utc_to_dt = _ensure_utc(to_dt) if to_dt is not None else None
 
     if utc_from_dt is None and utc_to_dt is None:
-        start_date = datetime.now(timezone.utc).date()
+        start_date = datetime.now(UTC).date()
         end_date = start_date + timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_from_dt is None:
         end_date = utc_to_dt.date()
         start_date = end_date - timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_to_dt is None:
         start_date = utc_from_dt.date()
         end_date = start_date + timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     else:
         effective_from_dt = utc_from_dt
         effective_to_dt = utc_to_dt

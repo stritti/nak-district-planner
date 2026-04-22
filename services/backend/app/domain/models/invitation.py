@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 
@@ -54,7 +54,7 @@ class CongregationInvitation:
         if target_type == InvitationTargetType.EXTERNAL_NOTE and not external_target_note:
             raise ValueError("external_target_note is required for EXTERNAL_NOTE")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=uuid.uuid4(),
             source_event_id=source_event_id,
@@ -97,7 +97,7 @@ class InvitationOverwriteRequest:
         proposed_description: str | None,
         proposed_category: str | None,
     ) -> InvitationOverwriteRequest:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=uuid.uuid4(),
             invitation_id=invitation_id,

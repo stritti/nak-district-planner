@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,7 +62,7 @@ async def create_invitations_for_event(
             current = existing_by_internal_target.get(target.target_congregation_id)
             if current is not None:
                 current.external_target_note = None
-                current.updated_at = datetime.now(timezone.utc)
+                current.updated_at = datetime.now(UTC)
                 await invitation_repo.save(current)
                 created.append(current)
                 continue
@@ -98,7 +98,7 @@ async def create_invitations_for_event(
 
         if existing_external is not None:
             existing_external.external_target_note = target.external_target_note
-            existing_external.updated_at = datetime.now(timezone.utc)
+            existing_external.updated_at = datetime.now(UTC)
             await invitation_repo.save(existing_external)
             created.append(existing_external)
             continue
@@ -133,7 +133,7 @@ async def delete_invitation(
         linked_event = await event_repo.get(invitation.linked_event_id)
         if linked_event is not None:
             linked_event.status = EventStatus.CANCELLED
-            linked_event.updated_at = datetime.now(timezone.utc)
+            linked_event.updated_at = datetime.now(UTC)
             await event_repo.save(linked_event)
 
     await invitation_repo.delete(invitation.id)
@@ -169,7 +169,7 @@ async def sync_linked_invitation_event_schedule(
 
         target_event.start_at = source_event.start_at
         target_event.end_at = source_event.end_at
-        target_event.updated_at = datetime.now(timezone.utc)
+        target_event.updated_at = datetime.now(UTC)
         await event_repo.save(target_event)
         updated += 1
 
@@ -207,7 +207,7 @@ async def propagate_source_event_update(
             existing.proposed_end_at = source_event.end_at
             existing.proposed_description = source_event.description
             existing.proposed_category = source_event.category
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             await overwrite_repo.save(existing)
             requests.append(existing)
             continue
@@ -250,7 +250,7 @@ async def apply_overwrite_decision(
         target_event.end_at = request.proposed_end_at
         target_event.description = request.proposed_description
         target_event.category = request.proposed_category
-        target_event.updated_at = datetime.now(timezone.utc)
+        target_event.updated_at = datetime.now(UTC)
         await event_repo.save(target_event)
 
     updated = await overwrite_repo.set_status(request.id, decision)

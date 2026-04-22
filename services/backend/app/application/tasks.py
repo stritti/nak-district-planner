@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.celery_app import celery
 
@@ -57,7 +57,7 @@ def sync_all_active_integrations() -> dict:
         async with AsyncSessionLocal() as session:
             repo = SqlCalendarIntegrationRepository(session)
             integrations = await repo.list_active()
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             ids_to_sync: list[str] = []
             for integration in integrations:
                 integration_id = str(integration.id)
@@ -87,7 +87,7 @@ def cleanup_old_events() -> dict:
     from app.adapters.db.session import AsyncSessionLocal
 
     async def _run() -> dict:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Compute cutoff as exactly 24 months (2 years) ago.
         # Handle the Feb-29 edge case: replace day with 28 when the target
         # year is not a leap year.
@@ -123,13 +123,13 @@ def auto_import_feiertage() -> dict:
     Only processes districts that have a state_code configured.
     Import is idempotent — safe to run multiple times.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.adapters.db.repositories.district import SqlDistrictRepository
     from app.adapters.db.session import AsyncSessionLocal
 
     async def _run() -> dict:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         years = {now.year}
         if now.month >= 9:  # September onwards → pre-import next year
             years.add(now.year + 1)

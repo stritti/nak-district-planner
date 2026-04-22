@@ -11,13 +11,13 @@ from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
-from app.domain.models.leader import Leader
-from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.invitation import (
     CongregationInvitation,
     InvitationOverwriteRequest,
     OverwriteDecisionStatus,
 )
+from app.domain.models.leader import Leader
+from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
 

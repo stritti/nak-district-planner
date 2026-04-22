@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.domain.models.invitation import InvitationTargetType
 
@@ -49,7 +49,7 @@ class Congregation:
             if not invitation_external_note:
                 raise ValueError("invitation_external_note is required for EXTERNAL_NOTE")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=uuid.uuid4(),
             name=name,

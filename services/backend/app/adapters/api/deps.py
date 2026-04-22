@@ -1,15 +1,15 @@
 """app/adapters/api/deps.py: Module."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated, NamedTuple
 
 from fastapi import Depends, HTTPException, Security, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.auth.jwt_claims import extract_memberships_from_claims
+from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.user import SqlUserRepository
@@ -56,8 +56,7 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
     session: AsyncSession = Depends(get_db_session),
 ) -> User:
-    """
-    Dependency to extract and validate current user from Bearer token.
+    """Dependency to extract and validate current user from Bearer token.
 
     - Validates JWT signature, issuer, expiration
     - Auto-creates user on first login
@@ -155,8 +154,7 @@ async def get_current_user_with_memberships(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ) -> CurrentUserContext:
-    """
-    Dependency to get current user with their role memberships.
+    """Dependency to get current user with their role memberships.
 
     Used for endpoints that require role-based authorization.
 
@@ -182,7 +180,7 @@ async def get_current_user_with_memberships(
         if len(candidates) == 1:
             registration = candidates[0]
             registration.user_sub = user.sub
-            registration.updated_at = datetime.now(timezone.utc)
+            registration.updated_at = datetime.now(UTC)
             await reg_repo.save(registration)
             if (
                 registration.assigned_role is not None

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 
@@ -59,7 +59,7 @@ class Leader:
         notes: str | None = None,
         is_active: bool = True,
     ) -> "Leader":
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return Leader(
             id=uuid.uuid4(),
             name=name,

@@ -1,5 +1,4 @@
-"""
-Claims validation for RBAC during request processing.
+"""Claims validation for RBAC during request processing.
 
 Ensures that membership claims in JWT tokens are valid and match
 the system's expectations.
@@ -20,8 +19,7 @@ class InvalidMembershipClaimError(Exception):
 
 
 def validate_membership_claims(claims: dict[str, Any]) -> list[Membership]:
-    """
-    Validate membership claims from JWT and return parsed Membership objects.
+    """Validate membership claims from JWT and return parsed Membership objects.
 
     Performs validation checks:
     - Membership claim structure is valid
@@ -118,8 +116,7 @@ def validate_membership_claims(claims: dict[str, Any]) -> list[Membership]:
 def validate_token_claim_consistency(
     claims: dict[str, Any], db_memberships: list[Membership]
 ) -> bool:
-    """
-    Validate that JWT membership claims are consistent with database state.
+    """Validate that JWT membership claims are consistent with database state.
 
     This check helps detect compromised or stale tokens. If a token was issued
     with certain membership claims but those memberships no longer exist in the DB,

@@ -1,5 +1,4 @@
-"""
-Initialization module for seeding canonical system data.
+"""Initialization module for seeding canonical system data.
 
 Currently handles RBAC initialization (roles are enum-based, so no DB seeding needed).
 This module can be extended to seed other canonical data as needed.
@@ -9,8 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def seed_canonical_roles(session: AsyncSession) -> None:
-    """
-    Ensure canonical RBAC roles are available in the system.
+    """Ensure canonical RBAC roles are available in the system.
 
     Canonical roles are:
     - DISTRICT_ADMIN: Full control over a district

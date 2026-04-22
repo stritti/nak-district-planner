@@ -3,20 +3,20 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
-from app.adapters.auth.permissions import (
-    PermissionError,
-    assert_has_role_in_district,
-)
 from app.adapters.api.schemas.event import (
     EventCreate,
     EventListResponse,
     EventResponse,
     EventUpdate,
+)
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
 )
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event import SqlEventRepository
@@ -228,7 +228,7 @@ async def update_event(
     if "category" in fields:
         event.category = body.category
 
-    event.updated_at = datetime.now(timezone.utc)
+    event.updated_at = datetime.now(UTC)
     await repo.save(event)
 
     if {"start_at", "end_at"}.intersection(fields) and event.invitation_source_event_id is None:

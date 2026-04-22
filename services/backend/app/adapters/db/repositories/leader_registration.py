@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.leader_registration import LeaderRegistrationORM
 from app.domain.models.leader import LeaderRank, SpecialRole
-from app.domain.models.membership import ScopeType
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
+from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
 from app.domain.ports.repositories import LeaderRegistrationRepository
 

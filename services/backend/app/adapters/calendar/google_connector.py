@@ -9,7 +9,7 @@ Credentials format: {"access_token": "ya29.a0AfH6SMB..."}
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -92,14 +92,14 @@ class GoogleCalendarConnector(CalendarConnector):
                 if "T" in start_str:
                     start_at = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
                 else:
-                    start_at = datetime.fromisoformat(start_str).replace(tzinfo=timezone.utc)
+                    start_at = datetime.fromisoformat(start_str).replace(tzinfo=UTC)
 
                 if "T" in end_str:
                     end_at = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
                 else:
                     # All-day events: end is exclusive (the day after the last full day)
                     # So if end date is 2026-04-06, the event ends at 2026-04-06 00:00:00 UTC
-                    end_at = datetime.fromisoformat(end_str).replace(tzinfo=timezone.utc)
+                    end_at = datetime.fromisoformat(end_str).replace(tzinfo=UTC)
             except ValueError:
                 # If parsing fails, skip this event
                 continue

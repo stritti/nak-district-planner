@@ -1,5 +1,4 @@
-"""
-User API schemas for authentication and user info endpoints.
+"""User API schemas for authentication and user info endpoints.
 """
 
 from typing import Literal

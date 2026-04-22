@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 
@@ -82,7 +82,7 @@ class Event:
         invitation_source_congregation_id: uuid.UUID | None = None,
         invitation_source_event_id: uuid.UUID | None = None,
     ) -> Event:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if "gottesdienst" in title.lower():
             category = "Gottesdienst"

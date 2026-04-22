@@ -5,7 +5,7 @@ from __future__ import annotations
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 
@@ -43,5 +43,5 @@ class ExportToken:
             district_id=district_id,
             congregation_id=congregation_id,
             leader_id=leader_id,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )

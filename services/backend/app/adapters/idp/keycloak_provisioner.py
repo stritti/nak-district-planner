@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from app.adapters.idp.base import IdpProvisionResult, IdpProvisioner, IdpProvisioningError
+from app.adapters.idp.base import IdpProvisioner, IdpProvisioningError, IdpProvisionResult
 
 
 class KeycloakProvisioningAdapter(IdpProvisioner):
