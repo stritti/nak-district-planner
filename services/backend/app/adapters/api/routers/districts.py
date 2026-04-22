@@ -405,7 +405,7 @@ async def get_matrix(
     to_dt: datetime | None = Query(None),
     group_id: uuid.UUID | None = Query(None),
 ) -> MatrixResponse:
-if not await SqlDistrictRepository(db).get(district_id):
+    if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     try:
         assert_has_role_in_district(auth, Role.VIEWER, district_id)
@@ -414,27 +414,27 @@ if not await SqlDistrictRepository(db).get(district_id):
 
     def _ensure_utc(dt: datetime) -> datetime:
         if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
 
     utc_from_dt = _ensure_utc(from_dt) if from_dt is not None else None
     utc_to_dt = _ensure_utc(to_dt) if to_dt is not None else None
 
     if utc_from_dt is None and utc_to_dt is None:
-        start_date = datetime.now(timezone.utc).date()
+        start_date = datetime.now(UTC).date()
         end_date = start_date + timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_from_dt is None:
         end_date = utc_to_dt.date()
         start_date = end_date - timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_to_dt is None:
         start_date = utc_from_dt.date()
         end_date = start_date + timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
+        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     else:
         effective_from_dt = utc_from_dt
         effective_to_dt = utc_to_dt
