@@ -95,8 +95,7 @@ def assert_has_role_in_district(
     district_id: uuid.UUID,
     congregation_ids_in_district: set[uuid.UUID] | None = None,
 ) -> None:
-    """Raise PermissionError if user lacks required role in district.
-    """
+    """Raise PermissionError if user lacks required role in district."""
     if not has_role_in_district(
         auth_context,
         required_role,

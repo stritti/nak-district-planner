@@ -1,4 +1,4 @@
-## [v0.3.0] - 2026-04-20
+## [v0.3.1] - 2026-04-20
 
 ### Features
 * feat(matrix): complete remaining UC-03 matrix tasks (#90) (bc98e71)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* Harden RBAC on read APIs and scoped district checks (#92) (64b1e17)
+* chore: release v0.3.0 (c2a0f7d)
 * chore: release v0.2.10 (8b338c0)
 * build(deps-dev): Bump eslint from 10.0.3 to 10.2.1 in /services/frontend (#88) (f0a5bc5)
 * chore: release v0.2.9 (698f1b3)
@@ -33,5 +35,3 @@
 * build(deps): Bump authlib (#91) (8a9119f)
 * chore: release v0.2.7 (fd60fe3)
 * build(deps): Update celery[sqlalchemy] requirement in /services/backend (#86) (3c8fed3)
-* chore: release v0.2.6 (fbfa5af)
-* build(deps): Bump actions/checkout from 4 to 6 (#85) (0bd1ef6)
