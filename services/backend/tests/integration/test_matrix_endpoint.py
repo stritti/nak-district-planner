@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
-from app.main import app
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
 from app.domain.models.event import Event
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 from app.domain.models.user import User
+from app.main import app
 
 
 @pytest.fixture
@@ -46,8 +46,8 @@ def test_matrix_endpoint_returns_gap_assigned_and_empty_cells(mock_oidc_adapter)
         service_times=[{"weekday": 6, "time": "09:30"}],
     )
 
-    gap_start = datetime(2026, 4, 8, 18, 0, tzinfo=timezone.utc)
-    assigned_start = datetime(2026, 4, 10, 18, 0, tzinfo=timezone.utc)
+    gap_start = datetime(2026, 4, 8, 18, 0, tzinfo=UTC)
+    assigned_start = datetime(2026, 4, 10, 18, 0, tzinfo=UTC)
 
     gap_event = Event.create(
         title="Gottesdienst Mittwoch",
@@ -88,9 +88,7 @@ def test_matrix_endpoint_returns_gap_assigned_and_empty_cells(mock_oidc_adapter)
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
         ) as group_repo_cls,
-        patch(
-            "app.adapters.api.routers.districts.SqlInvitationRepository"
-        ) as invitation_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlInvitationRepository") as invitation_repo_cls,
     ):
         user_repo = AsyncMock()
         user_repo.get_by_sub.return_value = None

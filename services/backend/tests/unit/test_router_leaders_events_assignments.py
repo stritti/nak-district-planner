@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -180,7 +180,7 @@ async def test_leader_not_found_paths() -> None:
 @pytest.mark.asyncio
 async def test_event_create_list_update_paths() -> None:
     district_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     event = Event.create(
         title="Gottesdienst",
         start_at=now,
@@ -267,7 +267,7 @@ async def test_event_list_requires_district_id_for_non_superadmin() -> None:
 async def test_event_list_allows_congregation_scoped_access_with_filter() -> None:
     district_id = uuid.uuid4()
     congregation_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     event = Event.create(
         title="Gottesdienst",
         start_at=now,
@@ -316,8 +316,8 @@ async def test_service_assignment_crud_paths() -> None:
     district_id = uuid.uuid4()
     event = Event.create(
         title="Gottesdienst",
-        start_at=datetime.now(timezone.utc),
-        end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC) + timedelta(hours=1),
         district_id=district_id,
     )
     assignment = ServiceAssignment.create(event_id=event.id, leader_name="Pr. X")

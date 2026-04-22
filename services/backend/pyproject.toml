@@ -72,6 +72,8 @@ ignore = [
     "D415",  # First line should end with a period, question mark, or exclamation point
     "E501",  # Line too long (let IDE handle wrapping)
     "F401",  # Unused imports (type hints - common in repositories)
+    "N806",  # Variable naming in tests (Mock patterns)
+    "B017",  # Blind exception in tests
     "N817",  # CamelCase in function name (intentional: EventStatus)
     "RUF001",  # Ambiguous dash in string (intentional: German text)
     "RUF003",  # Ambiguous dash in comment (intentional: German text)

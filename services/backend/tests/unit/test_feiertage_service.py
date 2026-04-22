@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-
 
 from app.application.feiertage_service import (
     _content_hash,
@@ -185,8 +184,8 @@ class TestImportKirchlicheFesttage:
 
         existing_event = Event.create(
             title="Ostersonntag",
-            start_at=datetime(2026, 4, 5, 0, 0, 0, tzinfo=timezone.utc),
-            end_at=datetime(2026, 4, 5, 23, 59, 59, tzinfo=timezone.utc),
+            start_at=datetime(2026, 4, 5, 0, 0, 0, tzinfo=UTC),
+            end_at=datetime(2026, 4, 5, 23, 59, 59, tzinfo=UTC),
             district_id=district_id,
         )
         # Set content_hash to match what import_kirchliche_festtage will compute
@@ -225,8 +224,8 @@ class TestImportKirchlicheFesttage:
 
         existing_event = Event.create(
             title="Old Title",
-            start_at=datetime(2026, 4, 5, 0, 0, 0, tzinfo=timezone.utc),
-            end_at=datetime(2026, 4, 5, 23, 59, 59, tzinfo=timezone.utc),
+            start_at=datetime(2026, 4, 5, 0, 0, 0, tzinfo=UTC),
+            end_at=datetime(2026, 4, 5, 23, 59, 59, tzinfo=UTC),
             district_id=district_id,
         )
         # Manually set a different hash
@@ -340,8 +339,8 @@ class TestReferenceFeiertageForCongregation:
 
         district_holiday = Event.create(
             title="Neujahr",
-            start_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-            end_at=datetime(2026, 1, 1, 23, 59, 59, tzinfo=timezone.utc),
+            start_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
+            end_at=datetime(2026, 1, 1, 23, 59, 59, tzinfo=UTC),
             district_id=district_id,
             category="Feiertag",
         )
@@ -349,8 +348,8 @@ class TestReferenceFeiertageForCongregation:
 
         congregation_holiday = Event.create(
             title="Lokaler Feiertag",
-            start_at=datetime(2026, 1, 2, 0, 0, 0, tzinfo=timezone.utc),
-            end_at=datetime(2026, 1, 2, 23, 59, 59, tzinfo=timezone.utc),
+            start_at=datetime(2026, 1, 2, 0, 0, 0, tzinfo=UTC),
+            end_at=datetime(2026, 1, 2, 23, 59, 59, tzinfo=UTC),
             district_id=district_id,
             congregation_id=other_congregation_id,
             category="Feiertag",
@@ -358,8 +357,8 @@ class TestReferenceFeiertageForCongregation:
 
         non_holiday = Event.create(
             title="Bezirksversammlung",
-            start_at=datetime(2026, 1, 3, 10, 0, 0, tzinfo=timezone.utc),
-            end_at=datetime(2026, 1, 3, 11, 0, 0, tzinfo=timezone.utc),
+            start_at=datetime(2026, 1, 3, 10, 0, 0, tzinfo=UTC),
+            end_at=datetime(2026, 1, 3, 11, 0, 0, tzinfo=UTC),
             district_id=district_id,
             category="Sonstiges",
         )
@@ -393,8 +392,8 @@ class TestReferenceFeiertageForCongregation:
 
         district_holiday = Event.create(
             title="Neujahr",
-            start_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-            end_at=datetime(2026, 1, 1, 23, 59, 59, tzinfo=timezone.utc),
+            start_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
+            end_at=datetime(2026, 1, 1, 23, 59, 59, tzinfo=UTC),
             district_id=district_id,
             category="Feiertag",
         )

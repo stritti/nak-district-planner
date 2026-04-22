@@ -1,56 +1,84 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.adapters.db.repositories.calendar_integration import (
     _domain_to_orm as ci_domain_to_orm,
+)
+from app.adapters.db.repositories.calendar_integration import (
     _orm_to_domain as ci_orm_to_domain,
 )
 from app.adapters.db.repositories.congregation import (
     SqlCongregationRepository,
+)
+from app.adapters.db.repositories.congregation import (
     _orm_to_domain as cong_orm_to_domain,
 )
 from app.adapters.db.repositories.congregation_group import (
     SqlCongregationGroupRepository,
+)
+from app.adapters.db.repositories.congregation_group import (
     _orm_to_domain as group_orm_to_domain,
 )
 from app.adapters.db.repositories.district import (
     SqlDistrictRepository,
+)
+from app.adapters.db.repositories.district import (
     _orm_to_domain as district_orm_to_domain,
 )
 from app.adapters.db.repositories.event import (
     SqlEventRepository,
+)
+from app.adapters.db.repositories.event import (
     _domain_to_orm as event_domain_to_orm,
+)
+from app.adapters.db.repositories.event import (
     _orm_to_domain as event_orm_to_domain,
 )
 from app.adapters.db.repositories.export_token import (
     SqlExportTokenRepository,
+)
+from app.adapters.db.repositories.export_token import (
     _orm_to_domain as token_orm_to_domain,
 )
 from app.adapters.db.repositories.invitation_overwrite_request import (
     SqlInvitationOverwriteRequestRepository,
+)
+from app.adapters.db.repositories.invitation_overwrite_request import (
     _orm_to_domain as overwrite_orm_to_domain,
 )
 from app.adapters.db.repositories.leader import (
     SqlLeaderRepository,
+)
+from app.adapters.db.repositories.leader import (
     _orm_to_domain as leader_orm_to_domain,
 )
 from app.adapters.db.repositories.membership import (
     SqlMembershipRepository,
+)
+from app.adapters.db.repositories.membership import (
     _domain_to_orm as membership_domain_to_orm,
+)
+from app.adapters.db.repositories.membership import (
     _orm_to_domain as membership_orm_to_domain,
 )
 from app.adapters.db.repositories.service_assignment import (
     SqlServiceAssignmentRepository,
+)
+from app.adapters.db.repositories.service_assignment import (
     _orm_to_domain as assignment_orm_to_domain,
 )
 from app.adapters.db.repositories.user import (
     SqlUserRepository,
+)
+from app.adapters.db.repositories.user import (
     _domain_to_orm as user_domain_to_orm,
+)
+from app.adapters.db.repositories.user import (
     _orm_to_domain as user_orm_to_domain,
 )
 from app.domain.models.calendar_integration import (
@@ -76,7 +104,7 @@ def _row(**kwargs):
 
 @pytest.mark.asyncio
 async def test_repository_mapping_helpers() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     district_id = uuid.uuid4()
     congregation_id = uuid.uuid4()
 
@@ -336,8 +364,8 @@ async def test_repository_methods_with_mocked_session() -> None:
     await event_repo.get_matching_draft_service_slot(
         district_id=uuid.uuid4(),
         congregation_id=uuid.uuid4(),
-        start_at=datetime.now(timezone.utc),
-        end_at=datetime.now(timezone.utc),
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC),
     )
 
     # export token
