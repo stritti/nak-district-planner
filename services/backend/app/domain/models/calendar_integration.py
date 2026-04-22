@@ -5,10 +5,10 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class CalendarType(str, Enum):
+class CalendarType(StrEnum):
     """CalendarType domain model."""
 
     GOOGLE = "GOOGLE"
@@ -17,7 +17,7 @@ class CalendarType(str, Enum):
     ICS = "ICS"
 
 
-class CalendarCapability(str, Enum):
+class CalendarCapability(StrEnum):
     """CalendarCapability domain model."""
 
     READ = "READ"

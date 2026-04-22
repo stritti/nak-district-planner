@@ -5,17 +5,17 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class EventSource(str, Enum):
+class EventSource(StrEnum):
     """EventSource domain model."""
 
     INTERNAL = "INTERNAL"
     EXTERNAL = "EXTERNAL"
 
 
-class EventStatus(str, Enum):
+class EventStatus(StrEnum):
     """EventStatus domain model."""
 
     DRAFT = "DRAFT"
@@ -23,7 +23,7 @@ class EventStatus(str, Enum):
     CANCELLED = "CANCELLED"  # set by sync when the external source marks event deleted
 
 
-class EventVisibility(str, Enum):
+class EventVisibility(StrEnum):
     """EventVisibility domain model."""
 
     INTERNAL = "INTERNAL"

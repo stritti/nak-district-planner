@@ -6,10 +6,10 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class TokenType(str, Enum):
+class TokenType(StrEnum):
     """TokenType domain model."""
 
     PUBLIC = "PUBLIC"  # leader names anonymized

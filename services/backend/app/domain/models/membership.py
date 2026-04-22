@@ -5,12 +5,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 from .role import Role
 
 
-class ScopeType(str, Enum):
+class ScopeType(StrEnum):
     """Scope type for membership assignments."""
 
     DISTRICT = "DISTRICT"

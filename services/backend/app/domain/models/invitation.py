@@ -5,17 +5,17 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class InvitationTargetType(str, Enum):
+class InvitationTargetType(StrEnum):
     """InvitationTargetType domain model."""
 
     DISTRICT_CONGREGATION = "DISTRICT_CONGREGATION"
     EXTERNAL_NOTE = "EXTERNAL_NOTE"
 
 
-class OverwriteDecisionStatus(str, Enum):
+class OverwriteDecisionStatus(StrEnum):
     """OverwriteDecisionStatus domain model."""
 
     PENDING_OVERWRITE = "PENDING_OVERWRITE"

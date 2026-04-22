@@ -1,9 +1,9 @@
 """app/domain/models/role.py: Module."""
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     """Canonical system roles for role-based access control."""
 
     DISTRICT_ADMIN = "DISTRICT_ADMIN"

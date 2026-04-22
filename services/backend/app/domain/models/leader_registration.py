@@ -7,14 +7,14 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 from app.domain.models.leader import LeaderRank, SpecialRole
 from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
 
 
-class RegistrationStatus(str, Enum):
+class RegistrationStatus(StrEnum):
     """Workflow status for a leader registration request."""
 
     PENDING = "PENDING"

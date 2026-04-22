@@ -5,10 +5,10 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class LeaderRank(str, Enum):
+class LeaderRank(StrEnum):
     """Kirchliche Ränge in aufsteigender Reihenfolge."""
 
     DIAKON = "Di."
@@ -23,7 +23,7 @@ class LeaderRank(str, Enum):
     STAMMAPOSTEL = "StAp."
 
 
-class SpecialRole(str, Enum):
+class SpecialRole(StrEnum):
     """Besondere Beauftragung."""
 
     GEMEINDEVORSTEHER = "Gemeindevorsteher"
