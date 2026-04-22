@@ -58,7 +58,7 @@ class Leader:
         phone: str | None = None,
         notes: str | None = None,
         is_active: bool = True,
-    ) -> "Leader":
+    ) -> Leader:
         now = datetime.now(UTC)
         return Leader(
             id=uuid.uuid4(),

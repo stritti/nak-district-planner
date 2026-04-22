@@ -444,40 +444,6 @@ async def get_matrix(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="to_dt muss groesser oder gleich from_dt sein",
         )
->>>>>>> origin/main
-
-    def _ensure_utc(dt: datetime) -> datetime:
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=UTC)
-        return dt.astimezone(UTC)
-
-    utc_from_dt = _ensure_utc(from_dt) if from_dt is not None else None
-    utc_to_dt = _ensure_utc(to_dt) if to_dt is not None else None
-
-    if utc_from_dt is None and utc_to_dt is None:
-        start_date = datetime.now(UTC).date()
-        end_date = start_date + timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
-    elif utc_from_dt is None:
-        end_date = utc_to_dt.date()
-        start_date = end_date - timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
-    elif utc_to_dt is None:
-        start_date = utc_from_dt.date()
-        end_date = start_date + timedelta(days=27)
-        effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
-        effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
-    else:
-        effective_from_dt = utc_from_dt
-        effective_to_dt = utc_to_dt
-
-    if effective_to_dt < effective_from_dt:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="to_dt muss groesser oder gleich from_dt sein",
-        )
 
     congregations = await SqlCongregationRepository(db).list_by_district(
         district_id, group_id=group_id

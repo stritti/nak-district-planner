@@ -18,7 +18,7 @@ class InvitationTargetCreate(BaseModel):
     external_target_note: str | None = Field(default=None, min_length=1, max_length=500)
 
     @model_validator(mode="after")
-    def validate_target(self) -> "InvitationTargetCreate":
+    def validate_target(self) -> InvitationTargetCreate:
         if self.target_type == InvitationTargetType.DISTRICT_CONGREGATION:
             if self.target_congregation_id is None:
                 raise ValueError("target_congregation_id is required for DISTRICT_CONGREGATION")

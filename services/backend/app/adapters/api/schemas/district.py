@@ -54,7 +54,7 @@ class CongregationCreate(BaseModel):
     invitation_external_note: str | None = Field(default=None, min_length=1, max_length=500)
 
     @model_validator(mode="after")
-    def validate_invitation_target(self) -> "CongregationCreate":
+    def validate_invitation_target(self) -> CongregationCreate:
         if self.invitation_target_type is None:
             if (
                 self.invitation_target_congregation_id is not None
@@ -93,7 +93,7 @@ class CongregationUpdate(BaseModel):
     invitation_external_note: str | None = Field(default=None, min_length=1, max_length=500)
 
     @model_validator(mode="after")
-    def validate_invitation_target(self) -> "CongregationUpdate":
+    def validate_invitation_target(self) -> CongregationUpdate:
         target_type_set = "invitation_target_type" in self.model_fields_set
         target_id_set = "invitation_target_congregation_id" in self.model_fields_set
         external_set = "invitation_external_note" in self.model_fields_set

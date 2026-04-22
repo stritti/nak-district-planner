@@ -67,7 +67,7 @@ class LeaderRegistration:
         phone: str | None = None,
         notes: str | None = None,
         user_sub: str | None = None,
-    ) -> "LeaderRegistration":
+    ) -> LeaderRegistration:
         now = datetime.now(UTC)
         return LeaderRegistration(
             id=uuid.uuid4(),

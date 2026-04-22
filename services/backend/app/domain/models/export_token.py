@@ -34,7 +34,7 @@ class ExportToken:
         district_id: uuid.UUID,
         congregation_id: uuid.UUID | None,
         leader_id: uuid.UUID | None = None,
-    ) -> "ExportToken":
+    ) -> ExportToken:
         return ExportToken(
             id=uuid.uuid4(),
             token=secrets.token_urlsafe(32),
