@@ -30,7 +30,7 @@
     "happy-dom": "^20.9",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0",
-    "typescript-eslint": "^8",
+    "typescript-eslint": "^8.59",
     "vite": "^8.0",
     "vitest": "^4.1",
     "vue-eslint-parser": "^10.0.0",
