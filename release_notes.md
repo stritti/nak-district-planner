@@ -1,6 +1,7 @@
-## [v0.3.1] - 2026-04-20
+## [v0.4.0] - 2026-04-23
 
 ### Features
+* feat(matrix): close remaining UC-03 implementation gaps (#93) (9ab555a)
 * feat(matrix): complete remaining UC-03 matrix tasks (#90) (bc98e71)
 * feat: add checks skill for code quality verification (eadd177)
 * feat: add pluggable IDP provisioning layer (63d5e66)
@@ -10,7 +11,6 @@
 * feat: group congregations and sync district selection (ef51686)
 * feat: optimize matrix view for wider, denser planning (0c0ca94)
 * feat: add draft generation and matrix move workflow (e45f958)
-* feat: add event-based invitation workflow in service matrix (6875958)
 
 ### Bug Fixes
 * fix(ci): remove trailing spaces and fix markdown lint issues (d06e62b)
@@ -25,6 +25,7 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* chore: release v0.3.1 (da47819)
 * Harden RBAC on read APIs and scoped district checks (#92) (64b1e17)
 * chore: release v0.3.0 (c2a0f7d)
 * chore: release v0.2.10 (8b338c0)
@@ -34,4 +35,3 @@
 * chore: release v0.2.8 (ea072cf)
 * build(deps): Bump authlib (#91) (8a9119f)
 * chore: release v0.2.7 (fd60fe3)
-* build(deps): Update celery[sqlalchemy] requirement in /services/backend (#86) (3c8fed3)
