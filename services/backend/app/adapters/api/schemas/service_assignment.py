@@ -1,3 +1,5 @@
+"""app/adapters/api/schemas/service_assignment.py: Module."""
+
 import uuid
 from datetime import datetime
 
@@ -7,6 +9,8 @@ from app.domain.models.service_assignment import AssignmentStatus
 
 
 class ServiceAssignmentCreate(BaseModel):
+    """ServiceAssignmentCreate."""
+
     leader_id: uuid.UUID | None = None
     leader_name: str | None = Field(default=None, min_length=1, max_length=255)
     status: AssignmentStatus = AssignmentStatus.ASSIGNED
@@ -19,12 +23,16 @@ class ServiceAssignmentCreate(BaseModel):
 
 
 class ServiceAssignmentUpdate(BaseModel):
+    """ServiceAssignmentUpdate."""
+
     leader_id: uuid.UUID | None = None
     leader_name: str | None = Field(default=None, min_length=1, max_length=255)
     status: AssignmentStatus | None = None
 
 
 class ServiceAssignmentResponse(BaseModel):
+    """ServiceAssignmentResponse."""
+
     id: uuid.UUID
     event_id: uuid.UUID
     leader_id: uuid.UUID | None

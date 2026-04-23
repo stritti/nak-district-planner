@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -21,8 +21,7 @@ from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.invitation import CongregationInvitation, InvitationTargetType
-from app.domain.models.leader import Leader
-from app.domain.models.leader import LeaderRank
+from app.domain.models.leader import Leader, LeaderRank
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
@@ -46,7 +45,7 @@ def _superadmin_auth() -> object:
 
 @pytest.mark.asyncio
 async def test_expected_dates_includes_matching_weekdays() -> None:
-    from_date = datetime(2026, 4, 6, tzinfo=timezone.utc).date()  # Monday
+    from_date = datetime(2026, 4, 6, tzinfo=UTC).date()  # Monday
     to_date = from_date + timedelta(days=6)
     dates = r._expected_dates([{"weekday": 0, "time": "20:00"}], from_date, to_date)
     assert dates == ["2026-04-06"]
@@ -448,7 +447,7 @@ async def test_group_crud_not_found_paths() -> None:
 async def test_get_matrix_success() -> None:
     district_id = uuid.uuid4()
     congregation = Congregation.create(name="G", district_id=district_id)
-    now = datetime(2026, 4, 8, 10, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
     event = Event.create(
         title="Gottesdienst Mittwoch",
         start_at=now,
@@ -556,8 +555,8 @@ async def test_get_matrix_not_found_and_invalid_range() -> None:
                 district_id,
                 _superadmin_auth(),
                 db,
-                from_dt=datetime(2030, 5, 2, tzinfo=timezone.utc),
-                to_dt=datetime(2030, 5, 1, tzinfo=timezone.utc),
+                from_dt=datetime(2030, 5, 2, tzinfo=UTC),
+                to_dt=datetime(2030, 5, 1, tzinfo=UTC),
                 group_id=None,
             )
     assert range_exc.value.status_code == 422
@@ -572,7 +571,7 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
         service_times=[{"weekday": 2, "time": "19:30"}],
     )
     source_congregation_id = uuid.uuid4()
-    start = datetime(2030, 4, 10, 10, 0, tzinfo=timezone.utc)
+    start = datetime(2030, 4, 10, 10, 0, tzinfo=UTC)
 
     source_event = Event.create(
         title="Gottesdienst Quelle",
@@ -675,8 +674,8 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
 async def test_generate_matrix_drafts_error_paths() -> None:
     district_id = uuid.uuid4()
     db = AsyncMock()
-    from_dt = datetime(2030, 4, 3, tzinfo=timezone.utc)
-    to_dt = datetime(2030, 4, 1, tzinfo=timezone.utc)
+    from_dt = datetime(2030, 4, 3, tzinfo=UTC)
+    to_dt = datetime(2030, 4, 1, tzinfo=UTC)
 
     with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls:
         district_repo = AsyncMock()
@@ -770,8 +769,8 @@ async def test_get_matrix_defaults_to_4_weeks_when_range_missing() -> None:
     assert result.rows
     call_kwargs = event_repo.list.await_args.kwargs
     assert call_kwargs["to_dt"] > call_kwargs["from_dt"]
-    assert call_kwargs["from_dt"].tzinfo is timezone.utc
-    assert call_kwargs["to_dt"].tzinfo is timezone.utc
+    assert call_kwargs["from_dt"].tzinfo is UTC
+    assert call_kwargs["to_dt"].tzinfo is UTC
     assert call_kwargs["from_dt"].time() == datetime.min.time()
     assert call_kwargs["to_dt"].time() == datetime.max.time()
     assert (call_kwargs["to_dt"].date() - call_kwargs["from_dt"].date()).days == 27
@@ -828,13 +827,13 @@ async def test_get_matrix_derives_from_dt_from_to_dt_when_missing() -> None:
             _superadmin_auth(),
             db,
             from_dt=None,
-            to_dt=datetime(2025, 6, 15, 14, 30, tzinfo=timezone.utc),
+            to_dt=datetime(2025, 6, 15, 14, 30, tzinfo=UTC),
             group_id=None,
         )
 
     call_kwargs = event_repo.list.await_args.kwargs
-    assert call_kwargs["to_dt"] == datetime(2025, 6, 15, 23, 59, 59, 999999, tzinfo=timezone.utc)
-    assert call_kwargs["from_dt"] == datetime(2025, 5, 19, 0, 0, tzinfo=timezone.utc)
+    assert call_kwargs["to_dt"] == datetime(2025, 6, 15, 23, 59, 59, 999999, tzinfo=UTC)
+    assert call_kwargs["from_dt"] == datetime(2025, 5, 19, 0, 0, tzinfo=UTC)
 
 
 @pytest.mark.asyncio
@@ -883,7 +882,7 @@ async def test_get_matrix_derives_to_dt_from_from_dt_when_missing() -> None:
         inv_repo.list_by_source_events.return_value = []
         inv_repo_cls.return_value = inv_repo
 
-        from_dt = datetime(2025, 7, 3, 9, 15, tzinfo=timezone.utc)
+        from_dt = datetime(2025, 7, 3, 9, 15, tzinfo=UTC)
         await r.get_matrix(
             district_id,
             _superadmin_auth(),
@@ -894,8 +893,8 @@ async def test_get_matrix_derives_to_dt_from_from_dt_when_missing() -> None:
         )
 
     call_kwargs = event_repo.list.await_args.kwargs
-    assert call_kwargs["from_dt"] == datetime(2025, 7, 3, 0, 0, tzinfo=timezone.utc)
-    assert call_kwargs["to_dt"] == datetime(2025, 7, 30, 23, 59, 59, 999999, tzinfo=timezone.utc)
+    assert call_kwargs["from_dt"] == datetime(2025, 7, 3, 0, 0, tzinfo=UTC)
+    assert call_kwargs["to_dt"] == datetime(2025, 7, 30, 23, 59, 59, 999999, tzinfo=UTC)
 
 
 @pytest.mark.asyncio
@@ -954,15 +953,15 @@ async def test_get_matrix_normalizes_naive_query_datetimes_to_utc() -> None:
         )
 
     call_kwargs = event_repo.list.await_args.kwargs
-    assert call_kwargs["from_dt"].tzinfo is timezone.utc
-    assert call_kwargs["to_dt"].tzinfo is timezone.utc
+    assert call_kwargs["from_dt"].tzinfo is UTC
+    assert call_kwargs["to_dt"].tzinfo is UTC
 
 
 @pytest.mark.asyncio
 async def test_generate_matrix_drafts_success() -> None:
     district_id = uuid.uuid4()
     db = AsyncMock()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     congregation = Congregation.create(name="G", district_id=district_id)
     event = Event.create(
         title="Gottesdienst",

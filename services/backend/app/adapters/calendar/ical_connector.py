@@ -9,7 +9,7 @@ Credentials format: {"url": "https://example.com/feed.ics"}
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from icalendar import Calendar as ICalendar  # type: ignore[import-untyped]
@@ -22,10 +22,10 @@ def _to_utc(dt: datetime | date) -> datetime:
     """Convert a date or datetime to a timezone-aware UTC datetime."""
     if isinstance(dt, datetime):
         if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
     # All-day event: treat as midnight UTC
-    return datetime(dt.year, dt.month, dt.day, tzinfo=timezone.utc)
+    return datetime(dt.year, dt.month, dt.day, tzinfo=UTC)
 
 
 def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:

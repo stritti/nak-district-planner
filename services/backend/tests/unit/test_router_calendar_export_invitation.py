@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,8 +29,8 @@ from app.domain.models.event import Event, EventStatus
 from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.invitation import (
     CongregationInvitation,
-    InvitationTargetType,
     InvitationOverwriteRequest,
+    InvitationTargetType,
     OverwriteDecisionStatus,
 )
 
@@ -127,8 +127,8 @@ async def test_export_token_routes_and_ics_export() -> None:
     )
     event = Event.create(
         title="GD",
-        start_at=datetime.now(timezone.utc),
-        end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC) + timedelta(hours=1),
         district_id=district_id,
         status=EventStatus.PUBLISHED,
     )
@@ -261,8 +261,8 @@ async def test_invitation_routes_success_and_error_paths() -> None:
     district_id = uuid.uuid4()
     event = Event.create(
         title="Quelle",
-        start_at=datetime.now(timezone.utc),
-        end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC) + timedelta(hours=1),
         district_id=district_id,
     )
     invitation = CongregationInvitation.create(

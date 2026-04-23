@@ -1,21 +1,23 @@
+"""app/adapters/api/routers/calendar_integrations.py: Module."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
-from app.adapters.auth.permissions import (
-    PermissionError,
-    assert_has_role_in_district,
-)
 from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationCreate,
     CalendarIntegrationListResponse,
     CalendarIntegrationResponse,
     CalendarIntegrationUpdate,
     SyncResult,
+)
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
 )
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.application.crypto import CryptoError, encrypt_credentials
@@ -167,7 +169,7 @@ async def update_calendar_integration(
     if "default_category" in fields:
         integration.default_category = body.default_category
 
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.now(UTC)
     await repo.save(integration)
     return _to_response(integration)
 

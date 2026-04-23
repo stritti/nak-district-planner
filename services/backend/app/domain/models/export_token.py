@@ -1,13 +1,17 @@
+"""app/domain/models/export_token.py: Module."""
+
 from __future__ import annotations
 
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import Enum, StrEnum
 
 
-class TokenType(str, Enum):
+class TokenType(StrEnum):
+    """TokenType domain model."""
+
     PUBLIC = "PUBLIC"  # leader names anonymized
     INTERNAL = "INTERNAL"  # full leader names visible
 
@@ -30,7 +34,7 @@ class ExportToken:
         district_id: uuid.UUID,
         congregation_id: uuid.UUID | None,
         leader_id: uuid.UUID | None = None,
-    ) -> "ExportToken":
+    ) -> ExportToken:
         return ExportToken(
             id=uuid.uuid4(),
             token=secrets.token_urlsafe(32),
@@ -39,5 +43,5 @@ class ExportToken:
             district_id=district_id,
             congregation_id=congregation_id,
             leader_id=leader_id,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )

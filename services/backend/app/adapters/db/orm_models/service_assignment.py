@@ -1,9 +1,12 @@
+"""app/adapters/db/orm_models/service_assignment.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,6 +15,8 @@ from app.domain.models.service_assignment import AssignmentStatus
 
 
 class ServiceAssignmentORM(Base):
+    """ORM model for serviceassignmentorm."""
+
     __tablename__ = "service_assignments"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

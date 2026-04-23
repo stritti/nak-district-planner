@@ -1,5 +1,4 @@
-"""
-Authorization guards and permission checks for role-based access control.
+"""Authorization guards and permission checks for role-based access control.
 
 Enforces permission boundaries at the application service level based on:
 - User's roles
@@ -35,8 +34,7 @@ def has_role_in_district(
     district_id: uuid.UUID,
     congregation_ids_in_district: set[uuid.UUID] | None = None,
 ) -> bool:
-    """
-    Check if user has the required role (or higher) in a district.
+    """Check if user has the required role (or higher) in a district.
 
     Role hierarchy (highest to lowest):
     - DISTRICT_ADMIN (can do everything in the district)
@@ -72,8 +70,7 @@ def has_role_in_congregation(
     required_role: Role,
     congregation_id: uuid.UUID,
 ) -> bool:
-    """
-    Check if user has the required role (or higher) in a congregation.
+    """Check if user has the required role (or higher) in a congregation.
 
     Direct congregation membership and district-level roles are considered.
     A DISTRICT_ADMIN has all permissions in all congregations within the district.
@@ -98,9 +95,7 @@ def assert_has_role_in_district(
     district_id: uuid.UUID,
     congregation_ids_in_district: set[uuid.UUID] | None = None,
 ) -> None:
-    """
-    Raise PermissionError if user lacks required role in district.
-    """
+    """Raise PermissionError if user lacks required role in district."""
     if not has_role_in_district(
         auth_context,
         required_role,
@@ -117,9 +112,7 @@ def assert_has_role_in_congregation(
     required_role: Role,
     congregation_id: uuid.UUID,
 ) -> None:
-    """
-    Raise PermissionError if user lacks required role in congregation.
-    """
+    """Raise PermissionError if user lacks required role in congregation."""
     if not has_role_in_congregation(auth_context, required_role, congregation_id):
         raise PermissionError(
             f"User {auth_context.user_sub} lacks {required_role.value} role in congregation {congregation_id}"
@@ -130,9 +123,7 @@ def get_districts_where_user_has_role(
     auth_context: AuthContext,
     required_role: Role,
 ) -> list[uuid.UUID]:
-    """
-    Get all district IDs where user has the required role (or higher).
-    """
+    """Get all district IDs where user has the required role (or higher)."""
     district_ids = set()
     for membership in auth_context.memberships:
         if membership.scope_type == ScopeType.DISTRICT and _role_hierarchy(
@@ -146,9 +137,7 @@ def get_congregations_where_user_has_role(
     auth_context: AuthContext,
     required_role: Role,
 ) -> list[uuid.UUID]:
-    """
-    Get all congregation IDs where user has the required role (or higher).
-    """
+    """Get all congregation IDs where user has the required role (or higher)."""
     congregation_ids = set()
     for membership in auth_context.memberships:
         if membership.scope_type == ScopeType.CONGREGATION and _role_hierarchy(
@@ -159,8 +148,7 @@ def get_congregations_where_user_has_role(
 
 
 def _role_hierarchy(role: Role) -> int:
-    """
-    Return numeric rank for role hierarchy.
+    """Return numeric rank for role hierarchy.
     Higher number = higher privilege level.
     """
     hierarchy = {

@@ -1,12 +1,13 @@
+"""app/adapters/api/routers/leaders.py: Module."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 
 from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
-from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.api.schemas.leader import (
     LeaderCreate,
     LeaderResponse,
@@ -14,6 +15,7 @@ from app.adapters.api.schemas.leader import (
     LeaderSelfLinkResponse,
     LeaderUpdate,
 )
+from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.domain.models.leader import Leader
@@ -122,7 +124,7 @@ async def update_leader(
         leader.notes = body.notes
     if "is_active" in fields and body.is_active is not None:
         leader.is_active = body.is_active
-    leader.updated_at = datetime.now(timezone.utc)
+    leader.updated_at = datetime.now(UTC)
     await repo.save(leader)
     return _leader_response(leader)
 
@@ -164,7 +166,7 @@ async def link_self_to_leader(
     existing_link = await repo.get_by_user_sub(user.sub, district_id=district_id)
     if existing_link and existing_link.id != target.id:
         existing_link.user_sub = None
-        existing_link.updated_at = datetime.now(timezone.utc)
+        existing_link.updated_at = datetime.now(UTC)
         await repo.save(existing_link)
 
     if target.user_sub and target.user_sub != user.sub:
@@ -174,7 +176,7 @@ async def link_self_to_leader(
         )
 
     target.user_sub = user.sub
-    target.updated_at = datetime.now(timezone.utc)
+    target.updated_at = datetime.now(UTC)
     await repo.save(target)
     return LeaderSelfLinkResponse(linked=True, leader=_leader_response(target))
 
@@ -191,7 +193,7 @@ async def unlink_self_from_leader(
         return LeaderSelfLinkResponse(linked=False, leader=None)
 
     linked.user_sub = None
-    linked.updated_at = datetime.now(timezone.utc)
+    linked.updated_at = datetime.now(UTC)
     await repo.save(linked)
     return LeaderSelfLinkResponse(linked=False, leader=None)
 
