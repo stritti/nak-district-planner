@@ -25,7 +25,6 @@ from app.domain.models.calendar_integration import (
     CalendarIntegration,
     CalendarType,
 )
-from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.invitation import (

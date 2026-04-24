@@ -19,7 +19,6 @@ from app.adapters.api.schemas.service_assignment import (
 from app.domain.models.district import District
 from app.domain.models.event import Event
 from app.domain.models.leader import Leader
-from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
 
@@ -221,10 +220,18 @@ async def test_service_assignment_crud_paths() -> None:
             type("A", (), {"memberships": [], "user": None})(),
             db,
         )
+        deleted = await sa_router.delete_assignment(
+            event.id,
+            assignment.id,
+            type("A", (), {"memberships": [], "user": None})(),
+            db,
+        )
 
     assert created.leader_name == "Pr. Y"
     assert len(listed) == 1
     assert updated.status == AssignmentStatus.CONFIRMED
+    assert deleted is None
+    assert sa_repo.delete.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -254,6 +261,13 @@ async def test_service_assignment_not_found_paths() -> None:
                 uuid.uuid4(),
                 uuid.uuid4(),
                 ServiceAssignmentUpdate(leader_name="A"),
+                type("A", (), {"memberships": [], "user": None})(),
+                AsyncMock(),
+            )
+        with pytest.raises(HTTPException):
+            await sa_router.delete_assignment(
+                uuid.uuid4(),
+                uuid.uuid4(),
                 type("A", (), {"memberships": [], "user": None})(),
                 AsyncMock(),
             )

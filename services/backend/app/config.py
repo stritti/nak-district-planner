@@ -25,9 +25,15 @@ class Settings(BaseSettings):
     oidc_scopes: str = "openid profile email"
     superadmin_sub: str | None = None
     idp_provisioning_enabled: bool = False
+    idp_provisioning_provider: str = "webhook"
     idp_provisioning_endpoint: str | None = None
     idp_provisioning_api_key: str | None = None
     idp_provisioning_timeout_seconds: float = 10.0
+    idp_provisioning_keycloak_base_url: str | None = None
+    idp_provisioning_keycloak_realm: str | None = None
+    idp_provisioning_keycloak_admin_username: str | None = None
+    idp_provisioning_keycloak_admin_password: str | None = None
+    idp_provisioning_keycloak_invite_on_approval: bool = True
     startup_generate_draft_services: bool = False
 
     @model_validator(mode="after")

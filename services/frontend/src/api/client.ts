@@ -1,10 +1,10 @@
 import { useAuthStore } from '@/stores/auth'
+import { useOIDC } from '@/composables/useOIDC'
+import { router } from '@/router'
 
-// Task 8.1: Create fetch wrapper with JWT interceptor
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const authStore = useAuthStore()
   
-  // Task 8.2: Add Authorization header
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -20,22 +20,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     headers,
   })
 
-  // Task 8.3: Handle 401 and refresh token
   if (res.status === 401 && path !== '/api/v1/auth/me') {
     // Token might be expired or invalid
     try {
-      const { useOIDC } = await import('@/composables/useOIDC')
-      const { useRouter } = await import('vue-router')
-      
-      // Get router instance (may be undefined if called outside component context)
-      let routerInstance
-      try {
-        routerInstance = useRouter()
-      } catch {
-        // Router not available in this context, that's ok
-      }
-      
-      const oidc = useOIDC(routerInstance)
+      const oidc = useOIDC(router)
 
       // Try to refresh token
       await oidc.refreshToken()
@@ -46,7 +34,6 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       } else {
         // Refresh failed, logout
         authStore.clearAuth()
-        const { router } = await import('@/router')
         router.push('/login')
         throw new Error('Unauthorized')
       }

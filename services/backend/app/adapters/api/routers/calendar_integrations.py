@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -23,8 +22,6 @@ from app.application.crypto import CryptoError, encrypt_credentials
 from app.application.sync_service import run_sync
 from app.domain.models.calendar_integration import CalendarIntegration
 from app.domain.models.role import Role
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/calendar-integrations", tags=["calendar-integrations"])
 

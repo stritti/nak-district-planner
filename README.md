@@ -3,6 +3,18 @@
 Planungswerkzeug für Gottesdienste und Veranstaltungen in NAK-Bezirken.
 Verwaltet Gemeinden, Termine und Dienstzuweisungen; exportiert Kalender als ICS-Feed.
 
+## Dokumentation
+
+Die Projektdokumentation befindet sich unter `docs/`.
+
+- Einstieg: `docs/documentation-map.md`
+- Architekturstatus: `docs/architecture-status.md`
+- Engineering Standards: `docs/engineering-standards.md`
+- Security Baseline: `docs/security-baseline.md`
+- Production Runbook: `docs/production-runbook.md`
+
+Historische Inhalte wurden in die strukturierte Projektdokumentation ueberfuehrt.
+
 ---
 
 ## Voraussetzungen
@@ -310,7 +322,7 @@ docker exec -i nak-district-planner-db-1 \
 
 ## Projektstruktur (Kurzübersicht)
 
-```
+```text
 nak-district-planner/
 ├── docker-compose.yml           # Produktion
 ├── docker-compose.override.yml  # Dev-Ergänzungen (automatisch)

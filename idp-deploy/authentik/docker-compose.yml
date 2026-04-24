@@ -41,17 +41,17 @@ services:
       AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRES_NAME:-authentik}
       AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRES_USER:-authentik}
       AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-authentik_dev_pw}
-      
+
       # Secret key for session encryption (generate: openssl rand -base64 32)
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-InsecureSecretKeyChangeInProduction}
-      
+
       # Log level
       AUTHENTIK_LOG_LEVEL: ${AUTHENTIK_LOG_LEVEL:-info}
-      
+
       # Hostname (used for OIDC discovery)
       AUTHENTIK_URL_SCHEME: http  # Change to https in production
       AUTHENTIK_URL_HOST: ${AUTHENTIK_HOSTNAME:-localhost:9000}
-      
+
     ports:
       - "9000:9000"  # HTTP - for local dev
     depends_on:
@@ -79,12 +79,12 @@ services:
       AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRES_NAME:-authentik}
       AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRES_USER:-authentik}
       AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-authentik_dev_pw}
-      
+
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-InsecureSecretKeyChangeInProduction}
       AUTHENTIK_LOG_LEVEL: ${AUTHENTIK_LOG_LEVEL:-info}
       AUTHENTIK_URL_SCHEME: http
       AUTHENTIK_URL_HOST: ${AUTHENTIK_HOSTNAME:-localhost:9000}
-      
+
     depends_on:
       authentik-postgres:
         condition: service_healthy

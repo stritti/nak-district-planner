@@ -72,7 +72,7 @@ docker exec <db-container> psql -U keycloak keycloak -c "SELECT client_secret FR
 
 Once all checks pass, copy CLIENT_SECRET to `nak-district-planner/.env`:
 
-```
+```text
 KEYCLOAK_URL=https://auth.5tritti.de
 KEYCLOAK_REALM=nak-planner
 KEYCLOAK_CLIENT_ID=nak-planner-api

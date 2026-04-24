@@ -1,102 +1,41 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
-
-import httpx
-
+from app.adapters.idp.base import IdpProvisioner, IdpProvisioningError
+from app.adapters.idp.keycloak_provisioner import KeycloakProvisioningAdapter
+from app.adapters.idp.webhook_provisioner import HttpIdpProvisioningAdapter
 from app.config import settings
 
 
-class IdpProvisioningError(Exception):
-    """Raised when provisioning to IDP fails."""
-
-
-@dataclass(slots=True)
-class IdpProvisionResult:
-    status: str
-    user_sub: str | None = None
-
-
-class HttpIdpProvisioningAdapter:
-    """Provider-agnostic HTTP adapter for IDP provisioning/invite automation."""
-
-    def __init__(
-        self,
-        endpoint: str,
-        api_key: str | None,
-        timeout_seconds: float,
-    ) -> None:
-        self._endpoint = endpoint
-        self._api_key = api_key
-        self._timeout_seconds = timeout_seconds
-
-    async def provision_user(
-        self,
-        *,
-        email: str,
-        name: str,
-        district_id: str,
-        registration_id: str,
-        role: str,
-        scope_type: str,
-        scope_id: str,
-    ) -> IdpProvisionResult:
-        headers: dict[str, str] = {
-            "Content-Type": "application/json",
-        }
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-
-        payload = {
-            "email": email,
-            "name": name,
-            "district_id": district_id,
-            "registration_id": registration_id,
-            "role": role,
-            "scope_type": scope_type,
-            "scope_id": scope_id,
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                response = await client.post(self._endpoint, json=payload, headers=headers)
-        except httpx.HTTPError as exc:
-            raise IdpProvisioningError(f"Provisioning request failed: {exc}") from exc
-
-        if response.status_code >= 400:
-            raise IdpProvisioningError(
-                f"Provisioning endpoint returned {response.status_code}: {response.text}"
-            )
-
-        body: Any
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise IdpProvisioningError("Provisioning endpoint returned invalid JSON") from exc
-
-        if not isinstance(body, dict):
-            raise IdpProvisioningError("Provisioning endpoint returned invalid payload shape")
-
-        status_value = body.get("status")
-        if not isinstance(status_value, str) or not status_value.strip():
-            raise IdpProvisioningError("Provisioning response missing required field 'status'")
-
-        user_sub = body.get("user_sub")
-        if user_sub is not None and not isinstance(user_sub, str):
-            raise IdpProvisioningError("Provisioning response field 'user_sub' has invalid type")
-
-        return IdpProvisionResult(status=status_value, user_sub=user_sub)
-
-
-def get_idp_provisioner() -> HttpIdpProvisioningAdapter | None:
+def get_idp_provisioner() -> IdpProvisioner | None:
     """Return configured provisioning adapter or None when disabled."""
     if not settings.idp_provisioning_enabled:
         return None
-    if not settings.idp_provisioning_endpoint:
-        return None
-    return HttpIdpProvisioningAdapter(
-        endpoint=settings.idp_provisioning_endpoint,
-        api_key=settings.idp_provisioning_api_key,
-        timeout_seconds=settings.idp_provisioning_timeout_seconds,
-    )
+    if settings.idp_provisioning_provider == "keycloak":
+        if (
+            not settings.idp_provisioning_keycloak_base_url
+            or not settings.idp_provisioning_keycloak_realm
+            or not settings.idp_provisioning_keycloak_admin_username
+            or not settings.idp_provisioning_keycloak_admin_password
+        ):
+            return None
+        return KeycloakProvisioningAdapter(
+            base_url=settings.idp_provisioning_keycloak_base_url,
+            realm=settings.idp_provisioning_keycloak_realm,
+            admin_username=settings.idp_provisioning_keycloak_admin_username,
+            admin_password=settings.idp_provisioning_keycloak_admin_password,
+            timeout_seconds=settings.idp_provisioning_timeout_seconds,
+            invite_on_approval=settings.idp_provisioning_keycloak_invite_on_approval,
+        )
+
+    if settings.idp_provisioning_provider == "webhook":
+        if not settings.idp_provisioning_endpoint:
+            return None
+        return HttpIdpProvisioningAdapter(
+            endpoint=settings.idp_provisioning_endpoint,
+            api_key=settings.idp_provisioning_api_key,
+            timeout_seconds=settings.idp_provisioning_timeout_seconds,
+        )
+    return None
+
+
+__all__ = ["IdpProvisioningError", "get_idp_provisioner"]

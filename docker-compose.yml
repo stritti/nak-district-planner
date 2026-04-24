@@ -40,4 +40,3 @@ services:
     image: redis:7-alpine
     volumes:
       - ./redis_data:/data
-

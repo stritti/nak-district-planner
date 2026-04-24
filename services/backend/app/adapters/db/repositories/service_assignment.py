@@ -75,3 +75,10 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
         row.created_at = assignment.created_at
         row.updated_at = assignment.updated_at
         await self._session.flush()
+
+    async def delete(self, assignment_id: uuid.UUID) -> None:
+        row = await self._session.get(ServiceAssignmentORM, assignment_id)
+        if row is None:
+            return
+        await self._session.delete(row)
+        await self._session.flush()

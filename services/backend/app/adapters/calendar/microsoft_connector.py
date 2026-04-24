@@ -44,10 +44,6 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
             params["startDateTime"] = from_dt.isoformat()
         if to_dt is not None:
             params["endDateTime"] = to_dt.isoformat()
-        else:
-            # If no to_dt, fetch a reasonable default (e.g., next 30 days)
-            # But we rely on the caller to provide meaningful bounds
-            pass
         params["$select"] = "subject,start,end,bodyPreview,iCalUId,status"
 
         headers = {"Authorization": f"Bearer {access_token}"}

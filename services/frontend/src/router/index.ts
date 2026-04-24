@@ -24,7 +24,6 @@ function getPinia() {
   return pinia
 }
 
-// Task 9.1: requireAuth Guard
 function requireAuth(
   to: RouteLocationNormalized,
   from: RouteLocationNormalized,

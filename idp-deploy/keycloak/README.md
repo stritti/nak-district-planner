@@ -53,14 +53,14 @@ openssl rand -base64 16
 
 ## Admin Console
 
-Access at: http://localhost:8080/admin/
+Access at: <http://localhost:8080/admin/>
 - Username: admin
 - Password: (from .env KC_BOOTSTRAP_ADMIN_PASSWORD)
 
 ## OIDC Integration
 
 Once setup is complete, frontend uses:
-- Discovery: http://localhost:8080/realms/nak-planner/.well-known/openid-configuration
+- Discovery: <http://localhost:8080/realms/nak-planner/.well-known/openid-configuration>
 - Client ID: nak-planner-frontend
 - Client Type: Public (PKCE)
 

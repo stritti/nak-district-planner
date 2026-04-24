@@ -105,7 +105,7 @@ chmod +x deploy_keycloak.sh
 ```
 
 **Expected Output:**
-```
+```text
 ═══════════════════════════════════════════════════════════
 Keycloak VPS Deployment
 ═══════════════════════════════════════════════════════════
@@ -219,7 +219,7 @@ curl https://auth.5tritti.de/admin/realms/nak-planner \
 
 The deploy script prints the CLIENT_SECRET during realm setup. Look for output like:
 
-```
+```text
 ============================================================
 CLIENT SECRET (speichere in .env):
 ============================================================
