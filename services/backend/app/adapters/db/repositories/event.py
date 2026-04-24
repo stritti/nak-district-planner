@@ -10,6 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.event import EventORM
+from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+from app.application.planning_model_bridge import (
+    event_instance_from_event,
+    planning_slot_from_event,
+)
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
 from app.domain.ports.repositories import EventRepository
 
@@ -156,6 +163,8 @@ class SqlEventRepository(EventRepository):
         row = _domain_to_orm(event, existing)
         if existing is None:
             self._session.add(row)
+        await SqlPlanningSlotRepository(self._session).save(planning_slot_from_event(event))
+        await SqlEventInstanceRepository(self._session).save(event_instance_from_event(event))
         await self._session.flush()
 
     async def list_linked_by_source_event(self, source_event_id: uuid.UUID) -> list[Event]:
@@ -207,5 +216,11 @@ class SqlEventRepository(EventRepository):
 
         Returns the number of deleted rows.
         """
+        # `planning_slot_from_event()` keeps the bridge IDs aligned (`slot.id == event.id`),
+        # so the stale event ID set is also the stale planning-slot ID set.
+        stale_bridge_ids = select(EventORM.id).where(EventORM.end_at < cutoff)
+        await self._session.execute(
+            delete(PlanningSlotORM).where(PlanningSlotORM.id.in_(stale_bridge_ids))
+        )
         result = await self._session.execute(delete(EventORM).where(EventORM.end_at < cutoff))
         return result.rowcount

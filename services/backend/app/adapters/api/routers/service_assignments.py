@@ -85,7 +85,7 @@ async def list_assignments(
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
-    assignments = await SqlServiceAssignmentRepository(db).list_by_event(event_id)
+    assignments = await SqlServiceAssignmentRepository(db).list_by_planning_slot(event_id)
     return [_assignment_response(a) for a in assignments]
 
 

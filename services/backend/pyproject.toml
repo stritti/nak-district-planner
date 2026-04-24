@@ -70,6 +70,7 @@ ignore = [
     "D401",  # First line should be in imperative mood
     "D413",  # Missing blank line after last section
     "D415",  # First line should end with a period, question mark, or exclamation point
+    "E402",  # Import might perform runtime check based on mocked value
     "E501",  # Line too long (let IDE handle wrapping)
     "F401",  # Unused imports (type hints - common in repositories)
     "N806",  # Variable naming in tests (Mock patterns)
@@ -77,6 +78,10 @@ ignore = [
     "N817",  # CamelCase in function name (intentional: EventStatus)
     "RUF001",  # Ambiguous dash in string (intentional: German text)
     "RUF003",  # Ambiguous dash in comment (intentional: German text)
+    "RUF022",  # __all__ sort order verification
+    "RUF100",  # Unused noqa directive
+    "UP017",  # datetime.UTC usage is fine for existing code
+    "UP042",  # Class inherits from both str and enum.Enum (common pattern)
     "W291",  # Trailing whitespace (intentional in comments)
 ]
 

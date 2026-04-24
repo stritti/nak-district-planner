@@ -34,7 +34,9 @@ from app.adapters.db.repositories import (
     SqlCongregationRepository,
     SqlDistrictRepository,
     SqlEventRepository,
+    SqlEventInstanceRepository,
     SqlLeaderRepository,
+    SqlPlanningSlotRepository,
     SqlServiceAssignmentRepository,
 )
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
@@ -482,29 +484,46 @@ async def get_matrix(
             all_dates.add(event.start_at.date().isoformat())
     sorted_dates = sorted(all_dates)
 
-    # Filter Gottesdienst events for the matrix cells (include district-level)
-    gottesdienst_events = [e for e in events if e.category == "Gottesdienst"]
-
-    # Build lookup: (congregation_id, date) → event
-    event_by_cong_date: dict[tuple[uuid.UUID, str], object] = {}
+    gottesdienst_events = [event for event in events if event.category == "Gottesdienst"]
+    event_by_owner_date: dict[tuple[uuid.UUID, str], object] = {}
     for event in gottesdienst_events:
-        # Use district_id as key for district-level events
-        cong_id = event.congregation_id or event.district_id
-        key = (cong_id, event.start_at.date().isoformat())
-        if key not in event_by_cong_date:
-            event_by_cong_date[key] = event
-
-    # Load all assignments for found events in one batch
-    event_ids = [e.id for e in gottesdienst_events]
-    assignments = await SqlServiceAssignmentRepository(db).list_by_events(event_ids)
-    assignment_by_event: dict[uuid.UUID, object] = {}
-    for a in assignments:
-        if a.event_id not in assignment_by_event:
-            assignment_by_event[a.event_id] = a
+        owner_id = event.congregation_id or event.district_id
+        key = (owner_id, event.start_at.date().isoformat())
+        existing_event = event_by_owner_date.get(key)
+        if existing_event is None or event.start_at < existing_event.start_at:
+            event_by_owner_date[key] = event
 
     # Batch-load leaders for this district
     leaders = await SqlLeaderRepository(db).list_by_district(district_id)
     leaders_by_id = {leader.id: leader for leader in leaders}
+
+    slots = await SqlPlanningSlotRepository(db).list_for_date_range(
+        district_id=district_id,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    gottesdienst_slots = [slot for slot in slots if slot.category == "Gottesdienst"]
+    slot_by_owner_date: dict[tuple[uuid.UUID, str], object] = {}
+    for slot in gottesdienst_slots:
+        owner_id = slot.congregation_id or slot.district_id
+        key = (owner_id, slot.planning_date.isoformat())
+        existing_slot = slot_by_owner_date.get(key)
+        if existing_slot is None or slot.planning_time < existing_slot.planning_time:
+            slot_by_owner_date[key] = slot
+    instances = await SqlEventInstanceRepository(db).list_by_planning_slots(
+        [slot.id for slot in gottesdienst_slots]
+    )
+    instance_by_slot_id = {instance.planning_slot_id: instance for instance in instances}
+
+    assignments = await SqlServiceAssignmentRepository(db).list_by_planning_slots(
+        [slot.id for slot in gottesdienst_slots]
+    )
+    assignment_by_slot_id: dict[uuid.UUID, object] = {}
+    for a in assignments:
+        # `event_id` is kept as a temporary compatibility key for older assignment rows.
+        assignment_key = a.planning_slot_id or a.event_id
+        if assignment_key not in assignment_by_slot_id:
+            assignment_by_slot_id[assignment_key] = a
 
     # Build matrix rows
     rows: list[MatrixRow] = []
@@ -536,22 +555,34 @@ async def get_matrix(
         cells: dict[str, MatrixCell] = {}
 
         for date_key in sorted_dates:
-            event = event_by_cong_date.get((congregation.id, date_key))
+            event = event_by_owner_date.get((congregation.id, date_key))
+            if event is None:
+                event = event_by_owner_date.get((district_id, date_key))
             if event is None and date_key not in cong_expected:
                 # Neither expected by schedule nor explicitly present as event.
                 cells[date_key] = MatrixCell()
                 continue
 
-            if event is None:
+            slot = slot_by_owner_date.get((congregation.id, date_key))
+            if slot is None:
+                slot = slot_by_owner_date.get((district_id, date_key))
+            if event is None and slot is None:
                 # Im Zeitplan erwartet, aber noch kein Event angelegt
                 cells[date_key] = MatrixCell()
                 continue
 
-            assignment = assignment_by_event.get(event.id)
-            is_invitation_copy = event.invitation_source_event_id is not None
-            assignment_event_id = event.id
-            if assignment is None and is_invitation_copy:
-                assignment = assignment_by_event.get(event.invitation_source_event_id)
+            slot_or_event_id = slot.id if slot is not None else event.id
+            instance = instance_by_slot_id.get(slot.id) if slot is not None else None
+            assignment = assignment_by_slot_id.get(slot_or_event_id)
+            is_invitation_copy = event.invitation_source_event_id is not None if event else False
+            assignment_event_id = event.id if event is not None else slot_or_event_id
+            if (
+                assignment is None
+                and is_invitation_copy
+                and event is not None
+                and event.invitation_source_event_id is not None
+            ):
+                assignment = assignment_by_slot_id.get(event.invitation_source_event_id)
                 if assignment is not None:
                     assignment_event_id = event.invitation_source_event_id
 
@@ -567,24 +598,59 @@ async def get_matrix(
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
-                event_id=event.id,
+                event_id=event.id if event is not None else instance.id if instance is not None else None,
+                planning_slot_id=slot.id if slot is not None else None,
                 assignment_event_id=assignment_event_id,
                 invitation_source_congregation_name=source_congregation_names.get(
                     event.invitation_source_congregation_id
                 )
-                if event.invitation_source_congregation_id is not None
+                if event is not None and event.invitation_source_congregation_id is not None
                 else None,
-                event_title=event.title,
-                event_start_at=event.start_at,
-                event_end_at=event.end_at,
-                category=event.category,
+                event_title=instance.title if instance is not None else event.title if event is not None else None,
+                event_start_at=(
+                    instance.actual_start_at
+                    if instance is not None
+                    else event.start_at
+                    if event is not None
+                    else None
+                ),
+                event_end_at=(
+                    instance.actual_end_at
+                    if instance is not None
+                    else event.end_at
+                    if event is not None
+                    else None
+                ),
+                category=slot.category if slot is not None else event.category if event is not None else None,
                 is_gap=(assignment is None and not is_invitation_copy),
+                planned_time=(
+                    slot.planning_time
+                    if slot is not None
+                    else event.start_at.timetz().replace(tzinfo=None)
+                    if event is not None
+                    else None
+                ),
+                actual_start_at=(
+                    instance.actual_start_at
+                    if instance is not None
+                    else event.start_at
+                    if event is not None
+                    else None
+                ),
+                actual_end_at=(
+                    instance.actual_end_at
+                    if instance is not None
+                    else event.end_at
+                    if event is not None
+                    else None
+                ),
+                has_deviation=instance.deviation_flag if instance is not None else False,
                 is_assignment_editable=not is_invitation_copy,
                 assignment_id=assignment.id if assignment else None,
                 assignment_status=assignment.status if assignment else None,
                 leader_id=leader_id,
                 leader_name=leader_name,
-                invitation_count=len(invitation_by_source_event.get(event.id, [])),
+                invitation_count=len(invitation_by_source_event.get(event.id, [])) if event else 0,
             )
 
         rows.append(
