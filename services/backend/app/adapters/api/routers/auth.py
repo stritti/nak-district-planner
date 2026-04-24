@@ -1,5 +1,4 @@
-"""
-Authentication API routes.
+"""Authentication API routes.
 
 - GET /api/v1/auth/me — Get current authenticated user info
 """
@@ -14,8 +13,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 @router.get("/me", response_model=UserOut)
 async def get_current_user_info(user: AuthenticatedUser) -> UserOut:
-    """
-    Get current authenticated user info.
+    """Get current authenticated user info.
 
     Returns the authenticated user's information extracted from the JWT token.
 

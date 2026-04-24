@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -17,15 +17,35 @@ from app.adapters.api.schemas.district import (
     FeiertageImportRequest,
 )
 from app.domain.models.congregation import Congregation
+from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
-from app.domain.models.leader import Leader
+from app.domain.models.invitation import CongregationInvitation, InvitationTargetType
+from app.domain.models.leader import Leader, LeaderRank
+from app.domain.models.membership import Membership, ScopeType
+from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
+
+
+def _superadmin_user() -> object:
+    return type("U", (), {"is_superadmin": True})()
+
+
+def _superadmin_auth() -> object:
+    return type(
+        "A",
+        (),
+        {
+            "user_sub": "superadmin",
+            "memberships": [],
+            "user": type("U", (), {"is_superadmin": True})(),
+        },
+    )()
 
 
 @pytest.mark.asyncio
 async def test_expected_dates_includes_matching_weekdays() -> None:
-    from_date = datetime(2026, 4, 6, tzinfo=timezone.utc).date()  # Monday
+    from_date = datetime(2026, 4, 6, tzinfo=UTC).date()  # Monday
     to_date = from_date + timedelta(days=6)
     dates = r._expected_dates([{"weekday": 0, "time": "20:00"}], from_date, to_date)
     assert dates == ["2026-04-06"]
@@ -35,7 +55,7 @@ async def test_expected_dates_includes_matching_weekdays() -> None:
 async def test_create_district_rejects_unknown_state() -> None:
     with pytest.raises(HTTPException) as exc:
         await r.create_district(
-            DistrictCreate(name="Bezirk", state_code="zz"), object(), AsyncMock()
+            DistrictCreate(name="Bezirk", state_code="zz"), _superadmin_user(), AsyncMock()
         )
     assert exc.value.status_code == 422
 
@@ -54,7 +74,9 @@ async def test_create_district_handles_holiday_api_error() -> None:
         repo = AsyncMock()
         repo_cls.return_value = repo
         with pytest.raises(HTTPException) as exc:
-            await r.create_district(DistrictCreate(name="Bezirk", state_code="BY"), object(), db)
+            await r.create_district(
+                DistrictCreate(name="Bezirk", state_code="BY"), _superadmin_user(), db
+            )
         assert exc.value.status_code == 502
 
 
@@ -73,10 +95,23 @@ async def test_create_district_success() -> None:
     ):
         repo = AsyncMock()
         repo_cls.return_value = repo
-        out = await r.create_district(DistrictCreate(name="Bezirk", state_code="BY"), object(), db)
+        out = await r.create_district(
+            DistrictCreate(name="Bezirk", state_code="BY"), _superadmin_user(), db
+        )
     assert out.name == "Bezirk"
     assert out.state_code == "BY"
     assert import_feiertage.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_create_district_requires_superadmin() -> None:
+    with pytest.raises(HTTPException) as exc:
+        await r.create_district(
+            DistrictCreate(name="Bezirk", state_code="BY"),
+            object(),
+            AsyncMock(),
+        )
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -86,8 +121,70 @@ async def test_update_district_not_found() -> None:
         repo.get.return_value = None
         repo_cls.return_value = repo
         with pytest.raises(HTTPException) as exc:
-            await r.update_district(uuid.uuid4(), DistrictUpdate(name="X"), object(), AsyncMock())
+            await r.update_district(
+                uuid.uuid4(), DistrictUpdate(name="X"), _superadmin_auth(), AsyncMock()
+            )
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_and_update_district_success() -> None:
+    district_id = uuid.uuid4()
+    district = District.create(name="Alt", state_code="BY")
+    district.id = district_id
+
+    with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as repo_cls:
+        repo = AsyncMock()
+        repo.list_all.return_value = [district]
+        repo.get.return_value = district
+        repo_cls.return_value = repo
+
+        listed = await r.list_districts(_superadmin_auth(), AsyncMock())
+        with patch("app.adapters.api.routers.districts.assert_has_role_in_district"):
+            updated = await r.update_district(
+                district_id,
+                DistrictUpdate(name="Neu", state_code="BW"),
+                _superadmin_auth(),
+                AsyncMock(),
+            )
+
+        assert len(listed) == 1
+    assert listed[0].name == "Alt"
+    assert updated.name == "Neu"
+    assert updated.state_code == "BW"
+    assert repo.save.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_list_districts_filters_for_non_superadmin() -> None:
+    district_a = District.create(name="A", state_code="BY")
+    district_b = District.create(name="B", state_code="BW")
+    auth = type(
+        "A",
+        (),
+        {
+            "user_sub": "user-1",
+            "memberships": [
+                Membership.create(
+                    user_sub="user-1",
+                    role=Role.VIEWER,
+                    scope_type=ScopeType.DISTRICT,
+                    scope_id=district_a.id,
+                )
+            ],
+            "user": type("U", (), {"is_superadmin": False})(),
+        },
+    )()
+
+    with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as repo_cls:
+        repo = AsyncMock()
+        repo.list_all.return_value = [district_a, district_b]
+        repo_cls.return_value = repo
+
+        listed = await r.list_districts(auth, AsyncMock())
+
+    assert len(listed) == 1
+    assert listed[0].id == district_a.id
 
 
 @pytest.mark.asyncio
@@ -96,6 +193,7 @@ async def test_create_and_list_congregations_success() -> None:
     db = AsyncMock()
     cong = Congregation.create(name="Gemeinde A", district_id=district_id)
     with (
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
         patch(
@@ -123,9 +221,102 @@ async def test_create_and_list_congregations_success() -> None:
             object(),
             db,
         )
-        listed = await r.list_congregations(district_id, object(), db)
+        listed = await r.list_congregations(district_id, _superadmin_auth(), db)
     assert created.name == "Gemeinde A"
     assert len(listed) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_congregation_sets_group_name_when_group_matches_district() -> None:
+    district_id = uuid.uuid4()
+    group_id = uuid.uuid4()
+    db = AsyncMock()
+    with (
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.reference_feiertage_for_congregation",
+            new=AsyncMock(),
+        ),
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="Bezirk")
+        district_repo_cls.return_value = district_repo
+
+        cong_repo = AsyncMock()
+        cong_repo_cls.return_value = cong_repo
+
+        group = CongregationGroup.create(name="Nord", district_id=district_id)
+        group.id = group_id
+        group_repo = AsyncMock()
+        group_repo.get.return_value = group
+        group_repo_cls.return_value = group_repo
+
+        created = await r.create_congregation(
+            district_id,
+            CongregationCreate(name="Gemeinde A", group_id=group_id),
+            object(),
+            db,
+        )
+
+    assert created.group_name == "Nord"
+
+
+@pytest.mark.asyncio
+async def test_update_congregation_updates_optional_fields_and_group_name() -> None:
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(name="Alt", district_id=district_id)
+    group_id = uuid.uuid4()
+
+    with (
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
+    ):
+        repo = AsyncMock()
+        repo.get.return_value = congregation
+        repo_cls.return_value = repo
+
+        group = CongregationGroup.create(name="Sued", district_id=district_id)
+        group.id = group_id
+        group_repo = AsyncMock()
+        group_repo.get.return_value = group
+        group_repo_cls.return_value = group_repo
+
+        updated = await r.update_congregation(
+            district_id,
+            congregation.id,
+            CongregationUpdate(
+                name="Neu",
+                service_times=[{"weekday": 0, "time": "20:00"}],
+                group_id=group_id,
+                invitation_target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+                invitation_target_congregation_id=uuid.uuid4(),
+            ),
+            object(),
+            AsyncMock(),
+        )
+        await r.update_congregation(
+            district_id,
+            congregation.id,
+            CongregationUpdate(
+                invitation_target_type=InvitationTargetType.EXTERNAL_NOTE,
+                invitation_external_note="Hinweis",
+            ),
+            object(),
+            AsyncMock(),
+        )
+
+    assert updated.name == "Neu"
+    assert updated.group_name == "Sued"
+    assert updated.invitation_target_type == InvitationTargetType.DISTRICT_CONGREGATION
+    assert repo.save.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -159,6 +350,69 @@ async def test_update_congregation_not_found() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_and_list_congregations_not_found_paths() -> None:
+    district_id = uuid.uuid4()
+    db = AsyncMock()
+    with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls:
+        district_repo = AsyncMock()
+        district_repo.get.return_value = None
+        district_repo_cls.return_value = district_repo
+
+        with pytest.raises(HTTPException) as create_exc:
+            await r.create_congregation(district_id, CongregationCreate(name="G"), object(), db)
+        with pytest.raises(HTTPException) as list_exc:
+            await r.list_congregations(district_id, _superadmin_auth(), db)
+
+    assert create_exc.value.status_code == 404
+    assert list_exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_group_crud_success_paths() -> None:
+    district_id = uuid.uuid4()
+    db = AsyncMock()
+    with (
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        created_group = CongregationGroup.create(name="Nord", district_id=district_id)
+        group_repo = AsyncMock()
+        group_repo.list_by_district.return_value = [created_group]
+        group_repo.get.return_value = created_group
+        group_repo_cls.return_value = group_repo
+
+        with patch(
+            "app.adapters.api.routers.districts.CongregationGroup.create",
+            return_value=created_group,
+        ):
+            created = await r.create_group(
+                district_id, r.CongregationGroupCreate(name="Nord"), object(), db
+            )
+        listed = await r.list_groups(district_id, _superadmin_auth(), db)
+        updated = await r.update_group(
+            district_id,
+            created_group.id,
+            r.CongregationGroupUpdate(name="Nord-West"),
+            object(),
+            db,
+        )
+        await r.delete_group(district_id, created_group.id, object(), db)
+
+    assert created.name == "Nord"
+    assert len(listed) == 1
+    assert updated.name == "Nord-West"
+    assert group_repo.save.await_count >= 1
+    assert group_repo.delete.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_group_crud_not_found_paths() -> None:
     district_id = uuid.uuid4()
     group_id = uuid.uuid4()
@@ -175,7 +429,7 @@ async def test_group_crud_not_found_paths() -> None:
         with pytest.raises(HTTPException):
             await r.create_group(district_id, r.CongregationGroupCreate(name="G"), object(), db)
         with pytest.raises(HTTPException):
-            await r.list_groups(district_id, object(), db)
+            await r.list_groups(district_id, _superadmin_auth(), db)
 
         district_repo.get.return_value = District.create(name="D")
         group_repo = AsyncMock()
@@ -193,7 +447,7 @@ async def test_group_crud_not_found_paths() -> None:
 async def test_get_matrix_success() -> None:
     district_id = uuid.uuid4()
     congregation = Congregation.create(name="G", district_id=district_id)
-    now = datetime(2026, 4, 8, 10, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
     event = Event.create(
         title="Gottesdienst Mittwoch",
         start_at=now,
@@ -252,7 +506,7 @@ async def test_get_matrix_success() -> None:
 
         result = await r.get_matrix(
             district_id,
-            object(),
+            _superadmin_auth(),
             AsyncMock(),
             from_dt=now - timedelta(days=2),
             to_dt=now + timedelta(days=2),
@@ -264,10 +518,450 @@ async def test_get_matrix_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_matrix_not_found_and_invalid_range() -> None:
+    district_id = uuid.uuid4()
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls:
+        district_repo = AsyncMock()
+        district_repo.get.return_value = None
+        district_repo_cls.return_value = district_repo
+
+        with pytest.raises(HTTPException) as not_found_exc:
+            await r.get_matrix(
+                district_id,
+                _superadmin_auth(),
+                db,
+                from_dt=None,
+                to_dt=None,
+                group_id=None,
+            )
+    assert not_found_exc.value.status_code == 404
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        cong_repo = AsyncMock()
+        cong_repo.list_by_district.return_value = []
+        cong_repo_cls.return_value = cong_repo
+
+        with pytest.raises(HTTPException) as range_exc:
+            await r.get_matrix(
+                district_id,
+                _superadmin_auth(),
+                db,
+                from_dt=datetime(2030, 5, 2, tzinfo=UTC),
+                to_dt=datetime(2030, 5, 1, tzinfo=UTC),
+                group_id=None,
+            )
+    assert range_exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() -> None:
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(
+        name="G",
+        district_id=district_id,
+        service_times=[{"weekday": 2, "time": "19:30"}],
+    )
+    source_congregation_id = uuid.uuid4()
+    start = datetime(2030, 4, 10, 10, 0, tzinfo=UTC)
+
+    source_event = Event.create(
+        title="Gottesdienst Quelle",
+        start_at=start,
+        end_at=start + timedelta(hours=1),
+        district_id=district_id,
+        congregation_id=source_congregation_id,
+        category="Gottesdienst",
+    )
+    invite_copy = Event.create(
+        title="Gottesdienst Ziel",
+        start_at=start,
+        end_at=start + timedelta(hours=1),
+        district_id=district_id,
+        congregation_id=congregation.id,
+        category="Gottesdienst",
+        invitation_source_congregation_id=source_congregation_id,
+        invitation_source_event_id=source_event.id,
+    )
+    feiertag = Event.create(
+        title="Karfreitag",
+        start_at=start + timedelta(days=1),
+        end_at=start + timedelta(days=1, hours=1),
+        district_id=district_id,
+        category="Feiertag",
+    )
+    leader = Leader.create(name="Muster", district_id=district_id, rank=LeaderRank.PRIESTER)
+    assignment = ServiceAssignment.create(
+        event_id=source_event.id,
+        leader_id=leader.id,
+        status=AssignmentStatus.ASSIGNED,
+    )
+    invitation = CongregationInvitation.create(
+        source_event_id=source_event.id,
+        source_congregation_id=source_congregation_id,
+        target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+        target_congregation_id=congregation.id,
+    )
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlInvitationRepository") as inv_repo_cls,
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        source_congregation = Congregation.create(name="Quelle", district_id=district_id)
+        source_congregation.id = source_congregation_id
+
+        cong_repo = AsyncMock()
+        cong_repo.list_by_district.return_value = [congregation]
+        cong_repo.list_by_ids.return_value = [source_congregation]
+        cong_repo_cls.return_value = cong_repo
+
+        event_repo = AsyncMock()
+        event_repo.list.return_value = ([invite_copy, source_event, feiertag], 3)
+        event_repo_cls.return_value = event_repo
+
+        sa_repo = AsyncMock()
+        sa_repo.list_by_events.return_value = [assignment]
+        sa_repo_cls.return_value = sa_repo
+
+        leader_repo = AsyncMock()
+        leader_repo.list_by_district.return_value = [leader]
+        leader_repo_cls.return_value = leader_repo
+
+        group_repo = AsyncMock()
+        group_repo.list_by_district.return_value = []
+        group_repo_cls.return_value = group_repo
+
+        inv_repo = AsyncMock()
+        inv_repo.list_by_source_events.return_value = [invitation]
+        inv_repo_cls.return_value = inv_repo
+
+        result = await r.get_matrix(
+            district_id,
+            _superadmin_auth(),
+            AsyncMock(),
+            from_dt=start - timedelta(days=1),
+            to_dt=start + timedelta(days=2),
+            group_id=None,
+        )
+
+    cell = result.rows[0].cells[start.date().isoformat()]
+    assert result.holidays[(start + timedelta(days=1)).date().isoformat()] == ["Karfreitag"]
+    assert cell.assignment_event_id == source_event.id
+    assert cell.leader_name == f"{LeaderRank.PRIESTER.value} Muster"
+    assert cell.is_assignment_editable is False
+
+
+@pytest.mark.asyncio
+async def test_generate_matrix_drafts_error_paths() -> None:
+    district_id = uuid.uuid4()
+    db = AsyncMock()
+    from_dt = datetime(2030, 4, 3, tzinfo=UTC)
+    to_dt = datetime(2030, 4, 1, tzinfo=UTC)
+
+    with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls:
+        district_repo = AsyncMock()
+        district_repo.get.return_value = None
+        district_repo_cls.return_value = district_repo
+        with pytest.raises(HTTPException) as not_found_exc:
+            await r.generate_matrix_drafts(district_id, object(), db, from_dt=from_dt, to_dt=to_dt)
+    assert not_found_exc.value.status_code == 404
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.assert_has_role_in_district",
+            side_effect=r.PermissionError("verboten"),
+        ),
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+        with pytest.raises(HTTPException) as forbidden_exc:
+            await r.generate_matrix_drafts(district_id, object(), db, from_dt=from_dt, to_dt=to_dt)
+    assert forbidden_exc.value.status_code == 403
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+        with pytest.raises(HTTPException) as invalid_range_exc:
+            await r.generate_matrix_drafts(district_id, object(), db, from_dt=from_dt, to_dt=to_dt)
+    assert invalid_range_exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_get_matrix_defaults_to_4_weeks_when_range_missing() -> None:
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(name="G", district_id=district_id)
+    db = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlInvitationRepository") as inv_repo_cls,
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        cong_repo = AsyncMock()
+        cong_repo.list_by_district.return_value = [congregation]
+        cong_repo.list_by_ids.return_value = []
+        cong_repo_cls.return_value = cong_repo
+
+        event_repo = AsyncMock()
+        event_repo.list.return_value = ([], 0)
+        event_repo_cls.return_value = event_repo
+
+        sa_repo = AsyncMock()
+        sa_repo.list_by_events.return_value = []
+        sa_repo_cls.return_value = sa_repo
+
+        leader_repo = AsyncMock()
+        leader_repo.list_by_district.return_value = []
+        leader_repo_cls.return_value = leader_repo
+
+        group_repo = AsyncMock()
+        group_repo.list_by_district.return_value = []
+        group_repo_cls.return_value = group_repo
+
+        inv_repo = AsyncMock()
+        inv_repo.list_by_source_events.return_value = []
+        inv_repo_cls.return_value = inv_repo
+
+        result = await r.get_matrix(
+            district_id,
+            _superadmin_auth(),
+            db,
+            from_dt=None,
+            to_dt=None,
+            group_id=None,
+        )
+
+    assert result.rows
+    call_kwargs = event_repo.list.await_args.kwargs
+    assert call_kwargs["to_dt"] > call_kwargs["from_dt"]
+    assert call_kwargs["from_dt"].tzinfo is UTC
+    assert call_kwargs["to_dt"].tzinfo is UTC
+    assert call_kwargs["from_dt"].time() == datetime.min.time()
+    assert call_kwargs["to_dt"].time() == datetime.max.time()
+    assert (call_kwargs["to_dt"].date() - call_kwargs["from_dt"].date()).days == 27
+
+
+@pytest.mark.asyncio
+async def test_get_matrix_derives_from_dt_from_to_dt_when_missing() -> None:
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(name="G", district_id=district_id)
+    db = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlInvitationRepository") as inv_repo_cls,
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        cong_repo = AsyncMock()
+        cong_repo.list_by_district.return_value = [congregation]
+        cong_repo.list_by_ids.return_value = []
+        cong_repo_cls.return_value = cong_repo
+
+        event_repo = AsyncMock()
+        event_repo.list.return_value = ([], 0)
+        event_repo_cls.return_value = event_repo
+
+        sa_repo = AsyncMock()
+        sa_repo.list_by_events.return_value = []
+        sa_repo_cls.return_value = sa_repo
+
+        leader_repo = AsyncMock()
+        leader_repo.list_by_district.return_value = []
+        leader_repo_cls.return_value = leader_repo
+
+        group_repo = AsyncMock()
+        group_repo.list_by_district.return_value = []
+        group_repo_cls.return_value = group_repo
+
+        inv_repo = AsyncMock()
+        inv_repo.list_by_source_events.return_value = []
+        inv_repo_cls.return_value = inv_repo
+
+        await r.get_matrix(
+            district_id,
+            _superadmin_auth(),
+            db,
+            from_dt=None,
+            to_dt=datetime(2025, 6, 15, 14, 30, tzinfo=UTC),
+            group_id=None,
+        )
+
+    call_kwargs = event_repo.list.await_args.kwargs
+    assert call_kwargs["to_dt"] == datetime(2025, 6, 15, 23, 59, 59, 999999, tzinfo=UTC)
+    assert call_kwargs["from_dt"] == datetime(2025, 5, 19, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_get_matrix_derives_to_dt_from_from_dt_when_missing() -> None:
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(name="G", district_id=district_id)
+    db = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlInvitationRepository") as inv_repo_cls,
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        cong_repo = AsyncMock()
+        cong_repo.list_by_district.return_value = [congregation]
+        cong_repo.list_by_ids.return_value = []
+        cong_repo_cls.return_value = cong_repo
+
+        event_repo = AsyncMock()
+        event_repo.list.return_value = ([], 0)
+        event_repo_cls.return_value = event_repo
+
+        sa_repo = AsyncMock()
+        sa_repo.list_by_events.return_value = []
+        sa_repo_cls.return_value = sa_repo
+
+        leader_repo = AsyncMock()
+        leader_repo.list_by_district.return_value = []
+        leader_repo_cls.return_value = leader_repo
+
+        group_repo = AsyncMock()
+        group_repo.list_by_district.return_value = []
+        group_repo_cls.return_value = group_repo
+
+        inv_repo = AsyncMock()
+        inv_repo.list_by_source_events.return_value = []
+        inv_repo_cls.return_value = inv_repo
+
+        from_dt = datetime(2025, 7, 3, 9, 15, tzinfo=UTC)
+        await r.get_matrix(
+            district_id,
+            _superadmin_auth(),
+            db,
+            from_dt=from_dt,
+            to_dt=None,
+            group_id=None,
+        )
+
+    call_kwargs = event_repo.list.await_args.kwargs
+    assert call_kwargs["from_dt"] == datetime(2025, 7, 3, 0, 0, tzinfo=UTC)
+    assert call_kwargs["to_dt"] == datetime(2025, 7, 30, 23, 59, 59, 999999, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_get_matrix_normalizes_naive_query_datetimes_to_utc() -> None:
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(name="G", district_id=district_id)
+    db = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch(
+            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
+        ) as group_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlInvitationRepository") as inv_repo_cls,
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        cong_repo = AsyncMock()
+        cong_repo.list_by_district.return_value = [congregation]
+        cong_repo.list_by_ids.return_value = []
+        cong_repo_cls.return_value = cong_repo
+
+        event_repo = AsyncMock()
+        event_repo.list.return_value = ([], 0)
+        event_repo_cls.return_value = event_repo
+
+        sa_repo = AsyncMock()
+        sa_repo.list_by_events.return_value = []
+        sa_repo_cls.return_value = sa_repo
+
+        leader_repo = AsyncMock()
+        leader_repo.list_by_district.return_value = []
+        leader_repo_cls.return_value = leader_repo
+
+        group_repo = AsyncMock()
+        group_repo.list_by_district.return_value = []
+        group_repo_cls.return_value = group_repo
+
+        inv_repo = AsyncMock()
+        inv_repo.list_by_source_events.return_value = []
+        inv_repo_cls.return_value = inv_repo
+
+        await r.get_matrix(
+            district_id,
+            _superadmin_auth(),
+            db,
+            from_dt=datetime(2030, 4, 1, 12, 0),
+            to_dt=datetime(2030, 4, 15, 18, 45),
+            group_id=None,
+        )
+
+    call_kwargs = event_repo.list.await_args.kwargs
+    assert call_kwargs["from_dt"].tzinfo is UTC
+    assert call_kwargs["to_dt"].tzinfo is UTC
+
+
+@pytest.mark.asyncio
 async def test_generate_matrix_drafts_success() -> None:
     district_id = uuid.uuid4()
     db = AsyncMock()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     congregation = Congregation.create(name="G", district_id=district_id)
     event = Event.create(
         title="Gottesdienst",
@@ -321,11 +1015,19 @@ async def test_generate_matrix_drafts_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_de_states_returns_mapping() -> None:
+    out = await r.list_de_states(object())
+    assert out
+    assert "BY" in out
+
+
+@pytest.mark.asyncio
 async def test_import_feiertage_endpoint_paths() -> None:
     district_id = uuid.uuid4()
     db = AsyncMock()
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
         patch(
             "app.adapters.api.routers.districts.import_feiertage",
             new=AsyncMock(return_value={"created": 1, "updated": 0, "skipped": 0}),
@@ -355,11 +1057,53 @@ async def test_import_feiertage_endpoint_invalid_state() -> None:
         district_repo = AsyncMock()
         district_repo.get.return_value = District.create(name="D")
         district_repo_cls.return_value = district_repo
-        with pytest.raises(HTTPException) as exc:
-            await r.import_feiertage_endpoint(
-                uuid.uuid4(),
-                FeiertageImportRequest(year=2026, state_code="ZZ"),
-                object(),
-                AsyncMock(),
-            )
+        with patch("app.adapters.api.routers.districts.assert_has_role_in_district"):
+            with pytest.raises(HTTPException) as exc:
+                await r.import_feiertage_endpoint(
+                    uuid.uuid4(),
+                    FeiertageImportRequest(year=2026, state_code="ZZ"),
+                    object(),
+                    AsyncMock(),
+                )
     assert exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_import_feiertage_endpoint_not_found_and_http_error() -> None:
+    district_id = uuid.uuid4()
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls:
+        district_repo = AsyncMock()
+        district_repo.get.return_value = None
+        district_repo_cls.return_value = district_repo
+
+        with pytest.raises(HTTPException) as not_found_exc:
+            await r.import_feiertage_endpoint(
+                district_id,
+                FeiertageImportRequest(year=2026, state_code="BY"),
+                object(),
+                db,
+            )
+    assert not_found_exc.value.status_code == 404
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch(
+            "app.adapters.api.routers.districts.import_feiertage",
+            new=AsyncMock(side_effect=httpx.HTTPError("boom")),
+        ),
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        with pytest.raises(HTTPException) as api_exc:
+            await r.import_feiertage_endpoint(
+                district_id,
+                FeiertageImportRequest(year=2026, state_code="BY"),
+                object(),
+                db,
+            )
+    assert api_exc.value.status_code == 502

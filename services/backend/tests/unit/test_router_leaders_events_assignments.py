@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -22,12 +22,25 @@ from app.domain.models.leader import Leader
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
 
+def _auth_context(*, is_superadmin: bool = True) -> object:
+    return type(
+        "A",
+        (),
+        {
+            "memberships": [],
+            "user_sub": "u",
+            "user": type("U", (), {"is_superadmin": is_superadmin})(),
+        },
+    )()
+
+
 @pytest.mark.asyncio
 async def test_leader_crud_and_self_link_paths() -> None:
     district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=district_id)
     db = AsyncMock()
     with (
+        patch("app.adapters.api.routers.leaders.assert_has_role_in_district"),
         patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls,
     ):
@@ -41,7 +54,7 @@ async def test_leader_crud_and_self_link_paths() -> None:
         leader_repo.get_by_user_sub.return_value = None
         leader_repo_cls.return_value = leader_repo
 
-        listed = await leaders_router.list_leaders(district_id, object(), db)
+        listed = await leaders_router.list_leaders(district_id, _auth_context(), db)
         created = await leaders_router.create_leader(
             district_id, LeaderCreate(name="Neu", rank=None), object(), db
         )
@@ -74,6 +87,69 @@ async def test_leader_crud_and_self_link_paths() -> None:
 
 
 @pytest.mark.asyncio
+async def test_leader_crud_forbidden_without_permission() -> None:
+    district_id = uuid.uuid4()
+    leader = Leader.create(name="L", district_id=district_id)
+    db = AsyncMock()
+    auth = type("A", (), {"memberships": [], "user_sub": "u", "user": None})()
+
+    with (
+        patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
+        patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls,
+        patch(
+            "app.adapters.api.routers.leaders.assert_has_role_in_district",
+            side_effect=leaders_router.PermissionError("forbidden"),
+        ),
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        leader_repo = AsyncMock()
+        leader_repo.get.return_value = leader
+        leader_repo_cls.return_value = leader_repo
+
+        with pytest.raises(HTTPException) as create_exc:
+            await leaders_router.create_leader(district_id, LeaderCreate(name="Neu"), auth, db)
+        with pytest.raises(HTTPException) as update_exc:
+            await leaders_router.update_leader(
+                district_id,
+                leader.id,
+                LeaderUpdate(name="X"),
+                auth,
+                db,
+            )
+        with pytest.raises(HTTPException) as delete_exc:
+            await leaders_router.delete_leader(district_id, leader.id, auth, db)
+
+    assert create_exc.value.status_code == 403
+    assert update_exc.value.status_code == 403
+    assert delete_exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_leader_list_forbidden_without_permission() -> None:
+    district_id = uuid.uuid4()
+    db = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
+        patch(
+            "app.adapters.api.routers.leaders.assert_has_role_in_district",
+            side_effect=leaders_router.PermissionError("forbidden"),
+        ),
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="D")
+        district_repo_cls.return_value = district_repo
+
+        with pytest.raises(HTTPException) as exc:
+            await leaders_router.list_leaders(district_id, _auth_context(is_superadmin=False), db)
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_leader_not_found_paths() -> None:
     district_id = uuid.uuid4()
     db = AsyncMock()
@@ -85,7 +161,7 @@ async def test_leader_not_found_paths() -> None:
         district_repo.get.return_value = None
         district_repo_cls.return_value = district_repo
         with pytest.raises(HTTPException):
-            await leaders_router.list_leaders(district_id, object(), db)
+            await leaders_router.list_leaders(district_id, _auth_context(), db)
         with pytest.raises(HTTPException):
             await leaders_router.create_leader(district_id, LeaderCreate(name="N"), object(), db)
 
@@ -104,7 +180,7 @@ async def test_leader_not_found_paths() -> None:
 @pytest.mark.asyncio
 async def test_event_create_list_update_paths() -> None:
     district_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     event = Event.create(
         title="Gottesdienst",
         start_at=now,
@@ -146,7 +222,7 @@ async def test_event_create_list_update_paths() -> None:
             db,
         )
         listed = await events_router.list_events(
-            object(), db, district_id=district_id, limit=10, offset=0
+            _auth_context(), db, district_id=district_id, limit=10, offset=0
         )
         updated = await events_router.update_event(
             event.id,
@@ -177,12 +253,71 @@ async def test_event_update_not_found() -> None:
 
 
 @pytest.mark.asyncio
+async def test_event_list_requires_district_id_for_non_superadmin() -> None:
+    with pytest.raises(HTTPException) as exc:
+        await events_router.list_events(
+            _auth_context(is_superadmin=False),
+            AsyncMock(),
+            district_id=None,
+        )
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_event_list_allows_congregation_scoped_access_with_filter() -> None:
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    now = datetime.now(UTC)
+    event = Event.create(
+        title="Gottesdienst",
+        start_at=now,
+        end_at=now + timedelta(hours=1),
+        district_id=district_id,
+        congregation_id=congregation_id,
+    )
+
+    db = AsyncMock()
+
+    with (
+        patch(
+            "app.adapters.api.routers.events.assert_has_role_in_district",
+            side_effect=[
+                events_router.PermissionError("no district role"),
+                None,
+            ],
+        ) as guard,
+        patch("app.adapters.api.routers.events.SqlEventRepository") as repo_cls,
+        patch("app.adapters.api.routers.events.SqlCongregationRepository") as cong_repo_cls,
+    ):
+        repo = AsyncMock()
+        repo.list.return_value = ([event], 1)
+        repo_cls.return_value = repo
+
+        cong_repo = AsyncMock()
+        cong_repo.get.return_value = type("C", (), {"district_id": district_id})()
+        cong_repo.list_by_ids.return_value = []
+        cong_repo_cls.return_value = cong_repo
+
+        listed = await events_router.list_events(
+            _auth_context(is_superadmin=False),
+            db,
+            district_id=district_id,
+            congregation_id=congregation_id,
+            limit=10,
+            offset=0,
+        )
+
+    assert listed.total == 1
+    assert guard.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_service_assignment_crud_paths() -> None:
     district_id = uuid.uuid4()
     event = Event.create(
         title="Gottesdienst",
-        start_at=datetime.now(timezone.utc),
-        end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC) + timedelta(hours=1),
         district_id=district_id,
     )
     assignment = ServiceAssignment.create(event_id=event.id, leader_name="Pr. X")
@@ -220,10 +355,18 @@ async def test_service_assignment_crud_paths() -> None:
             type("A", (), {"memberships": [], "user": None})(),
             db,
         )
+        deleted = await sa_router.delete_assignment(
+            event.id,
+            assignment.id,
+            type("A", (), {"memberships": [], "user": None})(),
+            db,
+        )
 
     assert created.leader_name == "Pr. Y"
     assert len(listed) == 1
     assert updated.status == AssignmentStatus.CONFIRMED
+    assert deleted is None
+    assert sa_repo.delete.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -253,6 +396,13 @@ async def test_service_assignment_not_found_paths() -> None:
                 uuid.uuid4(),
                 uuid.uuid4(),
                 ServiceAssignmentUpdate(leader_name="A"),
+                type("A", (), {"memberships": [], "user": None})(),
+                AsyncMock(),
+            )
+        with pytest.raises(HTTPException):
+            await sa_router.delete_assignment(
+                uuid.uuid4(),
+                uuid.uuid4(),
                 type("A", (), {"memberships": [], "user": None})(),
                 AsyncMock(),
             )

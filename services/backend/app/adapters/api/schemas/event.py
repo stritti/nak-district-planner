@@ -1,3 +1,5 @@
+"""app/adapters/api/schemas/event.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -9,6 +11,8 @@ from app.domain.models.event import EventSource, EventStatus, EventVisibility
 
 
 class EventCreate(BaseModel):
+    """EventCreate."""
+
     title: str = Field(..., min_length=1, max_length=500)
     description: str | None = None
     start_at: datetime
@@ -24,6 +28,8 @@ class EventCreate(BaseModel):
 
 
 class EventResponse(BaseModel):
+    """EventResponse."""
+
     id: uuid.UUID
     title: str
     description: str | None
@@ -60,6 +66,8 @@ class EventUpdate(BaseModel):
 
 
 class EventListResponse(BaseModel):
+    """EventListResponse."""
+
     items: list[EventResponse]
     total: int
     limit: int

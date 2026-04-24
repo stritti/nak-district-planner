@@ -1,3 +1,5 @@
+"""app/adapters/api/schemas/registration.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -41,6 +43,8 @@ class RegistrationReject(BaseModel):
 
 
 class RegistrationResponse(BaseModel):
+    """RegistrationResponse."""
+
     id: uuid.UUID
     district_id: uuid.UUID
     name: str

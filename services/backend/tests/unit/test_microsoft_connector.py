@@ -5,7 +5,7 @@ All HTTP calls are intercepted via a mock httpx.AsyncClient — no network neede
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -15,7 +15,6 @@ from app.adapters.calendar.microsoft_connector import (
     MicrosoftGraphCalendarConnector,
     _content_hash,
 )
-
 
 CREDS = {"access_token": "test_token"}
 
@@ -70,14 +69,14 @@ def connector(mock_client: MagicMock) -> MicrosoftGraphCalendarConnector:
 def test_content_hash_deterministic() -> None:
     h1 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title",
     )
     h2 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title",
     )
     assert h1 == h2
@@ -86,14 +85,14 @@ def test_content_hash_deterministic() -> None:
 def test_content_hash_changes_on_title_change() -> None:
     h1 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title A",
     )
     h2 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title B",
     )
     assert h1 != h2
@@ -102,14 +101,14 @@ def test_content_hash_changes_on_title_change() -> None:
 def test_content_hash_changes_on_time_change() -> None:
     h1 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title",
     )
     h2 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 14, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 14, tzinfo=UTC),
         "Title",
     )
     assert h1 != h2
@@ -140,8 +139,8 @@ class TestFetchEvents:
         raw = raw_events[0]
         assert raw.uid == "uid@test"
         assert raw.title == "Gottesdienst"
-        assert raw.start_at == datetime(2026, 4, 5, 10, tzinfo=timezone.utc)
-        assert raw.end_at == datetime(2026, 4, 5, 11, tzinfo=timezone.utc)
+        assert raw.start_at == datetime(2026, 4, 5, 10, tzinfo=UTC)
+        assert raw.end_at == datetime(2026, 4, 5, 11, tzinfo=UTC)
         assert raw.description == "Beschreibung"
         assert not raw.is_cancelled
 
@@ -226,7 +225,7 @@ class TestFetchEvents:
     async def test_from_dt_filter_excludes_ended_events(
         self, connector: MicrosoftGraphCalendarConnector, mock_client: MagicMock
     ) -> None:
-        from_dt = datetime(2026, 4, 5, 12, 0, tzinfo=timezone.utc)  # noon
+        from_dt = datetime(2026, 4, 5, 12, 0, tzinfo=UTC)  # noon
         _setup_mock_client(
             mock_client,
             [
@@ -252,7 +251,7 @@ class TestFetchEvents:
     async def test_to_dt_filter_excludes_future_events(
         self, connector: MicrosoftGraphCalendarConnector, mock_client: MagicMock
     ) -> None:
-        to_dt = datetime(2026, 4, 5, 12, 0, tzinfo=timezone.utc)  # noon
+        to_dt = datetime(2026, 4, 5, 12, 0, tzinfo=UTC)  # noon
         _setup_mock_client(
             mock_client,
             [

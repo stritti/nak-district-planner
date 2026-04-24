@@ -1,3 +1,5 @@
+"""app/adapters/api/routers/export.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -8,8 +10,9 @@ from icalendar import Calendar
 from icalendar import Event as ICalEvent
 from sqlalchemy import select
 
-from app.adapters.api.deps import CurrentUser, DbSession
+from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportTokenResponse
+from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.adapters.db.repositories.event import SqlEventRepository
@@ -18,6 +21,7 @@ from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.event import EventStatus
 from app.domain.models.export_token import ExportToken, TokenType
+from app.domain.models.role import Role
 
 router = APIRouter()
 
@@ -30,8 +34,13 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 async def create_export_token(
-    _: CurrentUser, body: ExportTokenCreate, session: DbSession
+    auth: CurrentUserWithMemberships, body: ExportTokenCreate, session: DbSession
 ) -> ExportTokenResponse:
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
     token = ExportToken.create(
         label=body.label,
         token_type=body.token_type,
@@ -49,10 +58,22 @@ async def create_export_token(
     response_model=list[ExportTokenResponse],
 )
 async def list_export_tokens(
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     session: DbSession,
     district_id: uuid.UUID | None = None,
 ) -> list[ExportTokenResponse]:
+    if district_id is None and not auth.user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="district_id ist erforderlich, außer für Superadmin.",
+        )
+
+    if district_id is not None:
+        try:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
     repo = SqlExportTokenRepository(session)
     tokens = await repo.list_by_district(district_id) if district_id else await repo.list_all()
     return [_token_response(t) for t in tokens]
@@ -62,11 +83,22 @@ async def list_export_tokens(
     "/export-tokens/{token_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_export_token(_: CurrentUser, token_id: uuid.UUID, session: DbSession) -> None:
+async def delete_export_token(
+    auth: CurrentUserWithMemberships,
+    token_id: uuid.UUID,
+    session: DbSession,
+) -> None:
     repo = SqlExportTokenRepository(session)
-    deleted = await repo.delete(token_id)
-    if not deleted:
+    token = await repo.get(token_id)
+    if token is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht gefunden")
+
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, token.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    await repo.delete(token_id)
 
 
 def _token_response(token: ExportToken) -> ExportTokenResponse:

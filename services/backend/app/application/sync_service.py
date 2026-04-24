@@ -16,7 +16,7 @@ Returns the number of events created/updated/cancelled.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,7 +55,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
 
     credentials = decrypt_credentials(integration.credentials_enc)
     connector = _get_connector(integration.type)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=62)  # ~2 Monate
+    cutoff = datetime.now(UTC) - timedelta(days=62)  # ~2 Monate
     raw_events = await connector.fetch_events(credentials, from_dt=cutoff)
 
     created = updated = cancelled = 0
@@ -87,7 +87,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
         else:
             if raw.is_cancelled and existing.status != EventStatus.CANCELLED:
                 existing.status = EventStatus.CANCELLED
-                existing.updated_at = datetime.now(timezone.utc)
+                existing.updated_at = datetime.now(UTC)
                 await event_repo.save(existing)
                 cancelled += 1
 
@@ -101,12 +101,12 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
                 # Apply auto-categorization on update
                 existing.apply_auto_categorization()
 
-                existing.updated_at = datetime.now(timezone.utc)
+                existing.updated_at = datetime.now(UTC)
                 await event_repo.save(existing)
                 updated += 1
 
-    integration.last_synced_at = datetime.now(timezone.utc)
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.last_synced_at = datetime.now(UTC)
+    integration.updated_at = datetime.now(UTC)
     await integration_repo.save(integration)
 
     return {"created": created, "updated": updated, "cancelled": cancelled}

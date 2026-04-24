@@ -1,5 +1,4 @@
-"""
-MembershipRepository — SQLAlchemy implementation for Membership persistence.
+"""MembershipRepository — SQLAlchemy implementation for Membership persistence.
 
 Handles CRUD operations for Membership entities (role assignments).
 """
@@ -7,7 +6,7 @@ Handles CRUD operations for Membership entities (role assignments).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -118,7 +117,7 @@ class SqlMembershipRepository:
             )
             orm = result.scalar_one()
             orm.role = membership.role.value
-            orm.updated_at = datetime.now(timezone.utc)
+            orm.updated_at = datetime.now(UTC)
 
         await self._session.flush()
 
@@ -132,7 +131,7 @@ class SqlMembershipRepository:
     ) -> Membership:
         """Idempotently create or update membership by user and scope."""
         existing = await self.get_by_user_and_scope(user_sub, scope_type, scope_id)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if existing is None:
             membership = Membership.create(
                 user_sub=user_sub,

@@ -1,19 +1,25 @@
+"""app/domain/models/calendar_integration.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import Enum, StrEnum
 
 
-class CalendarType(str, Enum):
+class CalendarType(StrEnum):
+    """CalendarType domain model."""
+
     GOOGLE = "GOOGLE"
     MICROSOFT = "MICROSOFT"
     CALDAV = "CALDAV"
     ICS = "ICS"
 
 
-class CalendarCapability(str, Enum):
+class CalendarCapability(StrEnum):
+    """CalendarCapability domain model."""
+
     READ = "READ"
     WRITE = "WRITE"
     WEBHOOK = "WEBHOOK"
@@ -48,7 +54,7 @@ class CalendarIntegration:
         congregation_id: uuid.UUID | None = None,
         default_category: str | None = None,
     ) -> CalendarIntegration:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=uuid.uuid4(),
             district_id=district_id,

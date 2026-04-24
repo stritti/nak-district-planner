@@ -30,6 +30,7 @@ describe('useMatrixStore', () => {
       created_at: '2026-04-07T00:00:00Z',
       updated_at: '2026-04-07T00:00:00Z',
     })
+    vi.mocked(assignmentsApi.deleteAssignment).mockResolvedValue()
   })
 
   it('assign triggers matrix refresh', async () => {
@@ -58,24 +59,33 @@ describe('useMatrixStore', () => {
       'e1',
       'a1',
       { leaderId: 'l1' },
-      'ASSIGNED',
     )
   })
 
-  it('clearAssignment sets assignment back to OPEN', async () => {
+  it('clearAssignment deletes existing assignment', async () => {
     const store = useMatrixStore()
     store.districtId = 'd1'
     store.fromDt = '2026-04-01'
     store.toDt = '2026-04-30'
 
     await store.clearAssignment('e1', 'a1')
+    expect(assignmentsApi.deleteAssignment).toHaveBeenCalledWith('e1', 'a1')
+    expect(matrixApi.fetchMatrix).toHaveBeenCalled()
+  })
+
+  it('assign supports confirmed status', async () => {
+    const store = useMatrixStore()
+    store.districtId = 'd1'
+    store.fromDt = '2026-04-01'
+    store.toDt = '2026-04-30'
+
+    await store.assign('e1', 'a1', { leaderName: 'Max' }, 'CONFIRMED')
     expect(assignmentsApi.updateAssignment).toHaveBeenCalledWith(
       'e1',
       'a1',
-      { leaderId: null, leaderName: null },
-      'OPEN',
+      { leaderName: 'Max' },
+      'CONFIRMED',
     )
-    expect(matrixApi.fetchMatrix).toHaveBeenCalled()
   })
 
   it('decides overwrite request through dedicated store', async () => {

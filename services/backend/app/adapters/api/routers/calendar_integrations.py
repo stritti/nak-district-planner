@@ -1,21 +1,23 @@
+"""app/adapters/api/routers/calendar_integrations.py: Module."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
-from app.adapters.auth.permissions import (
-    PermissionError,
-    assert_has_role_in_district,
-)
+from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationCreate,
     CalendarIntegrationListResponse,
     CalendarIntegrationResponse,
     CalendarIntegrationUpdate,
     SyncResult,
+)
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
 )
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.application.crypto import CryptoError, encrypt_credentials
@@ -73,10 +75,22 @@ async def create_calendar_integration(
 
 @router.get("", response_model=CalendarIntegrationListResponse)
 async def list_calendar_integrations(
-    _: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
     district_id: uuid.UUID | None = None,
 ) -> CalendarIntegrationListResponse:
+    if district_id is None and not auth.user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="district_id ist erforderlich, außer für Superadmin.",
+        )
+
+    if district_id is not None:
+        try:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
     repo = SqlCalendarIntegrationRepository(db)
     if district_id is not None:
         items = await repo.list_by_district(district_id)
@@ -155,7 +169,7 @@ async def update_calendar_integration(
     if "default_category" in fields:
         integration.default_category = body.default_category
 
-    integration.updated_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.now(UTC)
     await repo.save(integration)
     return _to_response(integration)
 

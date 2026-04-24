@@ -1,9 +1,12 @@
+"""app/adapters/db/orm_models/calendar_integration.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,6 +15,8 @@ from app.domain.models.calendar_integration import CalendarType
 
 
 class CalendarIntegrationORM(Base):
+    """ORM model for calendarintegrationorm."""
+
     __tablename__ = "calendar_integrations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

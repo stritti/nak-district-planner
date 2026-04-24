@@ -1,3 +1,5 @@
+"""app/adapters/api/schemas/leader.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -9,6 +11,8 @@ from app.domain.models.leader import LeaderRank, SpecialRole
 
 
 class LeaderCreate(BaseModel):
+    """LeaderCreate."""
+
     name: str = Field(min_length=1, max_length=255)
     rank: LeaderRank | None = None
     congregation_id: uuid.UUID | None = None
@@ -21,6 +25,8 @@ class LeaderCreate(BaseModel):
 
 
 class LeaderUpdate(BaseModel):
+    """LeaderUpdate."""
+
     name: str | None = Field(default=None, min_length=1, max_length=255)
     rank: LeaderRank | None = None
     congregation_id: uuid.UUID | None = None
@@ -33,6 +39,8 @@ class LeaderUpdate(BaseModel):
 
 
 class LeaderResponse(BaseModel):
+    """LeaderResponse."""
+
     id: uuid.UUID
     name: str
     district_id: uuid.UUID
@@ -49,9 +57,13 @@ class LeaderResponse(BaseModel):
 
 
 class LeaderSelfLinkRequest(BaseModel):
+    """LeaderSelfLinkRequest."""
+
     leader_id: uuid.UUID
 
 
 class LeaderSelfLinkResponse(BaseModel):
+    """LeaderSelfLinkResponse."""
+
     linked: bool
     leader: LeaderResponse | None = None

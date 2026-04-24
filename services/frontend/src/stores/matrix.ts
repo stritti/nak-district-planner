@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchMatrix, type MatrixResponse } from '../api/matrix'
-import { createAssignment, updateAssignment } from '../api/serviceAssignments'
+import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
 import { generateMatrixDraftServices } from '../api/districts'
 
 export const useMatrixStore = defineStore('matrix', () => {
@@ -37,11 +37,16 @@ export const useMatrixStore = defineStore('matrix', () => {
     eventId: string,
     assignmentId: string | null,
     options: { leaderId?: string | null; leaderName?: string | null },
+    assignmentStatus?: 'OPEN' | 'ASSIGNED' | 'CONFIRMED',
   ) {
     if (assignmentId) {
-      await updateAssignment(eventId, assignmentId, options, 'ASSIGNED')
+      if (assignmentStatus) {
+        await updateAssignment(eventId, assignmentId, options, assignmentStatus)
+      } else {
+        await updateAssignment(eventId, assignmentId, options)
+      }
     } else {
-      await createAssignment(eventId, options, 'ASSIGNED')
+      await createAssignment(eventId, options, assignmentStatus ?? 'ASSIGNED')
     }
     await fetch() // refresh matrix
   }
@@ -52,12 +57,7 @@ export const useMatrixStore = defineStore('matrix', () => {
       return
     }
 
-    await updateAssignment(
-      eventId,
-      assignmentId,
-      { leaderId: null, leaderName: null },
-      'OPEN',
-    )
+    await deleteAssignment(eventId, assignmentId)
     await fetch()
   }
 

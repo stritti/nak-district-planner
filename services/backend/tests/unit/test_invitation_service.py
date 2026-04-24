@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,8 +25,8 @@ from app.domain.models.invitation import (
 def _event(congregation_id: uuid.UUID | None = None) -> Event:
     return Event.create(
         title="Gottesdienst",
-        start_at=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),
-        end_at=datetime(2026, 4, 10, 11, 30, tzinfo=timezone.utc),
+        start_at=datetime(2026, 4, 10, 9, 30, tzinfo=UTC),
+        end_at=datetime(2026, 4, 10, 11, 30, tzinfo=UTC),
         district_id=uuid.uuid4(),
         congregation_id=congregation_id,
         category="Gottesdienst",
@@ -174,8 +174,8 @@ async def test_apply_overwrite_decision_accept_updates_target_event():
 async def test_sync_linked_invitation_event_schedule_updates_linked_events():
     session = MagicMock()
     source_event = _event(congregation_id=uuid.uuid4())
-    moved_start = datetime(2026, 5, 14, 18, 0, tzinfo=timezone.utc)
-    moved_end = datetime(2026, 5, 14, 19, 30, tzinfo=timezone.utc)
+    moved_start = datetime(2026, 5, 14, 18, 0, tzinfo=UTC)
+    moved_end = datetime(2026, 5, 14, 19, 30, tzinfo=UTC)
     source_event.start_at = moved_start
     source_event.end_at = moved_end
 

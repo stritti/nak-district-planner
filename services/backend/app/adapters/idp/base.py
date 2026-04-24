@@ -1,3 +1,5 @@
+"""app/adapters/idp/base.py: Module."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,6 +17,8 @@ class IdpProvisionResult:
 
 
 class IdpProvisioner(Protocol):
+    """IdpProvisioner."""
+
     async def provision_user(
         self,
         *,

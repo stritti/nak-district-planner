@@ -1,19 +1,21 @@
+"""app/adapters/api/routers/service_assignments.py: Module."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
-from app.adapters.auth.permissions import (
-    PermissionError,
-    assert_has_role_in_district,
-)
 from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentCreate,
     ServiceAssignmentResponse,
     ServiceAssignmentUpdate,
+)
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
 )
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
@@ -121,6 +123,33 @@ async def update_assignment(
         assignment.leader_name = body.leader_name
     if body.status is not None:
         assignment.status = body.status
-    assignment.updated_at = datetime.now(timezone.utc)
+    assignment.updated_at = datetime.now(UTC)
     await repo.save(assignment)
     return _assignment_response(assignment)
+
+
+@router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_assignment(
+    event_id: uuid.UUID,
+    assignment_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+) -> None:
+    repo = SqlServiceAssignmentRepository(db)
+    assignment = await repo.get(assignment_id)
+    if not assignment or assignment.event_id != event_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
+        )
+
+    event_repo = SqlEventRepository(db)
+    event = await event_repo.get(assignment.event_id)
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    await repo.delete(assignment_id)

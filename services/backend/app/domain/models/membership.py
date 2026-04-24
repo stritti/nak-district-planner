@@ -1,14 +1,16 @@
+"""app/domain/models/membership.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import Enum, StrEnum
 
 from .role import Role
 
 
-class ScopeType(str, Enum):
+class ScopeType(StrEnum):
     """Scope type for membership assignments."""
 
     DISTRICT = "DISTRICT"
@@ -17,8 +19,7 @@ class ScopeType(str, Enum):
 
 @dataclass
 class Membership:
-    """
-    Represents a role assignment for a user within a specific scope.
+    """Represents a role assignment for a user within a specific scope.
 
     A user can have multiple memberships across different districts and congregations,
     each with a potentially different role.
@@ -51,7 +52,7 @@ class Membership:
         scope_id: uuid.UUID,
     ) -> Membership:
         """Create a new membership."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=uuid.uuid4(),
             user_sub=user_sub,

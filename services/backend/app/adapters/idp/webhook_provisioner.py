@@ -1,10 +1,12 @@
+"""app/adapters/idp/webhook_provisioner.py: Module."""
+
 from __future__ import annotations
 
 from typing import Any
 
 import httpx
 
-from app.adapters.idp.base import IdpProvisionResult, IdpProvisioner, IdpProvisioningError
+from app.adapters.idp.base import IdpProvisioner, IdpProvisioningError, IdpProvisionResult
 
 
 class HttpIdpProvisioningAdapter(IdpProvisioner):

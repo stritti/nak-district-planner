@@ -1,10 +1,9 @@
-"""
-Tests for user authentication dependencies (get_current_user, user auto-creation).
+"""Tests for user authentication dependencies (get_current_user, user auto-creation).
 
 Tests cover JWT validation, user creation, and dependency injection.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -52,7 +51,7 @@ class TestGetCurrentUserAutoCreation:
             "name": "John Doe",
             "given_name": "John",
             "family_name": "Doe",
-            "exp": datetime.now(timezone.utc).timestamp() + 3600,
+            "exp": datetime.now(UTC).timestamp() + 3600,
             "iss": "https://oidc.example.com",
         }
         mock_oidc_adapter.validate_token.return_value = token_claims

@@ -1,5 +1,4 @@
-"""
-UserRepository — SQLAlchemy implementation for User persistence.
+"""UserRepository — SQLAlchemy implementation for User persistence.
 
 Handles CRUD operations for User entities extracted from OIDC tokens.
 """
@@ -7,7 +6,7 @@ Handles CRUD operations for User entities extracted from OIDC tokens.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,8 +40,8 @@ def _domain_to_orm(user: User) -> UserORM:
     orm.given_name = user.given_name
     orm.family_name = user.family_name
     orm.is_superadmin = user.is_superadmin
-    orm.created_at = user.created_at or datetime.now(timezone.utc)
-    orm.updated_at = datetime.now(timezone.utc)
+    orm.created_at = user.created_at or datetime.now(UTC)
+    orm.updated_at = datetime.now(UTC)
     return orm
 
 
@@ -88,7 +87,7 @@ class SqlUserRepository(UserRepository):
             orm.given_name = user.given_name
             orm.family_name = user.family_name
             orm.is_superadmin = user.is_superadmin
-            orm.updated_at = datetime.now(timezone.utc)
+            orm.updated_at = datetime.now(UTC)
 
         await self._session.flush()
 

@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 
 from app.telemetry import setup_telemetry
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
