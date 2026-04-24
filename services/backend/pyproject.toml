@@ -77,6 +77,8 @@ ignore = [
     "N817",  # CamelCase in function name (intentional: EventStatus)
     "RUF001",  # Ambiguous dash in string (intentional: German text)
     "RUF003",  # Ambiguous dash in comment (intentional: German text)
+    "RUF100",  # Unused noqa directive
+    "UP039",  # Use datetime.UTC alias (common pattern with timezone.utc)
     "W291",  # Trailing whitespace (intentional in comments)
 ]
 
