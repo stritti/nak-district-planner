@@ -1,11 +1,4 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    },
-    "ignoreDeprecations": "6.0"
-  },
   "include": ["src/**/*", "vite.config.ts"]
 }

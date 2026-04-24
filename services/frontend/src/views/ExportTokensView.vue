@@ -216,9 +216,9 @@ import {
   deleteExportToken,
   listExportTokens,
   type ExportTokenResponse,
-} from '@/api/exportTokens'
-import { listCongregations, type CongregationResponse } from '@/api/districts'
-import { useDistrictsStore } from '@/stores/districts'
+} from '../api/exportTokens'
+import { listCongregations, type CongregationResponse } from '../api/districts'
+import { useDistrictsStore } from '../stores/districts'
 
 const districtsStore = useDistrictsStore()
 const tokens = ref<ExportTokenResponse[]>([])

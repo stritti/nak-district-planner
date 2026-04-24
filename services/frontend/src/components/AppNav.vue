@@ -136,9 +136,9 @@ import {
   TableCellsIcon,
   UsersIcon,
 } from '@heroicons/vue/24/outline'
-import { useDarkMode } from '@/composables/useDarkMode'
-import { useAuthStore } from '@/stores/auth'
-import { useOIDC } from '@/composables/useOIDC'
+import { useDarkMode } from '../composables/useDarkMode'
+import { useAuthStore } from '../stores/auth'
+import { useOIDC } from '../composables/useOIDC'
 
 const router = useRouter()
 const authStore = useAuthStore()

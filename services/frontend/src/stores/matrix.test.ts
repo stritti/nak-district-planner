@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { useMatrixStore } from './matrix'
-import * as matrixApi from '@/api/matrix'
-import * as assignmentsApi from '@/api/serviceAssignments'
+import * as matrixApi from '../api/matrix'
+import * as assignmentsApi from '../api/serviceAssignments'
 
-vi.mock('@/api/matrix')
-vi.mock('@/api/serviceAssignments')
+vi.mock('../api/matrix')
+vi.mock('../api/serviceAssignments')
 
 describe('useMatrixStore', () => {
   beforeEach(() => {

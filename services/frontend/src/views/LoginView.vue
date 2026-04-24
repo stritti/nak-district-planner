@@ -55,7 +55,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOIDC } from '@/composables/useOIDC'
+import { useOIDC } from '../composables/useOIDC'
 
 const router = useRouter()
 const oidc = useOIDC(router)

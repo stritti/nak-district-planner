@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { exportMatrixToExcel, exportEventsToExcel } from './useExcelExport'
-import type { MatrixResponse } from '@/api/matrix'
-import type { EventResponse } from '@/api/events'
+import type { MatrixResponse } from '../api/matrix'
+import type { EventResponse } from '../api/events'
 
 // Mock DOM API
 const mockClick = vi.fn()

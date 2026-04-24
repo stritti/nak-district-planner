@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { listEvents, type EventListParams, type EventResponse } from '@/api/events'
+import { listEvents, type EventListParams, type EventResponse } from '../api/events'
 
 const PAGE_SIZE = 50
 
