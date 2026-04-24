@@ -1,6 +1,6 @@
-import { useAuthStore } from '@/stores/auth'
-import { useOIDC } from '@/composables/useOIDC'
-import { router } from '@/router'
+import { useAuthStore } from '../stores/auth'
+import { useOIDC } from '../composables/useOIDC'
+import { router } from '../router'
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const authStore = useAuthStore()

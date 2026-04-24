@@ -479,11 +479,11 @@ import {
   ChevronRightIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
-import { useDistrictsStore } from '@/stores/districts'
-import { useEventsStore } from '@/stores/events'
-import { listCongregations, type CongregationResponse } from '@/api/districts'
-import { listEvents, updateEvent, type EventListParams, type EventResponse } from '@/api/events'
-import { exportEventsToExcel } from '@/composables/useExcelExport'
+import { useDistrictsStore } from '../stores/districts'
+import { useEventsStore } from '../stores/events'
+import { listCongregations, type CongregationResponse } from '../api/districts'
+import { listEvents, updateEvent, type EventListParams, type EventResponse } from '../api/events'
+import { exportEventsToExcel } from '../composables/useExcelExport'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()

@@ -144,15 +144,15 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { CheckCircleIcon } from '@heroicons/vue/24/outline'
-import { LEADER_RANKS, SPECIAL_ROLES } from '@/api/leaders'
-import type { LeaderRank, SpecialRole } from '@/api/leaders'
+import { LEADER_RANKS, SPECIAL_ROLES } from '../api/leaders'
+import type { LeaderRank, SpecialRole } from '../api/leaders'
 import {
   listDistrictsPublic,
   listCongregationsPublic,
   submitRegistration,
   type PublicDistrictInfo,
   type PublicCongregationInfo,
-} from '@/api/registrations'
+} from '../api/registrations'
 
 const submitted = ref(false)
 const submitting = ref(false)

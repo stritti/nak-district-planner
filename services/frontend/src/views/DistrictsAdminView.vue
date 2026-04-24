@@ -437,9 +437,9 @@ import {
   type CongregationGroupResponse,
   type DistrictResponse,
   type ServiceTime,
-} from '@/api/districts'
-import { buildCongregationSections } from '@/utils/congregationGrouping'
-import { useDistrictsStore } from '@/stores/districts'
+} from '../api/districts'
+import { buildCongregationSections } from '../utils/congregationGrouping'
+import { useDistrictsStore } from '../stores/districts'
 
 const districtsStore = useDistrictsStore()
 
