@@ -5,7 +5,7 @@ import {
   decideOverwriteRequest,
   listOverwriteRequests,
   type OverwriteRequestResponse,
-} from '@/api/invitations'
+} from '../api/invitations'
 
 export const useInvitationsStore = defineStore('invitations', () => {
   const items = ref<OverwriteRequestResponse[]>([])

@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/calendar_integration.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -53,6 +55,8 @@ def _domain_to_orm(
 
 
 class SqlCalendarIntegrationRepository(CalendarIntegrationRepository):
+    """SQLAlchemy repository for CalendarIntegration."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

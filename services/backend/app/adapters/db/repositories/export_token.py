@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/export_token.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -44,6 +46,13 @@ class SqlExportTokenRepository:
     async def get_by_token(self, token: str) -> ExportToken | None:
         result = await self._session.execute(
             select(ExportTokenORM).where(ExportTokenORM.token == token)
+        )
+        row = result.scalar_one_or_none()
+        return _orm_to_domain(row) if row else None
+
+    async def get(self, token_id: uuid.UUID) -> ExportToken | None:
+        result = await self._session.execute(
+            select(ExportTokenORM).where(ExportTokenORM.id == token_id)
         )
         row = result.scalar_one_or_none()
         return _orm_to_domain(row) if row else None

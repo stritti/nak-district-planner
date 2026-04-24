@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { fetchMatrix, type MatrixResponse } from '@/api/matrix'
-import { createAssignment, deleteAssignment, updateAssignment } from '@/api/serviceAssignments'
-import { generateMatrixDraftServices } from '@/api/districts'
+import { fetchMatrix, type MatrixResponse } from '../api/matrix'
+import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
+import { generateMatrixDraftServices } from '../api/districts'
 
 export const useMatrixStore = defineStore('matrix', () => {
   const matrix = ref<MatrixResponse | null>(null)

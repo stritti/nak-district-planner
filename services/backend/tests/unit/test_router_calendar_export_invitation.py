@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,8 +29,8 @@ from app.domain.models.event import Event, EventStatus
 from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.invitation import (
     CongregationInvitation,
-    InvitationTargetType,
     InvitationOverwriteRequest,
+    InvitationTargetType,
     OverwriteDecisionStatus,
 )
 
@@ -77,7 +77,7 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
             auth,
             db,
         )
-        listed = await ci_router.list_calendar_integrations(object(), db, district_id=district_id)
+        listed = await ci_router.list_calendar_integrations(auth, db, district_id=district_id)
         sync = await ci_router.trigger_sync(integration.id, auth, db)
         updated = await ci_router.update_calendar_integration(
             integration.id,
@@ -118,6 +118,7 @@ async def test_calendar_integration_not_found_and_bad_sync() -> None:
 @pytest.mark.asyncio
 async def test_export_token_routes_and_ics_export() -> None:
     district_id = uuid.uuid4()
+    auth = type("A", (), {"memberships": [], "user_sub": "u", "user": None})()
     token = ExportToken.create(
         label="L",
         token_type=TokenType.INTERNAL,
@@ -126,13 +127,14 @@ async def test_export_token_routes_and_ics_export() -> None:
     )
     event = Event.create(
         title="GD",
-        start_at=datetime.now(timezone.utc),
-        end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC) + timedelta(hours=1),
         district_id=district_id,
         status=EventStatus.PUBLISHED,
     )
     db = AsyncMock()
     with (
+        patch("app.adapters.api.routers.export.assert_has_role_in_district"),
         patch("app.adapters.api.routers.export.SqlExportTokenRepository") as token_repo_cls,
         patch("app.adapters.api.routers.export.SqlEventRepository") as event_repo_cls,
         patch("app.adapters.api.routers.export.SqlServiceAssignmentRepository") as sa_repo_cls,
@@ -141,7 +143,8 @@ async def test_export_token_routes_and_ics_export() -> None:
     ):
         token_repo = AsyncMock()
         token_repo.get_by_token.return_value = token
-        token_repo.list_all.return_value = [token]
+        token_repo.get.return_value = token
+        token_repo.list_by_district.return_value = [token]
         token_repo.delete.return_value = True
         token_repo_cls.return_value = token_repo
 
@@ -171,7 +174,7 @@ async def test_export_token_routes_and_ics_export() -> None:
             ),
             db,
         )
-        listed = await export_router.list_export_tokens(object(), db)
+        listed = await export_router.list_export_tokens(auth, db, district_id=district_id)
         ics = await export_router.export_calendar_ics(token.token, db)
         await export_router.delete_export_token(object(), token.id, db)
 
@@ -185,7 +188,7 @@ async def test_export_token_not_found_paths() -> None:
     with patch("app.adapters.api.routers.export.SqlExportTokenRepository") as token_repo_cls:
         token_repo = AsyncMock()
         token_repo.get_by_token.return_value = None
-        token_repo.delete.return_value = False
+        token_repo.get.return_value = None
         token_repo_cls.return_value = token_repo
         with pytest.raises(HTTPException):
             await export_router.export_calendar_ics("missing", AsyncMock())
@@ -194,12 +197,72 @@ async def test_export_token_not_found_paths() -> None:
 
 
 @pytest.mark.asyncio
+async def test_export_token_write_routes_forbidden_without_permission() -> None:
+    district_id = uuid.uuid4()
+    token = ExportToken.create(
+        label="L",
+        token_type=TokenType.INTERNAL,
+        district_id=district_id,
+        congregation_id=None,
+    )
+    auth = type("A", (), {"memberships": [], "user_sub": "u", "user": None})()
+
+    with (
+        patch("app.adapters.api.routers.export.SqlExportTokenRepository") as token_repo_cls,
+        patch(
+            "app.adapters.api.routers.export.assert_has_role_in_district",
+            side_effect=export_router.PermissionError("forbidden"),
+        ),
+    ):
+        token_repo = AsyncMock()
+        token_repo.get.return_value = token
+        token_repo_cls.return_value = token_repo
+
+        with pytest.raises(HTTPException) as create_exc:
+            await export_router.create_export_token(
+                auth,
+                ExportTokenCreate(
+                    label="X",
+                    token_type=TokenType.INTERNAL,
+                    district_id=district_id,
+                ),
+                AsyncMock(),
+            )
+        with pytest.raises(HTTPException) as delete_exc:
+            await export_router.delete_export_token(auth, token.id, AsyncMock())
+
+    assert create_exc.value.status_code == 403
+    assert delete_exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_routes_require_district_id_for_non_superadmin() -> None:
+    auth = type(
+        "A",
+        (),
+        {
+            "memberships": [],
+            "user_sub": "u",
+            "user": type("U", (), {"is_superadmin": False})(),
+        },
+    )()
+
+    with pytest.raises(HTTPException) as ci_exc:
+        await ci_router.list_calendar_integrations(auth, AsyncMock(), district_id=None)
+    with pytest.raises(HTTPException) as export_exc:
+        await export_router.list_export_tokens(auth, AsyncMock(), district_id=None)
+
+    assert ci_exc.value.status_code == 403
+    assert export_exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_invitation_routes_success_and_error_paths() -> None:
     district_id = uuid.uuid4()
     event = Event.create(
         title="Quelle",
-        start_at=datetime.now(timezone.utc),
-        end_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC) + timedelta(hours=1),
         district_id=district_id,
     )
     invitation = CongregationInvitation.create(

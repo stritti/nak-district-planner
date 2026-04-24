@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/leader_registration.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -7,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.leader_registration import LeaderRegistrationORM
 from app.domain.models.leader import LeaderRank, SpecialRole
-from app.domain.models.membership import ScopeType
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
+from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
 from app.domain.ports.repositories import LeaderRegistrationRepository
 
@@ -41,6 +43,8 @@ def _orm_to_domain(row: LeaderRegistrationORM) -> LeaderRegistration:
 
 
 class SqlLeaderRegistrationRepository(LeaderRegistrationRepository):
+    """SQLAlchemy repository for LeaderRegistration."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

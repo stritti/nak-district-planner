@@ -1,3 +1,5 @@
+"""app/domain/ports/repositories.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -10,15 +12,15 @@ from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
 from app.domain.models.event_instance import EventInstance
-from app.domain.models.leader import Leader
-from app.domain.models.planning_series import PlanningSeries
-from app.domain.models.planning_slot import PlanningSlot
-from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.invitation import (
     CongregationInvitation,
     InvitationOverwriteRequest,
     OverwriteDecisionStatus,
 )
+from app.domain.models.leader import Leader
+from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
+from app.domain.models.planning_series import PlanningSeries
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
 

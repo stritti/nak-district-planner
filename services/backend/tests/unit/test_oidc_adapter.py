@@ -1,5 +1,4 @@
-"""
-Unit tests for OIDCAdapter — OIDC discovery, JWKS caching, JWT validation.
+"""Unit tests for OIDCAdapter — OIDC discovery, JWKS caching, JWT validation.
 
 Tests use mocked OIDC provider responses to ensure provider-agnostic behavior.
 """
@@ -11,12 +10,11 @@ import httpx
 import pytest
 
 from app.adapters.auth.oidc import (
+    JWKSFetchError,
     OIDCAdapter,
     OIDCDiscoveryError,
-    JWKSFetchError,
     TokenValidationError,
 )
-
 
 # Mock OIDC discovery response
 MOCK_DISCOVERY = {

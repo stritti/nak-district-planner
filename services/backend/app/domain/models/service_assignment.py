@@ -1,12 +1,16 @@
+"""app/domain/models/service_assignment.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import Enum, StrEnum
 
 
-class AssignmentStatus(str, Enum):
+class AssignmentStatus(StrEnum):
+    """AssignmentStatus domain model."""
+
     OPEN = "OPEN"
     ASSIGNED = "ASSIGNED"
     CONFIRMED = "CONFIRMED"
@@ -35,7 +39,7 @@ class ServiceAssignment:
     ) -> ServiceAssignment:
         if leader_id is None and not leader_name:
             raise ValueError("Entweder leader_id oder leader_name muss gesetzt sein")
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=uuid.uuid4(),
             event_id=event_id,

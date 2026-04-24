@@ -448,20 +448,20 @@
 import type { Directive } from 'vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
-import { useMatrixStore } from '@/stores/matrix'
-import { useDistrictsStore } from '@/stores/districts'
-import { useLeadersStore } from '@/stores/leaders'
+import { useMatrixStore } from '../stores/matrix'
+import { useDistrictsStore } from '../stores/districts'
+import { useLeadersStore } from '../stores/leaders'
 import {
   createInvitations,
   deleteInvitation,
   listEventInvitations,
   type InvitationResponse,
-} from '@/api/invitations'
-import { updateEvent } from '@/api/events'
-import type { MatrixCell, MatrixRow } from '@/api/matrix'
-import { sortMatrixRows } from '@/utils/matrixRows'
-import { exportMatrixToExcel } from '@/composables/useExcelExport'
-import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '@/components/AutocompleteInput.vue'
+} from '../api/invitations'
+import { updateEvent } from '../api/events'
+import type { MatrixCell, MatrixRow } from '../api/matrix'
+import { sortMatrixRows } from '../utils/matrixRows'
+import { exportMatrixToExcel } from '../composables/useExcelExport'
+import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '../components/AutocompleteInput.vue'
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 

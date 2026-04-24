@@ -1,22 +1,24 @@
+"""app/main.py: Module."""
+
 import logging
 import sys
 import traceback
 from contextlib import asynccontextmanager
 
 import httpx
-from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from alembic import command
 from app.adapters.api import deps
 from app.adapters.api.routers import (
     auth,
     calendar_integrations,
     districts,
     events,
-    invitations,
     export,
+    invitations,
     leaders,
     registrations,
     service_assignments,
@@ -25,8 +27,7 @@ from app.adapters.auth.oidc import OIDCAdapter
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
-from app.adapters.db.session import AsyncSessionLocal
-from app.adapters.db.session import engine
+from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
 from app.config import settings
 from app.telemetry import setup_telemetry

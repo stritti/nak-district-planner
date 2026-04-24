@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nak-district-planner-backend"
-version = "0.3.0"
+version = "0.4.1"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111",
@@ -51,6 +51,34 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "D", "RUF"]
+ignore = [
+    "B008",  # Function call in defaults (FastAPI pattern)
+    "B904",  # Exception chaining in HTTPException (intentional)
+    "D100",  # Missing docstring in public module
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method (repositories)
+    "D103",  # Missing docstring in public function (API endpoints)
+    "D104",  # Missing docstring in public package
+    "D107",  # Missing docstring in __init__
+    "D200",  # One-line docstring should fit on one line
+    "D202",  # Missing blank line before nested definition
+    "D205",  # 1 blank line required between summary line and description
+    "D400",  # First line should end with a period
+    "D401",  # First line should be in imperative mood
+    "D413",  # Missing blank line after last section
+    "D415",  # First line should end with a period, question mark, or exclamation point
+    "E501",  # Line too long (let IDE handle wrapping)
+    "F401",  # Unused imports (type hints - common in repositories)
+    "N806",  # Variable naming in tests (Mock patterns)
+    "B017",  # Blind exception in tests
+    "N817",  # CamelCase in function name (intentional: EventStatus)
+    "RUF001",  # Ambiguous dash in string (intentional: German text)
+    "RUF003",  # Ambiguous dash in comment (intentional: German text)
+    "W291",  # Trailing whitespace (intentional in comments)
+]
 
 [dependency-groups]
 dev = [

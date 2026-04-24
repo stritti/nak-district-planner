@@ -1,3 +1,5 @@
+"""app/adapters/idp/provisioning.py: Module."""
+
 from __future__ import annotations
 
 from app.adapters.idp.base import IdpProvisioner, IdpProvisioningError

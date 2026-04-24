@@ -7,11 +7,10 @@ database or network access is performed.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.application.tasks import cleanup_old_events
-
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -72,7 +71,7 @@ class TestCleanupOldEvents:
         assert cutoff.tzinfo is not None
 
     def test_cutoff_is_24_months_in_past(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result, _, _ = self._run_task()
         cutoff = datetime.fromisoformat(result["cutoff"])
         assert cutoff.year == now.year - 2
@@ -95,10 +94,10 @@ class TestCleanupOldEvents:
 
     def test_feb29_leap_year_cutoff_falls_back_to_feb28(self):
         """When today is Feb 29 (leap year), cutoff must be Feb 28 two years back."""
-        leap_day = datetime(2024, 2, 29, 12, 0, 0, tzinfo=timezone.utc)
+        leap_day = datetime(2024, 2, 29, 12, 0, 0, tzinfo=UTC)
 
         repo = _make_repo_mock(0)
-        cm, session = _make_session_cm(repo)
+        cm, _session = _make_session_cm(repo)
 
         # Patch datetime.now at module level so the inner _run closure picks it up.
         original_datetime = datetime

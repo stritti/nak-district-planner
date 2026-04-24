@@ -1,4 +1,4 @@
-import type { CongregationGroupResponse, CongregationResponse } from '@/api/districts'
+import type { CongregationGroupResponse, CongregationResponse } from '../api/districts'
 
 export interface CongregationSection {
   key: string

@@ -18,9 +18,9 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import AppNav from '@/components/AppNav.vue'
-import { useOIDC } from '@/composables/useOIDC'
-import { useAuthStore } from '@/stores/auth'
+import AppNav from './components/AppNav.vue'
+import { useOIDC } from './composables/useOIDC'
+import { useAuthStore } from './stores/auth'
 
 // Get router instance in component context (safe for inject)
 const router = useRouter()
