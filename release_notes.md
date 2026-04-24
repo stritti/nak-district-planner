@@ -1,4 +1,4 @@
-## [v0.4.0] - 2026-04-23
+## [v0.4.1] - 2026-04-24
 
 ### Features
 * feat(matrix): close remaining UC-03 implementation gaps (#93) (9ab555a)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* build(deps-dev): Bump typescript from 5.9.3 to 6.0.3 in /services/frontend (#87) (2521ec8)
+* chore: release v0.4.0 (530248b)
 * chore: release v0.3.1 (da47819)
 * Harden RBAC on read APIs and scoped district checks (#92) (64b1e17)
 * chore: release v0.3.0 (c2a0f7d)
@@ -33,5 +35,3 @@
 * chore: release v0.2.9 (698f1b3)
 * build(deps): Update pydantic[email] requirement in /services/backend (#89) (572b7ef)
 * chore: release v0.2.8 (ea072cf)
-* build(deps): Bump authlib (#91) (8a9119f)
-* chore: release v0.2.7 (fd60fe3)
