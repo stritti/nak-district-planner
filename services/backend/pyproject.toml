@@ -70,6 +70,7 @@ ignore = [
     "D401",  # First line should be in imperative mood
     "D413",  # Missing blank line after last section
     "D415",  # First line should end with a period, question mark, or exclamation point
+    "E402",  # Import might perform runtime check based on mocked value
     "E501",  # Line too long (let IDE handle wrapping)
     "F401",  # Unused imports (type hints - common in repositories)
     "N806",  # Variable naming in tests (Mock patterns)
