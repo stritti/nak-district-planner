@@ -1,4 +1,4 @@
-## [v0.4.4] - 2026-04-26
+## [v0.4.5] - 2026-04-26
 
 ### Features
 * feat(matrix): close remaining UC-03 implementation gaps (#93) (9ab555a)
@@ -25,6 +25,9 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* build(deps): Update pydantic[email] requirement in /services/backend (#104) (dfaf12b)
+* build(deps-dev): Bump @vue/test-utils in /services/frontend (#102) (8219c37)
+* chore: release v0.4.4 (2607b08)
 * build(deps-dev): Bump vitest from 4.1.4 to 4.1.5 in /services/frontend (#97) (7c35f65)
 * chore: release v0.4.3 (a2041ec)
 * build(deps): Bump opentelemetry-instrumentation-fastapi (#96) (5825a53)
@@ -32,6 +35,3 @@
 * build(deps-dev): Bump tailwindcss in /services/frontend (#95) (5cf0986)
 * chore: release v0.4.1 (77f6528)
 * build(deps-dev): Bump typescript from 5.9.3 to 6.0.3 in /services/frontend (#87) (2521ec8)
-* chore: release v0.4.0 (530248b)
-* chore: release v0.3.1 (da47819)
-* Harden RBAC on read APIs and scoped district checks (#92) (64b1e17)
