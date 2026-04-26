@@ -1,4 +1,4 @@
-## [v0.4.2] - 2026-04-26
+## [v0.4.3] - 2026-04-26
 
 ### Features
 * feat(matrix): close remaining UC-03 implementation gaps (#93) (9ab555a)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* build(deps): Bump opentelemetry-instrumentation-fastapi (#96) (5825a53)
+* chore: release v0.4.2 (c5e795f)
 * build(deps-dev): Bump tailwindcss in /services/frontend (#95) (5cf0986)
 * chore: release v0.4.1 (77f6528)
 * build(deps-dev): Bump typescript from 5.9.3 to 6.0.3 in /services/frontend (#87) (2521ec8)
@@ -33,5 +35,3 @@
 * Harden RBAC on read APIs and scoped district checks (#92) (64b1e17)
 * chore: release v0.3.0 (c2a0f7d)
 * chore: release v0.2.10 (8b338c0)
-* build(deps-dev): Bump eslint from 10.0.3 to 10.2.1 in /services/frontend (#88) (f0a5bc5)
-* chore: release v0.2.9 (698f1b3)
