@@ -13,6 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 revision = "0011_planning_model_foundation"
 down_revision: str | None = "0010_leader_registrations"
+__all__ = ("revision", "down_revision", "upgrade", "downgrade")
 
 
 def upgrade() -> None:
