@@ -28,8 +28,8 @@ Weiterentwicklung.
 | Feiertags-Import | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Nager.Date + Gauss |
 | ICS-Export (Token-basiert) | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Stabile UIDs, PUBLIC/INTERNAL |
 | Event-Verteilung (applicability) | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Virtuell, keine Duplizierung |
-| **PlanningSlot / PlanningSeries** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 – kritisches Fundament |
-| **EventInstance (Soll/Ist)** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
+| **PlanningSlot / PlanningSeries** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – konsolidierter Pfad ohne Feature-Flag/Migration |
+| **EventInstance (Soll/Ist)** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – Matrix liefert Plan/Ist-Daten |
 | **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
 | **RBAC-Durchsetzung** | ✅ | 🟡 | `introduce-rbac-permissions-model` | Modelle vorhanden, Guards unvollständig |
 | **Sync-Zustandsmaschine (Harden)** | ✅ | ❌ | `harden-calendar-sync-algorithm` | Phase 4 |
@@ -148,13 +148,18 @@ durchführen – ohne manuelle Aufrufe in jedem Service.
 
 ## 3. Architektonische Lücken
 
-### 3.1 🔴 KRITISCH: PlanningSlot / PlanningSeries fehlt
+### 3.1 ✅ Erledigt: PlanningSlot / PlanningSeries eingeführt
 
+<<<<<<< HEAD
+**Status:** Implementiert über den OpenSpec-Change
+[`planning-slot-hybrid-sync`](../openspec/changes/planning-slot-hybrid-sync/proposal.md)
+=======
 **Status:** → OpenSpec-Change
 [`planning-slot-hybrid-sync`](/openspec/changes/planning-slot-hybrid-sync/proposal)
+>>>>>>> main
 
-**Beschreibung:** Das aktuelle `Event`-Modell vermischt Planungs- (Soll), Ausführungs- (Ist)
-und Sync-Metadaten. Die Architektur sieht eine Trennung in:
+**Beschreibung:** Das bisherige `Event`-Modell vermischte Planungs- (Soll), Ausführungs- (Ist)
+und Sync-Metadaten. Dafür wurde nun die geplante Trennung eingeführt:
 
 ```text
 PlanningSeries
@@ -164,21 +169,22 @@ PlanningSeries
          └── SyncMetadata
 ```
 
-**Auswirkung:**
+**Umsetzung:**
 
-- Keine saubere Trennung zwischen „was geplant war" und „was tatsächlich stattfand"
-- Externe Systeme können Planungsdaten unkontrolliert überschreiben
-- Sync-Zustandsmaschine (Phase 4) kann nicht ohne dieses Fundament aktiviert werden
+- Neue Domain-Modelle `PlanningSeries`, `PlanningSlot` und `EventInstance`
+- Alembic-Migration für das neue Planungsschema ohne Legacy-Backfill-Pfad
+- `service_assignments.planning_slot_id` als konsolidierte Eigentumsbeziehung
+- Matrix-API liest direkt aus `PlanningSlot`/`EventInstance` und liefert zusätzlich
+  Soll/Ist-Zeitinformationen
 
-**Nächste Schritte:**
+**Verbleibende Folgearbeiten im selben OpenSpec-Change:**
 
-1. Migration gemäß `openspec/changes/planning-slot-hybrid-sync/` planen
-2. Feature-Flag `USE_PLANNING_SLOT_MODEL` aktivieren
-3. Bestehende `Event`-Daten migrieren
-4. Matrix-API anpassen (basiert dann auf `PlanningSlot`)
+1. ExternalEventCandidate-Workflow ergänzen
+2. Benachrichtigungen und Review-UI abschließen
+3. Hybrid-Sync-Regeln auf Feld-Ebene vervollständigen
 
 **Referenz:** `openspec/architecture/phase-1-planning-model-technical-plan.md`
-**Priorität:** 🔴 Kritisch – blockiert Phase 3 und 4 der Roadmap.
+**Bewertung:** Kritisches Fundament umgesetzt; die restlichen Arbeiten betreffen Folgephasen desselben Changes.
 
 ---
 
@@ -590,8 +596,8 @@ klarer Instruktion: „Ihre Anfrage wurde eingereicht. Der Bezirksadmin wird ben
 
 | # | Maßnahme | OpenSpec-Change | Aufwand | Bereich |
 | - | -------- | --- | ------- | ------- |
-| 5 | PlanningSlot + PlanningSeries einführen (Feature-Flag) | `planning-slot-hybrid-sync` | Hoch | Backend |
-| 6 | EventInstance & Soll/Ist-Trennung | `planning-slot-hybrid-sync` | Hoch | Backend |
+| 5 | PlanningSlot-/EventInstance-Rollout produktiv schalten | `planning-slot-hybrid-sync` | Mittel | Backend |
+| 6 | Assignment-Ownership vollständig auf `planning_slot_id` umstellen | `planning-slot-hybrid-sync` | Mittel | Backend |
 | 7 | ExternalEventCandidate + Review-Workflow | `planning-slot-hybrid-sync` | Mittel | Backend/Frontend |
 | 8 | Benachrichtigungssystem (Modell + UI-Basis) | `planning-slot-hybrid-sync` | Mittel | Backend/Frontend |
 

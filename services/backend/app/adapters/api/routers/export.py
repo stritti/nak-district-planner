@@ -157,7 +157,7 @@ async def export_calendar_ics(token_str: str, session: DbSession) -> Response:
 
     # Load assignments in one batch query
     sa_repo = SqlServiceAssignmentRepository(session)
-    assignments = await sa_repo.list_by_events([e.id for e in events])
+    assignments = await sa_repo.list_by_planning_slots([e.id for e in events])
 
     # For leader tokens: keep only assignments for this specific leader
     if export_token.leader_id:

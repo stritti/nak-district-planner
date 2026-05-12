@@ -6,6 +6,7 @@ from app.domain.models.calendar_integration import (
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import (
     CongregationInvitation,
     InvitationOverwriteRequest,
@@ -13,6 +14,8 @@ from app.domain.models.invitation import (
     OverwriteDecisionStatus,
 )
 from app.domain.models.leader import Leader, LeaderRank, SpecialRole
+from app.domain.models.planning_series import PlanningSeries
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
@@ -25,6 +28,7 @@ __all__ = [
     "CongregationInvitation",
     "District",
     "Event",
+    "EventInstance",
     "EventSource",
     "EventStatus",
     "EventVisibility",
@@ -33,6 +37,9 @@ __all__ = [
     "Leader",
     "LeaderRank",
     "OverwriteDecisionStatus",
+    "PlanningSeries",
+    "PlanningSlot",
+    "PlanningSlotStatus",
     "RawCalendarEvent",
     "ServiceAssignment",
     "SpecialRole",
