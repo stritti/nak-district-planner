@@ -36,7 +36,7 @@ POSTGRES_DB=nak_planner
 
 # SQLAlchemy async connection string
 # Für lokale Entwicklung (uv run uvicorn) auf localhost zeigen
-DATABASE_URL=postgresql+asyncpg://nak:<passwort-hier-eintragen>@localhost:5432/nak_planner
+DATABASE_URL=postgresql+asyncpg://nak:<passwort-hier-eintragen>@localhost:5433/nak_planner
 REDIS_URL=redis://localhost:6379/0
 
 # Security - generieren Sie diese Werte mit:
@@ -154,6 +154,8 @@ docker compose run --no-deps --rm backend pytest
 docker compose run --no-deps --rm backend pytest tests/unit/ -v
 
 # Integration-Tests (benötigt laufende DB)
+# Tipp: Nutze 'db-test' für persistente Testdaten: docker compose up -d db-test
+# Dann: DATABASE_URL=postgresql+asyncpg://nak:changeme@localhost:5434/nak_planner_test pytest ...
 docker compose run --no-deps --rm backend pytest tests/integration/ -v
 
 # Mit Coverage-Bericht
@@ -221,7 +223,7 @@ Das System verwendet OIDC (OpenID Connect) mit PKCE für sichere Authentifizieru
 - **Transportverschlüsselung**: In Produktion muss stets HTTPS verwendet werden (TLS-Termination am Reverse Proxy empfohlen)
 
 ### 7.4 Netzwerk- und Container-Security
-- **Port-Exposition**: In der Entwicklung werden bestimmte Ports nach außen exponiert für Debugging-Zwecke (Backend: 8000, DB: 5432, Redis: 6379)
+- **Port-Exposition**: In der Entwicklung werden bestimmte Ports nach außen exponiert für Debugging-Zwecke (Backend: 8000, DB: `${POSTGRES_PORT:-5432}`, Redis: 6379)
   - In Produktion wird KEIN `docker-compose.override.yml` verwendet, wodurch diese Expositions entfernt werden
   - Datenbank und Redis sind dann NICHT direkt vom Host erreichbar
 - **Interne Kommunikation**: Services kommunizieren über das Docker-Netzwerk mittels Service-Namen (`backend`, `db`, `redis`)
