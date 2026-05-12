@@ -1,3 +1,5 @@
+"""app/adapters/api/schemas/export_token.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -9,6 +11,8 @@ from app.domain.models.export_token import TokenType
 
 
 class ExportTokenCreate(BaseModel):
+    """ExportTokenCreate."""
+
     label: str
     token_type: TokenType
     district_id: uuid.UUID
@@ -17,6 +21,8 @@ class ExportTokenCreate(BaseModel):
 
 
 class ExportTokenResponse(BaseModel):
+    """ExportTokenResponse."""
+
     id: uuid.UUID
     token: str
     label: str

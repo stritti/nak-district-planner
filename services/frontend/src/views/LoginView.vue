@@ -55,7 +55,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOIDC } from '@/composables/useOIDC'
+import { useOIDC } from '../composables/useOIDC'
 
 const router = useRouter()
 const oidc = useOIDC(router)
@@ -63,7 +63,6 @@ const oidc = useOIDC(router)
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
-// Task 9.6: Loading-State during Discovery
 async function handleLogin() {
   try {
     error.value = null

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { listLeaders, type LeaderResponse } from '@/api/leaders'
+import { listLeaders, type LeaderResponse } from '../api/leaders'
 
 export const useLeadersStore = defineStore('leaders', () => {
   const leaders = ref<LeaderResponse[]>([])

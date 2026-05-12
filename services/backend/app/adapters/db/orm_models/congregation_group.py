@@ -1,3 +1,5 @@
+"""app/adapters/db/orm_models/congregation_group.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -11,6 +13,8 @@ from app.adapters.db.base import Base
 
 
 class CongregationGroupORM(Base):
+    """ORM model for congregationgrouporm."""
+
     __tablename__ = "congregation_groups"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

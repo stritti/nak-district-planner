@@ -1,23 +1,31 @@
+"""app/domain/models/event.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import Enum, StrEnum
 
 
-class EventSource(str, Enum):
+class EventSource(StrEnum):
+    """EventSource domain model."""
+
     INTERNAL = "INTERNAL"
     EXTERNAL = "EXTERNAL"
 
 
-class EventStatus(str, Enum):
+class EventStatus(StrEnum):
+    """EventStatus domain model."""
+
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
     CANCELLED = "CANCELLED"  # set by sync when the external source marks event deleted
 
 
-class EventVisibility(str, Enum):
+class EventVisibility(StrEnum):
+    """EventVisibility domain model."""
+
     INTERNAL = "INTERNAL"
     PUBLIC = "PUBLIC"
 
@@ -74,7 +82,7 @@ class Event:
         invitation_source_congregation_id: uuid.UUID | None = None,
         invitation_source_event_id: uuid.UUID | None = None,
     ) -> Event:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if "gottesdienst" in title.lower():
             category = "Gottesdienst"

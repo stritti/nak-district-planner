@@ -10,9 +10,9 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { OIDCToken, OIDCUser } from '@/composables/useOIDC'
-import { getAccessContext, getCurrentUser, type MembershipAccess } from '@/api/auth'
-import { getPendingRegistrationsOverview } from '@/api/registrations'
+import type { OIDCToken, OIDCUser } from '../composables/useOIDC'
+import { getAccessContext, getCurrentUser, type MembershipAccess } from '../api/auth'
+import { getPendingRegistrationsOverview } from '../api/registrations'
 
 export const useAuthStore = defineStore(
   'auth',

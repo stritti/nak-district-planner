@@ -2,8 +2,8 @@
  * Minimal XLSX (.xlsx) writer — no external dependencies.
  * Generates a ZIP archive (Store method, no compression) with OOXML SpreadsheetML XML.
  */
-import type { MatrixResponse } from '@/api/matrix'
-import type { EventResponse } from '@/api/events'
+import type { MatrixResponse } from '../api/matrix'
+import type { EventResponse } from '../api/events'
 
 // ── Date/time formatting ──────────────────────────────────────────────────────
 

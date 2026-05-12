@@ -3,6 +3,18 @@
 Planungswerkzeug für Gottesdienste und Veranstaltungen in NAK-Bezirken.
 Verwaltet Gemeinden, Termine und Dienstzuweisungen; exportiert Kalender als ICS-Feed.
 
+## Dokumentation
+
+Die Projektdokumentation befindet sich unter `docs/`.
+
+- Einstieg: `docs/documentation-map.md`
+- Architekturstatus: `docs/architecture-status.md`
+- Engineering Standards: `docs/engineering-standards.md`
+- Security Baseline: `docs/security-baseline.md`
+- Production Runbook: `docs/production-runbook.md`
+
+Historische Inhalte wurden in die strukturierte Projektdokumentation ueberfuehrt.
+
 ---
 
 ## Voraussetzungen
@@ -50,12 +62,12 @@ docker compose up -d
   sofort wirken ohne Rebuild
 - Exponierte Ports für direkten Zugriff von außen:
 
-| Service  | Port (Host) | Beschreibung |
-|----------|-------------|--------------|
-| Frontend | 80          | Vue-App via nginx |
-| Backend  | 8000        | FastAPI (direkt erreichbar) |
-| DB       | 5432        | PostgreSQL |
-| Redis    | 6379        | Redis |
+| Service  | Port (Host)            | Beschreibung                           |
+|----------|------------------------|----------------------------------------|
+| Frontend | 80                     | Vue-App via nginx                      |
+| Backend  | 8000                   | FastAPI (direkt erreichbar)            |
+| DB       | 5433 (default: 5432)   | PostgreSQL                             |
+| Redis    | 6379                   | Redis                                  |
 
 ---
 
@@ -134,7 +146,7 @@ docker compose up -d db redis
 > anpassen, z. B.:
 >
 > ```dotenv
-> DATABASE_URL=postgresql+asyncpg://nak:<passwort>@localhost:5432/nak_planner
+> DATABASE_URL=postgresql+asyncpg://nak:<passwort>@localhost:5433/nak_planner
 > REDIS_URL=redis://localhost:6379/0
 > ```
 
@@ -310,7 +322,7 @@ docker exec -i nak-district-planner-db-1 \
 
 ## Projektstruktur (Kurzübersicht)
 
-```
+```text
 nak-district-planner/
 ├── docker-compose.yml           # Produktion
 ├── docker-compose.override.yml  # Dev-Ergänzungen (automatisch)

@@ -7,15 +7,17 @@ Create Date: 2026-04-03 13:45:00.000000
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "3b7d9e1a4c20"
-down_revision: Union[str, None] = "2a9c4d5e6f70"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "2a9c4d5e6f70"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -46,7 +48,7 @@ def upgrade() -> None:
     )
 
     op.execute(
-        """
+        r"""
         INSERT INTO congregations (id, name, district_id, created_at, updated_at, service_times)
         VALUES
           ('5a8fcd84-1576-4f8f-b4f0-3028e25031a7', 'Stuttgart-Nord', '5fd81892-cb13-4d98-8b38-9448cf610d09', now(), now(), $$[{"weekday"\:6,"time":"09\:30"},{"weekday"\:2,"time":"20\:00"}]$$::jsonb),

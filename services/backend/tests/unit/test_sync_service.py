@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import ExitStack
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,7 +24,7 @@ from app.domain.models.raw_calendar_event import RawCalendarEvent
 
 # ── factories ─────────────────────────────────────────────────────────────────
 
-_NOW = datetime(2026, 3, 6, 12, tzinfo=timezone.utc)
+_NOW = datetime(2026, 3, 6, 12, tzinfo=UTC)
 _DISTRICT_ID = uuid.uuid4()
 _CONG_ID = uuid.uuid4()
 _INT_ID = uuid.uuid4()
@@ -56,8 +56,8 @@ def _raw(
     return RawCalendarEvent(
         uid=uid,
         title=title,
-        start_at=datetime(2026, 3, 10, 10, tzinfo=timezone.utc),
-        end_at=datetime(2026, 3, 10, 12, tzinfo=timezone.utc),
+        start_at=datetime(2026, 3, 10, 10, tzinfo=UTC),
+        end_at=datetime(2026, 3, 10, 12, tzinfo=UTC),
         description="Beschreibung",
         content_hash=content_hash,
         is_cancelled=is_cancelled,

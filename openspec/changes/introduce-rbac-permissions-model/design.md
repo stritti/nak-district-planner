@@ -19,7 +19,7 @@ The NAK District Planner includes multi-tenant structures (District, Congregatio
 ### 1. Role Model
 Roles are assigned via Membership:
 
-```
+```text
 User
   └── Membership
         - role

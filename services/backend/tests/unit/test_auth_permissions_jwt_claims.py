@@ -62,6 +62,28 @@ def test_permissions_superadmin_and_denied_paths() -> None:
         assert_has_role_in_congregation(auth, Role.VIEWER, uuid.uuid4())
 
 
+def test_district_permission_can_be_derived_from_congregation_scope_subset() -> None:
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    memberships = [
+        Membership.create(
+            user_sub="oidc|x",
+            role=Role.PLANNER,
+            scope_type=ScopeType.CONGREGATION,
+            scope_id=congregation_id,
+        )
+    ]
+    auth = _auth(memberships)
+
+    assert not has_role_in_district(auth, Role.VIEWER, district_id)
+    assert has_role_in_district(
+        auth,
+        Role.VIEWER,
+        district_id,
+        congregation_ids_in_district={congregation_id},
+    )
+
+
 def test_extract_memberships_from_claims_variants() -> None:
     district_id = uuid.uuid4()
     valid = {

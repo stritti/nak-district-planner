@@ -1,3 +1,5 @@
+"""app/adapters/api/schemas/calendar_integration.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -9,6 +11,8 @@ from app.domain.models.calendar_integration import CalendarCapability, CalendarT
 
 
 class CalendarIntegrationCreate(BaseModel):
+    """CalendarIntegrationCreate."""
+
     district_id: uuid.UUID
     congregation_id: uuid.UUID | None = None
     name: str = Field(..., min_length=1, max_length=255)
@@ -22,6 +26,8 @@ class CalendarIntegrationCreate(BaseModel):
 
 
 class CalendarIntegrationResponse(BaseModel):
+    """CalendarIntegrationResponse."""
+
     id: uuid.UUID
     district_id: uuid.UUID
     congregation_id: uuid.UUID | None
@@ -40,6 +46,8 @@ class CalendarIntegrationResponse(BaseModel):
 
 
 class CalendarIntegrationUpdate(BaseModel):
+    """CalendarIntegrationUpdate."""
+
     name: str | None = Field(None, min_length=1, max_length=255)
     credentials: dict | None = None  # if provided, re-encrypted before storage
     sync_interval: int | None = Field(None, ge=1, le=10080)
@@ -48,11 +56,15 @@ class CalendarIntegrationUpdate(BaseModel):
 
 
 class CalendarIntegrationListResponse(BaseModel):
+    """CalendarIntegrationListResponse."""
+
     items: list[CalendarIntegrationResponse]
     total: int
 
 
 class SyncResult(BaseModel):
+    """SyncResult."""
+
     integration_id: uuid.UUID
     created: int
     updated: int

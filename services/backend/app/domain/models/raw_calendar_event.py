@@ -1,3 +1,5 @@
+"""app/domain/models/raw_calendar_event.py: Module."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

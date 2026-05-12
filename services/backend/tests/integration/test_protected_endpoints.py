@@ -1,5 +1,4 @@
-"""
-Integration tests for protected API endpoints with JWT authentication.
+"""Integration tests for protected API endpoints with JWT authentication.
 
 Tests verify that endpoints require valid Bearer tokens and work with authenticated users.
 """
@@ -10,8 +9,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.adapters.auth.oidc import OIDCAdapter
 from app.adapters.api import deps
+from app.adapters.auth.oidc import OIDCAdapter
 from app.main import app
 
 

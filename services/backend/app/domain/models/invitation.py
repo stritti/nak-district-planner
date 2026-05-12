@@ -1,17 +1,23 @@
+"""app/domain/models/invitation.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import Enum, StrEnum
 
 
-class InvitationTargetType(str, Enum):
+class InvitationTargetType(StrEnum):
+    """InvitationTargetType domain model."""
+
     DISTRICT_CONGREGATION = "DISTRICT_CONGREGATION"
     EXTERNAL_NOTE = "EXTERNAL_NOTE"
 
 
-class OverwriteDecisionStatus(str, Enum):
+class OverwriteDecisionStatus(StrEnum):
+    """OverwriteDecisionStatus domain model."""
+
     PENDING_OVERWRITE = "PENDING_OVERWRITE"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
@@ -48,7 +54,7 @@ class CongregationInvitation:
         if target_type == InvitationTargetType.EXTERNAL_NOTE and not external_target_note:
             raise ValueError("external_target_note is required for EXTERNAL_NOTE")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=uuid.uuid4(),
             source_event_id=source_event_id,
@@ -91,7 +97,7 @@ class InvitationOverwriteRequest:
         proposed_description: str | None,
         proposed_category: str | None,
     ) -> InvitationOverwriteRequest:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=uuid.uuid4(),
             invitation_id=invitation_id,

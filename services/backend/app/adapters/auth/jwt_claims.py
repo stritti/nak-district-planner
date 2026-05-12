@@ -1,5 +1,4 @@
-"""
-JWT claim enrichment for RBAC.
+"""JWT claim enrichment for RBAC.
 
 Extends JWT token claims with membership information for efficient
 authorization checks without database queries on every request.
@@ -23,8 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def extract_memberships_from_claims(claims: dict[str, Any]) -> list[Membership]:
-    """
-    Extract membership information from JWT claims.
+    """Extract membership information from JWT claims.
 
     This assumes the OIDC provider includes a custom claim like 'memberships'
     with the structure: [{"role": "PLANNER", "scope_type": "DISTRICT", "scope_id": "..."}]

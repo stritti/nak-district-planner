@@ -7,7 +7,7 @@ import {
   type CongregationResponse,
   type DistrictResponse,
   type CongregationGroupResponse,
-} from '@/api/districts'
+} from '../api/districts'
 
 export const useDistrictsStore = defineStore('districts', () => {
   const districts = ref<DistrictResponse[]>([])

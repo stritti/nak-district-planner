@@ -1,3 +1,5 @@
+"""app/celery_app.py: Module."""
+
 from celery import Celery
 from celery.schedules import crontab, timedelta
 

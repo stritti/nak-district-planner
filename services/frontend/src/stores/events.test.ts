@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useEventsStore } from './events'
-import * as eventsApi from '@/api/events'
+import * as eventsApi from '../api/events'
 
-vi.mock('@/api/events')
+vi.mock('../api/events')
 
 const makeListResponse = (
   items: Partial<eventsApi.EventResponse>[] = [],

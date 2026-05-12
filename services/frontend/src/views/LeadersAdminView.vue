@@ -653,7 +653,7 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
-import { listCongregations, type CongregationResponse } from '@/api/districts'
+import { listCongregations, type CongregationResponse } from '../api/districts'
 import {
   createLeader,
   deleteLeader,
@@ -667,16 +667,16 @@ import {
   type LeaderRank,
   type LeaderResponse,
   type SpecialRole,
-} from '@/api/leaders'
-import { createExportToken as apiCreateExportToken } from '@/api/exportTokens'
+} from '../api/leaders'
+import { createExportToken as apiCreateExportToken } from '../api/exportTokens'
 import {
   approveRegistration,
   deleteRegistration,
   listRegistrations,
   rejectRegistration,
   type RegistrationResponse,
-} from '@/api/registrations'
-import { useDistrictsStore } from '@/stores/districts'
+} from '../api/registrations'
+import { useDistrictsStore } from '../stores/districts'
 
 const districtsStore = useDistrictsStore()
 const congregations = ref<CongregationResponse[]>([])

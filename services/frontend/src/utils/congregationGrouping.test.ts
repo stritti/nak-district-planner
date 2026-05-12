@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CongregationGroupResponse, CongregationResponse } from '@/api/districts'
+import type { CongregationGroupResponse, CongregationResponse } from '../api/districts'
 import { buildCongregationSections } from './congregationGrouping'
 
 function congregation(

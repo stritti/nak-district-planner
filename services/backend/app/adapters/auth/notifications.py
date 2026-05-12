@@ -1,5 +1,4 @@
-"""
-Authorization checks for notifications (in-app notifications UC).
+"""Authorization checks for notifications (in-app notifications UC).
 
 When notifications are implemented, this module provides utilities to enforce
 role-based permission checks for notification viewing and actions.
@@ -17,8 +16,7 @@ def can_view_notification(
     auth_context: AuthContext,
     notification_district_id: uuid.UUID,
 ) -> bool:
-    """
-    Check if user can view a notification for a specific district.
+    """Check if user can view a notification for a specific district.
 
     Currently, any user with VIEWER role (or higher) in the district
     can view notifications for that district.
@@ -34,8 +32,7 @@ def can_act_on_notification(
     auth_context: AuthContext,
     notification_district_id: uuid.UUID,
 ) -> bool:
-    """
-    Check if user can perform actions (e.g., acknowledge, close) on a notification.
+    """Check if user can perform actions (e.g., acknowledge, close) on a notification.
 
     Currently requires PLANNER role (or higher) to act on notifications.
     """

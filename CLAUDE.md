@@ -10,7 +10,7 @@ The spec is written in German (NAK = Neuapostolische Kirche / New Apostolic Chur
 
 ## Monorepo Structure
 
-```
+```text
 nak-district-planner/
 ├── docker-compose.yml              # 5 Services: backend, worker, frontend, db, redis
 ├── docker-compose.override.yml     # Dev-Overrides (Hot-Reload, exposed ports)
@@ -81,7 +81,7 @@ bun run lint                       # ESLint
 
 Business logic must **not** depend on FastAPI or SQLAlchemy directly. Use Abstract Base Classes for all repository and calendar connector interfaces.
 
-```
+```text
 app/
   domain/        # Pure Python — no framework imports
     models/      # Domain entities (Event, ServiceAssignment, etc.)

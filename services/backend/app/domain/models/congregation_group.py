@@ -1,8 +1,10 @@
+"""app/domain/models/congregation_group.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 @dataclass
@@ -15,7 +17,7 @@ class CongregationGroup:
 
     @classmethod
     def create(cls, *, name: str, district_id: uuid.UUID) -> CongregationGroup:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return cls(
             id=uuid.uuid4(),
             name=name,

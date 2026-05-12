@@ -16,7 +16,7 @@ Core principles:
 - Adapters handle HTTP, persistence, background jobs, and external calendars.
 - External systems never directly influence domain structure.
 
-```
+```text
           ┌────────────────────────────┐
           │        External World      │
           │  (Google, Outlook, ICS)    │
@@ -43,7 +43,7 @@ Core principles:
 
 The system distinguishes between planned structure (Soll) and actual execution (Ist).
 
-```
+```text
 PlanningSeries
    └── PlanningSlot (Aggregate Root)
          ├── EventInstance (actual execution)
@@ -87,7 +87,7 @@ New external events become `ExternalEventCandidate` until reviewed.
 
 Role-based access control is scoped.
 
-```
+```text
 User
   └── Membership
         - role
@@ -134,7 +134,7 @@ The system enforces:
 
 The system is district-centric.
 
-```
+```text
 District
   └── Congregation
 ```

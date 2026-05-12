@@ -1,4 +1,4 @@
-import type { MatrixRow } from '@/api/matrix'
+import type { MatrixRow } from '../api/matrix'
 
 export type MatrixSortMode = 'default' | 'grouped'
 

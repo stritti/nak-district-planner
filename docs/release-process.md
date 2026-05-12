@@ -24,7 +24,7 @@ Alle Commits auf dem `main`-Branch **müssen** dem [Conventional Commits Standar
 
 ### Format
 
-```
+```text
 <type>(<scope>): <kurze Beschreibung>
 
 [optionaler Body]
@@ -72,7 +72,7 @@ Die Release-Pipeline besteht aus zwei GitHub Actions Workflows:
 
 ### 1. `release.yml` – Kern der Release-Automatisierung
 
-```
+```text
 Push auf main
      │
      ▼
@@ -141,7 +141,7 @@ Nach einem erfolgreichen Release werden Docker-Images für Backend und Frontend 
 
 Die Images werden in der **GitHub Container Registry (GHCR)** veröffentlicht:
 
-```
+```text
 ghcr.io/stritti/nak-district-planner/backend:1.2.0
 ghcr.io/stritti/nak-district-planner/frontend:1.2.0
 ```

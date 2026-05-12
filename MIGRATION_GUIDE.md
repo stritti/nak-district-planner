@@ -345,10 +345,10 @@ After migration to Phase 4b, verify:
 
 ## Support & Further Reading
 
-- **Keycloak Documentation:** https://www.keycloak.org/documentation
-- **Authentik Documentation:** https://goauthentik.io/docs/
-- **OIDC Specification:** https://openid.net/specs/openid-connect-core-1_0.html
-- **PKCE (RFC 7636):** https://tools.ietf.org/html/rfc7636
+- **Keycloak Documentation:** <https://www.keycloak.org/documentation>
+- **Authentik Documentation:** <https://goauthentik.io/docs/>
+- **OIDC Specification:** <https://openid.net/specs/openid-connect-core-1_0.html>
+- **PKCE (RFC 7636):** <https://tools.ietf.org/html/rfc7636>
 - **Frontend OIDC Code:** See `services/frontend/src/composables/useOIDC.ts`
 - **Backend OIDC Config:** See backend `.env` setup
 

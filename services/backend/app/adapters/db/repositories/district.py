@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/district.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -21,6 +23,8 @@ def _orm_to_domain(row: DistrictORM) -> District:
 
 
 class SqlDistrictRepository(DistrictRepository):
+    """SQLAlchemy repository for District."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

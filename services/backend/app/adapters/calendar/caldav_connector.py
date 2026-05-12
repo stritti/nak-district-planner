@@ -11,7 +11,7 @@ or with bearer token: {"url": "...", "access_token": "token"}
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -157,10 +157,10 @@ class CalDAVConnector(CalendarConnector):
 
                     if isinstance(dt_val, datetime):
                         if dt_val.tzinfo is None:
-                            return dt_val.replace(tzinfo=timezone.utc)
-                        return dt_val.astimezone(timezone.utc)
+                            return dt_val.replace(tzinfo=UTC)
+                        return dt_val.astimezone(UTC)
                     else:  # date object
-                        return datetime(dt_val.year, dt_val.month, dt_val.day, tzinfo=timezone.utc)
+                        return datetime(dt_val.year, dt_val.month, dt_val.day, tzinfo=UTC)
 
                 start_at = _to_utc(dtstart)
 
@@ -198,7 +198,7 @@ class CalDAVConnector(CalendarConnector):
             return ""
         # CalDAV expects format like: 20230101T000000Z
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         else:
-            dt = dt.astimezone(timezone.utc)
+            dt = dt.astimezone(UTC)
         return dt.strftime("%Y%m%dT%H%M%SZ")

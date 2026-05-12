@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { apiFetch } from './client'
 import { setActivePinia, createPinia } from 'pinia'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../stores/auth'
 
 function makeResponse(
   body: unknown,

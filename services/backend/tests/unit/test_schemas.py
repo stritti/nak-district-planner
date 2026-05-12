@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 from pydantic import ValidationError
 
-from app.adapters.api.schemas.event import (
-    EventCreate,
-    EventUpdate,
-    EventResponse,
-)
 from app.adapters.api.schemas.district import (
     CongregationCreate,
     CongregationUpdate,
     DistrictCreate,
     DistrictResponse,
+)
+from app.adapters.api.schemas.event import (
+    EventCreate,
+    EventResponse,
+    EventUpdate,
 )
 from app.adapters.api.schemas.leader import (
     LeaderCreate,
@@ -37,8 +37,8 @@ class TestEventCreateSchema:
         data = {
             "title": "Gottesdienst",
             "district_id": str(uuid.uuid4()),
-            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=timezone.utc),
-            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
         }
         event = EventCreate(**data)
         assert event.title == "Gottesdienst"
@@ -47,8 +47,8 @@ class TestEventCreateSchema:
         """EventCreate without title should fail."""
         data = {
             "district_id": str(uuid.uuid4()),
-            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=timezone.utc),
-            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
         }
         with pytest.raises(ValidationError):
             EventCreate(**data)
@@ -57,8 +57,8 @@ class TestEventCreateSchema:
         """EventCreate without district_id should fail."""
         data = {
             "title": "Gottesdienst",
-            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=timezone.utc),
-            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
         }
         with pytest.raises(ValidationError):
             EventCreate(**data)
@@ -70,8 +70,8 @@ class TestEventCreateSchema:
             "description": "Morningservice",
             "district_id": str(uuid.uuid4()),
             "congregation_id": str(uuid.uuid4()),
-            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=timezone.utc),
-            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
             "category": "Gottesdienst",
             "source": "INTERNAL",
             "status": "DRAFT",
@@ -86,8 +86,8 @@ class TestEventCreateSchema:
         data = {
             "title": "Gottesdienst",
             "district_id": "not-a-uuid",
-            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=timezone.utc),
-            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
         }
         with pytest.raises(ValidationError):
             EventCreate(**data)
@@ -97,8 +97,8 @@ class TestEventCreateSchema:
         data = {
             "title": "Gottesdienst",
             "district_id": str(uuid.uuid4()),
-            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=timezone.utc),
-            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
             "status": "INVALID_STATUS",
         }
         with pytest.raises(ValidationError):
@@ -149,10 +149,10 @@ class TestEventResponseSchema:
             "visibility": "INTERNAL",
             "audiences": [],
             "applicability": [],
-            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=timezone.utc),
-            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc),
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
         response = EventResponse(**data)
         assert response.id == event_id
@@ -183,8 +183,8 @@ class TestDistrictSchema:
             "id": district_id,
             "name": "Bezirk München",
             "state_code": "BY",
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
         response = DistrictResponse(**data)
         assert response.id == district_id
@@ -254,8 +254,8 @@ class TestLeaderSchema:
             "phone": None,
             "notes": None,
             "is_active": True,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
         response = LeaderResponse(**data)
         assert response.id == leader_id
@@ -304,8 +304,8 @@ class TestServiceAssignmentSchema:
             "leader_id": leader_id,
             "leader_name": "Pastor Schmidt",
             "status": "ASSIGNED",
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
         response = ServiceAssignmentResponse(**data)
         assert response.id == assignment_id

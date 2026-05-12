@@ -1,19 +1,24 @@
+"""app/adapters/api/schemas/invitation.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.models.invitation import InvitationTargetType, OverwriteDecisionStatus
 
 
 class InvitationTargetCreate(BaseModel):
+    """InvitationTargetCreate."""
+
     target_type: InvitationTargetType
     target_congregation_id: uuid.UUID | None = None
     external_target_note: str | None = Field(default=None, min_length=1, max_length=500)
 
     @model_validator(mode="after")
-    def validate_target(self) -> "InvitationTargetCreate":
+    def validate_target(self) -> InvitationTargetCreate:
         if self.target_type == InvitationTargetType.DISTRICT_CONGREGATION:
             if self.target_congregation_id is None:
                 raise ValueError("target_congregation_id is required for DISTRICT_CONGREGATION")
@@ -28,10 +33,14 @@ class InvitationTargetCreate(BaseModel):
 
 
 class InvitationCreate(BaseModel):
+    """InvitationCreate."""
+
     targets: list[InvitationTargetCreate] = Field(min_length=1)
 
 
 class InvitationResponse(BaseModel):
+    """InvitationResponse."""
+
     id: uuid.UUID
     source_event_id: uuid.UUID
     source_congregation_id: uuid.UUID
@@ -44,6 +53,8 @@ class InvitationResponse(BaseModel):
 
 
 class OverwriteRequestResponse(BaseModel):
+    """OverwriteRequestResponse."""
+
     id: uuid.UUID
     invitation_id: uuid.UUID
     source_event_id: uuid.UUID
@@ -68,6 +79,8 @@ class OverwriteRequestResponse(BaseModel):
 
 
 class OverwriteDecisionRequest(BaseModel):
+    """OverwriteDecisionRequest."""
+
     decision: OverwriteDecisionStatus
 
     @field_validator("decision")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -154,20 +154,20 @@ class TestLeaderRegistrationDomainModel:
         assert reg.user_sub == "oidc|user-123"
 
     def test_created_at_set_automatically(self):
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         reg = LeaderRegistration.create(
             district_id=uuid.uuid4(),
             name="Test",
             email="t@example.com",
         )
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
         assert before <= reg.created_at <= after
         assert reg.created_at == reg.updated_at
 
 
 class TestRegistrationResponseSchema:
     def test_full_response(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         data = {
             "id": uuid.uuid4(),
             "district_id": uuid.uuid4(),

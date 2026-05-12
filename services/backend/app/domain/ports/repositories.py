@@ -1,3 +1,5 @@
+"""app/domain/ports/repositories.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -19,6 +21,8 @@ from app.domain.models.invitation import (
     InvitationOverwriteRequest,
     OverwriteDecisionStatus,
 )
+from app.domain.models.leader import Leader
+from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
 
@@ -167,6 +171,10 @@ class ServiceAssignmentRepository(ABC):
 
     @abstractmethod
     async def save(self, assignment: ServiceAssignment) -> None: ...
+
+    @abstractmethod
+    async def delete(self, assignment_id: uuid.UUID) -> None:
+        pass
 
 
 class InvitationRepository(ABC):

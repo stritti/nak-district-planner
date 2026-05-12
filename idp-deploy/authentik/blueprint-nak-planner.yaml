@@ -1,5 +1,5 @@
 # Authentik Blueprint für NAK Planner OIDC
-# 
+#
 # Blueprint importieren:
 #   1. Authentik Admin Console öffnen: http://localhost:9000/if/admin/
 #   2. Admin → System → Blueprints
@@ -152,7 +152,7 @@ entries:
       expression: |
         # Allow all authenticated users by default
         return True
-        
+
         # Optional: restrict to specific groups:
         # return user.groups.filter(name="nak-planner-users").exists()
 
@@ -161,7 +161,7 @@ entries:
   # ============================================================================
   # Note: Configure via System Settings GUI
   # This is documented here for reference
-  
+
   # ============================================================================
   # 9. Recovery Codes & Backup Stage (for security)
   # ============================================================================
@@ -175,7 +175,7 @@ entries:
   # ============================================================================
   # 10. DOCUMENTATION & DEPLOYMENT NOTES
   # ============================================================================
-  # 
+  #
   # OIDC Configuration URL:
   #   http://authentik:9000/application/o/.well-known/openid-configuration
   #

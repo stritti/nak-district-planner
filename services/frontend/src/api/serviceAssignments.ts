@@ -43,3 +43,9 @@ export function updateAssignment(
     },
   )
 }
+
+export function deleteAssignment(eventId: string, assignmentId: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/events/${eventId}/assignments/${assignmentId}`, {
+    method: 'DELETE',
+  })
+}

@@ -5,7 +5,7 @@ All HTTP calls are intercepted via a mock httpx.AsyncClient — no network neede
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -115,14 +115,14 @@ class TestToUtc:
     def test_aware_datetime_converted_to_utc(self):
         cet = timezone(timedelta(hours=1))
         aware = datetime(2026, 3, 1, 11, 0, tzinfo=cet)
-        assert _to_utc(aware) == datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
+        assert _to_utc(aware) == datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
 
     def test_naive_datetime_treated_as_utc(self):
         naive = datetime(2026, 3, 1, 10, 0)
-        assert _to_utc(naive) == datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
+        assert _to_utc(naive) == datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
 
     def test_date_becomes_midnight_utc(self):
-        assert _to_utc(date(2026, 3, 15)) == datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc)
+        assert _to_utc(date(2026, 3, 15)) == datetime(2026, 3, 15, 0, 0, tzinfo=UTC)
 
 
 # ── _content_hash ─────────────────────────────────────────────────────────────
@@ -130,22 +130,22 @@ class TestToUtc:
 
 class TestContentHash:
     def test_deterministic(self):
-        dt = datetime(2026, 3, 1, 10, tzinfo=timezone.utc)
+        dt = datetime(2026, 3, 1, 10, tzinfo=UTC)
         h1 = _content_hash("uid", dt, dt, "title")
         h2 = _content_hash("uid", dt, dt, "title")
         assert h1 == h2
 
     def test_changes_on_title_change(self):
-        dt = datetime(2026, 3, 1, 10, tzinfo=timezone.utc)
+        dt = datetime(2026, 3, 1, 10, tzinfo=UTC)
         assert _content_hash("uid", dt, dt, "A") != _content_hash("uid", dt, dt, "B")
 
     def test_changes_on_time_change(self):
-        dt1 = datetime(2026, 3, 1, 10, tzinfo=timezone.utc)
-        dt2 = datetime(2026, 3, 1, 11, tzinfo=timezone.utc)
+        dt1 = datetime(2026, 3, 1, 10, tzinfo=UTC)
+        dt2 = datetime(2026, 3, 1, 11, tzinfo=UTC)
         assert _content_hash("uid", dt1, dt1, "T") != _content_hash("uid", dt2, dt2, "T")
 
     def test_changes_on_uid_change(self):
-        dt = datetime(2026, 3, 1, 10, tzinfo=timezone.utc)
+        dt = datetime(2026, 3, 1, 10, tzinfo=UTC)
         assert _content_hash("uid-A", dt, dt, "T") != _content_hash("uid-B", dt, dt, "T")
 
 
@@ -160,8 +160,8 @@ class TestFetchEvents:
         ev = events[0]
         assert ev.uid == "uid-basic@test"
         assert ev.title == "Gottesdienst"
-        assert ev.start_at == datetime(2026, 3, 1, 10, tzinfo=timezone.utc)
-        assert ev.end_at == datetime(2026, 3, 1, 12, tzinfo=timezone.utc)
+        assert ev.start_at == datetime(2026, 3, 1, 10, tzinfo=UTC)
+        assert ev.end_at == datetime(2026, 3, 1, 12, tzinfo=UTC)
         assert ev.description == "Sonntagsgottesdienst"
         assert ev.is_cancelled is False
 
@@ -175,7 +175,7 @@ class TestFetchEvents:
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_ALLDAY)))
         events = await connector.fetch_events(CREDS)
         assert len(events) == 1
-        assert events[0].start_at == datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc)
+        assert events[0].start_at == datetime(2026, 3, 15, 0, 0, tzinfo=UTC)
 
     async def test_event_without_uid_is_skipped(self):
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_NO_UID)))
@@ -185,7 +185,7 @@ class TestFetchEvents:
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_DURATION)))
         events = await connector.fetch_events(CREDS)
         assert len(events) == 1
-        assert events[0].end_at == datetime(2026, 3, 20, 16, tzinfo=timezone.utc)  # 14:00 + 2h
+        assert events[0].end_at == datetime(2026, 3, 20, 16, tzinfo=UTC)  # 14:00 + 2h
 
     async def test_allday_fallback_when_no_dtend_or_duration(self):
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_NO_DTEND)))
@@ -208,7 +208,7 @@ class TestFetchEvents:
 
     async def test_from_dt_filter_excludes_ended_events(self):
         # VEVENT_BASIC ends 2026-03-01 12:00Z — cutoff is 2026-03-02 → excluded
-        cutoff = datetime(2026, 3, 2, tzinfo=timezone.utc)
+        cutoff = datetime(2026, 3, 2, tzinfo=UTC)
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_BASIC, VEVENT_CANCELLED)))
         events = await connector.fetch_events(CREDS, from_dt=cutoff)
         assert len(events) == 1
@@ -216,7 +216,7 @@ class TestFetchEvents:
 
     async def test_to_dt_filter_excludes_future_events(self):
         # VEVENT_CANCELLED starts 2026-03-05 — cutoff is 2026-03-04 → excluded
-        to = datetime(2026, 3, 4, tzinfo=timezone.utc)
+        to = datetime(2026, 3, 4, tzinfo=UTC)
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_BASIC, VEVENT_CANCELLED)))
         events = await connector.fetch_events(CREDS, to_dt=to)
         assert len(events) == 1

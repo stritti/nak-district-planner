@@ -1,8 +1,12 @@
+"""app/config.py: Module."""
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Settings."""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = "postgresql+asyncpg://nak:changeme@db:5432/nak_planner"
@@ -25,9 +29,15 @@ class Settings(BaseSettings):
     oidc_scopes: str = "openid profile email"
     superadmin_sub: str | None = None
     idp_provisioning_enabled: bool = False
+    idp_provisioning_provider: str = "webhook"
     idp_provisioning_endpoint: str | None = None
     idp_provisioning_api_key: str | None = None
     idp_provisioning_timeout_seconds: float = 10.0
+    idp_provisioning_keycloak_base_url: str | None = None
+    idp_provisioning_keycloak_realm: str | None = None
+    idp_provisioning_keycloak_admin_username: str | None = None
+    idp_provisioning_keycloak_admin_password: str | None = None
+    idp_provisioning_keycloak_invite_on_approval: bool = True
     startup_generate_draft_services: bool = False
 
     @model_validator(mode="after")

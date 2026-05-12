@@ -1,7 +1,9 @@
+"""app/adapters/db/repositories/invitation_overwrite_request.py: Module."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +33,8 @@ def _orm_to_domain(row: InvitationOverwriteRequestORM) -> InvitationOverwriteReq
 
 
 class SqlInvitationOverwriteRequestRepository(InvitationOverwriteRequestRepository):
+    """SQLAlchemy repository for InvitationOverwriteRequest."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
@@ -94,7 +98,7 @@ class SqlInvitationOverwriteRequestRepository(InvitationOverwriteRequestReposito
         if row is None:
             return None
         row.status = status
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
         if status != OverwriteDecisionStatus.PENDING_OVERWRITE:
             row.decided_at = row.updated_at
         await self._session.flush()

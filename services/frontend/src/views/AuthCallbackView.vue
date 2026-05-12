@@ -26,8 +26,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useOIDC } from '@/composables/useOIDC'
-import { useAuthStore } from '@/stores/auth'
+import { useOIDC } from '../composables/useOIDC'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const route = useRoute()

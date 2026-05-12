@@ -1,5 +1,4 @@
-"""
-OIDCAdapter — Provider-agnostic OIDC/OAuth2 integration.
+"""OIDCAdapter — Provider-agnostic OIDC/OAuth2 integration.
 
 Handles OIDC discovery, JWKS fetching/caching, and JWT validation.
 Works with any OIDC-compliant provider (Keycloak, Authentik, Okta, etc.)
@@ -7,8 +6,8 @@ Works with any OIDC-compliant provider (Keycloak, Authentik, Okta, etc.)
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 import jwt
@@ -36,8 +35,7 @@ class TokenValidationError(Exception):
 
 
 class OIDCAdapter:
-    """
-    Provider-agnostic OIDC adapter for JWT validation and user extraction.
+    """Provider-agnostic OIDC adapter for JWT validation and user extraction.
 
     Features:
     - OIDC discovery: fetches /.well-known/openid-configuration
@@ -51,14 +49,13 @@ class OIDCAdapter:
         discovery_url: str,
         client_id: str,
         client_secret: str,
-        issuer: Optional[str] = None,
-        audience: Optional[str] = None,
-        httpx_client: Optional[httpx.AsyncClient] = None,
+        issuer: str | None = None,
+        audience: str | None = None,
+        httpx_client: httpx.AsyncClient | None = None,
         jwks_cache_ttl: int = 3600,  # 1 hour
         clock_skew_seconds: int = 120,
     ):
-        """
-        Initialize the OIDC adapter.
+        """Initialize the OIDC adapter.
 
         Args:
             discovery_url: OIDC provider discovery URL
@@ -80,11 +77,11 @@ class OIDCAdapter:
         self.clock_skew_seconds = clock_skew_seconds
 
         self._httpx_client = httpx_client
-        self._discovery_cache: Optional[dict[str, Any]] = None
-        self._discovery_cache_time: Optional[datetime] = None
-        self._jwks_cache: Optional[dict[str, Any]] = None
-        self._jwks_cache_time: Optional[datetime] = None
-        self._jwks_fetch_error: Optional[Exception] = None
+        self._discovery_cache: dict[str, Any] | None = None
+        self._discovery_cache_time: datetime | None = None
+        self._jwks_cache: dict[str, Any] | None = None
+        self._jwks_cache_time: datetime | None = None
+        self._jwks_fetch_error: Exception | None = None
 
     async def get_httpx_client(self) -> httpx.AsyncClient:
         """Get or create httpx client."""
@@ -99,8 +96,7 @@ class OIDCAdapter:
             self._httpx_client = None
 
     async def discover(self) -> dict[str, Any]:
-        """
-        Fetch OIDC discovery configuration from /.well-known/openid-configuration.
+        """Fetch OIDC discovery configuration from /.well-known/openid-configuration.
 
         Returns:
             Discovery configuration dict with endpoints and metadata
@@ -110,7 +106,7 @@ class OIDCAdapter:
         """
         # Return cached discovery if fresh
         if self._discovery_cache is not None and self._discovery_cache_time is not None:
-            elapsed = (datetime.now(timezone.utc) - self._discovery_cache_time).total_seconds()
+            elapsed = (datetime.now(UTC) - self._discovery_cache_time).total_seconds()
             if elapsed < 3600:  # Cache for 1 hour
                 return self._discovery_cache
 
@@ -120,7 +116,7 @@ class OIDCAdapter:
             response.raise_for_status()
 
             self._discovery_cache = response.json()
-            self._discovery_cache_time = datetime.now(timezone.utc)
+            self._discovery_cache_time = datetime.now(UTC)
 
             # Auto-discover issuer if not provided
             if self.issuer is None and "issuer" in self._discovery_cache:
@@ -139,8 +135,7 @@ class OIDCAdapter:
             raise OIDCDiscoveryError(msg) from e
 
     async def fetch_jwks(self, force_refresh: bool = False) -> dict[str, Any]:
-        """
-        Fetch and cache JWKS (JSON Web Key Set) from the OIDC provider.
+        """Fetch and cache JWKS (JSON Web Key Set) from the OIDC provider.
 
         Returns:
             JWKS dict with 'keys' array
@@ -150,7 +145,7 @@ class OIDCAdapter:
         """
         # Return cached JWKS if fresh and not forcing refresh
         if not force_refresh and self._jwks_cache is not None and self._jwks_cache_time is not None:
-            elapsed = (datetime.now(timezone.utc) - self._jwks_cache_time).total_seconds()
+            elapsed = (datetime.now(UTC) - self._jwks_cache_time).total_seconds()
             if elapsed < self.jwks_cache_ttl:
                 return self._jwks_cache
 
@@ -166,7 +161,7 @@ class OIDCAdapter:
             response.raise_for_status()
 
             self._jwks_cache = response.json()
-            self._jwks_cache_time = datetime.now(timezone.utc)
+            self._jwks_cache_time = datetime.now(UTC)
             self._jwks_fetch_error = None
 
             logger.info(f"JWKS fetched successfully, {len(self._jwks_cache.get('keys', []))} keys")
@@ -198,11 +193,10 @@ class OIDCAdapter:
     async def validate_token(
         self,
         token: str,
-        audience: Optional[str] = None,
-        algorithms: Optional[list[str]] = None,
+        audience: str | None = None,
+        algorithms: list[str] | None = None,
     ) -> dict[str, Any]:
-        """
-        Validate JWT token: signature, issuer, expiration, audience.
+        """Validate JWT token: signature, issuer, expiration, audience.
 
         Args:
             token: JWT token to validate
@@ -272,11 +266,10 @@ class OIDCAdapter:
     async def _validate_jwt_token(
         self,
         token: str,
-        audience: Optional[str],
+        audience: str | None,
         algorithms: list[str],
     ) -> dict[str, Any]:
         """Validate JWT token via JWKS (signature + standard claims)."""
-
         try:
             # Decode header to get kid (key ID) without verifying first
             unverified = jwt.decode(token, options={"verify_signature": False})
@@ -438,8 +431,7 @@ class OIDCAdapter:
         return claims
 
     def _validate_audience_claims(self, token_claims: dict[str, Any], expected: str) -> None:
-        """
-        Validate token audience in a provider-compatible way.
+        """Validate token audience in a provider-compatible way.
 
         Standards background:
         - access token audience is usually checked via `aud`
@@ -466,8 +458,7 @@ class OIDCAdapter:
             )
 
     def extract_user_info(self, token_claims: dict[str, Any]) -> dict[str, Any]:
-        """
-        Extract user information from validated token claims.
+        """Extract user information from validated token claims.
 
         Extracts standard OIDC claims:
         - sub: Subject (user ID)

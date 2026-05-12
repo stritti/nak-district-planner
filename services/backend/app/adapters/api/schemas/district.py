@@ -1,3 +1,5 @@
+"""app/adapters/api/schemas/district.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -9,21 +11,29 @@ from app.domain.models.invitation import InvitationTargetType
 
 
 class ServiceTime(BaseModel):
+    """ServiceTime."""
+
     weekday: int = Field(ge=0, le=6)  # 0=Mo … 6=So
     time: str = Field(pattern=r"^\d{2}:\d{2}$")  # "HH:MM"
 
 
 class DistrictCreate(BaseModel):
+    """DistrictCreate."""
+
     name: str = Field(min_length=1, max_length=255)
     state_code: str | None = Field(None, min_length=2, max_length=2)
 
 
 class DistrictUpdate(BaseModel):
+    """DistrictUpdate."""
+
     name: str | None = Field(None, min_length=1, max_length=255)
     state_code: str | None = Field(None, min_length=2, max_length=2)
 
 
 class DistrictResponse(BaseModel):
+    """DistrictResponse."""
+
     model_config = {"from_attributes": True}
 
     id: uuid.UUID
@@ -34,6 +44,8 @@ class DistrictResponse(BaseModel):
 
 
 class CongregationCreate(BaseModel):
+    """CongregationCreate."""
+
     name: str = Field(min_length=1, max_length=255)
     service_times: list[ServiceTime] | None = None  # None → Defaults
     group_id: uuid.UUID | None = None
@@ -42,7 +54,7 @@ class CongregationCreate(BaseModel):
     invitation_external_note: str | None = Field(default=None, min_length=1, max_length=500)
 
     @model_validator(mode="after")
-    def validate_invitation_target(self) -> "CongregationCreate":
+    def validate_invitation_target(self) -> CongregationCreate:
         if self.invitation_target_type is None:
             if (
                 self.invitation_target_congregation_id is not None
@@ -71,6 +83,8 @@ class CongregationCreate(BaseModel):
 
 
 class CongregationUpdate(BaseModel):
+    """CongregationUpdate."""
+
     name: str | None = Field(default=None, min_length=1, max_length=255)
     service_times: list[ServiceTime] | None = None
     group_id: uuid.UUID | None = None
@@ -79,7 +93,7 @@ class CongregationUpdate(BaseModel):
     invitation_external_note: str | None = Field(default=None, min_length=1, max_length=500)
 
     @model_validator(mode="after")
-    def validate_invitation_target(self) -> "CongregationUpdate":
+    def validate_invitation_target(self) -> CongregationUpdate:
         target_type_set = "invitation_target_type" in self.model_fields_set
         target_id_set = "invitation_target_congregation_id" in self.model_fields_set
         external_set = "invitation_external_note" in self.model_fields_set
@@ -117,6 +131,8 @@ class CongregationUpdate(BaseModel):
 
 
 class CongregationResponse(BaseModel):
+    """CongregationResponse."""
+
     model_config = {"from_attributes": True}
 
     id: uuid.UUID
@@ -133,14 +149,20 @@ class CongregationResponse(BaseModel):
 
 
 class CongregationGroupCreate(BaseModel):
+    """CongregationGroupCreate."""
+
     name: str = Field(min_length=1, max_length=255)
 
 
 class CongregationGroupUpdate(BaseModel):
+    """CongregationGroupUpdate."""
+
     name: str | None = Field(default=None, min_length=1, max_length=255)
 
 
 class CongregationGroupResponse(BaseModel):
+    """CongregationGroupResponse."""
+
     model_config = {"from_attributes": True}
 
     id: uuid.UUID
@@ -151,6 +173,8 @@ class CongregationGroupResponse(BaseModel):
 
 
 class FeiertageImportRequest(BaseModel):
+    """FeiertageImportRequest."""
+
     year: int = Field(..., ge=2020, le=2035)
     state_code: str | None = Field(
         None,
@@ -161,6 +185,8 @@ class FeiertageImportRequest(BaseModel):
 
 
 class FeiertageImportResult(BaseModel):
+    """FeiertageImportResult."""
+
     created: int
     updated: int
     skipped: int

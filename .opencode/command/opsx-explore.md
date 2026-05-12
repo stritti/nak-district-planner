@@ -51,7 +51,7 @@ Depending on what the user brings, you might:
 - Recommend a path (if asked)
 
 **Visualize**
-```
+```text
 ┌─────────────────────────────────────────┐
 │     Use ASCII diagrams liberally        │
 ├─────────────────────────────────────────┤

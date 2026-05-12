@@ -9,6 +9,7 @@ export default defineConfig(
     themeConfig: {
       nav: [
         { text: 'Home', link: '/' },
+        { text: 'Doku-Map', link: '/documentation-map' },
         { text: 'Erste Schritte', link: '/getting-started' },
         { text: 'Use Cases', link: '/use-cases' },
         { text: 'Rollenkonzept', link: '/roles' },
@@ -20,20 +21,31 @@ export default defineConfig(
         {
           text: 'Einführung',
           items: [
+            { text: 'Dokumentationslandkarte', link: '/documentation-map' },
             { text: 'Erste Schritte', link: '/getting-started' },
-            { text: 'Use Cases', link: '/use-cases' }
+            { text: 'Use Cases', link: '/use-cases' },
+            { text: 'Glossar', link: '/glossary' }
+          ]
+        },
+        {
+          text: 'Architektur & Standards',
+          items: [
+            { text: 'Architekturstatus', link: '/architecture-status' },
+            { text: 'Engineering Standards', link: '/engineering-standards' },
+            { text: 'Test- & Coverage-Strategie', link: '/coverage-strategy' }
           ]
         },
         {
           text: 'Sicherheit & Berechtigungen',
           items: [
             { text: 'Rollenkonzept', link: '/roles' },
-            { text: 'Authentifizierung (veraltet)', link: '/auth-keycloak' }
+            { text: 'Security Baseline', link: '/security-baseline' }
           ]
         },
         {
-          text: 'Entwicklung',
+          text: 'Betrieb & Entwicklung',
           items: [
+            { text: 'Production Runbook', link: '/production-runbook' },
             { text: 'Release-Prozess', link: '/release-process' },
             { text: 'Verbesserungsvorschläge', link: '/improvement-proposals' }
           ]

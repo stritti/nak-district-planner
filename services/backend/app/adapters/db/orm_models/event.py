@@ -1,9 +1,12 @@
+"""app/adapters/db/orm_models/event.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,6 +15,8 @@ from app.domain.models.event import EventSource, EventStatus, EventVisibility
 
 
 class EventORM(Base):
+    """ORM model for eventorm."""
+
     __tablename__ = "events"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

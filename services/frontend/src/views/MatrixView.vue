@@ -423,6 +423,14 @@
             Abbrechen
           </button>
           <button
+            v-if="!modal.isGap"
+            class="btn-secondary px-4 py-2"
+            :disabled="!hasLeaderSelection || modal.saving"
+            @click="confirmAssignment"
+          >
+            {{ modal.saving ? 'Speichern…' : 'Bestaetigen' }}
+          </button>
+          <button
             class="btn-primary px-4 py-2"
             :disabled="!canSubmit || modal.saving"
             @click="submitAssignment"
@@ -440,20 +448,20 @@
 import type { Directive } from 'vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/vue/24/outline'
-import { useMatrixStore } from '@/stores/matrix'
-import { useDistrictsStore } from '@/stores/districts'
-import { useLeadersStore } from '@/stores/leaders'
+import { useMatrixStore } from '../stores/matrix'
+import { useDistrictsStore } from '../stores/districts'
+import { useLeadersStore } from '../stores/leaders'
 import {
   createInvitations,
   deleteInvitation,
   listEventInvitations,
   type InvitationResponse,
-} from '@/api/invitations'
-import { updateEvent } from '@/api/events'
-import type { MatrixCell, MatrixRow } from '@/api/matrix'
-import { sortMatrixRows } from '@/utils/matrixRows'
-import { exportMatrixToExcel } from '@/composables/useExcelExport'
-import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '@/components/AutocompleteInput.vue'
+} from '../api/invitations'
+import { updateEvent } from '../api/events'
+import type { MatrixCell, MatrixRow } from '../api/matrix'
+import { sortMatrixRows } from '../utils/matrixRows'
+import { exportMatrixToExcel } from '../composables/useExcelExport'
+import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '../components/AutocompleteInput.vue'
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
@@ -687,6 +695,10 @@ const canSubmit = computed(() => {
   return true
 })
 
+const hasLeaderSelection = computed(() => {
+  return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
+})
+
 const invitation = reactive({
   targetType: '' as '' | 'DISTRICT_CONGREGATION' | 'EXTERNAL_NOTE',
   targetCongregationId: '',
@@ -871,6 +883,38 @@ async function submitAssignment() {
     closeModal()
   } catch (e) {
     modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+  } finally {
+    modal.saving = false
+  }
+}
+
+async function confirmAssignment() {
+  if (!hasLeaderSelection.value) {
+    modal.error = 'Bitte waehle zuerst eine:n Amtstragende:n aus.'
+    return
+  }
+  modal.saving = true
+  modal.error = ''
+  try {
+    const leaderText = modal.leaderInput.text.trim()
+    if (modal.leaderInput.id !== null) {
+      await matrixStore.assign(
+        modal.eventId,
+        modal.assignmentId,
+        { leaderId: modal.leaderInput.id },
+        'CONFIRMED',
+      )
+    } else {
+      await matrixStore.assign(
+        modal.eventId,
+        modal.assignmentId,
+        { leaderName: leaderText },
+        'CONFIRMED',
+      )
+    }
+    closeModal()
+  } catch (e) {
+    modal.error = e instanceof Error ? e.message : 'Fehler beim Bestaetigen'
   } finally {
     modal.saving = false
   }

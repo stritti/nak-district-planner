@@ -18,9 +18,9 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import AppNav from '@/components/AppNav.vue'
-import { useOIDC } from '@/composables/useOIDC'
-import { useAuthStore } from '@/stores/auth'
+import AppNav from './components/AppNav.vue'
+import { useOIDC } from './composables/useOIDC'
+import { useAuthStore } from './stores/auth'
 
 // Get router instance in component context (safe for inject)
 const router = useRouter()
@@ -34,7 +34,6 @@ const mainClass = computed(() => {
   return 'max-w-7xl mx-auto px-4 py-6'
 })
 
-// Task 6.3: Initialize useOIDC in component context, passing router to avoid inject issues
 const oidc = useOIDC(router)
 
 // Restore token from persisted store

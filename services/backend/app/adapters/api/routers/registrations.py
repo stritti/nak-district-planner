@@ -1,5 +1,4 @@
-"""
-Registration workflow API routes.
+"""Registration workflow API routes.
 
 Public (no auth):
   GET  /api/v1/public/districts                              — list districts (for registration form)
@@ -17,29 +16,28 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
+from app.adapters.api import deps as api_deps
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
-from app.adapters.idp.provisioning import IdpProvisioningError, get_idp_provisioner
-from app.adapters.auth.oidc import TokenValidationError
-from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.api.schemas.registration import (
     RegistrationApprove,
     RegistrationCreate,
     RegistrationReject,
     RegistrationResponse,
 )
-from app.adapters.db.repositories.membership import SqlMembershipRepository
+from app.adapters.auth.oidc import TokenValidationError
+from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
-from app.adapters.api import deps as api_deps
+from app.adapters.db.repositories.membership import SqlMembershipRepository
+from app.adapters.idp.provisioning import IdpProvisioningError, get_idp_provisioner
 from app.domain.models.leader import Leader
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.membership import ScopeType
@@ -152,10 +150,9 @@ async def submit_registration(
     district_id: uuid.UUID,
     body: RegistrationCreate,
     db: DbSession,
-    credentials: Optional[HTTPAuthorizationCredentials] = Security(_optional_bearer),
+    credentials: HTTPAuthorizationCredentials | None = Security(_optional_bearer),
 ) -> RegistrationResponse:
-    """
-    Submit a self-registration request for a new Amtstragender.
+    """Submit a self-registration request for a new Amtstragender.
 
     This endpoint is **public** — no authentication is required, making it
     IDP-agnostic. If a Bearer token is provided, it is validated first and only
@@ -219,7 +216,7 @@ async def list_registrations(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
-    status_filter: Optional[RegistrationStatus] = Query(default=None, alias="status"),
+    status_filter: RegistrationStatus | None = Query(default=None, alias="status"),
 ) -> list[RegistrationResponse]:
     """List registration requests for a district (DISTRICT_ADMIN only)."""
     try:
@@ -281,8 +278,7 @@ async def approve_registration(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> RegistrationResponse:
-    """
-    Approve a registration request (DISTRICT_ADMIN only).
+    """Approve a registration request (DISTRICT_ADMIN only).
 
     Creates an active Leader record and marks the registration as APPROVED.
     The admin may override the congregation, rank, or special role.
@@ -346,11 +342,11 @@ async def approve_registration(
     reg.assigned_scope_type = body.scope_type
     reg.assigned_scope_id = body.scope_id
     reg.approved_by_sub = auth.user_sub
-    reg.approved_at = datetime.now(timezone.utc)
+    reg.approved_at = datetime.now(UTC)
     reg.idp_provision_status = None
     reg.idp_provision_error = None
     reg.idp_provisioned_at = None
-    reg.updated_at = datetime.now(timezone.utc)
+    reg.updated_at = datetime.now(UTC)
 
     # Create/update membership only when user is linked.
     if reg.user_sub is not None:
@@ -376,7 +372,7 @@ async def approve_registration(
             )
             reg.idp_provision_status = provision_result.status
             reg.idp_provision_error = None
-            reg.idp_provisioned_at = datetime.now(timezone.utc)
+            reg.idp_provisioned_at = datetime.now(UTC)
             if reg.user_sub is None and provision_result.user_sub:
                 reg.user_sub = provision_result.user_sub
                 await SqlMembershipRepository(db).upsert_by_scope(
@@ -426,7 +422,7 @@ async def reject_registration(
 
     reg.status = RegistrationStatus.REJECTED
     reg.rejection_reason = body.reason
-    reg.updated_at = datetime.now(timezone.utc)
+    reg.updated_at = datetime.now(UTC)
     await reg_repo.save(reg)
 
     logger.info("Registration rejected.")

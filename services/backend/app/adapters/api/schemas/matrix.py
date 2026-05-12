@@ -1,3 +1,5 @@
+"""app/adapters/api/schemas/matrix.py: Module."""
+
 import uuid
 from datetime import datetime, time
 
@@ -7,6 +9,8 @@ from app.domain.models.service_assignment import AssignmentStatus
 
 
 class MatrixCell(BaseModel):
+    """MatrixCell."""
+
     event_id: uuid.UUID | None = None
     planning_slot_id: uuid.UUID | None = None
     assignment_event_id: uuid.UUID | None = None
@@ -29,6 +33,8 @@ class MatrixCell(BaseModel):
 
 
 class MatrixRow(BaseModel):
+    """MatrixRow."""
+
     congregation_id: uuid.UUID
     congregation_name: str
     group_id: uuid.UUID | None = None
@@ -37,6 +43,8 @@ class MatrixRow(BaseModel):
 
 
 class MatrixResponse(BaseModel):
+    """MatrixResponse."""
+
     dates: list[str]  # sorted ISO date strings "YYYY-MM-DD"
     rows: list[MatrixRow]
     holidays: dict[str, list[str]] = {}  # "YYYY-MM-DD" → list of holiday names

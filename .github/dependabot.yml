@@ -20,9 +20,8 @@ updates:
   - package-ecosystem: "docker" # See documentation for possible values
     directory: "/" # Location of package manifests
     schedule:
-      interval: "weekly"      
+      interval: "weekly"
   - package-ecosystem: "docker-compose" # See documentation for possible values
     directory: "/services/frontend" # Location of package manifests
     schedule:
       interval: "weekly"
-      

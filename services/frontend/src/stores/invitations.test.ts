@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { useInvitationsStore } from './invitations'
-import * as invitationApi from '@/api/invitations'
+import * as invitationApi from '../api/invitations'
 
-vi.mock('@/api/invitations')
+vi.mock('../api/invitations')
 
 describe('useInvitationsStore', () => {
   beforeEach(() => {

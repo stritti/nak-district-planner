@@ -1,12 +1,14 @@
+"""app/domain/models/leader.py: Module."""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import Enum, StrEnum
 
 
-class LeaderRank(str, Enum):
+class LeaderRank(StrEnum):
     """Kirchliche Ränge in aufsteigender Reihenfolge."""
 
     DIAKON = "Di."
@@ -21,7 +23,7 @@ class LeaderRank(str, Enum):
     STAMMAPOSTEL = "StAp."
 
 
-class SpecialRole(str, Enum):
+class SpecialRole(StrEnum):
     """Besondere Beauftragung."""
 
     GEMEINDEVORSTEHER = "Gemeindevorsteher"
@@ -56,8 +58,8 @@ class Leader:
         phone: str | None = None,
         notes: str | None = None,
         is_active: bool = True,
-    ) -> "Leader":
-        now = datetime.now(timezone.utc)
+    ) -> Leader:
+        now = datetime.now(UTC)
         return Leader(
             id=uuid.uuid4(),
             name=name,

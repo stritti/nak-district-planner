@@ -6,13 +6,12 @@ we'll focus on testing the basic structure and error handling.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import MagicMock
 
 import httpx
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash
-
 
 CREDS = {
     "url": "https://example.com/calendars/user/default/",
@@ -24,14 +23,14 @@ CREDS = {
 def test_content_hash_deterministic() -> None:
     h1 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title",
     )
     h2 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title",
     )
     assert h1 == h2
@@ -40,14 +39,14 @@ def test_content_hash_deterministic() -> None:
 def test_content_hash_changes_on_title_change() -> None:
     h1 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title A",
     )
     h2 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title B",
     )
     assert h1 != h2
@@ -56,14 +55,14 @@ def test_content_hash_changes_on_title_change() -> None:
 def test_content_hash_changes_on_time_change() -> None:
     h1 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 13, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 13, tzinfo=UTC),
         "Title",
     )
     h2 = _content_hash(
         "uid",
-        datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 14, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 14, tzinfo=UTC),
         "Title",
     )
     assert h1 != h2
@@ -86,7 +85,7 @@ class TestCalDAVConnectorBasics:
         connector = CalDAVConnector()
 
         # Test with timezone-aware datetime
-        dt = datetime(2026, 4, 5, 10, 30, 0, tzinfo=timezone.utc)
+        dt = datetime(2026, 4, 5, 10, 30, 0, tzinfo=UTC)
         formatted = connector._format_datetime(dt)
         assert formatted == "20260405T103000Z"
 

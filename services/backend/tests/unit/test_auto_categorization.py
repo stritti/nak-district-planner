@@ -1,6 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
+
 import pytest
+
 from app.domain.models.event import Event
 
 
@@ -19,8 +21,8 @@ def test_event_create_auto_categorization(title, expected_category):
     district_id = uuid.uuid4()
     event = Event.create(
         title=title,
-        start_at=datetime.now(timezone.utc),
-        end_at=datetime.now(timezone.utc),
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC),
         district_id=district_id,
     )
     assert event.category == expected_category
@@ -31,8 +33,8 @@ def test_event_apply_auto_categorization():
     # Explicitly create with different category but keyword in title
     event = Event.create(
         title="Ein Festgottesdienst",
-        start_at=datetime.now(timezone.utc),
-        end_at=datetime.now(timezone.utc),
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC),
         district_id=district_id,
         category="Anderes",
     )

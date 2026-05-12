@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { MatrixRow } from '@/api/matrix'
+import type { MatrixRow } from '../api/matrix'
 import { sortMatrixRows } from './matrixRows'
 
 function row(name: string, groupName?: string | null): MatrixRow {

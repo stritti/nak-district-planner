@@ -21,7 +21,6 @@ REPORTERS:
 
 ENABLE_LINTERS:
   # Python
-  - PYTHON_RUFF
   - PYTHON_BANDIT
   # TypeScript / Vue
   - TYPESCRIPT_ES

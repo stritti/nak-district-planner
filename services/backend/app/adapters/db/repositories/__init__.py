@@ -17,8 +17,8 @@ from app.adapters.db.repositories.service_assignment import SqlServiceAssignment
 
 __all__ = [
     "SqlCalendarIntegrationRepository",
-    "SqlCongregationRepository",
     "SqlCongregationGroupRepository",
+    "SqlCongregationRepository",
     "SqlDistrictRepository",
     "SqlEventRepository",
     "SqlEventInstanceRepository",

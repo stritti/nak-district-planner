@@ -44,7 +44,7 @@ python3 setup_authentik_oauth2.py --authentik-url http://localhost:9000 --bootst
 
 ## Directory Structure
 
-```
+```text
 idp-deploy/
 ├── keycloak/
 │   ├── docker-compose.yml              # Container configuration
@@ -132,7 +132,7 @@ bun run dev
 ```
 
 ### 7. Test Login
-Open http://localhost:5173/login and test the OIDC flow.
+Open <http://localhost:5173/login> and test the OIDC flow.
 
 ## Production Deployment
 
@@ -155,7 +155,7 @@ bash test-oidc-integration.sh keycloak    # or authentik
 ```
 
 Expected output:
-```
+```text
 ✓ IDP is healthy
 ✓ Discovery configuration found
 ✓ JWKS endpoint functional
@@ -230,6 +230,7 @@ For help with specific IDP:
 - **Keycloak:** See `keycloak/OIDC-SETUP.md` troubleshooting section
 - **Authentik:** See `authentik/OIDC-SETUP.md` troubleshooting section
 
-For Phase 4b OIDC implementation details:
-- See `../PHASE_4B_SUMMARY.md` (architecture & features)
-- See `../MIGRATION_GUIDE.md` (Phase 4a → 4b migration)
+For OIDC implementation details:
+- See `../docs/security-baseline.md`
+- See `../docs/documentation-map.md`
+- See `../MIGRATION_GUIDE.md` (Phase 4a -> 4b migration)

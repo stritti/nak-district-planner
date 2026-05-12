@@ -5,9 +5,9 @@
       ⚠️ **Abweichung:** Endpoint-Pfad ist `/api/v1/events/{event_id}/assignments` (nicht `/api/v1/service-assignments` wie im Spec)
 - [x] 1.3 `PUT /api/v1/events/{event_id}/assignments/{assignment_id}` implementiert (leader_name, status)
       ⚠️ **Abweichung:** HTTP-Methode `PUT` statt `PATCH`
-- [ ] 1.4 `DELETE /api/v1/events/{event_id}/assignments/{assignment_id}` → **fehlt!**
+- [x] 1.4 `DELETE /api/v1/events/{event_id}/assignments/{assignment_id}` implementiert
 - [x] 1.5 Pydantic-Schemas für ServiceAssignment Request/Response definiert
-- [ ] 1.6 Unit-Tests für ServiceAssignment-CRUD
+- [x] 1.6 Unit-Tests für ServiceAssignment-CRUD erweitert (inkl. DELETE)
 
 ## 2. Matrix-Endpoint (Backend)
 
@@ -15,8 +15,8 @@
 - [x] 2.2 Feiertags-Events (`category=Feiertag`) in Spalten-Logik integriert, mit `holidays_map` in Response
 - [x] 2.3 `MatrixResponse`-Pydantic-Schema definiert (dates, rows, cells mit is_gap/leader_name)
 - [x] 2.4 `GET /api/v1/districts/{district_id}/matrix` implementiert
-- [ ] 2.5 Standard-Zeitraum (4 Wochen) wenn `from_dt`/`to_dt` fehlen → **fehlt!** Parameter sind aktuell Pflichtfelder (`Query(...)`)
-- [ ] 2.6 Integrations-Tests für Matrix-Endpoint (GAP, ASSIGNED, EMPTY)
+- [x] 2.5 Standard-Zeitraum (4 Wochen) wenn `from_dt`/`to_dt` fehlen implementiert
+- [x] 2.6 Integrations-Tests für Matrix-Endpoint (GAP, ASSIGNED, EMPTY) ergänzt
 
 ## 3. Frontend — Matrixansicht
 
@@ -30,9 +30,9 @@
 - [x] 4.1 Zuweisung-Modal inline in `MatrixView.vue` implementiert (kein separates `AssignLeaderModal.vue`)
 - [x] 4.2 Speichern-Button ruft `matrixStore.assign(eventId, leaderName)` → `POST /events/{id}/assignments`
 - [x] 4.3 Nach Speichern: Matrix-Daten werden neu geladen, Modal schließt sich
-- [ ] 4.4 Bestätigen-Button (`status=CONFIRMED`) im Modal → nicht implementiert
+- [x] 4.4 Bestätigen-Button (`status=CONFIRMED`) im Modal implementiert
 
 ## 5. Navigation & Integration
 
 - [x] 5.1 Route `/matrix` in Vue Router eingebunden
-- [ ] 5.2 E2E-Test: Lücke erkennen → Modal → Zuweisung speichern → Zelle grün
+- [x] 5.2 E2E-Test: Lücke erkennen → Modal → Zuweisung speichern → Zelle grün ergänzt

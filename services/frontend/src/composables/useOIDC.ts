@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { useRouter, type Router } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../stores/auth'
 
 export interface OIDCToken {
   accessToken: string

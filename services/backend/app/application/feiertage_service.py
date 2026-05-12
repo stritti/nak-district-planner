@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,8 +100,8 @@ def _external_uid(district_id: uuid.UUID, date: str, name: str) -> str:
 
 def _parse_day(date_str: str) -> tuple[datetime, datetime]:
     y, m, d = int(date_str[:4]), int(date_str[5:7]), int(date_str[8:])
-    start = datetime(y, m, d, 0, 0, 0, tzinfo=timezone.utc)
-    end = datetime(y, m, d, 23, 59, 59, tzinfo=timezone.utc)
+    start = datetime(y, m, d, 0, 0, 0, tzinfo=UTC)
+    end = datetime(y, m, d, 23, 59, 59, tzinfo=UTC)
     return start, end
 
 
@@ -168,7 +168,7 @@ async def import_feiertage(
             existing.start_at = start_at
             existing.end_at = end_at
             existing.content_hash = chash
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             await event_repo.save(existing)
             updated += 1
         else:
@@ -226,7 +226,7 @@ async def import_kirchliche_festtage(
             existing.start_at = start_at
             existing.end_at = end_at
             existing.content_hash = chash
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             await event_repo.save(existing)
             updated += 1
         else:
@@ -258,7 +258,7 @@ async def reference_feiertage_for_congregation(
         if congregation_id in event.applicability:
             continue
         event.applicability = [*event.applicability, congregation_id]
-        event.updated_at = datetime.now(timezone.utc)
+        event.updated_at = datetime.now(UTC)
         await event_repo.save(event)
         updated += 1
 

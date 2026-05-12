@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/leader.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -29,6 +31,8 @@ def _orm_to_domain(row: LeaderORM) -> Leader:
 
 
 class SqlLeaderRepository(LeaderRepository):
+    """SQLAlchemy repository for Leader."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

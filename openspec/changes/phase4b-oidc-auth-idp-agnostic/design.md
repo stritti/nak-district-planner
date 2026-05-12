@@ -32,7 +32,7 @@ Phase 4a implementierte JWT-Authentifizierung via Keycloak-spezifischen Librarie
 3. Auth0/Okta SDK
 
 **Decision:** Generic OIDC mit `authlib`
-**Rationale:** 
+**Rationale:**
 - Authlib ist OIDC 1.0 compliant, funktioniert mit jedem Provider
 - Keycloak AND Authentik sind OIDC-konform → kein Provider-Code nötig
 - Leichter zu testen (Mock OIDC Server statt Keycloak)

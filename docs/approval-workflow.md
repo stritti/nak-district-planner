@@ -18,7 +18,8 @@ Dieses Dokument beschreibt den produktiven Onboarding-Ablauf fuer Benutzer, die 
    - `scope_type` (`DISTRICT` oder `CONGREGATION`)
    - `scope_id` (UUID des Bezirkes oder der Gemeinde)
 5. Bei genehmigter Registrierung wird eine Membership erzeugt oder aktualisiert.
-6. Nach Login ist der Benutzer aktiv, sobald mindestens eine Membership vorhanden ist.
+6. Optional (empfohlen): Benutzer wird beim Approval automatisch im IDP angelegt.
+7. Nach Login ist der Benutzer aktiv, sobald mindestens eine Membership vorhanden ist.
 
 ## Wichtige Regeln
 
@@ -33,6 +34,32 @@ Dieses Dokument beschreibt den produktiven Onboarding-Ablauf fuer Benutzer, die 
 - `GET /api/v1/auth/access`: liefert effektive Memberships und Status
   - `ACTIVE`: Zugriff freigegeben
   - `PENDING_APPROVAL`: angemeldet, aber keine Membership vorhanden
+
+## IDP-Provisionierung bei Genehmigung
+
+Der Planner unterstuetzt zwei Modi:
+
+- `webhook`: ruft einen externen Provisioning-Service auf
+- `keycloak`: spricht direkt die Keycloak Admin API an
+
+Empfohlener Produktionsmodus, wenn Keycloak direkt genutzt wird:
+
+```env
+IDP_PROVISIONING_ENABLED=true
+IDP_PROVISIONING_PROVIDER=keycloak
+IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://auth.example.com
+IDP_PROVISIONING_KEYCLOAK_REALM=nak-planner
+IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME=admin
+IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD=<secret>
+IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=true
+```
+
+Verhalten im Keycloak-Modus bei Approval:
+
+1. User wird per E-Mail gesucht.
+2. Falls nicht vorhanden: User wird angelegt (`username=email`, `email`, `enabled=true`).
+3. Falls `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=true`: Keycloak sendet E-Mail mit Required Actions (`VERIFY_EMAIL`, `UPDATE_PASSWORD`).
+4. Ergebnis wird in Registrierung gespeichert (`idp_provision_status`, ggf. `idp_provision_error`).
 
 ## Betrieb / Rollout
 

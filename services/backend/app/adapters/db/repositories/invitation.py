@@ -1,3 +1,5 @@
+"""app/adapters/db/repositories/invitation.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -25,6 +27,8 @@ def _orm_to_domain(row: CongregationInvitationORM) -> CongregationInvitation:
 
 
 class SqlInvitationRepository(InvitationRepository):
+    """SQLAlchemy repository for Invitation."""
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 

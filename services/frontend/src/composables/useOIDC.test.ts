@@ -4,10 +4,12 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useOIDC } from '@/composables/useOIDC'
+import { useOIDC } from './useOIDC'
 
 // Mock Vue Router
 vi.mock('vue-router', () => ({
+  createRouter: vi.fn(),
+  createWebHistory: vi.fn(),
   useRouter: () => ({
     push: vi.fn(),
   }),

@@ -545,13 +545,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ArrowDownTrayIcon, ArrowPathIcon, PencilSquareIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
-import { useDistrictsStore } from '@/stores/districts'
+import { useDistrictsStore } from '../stores/districts'
 import {
   importFeiertage,
   listCongregations,
   type CongregationResponse,
   type FeiertageImportResult,
-} from '@/api/districts'
+} from '../api/districts'
 import {
   createIntegration,
   deleteIntegration,
@@ -562,7 +562,7 @@ import {
   type CalendarIntegrationResponse,
   type CalendarType,
   type SyncResult,
-} from '@/api/calendarIntegrations'
+} from '../api/calendarIntegrations'
 
 const DE_STATES: Record<string, string> = {
   BB: 'Brandenburg', BE: 'Berlin', BW: 'Baden-Württemberg', BY: 'Bayern',

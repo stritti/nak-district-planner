@@ -1,5 +1,4 @@
-"""
-Membership ORM model — SQLAlchemy representation of Membership in the database.
+"""Membership ORM model — SQLAlchemy representation of Membership in the database.
 
 Stores role assignments for users within specific scopes (District or Congregation).
 """

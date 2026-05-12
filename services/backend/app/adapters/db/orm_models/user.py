@@ -1,5 +1,4 @@
-"""
-User ORM model — SQLAlchemy representation of User in the database.
+"""User ORM model — SQLAlchemy representation of User in the database.
 
 Stores user information extracted from OIDC tokens.
 Each user is uniquely identified by `sub` (OIDC subject/user ID).

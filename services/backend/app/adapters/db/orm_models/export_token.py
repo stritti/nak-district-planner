@@ -1,3 +1,5 @@
+"""app/adapters/db/orm_models/export_token.py: Module."""
+
 from __future__ import annotations
 
 import uuid
@@ -14,6 +16,8 @@ _TokenTypeEnum = sa.Enum(TokenType, name="tokentype", create_type=False)
 
 
 class ExportTokenORM(Base):
+    """ORM model for exporttokenorm."""
+
     __tablename__ = "export_tokens"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

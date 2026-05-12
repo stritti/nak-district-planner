@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -17,9 +17,5 @@ export default defineConfig({
     alias: {
       "@": "/src",
     },
-  },
-  test: {
-    environment: "happy-dom",
-    include: ["src/**/*.test.ts"],
   },
 });

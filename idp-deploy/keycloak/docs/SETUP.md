@@ -77,14 +77,14 @@ docker compose logs -f keycloak
 ```
 
 Auf dem ersten Start führt Keycloak automatisch eine Optimierungs-Phase durch (Build). Dies kann 30-60 Sekunden dauern. Warte bis diese Nachricht erscheint:
-```
+```text
 Keycloak ... version X.X.X is now running
 ```
 
 ## Schritt 4: Keycloak Admin Console erreichbar?
 
 Öffne in deinem Browser:
-```
+```text
 https://auth.5tritti.de/admin/
 ```
 
@@ -113,13 +113,13 @@ Login mit:
 Im gerade erstellten Client → Tab "Settings":
 
 **Valid redirect URIs:**
-```
+```text
 https://planner.5tritti.de/auth/callback
 http://localhost:3000/auth/callback
 ```
 
 **Valid post logout redirect URIs:**
-```
+```text
 https://planner.5tritti.de/
 http://localhost:3000/
 ```
@@ -131,7 +131,7 @@ Save.
 Tab "Credentials" → Copy `Client secret`
 
 Diesen Wert speicherst du für die NAK-Planner `.env`:
-```
+```text
 KEYCLOAK_CLIENT_SECRET=<copied-secret>
 ```
 

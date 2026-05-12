@@ -185,8 +185,8 @@ async def seed_test_data(*, dry_run: bool = False) -> None:
                 congregations_by_name[congregation.name] = congregation
 
             existing_leaders = {
-                (l.name, l.congregation_id): l
-                for l in await leader_repo.list_by_district(district.id)
+                (leader.name, leader.congregation_id): leader
+                for leader in await leader_repo.list_by_district(district.id)
             }
 
             for leader_seed in district_seed.leaders:
