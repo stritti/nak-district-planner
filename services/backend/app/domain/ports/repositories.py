@@ -11,6 +11,7 @@ from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import Event, EventStatus
+from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import (
     CongregationInvitation,
     InvitationOverwriteRequest,
@@ -18,54 +19,68 @@ from app.domain.models.invitation import (
 )
 from app.domain.models.leader import Leader
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
+from app.domain.models.planning_series import PlanningSeries
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
 
 
 class DistrictRepository(ABC):
     @abstractmethod
-    async def get(self, district_id: uuid.UUID) -> District | None: ...
+    async def get(self, district_id: uuid.UUID) -> District | None:
+        pass
 
     @abstractmethod
-    async def list_all(self) -> list[District]: ...
+    async def list_all(self) -> list[District]:
+        pass
 
     @abstractmethod
-    async def save(self, district: District) -> None: ...
+    async def save(self, district: District) -> None:
+        pass
 
 
 class CongregationGroupRepository(ABC):
     @abstractmethod
-    async def get(self, group_id: uuid.UUID) -> CongregationGroup | None: ...
+    async def get(self, group_id: uuid.UUID) -> CongregationGroup | None:
+        pass
 
     @abstractmethod
-    async def list_by_district(self, district_id: uuid.UUID) -> list[CongregationGroup]: ...
+    async def list_by_district(self, district_id: uuid.UUID) -> list[CongregationGroup]:
+        pass
 
     @abstractmethod
-    async def save(self, group: CongregationGroup) -> None: ...
+    async def save(self, group: CongregationGroup) -> None:
+        pass
 
     @abstractmethod
-    async def delete(self, group_id: uuid.UUID) -> None: ...
+    async def delete(self, group_id: uuid.UUID) -> None:
+        pass
 
 
 class CongregationRepository(ABC):
     @abstractmethod
-    async def get(self, congregation_id: uuid.UUID) -> Congregation | None: ...
+    async def get(self, congregation_id: uuid.UUID) -> Congregation | None:
+        pass
 
     @abstractmethod
     async def list_by_district(
         self, district_id: uuid.UUID, group_id: uuid.UUID | None = None
-    ) -> list[Congregation]: ...
+    ) -> list[Congregation]:
+        pass
 
     @abstractmethod
-    async def list_by_ids(self, congregation_ids: list[uuid.UUID]) -> list[Congregation]: ...
+    async def list_by_ids(self, congregation_ids: list[uuid.UUID]) -> list[Congregation]:
+        pass
 
     @abstractmethod
-    async def save(self, congregation: Congregation) -> None: ...
+    async def save(self, congregation: Congregation) -> None:
+        pass
 
 
 class EventRepository(ABC):
     @abstractmethod
-    async def get(self, event_id: uuid.UUID) -> Event | None: ...
+    async def get(self, event_id: uuid.UUID) -> Event | None:
+        pass
 
     @abstractmethod
     async def list(
@@ -80,20 +95,24 @@ class EventRepository(ABC):
         to_dt: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> tuple[list[Event], int]: ...
+    ) -> tuple[list[Event], int]:
+        pass
 
     @abstractmethod
     async def get_by_external_uid(
         self, external_uid: str, calendar_integration_id: uuid.UUID
-    ) -> Event | None: ...
+    ) -> Event | None:
+        pass
 
     @abstractmethod
     async def get_by_external_uid_district(
         self, external_uid: str, district_id: uuid.UUID
-    ) -> Event | None: ...
+    ) -> Event | None:
+        pass
 
     @abstractmethod
-    async def list_linked_by_source_event(self, source_event_id: uuid.UUID) -> list[Event]: ...
+    async def list_linked_by_source_event(self, source_event_id: uuid.UUID) -> list[Event]:
+        pass
 
     @abstractmethod
     async def get_by_generation_slot_key(
@@ -102,7 +121,8 @@ class EventRepository(ABC):
         district_id: uuid.UUID,
         congregation_id: uuid.UUID,
         generation_slot_key: str,
-    ) -> Event | None: ...
+    ) -> Event | None:
+        pass
 
     @abstractmethod
     async def get_matching_draft_service_slot(
@@ -112,10 +132,12 @@ class EventRepository(ABC):
         congregation_id: uuid.UUID,
         start_at: datetime,
         end_at: datetime,
-    ) -> Event | None: ...
+    ) -> Event | None:
+        pass
 
     @abstractmethod
-    async def save(self, event: Event) -> None: ...
+    async def save(self, event: Event) -> None:
+        pass
 
     @abstractmethod
     async def delete_before(self, cutoff: datetime) -> int:
@@ -123,21 +145,57 @@ class EventRepository(ABC):
 
         Returns the number of deleted rows.
         """
-        ...
+        pass
+
+
+class PlanningSeriesRepository(ABC):
+    @abstractmethod
+    async def get(self, series_id: uuid.UUID) -> PlanningSeries | None:
+        pass
+
+    @abstractmethod
+    async def save(self, series: PlanningSeries) -> None:
+        pass
+
+
+class PlanningSlotRepository(ABC):
+    @abstractmethod
+    async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None:
+        pass
+
+    @abstractmethod
+    async def save(self, slot: PlanningSlot) -> None:
+        pass
+
+
+class EventInstanceRepository(ABC):
+    @abstractmethod
+    async def get(self, instance_id: uuid.UUID) -> EventInstance | None:
+        pass
+
+    @abstractmethod
+    async def save(self, instance: EventInstance) -> None:
+        pass
 
 
 class ServiceAssignmentRepository(ABC):
     @abstractmethod
-    async def get(self, assignment_id: uuid.UUID) -> ServiceAssignment | None: ...
+    async def get(self, assignment_id: uuid.UUID) -> ServiceAssignment | None:
+        pass
 
     @abstractmethod
-    async def list_by_event(self, event_id: uuid.UUID) -> list[ServiceAssignment]: ...
+    async def list_by_planning_slot(self, slot_or_event_id: uuid.UUID) -> list[ServiceAssignment]:
+        pass
 
     @abstractmethod
-    async def list_by_events(self, event_ids: list[uuid.UUID]) -> list[ServiceAssignment]: ...
+    async def list_by_planning_slots(
+        self, slot_or_event_ids: list[uuid.UUID]
+    ) -> list[ServiceAssignment]:
+        pass
 
     @abstractmethod
-    async def save(self, assignment: ServiceAssignment) -> None: ...
+    async def save(self, assignment: ServiceAssignment) -> None:
+        pass
 
     @abstractmethod
     async def delete(self, assignment_id: uuid.UUID) -> None:
@@ -146,53 +204,64 @@ class ServiceAssignmentRepository(ABC):
 
 class InvitationRepository(ABC):
     @abstractmethod
-    async def get(self, invitation_id: uuid.UUID) -> CongregationInvitation | None: ...
+    async def get(self, invitation_id: uuid.UUID) -> CongregationInvitation | None:
+        pass
 
     @abstractmethod
     async def list_by_source_event(
         self, source_event_id: uuid.UUID
-    ) -> list[CongregationInvitation]: ...
+    ) -> list[CongregationInvitation]:
+        pass
 
     @abstractmethod
     async def list_by_source_events(
         self, source_event_ids: list[uuid.UUID]
-    ) -> list[CongregationInvitation]: ...
+    ) -> list[CongregationInvitation]:
+        pass
 
     @abstractmethod
-    async def save(self, invitation: CongregationInvitation) -> None: ...
+    async def save(self, invitation: CongregationInvitation) -> None:
+        pass
 
     @abstractmethod
-    async def delete(self, invitation_id: uuid.UUID) -> None: ...
+    async def delete(self, invitation_id: uuid.UUID) -> None:
+        pass
 
 
 class InvitationOverwriteRequestRepository(ABC):
     @abstractmethod
-    async def get(self, request_id: uuid.UUID) -> InvitationOverwriteRequest | None: ...
+    async def get(self, request_id: uuid.UUID) -> InvitationOverwriteRequest | None:
+        pass
 
     @abstractmethod
     async def list_open_by_district(
         self, district_id: uuid.UUID
-    ) -> list[InvitationOverwriteRequest]: ...
+    ) -> list[InvitationOverwriteRequest]:
+        pass
 
     @abstractmethod
     async def list_open_by_source_event(
         self, source_event_id: uuid.UUID
-    ) -> list[InvitationOverwriteRequest]: ...
+    ) -> list[InvitationOverwriteRequest]:
+        pass
 
     @abstractmethod
-    async def save(self, request: InvitationOverwriteRequest) -> None: ...
+    async def save(self, request: InvitationOverwriteRequest) -> None:
+        pass
 
     @abstractmethod
     async def set_status(
         self,
         request_id: uuid.UUID,
         status: OverwriteDecisionStatus,
-    ) -> InvitationOverwriteRequest | None: ...
+    ) -> InvitationOverwriteRequest | None:
+        pass
 
 
 class LeaderRepository(ABC):
     @abstractmethod
-    async def get(self, leader_id: uuid.UUID) -> Leader | None: ...
+    async def get(self, leader_id: uuid.UUID) -> Leader | None:
+        pass
 
     @abstractmethod
     async def list_by_district(
@@ -200,59 +269,66 @@ class LeaderRepository(ABC):
         district_id: uuid.UUID,
         congregation_id: uuid.UUID | None = None,
         active_only: bool = False,
-    ) -> list[Leader]: ...
+    ) -> list[Leader]:
+        pass
 
     @abstractmethod
-    async def save(self, leader: Leader) -> None: ...
+    async def save(self, leader: Leader) -> None:
+        pass
 
     @abstractmethod
-    async def delete(self, leader_id: uuid.UUID) -> None: ...
+    async def delete(self, leader_id: uuid.UUID) -> None:
+        pass
 
 
 class CalendarIntegrationRepository(ABC):
     @abstractmethod
-    async def get(self, integration_id: uuid.UUID) -> CalendarIntegration | None: ...
+    async def get(self, integration_id: uuid.UUID) -> CalendarIntegration | None:
+        pass
 
     @abstractmethod
-    async def list_by_district(self, district_id: uuid.UUID) -> list[CalendarIntegration]: ...
+    async def list_by_district(self, district_id: uuid.UUID) -> list[CalendarIntegration]:
+        pass
 
     @abstractmethod
     async def list_active(self) -> list[CalendarIntegration]:
         """Return all active integrations — used by the Celery beat scheduler."""
-        ...
+        pass
 
     @abstractmethod
-    async def save(self, integration: CalendarIntegration) -> None: ...
+    async def save(self, integration: CalendarIntegration) -> None:
+        pass
 
     @abstractmethod
-    async def delete(self, integration_id: uuid.UUID) -> None: ...
+    async def delete(self, integration_id: uuid.UUID) -> None:
+        pass
 
 
 class UserRepository(ABC):
     @abstractmethod
     async def get_by_sub(self, sub: str) -> User | None:
         """Get user by OIDC subject (user ID from IDP)."""
-        ...
+        pass
 
     @abstractmethod
     async def get_by_email(self, email: str) -> User | None:
         """Get user by email address."""
-        ...
+        pass
 
     @abstractmethod
     async def get_by_id(self, user_id: uuid.UUID) -> User | None:
         """Get user by internal UUID."""
-        ...
+        pass
 
     @abstractmethod
     async def save(self, user: User) -> None:
         """Create or update user."""
-        ...
+        pass
 
     @abstractmethod
     async def has_any_user(self) -> bool:
         """Check whether at least one user exists."""
-        ...
+        pass
 
 
 class LeaderRegistrationRepository(ABC):
