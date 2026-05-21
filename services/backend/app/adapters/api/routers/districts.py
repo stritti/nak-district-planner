@@ -598,7 +598,11 @@ async def get_matrix(
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
-                event_id=event.id if event is not None else instance.id if instance is not None else None,
+                event_id=event.id
+                if event is not None
+                else instance.id
+                if instance is not None
+                else None,
                 planning_slot_id=slot.id if slot is not None else None,
                 assignment_event_id=assignment_event_id,
                 invitation_source_congregation_name=source_congregation_names.get(
@@ -606,7 +610,11 @@ async def get_matrix(
                 )
                 if event is not None and event.invitation_source_congregation_id is not None
                 else None,
-                event_title=instance.title if instance is not None else event.title if event is not None else None,
+                event_title=instance.title
+                if instance is not None
+                else event.title
+                if event is not None
+                else None,
                 event_start_at=(
                     instance.actual_start_at
                     if instance is not None
@@ -621,7 +629,11 @@ async def get_matrix(
                     if event is not None
                     else None
                 ),
-                category=slot.category if slot is not None else event.category if event is not None else None,
+                category=slot.category
+                if slot is not None
+                else event.category
+                if event is not None
+                else None,
                 is_gap=(assignment is None and not is_invitation_copy),
                 planned_time=(
                     slot.planning_time

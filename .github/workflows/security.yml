@@ -70,7 +70,6 @@ jobs:
         uses: pypa/gh-action-pip-audit@v1.1.0
         with:
           inputs: /tmp/requirements-audit.txt
-          vulnerability-service: osv
 
   npm-audit:
     name: Frontend Dependency Audit (npm audit)

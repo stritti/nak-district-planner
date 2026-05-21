@@ -153,7 +153,7 @@ async def test_export_token_routes_and_ics_export() -> None:
         event_repo_cls.return_value = event_repo
 
         sa_repo = AsyncMock()
-        sa_repo.list_by_events.return_value = []
+        sa_repo.list_by_planning_slots.return_value = []
         sa_repo_cls.return_value = sa_repo
 
         leader_repo = AsyncMock()

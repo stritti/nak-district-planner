@@ -184,9 +184,7 @@ class ServiceAssignmentRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_by_planning_slot(
-        self, slot_or_event_id: uuid.UUID
-    ) -> list[ServiceAssignment]:
+    async def list_by_planning_slot(self, slot_or_event_id: uuid.UUID) -> list[ServiceAssignment]:
         pass
 
     @abstractmethod
