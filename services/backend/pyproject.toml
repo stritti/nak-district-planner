@@ -30,6 +30,7 @@ dependencies = [
     "opentelemetry-instrumentation-httpx>=0.62b0",
     "opentelemetry-instrumentation-celery>=0.63b1",
     "requests>=2.33.1",
+    "starlette>=1.0.1",
 ]
 
 [project.optional-dependencies]
