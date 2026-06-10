@@ -1,5 +1,7 @@
 """app/config.py: Module."""
 
+import importlib.metadata
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,6 +42,12 @@ class Settings(BaseSettings):
     idp_provisioning_keycloak_invite_on_approval: bool = True
     startup_generate_draft_services: bool = False
 
+    # Version check & self-update
+    ghcr_owner: str = "stritti"
+    ghcr_repo: str = "nak-district-planner"
+    update_mode: str = "manual"
+    docker_compose_dir: str = ""
+
     @model_validator(mode="after")
     def validate_oidc_settings(self) -> "Settings":
         """Validate OIDC settings are properly configured in production."""
@@ -58,6 +66,15 @@ class Settings(BaseSettings):
     def get_oidc_scopes_list(self) -> list[str]:
         """Parse OIDC_SCOPES string into list"""
         return [scope.strip() for scope in self.oidc_scopes.split() if scope.strip()]
+
+
+    @property
+    def app_version(self) -> str:
+        """Return the running application version from package metadata."""
+        try:
+            return importlib.metadata.version("nak-district-planner-backend")
+        except importlib.metadata.PackageNotFoundError:
+            return "0.0.0"
 
 
 settings = Settings()

@@ -26,10 +26,13 @@ services:
       - backend
 
   db:
-    image: postgres:16-alpine
+    # NOTE: PG18+ requires mount at /var/lib/postgresql (not /data) so it can
+    # create a major-version-specific subdirectory (e.g. 18/data) internally.
+    # This enables future pg_upgrade --link across major versions.
+    image: postgres:18-alpine
     env_file: .env
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      - ./postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -37,7 +40,7 @@ services:
       retries: 5
  
   db-test:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     env_file: .env
     environment:
       POSTGRES_DB: nak_planner_test

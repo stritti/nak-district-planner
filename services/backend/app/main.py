@@ -22,6 +22,7 @@ from app.adapters.api.routers import (
     leaders,
     registrations,
     service_assignments,
+    system,
 )
 from app.adapters.auth.oidc import OIDCAdapter
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
@@ -138,3 +139,4 @@ app.include_router(registrations.public_router)
 app.include_router(registrations.overview_router)
 app.include_router(registrations.router)
 app.include_router(export.router, prefix="/api/v1")
+app.include_router(system.router)
