@@ -35,7 +35,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
- 
+
   db-test:
     image: postgres:16-alpine
     env_file: .env
