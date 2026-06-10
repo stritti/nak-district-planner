@@ -4,7 +4,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "baseUrl": "."
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*", "vite.config.ts"],
   "exclude": ["src/**/*.test.ts", "src/**/__tests__/**"]
