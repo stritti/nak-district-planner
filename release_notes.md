@@ -1,4 +1,4 @@
-## [v0.6.0] - 2026-06-10
+## [v0.6.1] - 2026-06-10
 
 ### Features
 * feat(system): automatic version check and admin-triggered self-update (01bafcb)
@@ -13,6 +13,7 @@
 * feat: add approval-based IDP onboarding and pending alerts (06b84c3)
 
 ### Bug Fixes
+* fix(build): add @ alias to tsconfig paths and fix vite alias path for Docker (989fe59)
 * fix(db): resolve alembic migration heads conflict and PG18 volume mount (0a6f851)
 * fix(ci): remove trailing spaces and fix markdown lint issues (d06e62b)
 * fix(ci): add timezone import and enhance quality-check skills (fe58787)
@@ -22,9 +23,9 @@
 * fix(ci): add skip-release-pulls parameter directly to workflow (330e9e7)
 * fix(ci): enable automatic releases on push to main (e07d439)
 * fix(ci): change release workflow trigger from push to workflow_dispatch (d24686b)
-* fix: remove ignore (074ebdb)
 
 ### Other Changes
+* chore: release v0.6.0 (ec47081)
 * build: upgrade postgres image version to 18-alpine in docker-compose (22418f4)
 * chore: release v0.5.1 (39b80fc)
 * refactor: extract hybrid-calendar-sync, external-event-ingestion, in-app-notifications from planning-slot-hybrid-sync (6b1e80c)
@@ -34,4 +35,3 @@
 * build(deps-dev): Bump vite from 8.0.13 to 8.0.16 in /services/frontend (#133) (c4c447e)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#130) (b08a08f)
 * Remediate pip-audit failure by constraining Starlette to a non-vulnerable version (#137) (a1fcb0d)
-* build(deps): Bump psycopg2-binary in /services/backend (#134) (4134d4c)
