@@ -1,6 +1,9 @@
-## [v0.4.5] - 2026-04-26
+## [v0.5.0] - 2026-06-10
 
 ### Features
+* feat: add specification and design for automatic system version checking and admin-triggered self-updates (e7cd858)
+* feat: add configurable-email-reminders and event-driven-mail-hooks proposals (dfd452b)
+* feat: add persistent test database service, enable configurable PostgreSQL ports, migrate Authentik to local bind mounts, and add utility script for database verification. (d226782)
 * feat(matrix): close remaining UC-03 implementation gaps (#93) (9ab555a)
 * feat(matrix): complete remaining UC-03 matrix tasks (#90) (bc98e71)
 * feat: add checks skill for code quality verification (eadd177)
@@ -8,9 +11,6 @@
 * feat: add approval-based IDP onboarding and pending alerts (06b84c3)
 * feat: add openspec configuration for auto-generating 8-week draft services (a0565a6)
 * feat: add OpenSpec for approved IDP onboarding (ffe095a)
-* feat: group congregations and sync district selection (ef51686)
-* feat: optimize matrix view for wider, denser planning (0c0ca94)
-* feat: add draft generation and matrix move workflow (e45f958)
 
 ### Bug Fixes
 * fix(ci): remove trailing spaces and fix markdown lint issues (d06e62b)
@@ -25,13 +25,13 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
-* build(deps): Update pydantic[email] requirement in /services/backend (#104) (dfaf12b)
-* build(deps-dev): Bump @vue/test-utils in /services/frontend (#102) (8219c37)
-* chore: release v0.4.4 (2607b08)
-* build(deps-dev): Bump vitest from 4.1.4 to 4.1.5 in /services/frontend (#97) (7c35f65)
-* chore: release v0.4.3 (a2041ec)
-* build(deps): Bump opentelemetry-instrumentation-fastapi (#96) (5825a53)
-* chore: release v0.4.2 (c5e795f)
-* build(deps-dev): Bump tailwindcss in /services/frontend (#95) (5cf0986)
-* chore: release v0.4.1 (77f6528)
-* build(deps-dev): Bump typescript from 5.9.3 to 6.0.3 in /services/frontend (#87) (2521ec8)
+* Merge branch 'main' of github.com:stritti/nak-district-planner (2d7de1e)
+* build(deps-dev): Bump ruff from 0.15.13 to 0.15.14 in /services/backend (#132) (fa72eef)
+* build(deps-dev): Bump vite from 8.0.13 to 8.0.16 in /services/frontend (#133) (c4c447e)
+* build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#130) (b08a08f)
+* Remediate pip-audit failure by constraining Starlette to a non-vulnerable version (#137) (a1fcb0d)
+* build(deps): Bump psycopg2-binary in /services/backend (#134) (4134d4c)
+* build(deps-dev): Bump vue-tsc from 3.2.6 to 3.3.1 in /services/frontend (#131) (3b07398)
+* build(deps): Bump @vueuse/core in /services/frontend (#129) (1fdf9c9)
+* build(deps): Bump opentelemetry-instrumentation-celery (#128) (a2fc490)
+* build(deps-dev): Bump typescript-eslint in /services/frontend (#127) (0a31d36)
