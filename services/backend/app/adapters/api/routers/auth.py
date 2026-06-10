@@ -2,9 +2,12 @@
 
 - GET /api/v1/auth/me — Get current authenticated user info
 - GET /api/v1/auth/oidc/discovery — Get OIDC discovery document (proxied from provider)
+- POST /api/v1/auth/oidc/token — Proxy token exchange to OIDC provider
 """
 
+import httpx
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 
 from app.adapters.api.deps import (
     AuthenticatedUser,
@@ -15,6 +18,19 @@ from app.adapters.api.schemas.user import AccessContextOut, MembershipOut, UserO
 from app.adapters.auth.oidc import OIDCDiscoveryError
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+
+class OIDCTokenExchangeRequest(BaseModel):
+    """Parameters forwarded from frontend to OIDC provider token endpoint.
+
+    The backend adds client_id and client_secret server-side so the secret
+    is never exposed to the browser.
+    """
+
+    grant_type: str = "authorization_code"
+    code: str
+    redirect_uri: str
+    code_verifier: str
 
 
 @router.get("/oidc/discovery")
@@ -48,6 +64,63 @@ async def get_oidc_discovery() -> dict:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"OIDC discovery failed: {e}",
+        ) from e
+
+
+@router.post("/oidc/token")
+async def exchange_oidc_token(body: OIDCTokenExchangeRequest) -> dict:
+    """Proxy token exchange to the OIDC provider's token endpoint.
+
+    The frontend sends the authorization code + PKCE verifier.
+    The backend adds client_id and client_secret (never exposed to the browser)
+    and forwards the request to the provider.
+
+    This endpoint is intentionally **unauthenticated** — it is called during
+    the OIDC callback flow when no session exists yet.
+    """
+    adapter = get_oidc_adapter()
+    if adapter is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OIDC adapter not initialized",
+        )
+
+    discovery = await adapter.discover()
+    token_endpoint = discovery.get("token_endpoint")
+    if not token_endpoint:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OIDC discovery missing token_endpoint",
+        )
+
+    # Forward to the OIDC provider with server-side credentials
+    client = await adapter.get_httpx_client()
+    data: dict[str, str] = {
+        "grant_type": body.grant_type,
+        "code": body.code,
+        "redirect_uri": body.redirect_uri,
+        "code_verifier": body.code_verifier,
+        "client_id": adapter.client_id,
+        "client_secret": adapter.client_secret,
+    }
+
+    try:
+        response = await client.post(token_endpoint, data=data, timeout=15)
+        if not response.is_success:
+            detail: dict | str = {"error": "token_exchange_failed"}
+            try:
+                detail = response.json()
+            except Exception:
+                detail = response.text
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=detail,
+            )
+        return response.json()
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Token exchange failed: {e}",
         ) from e
 
 

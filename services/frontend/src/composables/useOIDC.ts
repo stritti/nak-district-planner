@@ -206,18 +206,16 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     error.value = null
 
     try {
-      const body = new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: clientId.value,
-        code,
-        redirect_uri: oidcConfig.redirectUri,
-        code_verifier: codeVerifier,
-      })
-
-      const response = await fetch(discovery.value.token_endpoint, {
+      // Send code + PKCE verifier to backend proxy; backend adds client_secret
+      const response = await fetch('/api/v1/auth/oidc/token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: oidcConfig.redirectUri,
+          code_verifier: codeVerifier,
+        }),
       })
 
       if (!response.ok) {
@@ -278,20 +276,14 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         return
       }
 
-      await loadDiscovery()
-      if (!discovery.value) throw new Error('Discovery not loaded')
-
       try {
-        const body = new URLSearchParams({
-          grant_type: 'refresh_token',
-          client_id: clientId.value,
-          refresh_token: current.refreshToken,
-        })
-
-        const response = await fetch(discovery.value.token_endpoint, {
+        const response = await fetch('/api/v1/auth/oidc/token', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString(),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: current.refreshToken,
+          }),
         })
 
         if (!response.ok) {
