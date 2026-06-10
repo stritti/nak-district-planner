@@ -455,6 +455,16 @@
             </select>
           </div>
           <div>
+            <label class="form-label">Freigabestatus</label>
+            <select
+              v-model="editForm.approval_status"
+              class="form-input"
+            >
+              <option value="PLANNED">Geplant</option>
+              <option value="CONFIRMED">Bestätigt</option>
+            </select>
+          </div>
+          <div>
             <label class="form-label">
               Kategorie <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
             </label>
@@ -849,7 +859,7 @@ const editSaving       = ref(false)
 const editError        = ref('')
 const editCongregations = ref<CongregationResponse[]>([])
 
-const editForm = reactive({ district_id: '', congregation_id: '', status: 'DRAFT', category: '' })
+const editForm = reactive({ district_id: '', congregation_id: '', status: 'DRAFT', approval_status: 'PLANNED', category: '' })
 
 watch(() => editForm.district_id, async (id) => {
   editForm.congregation_id = ''
@@ -862,6 +872,7 @@ async function openEdit(event: EventResponse) {
   editForm.district_id     = event.district_id
   editForm.congregation_id = event.congregation_id ?? ''
   editForm.status          = event.status
+  editForm.approval_status = event.approval_status
   editForm.category        = event.category ?? ''
   editCongregations.value  = []
   if (event.district_id) listCongregations(event.district_id).then(cs => { editCongregations.value = cs }).catch(() => {})
@@ -876,6 +887,7 @@ async function saveEdit() {
       district_id:     editForm.district_id || undefined,
       congregation_id: editForm.congregation_id || null,
       status:          editForm.status || undefined,
+      approval_status: editForm.approval_status || undefined,
       category:        editForm.category || null,
     })
     // In-place update je nach aktiver Ansicht

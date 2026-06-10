@@ -137,6 +137,9 @@
         </div>
       </div>
 
+      <p v-if="releaseMessage" class="mt-2 text-xs text-teal-700 dark:text-teal-400">
+        {{ releaseMessage }}
+      </p>
       <p v-if="generationMessage" class="mt-2 text-xs text-green-700 dark:text-green-400">
         {{ generationMessage }}
       </p>
@@ -531,9 +534,12 @@ const MATRIX_SORT_MODE_STORAGE_KEY = 'matrix.sortMode'
 const compactMode = ref(false)
 const matrixSortMode = ref<'default' | 'grouped'>('default')
 const showReleaseDialog = ref(false)
+const releaseMessage = ref('')
 
 function onReleaseComplete(count: number) {
   showReleaseDialog.value = false
+  releaseMessage.value = `${count} Termin${count === 1 ? '' : 'e'} bestätigt.`
+  setTimeout(() => { releaseMessage.value = '' }, 4000)
   matrixStore.fetch() // refresh matrix after release
 }
 

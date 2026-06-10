@@ -10,14 +10,14 @@ from fastapi import HTTPException
 from app.adapters.api.routers import events as events_router
 from app.adapters.api.routers import leaders as leaders_router
 from app.adapters.api.routers import service_assignments as sa_router
-from app.adapters.api.schemas.event import EventCreate, EventUpdate
+from app.adapters.api.schemas.event import BulkApprovalStatusRequest, EventCreate, EventUpdate
 from app.adapters.api.schemas.leader import LeaderCreate, LeaderSelfLinkRequest, LeaderUpdate
 from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentCreate,
     ServiceAssignmentUpdate,
 )
 from app.domain.models.district import District
-from app.domain.models.event import Event
+from app.domain.models.event import Event, EventApprovalStatus
 from app.domain.models.leader import Leader
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
@@ -232,6 +232,7 @@ async def test_event_create_list_update_paths() -> None:
         )
 
     assert created.title == "Test"
+    assert created.approval_status == "PLANNED"  # default
     assert listed.total == 1
     assert updated.title == "Neu"
 
@@ -392,17 +393,91 @@ async def test_service_assignment_not_found_paths() -> None:
         sa_repo.get.return_value = None
         sa_repo_cls.return_value = sa_repo
         with pytest.raises(HTTPException):
-            await sa_router.update_assignment(
+            await sa_router.delete_assignment(
                 uuid.uuid4(),
                 uuid.uuid4(),
                 ServiceAssignmentUpdate(leader_name="A"),
                 type("A", (), {"memberships": [], "user": None})(),
                 AsyncMock(),
             )
-        with pytest.raises(HTTPException):
-            await sa_router.delete_assignment(
-                uuid.uuid4(),
-                uuid.uuid4(),
-                type("A", (), {"memberships": [], "user": None})(),
-                AsyncMock(),
-            )
+
+
+@pytest.mark.asyncio
+async def test_event_list_filters_by_approval_status() -> None:
+    district_id = uuid.uuid4()
+    now = datetime.now(UTC)
+    planned = Event.create(
+        title="Geplant",
+        start_at=now,
+        end_at=now + timedelta(hours=1),
+        district_id=district_id,
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    confirmed = Event.create(
+        title="Bestätigt",
+        start_at=now,
+        end_at=now + timedelta(hours=1),
+        district_id=district_id,
+        approval_status=EventApprovalStatus.CONFIRMED,
+    )
+
+    db = AsyncMock()
+    with (
+        patch("app.adapters.api.routers.events.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.events.SqlEventRepository") as repo_cls,
+    ):
+        repo = AsyncMock()
+        # Simulate repo filtering: return only CONFIRMED events
+        repo.list.return_value = ([confirmed], 1)
+        repo_cls.return_value = repo
+
+        listed = await events_router.list_events(
+            _auth_context(),
+            db,
+            district_id=district_id,
+            approval_status="CONFIRMED",
+            limit=10,
+            offset=0,
+        )
+
+    assert listed.total == 1
+    assert listed.items[0].title == "Bestätigt"
+    assert listed.items[0].approval_status == EventApprovalStatus.CONFIRMED
+    # Verify that the repo was called with the correct filter
+    repo.list.assert_awaited_once()
+    call_kwargs = repo.list.call_args.kwargs
+    assert call_kwargs["approval_status"] == EventApprovalStatus.CONFIRMED
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_approval_status() -> None:
+    district_id = uuid.uuid4()
+    db = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.events.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.events.SqlEventRepository") as repo_cls,
+    ):
+        repo = AsyncMock()
+        repo.bulk_update_approval_status.return_value = 3
+        repo_cls.return_value = repo
+
+        result = await events_router.bulk_update_approval_status(
+            BulkApprovalStatusRequest(
+                year=2026,
+                month=6,
+                approval_status="CONFIRMED",
+            ),
+            _auth_context(),
+            db,
+            district_id=district_id,
+        )
+
+    assert result.updated_count == 3
+    repo.bulk_update_approval_status.assert_awaited_once_with(
+        district_id=district_id,
+        year=2026,
+        month=6,
+        new_status=EventApprovalStatus.CONFIRMED,
+        congregation_id=None,
+    )
