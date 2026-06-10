@@ -1,6 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-950">
     <AppNav />
+    <UpdateBanner />
     <div
       v-if="authStore.isAuthenticated && authStore.accessStatus === 'PENDING_APPROVAL'"
       class="max-w-7xl mx-auto px-4 pt-4"
@@ -19,6 +20,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppNav from './components/AppNav.vue'
+import UpdateBanner from './components/UpdateBanner.vue'
 import { useOIDC } from './composables/useOIDC'
 import { useAuthStore } from './stores/auth'
 

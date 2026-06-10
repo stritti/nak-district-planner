@@ -1,4 +1,4 @@
-"""Celery tasks for calendar synchronisation (UC-02).
+"""Celery tasks for calendar synchronisation (UC-02) and system maintenance.
 
 Tasks intentionally run synchronous Celery workers; asyncio.run() bridges
 to the async database/HTTP layer.  This is the standard pattern for Celery
@@ -289,3 +289,98 @@ def generate_draft_services_window() -> dict:
         result["invalid_configurations"],
     )
     return result
+
+
+@celery.task(name="check_version")
+def check_version() -> dict:
+    """Celery beat task — runs every 6 hours.
+
+    Queries ghcr.io for the latest backend image tag,
+    caches the result, and returns it.
+    """
+    from app.adapters.version_check.cache import version_cache
+    from app.adapters.version_check.ghcr import GhcrTagFetcher
+
+    fetcher = GhcrTagFetcher()
+    latest = fetcher.fetch_latest_version("backend")
+    version_cache.set(latest)
+    logger.info(
+        "check_version: latest=%s current=%s",
+        latest,
+        __import__("app.config", fromlist=["settings"]).settings.app_version,
+    )
+    return {"latest": latest}
+
+
+@celery.task(name="trigger_docker_update")
+def trigger_docker_update() -> dict:
+    """Celery task — pull latest Docker images and restart services.
+
+    Runs `docker compose pull` and `docker compose up -d` in the configured
+    project directory. Only available in `docker-socket` mode.
+
+    The task uses subprocess with a timeout to prevent hanging.
+    Services are restarted in-place (rolling restart via compose).
+    Database migrations are NOT run automatically — admin must trigger them.
+    """
+    import subprocess
+    from pathlib import Path
+
+    from app.config import settings
+
+    compose_dir = settings.docker_compose_dir
+    if not compose_dir:
+        return {"status": "error", "message": "DOCKER_COMPOSE_DIR not configured"}
+
+    project_path = Path(compose_dir)
+    if not project_path.exists():
+        return {"status": "error", "message": f"Directory not found: {compose_dir}"}
+
+    results: dict[str, str] = {}
+
+    # Step 1: Pull latest images
+    logger.info("trigger_docker_update: pulling latest images in %s", compose_dir)
+    try:
+        pull = subprocess.run(
+            ["docker", "compose", "pull"],
+            cwd=compose_dir,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        results["pull"] = "ok" if pull.returncode == 0 else f"failed: {pull.stderr.strip()}"
+        if pull.returncode != 0:
+            logger.error("trigger_docker_update: pull failed: %s", pull.stderr)
+    except subprocess.TimeoutExpired:
+        results["pull"] = "timeout"
+        logger.error("trigger_docker_update: pull timed out")
+    except Exception as e:
+        results["pull"] = f"error: {e}"
+        logger.exception("trigger_docker_update: pull error")
+
+    if results.get("pull", "").startswith("failed") or results.get("pull") == "timeout":
+        return {"status": "error", "details": results}
+
+    # Step 2: Restart services
+    logger.info("trigger_docker_update: restarting services")
+    try:
+        up = subprocess.run(
+            ["docker", "compose", "up", "-d"],
+            cwd=compose_dir,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        results["up"] = "ok" if up.returncode == 0 else f"failed: {up.stderr.strip()}"
+        if up.returncode != 0:
+            logger.error("trigger_docker_update: up failed: %s", up.stderr)
+    except subprocess.TimeoutExpired:
+        results["up"] = "timeout"
+        logger.error("trigger_docker_update: up timed out")
+    except Exception as e:
+        results["up"] = f"error: {e}"
+        logger.exception("trigger_docker_update: up error")
+
+    success = results.get("pull") == "ok" and results.get("up") == "ok"
+    logger.info("trigger_docker_update: completed: %s", results)
+    return {"status": "ok" if success else "error", "details": results}

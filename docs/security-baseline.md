@@ -44,3 +44,16 @@ Dieses Dokument fasst die verbindlichen Sicherheitsleitplanken fuer Entwicklung 
 - Secrets regelmaessig rotieren (IDP-Admin, API-Keys, App-Secret).
 - Backup/Restore-Verfahren regelmaessig testen.
 - Security-Incidents dokumentieren und mit Massnahmen nachverfolgen.
+
+## 8. Docker Socket Self-Update
+
+- **NICHT** in Produktion ohne vorherige Sicherheitspruefung aktivieren.
+- **UPDATE_MODE=docker-socket** mountet den Docker-Socket in den Backend-Container.
+  Der Container erhaelt dadurch root-equivalenten Zugriff auf den Docker-Daemon.
+- Empfohlener Modus fuer Produktion: **UPDATE_MODE=manual** — Admins fuehren die
+  Update-Befehle manuell per SSH aus.
+- Der docker-socket Modus ist ausschliesslich fuer vertrauenswuerdige Umgebungen
+  (abgesicherte Server, keine Multi-Tenancy) geeignet.
+- Der Celery-Task `trigger_docker_update` fuehrt nur fixe Befehle aus
+  (`docker compose pull`, `docker compose up -d`). Es werden keine
+  benutzer-eingegebenen Argumente an die Shell uebergeben.
