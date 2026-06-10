@@ -1,4 +1,4 @@
-## [v0.5.0] - 2026-06-10
+## [v0.5.1] - 2026-06-10
 
 ### Features
 * feat: add specification and design for automatic system version checking and admin-triggered self-updates (e7cd858)
@@ -25,6 +25,8 @@
 * fix: synchronize active district selection across admin views (8a46758)
 
 ### Other Changes
+* refactor: extract hybrid-calendar-sync, external-event-ingestion, in-app-notifications from planning-slot-hybrid-sync (6b1e80c)
+* chore: release v0.5.0 (71956f8)
 * Merge branch 'main' of github.com:stritti/nak-district-planner (2d7de1e)
 * build(deps-dev): Bump ruff from 0.15.13 to 0.15.14 in /services/backend (#132) (fa72eef)
 * build(deps-dev): Bump vite from 8.0.13 to 8.0.16 in /services/frontend (#133) (c4c447e)
@@ -33,5 +35,3 @@
 * build(deps): Bump psycopg2-binary in /services/backend (#134) (4134d4c)
 * build(deps-dev): Bump vue-tsc from 3.2.6 to 3.3.1 in /services/frontend (#131) (3b07398)
 * build(deps): Bump @vueuse/core in /services/frontend (#129) (1fdf9c9)
-* build(deps): Bump opentelemetry-instrumentation-celery (#128) (a2fc490)
-* build(deps-dev): Bump typescript-eslint in /services/frontend (#127) (0a31d36)
