@@ -1,6 +1,7 @@
-## [v0.7.0] - 2026-06-10
+## [v0.8.0] - 2026-06-10
 
 ### Features
+* feat: proxy OIDC token exchange through backend (76590c3)
 * feat: proxy OIDC discovery through backend (no build-time env vars) (03cebe9)
 * feat(system): automatic version check and admin-triggered self-update (01bafcb)
 * feat(system): implement automatic version check and self-update feature (6c0ce93)
@@ -10,7 +11,6 @@
 * feat(matrix): close remaining UC-03 implementation gaps (#93) (9ab555a)
 * feat(matrix): complete remaining UC-03 matrix tasks (#90) (bc98e71)
 * feat: add checks skill for code quality verification (eadd177)
-* feat: add pluggable IDP provisioning layer (63d5e66)
 
 ### Bug Fixes
 * fix(build): suppress TS 7.0 baseUrl deprecation warning in tsconfig (6efbf45)
@@ -25,6 +25,7 @@
 * fix(ci): enable automatic releases on push to main (e07d439)
 
 ### Other Changes
+* chore: release v0.7.0 (18c3ec4)
 * chore: release v0.6.2 (84f061d)
 * chore: release v0.6.1 (0ec4662)
 * chore: release v0.6.0 (ec47081)
@@ -34,4 +35,3 @@
 * chore: release v0.5.0 (71956f8)
 * Merge branch 'main' of github.com:stritti/nak-district-planner (2d7de1e)
 * build(deps-dev): Bump ruff from 0.15.13 to 0.15.14 in /services/backend (#132) (fa72eef)
-* build(deps-dev): Bump vite from 8.0.13 to 8.0.16 in /services/frontend (#133) (c4c447e)
