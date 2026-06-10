@@ -334,7 +334,7 @@ async def test_service_assignment_crud_paths() -> None:
         event_repo_cls.return_value = event_repo
         sa_repo = AsyncMock()
         sa_repo.get.return_value = assignment
-        sa_repo.list_by_event.return_value = [assignment]
+        sa_repo.list_by_planning_slot.return_value = [assignment]
         sa_repo_cls.return_value = sa_repo
 
         created = await sa_router.create_assignment(
