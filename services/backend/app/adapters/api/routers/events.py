@@ -9,6 +9,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.api.schemas.event import (
+    BulkApprovalStatusRequest,
+    BulkApprovalStatusResponse,
     EventCreate,
     EventListResponse,
     EventResponse,
@@ -24,7 +26,7 @@ from app.application.invitation_service import (
     propagate_source_event_update,
     sync_linked_invitation_event_schedule,
 )
-from app.domain.models.event import Event, EventStatus
+from app.domain.models.event import Event, EventApprovalStatus, EventStatus
 from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
@@ -52,6 +54,7 @@ async def create_event(
         category=body.category,
         source=body.source,
         status=body.status,
+        approval_status=body.approval_status,
         visibility=body.visibility,
         audiences=body.audiences,
         applicability=body.applicability,
@@ -69,6 +72,7 @@ async def create_event(
         category=event.category,
         source=event.source,
         status=event.status,
+        approval_status=event.approval_status,
         visibility=event.visibility,
         audiences=event.audiences,
         applicability=event.applicability,
@@ -86,6 +90,7 @@ async def list_events(
     group_id: uuid.UUID | None = Query(None),
     only_district_level: bool = Query(False),
     status_filter: EventStatus | None = Query(None, alias="status"),
+    approval_status: EventApprovalStatus | None = Query(None),
     from_dt: datetime | None = Query(None),
     to_dt: datetime | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
@@ -129,6 +134,7 @@ async def list_events(
         group_id=group_id,
         only_district_level=only_district_level,
         status=status_filter,
+        approval_status=approval_status,
         from_dt=from_dt,
         to_dt=to_dt,
         limit=limit,
@@ -160,6 +166,7 @@ async def list_events(
                 category=e.category,
                 source=e.source,
                 status=e.status,
+                approval_status=e.approval_status,
                 visibility=e.visibility,
                 audiences=e.audiences,
                 applicability=e.applicability,
@@ -225,6 +232,8 @@ async def update_event(
         event.end_at = body.end_at
     if "status" in fields and body.status is not None:
         event.status = body.status
+    if "approval_status" in fields and body.approval_status is not None:
+        event.approval_status = body.approval_status
     if "category" in fields:
         event.category = body.category
 
@@ -256,6 +265,7 @@ async def update_event(
         category=event.category,
         source=event.source,
         status=event.status,
+        approval_status=event.approval_status,
         visibility=event.visibility,
         audiences=event.audiences,
         applicability=event.applicability,
@@ -265,3 +275,56 @@ async def update_event(
         created_at=event.created_at,
         updated_at=event.updated_at,
     )
+
+
+@router.post("/bulk-approval-status", response_model=BulkApprovalStatusResponse)
+async def bulk_update_approval_status(
+    body: BulkApprovalStatusRequest,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    district_id: uuid.UUID | None = Query(None),
+) -> BulkApprovalStatusResponse:
+    """Update approval_status for all events in a given month.
+
+    Requires PLANNER role (or higher) in the district.
+    If congregation_id is given, only events for that congregation are updated.
+    """
+    # Determine target district
+    target_district: uuid.UUID | None = district_id
+    if body.congregation_id is not None:
+        congregation_repo = SqlCongregationRepository(db)
+        congregation = await congregation_repo.get(body.congregation_id)
+        if congregation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Gemeinde nicht gefunden",
+            )
+        target_district = congregation.district_id
+
+    if target_district is None:
+        if auth.user.is_superadmin:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="district_id ist als Superadmin erforderlich.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="district_id oder congregation_id ist erforderlich.",
+        )
+
+    # Check permission
+    try:
+        assert_has_role_in_district(auth, Role.PLANNER, target_district)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    repo = SqlEventRepository(db)
+    updated_count = await repo.bulk_update_approval_status(
+        district_id=target_district,
+        year=body.year,
+        month=body.month,
+        new_status=body.approval_status,
+        congregation_id=body.congregation_id,
+    )
+
+    return BulkApprovalStatusResponse(updated_count=updated_count)

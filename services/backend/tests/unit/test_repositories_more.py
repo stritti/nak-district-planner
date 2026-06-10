@@ -157,6 +157,7 @@ async def test_repository_mapping_helpers() -> None:
             visibility=e.visibility,
             audiences=e.audiences,
             applicability=e.applicability,
+            approval_status=e.approval_status,
             external_uid=None,
             calendar_integration_id=None,
             content_hash=None,

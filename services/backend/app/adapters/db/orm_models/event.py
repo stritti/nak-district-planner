@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.adapters.db.base import Base
-from app.domain.models.event import EventSource, EventStatus, EventVisibility
+from app.domain.models.event import EventApprovalStatus, EventSource, EventStatus, EventVisibility
 
 
 class EventORM(Base):
@@ -36,6 +36,11 @@ class EventORM(Base):
     )
     status: Mapped[EventStatus] = mapped_column(
         SAEnum(EventStatus, name="event_status", create_type=False), nullable=False
+    )
+    approval_status: Mapped[EventApprovalStatus] = mapped_column(
+        SAEnum(EventApprovalStatus, name="event_approval_status", create_type=False),
+        nullable=False,
+        default=EventApprovalStatus.PLANNED,
     )
     visibility: Mapped[EventVisibility] = mapped_column(
         SAEnum(EventVisibility, name="event_visibility", create_type=False), nullable=False

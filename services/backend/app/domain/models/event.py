@@ -23,6 +23,18 @@ class EventStatus(StrEnum):
     CANCELLED = "CANCELLED"  # set by sync when the external source marks event deleted
 
 
+class EventApprovalStatus(StrEnum):
+    """EventApprovalStatus domain model.
+
+    Orthogonal to EventStatus — controls the planning/release workflow.
+    PLANNED  = event is drafted/planned but not yet finalised.
+    CONFIRMED = event has been released/confirmed (e.g. monthly release).
+    """
+
+    PLANNED = "PLANNED"
+    CONFIRMED = "CONFIRMED"
+
+
 class EventVisibility(StrEnum):
     """EventVisibility domain model."""
 
@@ -40,6 +52,7 @@ class Event:
     source: EventSource
     status: EventStatus
     visibility: EventVisibility
+    approval_status: EventApprovalStatus
     created_at: datetime
     updated_at: datetime
     description: str | None = None
@@ -73,6 +86,7 @@ class Event:
         source: EventSource = EventSource.INTERNAL,
         status: EventStatus = EventStatus.DRAFT,
         visibility: EventVisibility = EventVisibility.INTERNAL,
+        approval_status: EventApprovalStatus = EventApprovalStatus.PLANNED,
         audiences: list[str] | None = None,
         applicability: list[uuid.UUID] | None = None,
         external_uid: str | None = None,
@@ -99,6 +113,7 @@ class Event:
             source=source,
             status=status,
             visibility=visibility,
+            approval_status=approval_status,
             audiences=audiences or [],
             applicability=applicability or [],
             external_uid=external_uid,

@@ -147,6 +147,7 @@ class TestEventResponseSchema:
             "source": "INTERNAL",
             "status": "DRAFT",
             "visibility": "INTERNAL",
+            "approval_status": "PLANNED",
             "audiences": [],
             "applicability": [],
             "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),

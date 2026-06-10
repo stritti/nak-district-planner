@@ -19,7 +19,7 @@ from app.domain.models.calendar_integration import (
     CalendarIntegration,
     CalendarType,
 )
-from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.domain.models.event import Event, EventApprovalStatus, EventSource, EventStatus, EventVisibility
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 
 # ── factories ─────────────────────────────────────────────────────────────────
@@ -78,6 +78,7 @@ def _existing_event(
         congregation_id=integration.congregation_id,
         source=EventSource.EXTERNAL,
         status=status,
+        approval_status=EventApprovalStatus.PLANNED,
         visibility=EventVisibility.INTERNAL,
         external_uid=raw.uid,
         calendar_integration_id=integration.id,

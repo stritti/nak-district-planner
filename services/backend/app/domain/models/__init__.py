@@ -5,7 +5,13 @@ from app.domain.models.calendar_integration import (
 )
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
-from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.domain.models.event import (
+    Event,
+    EventApprovalStatus,
+    EventSource,
+    EventStatus,
+    EventVisibility,
+)
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import (
     CongregationInvitation,
@@ -28,6 +34,7 @@ __all__ = [
     "CongregationInvitation",
     "District",
     "Event",
+    "EventApprovalStatus",
     "EventInstance",
     "EventSource",
     "EventStatus",

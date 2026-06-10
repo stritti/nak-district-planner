@@ -142,6 +142,20 @@
           </select>
         </div>
 
+        <!-- Genehmigungsstatus -->
+        <div>
+          <label class="filter-label">Freigabe</label>
+          <select
+            v-model="selectedApprovalStatus"
+            class="form-select px-2"
+            @change="onFilterChange"
+          >
+            <option value="">Alle</option>
+            <option value="PLANNED">Geplant</option>
+            <option value="CONFIRMED">Bestätigt</option>
+          </select>
+        </div>
+
         <!-- Datumsfelder: nur in der Listenansicht -->
         <template v-if="viewMode === 'list'">
           <div>
@@ -178,19 +192,20 @@
               <th class="table-th">Zuordnung</th>
               <th class="table-th">Einladung</th>
               <th class="table-th">Status</th>
+              <th class="table-th">Freigabe</th>
               <th class="table-th">Quelle</th>
               <th class="table-th"></th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="eventsStore.loading">
-              <td colspan="8" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
+              <td colspan="9" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
             </tr>
             <tr v-else-if="eventsStore.error">
-              <td colspan="8" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
+              <td colspan="9" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
             </tr>
             <tr v-else-if="eventsStore.items.length === 0">
-              <td colspan="8" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
+              <td colspan="9" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
             </tr>
             <tr
               v-else
@@ -219,6 +234,9 @@
                 <span :class="statusClass(event.status)" class="badge">
                   {{ statusLabel(event.status) }}
                 </span>
+              </td>
+              <td class="px-4 py-3">
+                <EventApprovalStatusBadge :status="event.approval_status" />
               </td>
               <td class="px-4 py-3">
                 <span
@@ -484,6 +502,7 @@ import { useEventsStore } from '../stores/events'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import { listEvents, updateEvent, type EventListParams, type EventResponse } from '../api/events'
 import { exportEventsToExcel } from '../composables/useExcelExport'
+import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
@@ -582,6 +601,7 @@ async function fetchCalendar() {
     }
     if (selectedGroupId.value)        params.group_id        = selectedGroupId.value
     if (selectedStatus.value)         params.status          = selectedStatus.value
+    if (selectedApprovalStatus.value) params.approval_status = selectedApprovalStatus.value
     const res = await listEvents(params)
     let events = res.items
 
@@ -686,6 +706,7 @@ const periodLabel = computed(() => {
 const selectedCongregationId = ref('')
 const selectedGroupId        = ref('')
 const selectedStatus         = ref('')
+const selectedApprovalStatus = ref('')
 const fromDate               = ref('')
 const toDate                 = ref('')
 
@@ -757,6 +778,7 @@ function applyFilters() {
     group_id:        selectedGroupId.value || undefined,
     only_district_level: isDistrictOnly,
     status:          selectedStatus.value || undefined,
+    approval_status: selectedApprovalStatus.value || undefined,
     from_dt: fromDate.value ? fromDate.value + 'T00:00:00' : undefined,
     to_dt:   toDate.value   ? toDate.value   + 'T23:59:59' : undefined,
   })

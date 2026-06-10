@@ -175,7 +175,7 @@ async def test_export_token_routes_and_ics_export() -> None:
             db,
         )
         listed = await export_router.list_export_tokens(auth, db, district_id=district_id)
-        ics = await export_router.export_calendar_ics(token.token, db)
+        ics = await export_router.export_calendar_ics(token.token, db, approval_status=None)
         await export_router.delete_export_token(object(), token.id, db)
 
     assert created.label == "X"
