@@ -19,7 +19,13 @@ from app.domain.models.calendar_integration import (
     CalendarIntegration,
     CalendarType,
 )
-from app.domain.models.event import Event, EventApprovalStatus, EventSource, EventStatus, EventVisibility
+from app.domain.models.event import (
+    Event,
+    EventApprovalStatus,
+    EventSource,
+    EventStatus,
+    EventVisibility,
+)
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 
 # ── factories ─────────────────────────────────────────────────────────────────

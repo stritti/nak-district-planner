@@ -69,7 +69,7 @@
               <span class="text-[11px] text-gray-400 dark:text-gray-500">Freigabe:</span>
               <button
                 class="text-[11px] px-2 py-0.5 rounded border transition-colors"
-                :class="(tokenFilter[t.id] ?? 'confirmed_only') === 'confirmed_only'
+                :class="(tokenFilter[t.id] ?? defaultFilter(t)) === 'confirmed_only'
                   ? 'bg-green-100 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-300'
                   : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400'"
                 @click="tokenFilter[t.id] = 'confirmed_only'"
@@ -78,7 +78,7 @@
               </button>
               <button
                 class="text-[11px] px-2 py-0.5 rounded border transition-colors"
-                :class="tokenFilter[t.id] === 'include_planned'
+                :class="(tokenFilter[t.id] ?? defaultFilter(t)) === 'include_planned'
                   ? 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-300'
                   : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400'"
                 @click="tokenFilter[t.id] = 'include_planned'"
@@ -292,6 +292,12 @@ function districtName(id: string): string {
 
 function congregationName(id: string): string {
   return allCongregations.value.find((c) => c.id === id)?.name ?? id
+}
+
+function defaultFilter(t: ExportTokenResponse): 'confirmed_only' | 'include_planned' {
+  // Match backend logic: public tokens without leader → confirmed_only, else include_planned
+  if (t.token_type === 'PUBLIC' && !t.leader_id) return 'confirmed_only'
+  return 'include_planned'
 }
 
 function icsUrl(token: string, filter?: 'confirmed_only' | 'include_planned'): string {

@@ -17,7 +17,13 @@ from app.application.planning_model_bridge import (
     event_instance_from_event,
     planning_slot_from_event,
 )
-from app.domain.models.event import Event, EventApprovalStatus, EventSource, EventStatus, EventVisibility
+from app.domain.models.event import (
+    Event,
+    EventApprovalStatus,
+    EventSource,
+    EventStatus,
+    EventVisibility,
+)
 from app.domain.ports.repositories import EventRepository
 
 

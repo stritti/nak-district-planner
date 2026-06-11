@@ -36,12 +36,9 @@ def upgrade() -> None:
         ),
     )
 
-    # Backfill: existing non-cancelled events → CONFIRMED, cancelled events → PLANNED
+    # Backfill: all existing events → PLANNED (no event has been through the release workflow yet)
     op.execute(
-        "UPDATE events SET approval_status = 'CONFIRMED' WHERE status != 'CANCELLED'"
-    )
-    op.execute(
-        "UPDATE events SET approval_status = 'PLANNED' WHERE status = 'CANCELLED'"
+        "UPDATE events SET approval_status = 'PLANNED'"
     )
 
     # Make the column NOT NULL now that it's backfilled

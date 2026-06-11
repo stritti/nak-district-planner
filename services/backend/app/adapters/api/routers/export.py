@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import Response
@@ -121,7 +122,7 @@ def _token_response(token: ExportToken) -> ExportTokenResponse:
 async def export_calendar_ics(
     token_str: str,
     session: DbSession,
-    approval_status: str | None = Query(None),
+    approval_status: Literal["confirmed_only", "include_planned"] | None = Query(None),
 ) -> Response:
     token_repo = SqlExportTokenRepository(session)
     export_token = await token_repo.get_by_token(token_str)
@@ -176,8 +177,8 @@ async def export_calendar_ics(
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ungültiger approval_status: {approval_status}. "
-            f"Erlaubt: confirmed_only, include_planned",
+            detail=f"Ungültiger approval_status-Filter: {approval_status}. "
+            f"Erlaubte Werte: confirmed_only, include_planned",
         )
 
     # Load assignments in one batch query
