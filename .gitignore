@@ -92,3 +92,6 @@ megalinter-reports/
 .claude/settings.local.json
 docs/.vitepress/cache/
 services/backend/.env.tmp
+
+# PostgreSQL data directory
+postgres_data/

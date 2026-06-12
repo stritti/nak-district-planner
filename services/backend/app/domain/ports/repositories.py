@@ -10,7 +10,7 @@ from app.domain.models.calendar_integration import CalendarIntegration
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
-from app.domain.models.event import Event, EventStatus
+from app.domain.models.event import Event, EventApprovalStatus, EventStatus
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import (
     CongregationInvitation,
@@ -91,6 +91,7 @@ class EventRepository(ABC):
         group_id: uuid.UUID | None = None,
         only_district_level: bool = False,
         status: EventStatus | None = None,
+        approval_status: EventApprovalStatus | None = None,
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
         limit: int = 100,
@@ -138,6 +139,22 @@ class EventRepository(ABC):
     @abstractmethod
     async def save(self, event: Event) -> None:
         pass
+
+    @abstractmethod
+    async def bulk_update_approval_status(
+        self,
+        *,
+        district_id: uuid.UUID,
+        year: int,
+        month: int,
+        new_status: EventApprovalStatus,
+        congregation_id: uuid.UUID | None = None,
+    ) -> int:
+        """Update approval_status for all events in a given month.
+
+        Returns the number of updated rows.
+        """
+        ...
 
     @abstractmethod
     async def delete_before(self, cutoff: datetime) -> int:

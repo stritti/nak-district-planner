@@ -11,6 +11,7 @@ export interface EventResponse {
   category: string | null
   source: 'INTERNAL' | 'EXTERNAL'
   status: 'DRAFT' | 'PUBLISHED' | 'CANCELLED'
+  approval_status: 'PLANNED' | 'CONFIRMED'
   visibility: 'INTERNAL' | 'PUBLIC'
   audiences: string[]
   applicability: string[]
@@ -34,6 +35,7 @@ export interface EventListParams {
   group_id?: string
   only_district_level?: boolean
   status?: string
+  approval_status?: string
   from_dt?: string
   to_dt?: string
   limit?: number
@@ -48,6 +50,7 @@ export interface EventUpdate {
   district_id?: string
   congregation_id?: string | null
   status?: string
+  approval_status?: string
   category?: string | null
 }
 
@@ -75,6 +78,9 @@ export function listEvents(params: EventListParams = {}): Promise<EventListRespo
   if (params.status !== undefined && params.status !== null) {
     query.set('status', params.status)
   }
+  if (params.approval_status !== undefined && params.approval_status !== null) {
+    query.set('approval_status', params.approval_status)
+  }
   if (params.from_dt !== undefined && params.from_dt !== null) {
     query.set('from_dt', params.from_dt)
   }
@@ -89,4 +95,26 @@ export function listEvents(params: EventListParams = {}): Promise<EventListRespo
   }
   const qs = query.toString()
   return apiFetch(`/api/v1/events${qs ? '?' + qs : ''}`)
+}
+
+export interface BulkApprovalStatusRequest {
+  year: number
+  month: number
+  approval_status: 'PLANNED' | 'CONFIRMED'
+  congregation_id?: string | null
+}
+
+export interface BulkApprovalStatusResponse {
+  updated_count: number
+}
+
+export function bulkUpdateApprovalStatus(
+  districtId: string,
+  data: BulkApprovalStatusRequest,
+): Promise<BulkApprovalStatusResponse> {
+  const query = districtId ? `?district_id=${districtId}` : ''
+  return apiFetch(`/api/v1/events/bulk-approval-status${query}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
 }

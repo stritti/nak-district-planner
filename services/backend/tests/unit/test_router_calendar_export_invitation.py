@@ -175,12 +175,19 @@ async def test_export_token_routes_and_ics_export() -> None:
             db,
         )
         listed = await export_router.list_export_tokens(auth, db, district_id=district_id)
-        ics = await export_router.export_calendar_ics(token.token, db)
+        ics = await export_router.export_calendar_ics(token.token, db, approval_status=None)
         await export_router.delete_export_token(object(), token.id, db)
 
-    assert created.label == "X"
-    assert listed
-    assert b"BEGIN:VCALENDAR" in ics.body
+        # Test confirmed_only filter — event is PLANNED by default, the filtered list is empty,
+        # but the calendar is still valid (no VEVENT inside).
+        ics_filtered = await export_router.export_calendar_ics(
+            token.token, db, approval_status="confirmed_only"
+        )
+
+        assert created.label == "X"
+        assert listed
+        assert b"BEGIN:VCALENDAR" in ics.body
+        assert b"BEGIN:VCALENDAR" in ics_filtered.body
 
 
 @pytest.mark.asyncio

@@ -634,6 +634,7 @@ async def get_matrix(
                 else event.category
                 if event is not None
                 else None,
+                approval_status=event.approval_status,
                 is_gap=(assignment is None and not is_invitation_copy),
                 planned_time=(
                     slot.planning_time

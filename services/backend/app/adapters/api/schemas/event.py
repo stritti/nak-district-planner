@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.domain.models.event import EventSource, EventStatus, EventVisibility
+from app.domain.models.event import EventApprovalStatus, EventSource, EventStatus, EventVisibility
 
 
 class EventCreate(BaseModel):
@@ -22,6 +22,7 @@ class EventCreate(BaseModel):
     category: str | None = None
     source: EventSource = EventSource.INTERNAL
     status: EventStatus = EventStatus.DRAFT
+    approval_status: EventApprovalStatus = EventApprovalStatus.PLANNED
     visibility: EventVisibility = EventVisibility.INTERNAL
     audiences: list[str] = Field(default_factory=list)
     applicability: list[uuid.UUID] = Field(default_factory=list)
@@ -40,6 +41,7 @@ class EventResponse(BaseModel):
     category: str | None
     source: EventSource
     status: EventStatus
+    approval_status: EventApprovalStatus
     visibility: EventVisibility
     audiences: list[str]
     applicability: list[uuid.UUID]
@@ -62,7 +64,23 @@ class EventUpdate(BaseModel):
     district_id: uuid.UUID | None = None
     congregation_id: uuid.UUID | None = None
     status: EventStatus | None = None
+    approval_status: EventApprovalStatus | None = None
     category: str | None = None
+
+
+class BulkApprovalStatusRequest(BaseModel):
+    """BulkApprovalStatusRequest."""
+
+    year: int = Field(..., ge=2020, le=2100)
+    month: int = Field(..., ge=1, le=12)
+    approval_status: EventApprovalStatus
+    congregation_id: uuid.UUID | None = None
+
+
+class BulkApprovalStatusResponse(BaseModel):
+    """BulkApprovalStatusResponse."""
+
+    updated_count: int
 
 
 class EventListResponse(BaseModel):

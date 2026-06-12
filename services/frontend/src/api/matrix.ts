@@ -16,6 +16,7 @@ export interface MatrixCell {
   actual_end_at?: string | null
   has_deviation?: boolean
   is_assignment_editable?: boolean
+  approval_status?: 'PLANNED' | 'CONFIRMED' | null
   assignment_id: string | null
   assignment_status: 'OPEN' | 'ASSIGNED' | 'CONFIRMED' | null
   leader_id: string | null
