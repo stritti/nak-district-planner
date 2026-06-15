@@ -20,7 +20,7 @@ test.describe('Event list CRUD', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript((auth) => {
       localStorage.setItem('auth', JSON.stringify(auth))
-    }, JSON.stringify(AUTH))
+    }, AUTH)
   })
 
   test('renders event list with mocked data', async ({ page }) => {
@@ -28,19 +28,24 @@ test.describe('Event list CRUD', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([
-          {
-            id: 'ev-1',
-            title: 'Gottesdienst',
-            start_at: '2026-06-01T10:00:00Z',
-            end_at: '2026-06-01T12:00:00Z',
-            district_id: 'district-1',
-            category: 'Gottesdienst',
-            status: 'PUBLISHED',
-            source: 'INTERNAL',
-            visibility: 'INTERNAL',
-          },
-        ]),
+        body: JSON.stringify({
+          items: [
+            {
+              id: 'ev-1',
+              title: 'Gottesdienst',
+              start_at: '2026-06-01T10:00:00Z',
+              end_at: '2026-06-01T12:00:00Z',
+              district_id: 'district-1',
+              category: 'Gottesdienst',
+              status: 'PUBLISHED',
+              source: 'INTERNAL',
+              visibility: 'INTERNAL',
+            },
+          ],
+          total: 1,
+          limit: 50,
+          offset: 0,
+        }),
       })
     })
     await page.route('**/api/v1/districts', async (route) => {

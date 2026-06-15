@@ -5,7 +5,7 @@ All HTTP calls are mocked — no network needed.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone, timedelta, date
+from datetime import UTC, datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx

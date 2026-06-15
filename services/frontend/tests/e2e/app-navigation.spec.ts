@@ -14,7 +14,7 @@ test.describe('App navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript((auth) => {
       localStorage.setItem('auth', JSON.stringify(auth))
-    }, JSON.stringify(AUTH))
+    }, AUTH)
   })
 
   test('navigation shows after login and links work', async ({ page }) => {

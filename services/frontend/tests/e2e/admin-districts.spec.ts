@@ -20,7 +20,7 @@ test.describe('Districts admin view', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript((auth) => {
       localStorage.setItem('auth', JSON.stringify(auth))
-    }, JSON.stringify(ADMIN_AUTH))
+    }, ADMIN_AUTH)
   })
 
   test('renders districts list', async ({ page }) => {

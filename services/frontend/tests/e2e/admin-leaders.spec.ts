@@ -20,7 +20,7 @@ test.describe('Leaders admin view', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript((auth) => {
       localStorage.setItem('auth', JSON.stringify(auth))
-    }, JSON.stringify(ADMIN_AUTH))
+    }, ADMIN_AUTH)
   })
 
   test('renders leaders list and allows adding', async ({ page }) => {
