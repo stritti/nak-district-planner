@@ -186,7 +186,7 @@
     <template v-if="viewMode === 'list'">
       <div class="table-container">
         <div class="table-scroll">
-        <table class="table-min-w">
+        <table class="table-min-w w-full text-sm">
           <thead>
             <tr class="table-thead">
               <th class="table-th">Titel</th>
