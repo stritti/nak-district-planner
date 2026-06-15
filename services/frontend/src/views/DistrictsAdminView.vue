@@ -1,6 +1,6 @@
 <template>
   <div class="p-6 max-w-3xl">
-    <div class="flex items-center justify-between mb-5">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-2">
       <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Bezirke & Gemeinden</h1>
       <button
         class="btn-primary"

@@ -101,7 +101,9 @@
 
   /** White modal container (add max-w-* in template as needed) */
   .modal-panel {
-    @apply bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full p-6;
+    @apply bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full p-4 sm:p-6 mx-4 sm:mx-auto;
+    max-height: 90vh;
+    overflow-y: auto;
   }
 
   /** Bold modal heading */
@@ -113,7 +115,8 @@
 
   /** Table wrapper with white bg and border */
   .table-container {
-    @apply bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden;
+    @apply bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   /** <thead> or <tr> used as header row */
@@ -141,5 +144,31 @@
   /** Status / type pill — add a colour modifier class alongside */
   .badge {
     @apply px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  /* ── Responsive helpers ──────────────────────────────────────────────────── */
+
+  /** Horizontally scrollable table wrapper for mobile */
+  .table-scroll {
+    @apply overflow-x-auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table-scroll table.table-min-w {
+    min-width: 640px;
+  }
+
+  /** Override: allow manual table-min-w on any table */
+  .table-min-w {
+    min-width: 640px;
+  }
+
+  /** Mobile navigation overlay */
+  .mobile-nav-overlay {
+    @apply fixed inset-0 z-40 bg-black/40;
+  }
+
+  /** Mobile navigation panel (slide-in from left) */
+  .mobile-nav-panel {
+    @apply fixed inset-y-0 left-0 z-50 w-72 max-w-[80vw] bg-white dark:bg-gray-900 shadow-xl overflow-y-auto;
   }
 }
