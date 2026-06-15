@@ -38,7 +38,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/.*/i,
+            urlPattern: ({ url }) => url.pathname.startsWith("/api"),
             handler: "NetworkOnly",
           },
         ],
