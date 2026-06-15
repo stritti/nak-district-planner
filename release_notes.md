@@ -1,6 +1,7 @@
-## [v0.10.0] - 2026-06-15
+## [v0.11.0] - 2026-06-15
 
 ### Features
+* feat: add pr-review skill for structured review comment handling (ec499a7)
 * Merge pull request #152 from stritti/feat/responsive-pwa (e7c4c2c)
 * feat: responsive UI + PWA support (d5f0bad)
 * Merge pull request #150 from stritti/feat/approval-status (ee43e4e)
@@ -10,7 +11,6 @@
 * feat: proxy OIDC discovery through backend (no build-time env vars) (03cebe9)
 * feat(system): automatic version check and admin-triggered self-update (01bafcb)
 * feat(system): implement automatic version check and self-update feature (6c0ce93)
-* feat: add specification and design for automatic system version checking and admin-triggered self-updates (e7cd858)
 
 ### Bug Fixes
 * fix: remove duplicated public/manifest.json, let VitePWA inject manifest (a320106)
@@ -25,6 +25,7 @@
 * fix(db): resolve alembic migration heads conflict and PG18 volume mount (0a6f851)
 
 ### Other Changes
+* chore: release v0.10.0 (f4cdf03)
 * chore: release v0.9.0 (bdee59d)
 * chore: release v0.8.0 (57ae834)
 * chore: release v0.7.0 (18c3ec4)
@@ -34,4 +35,3 @@
 * build: upgrade postgres image version to 18-alpine in docker-compose (22418f4)
 * chore: release v0.5.1 (39b80fc)
 * refactor: extract hybrid-calendar-sync, external-event-ingestion, in-app-notifications from planning-slot-hybrid-sync (6b1e80c)
-* chore: release v0.5.0 (71956f8)
