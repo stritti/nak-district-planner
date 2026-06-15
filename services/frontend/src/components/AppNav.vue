@@ -8,7 +8,7 @@
           <button
             class="sm:hidden p-2 -ml-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
             aria-label="Navigation öffnen"
-            @click.stop="mobileNavOpen = !mobileNavOpen"
+            @click.stop="mobileNavOpen = !mobileNavOpen; menuOpen = false"
           >
             <Bars3Icon class="h-5 w-5" />
           </button>
@@ -255,13 +255,6 @@ const links = [
   { to: '/admin/calendars', label: 'Kalender',          icon: ArrowDownTrayIcon },
   { to: '/admin/export',    label: 'Export',            icon: LinkIcon },
 ]
-
-// Close user menu when mobile nav opens
-function closeMenuOnNavOpen() {
-  if (mobileNavOpen.value) {
-    menuOpen.value = false
-  }
-}
 
 async function handleLogout() {
   menuOpen.value = false
