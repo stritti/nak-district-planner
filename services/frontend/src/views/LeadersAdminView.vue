@@ -78,7 +78,7 @@
         <!-- Leaders table -->
         <div v-else class="card overflow-hidden">
           <div class="table-scroll">
-          <table class="table-min-w">
+          <table class="table-min-w w-full text-sm">
             <thead class="table-thead">
               <tr>
                 <th class="table-th py-2">Grad</th>
@@ -170,7 +170,7 @@
 
       <div v-else class="border border-gray-200 rounded-lg overflow-hidden">
         <div class="table-scroll">
-        <table class="table-min-w">
+        <table class="table-min-w w-full text-sm">
           <thead class="bg-gray-50 text-xs text-gray-500 font-medium">
             <tr>
               <th class="px-4 py-2 text-left">Name</th>
