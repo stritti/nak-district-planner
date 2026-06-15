@@ -95,3 +95,4 @@ services/backend/.env.tmp
 
 # PostgreSQL data directory
 postgres_data/
+playwright-report/
