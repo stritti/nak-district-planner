@@ -1,6 +1,6 @@
 <template>
-  <div class="p-6 max-w-3xl">
-    <div class="flex items-center justify-between mb-5">
+  <div class="p-4 sm:p-6 max-w-3xl">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-2">
       <h1 class="page-title mb-0">Kalender-Export</h1>
       <button
         class="btn-primary"
@@ -65,7 +65,7 @@
               </a>
             </div>
             <!-- approval_status filter -->
-            <div class="flex items-center gap-2 mt-1.5">
+            <div class="flex items-center gap-2 mt-1.5 flex-wrap">
               <span class="text-[11px] text-gray-400 dark:text-gray-500">Freigabe:</span>
               <button
                 class="text-[11px] px-2 py-0.5 rounded border transition-colors"

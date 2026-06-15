@@ -1,12 +1,12 @@
 <template>
   <div>
     <!-- Header -->
-    <div class="flex items-center justify-between mb-5">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-2">
       <div class="flex items-center gap-3">
         <h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Ereignisse</h1>
         <span v-if="viewMode === 'list'" class="text-sm text-gray-400 dark:text-gray-500">{{ eventsStore.total }} gesamt</span>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <!-- Excel Export (list mode only) -->
         <div v-if="viewMode === 'list'" class="flex flex-col items-end gap-1">
           <button
@@ -40,10 +40,11 @@
     <div class="filter-bar mb-5">
 
       <!-- Zeile 1: Schnellfilter (Liste) oder Perioden-Navigation (Woche/Monat) -->
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <template v-if="viewMode === 'list'">
             <span class="text-xs text-gray-400 dark:text-gray-500 font-medium mr-1">Schnellfilter:</span>
+            <div class="flex flex-wrap gap-1">
             <button
               v-for="preset in presets"
               :key="preset.key"
@@ -53,6 +54,7 @@
             >
               {{ preset.label }}
             </button>
+            </div>
           </template>
           <template v-else>
             <button
@@ -83,7 +85,7 @@
       <!-- Zeile 2: Filter-Felder -->
       <div class="flex flex-wrap gap-3">
         <!-- Bezirk -->
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Bezirk</label>
           <select
             v-model="districtsStore.selectedDistrictId"
@@ -96,7 +98,7 @@
         </div>
 
         <!-- Gemeinde -->
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Gemeinde</label>
           <select
             v-model="selectedCongregationId"
@@ -113,7 +115,7 @@
         </div>
 
         <!-- Gruppe -->
-        <div v-if="districtsStore.groups.length > 0">
+        <div v-if="districtsStore.groups.length > 0" class="w-full sm:w-auto">
           <label class="filter-label">Gruppe (optional)</label>
           <select
             v-model="selectedGroupId"
@@ -128,7 +130,7 @@
         </div>
 
         <!-- Status -->
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Status</label>
           <select
             v-model="selectedStatus"
@@ -143,7 +145,7 @@
         </div>
 
         <!-- Genehmigungsstatus -->
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Freigabe</label>
           <select
             v-model="selectedApprovalStatus"
@@ -158,7 +160,7 @@
 
         <!-- Datumsfelder: nur in der Listenansicht -->
         <template v-if="viewMode === 'list'">
-          <div>
+          <div class="w-full sm:w-auto">
             <label class="filter-label">Von</label>
             <input
               v-model="fromDate"
@@ -167,7 +169,7 @@
               @change="applyFilters"
             />
           </div>
-          <div>
+          <div class="w-full sm:w-auto">
             <label class="filter-label">Bis</label>
             <input
               v-model="toDate"
@@ -183,7 +185,8 @@
     <!-- ── Listenansicht ───────────────────────────────────────────────────── -->
     <template v-if="viewMode === 'list'">
       <div class="table-container">
-        <table class="w-full text-sm">
+        <div class="table-scroll">
+        <table class="table-min-w w-full text-sm">
           <thead>
             <tr class="table-thead">
               <th class="table-th">Titel</th>
@@ -258,12 +261,13 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       <!-- Pagination -->
       <div
         v-if="eventsStore.totalPages > 1"
-        class="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400"
+        class="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 flex-wrap gap-2"
       >
         <span>Seite {{ eventsStore.currentPage }} von {{ eventsStore.totalPages }}</span>
         <div class="flex gap-2">

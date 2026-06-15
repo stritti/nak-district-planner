@@ -20,3 +20,12 @@ if (authStore.isAuthenticated) {
 }
 
 app.mount('#app')
+
+// Register service worker for PWA support (offline caching, install prompt)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Service worker registration failed — app still works without cache
+    })
+  })
+}

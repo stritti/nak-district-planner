@@ -1,12 +1,12 @@
 <template>
   <div class="p-2 sm:p-4">
-    <h1 class="page-title mb-4">Dienstplan-Matrix</h1>
+    <h1 class="page-title">Dienstplan-Matrix</h1>
 
     <!-- Filter-Leiste -->
     <div class="filter-bar mb-4">
 
       <!-- Schnellfilter -->
-      <div class="flex items-center gap-2 mb-3">
+      <div class="flex items-center gap-2 mb-3 flex-wrap">
         <span class="text-xs text-gray-400 dark:text-gray-500 font-medium mr-1">Schnellfilter:</span>
         <button
           v-for="preset in presets"
@@ -23,7 +23,7 @@
 
       <!-- Bezirk + Datumsfelder -->
       <div class="flex flex-wrap items-end gap-3">
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Bezirk</label>
           <select
             v-model="districtsStore.selectedDistrictId"
@@ -35,7 +35,7 @@
           </select>
         </div>
 
-        <div v-if="districtsStore.groups.length > 0">
+        <div v-if="districtsStore.groups.length > 0" class="w-full sm:w-auto">
           <label class="filter-label">Gruppe</label>
           <select
             v-model="matrixStore.groupId"
@@ -49,7 +49,7 @@
           </select>
         </div>
 
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Sortierung</label>
           <select
             v-model="matrixSortMode"
@@ -61,7 +61,7 @@
           </select>
         </div>
 
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Von</label>
           <input
             v-model="matrixStore.fromDt"
@@ -70,7 +70,7 @@
           />
         </div>
 
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Bis</label>
           <input
             v-model="matrixStore.toDt"
@@ -115,7 +115,7 @@
           Freigabe
         </button>
 
-        <div class="ml-auto inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+        <div class="sm:ml-auto inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
           <button
             class="px-3 py-1.5 text-xs font-medium transition-colors"
             :class="!compactMode
