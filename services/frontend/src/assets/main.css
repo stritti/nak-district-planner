@@ -89,7 +89,7 @@
 
   /** Page-level heading */
   .page-title {
-    @apply text-xl font-semibold text-gray-900 dark:text-gray-100 mb-5;
+    @apply text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 mb-5;
   }
 
   /* ── Modal ───────────────────────────────────────────────────────────────── */

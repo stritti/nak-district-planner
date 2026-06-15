@@ -1,6 +1,6 @@
 <template>
   <div class="p-2 sm:p-4">
-    <h1 class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Dienstplan-Matrix</h1>
+    <h1 class="page-title">Dienstplan-Matrix</h1>
 
     <!-- Filter-Leiste -->
     <div class="filter-bar mb-4">
