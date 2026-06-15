@@ -4,6 +4,7 @@ Tests use mocked OIDC provider responses to ensure provider-agnostic behavior.
 """
 
 import json
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -298,3 +299,294 @@ class TestTokenValidation:
         claims = {"aud": ["some-api"], "azp": "test-client"}
 
         oidc_adapter._validate_audience_claims(claims, "test-client")
+
+    def test_validate_audience_string_match(self, oidc_adapter):
+        """Audience validation accepts string aud match."""
+        claims = {"aud": "test-client"}
+        oidc_adapter._validate_audience_claims(claims, "test-client")
+
+    def test_validate_audience_no_match_raises(self, oidc_adapter):
+        """Audience validation raises when neither aud nor azp match."""
+        claims = {"aud": ["other-api"], "azp": "other-client"}
+        with pytest.raises(TokenValidationError, match="audience"):
+            oidc_adapter._validate_audience_claims(claims, "test-client")
+
+    def test_validate_audience_list_match(self, oidc_adapter):
+        """Audience validation accepts list aud containing expected."""
+        claims = {"aud": ["api1", "test-client", "api2"]}
+        oidc_adapter._validate_audience_claims(claims, "test-client")
+
+
+class TestIntrospection:
+    @pytest.mark.asyncio
+    async def test_introspect_token_success(self, oidc_adapter, mock_httpx_client):
+        """Successful introspection returns claims."""
+        oidc_adapter._discovery_cache = {
+            "introspection_endpoint": "https://oidc.example.com/oauth/introspect"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=200)
+        mock_response.json = MagicMock(return_value={"active": True, "sub": "user-123"})
+        mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        claims = await oidc_adapter._introspect_token("some-token")
+
+        assert claims["sub"] == "user-123"
+        assert claims["active"] is True
+
+    @pytest.mark.asyncio
+    async def test_introspect_token_inactive(self, oidc_adapter, mock_httpx_client):
+        """Inactive token raises error."""
+        oidc_adapter._discovery_cache = {
+            "introspection_endpoint": "https://oidc.example.com/oauth/introspect"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=200)
+        mock_response.json = MagicMock(return_value={"active": False})
+        mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="inactive"):
+            await oidc_adapter._introspect_token("bad-token")
+
+    @pytest.mark.asyncio
+    async def test_introspect_token_missing_endpoint(self, oidc_adapter, mock_httpx_client):
+        """Missing introspection endpoint raises error."""
+        oidc_adapter._discovery_cache = {}
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        with pytest.raises(TokenValidationError, match="introspection endpoint"):
+            await oidc_adapter._introspect_token("token")
+
+    @pytest.mark.asyncio
+    async def test_introspect_token_http_error(self, oidc_adapter, mock_httpx_client):
+        """HTTP error during introspection raises error."""
+        oidc_adapter._discovery_cache = {
+            "introspection_endpoint": "https://oidc.example.com/oauth/introspect"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_httpx_client.post = AsyncMock(side_effect=httpx.HTTPError("connection failed"))
+
+        with pytest.raises(TokenValidationError, match="introspection request failed"):
+            await oidc_adapter._introspect_token("token")
+
+    @pytest.mark.asyncio
+    async def test_introspect_token_invalid_json(self, oidc_adapter, mock_httpx_client):
+        """Invalid JSON in introspection response raises error."""
+        oidc_adapter._discovery_cache = {
+            "introspection_endpoint": "https://oidc.example.com/oauth/introspect"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=200)
+        mock_response.json = MagicMock(side_effect=json.JSONDecodeError("bad json", "", 0))
+        mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="not valid JSON"):
+            await oidc_adapter._introspect_token("token")
+
+    @pytest.mark.asyncio
+    async def test_introspect_token_missing_sub(self, oidc_adapter, mock_httpx_client):
+        """Introspection response missing sub raises error."""
+        oidc_adapter._discovery_cache = {
+            "introspection_endpoint": "https://oidc.example.com/oauth/introspect"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=200)
+        mock_response.json = MagicMock(return_value={"active": True})
+        mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="missing sub"):
+            await oidc_adapter._introspect_token("token")
+
+    @pytest.mark.asyncio
+    async def test_introspect_token_http_400(self, oidc_adapter, mock_httpx_client):
+        """HTTP 400 from introspection endpoint raises error."""
+        oidc_adapter._discovery_cache = {
+            "introspection_endpoint": "https://oidc.example.com/oauth/introspect"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=400)
+        mock_response.json = MagicMock(return_value={})
+        mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="400"):
+            await oidc_adapter._introspect_token("token")
+
+
+class TestUserInfoEndpoint:
+    @pytest.mark.asyncio
+    async def test_fetch_userinfo_success(self, oidc_adapter, mock_httpx_client):
+        """Successful userinfo call returns claims."""
+        oidc_adapter._discovery_cache = {
+            "userinfo_endpoint": "https://oidc.example.com/oauth/userinfo"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=200)
+        mock_response.json = MagicMock(return_value={"sub": "user-123", "email": "u@example.com"})
+        mock_httpx_client.get = AsyncMock(return_value=mock_response)
+
+        claims = await oidc_adapter._fetch_userinfo_claims("token")
+        assert claims["sub"] == "user-123"
+
+    @pytest.mark.asyncio
+    async def test_fetch_userinfo_401(self, oidc_adapter, mock_httpx_client):
+        """401 from userinfo raises error."""
+        oidc_adapter._discovery_cache = {
+            "userinfo_endpoint": "https://oidc.example.com/oauth/userinfo"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=401)
+        mock_httpx_client.get = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="401"):
+            await oidc_adapter._fetch_userinfo_claims("token")
+
+    @pytest.mark.asyncio
+    async def test_fetch_userinfo_missing_endpoint(self, oidc_adapter, mock_httpx_client):
+        """Missing userinfo endpoint raises error."""
+        oidc_adapter._discovery_cache = {}
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        with pytest.raises(TokenValidationError, match="userinfo endpoint"):
+            await oidc_adapter._fetch_userinfo_claims("token")
+
+    @pytest.mark.asyncio
+    async def test_fetch_userinfo_http_error(self, oidc_adapter, mock_httpx_client):
+        """HTTP error during userinfo call raises error."""
+        oidc_adapter._discovery_cache = {
+            "userinfo_endpoint": "https://oidc.example.com/oauth/userinfo"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_httpx_client.get = AsyncMock(side_effect=httpx.HTTPError("connection failed"))
+
+        with pytest.raises(TokenValidationError, match="userinfo request failed"):
+            await oidc_adapter._fetch_userinfo_claims("token")
+
+    @pytest.mark.asyncio
+    async def test_fetch_userinfo_invalid_json(self, oidc_adapter, mock_httpx_client):
+        """Invalid JSON from userinfo raises error."""
+        oidc_adapter._discovery_cache = {
+            "userinfo_endpoint": "https://oidc.example.com/oauth/userinfo"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=200)
+        mock_response.json = MagicMock(side_effect=json.JSONDecodeError("bad", "", 0))
+        mock_httpx_client.get = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="not valid JSON"):
+            await oidc_adapter._fetch_userinfo_claims("token")
+
+    @pytest.mark.asyncio
+    async def test_fetch_userinfo_non_dict(self, oidc_adapter, mock_httpx_client):
+        """Non-dict userinfo response raises error."""
+        oidc_adapter._discovery_cache = {
+            "userinfo_endpoint": "https://oidc.example.com/oauth/userinfo"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=200)
+        mock_response.json = MagicMock(return_value=["not", "a", "dict"])
+        mock_httpx_client.get = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="invalid shape"):
+            await oidc_adapter._fetch_userinfo_claims("token")
+
+
+class TestExtractUserInfoEdgeCases:
+    def test_missing_sub(self, oidc_adapter):
+        with pytest.raises(TokenValidationError, match="subject"):
+            oidc_adapter.extract_user_info({})
+
+    def test_empty_sub(self, oidc_adapter):
+        with pytest.raises(TokenValidationError, match="subject"):
+            oidc_adapter.extract_user_info({"sub": ""})
+
+    def test_username_falls_back_to_sub_when_no_email(self, oidc_adapter):
+        result = oidc_adapter.extract_user_info({"sub": "user-123"})
+        assert result["username"] == "user-123"
+        assert result["email"] == "user-123@oidc.local"
+
+    def test_email_falls_back_to_oidc_local(self, oidc_adapter):
+        result = oidc_adapter.extract_user_info({
+            "sub": "user-456",
+            "preferred_username": "jane",
+        })
+        assert result["email"] == "user-456@oidc.local"
+
+    def test_email_from_username_with_at(self, oidc_adapter):
+        result = oidc_adapter.extract_user_info({
+            "sub": "user-789",
+            "preferred_username": "jane@work.com",
+        })
+        assert result["email"] == "jane@work.com"
+
+
+class TestValidateTokenFallback:
+    @pytest.mark.asyncio
+    async def test_falls_back_to_introspection(self, oidc_adapter):
+        """When JWT and userinfo fail, should try introspection."""
+        oidc_adapter._validate_jwt_token = AsyncMock(side_effect=TokenValidationError("jwt fail"))
+        oidc_adapter._fetch_userinfo_claims = AsyncMock(
+            side_effect=TokenValidationError("userinfo fail")
+        )
+        oidc_adapter._introspect_token = AsyncMock(
+            return_value={"active": True, "sub": "introspect-user"}
+        )
+
+        claims = await oidc_adapter.validate_token("opaque-token")
+
+        assert claims["sub"] == "introspect-user"
+        oidc_adapter._introspect_token.assert_called_once_with("opaque-token")
+
+    @pytest.mark.asyncio
+    async def test_all_fallbacks_fail(self, oidc_adapter):
+        """When all validation paths fail, should raise."""
+        oidc_adapter._validate_jwt_token = AsyncMock(side_effect=TokenValidationError("jwt fail"))
+        oidc_adapter._fetch_userinfo_claims = AsyncMock(
+            side_effect=TokenValidationError("userinfo fail")
+        )
+        oidc_adapter._introspect_token = AsyncMock(
+            side_effect=TokenValidationError("introspect fail")
+        )
+
+        with pytest.raises(TokenValidationError, match="JWT validation failed"):
+            await oidc_adapter.validate_token("bad-token")
+
+
+class TestJWKSEdgeCases:
+    @pytest.mark.asyncio
+    async def test_fetch_jwks_no_uri(self, oidc_adapter, mock_httpx_client):
+        """JWKS fetch should fail when jwks_uri is missing."""
+        oidc_adapter._discovery_cache = {"issuer": "https://example.com"}
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        with pytest.raises(JWKSFetchError, match="JWKS URI"):
+            await oidc_adapter.fetch_jwks()
+
+
+class TestOIDCClose:
+    @pytest.mark.asyncio
+    async def test_close(self, oidc_adapter, mock_httpx_client):
+        await oidc_adapter.close()
+        mock_httpx_client.aclose.assert_awaited_once()
+        assert oidc_adapter._httpx_client is None
+
+    @pytest.mark.asyncio
+    async def test_close_no_client(self):
+        adapter = OIDCAdapter(
+            discovery_url="https://example.com",
+            client_id="test",
+            client_secret="secret",
+            httpx_client=None,
+        )
+        adapter._httpx_client = None
+        await adapter.close()  # Should not crash
