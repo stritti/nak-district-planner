@@ -26,6 +26,7 @@ from app.adapters.api.schemas.district import (
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
 from app.adapters.auth.permissions import (
     PermissionError,
+    assert_has_role_in_congregation,
     assert_has_role_in_district,
     get_districts_where_user_has_role,
 )
@@ -247,7 +248,10 @@ async def update_congregation(
     if not congregation or congregation.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gemeinde nicht gefunden")
     try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+        try:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+        except PermissionError:
+            assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, congregation_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     if body.name is not None:

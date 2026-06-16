@@ -17,6 +17,7 @@ from app.adapters.api.schemas.calendar_integration import (
 )
 from app.adapters.auth.permissions import (
     PermissionError,
+    assert_has_role_in_congregation,
     assert_has_role_in_district,
 )
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
@@ -51,9 +52,15 @@ async def create_calendar_integration(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> CalendarIntegrationResponse:
-    # Check if user has DISTRICT_ADMIN role in the district
+    # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+        if body.congregation_id is not None:
+            try:
+                assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, body.congregation_id)
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -151,9 +158,15 @@ async def update_calendar_integration(
             status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden"
         )
 
-    # Check if user has DISTRICT_ADMIN role in the district
+    # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+        if integration.congregation_id is not None:
+            try:
+                assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, integration.congregation_id)
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -187,9 +200,15 @@ async def delete_calendar_integration(
             status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden"
         )
 
-    # Check if user has DISTRICT_ADMIN role in the district
+    # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+        if integration.congregation_id is not None:
+            try:
+                assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, integration.congregation_id)
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 

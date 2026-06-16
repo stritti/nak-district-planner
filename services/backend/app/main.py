@@ -30,7 +30,7 @@ from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
-from app.config import settings
+from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
 
 
@@ -47,6 +47,13 @@ async def lifespan(app: FastAPI):
     import asyncio
 
     configure_logging()
+
+    # Production guard — fail fast on unsafe config
+    try:
+        production_guard(settings)
+    except RuntimeError as e:
+        print("🚨", str(e))
+        sys.exit(1)
 
     # Run migrations
     cfg = Config("alembic.ini")

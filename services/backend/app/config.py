@@ -67,7 +67,6 @@ class Settings(BaseSettings):
         """Parse OIDC_SCOPES string into list"""
         return [scope.strip() for scope in self.oidc_scopes.split() if scope.strip()]
 
-
     @property
     def app_version(self) -> str:
         """Return the running application version from package metadata."""
@@ -76,5 +75,83 @@ class Settings(BaseSettings):
         except importlib.metadata.PackageNotFoundError:
             return "0.0.0"
 
+
+def production_guard(settings: Settings) -> None:
+    """Validate production configuration and block startup on critical issues.
+
+    Called during app startup when ``APP_ENV=production``.  Raises
+    ``RuntimeError`` for each unsafe setting so that the process fails
+    early with an informative message.
+    """
+    if settings.app_env != "production":
+        return
+
+    errors: list[str] = []
+
+    # SECRET_KEY must be non-default and have sufficient entropy
+    if settings.secret_key in (
+        "replace-with-a-long-random-secret-key",
+        "",
+    ):
+        errors.append(
+            "SECRET_KEY must be changed from the default value "
+            "(generate one with: python -c \"import secrets; print(secrets.token_hex(32))\")"
+        )
+    if len(settings.secret_key) < 32:
+        errors.append(
+            f"SECRET_KEY is too short ({len(settings.secret_key)} chars, minimum 32)"
+        )
+
+    # OIDC_CLIENT_SECRET must not be a placeholder
+    if settings.oidc_client_secret in (
+        "replace-with-oidc-client-secret",
+        "",
+    ):
+        errors.append(
+            "OIDC_CLIENT_SECRET must be changed from the default value"
+        )
+
+    # OIDC discovery URL
+    if settings.oidc_discovery_url in (
+        "https://oidc.example.com/.well-known/openid-configuration",
+        "",
+    ):
+        errors.append(
+            "OIDC_DISCOVERY_URL must be changed from the default value"
+        )
+    if not settings.oidc_discovery_url.startswith("https://"):
+        errors.append(
+            "OIDC_DISCOVERY_URL should use HTTPS in production"
+        )
+
+    # OIDC client ID
+    if settings.oidc_client_id in (
+        "replace-with-oidc-client-id",
+        "",
+    ):
+        errors.append(
+            "OIDC_CLIENT_ID must be changed from the default value"
+        )
+
+    # IDP provisioning secrets
+    if settings.idp_provisioning_enabled:
+        if settings.idp_provisioning_api_key in (None, ""):
+            errors.append("IDP_PROVISIONING_API_KEY must be configured when provisioning is enabled")
+        if not settings.idp_provisioning_endpoint:
+            errors.append("IDP_PROVISIONING_ENDPOINT must be configured when provisioning is enabled")
+        if settings.idp_provisioning_endpoint and not settings.idp_provisioning_endpoint.startswith("https://"):
+            errors.append("IDP_PROVISIONING_ENDPOINT should use HTTPS in production")
+        if settings.idp_provisioning_provider == "keycloak":
+            for field, name in [
+                (settings.idp_provisioning_keycloak_admin_password, "IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD"),
+            ]:
+                if field in (None, "", "replace-with-admin-password"):
+                    errors.append(f"{name} must be changed from the default value")
+
+    if errors:
+        raise RuntimeError(
+            f"Production configuration check failed — {len(errors)} issue(s):\n"
+            + "\n".join(f"  • {e}" for e in errors)
+        )
 
 settings = Settings()

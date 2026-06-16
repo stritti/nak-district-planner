@@ -18,6 +18,7 @@ from app.adapters.api.schemas.event import (
 )
 from app.adapters.auth.permissions import (
     PermissionError,
+    assert_has_role_in_congregation,
     assert_has_role_in_district,
 )
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
@@ -38,9 +39,16 @@ async def create_event(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> EventResponse:
-    # Check if user has PLANNER role (or higher) in the district
+    # Check permission: district-level PLANNER+ or congregation-level CONGREGATION_ADMIN
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, body.district_id)
+        if body.congregation_id is not None:
+            # Try congregation_admin first, fall back to district-level PLANNER+
+            try:
+                assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, body.congregation_id)
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.PLANNER, body.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.PLANNER, body.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -201,9 +209,15 @@ async def update_event(
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
-    # Check if user has PLANNER role (or higher) in the current district
+    # Check permission: district-level PLANNER+ or congregation-level CONGREGATION_ADMIN
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+        if event.congregation_id is not None:
+            try:
+                assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, event.congregation_id)
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
