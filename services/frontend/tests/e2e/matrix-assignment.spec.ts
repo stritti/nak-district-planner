@@ -177,6 +177,11 @@ test.describe('Matrix assignment flow', () => {
       })
     })
 
+    // Catch-all for any unmocked API endpoints (last, after all specific mocks)
+    await page.route('**/api/v1/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+
     await page.goto(`${FRONTEND_URL}/matrix`)
 
     await expect(page.getByRole('button', { name: /Gottesdienst/i })).toBeVisible({ timeout: 10000 })

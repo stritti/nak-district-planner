@@ -41,6 +41,9 @@ test.describe('Districts admin view', () => {
         body: JSON.stringify([{ id: 'c1', name: 'Gemeinde A', district_id: 'd1' }]),
       })
     })
+    await page.route('**/api/v1/districts/*/groups', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
 
     await page.goto(`${FRONTEND_URL}/admin/districts`)
     await expect(page.getByRole('heading', { name: /Bezirk/i })).toBeVisible({ timeout: 10000 })

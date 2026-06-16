@@ -55,6 +55,10 @@ test.describe('Event list CRUD', () => {
         body: JSON.stringify([{ id: 'district-1', name: 'Bezirk Test' }]),
       })
     })
+    // Catch-all for any unmocked API endpoints (congregations, groups, etc.)
+    await page.route('**/api/v1/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
 
     await page.goto(`${FRONTEND_URL}/events`)
     await expect(page.getByText('Gottesdienst')).toBeVisible({ timeout: 10000 })

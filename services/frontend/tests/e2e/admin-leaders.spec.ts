@@ -47,6 +47,12 @@ test.describe('Leaders admin view', () => {
         ]),
       })
     })
+    await page.route('**/api/v1/districts/*/congregations', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await page.route('**/api/v1/districts/*/self-link', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ leader: null }) })
+    })
 
     await page.goto(`${FRONTEND_URL}/admin/leaders`)
     await expect(page.getByText('Pastor Schmidt')).toBeVisible({ timeout: 10000 })
