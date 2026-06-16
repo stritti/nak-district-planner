@@ -113,7 +113,6 @@ test.describe('Matrix assignment flow', () => {
       })
     })
     await page.route('**/api/v1/districts/district-1/matrix**', async (route) => {
-    await page.route('**/api/v1/districts/district-1/matrix**', async (route) => {
       if (!assignmentCreated) {
         await route.fulfill({
           status: 200,
