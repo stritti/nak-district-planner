@@ -1,0 +1,32 @@
+# CodeQL Configuration
+# https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning
+#
+# Security-and-quality scanning for all production code.
+# Excludes generated/third-party/test paths and Alembic migrations
+# (boilerplate templates — not security-relevant).
+
+name: "NAK District Planner CodeQL Config"
+
+queries:
+  - uses: security-and-quality
+
+paths-ignore:
+  # Generated / third-party / vendored
+  - "**/node_modules/**"
+  - "**/__pycache__/**"
+  - "**/*.egg-info/**"
+  - "**/.venv/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "services/backend/.nox/**"
+  - "services/backend/.tox/**"
+
+  # Test code (not production)
+  - "services/backend/tests/**"
+  - "services/frontend/tests/**"
+  - "test_ics/**"
+
+  # Alembic migrations — auto-generated boilerplate templates.
+  # Variables like revision / down_revision / branch_labels / depends_on
+  # are read by Alembic at import time but appear unused to static analysis.
+  - "services/backend/alembic/**"
