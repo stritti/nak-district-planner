@@ -1,4 +1,4 @@
-## [v0.11.0] - 2026-06-15
+## [v0.11.1] - 2026-06-16
 
 ### Features
 * feat: add pr-review skill for structured review comment handling (ec499a7)
@@ -25,13 +25,13 @@
 * fix(db): resolve alembic migration heads conflict and PG18 volume mount (0a6f851)
 
 ### Other Changes
+* Merge pull request #151 from stritti/dependabot/github_actions/codecov/codecov-action-7 (881f438)
+* chore: release v0.11.0 (5da1f6b)
 * chore: release v0.10.0 (f4cdf03)
+* build(deps): Bump codecov/codecov-action from 6 to 7 (a158332)
 * chore: release v0.9.0 (bdee59d)
 * chore: release v0.8.0 (57ae834)
 * chore: release v0.7.0 (18c3ec4)
 * chore: release v0.6.2 (84f061d)
 * chore: release v0.6.1 (0ec4662)
 * chore: release v0.6.0 (ec47081)
-* build: upgrade postgres image version to 18-alpine in docker-compose (22418f4)
-* chore: release v0.5.1 (39b80fc)
-* refactor: extract hybrid-calendar-sync, external-event-ingestion, in-app-notifications from planning-slot-hybrid-sync (6b1e80c)
