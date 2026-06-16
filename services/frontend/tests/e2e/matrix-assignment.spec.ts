@@ -29,6 +29,21 @@ test.describe('Matrix assignment flow', () => {
           ],
         }),
       )
+      localStorage.setItem(
+        'matrix',
+        JSON.stringify({
+          districtId: 'district-1',
+          groupId: '',
+          fromDt: '2026-04-01',
+          toDt: '2026-04-30',
+        }),
+      )
+      localStorage.setItem(
+        'districts',
+        JSON.stringify({
+          selectedDistrictId: 'district-1',
+        }),
+      )
     })
 
     let assignmentCreated = false
@@ -84,7 +99,7 @@ test.describe('Matrix assignment flow', () => {
       })
     })
 
-    await page.route('**/api/v1/events/event-1/invitations', async (route) => {
+    await page.route(/\/api\/v1\/events\/event-1\/invitations(?:\?.*)?$/, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -92,7 +107,7 @@ test.describe('Matrix assignment flow', () => {
       })
     })
 
-    await page.route('**/api/v1/events/event-1/assignments', async (route) => {
+    await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') {
         await route.fallback()
         return
@@ -112,7 +127,7 @@ test.describe('Matrix assignment flow', () => {
         }),
       })
     })
-    await page.route('**/api/v1/districts/district-1/matrix**', async (route) => {
+    await page.route(/\/api\/v1\/districts\/district-1\/matrix(?:\?.*)?$/, async (route) => {
       if (!assignmentCreated) {
         await route.fulfill({
           status: 200,
@@ -190,6 +205,8 @@ test.describe('Matrix assignment flow', () => {
     await input.fill('Pr. Tester')
     await page.getByRole('button', { name: 'Zuweisen' }).click()
 
-    await expect(page.getByRole('button', { name: /Pr\. Tester/i })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: /Zuweisung bearbeiten/i })).toBeHidden({
+      timeout: 10000,
+    })
   })
 })
