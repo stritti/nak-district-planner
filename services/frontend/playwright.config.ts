@@ -12,7 +12,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'bun run preview',
+    command: 'vite preview --port 5173',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     cwd: '.',
