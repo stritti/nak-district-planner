@@ -17,7 +17,8 @@ from app.config import Settings, production_guard
 
 def _valid_prod_settings(**overrides: object) -> Settings:
     """Helper: return a Settings object with all OIDC fields set to valid
-    production values.  Individual fields can be overridden for testing."""
+    production values.  Individual fields can be overridden for testing.
+    """
     kwargs: dict = {
         "app_env": "production",
         "secret_key": "a-32-char-string-abcdef1234567890",

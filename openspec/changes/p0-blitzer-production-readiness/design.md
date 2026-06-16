@@ -58,7 +58,7 @@ Der NAK District Planner hat eine solide RBAC-Grundlage (`permissions.py`, `Memb
 **Entscheidung:** Ein neues Testmodul `tests/integration/test_cross_tenant_isolation.py` mit parametrisierten Tests.
 
 **Testmuster:**
-```
+```text
 Gegeben: User_A (Bezirk A, Rolle X)
   + User_B (Bezirk B, Rolle X)
   + District A + Congregation A1
