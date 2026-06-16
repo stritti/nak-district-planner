@@ -393,12 +393,12 @@ async def test_service_assignment_not_found_paths() -> None:
         sa_repo.get.return_value = None
         sa_repo_cls.return_value = sa_repo
         with pytest.raises(HTTPException):
-                await sa_router.delete_assignment(
-                    uuid.uuid4(),
-                    uuid.uuid4(),
-                    type("A", (), {"memberships": [], "user": None})(),
-                    AsyncMock(),
-                )
+            await sa_router.delete_assignment(
+                uuid.uuid4(),
+                uuid.uuid4(),
+                type("A", (), {"memberships": [], "user": None})(),
+                AsyncMock(),
+            )
 
 
 @pytest.mark.asyncio

@@ -5,14 +5,13 @@ All HTTP calls are mocked — no network needed.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash
-
 
 CREDS_BASIC = {"url": "https://caldav.example.com/cal/", "username": "user", "password": "pass"}
 CREDS_BEARER = {"url": "https://caldav.example.com/cal/", "access_token": "tok"}
@@ -40,6 +39,7 @@ def _mock_xml_response(body: str, status: int = 200) -> AsyncMock:
 
 
 # ── _content_hash ──────────────────────────────────────────────────────────────
+
 
 class TestContentHash:
     def test_deterministic(self):
@@ -219,6 +219,7 @@ END:VCALENDAR</C:calendar-data>
 
 # ── Test _format_datetime ─────────────────────────────────────────────────────
 
+
 class TestFormatDatetime:
     def test_format_utc_datetime(self):
         connector = CalDAVConnector(client=AsyncMock())
@@ -242,6 +243,7 @@ class TestFormatDatetime:
 
 
 # ── Test fetch_events ─────────────────────────────────────────────────────────
+
 
 class TestFetchEvents:
     async def test_basic_event_parsed_correctly(self):

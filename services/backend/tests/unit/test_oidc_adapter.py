@@ -516,17 +516,21 @@ class TestExtractUserInfoEdgeCases:
         assert result["email"] == "user-123@oidc.local"
 
     def test_email_falls_back_to_oidc_local(self, oidc_adapter):
-        result = oidc_adapter.extract_user_info({
-            "sub": "user-456",
-            "preferred_username": "jane",
-        })
+        result = oidc_adapter.extract_user_info(
+            {
+                "sub": "user-456",
+                "preferred_username": "jane",
+            }
+        )
         assert result["email"] == "user-456@oidc.local"
 
     def test_email_from_username_with_at(self, oidc_adapter):
-        result = oidc_adapter.extract_user_info({
-            "sub": "user-789",
-            "preferred_username": "jane@work.com",
-        })
+        result = oidc_adapter.extract_user_info(
+            {
+                "sub": "user-789",
+                "preferred_username": "jane@work.com",
+            }
+        )
         assert result["email"] == "jane@work.com"
 
 

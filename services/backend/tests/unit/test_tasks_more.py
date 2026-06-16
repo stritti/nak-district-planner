@@ -51,9 +51,7 @@ class TestCheckVersionTask:
         # patch at the defining module, not at app.application.tasks.
         with (
             patch("app.adapters.version_check.cache.version_cache", mock_cache),
-            patch(
-                "app.adapters.version_check.ghcr.GhcrTagFetcher", return_value=mock_fetcher
-            ) as _,
+            patch("app.adapters.version_check.ghcr.GhcrTagFetcher", return_value=mock_fetcher) as _,
             patch("app.config.settings") as mock_settings,
         ):
             mock_settings.app_version = "v0.8.0"
