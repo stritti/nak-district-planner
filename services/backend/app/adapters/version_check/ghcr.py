@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Sequence
+from collections.abc import Sequence
 
 import httpx
 
@@ -37,6 +37,7 @@ class SemVer:
         )
 
     def __str__(self) -> str:
+        """Return string representation as 'major.minor.patch'."""
         return f"{self.major}.{self.minor}.{self.patch}"
 
 
