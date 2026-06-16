@@ -24,6 +24,10 @@ test.describe('Event list CRUD', () => {
   })
 
   test('renders event list with mocked data', async ({ page }) => {
+    // Catch-all registered FIRST → lowest priority (runs last in Playwright's reverse order)
+    await page.route('**/api/v1/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
     await page.route('**/api/v1/events**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -54,10 +58,6 @@ test.describe('Event list CRUD', () => {
         contentType: 'application/json',
         body: JSON.stringify([{ id: 'district-1', name: 'Bezirk Test' }]),
       })
-    })
-    // Catch-all for any unmocked API endpoints (congregations, groups, etc.)
-    await page.route('**/api/v1/**', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
 
     await page.goto(`${FRONTEND_URL}/events`)

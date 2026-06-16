@@ -33,6 +33,11 @@ test.describe('Matrix assignment flow', () => {
 
     let matrixCalls = 0
 
+    // Catch-all registered FIRST → lowest priority (runs last in Playwright's reverse order)
+    await page.route('**/api/v1/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+
     await page.route('**/api/v1/districts', async (route) => {
       await route.fulfill({
         status: 200,
@@ -175,11 +180,6 @@ test.describe('Matrix assignment flow', () => {
           ],
         }),
       })
-    })
-
-    // Catch-all for any unmocked API endpoints (last, after all specific mocks)
-    await page.route('**/api/v1/**', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
 
     await page.goto(`${FRONTEND_URL}/matrix`)
