@@ -247,11 +247,14 @@ async def update_congregation(
     congregation = await repo.get(congregation_id)
     if not congregation or congregation.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gemeinde nicht gefunden")
+    # Determine if request comes through congregation_admin fallback
+    is_congregation_scoped = False
     try:
         try:
             assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
         except PermissionError:
             assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, congregation_id)
+            is_congregation_scoped = True
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     if body.name is not None:
@@ -259,6 +262,11 @@ async def update_congregation(
     if body.service_times is not None:
         congregation.service_times = [st.model_dump() for st in body.service_times]
     if "group_id" in body.model_fields_set:
+        if is_congregation_scoped:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Nur DISTRICT_ADMIN darf die Gruppenzugehörigkeit ändern",
+            )
         await _validate_group_assignment(db, district_id, body.group_id)
         congregation.group_id = body.group_id
     if "invitation_target_type" in body.model_fields_set:

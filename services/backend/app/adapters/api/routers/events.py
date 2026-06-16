@@ -45,6 +45,14 @@ async def create_event(
             # Try congregation_admin first, fall back to district-level PLANNER+
             try:
                 assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, body.congregation_id)
+                # Validate congregation belongs to the specified district
+                cong_repo = SqlCongregationRepository(db)
+                congregation = await cong_repo.get(body.congregation_id)
+                if congregation is None or congregation.district_id != body.district_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Gemeinde nicht gefunden",
+                    )
             except PermissionError:
                 assert_has_role_in_district(auth, Role.PLANNER, body.district_id)
         else:

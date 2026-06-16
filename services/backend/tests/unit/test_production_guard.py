@@ -128,3 +128,37 @@ def test_production_guard_idp_provisioning_valid() -> None:
         idp_provisioning_endpoint="https://idp.example.com/provision",
     )
     production_guard(settings)  # should not raise
+
+
+# ── IDP provisioning: keycloak provider ────────────────────────────────────
+
+def test_production_guard_idp_keycloak_missing_config() -> None:
+    """Keycloak provider requires keycloak-specific fields, not webhook fields."""
+    settings = _valid_prod_settings(
+        idp_provisioning_enabled=True,
+        idp_provisioning_provider="keycloak",
+        idp_provisioning_keycloak_base_url="",
+        idp_provisioning_keycloak_realm="",
+        idp_provisioning_keycloak_admin_password="",
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        production_guard(settings)
+    msg = str(exc_info.value)
+    assert "IDP_PROVISIONING_KEYCLOAK_BASE_URL" in msg
+    assert "IDP_PROVISIONING_KEYCLOAK_REALM" in msg
+    assert "IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD" in msg
+    # Webhook-specific fields should NOT be required for keycloak
+    assert "IDP_PROVISIONING_API_KEY" not in msg
+    assert "IDP_PROVISIONING_ENDPOINT" not in msg
+
+
+def test_production_guard_idp_keycloak_valid() -> None:
+    """Valid keycloak config passes without errors."""
+    settings = _valid_prod_settings(
+        idp_provisioning_enabled=True,
+        idp_provisioning_provider="keycloak",
+        idp_provisioning_keycloak_base_url="https://keycloak.example.com",
+        idp_provisioning_keycloak_realm="nak-planner",
+        idp_provisioning_keycloak_admin_password="strong-admin-password-123",
+    )
+    production_guard(settings)  # should not raise

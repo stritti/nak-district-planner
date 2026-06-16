@@ -21,6 +21,7 @@ from app.adapters.auth.permissions import (
     assert_has_role_in_district,
 )
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.application.crypto import CryptoError, encrypt_credentials
 from app.application.sync_service import run_sync
 from app.domain.models.calendar_integration import CalendarIntegration
@@ -57,6 +58,14 @@ async def create_calendar_integration(
         if body.congregation_id is not None:
             try:
                 assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, body.congregation_id)
+                # Validate congregation belongs to the specified district
+                cong_repo = SqlCongregationRepository(db)
+                congregation = await cong_repo.get(body.congregation_id)
+                if congregation is None or congregation.district_id != body.district_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Gemeinde nicht gefunden",
+                    )
             except PermissionError:
                 assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
         else:
