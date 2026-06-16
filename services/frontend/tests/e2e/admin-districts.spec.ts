@@ -38,7 +38,15 @@ test.describe('Districts admin view', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([{ id: 'c1', name: 'Gemeinde A', district_id: 'd1' }]),
+        body: JSON.stringify([{
+          id: 'c1',
+          name: 'Gemeinde A',
+          district_id: 'd1',
+          group_id: null,
+          service_times: [],
+          created_at: '2026-06-01T00:00:00Z',
+          updated_at: '2026-06-01T00:00:00Z',
+        }]),
       })
     })
     await page.route('**/api/v1/districts/*/groups', async (route) => {

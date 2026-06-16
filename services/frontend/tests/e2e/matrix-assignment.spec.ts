@@ -31,7 +31,7 @@ test.describe('Matrix assignment flow', () => {
       )
     })
 
-    let matrixCalls = 0
+    let assignmentCreated = false
 
     // Catch-all registered FIRST → lowest priority (runs last in Playwright's reverse order)
     await page.route('**/api/v1/**', async (route) => {
@@ -97,6 +97,7 @@ test.describe('Matrix assignment flow', () => {
         await route.fallback()
         return
       }
+      assignmentCreated = true
       await route.fulfill({
         status: 201,
         contentType: 'application/json',
@@ -111,10 +112,9 @@ test.describe('Matrix assignment flow', () => {
         }),
       })
     })
-
     await page.route('**/api/v1/districts/district-1/matrix**', async (route) => {
-      matrixCalls += 1
-      if (matrixCalls === 1) {
+    await page.route('**/api/v1/districts/district-1/matrix**', async (route) => {
+      if (!assignmentCreated) {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -184,13 +184,13 @@ test.describe('Matrix assignment flow', () => {
 
     await page.goto(`${FRONTEND_URL}/matrix`)
 
-    await expect(page.getByRole('button', { name: /Gottesdienst/i })).toBeVisible({ timeout: 10000 })
-    await page.getByRole('button', { name: /Gottesdienst/i }).click()
+    await expect(page.getByRole('button', { name: /LÜCKE/i })).toBeVisible({ timeout: 10000 })
+    await page.getByRole('button', { name: /LÜCKE/i }).click()
 
     const input = page.getByPlaceholder(/Name eingeben/i)
     await input.fill('Pr. Tester')
     await page.getByRole('button', { name: 'Zuweisen' }).click()
 
-    await expect(page.getByText('Pr. Tester')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('button', { name: /Pr\. Tester/i })).toBeVisible({ timeout: 10000 })
   })
 })

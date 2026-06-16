@@ -61,6 +61,8 @@ test.describe('Event list CRUD', () => {
     })
 
     await page.goto(`${FRONTEND_URL}/events`)
-    await expect(page.getByText('Gottesdienst')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('cell', { name: 'Gottesdienst' }).first()).toBeVisible({
+      timeout: 10000,
+    })
   })
 })
