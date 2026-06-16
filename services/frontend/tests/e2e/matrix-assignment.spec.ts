@@ -208,5 +208,9 @@ test.describe('Matrix assignment flow', () => {
     await expect(page.getByRole('heading', { name: /Zuweisung bearbeiten/i })).toBeHidden({
       timeout: 10000,
     })
+
+    // Verify the gap is gone and the assigned leader is visible
+    await expect(page.getByRole('button', { name: /LÜCKE/i })).toBeHidden({ timeout: 10000 })
+    await expect(page.getByText('Pr. Tester')).toBeVisible({ timeout: 10000 })
   })
 })
