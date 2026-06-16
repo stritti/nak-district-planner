@@ -10,6 +10,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: write
+
 env:
   PYTHON_VERSION: "3.13"
   BUN_VERSION: "1.2"
@@ -103,6 +107,44 @@ jobs:
             exit 1
           fi
           echo "✅ Coverage ${TOTAL_COVERAGE}% meets 80% threshold"
+
+      - name: Post coverage report to PR
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COVERAGE="${TOTAL_COVERAGE:-unknown}"
+          if [ "$COVERAGE" -lt 80 ] 2>/dev/null; then
+            ICON="❌"
+            STATUS="below threshold (80%)"
+          else
+            ICON="✅"
+            STATUS="meets threshold (80%)"
+          fi
+          BODY="## Backend Test Coverage
+          | Metric | Value |
+          |--------|-------|
+          | **Coverage** | ${COVERAGE}% |
+          | **Status** | ${ICON} ${STATUS} |
+
+          _Reported by CI workflow_"
+
+          # Find existing coverage comment by this bot
+          COMMENT_ID=$(gh api \
+            repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## Backend Test Coverage"))) | .id' \
+            | head -1)
+
+          if [ -n "$COMMENT_ID" ]; then
+            gh api \
+              repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
+              -X PATCH \
+              -f body="$BODY" \
+              --silent
+          else
+            gh pr comment ${{ github.event.pull_request.number }} \
+              --body "$BODY"
+          fi
 
   frontend-tests:
     name: Frontend — Unit Tests
