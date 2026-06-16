@@ -400,3 +400,97 @@ async def test_invitation_not_found_paths() -> None:
                 auth,
                 AsyncMock(),
             )
+
+
+@pytest.mark.asyncio
+async def test_list_calendar_integrations_congregation_scoped() -> None:
+    """Congregation admin can list integrations for their congregation."""
+    congregation_id = uuid.uuid4()
+    district_id = uuid.uuid4()
+    integration = CalendarIntegration.create(
+        district_id=district_id,
+        congregation_id=congregation_id,
+        name="Cong ICS",
+        type=CalendarType.ICS,
+        credentials_enc="enc",
+        capabilities=[CalendarCapability.READ],
+    )
+    db = AsyncMock()
+    auth = type("A", (), {"memberships": [], "user_sub": "u"})()
+
+    with (
+        patch("app.adapters.api.routers.calendar_integrations.assert_has_role_in_congregation"),
+        patch(
+            "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
+        ) as repo_cls,
+    ):
+        repo = AsyncMock()
+        repo.list_by_congregation.return_value = [integration]
+        repo_cls.return_value = repo
+
+        listed = await ci_router.list_calendar_integrations(
+            auth, db, congregation_id=congregation_id
+        )
+
+    assert listed.total == 1
+    assert listed.items[0].congregation_id == congregation_id
+
+
+@pytest.mark.asyncio
+async def test_list_calendar_integrations_congregation_scoped_validates_district() -> None:
+    """When both congregation_id and district_id are provided, congregation must belong to district."""
+    congregation_id = uuid.uuid4()
+    other_district_id = uuid.uuid4()
+    db = AsyncMock()
+    auth = type("A", (), {"memberships": [], "user_sub": "u"})()
+
+    with (
+        patch("app.adapters.api.routers.calendar_integrations.assert_has_role_in_congregation"),
+        patch(
+            "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
+        ) as repo_cls,
+        patch(
+            "app.adapters.api.routers.calendar_integrations.SqlCongregationRepository"
+        ) as cong_repo_cls,
+    ):
+        repo = AsyncMock()
+        repo_cls.return_value = repo
+        cong_repo = AsyncMock()
+        # congregation belongs to a different district
+        cong_repo.get.return_value = type("C", (), {"district_id": uuid.uuid4()})()
+        cong_repo_cls.return_value = cong_repo
+
+        with pytest.raises(HTTPException) as exc:
+            await ci_router.list_calendar_integrations(
+                auth,
+                db,
+                district_id=other_district_id,
+                congregation_id=congregation_id,
+            )
+
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_calendar_integrations_congregation_scoped_forbidden() -> None:
+    """Non-congregation-admin is forbidden from congregation-scoped listing."""
+    congregation_id = uuid.uuid4()
+    db = AsyncMock()
+    auth = type("A", (), {"memberships": [], "user_sub": "u"})()
+
+    with (
+        patch(
+            "app.adapters.api.routers.calendar_integrations.assert_has_role_in_congregation",
+            side_effect=ci_router.PermissionError("no permission"),
+        ),
+        patch(
+            "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
+        ) as repo_cls,
+    ):
+        repo = AsyncMock()
+        repo_cls.return_value = repo
+
+        with pytest.raises(HTTPException) as exc:
+            await ci_router.list_calendar_integrations(auth, db, congregation_id=congregation_id)
+
+    assert exc.value.status_code == 403

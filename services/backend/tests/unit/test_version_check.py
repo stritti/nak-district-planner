@@ -133,7 +133,9 @@ class TestGhcrTagFetcher:
         fetcher = GhcrTagFetcher(owner="test", repo="test")
 
         with patch("httpx.Client") as mock_client:
-            mock_client.return_value.__enter__.return_value.get.side_effect = Exception("Connection error")
+            mock_client.return_value.__enter__.return_value.get.side_effect = Exception(
+                "Connection error"
+            )
             tags = fetcher.fetch_tags("backend")
 
         assert tags == []
@@ -160,7 +162,9 @@ class TestCheckVersionTask:
         from app.application.tasks import check_version
 
         with (
-            patch("app.adapters.version_check.ghcr.GhcrTagFetcher.fetch_latest_version") as mock_fetch,
+            patch(
+                "app.adapters.version_check.ghcr.GhcrTagFetcher.fetch_latest_version"
+            ) as mock_fetch,
             patch("app.adapters.version_check.cache.version_cache.set") as mock_set,
         ):
             mock_fetch.return_value = "0.5.0"
@@ -174,7 +178,9 @@ class TestCheckVersionTask:
         from app.application.tasks import check_version
 
         with (
-            patch("app.adapters.version_check.ghcr.GhcrTagFetcher.fetch_latest_version") as mock_fetch,
+            patch(
+                "app.adapters.version_check.ghcr.GhcrTagFetcher.fetch_latest_version"
+            ) as mock_fetch,
             patch("app.adapters.version_check.cache.version_cache.set") as mock_set,
         ):
             mock_fetch.return_value = None

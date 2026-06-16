@@ -94,24 +94,39 @@ async def list_calendar_integrations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     district_id: uuid.UUID | None = None,
+    congregation_id: uuid.UUID | None = None,
 ) -> CalendarIntegrationListResponse:
-    if district_id is None and not auth.user.is_superadmin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="district_id ist erforderlich, außer für Superadmin.",
-        )
+    repo = SqlCalendarIntegrationRepository(db)
 
-    if district_id is not None:
+    if congregation_id is not None:
+        # Congregation-scoped listing: require CONGREGATION_ADMIN for that congregation
+        try:
+            assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, congregation_id)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        # When district_id is also provided, validate the congregation belongs to it
+        if district_id is not None:
+            cong_repo = SqlCongregationRepository(db)
+            congregation = await cong_repo.get(congregation_id)
+            if congregation is None or congregation.district_id != district_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Gemeinde nicht gefunden",
+                )
+        items = await repo.list_by_congregation(congregation_id)
+    elif district_id is not None:
         try:
             assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
         except PermissionError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
-
-    repo = SqlCalendarIntegrationRepository(db)
-    if district_id is not None:
         items = await repo.list_by_district(district_id)
-    else:
+    elif auth.user.is_superadmin:
         items = await repo.list_active()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="district_id oder congregation_id ist erforderlich, außer für Superadmin.",
+        )
     return CalendarIntegrationListResponse(
         items=[_to_response(i) for i in items],
         total=len(items),
@@ -171,7 +186,9 @@ async def update_calendar_integration(
     try:
         if integration.congregation_id is not None:
             try:
-                assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, integration.congregation_id)
+                assert_has_role_in_congregation(
+                    auth, Role.CONGREGATION_ADMIN, integration.congregation_id
+                )
             except PermissionError:
                 assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
         else:
@@ -213,7 +230,9 @@ async def delete_calendar_integration(
     try:
         if integration.congregation_id is not None:
             try:
-                assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, integration.congregation_id)
+                assert_has_role_in_congregation(
+                    auth, Role.CONGREGATION_ADMIN, integration.congregation_id
+                )
             except PermissionError:
                 assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
         else:

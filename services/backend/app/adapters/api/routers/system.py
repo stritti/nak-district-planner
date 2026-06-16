@@ -23,10 +23,7 @@ router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
 def _build_release_url(version: str) -> str:
     """Build the GitHub release URL for a given version."""
-    return (
-        f"https://github.com/{settings.ghcr_owner}/{settings.ghcr_repo}"
-        f"/releases/tag/v{version}"
-    )
+    return f"https://github.com/{settings.ghcr_owner}/{settings.ghcr_repo}/releases/tag/v{version}"
 
 
 @router.get("/version", response_model=SystemVersionResponse)
@@ -95,8 +92,7 @@ async def trigger_update(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=(
-                    "DOCKER_COMPOSE_DIR is not configured. "
-                    "Set it to the project root directory."
+                    "DOCKER_COMPOSE_DIR is not configured. Set it to the project root directory."
                 ),
             )
         from app.application.tasks import trigger_docker_update

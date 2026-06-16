@@ -95,65 +95,77 @@ def production_guard(settings: Settings) -> None:
     ):
         errors.append(
             "SECRET_KEY must be changed from the default value "
-            "(generate one with: python -c \"import secrets; print(secrets.token_hex(32))\")"
+            '(generate one with: python -c "import secrets; print(secrets.token_hex(32))")'
         )
     if len(settings.secret_key) < 32:
-        errors.append(
-            f"SECRET_KEY is too short ({len(settings.secret_key)} chars, minimum 32)"
-        )
+        errors.append(f"SECRET_KEY is too short ({len(settings.secret_key)} chars, minimum 32)")
 
     # OIDC_CLIENT_SECRET must not be a placeholder
     if settings.oidc_client_secret in (
         "replace-with-oidc-client-secret",
         "",
     ):
-        errors.append(
-            "OIDC_CLIENT_SECRET must be changed from the default value"
-        )
+        errors.append("OIDC_CLIENT_SECRET must be changed from the default value")
 
     # OIDC discovery URL
     if settings.oidc_discovery_url in (
         "https://oidc.example.com/.well-known/openid-configuration",
         "",
     ):
-        errors.append(
-            "OIDC_DISCOVERY_URL must be changed from the default value"
-        )
+        errors.append("OIDC_DISCOVERY_URL must be changed from the default value")
     if not settings.oidc_discovery_url.startswith("https://"):
-        errors.append(
-            "OIDC_DISCOVERY_URL should use HTTPS in production"
-        )
+        errors.append("OIDC_DISCOVERY_URL should use HTTPS in production")
 
     # OIDC client ID
     if settings.oidc_client_id in (
         "replace-with-oidc-client-id",
         "",
     ):
-        errors.append(
-            "OIDC_CLIENT_ID must be changed from the default value"
-        )
+        errors.append("OIDC_CLIENT_ID must be changed from the default value")
 
     # IDP provisioning secrets — validate only the fields relevant to the selected provider
     if settings.idp_provisioning_enabled:
         if settings.idp_provisioning_provider == "webhook":
             if settings.idp_provisioning_api_key in (None, ""):
-                errors.append("IDP_PROVISIONING_API_KEY must be configured when provisioning is enabled")
+                errors.append(
+                    "IDP_PROVISIONING_API_KEY must be configured when provisioning is enabled"
+                )
             if not settings.idp_provisioning_endpoint:
-                errors.append("IDP_PROVISIONING_ENDPOINT must be configured when provisioning is enabled")
-            if settings.idp_provisioning_endpoint and not settings.idp_provisioning_endpoint.startswith("https://"):
+                errors.append(
+                    "IDP_PROVISIONING_ENDPOINT must be configured when provisioning is enabled"
+                )
+            if (
+                settings.idp_provisioning_endpoint
+                and not settings.idp_provisioning_endpoint.startswith("https://")
+            ):
                 errors.append("IDP_PROVISIONING_ENDPOINT should use HTTPS in production")
         elif settings.idp_provisioning_provider == "keycloak":
             if not settings.idp_provisioning_keycloak_base_url:
-                errors.append("IDP_PROVISIONING_KEYCLOAK_BASE_URL must be configured when using keycloak provider")
+                errors.append(
+                    "IDP_PROVISIONING_KEYCLOAK_BASE_URL must be configured when using keycloak provider"
+                )
             if not settings.idp_provisioning_keycloak_realm:
-                errors.append("IDP_PROVISIONING_KEYCLOAK_REALM must be configured when using keycloak provider")
-            if settings.idp_provisioning_keycloak_admin_password in (None, "", "replace-with-admin-password"):
-                errors.append("IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD must be changed from the default value")
+                errors.append(
+                    "IDP_PROVISIONING_KEYCLOAK_REALM must be configured when using keycloak provider"
+                )
+            if not settings.idp_provisioning_keycloak_admin_username:
+                errors.append(
+                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME must be configured when using keycloak provider"
+                )
+            if settings.idp_provisioning_keycloak_admin_password in (
+                None,
+                "",
+                "replace-with-admin-password",
+            ):
+                errors.append(
+                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD must be changed from the default value"
+                )
 
     if errors:
         raise RuntimeError(
             f"Production configuration check failed — {len(errors)} issue(s):\n"
             + "\n".join(f"  • {e}" for e in errors)
         )
+
 
 settings = Settings()
