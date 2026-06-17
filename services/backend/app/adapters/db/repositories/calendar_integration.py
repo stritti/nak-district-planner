@@ -72,6 +72,14 @@ class SqlCalendarIntegrationRepository(CalendarIntegrationRepository):
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
+    async def list_by_congregation(self, congregation_id: uuid.UUID) -> list[CalendarIntegration]:
+        result = await self._session.execute(
+            select(CalendarIntegrationORM)
+            .where(CalendarIntegrationORM.congregation_id == congregation_id)
+            .order_by(CalendarIntegrationORM.name)
+        )
+        return [_orm_to_domain(r) for r in result.scalars().all()]
+
     async def list_active(self) -> list[CalendarIntegration]:
         result = await self._session.execute(
             select(CalendarIntegrationORM)

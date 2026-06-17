@@ -23,8 +23,9 @@ def _valid_prod_settings(**overrides: object) -> Settings:
         "app_env": "production",
         "secret_key": "a-32-char-string-abcdef1234567890",
         "oidc_client_secret": "a-very-secret-client-secret-12345",
-        "oidc_discovery_url": ("https://auth.example.com/realms/nak-planner/"
-                               ".well-known/openid-configuration"),
+        "oidc_discovery_url": (
+            "https://auth.example.com/realms/nak-planner/.well-known/openid-configuration"
+        ),
         "oidc_client_id": "nak-planner-backend",
     }
     kwargs.update(overrides)
@@ -33,10 +34,12 @@ def _valid_prod_settings(**overrides: object) -> Settings:
 
 # ── SECRET_KEY ──────────────────────────────────────────────────────────────
 
+
 def test_production_guard_skipped_in_dev() -> None:
     """production_guard does nothing when APP_ENV is not 'production'."""
-    settings = _valid_prod_settings(app_env="development",
-                                    secret_key="replace-with-a-long-random-secret-key")
+    settings = _valid_prod_settings(
+        app_env="development", secret_key="replace-with-a-long-random-secret-key"
+    )
     production_guard(settings)  # should not raise
 
 
@@ -62,6 +65,7 @@ def test_production_guard_short_secret_key() -> None:
 
 # ── OIDC discovery HTTPS (model-validator checks URL, guard checks scheme) ──
 
+
 def test_production_guard_non_https_oidc_discovery() -> None:
     settings = _valid_prod_settings(
         oidc_discovery_url="http://auth.example.com/.well-known/openid-configuration",
@@ -71,6 +75,7 @@ def test_production_guard_non_https_oidc_discovery() -> None:
 
 
 # ── Comprehensive multi-issue error ─────────────────────────────────────────
+
 
 def test_production_guard_all_defaults_at_once() -> None:
     """SECRET_KEY default + IDP misconfig produce a multi-issue error."""
@@ -90,6 +95,7 @@ def test_production_guard_all_defaults_at_once() -> None:
 
 # ── Valid config ────────────────────────────────────────────────────────────
 
+
 def test_production_guard_valid_config() -> None:
     """All valid production values pass without errors."""
     settings = _valid_prod_settings()
@@ -97,6 +103,7 @@ def test_production_guard_valid_config() -> None:
 
 
 # ── IDP provisioning ────────────────────────────────────────────────────────
+
 
 def test_production_guard_idp_provisioning_checks() -> None:
     settings = _valid_prod_settings(
@@ -132,6 +139,7 @@ def test_production_guard_idp_provisioning_valid() -> None:
 
 # ── IDP provisioning: keycloak provider ────────────────────────────────────
 
+
 def test_production_guard_idp_keycloak_missing_config() -> None:
     """Keycloak provider requires keycloak-specific fields, not webhook fields."""
     settings = _valid_prod_settings(
@@ -139,6 +147,7 @@ def test_production_guard_idp_keycloak_missing_config() -> None:
         idp_provisioning_provider="keycloak",
         idp_provisioning_keycloak_base_url="",
         idp_provisioning_keycloak_realm="",
+        idp_provisioning_keycloak_admin_username="",
         idp_provisioning_keycloak_admin_password="",
     )
     with pytest.raises(RuntimeError) as exc_info:
@@ -146,6 +155,7 @@ def test_production_guard_idp_keycloak_missing_config() -> None:
     msg = str(exc_info.value)
     assert "IDP_PROVISIONING_KEYCLOAK_BASE_URL" in msg
     assert "IDP_PROVISIONING_KEYCLOAK_REALM" in msg
+    assert "IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME" in msg
     assert "IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD" in msg
     # Webhook-specific fields should NOT be required for keycloak
     assert "IDP_PROVISIONING_API_KEY" not in msg
@@ -159,6 +169,7 @@ def test_production_guard_idp_keycloak_valid() -> None:
         idp_provisioning_provider="keycloak",
         idp_provisioning_keycloak_base_url="https://keycloak.example.com",
         idp_provisioning_keycloak_realm="nak-planner",
+        idp_provisioning_keycloak_admin_username="admin",
         idp_provisioning_keycloak_admin_password="strong-admin-password-123",
     )
     production_guard(settings)  # should not raise

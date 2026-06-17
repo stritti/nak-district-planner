@@ -308,6 +308,10 @@ class CalendarIntegrationRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_by_congregation(self, congregation_id: uuid.UUID) -> list[CalendarIntegration]:
+        pass
+
+    @abstractmethod
     async def list_active(self) -> list[CalendarIntegration]:
         """Return all active integrations — used by the Celery beat scheduler."""
         pass

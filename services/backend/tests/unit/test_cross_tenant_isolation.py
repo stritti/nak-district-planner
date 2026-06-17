@@ -31,6 +31,7 @@ def _auth(memberships: list[Membership], is_superadmin: bool = False):
 
 # ── Fixtures: two districts with congregations ──────────────────────────────
 
+
 @pytest.fixture
 def district_a() -> uuid.UUID:
     return uuid.uuid4()
@@ -54,53 +55,61 @@ def cong_b1(district_b: uuid.UUID) -> uuid.UUID:
 @pytest.fixture
 def user_a_in_a(district_a: uuid.UUID) -> _auth:
     """User_A has DISTRICT_ADMIN role in District A."""
-    return _auth([
-        Membership.create(
-            user_sub="oidc|user_a",
-            role=Role.DISTRICT_ADMIN,
-            scope_type=ScopeType.DISTRICT,
-            scope_id=district_a,
-        ),
-    ])
+    return _auth(
+        [
+            Membership.create(
+                user_sub="oidc|user_a",
+                role=Role.DISTRICT_ADMIN,
+                scope_type=ScopeType.DISTRICT,
+                scope_id=district_a,
+            ),
+        ]
+    )
 
 
 @pytest.fixture
 def user_b_in_b(district_b: uuid.UUID) -> _auth:
     """User_B has DISTRICT_ADMIN role in District B."""
-    return _auth([
-        Membership.create(
-            user_sub="oidc|user_b",
-            role=Role.DISTRICT_ADMIN,
-            scope_type=ScopeType.DISTRICT,
-            scope_id=district_b,
-        ),
-    ])
+    return _auth(
+        [
+            Membership.create(
+                user_sub="oidc|user_b",
+                role=Role.DISTRICT_ADMIN,
+                scope_type=ScopeType.DISTRICT,
+                scope_id=district_b,
+            ),
+        ]
+    )
 
 
 @pytest.fixture
 def user_a_planner_in_a(district_a: uuid.UUID) -> _auth:
     """User_A_planner has PLANNER role in District A."""
-    return _auth([
-        Membership.create(
-            user_sub="oidc|user_a_planner",
-            role=Role.PLANNER,
-            scope_type=ScopeType.DISTRICT,
-            scope_id=district_a,
-        ),
-    ])
+    return _auth(
+        [
+            Membership.create(
+                user_sub="oidc|user_a_planner",
+                role=Role.PLANNER,
+                scope_type=ScopeType.DISTRICT,
+                scope_id=district_a,
+            ),
+        ]
+    )
 
 
 @pytest.fixture
 def user_a_viewer_in_a(district_a: uuid.UUID) -> _auth:
     """User_A_viewer has VIEWER role in District A."""
-    return _auth([
-        Membership.create(
-            user_sub="oidc|user_a_viewer",
-            role=Role.VIEWER,
-            scope_type=ScopeType.DISTRICT,
-            scope_id=district_a,
-        ),
-    ])
+    return _auth(
+        [
+            Membership.create(
+                user_sub="oidc|user_a_viewer",
+                role=Role.VIEWER,
+                scope_type=ScopeType.DISTRICT,
+                scope_id=district_a,
+            ),
+        ]
+    )
 
 
 @pytest.fixture
@@ -117,17 +126,14 @@ def superadmin() -> _auth:
 
 # ── 3.2 Cross-Tenant Read Tests ──────────────────────────────────────────────
 
+
 class TestCrossTenantReadAccess:
     """Users must NOT be able to read resources from other tenants."""
 
-    def test_user_a_cannot_read_district_b(
-        self, user_a_in_a: _auth, district_b: uuid.UUID
-    ) -> None:
+    def test_user_a_cannot_read_district_b(self, user_a_in_a: _auth, district_b: uuid.UUID) -> None:
         assert not has_role_in_district(user_a_in_a, Role.VIEWER, district_b)
 
-    def test_user_b_cannot_read_district_a(
-        self, user_b_in_b: _auth, district_a: uuid.UUID
-    ) -> None:
+    def test_user_b_cannot_read_district_a(self, user_b_in_b: _auth, district_a: uuid.UUID) -> None:
         assert not has_role_in_district(user_b_in_b, Role.VIEWER, district_a)
 
     def test_user_a_assert_fails_for_district_b(
@@ -156,6 +162,7 @@ class TestCrossTenantReadAccess:
 
 
 # ── 3.3 Cross-Tenant Write Tests ─────────────────────────────────────────────
+
 
 class TestCrossTenantWriteAccess:
     """Users must NOT be able to write/modify resources from other tenants."""
@@ -190,6 +197,7 @@ class TestCrossTenantWriteAccess:
 
 # ── 3.4 Admin Sonderrechte Tests ─────────────────────────────────────────────
 
+
 class TestSuperadminCrossTenantAccess:
     """Superadmin MUST be able to bypass all tenant boundaries."""
 
@@ -220,6 +228,7 @@ class TestSuperadminCrossTenantAccess:
 
 # ── 3.5 Parametrisierte Tests über alle Rollen ───────────────────────────────
 
+
 class TestCrossTenantAllRoles:
     """Every role must respect tenant boundaries."""
 
@@ -230,14 +239,16 @@ class TestCrossTenantAllRoles:
         self, role: Role, district_a: uuid.UUID, district_b: uuid.UUID
     ) -> None:
         """A user with ANY role in District A cannot assert that role in District B."""
-        user_in_a = _auth([
-            Membership.create(
-                user_sub="oidc|x",
-                role=role,
-                scope_type=ScopeType.DISTRICT,
-                scope_id=district_a,
-            ),
-        ])
+        user_in_a = _auth(
+            [
+                Membership.create(
+                    user_sub="oidc|x",
+                    role=role,
+                    scope_type=ScopeType.DISTRICT,
+                    scope_id=district_a,
+                ),
+            ]
+        )
         # District B access must be denied for all roles
         assert not has_role_in_district(user_in_a, role, district_b)
 
@@ -248,90 +259,99 @@ class TestCrossTenantAllRoles:
         self, role: Role, district_a: uuid.UUID, cong_b1: uuid.UUID
     ) -> None:
         """A user with ANY role cannot access a congregation in another district."""
-        user_in_a = _auth([
-            Membership.create(
-                user_sub="oidc|x",
-                role=role,
-                scope_type=ScopeType.DISTRICT,
-                scope_id=district_a,
-            ),
-        ])
+        user_in_a = _auth(
+            [
+                Membership.create(
+                    user_sub="oidc|x",
+                    role=role,
+                    scope_type=ScopeType.DISTRICT,
+                    scope_id=district_a,
+                ),
+            ]
+        )
         assert not has_role_in_congregation(user_in_a, role, cong_b1)
 
-    @pytest.mark.parametrize(
-        "role", [Role.VIEWER, Role.PLANNER]
-    )
+    @pytest.mark.parametrize("role", [Role.VIEWER, Role.PLANNER])
     def test_lower_roles_cannot_assert_higher_role_in_own_tenant(
         self, role: Role, district_a: uuid.UUID
     ) -> None:
         """A user with a lower role cannot assert a higher role, even in their own tenant."""
-        user_in_a = _auth([
-            Membership.create(
-                user_sub="oidc|x",
-                role=role,
-                scope_type=ScopeType.DISTRICT,
-                scope_id=district_a,
-            ),
-        ])
+        user_in_a = _auth(
+            [
+                Membership.create(
+                    user_sub="oidc|x",
+                    role=role,
+                    scope_type=ScopeType.DISTRICT,
+                    scope_id=district_a,
+                ),
+            ]
+        )
         assert not has_role_in_district(user_in_a, Role.DISTRICT_ADMIN, district_a)
 
 
 # ── Congregation-level scoping ───────────────────────────────────────────────
 
+
 class TestCongregationLevelScoping:
     """CONGREGATION_ADMIN must be limited to their own congregation."""
 
-    def test_congregation_admin_own_congregation(
-        self, cong_a1: uuid.UUID
-    ) -> None:
-        user = _auth([
-            Membership.create(
-                user_sub="oidc|x",
-                role=Role.CONGREGATION_ADMIN,
-                scope_type=ScopeType.CONGREGATION,
-                scope_id=cong_a1,
-            ),
-        ])
+    def test_congregation_admin_own_congregation(self, cong_a1: uuid.UUID) -> None:
+        user = _auth(
+            [
+                Membership.create(
+                    user_sub="oidc|x",
+                    role=Role.CONGREGATION_ADMIN,
+                    scope_type=ScopeType.CONGREGATION,
+                    scope_id=cong_a1,
+                ),
+            ]
+        )
         assert has_role_in_congregation(user, Role.CONGREGATION_ADMIN, cong_a1)
 
     def test_congregation_admin_cannot_access_other_congregation(
         self, cong_a1: uuid.UUID, cong_b1: uuid.UUID
     ) -> None:
-        user = _auth([
-            Membership.create(
-                user_sub="oidc|x",
-                role=Role.CONGREGATION_ADMIN,
-                scope_type=ScopeType.CONGREGATION,
-                scope_id=cong_a1,
-            ),
-        ])
+        user = _auth(
+            [
+                Membership.create(
+                    user_sub="oidc|x",
+                    role=Role.CONGREGATION_ADMIN,
+                    scope_type=ScopeType.CONGREGATION,
+                    scope_id=cong_a1,
+                ),
+            ]
+        )
         assert not has_role_in_congregation(user, Role.VIEWER, cong_b1)
 
     def test_congregation_admin_cannot_access_district_level(
         self, cong_a1: uuid.UUID, district_a: uuid.UUID
     ) -> None:
         """CONGREGATION_ADMIN has no district-level authority."""
-        user = _auth([
-            Membership.create(
-                user_sub="oidc|x",
-                role=Role.CONGREGATION_ADMIN,
-                scope_type=ScopeType.CONGREGATION,
-                scope_id=cong_a1,
-            ),
-        ])
+        user = _auth(
+            [
+                Membership.create(
+                    user_sub="oidc|x",
+                    role=Role.CONGREGATION_ADMIN,
+                    scope_type=ScopeType.CONGREGATION,
+                    scope_id=cong_a1,
+                ),
+            ]
+        )
         assert not has_role_in_district(user, Role.VIEWER, district_a)
 
     def test_congregation_admin_get_congregations_own_only(
         self, cong_a1: uuid.UUID, cong_b1: uuid.UUID
     ) -> None:
-        user = _auth([
-            Membership.create(
-                user_sub="oidc|x",
-                role=Role.CONGREGATION_ADMIN,
-                scope_type=ScopeType.CONGREGATION,
-                scope_id=cong_a1,
-            ),
-        ])
+        user = _auth(
+            [
+                Membership.create(
+                    user_sub="oidc|x",
+                    role=Role.CONGREGATION_ADMIN,
+                    scope_type=ScopeType.CONGREGATION,
+                    scope_id=cong_a1,
+                ),
+            ]
+        )
         congregations = get_congregations_where_user_has_role(user, Role.VIEWER)
         assert cong_a1 in congregations
         assert cong_b1 not in congregations
