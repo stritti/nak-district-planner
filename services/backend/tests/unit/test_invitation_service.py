@@ -210,3 +210,82 @@ async def test_sync_linked_invitation_event_schedule_updates_linked_events():
         assert linked_event.start_at == moved_start
         assert linked_event.end_at == moved_end
         event_repo.save.assert_called_once_with(linked_event)
+
+
+@pytest.mark.asyncio
+async def test_delete_invitation_cancels_linked_event():
+    session = MagicMock()
+    source_event = _event(congregation_id=uuid.uuid4())
+    invitation = CongregationInvitation.create(
+        source_event_id=source_event.id,
+        source_congregation_id=source_event.congregation_id,
+        target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+        target_congregation_id=uuid.uuid4(),
+        linked_event_id=source_event.id,
+    )
+
+    with (
+        patch("app.application.invitation_service.SqlInvitationRepository") as invitation_repo_cls,
+        patch("app.application.invitation_service.SqlEventRepository") as event_repo_cls,
+    ):
+        from app.application.invitation_service import delete_invitation
+
+        invitation_repo = MagicMock()
+        invitation_repo.get = AsyncMock(return_value=invitation)
+        invitation_repo.delete = AsyncMock()
+        invitation_repo_cls.return_value = invitation_repo
+
+        event_repo = MagicMock()
+        event_repo.get = AsyncMock(return_value=source_event)
+        event_repo.save = AsyncMock()
+        event_repo_cls.return_value = event_repo
+
+        result = await delete_invitation(session, invitation_id=invitation.id)
+
+        assert result is True
+        assert source_event.status == EventStatus.CANCELLED
+        event_repo.save.assert_called_once()
+        invitation_repo.delete.assert_called_once_with(invitation.id)
+
+
+@pytest.mark.asyncio
+async def test_delete_invitation_not_found():
+    session = MagicMock()
+
+    with patch("app.application.invitation_service.SqlInvitationRepository") as invitation_repo_cls:
+        from app.application.invitation_service import delete_invitation
+
+        invitation_repo = MagicMock()
+        invitation_repo.get = AsyncMock(return_value=None)
+        invitation_repo_cls.return_value = invitation_repo
+
+        result = await delete_invitation(session, invitation_id=uuid.uuid4())
+
+        assert result is False
+        invitation_repo.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_invitation_no_linked_event():
+    session = MagicMock()
+    invitation = CongregationInvitation.create(
+        source_event_id=uuid.uuid4(),
+        source_congregation_id=uuid.uuid4(),
+        target_type=InvitationTargetType.EXTERNAL_NOTE,
+        target_congregation_id=None,
+        external_target_note="External note",
+        linked_event_id=None,
+    )
+
+    with patch("app.application.invitation_service.SqlInvitationRepository") as invitation_repo_cls:
+        from app.application.invitation_service import delete_invitation
+
+        invitation_repo = MagicMock()
+        invitation_repo.get = AsyncMock(return_value=invitation)
+        invitation_repo.delete = AsyncMock()
+        invitation_repo_cls.return_value = invitation_repo
+
+        result = await delete_invitation(session, invitation_id=invitation.id)
+
+        assert result is True
+        invitation_repo.delete.assert_called_once_with(invitation.id)

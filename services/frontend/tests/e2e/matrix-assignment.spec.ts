@@ -29,9 +29,58 @@ test.describe('Matrix assignment flow', () => {
           ],
         }),
       )
+      localStorage.setItem(
+        'matrix',
+        JSON.stringify({
+          districtId: 'district-1',
+          groupId: '',
+          fromDt: '2026-04-01',
+          toDt: '2026-04-30',
+        }),
+      )
+      localStorage.setItem(
+        'districts',
+        JSON.stringify({
+          selectedDistrictId: 'district-1',
+        }),
+      )
     })
 
-    let matrixCalls = 0
+    let assignmentCreated = false
+
+    // Catch-all registered FIRST → lowest priority (runs last in Playwright's reverse order)
+    await page.route('**/api/v1/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+
+    // Auth endpoints must return proper objects (the catch-all returns [] which causes errors)
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sub: 'planner-user',
+          email: 'planner@example.com',
+          username: 'planner',
+          name: 'Planner User',
+          given_name: 'Planner',
+          family_name: 'User',
+          is_superadmin: false,
+        }),
+      })
+    })
+    await page.route('**/api/v1/auth/access', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ACTIVE',
+          memberships: [
+            { role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'district-1' },
+          ],
+        }),
+      })
+    })
 
     await page.route('**/api/v1/districts', async (route) => {
       await route.fulfill({
@@ -79,7 +128,7 @@ test.describe('Matrix assignment flow', () => {
       })
     })
 
-    await page.route('**/api/v1/events/event-1/invitations', async (route) => {
+    await page.route(/\/api\/v1\/events\/event-1\/invitations(?:\?.*)?$/, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -87,11 +136,12 @@ test.describe('Matrix assignment flow', () => {
       })
     })
 
-    await page.route('**/api/v1/events/event-1/assignments', async (route) => {
+    await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') {
         await route.fallback()
         return
       }
+      assignmentCreated = true
       await route.fulfill({
         status: 201,
         contentType: 'application/json',
@@ -106,10 +156,8 @@ test.describe('Matrix assignment flow', () => {
         }),
       })
     })
-
-    await page.route('**/api/v1/districts/district-1/matrix**', async (route) => {
-      matrixCalls += 1
-      if (matrixCalls === 1) {
+    await page.route(/\/api\/v1\/districts\/district-1\/matrix(?:\?.*)?$/, async (route) => {
+      if (!assignmentCreated) {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -179,13 +227,19 @@ test.describe('Matrix assignment flow', () => {
 
     await page.goto(`${FRONTEND_URL}/matrix`)
 
-    await expect(page.getByRole('button', { name: /Gottesdienst/i })).toBeVisible({ timeout: 10000 })
-    await page.getByRole('button', { name: /Gottesdienst/i }).click()
+    await expect(page.getByRole('button', { name: /LÜCKE/i })).toBeVisible({ timeout: 10000 })
+    await page.getByRole('button', { name: /LÜCKE/i }).click()
 
     const input = page.getByPlaceholder(/Name eingeben/i)
     await input.fill('Pr. Tester')
     await page.getByRole('button', { name: 'Zuweisen' }).click()
 
+    await expect(page.getByRole('heading', { name: /Zuweisung bearbeiten/i })).toBeHidden({
+      timeout: 10000,
+    })
+
+    // Verify the gap is gone and the assigned leader is visible
+    await expect(page.getByRole('button', { name: /LÜCKE/i })).toBeHidden({ timeout: 10000 })
     await expect(page.getByText('Pr. Tester')).toBeVisible({ timeout: 10000 })
   })
 })

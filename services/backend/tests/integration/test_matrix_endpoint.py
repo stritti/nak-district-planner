@@ -12,7 +12,6 @@ from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
 from app.domain.models.event import Event
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
-from app.domain.models.user import User
 from app.main import app
 
 

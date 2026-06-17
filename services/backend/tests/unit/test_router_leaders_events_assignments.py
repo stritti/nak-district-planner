@@ -405,13 +405,6 @@ async def test_service_assignment_not_found_paths() -> None:
 async def test_event_list_filters_by_approval_status() -> None:
     district_id = uuid.uuid4()
     now = datetime.now(UTC)
-    Event.create(
-        title="Geplant",
-        start_at=now,
-        end_at=now + timedelta(hours=1),
-        district_id=district_id,
-        approval_status=EventApprovalStatus.PLANNED,
-    )
     confirmed = Event.create(
         title="Bestätigt",
         start_at=now,

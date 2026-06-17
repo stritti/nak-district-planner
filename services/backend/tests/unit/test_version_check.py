@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.adapters.version_check.cache import VersionCache
 from app.adapters.version_check.ghcr import SemVer, latest_semver, parse_semver_tags
 

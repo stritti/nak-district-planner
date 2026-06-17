@@ -1,0 +1,101 @@
+import { expect, test } from '@playwright/test'
+
+const FRONTEND_URL = 'http://localhost:5173'
+
+const ADMIN_AUTH = {
+  token: {
+    accessToken: 'admin-token',
+    idToken: 'admin-id-token',
+    expiresAt: Math.floor(Date.now() / 1000) + 3600,
+  },
+  user: { sub: 'admin-1', email: 'admin@example.com', name: 'Bezirksvorsteher' },
+  isSuperadmin: true,
+  accessStatus: 'ACTIVE' as const,
+  memberships: [
+    { role: 'DISTRICT_ADMIN', scope_type: 'DISTRICT', scope_id: 'district-1' },
+  ],
+}
+
+test.describe('Districts admin view', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript((auth) => {
+      localStorage.setItem('auth', JSON.stringify(auth))
+    }, ADMIN_AUTH)
+  })
+
+  test('renders districts list', async ({ page }) => {
+    // Catch-all registered FIRST → lowest priority (runs last in Playwright's reverse order)
+    await page.route('**/api/v1/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+
+    // Auth endpoints must return proper objects (the catch-all returns [] which causes errors)
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sub: 'admin-1',
+          email: 'admin@example.com',
+          username: 'admin',
+          name: 'Bezirksvorsteher',
+          given_name: 'Admin',
+          family_name: 'User',
+          is_superadmin: true,
+        }),
+      })
+    })
+    await page.route('**/api/v1/auth/access', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ACTIVE',
+          memberships: [
+            { role: 'DISTRICT_ADMIN', scope_type: 'DISTRICT', scope_id: 'district-1' },
+          ],
+        }),
+      })
+    })
+    // Registration overview for district admins
+    await page.route('**/api/v1/registrations/pending/overview', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ total_pending: 0 }),
+      })
+    })
+
+    await page.route('**/api/v1/districts', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { id: 'd1', name: 'Bezirk München', state_code: 'BY' },
+          { id: 'd2', name: 'Bezirk Stuttgart', state_code: 'BW' },
+        ]),
+      })
+    })
+    await page.route('**/api/v1/districts/*/congregations', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{
+          id: 'c1',
+          name: 'Gemeinde A',
+          district_id: 'd1',
+          group_id: null,
+          service_times: [],
+          created_at: '2026-06-01T00:00:00Z',
+          updated_at: '2026-06-01T00:00:00Z',
+        }]),
+      })
+    })
+    await page.route('**/api/v1/districts/*/groups', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+
+    await page.goto(`${FRONTEND_URL}/admin/districts`)
+    await expect(page.getByRole('heading', { name: /Bezirk/i })).toBeVisible({ timeout: 10000 })
+  })
+})
