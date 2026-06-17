@@ -571,25 +571,30 @@ async function saveEditCong() {
 
 onMounted(loadAll)
 
-async function loadAll() {
-  loadingDistricts.value = true
-  globalError.value = ''
-  try {
-    districts.value = await listDistricts()
-    districtsStore.districts = districts.value
-    districtsStore.ensureSelectedDistrict()
-    await Promise.all(
-      districts.value.map(async (d) => {
-        congregationsByDistrict[d.id] = await listCongregations(d.id)
-        groupsByDistrict[d.id] = await listGroups(d.id)
-      }),
-    )
-  } catch (e) {
-    globalError.value = e instanceof Error ? e.message : 'Fehler beim Laden'
-  } finally {
-    loadingDistricts.value = false
+  async function loadAll() {
+    loadingDistricts.value = true
+    globalError.value = ''
+    try {
+      districts.value = await listDistricts()
+      districtsStore.districts = districts.value
+      districtsStore.ensureSelectedDistrict()
+      await Promise.all(
+        districts.value.map(async (d) => {
+          try {
+            congregationsByDistrict[d.id] = (await listCongregations(d.id)) || []
+            groupsByDistrict[d.id] = (await listGroups(d.id)) || []
+          } catch (e) {
+            congregationsByDistrict[d.id] = []
+            groupsByDistrict[d.id] = []
+          }
+        }),
+      )
+    } catch (e) {
+      globalError.value = e instanceof Error ? e.message : 'Fehler beim Laden'
+    } finally {
+      loadingDistricts.value = false
+    }
   }
-}
 
 // ── Districts ─────────────────────────────────────────────────────────────────
 

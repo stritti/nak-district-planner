@@ -24,6 +24,48 @@ test.describe('Districts admin view', () => {
   })
 
   test('renders districts list', async ({ page }) => {
+    // Catch-all registered FIRST → lowest priority (runs last in Playwright's reverse order)
+    await page.route('**/api/v1/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+
+    // Auth endpoints must return proper objects (the catch-all returns [] which causes errors)
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sub: 'admin-1',
+          email: 'admin@example.com',
+          username: 'admin',
+          name: 'Bezirksvorsteher',
+          given_name: 'Admin',
+          family_name: 'User',
+          is_superadmin: true,
+        }),
+      })
+    })
+    await page.route('**/api/v1/auth/access', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ACTIVE',
+          memberships: [
+            { role: 'DISTRICT_ADMIN', scope_type: 'DISTRICT', scope_id: 'district-1' },
+          ],
+        }),
+      })
+    })
+    // Registration overview for district admins
+    await page.route('**/api/v1/registrations/pending/overview', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ total_pending: 0 }),
+      })
+    })
+
     await page.route('**/api/v1/districts', async (route) => {
       await route.fulfill({
         status: 200,
