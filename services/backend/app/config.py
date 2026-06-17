@@ -67,7 +67,6 @@ class Settings(BaseSettings):
         """Parse OIDC_SCOPES string into list"""
         return [scope.strip() for scope in self.oidc_scopes.split() if scope.strip()]
 
-
     @property
     def app_version(self) -> str:
         """Return the running application version from package metadata."""
