@@ -16,7 +16,6 @@ Changes:
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Union
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql

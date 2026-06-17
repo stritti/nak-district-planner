@@ -37,7 +37,7 @@ class SemVer:
         )
 
     def __str__(self) -> str:
-        """Return string representation as 'major.minor.patch'."""
+        """Return the version as ``major.minor.patch`` string."""
         return f"{self.major}.{self.minor}.{self.patch}"
 
 

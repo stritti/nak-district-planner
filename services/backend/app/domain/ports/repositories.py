@@ -154,7 +154,7 @@ class EventRepository(ABC):
 
         Returns the number of updated rows.
         """
-        ...
+        pass
 
     @abstractmethod
     async def delete_before(self, cutoff: datetime) -> int:
