@@ -393,25 +393,18 @@ async def test_service_assignment_not_found_paths() -> None:
         sa_repo.get.return_value = None
         sa_repo_cls.return_value = sa_repo
         with pytest.raises(HTTPException):
-                await sa_router.delete_assignment(
-                    uuid.uuid4(),
-                    uuid.uuid4(),
-                    type("A", (), {"memberships": [], "user": None})(),
-                    AsyncMock(),
-                )
+            await sa_router.delete_assignment(
+                uuid.uuid4(),
+                uuid.uuid4(),
+                type("A", (), {"memberships": [], "user": None})(),
+                AsyncMock(),
+            )
 
 
 @pytest.mark.asyncio
 async def test_event_list_filters_by_approval_status() -> None:
     district_id = uuid.uuid4()
     now = datetime.now(UTC)
-    planned = Event.create(
-        title="Geplant",
-        start_at=now,
-        end_at=now + timedelta(hours=1),
-        district_id=district_id,
-        approval_status=EventApprovalStatus.PLANNED,
-    )
     confirmed = Event.create(
         title="Bestätigt",
         start_at=now,

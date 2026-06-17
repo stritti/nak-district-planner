@@ -9,7 +9,6 @@ Create Date: 2026-04-07 11:17:45.652612
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Union
 
 # revision identifiers, used by Alembic.
 revision: str = "ae6c055cc050"

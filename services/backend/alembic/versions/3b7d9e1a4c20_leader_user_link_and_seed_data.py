@@ -8,7 +8,6 @@ Create Date: 2026-04-03 13:45:00.000000
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Union
 
 import sqlalchemy as sa
 

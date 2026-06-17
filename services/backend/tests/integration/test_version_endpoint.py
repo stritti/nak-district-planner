@@ -15,19 +15,23 @@ from app.main import app
 def mock_oidc_adapter():
     """Mock OIDC adapter for integration tests."""
     adapter = AsyncMock(spec=object)  # Use spec to avoid implicit async behavior
-    adapter.validate_token = AsyncMock(return_value={
-        "sub": "admin-123",
-        "email": "admin@example.com",
-        "preferred_username": "admin.user",
-        "name": "Admin User",
-        "roles": ["superadmin"],
-    })
-    adapter.extract_user_info = MagicMock(return_value={
-        "sub": "admin-123",
-        "email": "admin@example.com",
-        "preferred_username": "admin.user",
-        "name": "Admin User",
-    })
+    adapter.validate_token = AsyncMock(
+        return_value={
+            "sub": "admin-123",
+            "email": "admin@example.com",
+            "preferred_username": "admin.user",
+            "name": "Admin User",
+            "roles": ["superadmin"],
+        }
+    )
+    adapter.extract_user_info = MagicMock(
+        return_value={
+            "sub": "admin-123",
+            "email": "admin@example.com",
+            "preferred_username": "admin.user",
+            "name": "Admin User",
+        }
+    )
     adapter.get_roles = MagicMock(return_value=["superadmin"])
     deps.set_oidc_adapter(adapter)
     return adapter
