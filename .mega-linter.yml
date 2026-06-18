@@ -3,7 +3,10 @@
 
 # ── General ──────────────────────────────────────────────────────────────────
 
-# Only lint changed files on PRs; full scan on push to main (set via workflow env)
+# Validate all sources, not only the diff
+VALIDATE_ALL_CODEBASE: true
+# Skip the v9.5.0 release-announcement banner on PR/console reports
+SECURITY_SUGGESTIONS: false
 APPLY_FIXES: none
 PRINT_ALPACA: false
 SHOW_ELAPSED_TIME: true
