@@ -31,8 +31,7 @@ jobs:
         uses: oxsecurity/megalinter@v9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Validate only files changed in the PR/push (faster)
-          VALIDATE_ALL_CODEBASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # VALIDATE_ALL_CODEBASE is now set in .mega-linter.yml
           # Do not auto-apply fixes — just report
           APPLY_FIXES: none
           # Post a summary comment on PRs
