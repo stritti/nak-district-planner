@@ -1,6 +1,8 @@
-## [v0.13.0] - 2026-06-19
+## [v0.14.0] - 2026-06-19
 
 ### Features
+* Merge pull request #170 from stritti/feature/rbac-completion-1-4 (4ac8a98)
+* feat: add RBAC guards to auth.py and system.py routers (Task 1.4) (9e677d2)
 * feat: OpenSpec Spezifikationen für Security Issues (20f5b2e)
 * feat: umfassende Security-Analyse und Dokumentationserweiterungen (18c36bf)
 * Merge pull request #162 from stritti/feat/e2e-and-coverage (3c969dc)
@@ -9,10 +11,10 @@
 * feat(tests): add e2e tests and improve backend coverage to 82% (dda308e)
 * feat: add pr-review skill for structured review comment handling (ec499a7)
 * Merge pull request #152 from stritti/feat/responsive-pwa (e7c4c2c)
-* feat: responsive UI + PWA support (d5f0bad)
-* Merge pull request #150 from stritti/feat/approval-status (ee43e4e)
 
 ### Bug Fixes
+* fix: adjust RBAC guard for /access endpoint to allow PENDING_APPROVAL users (df3d466)
+* fix: rename status variable to avoid shadowing fastapi.status import (9250f5d)
 * Fix markdownlint issues: add language specifiers to code blocks, wrap bare URLs, fix trailing spaces and newlines (052f542)
 * Merge pull request #163 from stritti/copilot/fix-merge-konflikte-and-action-errors (07430ad)
 * fix(e2e): add auth/calendar/component mocks and fix DistrictsAdminView error handling (344d745)
@@ -21,10 +23,9 @@
 * fix(e2e): block service worker in Playwright to prevent route mock bypass (17e8bd1)
 * Merge pull request #159 from stritti/copilot/fix-action-run-error (949924a)
 * test: fix matrix e2e syntax (561e68a)
-* Merge pull request #157 from stritti/copilot/fix-correct-issue-for-reference (f3380c8)
-* fix: correct Playwright route handler ordering — catch-all first, specific mocks after (55e05be)
 
 ### Other Changes
+* chore: release v0.13.0 (f724043)
 * Merge pull request #167 from stritti/vibe/security-analysis-5ad88e (cb306cf)
 * chore: release v0.12.6 (e7bcebf)
 * Merge pull request #168 from stritti/vibe/openspec-gap-analysis-refined-71c667 (0731ee9)
@@ -34,4 +35,3 @@
 * chore: activate Mistral Vibe Code for OpenSpec (aa5ce32)
 * chore: release v0.12.4 (dcf9e8f)
 * Merge pull request #140 from stritti/dependabot/uv/services/backend/ruff-0.15.16 (35f8618)
-* chore: release v0.12.3 (b96c3f9)
