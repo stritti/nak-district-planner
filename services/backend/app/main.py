@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from alembic import command
 from app.adapters.api import deps
+from app.adapters.api.middleware.audit import AuditMiddleware
 from app.adapters.api.routers import (
     auth,
     calendar_integrations,
@@ -25,6 +26,7 @@ from app.adapters.api.routers import (
     system,
 )
 from app.adapters.auth.oidc import OIDCAdapter
+from app.application.audit_service import audit_service
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
@@ -52,6 +54,9 @@ async def lifespan(app: FastAPI):
     cfg = Config("alembic.ini")
     # env.py uses asyncio.run() internally — must run in a thread without an active loop
     await asyncio.to_thread(command.upgrade, cfg, "head")
+
+    # Start audit service
+    await audit_service.start()
 
     # Initialize OIDC adapter
     httpx_client = httpx.AsyncClient()
@@ -102,6 +107,7 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     await oidc_adapter.close()
+    await audit_service.stop()
 
 
 app = FastAPI(
@@ -112,6 +118,14 @@ app = FastAPI(
 )
 
 setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
+
+# Initialize Audit Logging
+app.add_middleware(
+    AuditMiddleware,
+    audit_service=audit_service,
+    exempt_paths={"/api/health"},
+    exempt_methods={"GET", "HEAD", "OPTIONS"},
+)
 
 
 @app.exception_handler(Exception)
