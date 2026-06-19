@@ -611,7 +611,7 @@ async def get_matrix(
             invitation_count: int = len(invitation_by_source_slot.get(slot.id, []))
             
             cells[date_key] = MatrixCell(
-                event_id=None,  # No longer using Event model
+                event_id=str(slot.id),  # For frontend compatibility - use slot.id as event_id
                 planning_slot_id=slot.id,
                 assignment_event_id=assignment_slot_id,
                 invitation_source_congregation_name=source_congregation_names.get(
