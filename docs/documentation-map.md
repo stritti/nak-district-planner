@@ -13,6 +13,7 @@ Diese Dokumente gelten als operative Quelle fuer Entwicklung und Betrieb.
 - `docs/roles.md`: Rollenmodell und Berechtigungsmatrix
 - `docs/release-process.md`: SemVer-, Commit- und Release-Ablauf
 - `docs/security-baseline.md`: Sicherheits-Baseline und Guardrails
+- `docs/security-analysis.md`: Umfassende Security-Analyse mit Threat Modeling und Massnahmen
 - `docs/production-runbook.md`: Betriebs- und Incident-Grundablaeufe
 - `docs/approval-workflow.md`: Benutzer-Onboarding, Freigabe-Workflow und IDP-Provisionierung
 - `openspec/architecture/overview.md`: Zielarchitektur (stabiler Rahmen)

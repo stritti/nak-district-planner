@@ -145,3 +145,236 @@ app/
 2. **Phase 2:** `CalendarConnector` ABC; `iCalConnector` read-only adapter; Celery sync task
 3. **Phase 3:** Vue 3 + Tailwind + Pinia scaffolding; event list dashboard; matrix planning view
 4. **Phase 4:** JWT authentication; API key encryption in DB (service layer decorator)
+
+---
+
+## Security Guidelines for AI Agents
+
+### Security-First Development Principles
+
+When working on this codebase, **ALWAYS** prioritize security considerations:
+
+1. **Never commit secrets** - API keys, passwords, tokens, or any sensitive data must NEVER be committed to the repository
+2. **Validate all inputs** - Use Pydantic v2 models for all API inputs, validate before processing
+3. **Principle of Least Privilege** - Grant minimum necessary permissions for all operations
+4. **Defense in Depth** - Implement multiple layers of security controls
+5. **Fail Securely** - Default to denying access rather than allowing it
+
+### Critical Security Areas
+
+#### Authentication & Authorization
+- **OIDC Integration:** Use the existing `OIDCAdapter` class for all authentication
+- **Token Validation:** Always validate JWT tokens with signature, issuer, audience, and expiration checks
+- **RBAC Enforcement:** Use `has_role_in_district()` and `has_role_in_congregation()` for all authorization checks
+- **Membership Gate:** Always verify user has appropriate membership before allowing access to resources
+- **Superadmin Check:** Use `user.is_superadmin` for system-wide operations
+
+**Required Pattern:**
+```python
+# ALWAYS check permissions before any write operation
+from app.adapters.auth.permissions import assert_has_role_in_district, PermissionError
+from app.domain.models.role import Role
+
+try:
+    assert_has_role_in_district(auth_context, Role.DISTRICT_ADMIN, district_id)
+except PermissionError as e:
+    raise HTTPException(status_code=403, detail=str(e))
+```
+
+#### Data Protection
+- **Credential Encryption:** Use `app.application.crypto.encrypt_credentials()` and `decrypt_credentials()` for all sensitive data
+- **Never log sensitive data:** Avoid logging tokens, passwords, API keys, or personal information
+- **HTTPS Only:** Ensure all production deployments use HTTPS (configured at reverse proxy)
+- **Secure Headers:** Implement security headers in production (CSP, HSTS, X-Frame-Options, etc.)
+
+**Required Pattern:**
+```python
+# ALWAYS encrypt credentials before storage
+from app.application.crypto import encrypt_credentials, decrypt_credentials
+
+# Encrypt before saving to database
+encrypted = encrypt_credentials({"api_key": "secret-value", "url": "https://..."})
+
+# Decrypt when needed
+decrypted = decrypt_credentials(encrypted)
+```
+
+#### API Security
+- **Input Validation:** Use Pydantic v2 models for all request bodies, query parameters, and path parameters
+- **Rate Limiting:** Implement rate limiting for all public endpoints (see `docs/security-analysis.md`)
+- **CSRF Protection:** Add CSRF tokens for state-changing requests in web interfaces
+- **Error Handling:** Never expose stack traces or sensitive error details in production
+
+**Required Pattern:**
+```python
+# ALWAYS use Pydantic models for input validation
+from pydantic import BaseModel, Field
+
+class EventCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    start_at: datetime
+    end_at: datetime
+    district_id: uuid.UUID
+    # All fields are automatically validated
+```
+
+#### Tenant Isolation (Multi-Tenancy)
+- **Scope Validation:** Always verify user has access to the requested district/congregation
+- **Cross-Tenant Prevention:** Never allow users to access data from other tenants
+- **Row-Level Security:** Consider PostgreSQL RLS for database-level tenant isolation
+
+**Required Pattern:**
+```python
+# ALWAYS validate tenant access
+from app.adapters.auth.permissions import has_role_in_district
+
+if not has_role_in_district(auth_context, Role.VIEWER, district_id):
+    raise HTTPException(status_code=403, detail="Access denied")
+```
+
+### Security Code Review Checklist
+
+Before any merge, verify the following security aspects:
+
+- [ ] **No secrets committed** - Check for passwords, API keys, tokens in code
+- [ ] **Input validation present** - All API endpoints have Pydantic models
+- [ ] **Authorization checks** - All write operations have permission checks
+- [ ] **Tenant isolation** - Users cannot access other tenants' data
+- [ ] **Sensitive data encrypted** - Credentials and tokens are encrypted at rest
+- [ ] **Error handling secure** - No sensitive data in error responses
+- [ ] **Logging safe** - No sensitive data in logs
+- [ ] **Dependencies scanned** - New dependencies have been security-reviewed
+
+### Security Testing Requirements
+
+All security-related changes must include:
+
+1. **Unit Tests** for new security features
+2. **Integration Tests** for authentication/authorization flows
+3. **Negative Tests** - Verify unauthorized access is properly denied
+4. **Edge Case Tests** - Test with malformed inputs, expired tokens, etc.
+
+**Example Test:**
+```python
+# Test that unauthorized access is denied
+def test_create_event_without_permission():
+    # Setup: user without DISTRICT_ADMIN role
+    user = create_test_user(role=Role.VIEWER)
+    
+    # Attempt to create event
+    response = client.post("/api/v1/events", json={...}, headers={"Authorization": f"Bearer {user.token}"})
+    
+    # Verify access denied
+    assert response.status_code == 403
+    assert "Access denied" in response.json()["detail"]
+```
+
+### Security Documentation
+
+**Mandatory Reading for Security Work:**
+- `docs/security-baseline.md` - Security baseline requirements
+- `docs/security-analysis.md` - Comprehensive security analysis with threat modeling
+- `docs/roles.md` - Role model and permission matrix
+- `docs/approval-workflow.md` - User onboarding and approval workflow
+
+**Reference Documents:**
+- `docs/production-runbook.md` - Production security procedures
+- `.github/workflows/security.yml` - Automated security scanning workflow
+
+### Security Incident Response
+
+If you detect or suspect a security vulnerability:
+
+1. **STOP** - Do not commit or push the code
+2. **ISOLATE** - Contain the potential issue
+3. **REPORT** - Immediately notify the security team
+4. **DOCUMENT** - Record all observations and steps taken
+
+**Contact:** security@nak-district-planner.example
+
+### Prohibited Actions
+
+**NEVER do the following:**
+- ❌ Commit secrets, passwords, or API keys to the repository
+- ❌ Disable security checks for "convenience" during development
+- ❌ Use `eval()` or similar dangerous functions with user input
+- ❌ Store sensitive data in plaintext
+- ❌ Log sensitive information (tokens, passwords, personal data)
+- ❌ Bypass authentication/authorization checks
+- ❌ Use hardcoded credentials or secrets
+- ❌ Disable HTTPS in production
+- ❌ Expose internal ports in production (8000, 5432, 6379)
+- ❌ Use `sudo` or root privileges unnecessarily in Docker containers
+
+### Security Tools & Commands
+
+```bash
+# Run security scans locally
+make lint                          # Linting checks
+
+# Backend security tests
+docker compose run --no-deps --rm backend pytest tests/unit/test_auth_permissions_jwt_claims.py -v
+docker compose run --no-deps --rm backend pytest tests/unit/test_oidc_adapter.py -v
+docker compose run --no-deps --rm backend pytest tests/unit/test_crypto.py -v
+
+# Dependency security scans
+uv export --format requirements-txt --no-dev --no-emit-project -o /tmp/requirements.txt
+pip-audit -r /tmp/requirements.txt
+
+cd services/frontend
+bun audit --level moderate
+
+# CodeQL analysis (requires GitHub Actions or local setup)
+codeql database create --language python .
+codeql analyze --format=sarif --output=results.sarif .
+```
+
+### Security-Related Files & Directories
+
+**Backend Security Components:**
+- `services/backend/app/adapters/auth/` - Authentication and authorization modules
+- `services/backend/app/application/crypto.py` - Credential encryption
+- `services/backend/app/config.py` - Security configuration
+- `services/backend/tests/unit/test_*auth*.py` - Authentication tests
+- `services/backend/tests/unit/test_*crypto*.py` - Encryption tests
+
+**Frontend Security Components:**
+- `services/frontend/src/composables/useOIDC.ts` - OIDC authentication
+- `services/frontend/src/stores/auth.ts` - Auth state management
+
+**Infrastructure Security:**
+- `docker-compose.yml` - Production configuration (no exposed ports)
+- `docker-compose.override.yml` - Development configuration (exposed ports for debugging)
+- `.github/workflows/security.yml` - Automated security scanning
+
+---
+
+## Quick Reference: Security Decision Tree
+
+```
+Is this a security-sensitive change?
+    │
+    ├── Yes
+    │   │
+    │   ├── Does it involve authentication/authorization?
+    │   │   │
+    │   │   ├── Yes → Review docs/roles.md and test with multiple role levels
+    │   │   │
+    │   │   └── No
+    │   │       │
+    │   │       ├── Does it handle sensitive data?
+    │   │       │   │
+    │   │       │   ├── Yes → Use encryption (crypto.py) and secure storage
+    │   │       │   │
+    │   │       │   └── No
+    │   │       │       │
+    │   │       │       ├── Does it accept user input?
+    │   │       │       │   │
+    │   │       │       │   ├── Yes → Validate with Pydantic, sanitize, escape
+    │   │       │       │   │
+    │   │       │       │   └── No → Proceed with standard review
+    │   │       │       │
+    │   │       └── Consult docs/security-analysis.md for threat modeling
+    │   │
+    └── No → Standard code review applies
+```
