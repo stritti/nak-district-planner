@@ -70,7 +70,7 @@ class AuditLog(NamedTuple):
     error_message: str | None
     
     # Metadata
-    metadata: dict[str, Any] | None
+    extra_metadata: dict[str, Any] | None
     
     # Timestamps
     created_at: datetime
@@ -79,6 +79,10 @@ class AuditLog(NamedTuple):
 class AuditLogCreate(NamedTuple):
     """Data for creating a new audit log entry."""
 
+    # What: Action details (required fields first)
+    action: AuditAction
+    resource_type: str
+    
     # Timestamp (defaults to now if not provided)
     timestamp: datetime | None = None
     
@@ -87,14 +91,10 @@ class AuditLogCreate(NamedTuple):
     user_email: str | None = None
     user_roles: list[str] | None = None
     
-    # What: Action details
-    action: AuditAction
-    resource_type: str
-    resource_id: uuid.UUID | None = None
-    
     # Where: Tenant context
     district_id: uuid.UUID | None = None
     congregation_id: uuid.UUID | None = None
+    resource_id: uuid.UUID | None = None
     
     # Details: Change information
     changes: dict[str, Any] | None = None
@@ -111,4 +111,4 @@ class AuditLogCreate(NamedTuple):
     error_message: str | None = None
     
     # Metadata
-    metadata: dict[str, Any] | None = None
+    extra_metadata: dict[str, Any] | None = None

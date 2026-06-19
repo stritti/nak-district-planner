@@ -56,7 +56,7 @@ class SqlAuditLogRepository:
             request_id=audit_log.request_id,
             status=audit_log.status or AuditStatus.SUCCESS,
             error_message=audit_log.error_message,
-            metadata=audit_log.metadata,
+            extra_metadata=audit_log.extra_metadata,
             created_at=datetime.now(UTC),
         )
         
@@ -82,7 +82,7 @@ class SqlAuditLogRepository:
             request_id=orm_audit_log.request_id,
             status=orm_audit_log.status,
             error_message=orm_audit_log.error_message,
-            metadata=orm_audit_log.metadata,
+            extra_metadata=orm_audit_log.extra_metadata,
             created_at=orm_audit_log.created_at,
         )
 
@@ -122,7 +122,7 @@ class SqlAuditLogRepository:
             request_id=orm_audit_log.request_id,
             status=orm_audit_log.status,
             error_message=orm_audit_log.error_message,
-            metadata=orm_audit_log.metadata,
+            extra_metadata=orm_audit_log.extra_metadata,
             created_at=orm_audit_log.created_at,
         )
 
@@ -171,7 +171,7 @@ class SqlAuditLogRepository:
                 request_id=orm.request_id,
                 status=orm.status,
                 error_message=orm.error_message,
-                metadata=orm.metadata,
+                extra_metadata=orm.extra_metadata,
                 created_at=orm.created_at,
             )
             for orm in orm_audit_logs
@@ -229,7 +229,7 @@ class SqlAuditLogRepository:
                 request_id=orm.request_id,
                 status=orm.status,
                 error_message=orm.error_message,
-                metadata=orm.metadata,
+                extra_metadata=orm.extra_metadata,
                 created_at=orm.created_at,
             )
             for orm in orm_audit_logs
@@ -287,7 +287,7 @@ class SqlAuditLogRepository:
                 request_id=orm.request_id,
                 status=orm.status,
                 error_message=orm.error_message,
-                metadata=orm.metadata,
+                extra_metadata=orm.extra_metadata,
                 created_at=orm.created_at,
             )
             for orm in orm_audit_logs
@@ -338,7 +338,7 @@ class SqlAuditLogRepository:
                 request_id=orm.request_id,
                 status=orm.status,
                 error_message=orm.error_message,
-                metadata=orm.metadata,
+                extra_metadata=orm.extra_metadata,
                 created_at=orm.created_at,
             )
             for orm in orm_audit_logs

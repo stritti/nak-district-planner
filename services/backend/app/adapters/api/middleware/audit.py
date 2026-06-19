@@ -225,7 +225,7 @@ class AuditMiddleware:
                 context=context,
                 status=status,
                 error_message=error_message,
-                metadata={
+                extra_metadata={
                     "http_method": request.method,
                     "path": request.url.path,
                     "status_code": response.status_code if response else None,

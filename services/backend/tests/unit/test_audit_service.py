@@ -74,7 +74,7 @@ class TestAuditEvent:
         assert event.new_values is None
         assert event.status == AuditStatus.SUCCESS
         assert event.error_message is None
-        assert event.metadata is None
+        assert event.extra_metadata is None
         assert event.timestamp is None
 
     def test_with_all_values(self):
@@ -91,7 +91,7 @@ class TestAuditEvent:
             new_values=None,
             status=AuditStatus.FAILED,
             error_message="Test error",
-            metadata={"key": "value"},
+            extra_metadata={"key": "value"},
             timestamp=timestamp,
         )
         
@@ -103,7 +103,7 @@ class TestAuditEvent:
         assert event.new_values is None
         assert event.status == AuditStatus.FAILED
         assert event.error_message == "Test error"
-        assert event.metadata == {"key": "value"}
+        assert event.extra_metadata == {"key": "value"}
         assert event.timestamp == timestamp
 
 

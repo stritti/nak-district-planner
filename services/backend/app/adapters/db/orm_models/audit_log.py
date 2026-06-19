@@ -94,7 +94,7 @@ class AuditLogORM(Base):
     error_message: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     # Metadata: Additional context
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

@@ -51,7 +51,7 @@ class AuditEvent:
     new_values: dict[str, Any] | None = None
     status: AuditStatus = AuditStatus.SUCCESS
     error_message: str | None = None
-    metadata: dict[str, Any] | None = None
+    extra_metadata: dict[str, Any] | None = None
     timestamp: datetime | None = None
 
 
@@ -134,7 +134,7 @@ class AuditService:
         new_values: dict[str, Any] | None = None,
         status: AuditStatus = AuditStatus.SUCCESS,
         error_message: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Log an audit event.
         
@@ -148,7 +148,7 @@ class AuditService:
             new_values: New values of the resource (for CREATE/UPDATE).
             status: Status of the action (success/failed).
             error_message: Error message if action failed.
-            metadata: Additional metadata to store.
+            extra_metadata: Additional metadata to store.
         """
         audit_log = AuditLogCreate(
             timestamp=datetime.now(UTC),
@@ -168,7 +168,7 @@ class AuditService:
             request_id=context.request_id if context else None,
             status=status,
             error_message=error_message,
-            metadata=metadata,
+            extra_metadata=extra_metadata,
         )
         
         # Queue the audit log for async writing
@@ -195,7 +195,7 @@ class AuditService:
             new_values=event.new_values,
             status=event.status,
             error_message=event.error_message,
-            metadata=event.metadata,
+            extra_metadata=event.extra_metadata,
         )
 
     async def log_batch(
