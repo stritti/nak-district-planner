@@ -1,6 +1,8 @@
-## [v0.12.6] - 2026-06-19
+## [v0.13.0] - 2026-06-19
 
 ### Features
+* feat: OpenSpec Spezifikationen für Security Issues (20f5b2e)
+* feat: umfassende Security-Analyse und Dokumentationserweiterungen (18c36bf)
 * Merge pull request #162 from stritti/feat/e2e-and-coverage (3c969dc)
 * Merge pull request #153 from stritti/feat/e2e-and-coverage (3badc13)
 * Merge branch 'main' into feat/e2e-and-coverage (23c5702)
@@ -9,10 +11,9 @@
 * Merge pull request #152 from stritti/feat/responsive-pwa (e7c4c2c)
 * feat: responsive UI + PWA support (d5f0bad)
 * Merge pull request #150 from stritti/feat/approval-status (ee43e4e)
-* feat: complete approval_status UI and tests (d83782c)
-* feat: add approval_status (PLANNED/CONFIRMED) orthogonal to EventStatus (37f13dc)
 
 ### Bug Fixes
+* Fix markdownlint issues: add language specifiers to code blocks, wrap bare URLs, fix trailing spaces and newlines (052f542)
 * Merge pull request #163 from stritti/copilot/fix-merge-konflikte-and-action-errors (07430ad)
 * fix(e2e): add auth/calendar/component mocks and fix DistrictsAdminView error handling (344d745)
 * Plan PR 141 merge fix (d520d6c)
@@ -22,9 +23,10 @@
 * test: fix matrix e2e syntax (561e68a)
 * Merge pull request #157 from stritti/copilot/fix-correct-issue-for-reference (f3380c8)
 * fix: correct Playwright route handler ordering — catch-all first, specific mocks after (55e05be)
-* Merge pull request #156 from stritti/copilot/fix-reference-issue (b0be84b)
 
 ### Other Changes
+* Merge pull request #167 from stritti/vibe/security-analysis-5ad88e (cb306cf)
+* chore: release v0.12.6 (e7bcebf)
 * Merge pull request #168 from stritti/vibe/openspec-gap-analysis-refined-71c667 (0731ee9)
 * docs: update OpenSpec specs and add implementation tasks (5ceb5b4)
 * docs: add refined OpenSpec gap analysis v2.1 with domain expert confirmations (de6bbc7)
@@ -33,5 +35,3 @@
 * chore: release v0.12.4 (dcf9e8f)
 * Merge pull request #140 from stritti/dependabot/uv/services/backend/ruff-0.15.16 (35f8618)
 * chore: release v0.12.3 (b96c3f9)
-* Merge pull request #165 from stritti/chore/megalinter-v9.5.0-config (a4e90a3)
-* chore: configure MegaLinter v9.5.0 settings (1173a56)
