@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from alembic import command
 from app.adapters.api import deps
+from app.adapters.api.middleware.tenant import TenantMiddleware, TenantValidationMiddleware
 from app.adapters.api.routers import (
     auth,
     calendar_integrations,
@@ -31,6 +32,7 @@ from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
 from app.config import settings
+from app.tenant import TenantContext
 from app.telemetry import setup_telemetry
 
 
@@ -112,6 +114,18 @@ app = FastAPI(
 )
 
 setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
+
+# Initialize Tenant Isolation
+app.add_middleware(
+    TenantMiddleware,
+    exempt_paths={"/api/health", "/api/v1/auth"},
+    exempt_methods={"OPTIONS"},
+)
+app.add_middleware(
+    TenantValidationMiddleware,
+    exempt_paths={"/api/health", "/api/v1/auth"},
+    exempt_methods={"GET", "HEAD", "OPTIONS"},
+)
 
 
 @app.exception_handler(Exception)
