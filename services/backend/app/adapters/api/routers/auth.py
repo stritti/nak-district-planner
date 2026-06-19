@@ -159,18 +159,9 @@ async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessConte
     """Return effective memberships for access-aware frontend UX.
     
     **Security:** Requires valid Bearer token.
-    **RBAC:** Requires VIEWER role in at least one district or superadmin.
+    **RBAC:** Users with memberships require VIEWER role in at least one district.
+    Users without memberships (PENDING_APPROVAL) can access to check their status.
     """
-    # RBAC Guard: User must have VIEWER role in at least one district
-    districts_with_viewer = get_districts_where_user_has_role(
-        auth, Role.VIEWER
-    )
-    if not districts_with_viewer and not auth.user.is_superadmin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Nur Benutzer mit VIEWER-Rolle in mindestens einem Bezirk können auf diese Ressource zugreifen.",
-        )
-    
     memberships = [
         MembershipOut(
             role=m.role.value,
@@ -179,6 +170,17 @@ async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessConte
         )
         for m in auth.memberships
     ]
+
+    # RBAC Guard: If user has memberships, they must have VIEWER role in at least one district
+    if memberships:
+        districts_with_viewer = get_districts_where_user_has_role(
+            auth, Role.VIEWER
+        )
+        if not districts_with_viewer and not auth.user.is_superadmin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Nur Benutzer mit VIEWER-Rolle in mindestens einem Bezirk können auf diese Ressource zugreifen.",
+            )
 
     access_status = "ACTIVE" if auth.user.is_superadmin or memberships else "PENDING_APPROVAL"
     return AccessContextOut(status=access_status, memberships=memberships)
