@@ -3,6 +3,13 @@
 - GET /api/v1/auth/me — Get current authenticated user info
 - GET /api/v1/auth/oidc/discovery — Get OIDC discovery document (proxied from provider)
 - POST /api/v1/auth/oidc/token — Proxy token exchange to OIDC provider
+- GET /api/v1/auth/access — Get user access context and memberships
+
+RBAC Notes:
+- /oidc/discovery: PUBLIC - No auth required (frontend needs before login)
+- /oidc/token: PUBLIC - No auth required (OIDC callback flow)
+- /me: AUTHENTICATED - Any valid token, no role requirement
+- /access: VIEWER - Requires VIEWER role in at least one district
 """
 
 import httpx
@@ -16,6 +23,10 @@ from app.adapters.api.deps import (
 )
 from app.adapters.api.schemas.user import AccessContextOut, MembershipOut, UserOut
 from app.adapters.auth.oidc import OIDCDiscoveryError
+from app.adapters.auth.permissions import (
+    get_districts_where_user_has_role,
+)
+from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -145,7 +156,21 @@ async def get_current_user_info(user: AuthenticatedUser) -> UserOut:
 
 @router.get("/access", response_model=AccessContextOut)
 async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessContextOut:
-    """Return effective memberships for access-aware frontend UX."""
+    """Return effective memberships for access-aware frontend UX.
+    
+    **Security:** Requires valid Bearer token.
+    **RBAC:** Requires VIEWER role in at least one district or superadmin.
+    """
+    # RBAC Guard: User must have VIEWER role in at least one district
+    districts_with_viewer = get_districts_where_user_has_role(
+        auth, Role.VIEWER
+    )
+    if not districts_with_viewer and not auth.user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nur Benutzer mit VIEWER-Rolle in mindestens einem Bezirk können auf diese Ressource zugreifen.",
+        )
+    
     memberships = [
         MembershipOut(
             role=m.role.value,
