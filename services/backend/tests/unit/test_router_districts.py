@@ -448,24 +448,36 @@ async def test_get_matrix_success() -> None:
     district_id = uuid.uuid4()
     congregation = Congregation.create(name="G", district_id=district_id)
     now = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
-    event = Event.create(
-        title="Gottesdienst Mittwoch",
-        start_at=now,
-        end_at=now + timedelta(hours=1),
+    # Create PlanningSlot instead of Event
+    from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+    from app.domain.models.event_instance import EventInstance
+    from app.domain.models.event import EventSource, EventVisibility
+    
+    slot = PlanningSlot.create(
         district_id=district_id,
         congregation_id=congregation.id,
-        status=EventStatus.DRAFT,
+        planning_date=now.date(),
+        planning_time=now.time(),
         category="Gottesdienst",
+        title="Gottesdienst Mittwoch",
+        status=PlanningSlotStatus.ACTIVE,
+    )
+    instance = EventInstance.create(
+        planning_slot_id=slot.id,
+        title="Gottesdienst Mittwoch",
+        actual_start_at=now,
+        actual_end_at=now + timedelta(hours=1),
+        source=EventSource.INTERNAL,
+        visibility=EventVisibility.INTERNAL,
     )
     assignment = ServiceAssignment.create(
-        event_id=event.id,
+        planning_slot_id=slot.id,
         leader_name="Pr. Muster",
         status=AssignmentStatus.ASSIGNED,
     )
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
-        patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
         patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
         patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
         patch("app.adapters.api.routers.districts.SqlPlanningSlotRepository") as slot_repo_cls,
@@ -484,20 +496,16 @@ async def test_get_matrix_success() -> None:
         cong_repo.list_by_ids.return_value = []
         cong_repo_cls.return_value = cong_repo
 
-        event_repo = AsyncMock()
-        event_repo.list.return_value = ([event], 1)
-        event_repo_cls.return_value = event_repo
-
         sa_repo = AsyncMock()
         sa_repo.list_by_planning_slots.return_value = [assignment]
         sa_repo_cls.return_value = sa_repo
 
         slot_repo = AsyncMock()
-        slot_repo.list_for_date_range.return_value = []
+        slot_repo.list_for_date_range.return_value = [slot]
         slot_repo_cls.return_value = slot_repo
 
         instance_repo = AsyncMock()
-        instance_repo.list_by_planning_slots.return_value = []
+        instance_repo.list_by_planning_slots.return_value = [instance]
         instance_repo_cls.return_value = instance_repo
 
         leader_repo = AsyncMock()
@@ -511,7 +519,7 @@ async def test_get_matrix_success() -> None:
         group_repo_cls.return_value = group_repo
 
         inv_repo = AsyncMock()
-        inv_repo.list_by_source_events.return_value = []
+        inv_repo.list_by_source_planning_slots.return_value = []
         inv_repo_cls.return_value = inv_repo
 
         result = await r.get_matrix(
@@ -525,6 +533,9 @@ async def test_get_matrix_success() -> None:
 
     assert result.rows
     assert result.dates
+    # Verify that the matrix contains our slot
+    assert len(result.rows) == 1
+    assert result.rows[0].congregation_id == congregation.id
 
 
 @pytest.mark.asyncio
