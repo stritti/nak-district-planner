@@ -161,7 +161,7 @@ class CSRFTokenService:
             return datetime.now(UTC) - token_time
         except (ValueError, IndexError):
             return timedelta(0)
-```
+```python
 
 ### 3. CSRF Middleware
 
@@ -275,7 +275,7 @@ class CSRFMiddleware:
         )
         
         return response
-```
+```python
 
 ### 4. Integration mit FastAPI
 
@@ -300,7 +300,7 @@ app.add_middleware(
     exempt_paths={"/api/health", "/api/v1/auth/oidc/discovery", "/api/v1/auth/oidc/token"},
     exempt_methods={"GET", "HEAD", "OPTIONS"},
 )
-```
+```python
 
 ### 5. Frontend Integration
 
@@ -344,7 +344,7 @@ export function useCSRF() {
     hasCSRFToken,
   }
 }
-```
+```typescript
 
 **Verwendung in API-Requests:**
 
@@ -374,7 +374,7 @@ apiClient.interceptors.response.use((response) => {
   }
   return Promise.reject(error)
 })
-```
+```typescript
 
 **Verwendung in Komponenten:**
 
@@ -408,7 +408,7 @@ const submitForm = async () => {
   }
 }
 </script>
-```
+```vue
 
 ### 6. OIDC Flow Integration
 
@@ -432,7 +432,7 @@ async def get_current_user_info(user: AuthenticatedUser) -> UserOut:
     # CSRF-Schutz durch Middleware
     # ... bestehende Implementierung
     pass
-```
+```python
 
 ### 7. API-Key Auth Ausnahmen
 
@@ -448,7 +448,7 @@ class CSRFMiddleware:
             return response
         
         # ... Rest der Implementierung
-```
+```python
 
 ### 8. Security Considerations
 
@@ -534,3 +534,4 @@ class CSRFMiddleware:
 
 5. Sollten CSRF-Fehler in Audit-Logs erfasst werden?
    - **Empfehlung:** Ja, für Security Monitoring
+

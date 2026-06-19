@@ -89,3 +89,4 @@ Aktuell gibt es **kein Audit-Logging** für schreibende Operationen im NAK Distr
 
 5. Wie lange sollen Audit-Logs aufbewahrt werden?
    - **Empfehlung**: 90 Tage (Compliance), 365 Tage (Forensik)
+

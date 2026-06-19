@@ -31,12 +31,12 @@ Aktuell existierende Komponenten:
 - Verhindert Burst-Angriffe an Window-Grenzen
 - Einfache Implementierung mit Redis Sorted Sets
 
-```
+```text
 Beispiel: 60 Requests/Minute
 - Jeder Request wird als Timestamp in Redis gespeichert
 - Bei jedem Request: Zähle Requests in den letzten 60 Sekunden
 - Wenn > 60: Verweigere mit HTTP 429
-```
+```text
 
 ### 2. Rate Limit Konfiguration
 
@@ -62,7 +62,7 @@ class RateLimitConfig:
     # Burst Protection
     burst_limit: int = 10  # Maximale Requests in 1 Sekunde
     burst_window_seconds: int = 1
-```
+```python
 
 ### 3. Rate Limiter Implementierung
 
@@ -170,7 +170,7 @@ class RateLimiter:
         # Für unauthentifizierte Nutzer: IP + endpoint
         ip = request.client.host
         return f"ip:{ip}:{endpoint}"
-```
+```python
 
 ### 4. Rate Limit Middleware
 
@@ -248,7 +248,7 @@ class RateLimitMiddleware:
         # Einfache Pattern-Matching (z.B. "/api/v1/export/*/calendar.ics")
         import fnmatch
         return fnmatch.fnmatch(path, pattern)
-```
+```python
 
 ### 5. Integration mit FastAPI
 
@@ -275,7 +275,7 @@ app.add_middleware(
     rate_limiter=rate_limiter,
     config=rate_limit_config,
 )
-```
+```python
 
 ### 6. Burst Protection
 
@@ -316,7 +316,7 @@ class BurstRateLimiter:
             "reset": normal_info["reset"],
             "burst_remaining": burst_info["remaining"],
         }
-```
+```python
 
 ### 7. Monitoring und Alerting
 
@@ -367,7 +367,7 @@ class RateLimitMiddleware:
         self.metrics.record_request(endpoint, allowed, key_type)
         
         return response
-```
+```python
 
 ### 8. Konfiguration per Environment
 
@@ -387,7 +387,7 @@ RATE_LIMIT_ENDPOINTS='{
   "/api/v1/auth/oidc/token": {"limit": 100, "window": 60},
   "/api/v1/export/*/calendar.ics": {"limit": 60, "window": 60}
 }'
-```
+```yaml
 
 ### 9. Frontend Integration
 
@@ -435,7 +435,7 @@ export function useRateLimit() {
     getRetryAfterMessage,
   }
 }
-```
+```typescript
 
 **Verwendung in Komponenten:**
 
@@ -453,7 +453,7 @@ import { useRateLimit } from '@/composables/useRateLimit'
 
 const { isRateLimited, getRetryAfterMessage } = useRateLimit()
 </script>
-```
+```vue
 
 ## Risks / Trade-offs
 
@@ -515,3 +515,4 @@ const { isRateLimited, getRetryAfterMessage } = useRateLimit()
 
 5. Wie mit API-Gateways umgehen?
    - **Empfehlung:** Rate Limiting auf Application-Ebene reicht
+

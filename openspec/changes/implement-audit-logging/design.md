@@ -79,7 +79,7 @@ class AuditLog(Base):
     # Metadaten
     metadata: Optional[dict] = Column(JSONB, nullable=True)
     created_at: datetime = Column(DateTime(timezone=True), default=datetime.now(UTC))
-```
+```python
 
 **Indices:**
 - `timestamp` für zeitbasierte Abfragen
@@ -92,7 +92,7 @@ class AuditLog(Base):
 
 ### 2. Audit-Log Service Architektur
 
-```
+```ascii
 ┌─────────────────────────────────────────────────────────────────┐
 │                        FastAPI Application                          │
 ├─────────────────────────────────────────────────────────────────┤
@@ -121,7 +121,7 @@ class AuditLog(Base):
 │  │                   PostgreSQL (audit_logs)                      │ │
 │  └─────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
-```
+```ascii
 
 ### 3. Audit Middleware
 
@@ -213,7 +213,7 @@ class AuditMiddleware:
         if match:
             return uuid.UUID(match.group(1))
         return None
-```
+```python
 
 ### 4. Audit Decorator
 
@@ -380,7 +380,7 @@ async def create_event(self, event_data: dict) -> Event:
     event = Event.create(**event_data)
     await self.event_repo.save(event)
     return event
-```
+```python
 
 ### 5. Audit API
 
@@ -460,7 +460,7 @@ async def export_audit_logs(
             media_type="application/json",
             headers={"Content-Disposition": 'attachment; filename="audit_logs.json"'},
         )
-```
+```python
 
 ### 6. Log Retention
 
@@ -507,7 +507,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=2, minute=0),
     },
 }
-```
+```python
 
 ### 7. Integration mit bestehenden Komponenten
 
@@ -589,7 +589,7 @@ class SqlEventRepository:
             )
         
         return True
-```
+```python
 
 ### 8. Performance-Optimierungen
 
@@ -639,7 +639,7 @@ class AsyncAuditLoggingService:
                 await session.commit()
                 
             await asyncio.sleep(0.1)  # Throttle
-```
+```python
 
 ### 9. Security Considerations
 
@@ -722,3 +722,4 @@ class AsyncAuditLoggingService:
 
 5. Wie mit Timezone-Umstellung umgehen?
    - **Empfehlung:** Immer UTC verwenden
+

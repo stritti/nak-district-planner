@@ -89,3 +89,4 @@ Besonders betroffen:
 
 5. Sollten Rate Limits dynamisch anpassbar sein?
    - **Empfehlung:** Nein, statische Konfiguration reicht
+

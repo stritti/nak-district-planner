@@ -78,3 +78,4 @@ Aktuell gibt es **keinen CSRF-Schutz** (SEC-004) für state-changing Requests. D
 
 5. Wie mit CORS umgehen?
    - **Empfehlung:** CORS muss korrekt konfiguriert sein
+

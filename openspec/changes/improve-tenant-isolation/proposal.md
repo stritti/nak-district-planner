@@ -79,3 +79,4 @@ Aktuell gibt es **keine vollständige Tenant-Isolation** (SEC-020, SEC-021). Die
 
 5. Wie mit Shared Data umgehen (z.B. System-Konfiguration)?
    - **Empfehlung:** Separate Tabellen für Shared Data
+

@@ -290,7 +290,7 @@ If you detect or suspect a security vulnerability:
 3. **REPORT** - Immediately notify the security team
 4. **DOCUMENT** - Record all observations and steps taken
 
-**Contact:** security@nak-district-planner.example
+**Contact:** <security@nak-district-planner.example>
 
 ### Prohibited Actions
 
@@ -351,7 +351,7 @@ codeql analyze --format=sarif --output=results.sarif .
 
 ## Quick Reference: Security Decision Tree
 
-```
+```mermaid
 Is this a security-sensitive change?
     │
     ├── Yes

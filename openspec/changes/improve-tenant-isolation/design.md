@@ -28,7 +28,7 @@ Aktuell gibt es Tenant-Isolation auf Application-Ebene (Membership-Gate), aber k
 
 **Architektur:**
 
-```
+```ascii
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Application Layer                           │
 ├─────────────────────────────────────────────────────────────────┤
@@ -58,7 +58,7 @@ Aktuell gibt es Tenant-Isolation auf Application-Ebene (Membership-Gate), aber k
 │  │  └─────────────────────────────────────────────────────────┘│ │
 │  └─────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
-```
+```ascii
 
 ### 2. Tenant Context
 
@@ -111,7 +111,7 @@ class TenantContext:
         current_tenant.reset(token)
         current_district.reset()
         current_user_sub.reset()
-```
+```python
 
 ### 3. Tenant Middleware
 
@@ -185,7 +185,7 @@ class TenantMiddleware:
             return response
         finally:
             TenantContext.reset(token)
-```
+```python
 
 ### 4. PostgreSQL Row-Level Security (RLS)
 
@@ -261,7 +261,7 @@ CREATE POLICY tenant_isolation_congregations ON congregations
         (current_setting('app.current_user_is_superadmin') = 'true') OR
         (district_id = current_setting('app.current_district_id')::uuid)
     );
-```
+```sql
 
 **Middleware zur Setzung von PostgreSQL Settings:**
 
@@ -303,7 +303,7 @@ def set_tenant_context(conn, cursor, statement, parameters, context, executemany
         conn.execute("SET app.current_user_sub = NULL")
     
     conn.execute(f"SET app.current_user_is_superadmin = {is_superadmin}")
-```
+```python
 
 ### 5. Tenant-Aware Repositories
 
@@ -429,7 +429,7 @@ class TenantAwareRepository(Generic[T]):
             # Hier müsste die Superadmin-Prüfung implementiert werden
             return user_sub.startswith("superadmin:")
         return False
-```
+```python
 
 ### 6. Tenant Validation Service
 
@@ -574,7 +574,7 @@ class TenantValidationService:
         # Hier müsste die Datenbank-Abfrage implementiert werden
         # Für jetzt: Annahme dass es eine Zuordnung gibt
         return True
-```
+```python
 
 ### 7. Decorator für Tenant-Validierung
 
@@ -635,7 +635,7 @@ def validate_tenant_congregation(
 async def update_district_settings(district_id: uuid.UUID, settings: dict) -> District:
     # Implementierung
     pass
-```
+```python
 
 ### 8. Integration mit bestehenden Routern
 
@@ -683,7 +683,7 @@ async def update_event(
     # Tenant-Validierung wird automatisch durchgeführt
     # ... bestehende Implementierung
     pass
-```
+```python
 
 ### 9. Testing
 
@@ -759,7 +759,7 @@ async def test_rls_policies():
             
         finally:
             TenantContext.reset(token)
-```
+```python
 
 ## Risks / Trade-offs
 
@@ -825,3 +825,4 @@ async def test_rls_policies():
 
 5. Wie mit Shared Data (z.B. System-Konfiguration) umgehen?
    - **Empfehlung:** Separate Tabellen ohne RLS
+

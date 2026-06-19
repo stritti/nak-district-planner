@@ -5,7 +5,7 @@
 **Status:** Aktiv  
 **Verantwortlich:** Security Team  
 
-> **Hinweis:** Dieses Dokument definiert die verbindlichen Sicherheitsleitplanken. 
+> **Hinweis:** Dieses Dokument definiert die verbindlichen Sicherheitsleitplanken.
 > Detaillierte Analysen und Implementierungsanleitungen finden sich in `docs/security-analysis.md`.
 
 ---
@@ -317,9 +317,9 @@ server {
 - **Niedrig:** Sicherheitsrelevantes Ereignis - Reaktionszeit: < 72 Stunden
 
 **Response Team:**
-- Security Team: security@nak-district-planner.example
-- Projektleiter: project-lead@nak-district-planner.example
-- Hosting Provider: support@hosting-provider.example
+- Security Team: <security@nak-district-planner.example>
+- Projektleiter: <project-lead@nak-district-planner.example>
+- Hosting Provider: <support@hosting-provider.example>
 
 ### 7.5 Compliance-Checks
 

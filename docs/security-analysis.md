@@ -644,9 +644,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 | Rolle | Kontakt | Verantwortung |
 |-------|---------|---------------|
-| Security Team | security@nak-district-planner.example | Incident Response |
-| Projektleiter | project-lead@nak-district-planner.example | Koordination |
-| Hosting Provider | support@hosting-provider.example | Infrastruktur |
+| Security Team | <security@nak-district-planner.example> | Incident Response |
+| Projektleiter | <project-lead@nak-district-planner.example> | Koordination |
+| Hosting Provider | <support@hosting-provider.example> | Infrastruktur |
 
 ---
 

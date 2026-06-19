@@ -75,7 +75,7 @@ docker compose ps
 ```
 
 Erwarteter Output:
-```
+```bash
 NAME                          COMMAND                  SERVICE             STATE             
 nak-district-planner-backend-1   "uv run uvicorn app..."   backend             running           
 nak-district-planner-frontend-1  "/docker-entrypoint.…"   frontend            running           
@@ -501,7 +501,7 @@ def test_viewer_cannot_create_event():
 1. **Nicht panisch reagieren**, aber schnell handeln
 2. **System nicht neu starten** (könnte Beweise zerstören)
 3. **Netzwerkverbindungen nicht trennen** (könnte Angreifer warnen)
-4. **Sicherheitsteam kontaktieren:** security@nak-district-planner.example
+4. **Sicherheitsteam kontaktieren:** <security@nak-district-planner.example>
 5. **Alle Beobachtungen dokumentieren:**
    - Zeitstempel
    - Betroffene Systeme
@@ -553,7 +553,7 @@ curl http://localhost/api/health
 - **Frontend kann Backend nicht erreichen**: Prüfen Sie ob der Backend-Container läuft und ob das Proxying in Vite korrekt konfiguriert ist
 
 ### 9.2 Debugging-Tools
-- **Backend**: 
+- **Backend**:
   - `--reload` Modus für automatischen Neustart bei Codeänderungen
   - Ausführliche Logs über `docker compose logs -f backend`
   - Direktzugriff auf Swagger UI: `http://localhost:8000/docs` (nur Entwicklung)

@@ -100,7 +100,7 @@ RATE_LIMIT_ENDPOINTS:
   "/api/v1/export/*/calendar.ics": {limit: 60, window: 60}
   "/api/v1/auth/oidc/discovery": {limit: 100, window: 60}
   "/api/v1/auth/oidc/token": {limit: 100, window: 60}
-```
+```yaml
 
 ---
 
@@ -175,7 +175,7 @@ RATE_LIMIT_ENDPOINTS:
 - PostgreSQL (RLS Support)
 
 #### 🏗️ Multi-Layer Architektur
-```
+```ascii
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Application Layer                           │
 ├─────────────────────────────────────────────────────────────────┤
@@ -195,7 +195,7 @@ RATE_LIMIT_ENDPOINTS:
 ├─────────────────────────────────────────────────────────────────┤
 │  PostgreSQL RLS Policies → Tenant-specific Queries               │
 └─────────────────────────────────────────────────────────────────┘
-```
+```ascii
 
 ---
 
@@ -381,8 +381,8 @@ RATE_LIMIT_ENDPOINTS:
 
 ## 📞 Kontakt
 
-- **Security Team:** security@nak-district-planner.example
-- **Projektleiter:** project-lead@nak-district-planner.example
+- **Security Team:** <security@nak-district-planner.example>
+- **Projektleiter:** <project-lead@nak-district-planner.example>
 - **Slack Channel:** #security
 
 ---
@@ -395,3 +395,4 @@ RATE_LIMIT_ENDPOINTS:
 
 **Nächste Review:** 2025-09-30 (nach Q3 2025)
 **Klassifikation:** Intern - Nur für autorisiertes Personal
+
