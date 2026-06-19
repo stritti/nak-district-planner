@@ -92,10 +92,17 @@ class CSRFTokenService:
                 raise CSRFError("Invalid token format")
             
             # Extract components
+            # Token format: random_hex:timestamp[:session_id]:signature
+            # When session_id is present: 4 parts (random_hex, timestamp, session_id, signature)
+            # When session_id is absent: 3 parts (random_hex, timestamp, signature)
             random_hex = parts[0]
             timestamp_str = parts[1]
-            signature = parts[2]
-            token_session_id = parts[3] if len(parts) > 3 else None
+            if len(parts) == 4:
+                token_session_id = parts[2]
+                signature = parts[3]
+            else:
+                token_session_id = None
+                signature = parts[2]
             
             # Validate timestamp (lifetime check)
             timestamp = int(timestamp_str)
