@@ -19,10 +19,12 @@ from app.adapters.api.schemas.district import (
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
-from app.domain.models.event import Event, EventStatus
+from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import CongregationInvitation, InvitationTargetType
 from app.domain.models.leader import Leader, LeaderRank
 from app.domain.models.membership import Membership, ScopeType
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
@@ -449,9 +451,6 @@ async def test_get_matrix_success() -> None:
     congregation = Congregation.create(name="G", district_id=district_id)
     now = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
     # Create PlanningSlot instead of Event
-    from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
-    from app.domain.models.event_instance import EventInstance
-    from app.domain.models.event import EventSource, EventVisibility
     
     slot = PlanningSlot.create(
         district_id=district_id,
@@ -585,6 +584,7 @@ async def test_get_matrix_not_found_and_invalid_range() -> None:
 
 @pytest.mark.asyncio
 async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() -> None:
+    """Test matrix rendering with holidays (Feiertag PlanningSlots) and invitation fallback."""
     district_id = uuid.uuid4()
     congregation = Congregation.create(
         name="G",
@@ -593,40 +593,53 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
     )
     source_congregation_id = uuid.uuid4()
     start = datetime(2030, 4, 10, 10, 0, tzinfo=UTC)
-
-    source_event = Event.create(
+    start_date = start.date()
+    
+    # Create source PlanningSlot
+    source_slot = PlanningSlot.create(
         title="Gottesdienst Quelle",
-        start_at=start,
-        end_at=start + timedelta(hours=1),
         district_id=district_id,
         congregation_id=source_congregation_id,
+        planning_date=start_date,
+        planning_time=start.time(),
         category="Gottesdienst",
+        status=PlanningSlotStatus.ACTIVE,
     )
-    invite_copy = Event.create(
+    
+    # Create invitation copy PlanningSlot (with source reference)
+    invite_copy_slot = PlanningSlot.create(
         title="Gottesdienst Ziel",
-        start_at=start,
-        end_at=start + timedelta(hours=1),
         district_id=district_id,
         congregation_id=congregation.id,
+        planning_date=start_date,
+        planning_time=start.time(),
         category="Gottesdienst",
+        status=PlanningSlotStatus.ACTIVE,
         invitation_source_congregation_id=source_congregation_id,
-        invitation_source_event_id=source_event.id,
+        invitation_source_event_id=source_slot.id,  # Legacy field for compatibility
     )
-    feiertag = Event.create(
+    
+    # Create Feiertag PlanningSlot
+    feiertag_date = start_date + timedelta(days=1)
+    feiertag_slot = PlanningSlot.create(
         title="Karfreitag",
-        start_at=start + timedelta(days=1),
-        end_at=start + timedelta(days=1, hours=1),
         district_id=district_id,
+        congregation_id=None,  # District-level holiday
+        planning_date=feiertag_date,
+        planning_time=time(0, 0, 0),
         category="Feiertag",
+        status=PlanningSlotStatus.ACTIVE,
     )
+    
     leader = Leader.create(name="Muster", district_id=district_id, rank=LeaderRank.PRIESTER)
     assignment = ServiceAssignment.create(
-        event_id=source_event.id,
+        planning_slot_id=source_slot.id,
         leader_id=leader.id,
         status=AssignmentStatus.ASSIGNED,
     )
     invitation = CongregationInvitation.create(
-        source_event_id=source_event.id,
+        source_event_id=source_slot.id,  # Legacy field
+        source_planning_slot_id=source_slot.id,  # New field
         source_congregation_id=source_congregation_id,
         target_type=InvitationTargetType.DISTRICT_CONGREGATION,
         target_congregation_id=congregation.id,
@@ -635,7 +648,6 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
-        patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
         patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
         patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
         patch("app.adapters.api.routers.districts.SqlPlanningSlotRepository") as slot_repo_cls,
@@ -657,16 +669,13 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
         cong_repo.list_by_ids.return_value = [source_congregation]
         cong_repo_cls.return_value = cong_repo
 
-        event_repo = AsyncMock()
-        event_repo.list.return_value = ([invite_copy, source_event, feiertag], 3)
-        event_repo_cls.return_value = event_repo
-
         sa_repo = AsyncMock()
         sa_repo.list_by_planning_slots.return_value = [assignment]
         sa_repo_cls.return_value = sa_repo
 
         slot_repo = AsyncMock()
-        slot_repo.list_for_date_range.return_value = []
+        # Return all slots: source, invite_copy, and feiertag
+        slot_repo.list_for_date_range.return_value = [source_slot, invite_copy_slot, feiertag_slot]
         slot_repo_cls.return_value = slot_repo
 
         instance_repo = AsyncMock()
@@ -682,7 +691,7 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
         group_repo_cls.return_value = group_repo
 
         inv_repo = AsyncMock()
-        inv_repo.list_by_source_events.return_value = [invitation]
+        inv_repo.list_by_source_planning_slots.return_value = [invitation]
         inv_repo_cls.return_value = inv_repo
 
         result = await r.get_matrix(
@@ -694,11 +703,16 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
             group_id=None,
         )
 
-    cell = result.rows[0].cells[start.date().isoformat()]
-    assert result.holidays[(start + timedelta(days=1)).date().isoformat()] == ["Karfreitag"]
-    assert cell.assignment_event_id == source_event.id
+    # Verify holidays are loaded from Feiertag PlanningSlots
+    assert result.holidays[feiertag_date.isoformat()] == ["Karfreitag"]
+    
+    # Verify invitation copy cell has correct assignment reference
+    cell = result.rows[0].cells[start_date.isoformat()]
+    # The assignment_event_id should be the source slot ID for invitation copies
+    assert cell.assignment_event_id == source_slot.id
     assert cell.leader_name == f"{LeaderRank.PRIESTER.value} Muster"
     assert cell.is_assignment_editable is False
+    assert cell.invitation_source_congregation_name == "Quelle"
 
 
 @pytest.mark.asyncio
