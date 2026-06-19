@@ -1,0 +1,6 @@
+name: implement-csrf-protection
+status: proposed
+priority: high
+risk: high
+team: backend
+milestone: security-q3-2025
