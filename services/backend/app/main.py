@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from alembic import command
 from app.adapters.api import deps
+from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
 from app.adapters.api.routers import (
     auth,
     calendar_integrations,
@@ -30,6 +31,7 @@ from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
+from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import settings
 from app.telemetry import setup_telemetry
 
@@ -98,10 +100,13 @@ async def lifespan(app: FastAPI):
             result["invalid_configurations"],
         )
 
+    # Start rate limiter
+    await rate_limiter.connect()
     yield
 
     # Cleanup
     await oidc_adapter.close()
+    await rate_limiter.close()
 
 
 app = FastAPI(
@@ -112,6 +117,29 @@ app = FastAPI(
 )
 
 setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
+
+# Initialize Rate Limiting
+rate_limit_config = RateLimitConfig(
+    default_limit=200,
+    default_window_seconds=60,
+    authenticated_multiplier=2.0,
+    burst_limit=10,
+    burst_window_seconds=1,
+    endpoint_limits={
+        "/api/health": {"limit": 60, "window": 60},
+        "/api/v1/auth/oidc/discovery": {"limit": 100, "window": 60},
+        "/api/v1/auth/oidc/token": {"limit": 100, "window": 60},
+        "/api/v1/export/*": {"limit": 60, "window": 60},
+        "/api/v1/events": {"limit": 100, "window": 60},
+    },
+)
+app.add_middleware(
+    RateLimitMiddleware,
+    rate_limiter=rate_limiter,
+    config=rate_limit_config,
+    exempt_paths={"/api/health"},
+    exempt_methods={"OPTIONS"},
+)
 
 
 @app.exception_handler(Exception)
