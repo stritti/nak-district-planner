@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -470,6 +470,7 @@ async def test_get_matrix_success() -> None:
         visibility=EventVisibility.INTERNAL,
     )
     assignment = ServiceAssignment.create(
+        event_id=slot.id,  # event_id is required but we use planning_slot_id
         planning_slot_id=slot.id,
         leader_name="Pr. Muster",
         status=AssignmentStatus.ASSIGNED,
@@ -633,6 +634,7 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
     
     leader = Leader.create(name="Muster", district_id=district_id, rank=LeaderRank.PRIESTER)
     assignment = ServiceAssignment.create(
+        event_id=source_slot.id,  # event_id is required but we use planning_slot_id
         planning_slot_id=source_slot.id,
         leader_id=leader.id,
         status=AssignmentStatus.ASSIGNED,
