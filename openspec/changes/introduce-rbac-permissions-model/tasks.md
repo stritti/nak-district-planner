@@ -15,8 +15,18 @@
 - [x] 3.2 Add role checks to Planning use cases
 - [x] 3.3 Add role checks to CalendarIntegration use cases
 - [x] 3.4 Add role checks to Notification actions
+- [ ] 3.5 Add RBAC guards to auth.py router (🔴 CRITICAL - 0 checks found)
+- [ ] 3.6 Add RBAC guards to system.py router (🔴 CRITICAL - 0 checks found)
+- [ ] 3.7 Audit all routers for complete endpoint coverage (🟠 HIGH)
+- [ ] 3.8 Create automated permission coverage test (🟡 MEDIUM)
 
 ## 4. Authentication Integration
 
 - [x] 4.1 Extend JWT to include memberships
 - [x] 4.2 Validate claims during request processing
+- [ ] 4.3 Verify role claims are properly extracted from JWT (🟠 HIGH)
+
+## 5. Verification
+
+- [ ] 5.1 Create permission coverage report (🟡 MEDIUM)
+- [ ] 5.2 Document all protected endpoints (🟡 MEDIUM)
