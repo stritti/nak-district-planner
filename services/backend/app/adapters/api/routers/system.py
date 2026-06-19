@@ -1,6 +1,10 @@
 """FastAPI router for system version and update endpoints.
 
 Protected by RBAC — all endpoints require admin privileges.
+
+RBAC Notes:
+- /version: Requires DISTRICT_ADMIN or CONGREGATION_ADMIN role in any district
+- /update: Requires SUPERADMIN role
 """
 
 from __future__ import annotations
@@ -11,6 +15,9 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.adapters.api.deps import CurrentUserWithMemberships
 from app.adapters.api.schemas.system import SystemVersionResponse, UpdateResponse
+from app.adapters.auth.permissions import (
+    get_districts_where_user_has_role,
+)
 from app.adapters.version_check.cache import version_cache
 from app.adapters.version_check.ghcr import GhcrTagFetcher, latest_semver
 from app.config import settings
@@ -33,15 +40,20 @@ async def get_version(
 ) -> SystemVersionResponse:
     """Return the current running version and the latest available version.
 
-    Requires DISTRICT_ADMIN role or superadmin.
+    **RBAC:** Requires DISTRICT_ADMIN or CONGREGATION_ADMIN role in any district.
     """
-    has_admin = auth.user.is_superadmin or any(
-        m.role in (Role.DISTRICT_ADMIN, Role.CONGREGATION_ADMIN) for m in auth.memberships
+    # RBAC Guard: User must have DISTRICT_ADMIN or CONGREGATION_ADMIN in any district
+    districts_with_admin = get_districts_where_user_has_role(
+        auth, Role.DISTRICT_ADMIN
     )
-    if not has_admin:
+    congregations_with_admin = get_districts_where_user_has_role(
+        auth, Role.CONGREGATION_ADMIN
+    )
+    
+    if not districts_with_admin and not congregations_with_admin and not auth.user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Nur Administratoren können die Version abfragen.",
+            detail="Nur Administratoren (DISTRICT_ADMIN oder CONGREGATION_ADMIN) können die Version abfragen.",
         )
 
     current = settings.app_version
@@ -79,8 +91,9 @@ async def trigger_update(
     In manual mode: returns shell commands to run on the server.
     In docker-socket mode: fires a Celery task to pull and restart.
 
-    Requires superadmin role (highest privilege).
+    **RBAC:** Requires SUPERADMIN role (highest privilege).
     """
+    # RBAC Guard: Only superadmin can trigger system updates
     if not auth.user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
