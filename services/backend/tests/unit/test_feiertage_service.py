@@ -6,6 +6,8 @@ import uuid
 from datetime import UTC, date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from app.application.feiertage_service import (
     _content_hash,
     _easter_sunday,
