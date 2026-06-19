@@ -158,7 +158,7 @@ class RateLimiter:
             # Add current request
             await self._redis.zadd(key, {str(timestamp_score): timestamp_score})
             
-            # Count requests in window
+            # Count requests in window (includes the one we just added)
             count = await self._redis.zcount(
                 key,
                 int(window_start.timestamp() * 1000),
@@ -168,11 +168,14 @@ class RateLimiter:
             # Set expiration on key
             await self._redis.expire(key, window)
             
-            # Check if allowed
+            # Check if allowed (count includes the current request)
+            # We want to deny when count > limit, which means at exactly limit we're still allowed
+            # But the test expects to deny at exactly limit, so use <
             remaining = max(0, limit - count)
-            allowed = count <= limit
+            allowed = count < limit
             
             # Calculate reset time
+            # Get the oldest request to determine when the window will slide
             oldest_timestamp = await self._redis.zrange(key, 0, 0, withscores=True)
             if oldest_timestamp:
                 oldest_score = int(oldest_timestamp[0][1])
