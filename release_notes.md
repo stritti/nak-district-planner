@@ -1,4 +1,4 @@
-## [v0.12.4] - 2026-06-18
+## [v0.12.5] - 2026-06-19
 
 ### Features
 * Merge pull request #162 from stritti/feat/e2e-and-coverage (3c969dc)
@@ -25,6 +25,8 @@
 * Merge pull request #156 from stritti/copilot/fix-reference-issue (b0be84b)
 
 ### Other Changes
+* chore: activate Mistral Vibe Code for OpenSpec (aa5ce32)
+* chore: release v0.12.4 (dcf9e8f)
 * Merge pull request #140 from stritti/dependabot/uv/services/backend/ruff-0.15.16 (35f8618)
 * chore: release v0.12.3 (b96c3f9)
 * Merge pull request #165 from stritti/chore/megalinter-v9.5.0-config (a4e90a3)
@@ -33,5 +35,3 @@
 * chore: release v0.12.2 (cabe4aa)
 * Merge pull request #141 from stritti/dependabot/bun/services/frontend/vitest-4.1.8 (2547d6d)
 * chore: release v0.12.1 (80fa5a8)
-* Validate PR 141 merge update (2c4149a)
-* Resolve PR 141 merge conflict (90c731f)
