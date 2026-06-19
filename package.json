@@ -1,6 +1,6 @@
 {
   "name": "nak-district-planner",
-  "version": "0.12.5",
+  "version": "0.12.6",
   "private": true,
   "description": "Bezirksplanung für die Neuapostolische Kirche",
   "scripts": {
