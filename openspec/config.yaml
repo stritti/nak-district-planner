@@ -1,5 +1,15 @@
 schema: spec-driven
 
+# Mistral Vibe Code Agent Configuration
+agents:
+  mistral-vibe-code:
+    enabled: true
+    rules:
+      - Follow OpenSpec changes strictly
+      - Reference spec files in PR descriptions
+      - Validate implementations against specs before merging
+      - Use OpenSpec artifact structure for all changes
+
 # Project context (optional)
 # This is shown to AI when creating artifacts.
 # Add your tech stack, conventions, style guides, domain knowledge, etc.
