@@ -98,7 +98,7 @@ class TenantValidationService:
         # Check required role
         if required_role:
             for membership in memberships:
-                if membership.role.value >= required_role.value:
+                if membership.role >= required_role:
                     return True
             
             raise TenantValidationError(
@@ -163,7 +163,7 @@ class TenantValidationService:
         # Check required role
         if required_role:
             for membership in memberships:
-                if membership.role.value >= required_role.value:
+                if membership.role >= required_role:
                     return True
             
             raise TenantValidationError(

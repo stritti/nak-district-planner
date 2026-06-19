@@ -50,13 +50,17 @@ class TestTenantValidationService:
         user_sub = "user-123"
         district_id = uuid.uuid4()
         
-        # Mock is_superadmin check
-        mock_session.execute.return_value.scalar_one_or_none.return_value = False
+        # Mock is_superadmin check - returns False
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = False
         
-        # Mock membership check
+        # Mock membership check - returns a membership with VIEWER role
         mock_membership = MagicMock()
         mock_membership.role = Role.VIEWER
-        mock_session.execute.return_value.scalars.return_value.all.return_value = [mock_membership]
+        mock_result2 = MagicMock()
+        mock_result2.scalars.return_value.all.return_value = [mock_membership]
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2]
         
         result = await service.validate_user_in_district(user_sub, district_id)
         
@@ -68,8 +72,10 @@ class TestTenantValidationService:
         user_sub = "user-123"
         district_id = uuid.uuid4()
         
-        # Mock is_superadmin check
-        mock_session.execute.return_value.scalar_one_or_none.return_value = True
+        # Mock is_superadmin check - returns True
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = True
+        mock_session.execute.return_value = mock_result
         
         result = await service.validate_user_in_district(user_sub, district_id)
         
@@ -83,11 +89,15 @@ class TestTenantValidationService:
         user_sub = "user-123"
         district_id = uuid.uuid4()
         
-        # Mock is_superadmin check
-        mock_session.execute.return_value.scalar_one_or_none.return_value = False
+        # Mock is_superadmin check - returns False
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = False
         
-        # Mock membership check - no memberships
-        mock_session.execute.return_value.scalars.return_value.all.return_value = []
+        # Mock membership check - returns empty list
+        mock_result2 = MagicMock()
+        mock_result2.scalars.return_value.all.return_value = []
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2]
         
         with pytest.raises(TenantValidationError) as exc_info:
             await service.validate_user_in_district(user_sub, district_id)
@@ -100,13 +110,17 @@ class TestTenantValidationService:
         user_sub = "user-123"
         district_id = uuid.uuid4()
         
-        # Mock is_superadmin check
-        mock_session.execute.return_value.scalar_one_or_none.return_value = False
+        # Mock is_superadmin check - returns False
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = False
         
         # Mock membership check - user has VIEWER role
         mock_membership = MagicMock()
         mock_membership.role = Role.VIEWER
-        mock_session.execute.return_value.scalars.return_value.all.return_value = [mock_membership]
+        mock_result2 = MagicMock()
+        mock_result2.scalars.return_value.all.return_value = [mock_membership]
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2]
         
         # Require PLANNER role
         with pytest.raises(TenantValidationError) as exc_info:
@@ -122,13 +136,17 @@ class TestTenantValidationService:
         user_sub = "user-123"
         district_id = uuid.uuid4()
         
-        # Mock is_superadmin check
-        mock_session.execute.return_value.scalar_one_or_none.return_value = False
+        # Mock is_superadmin check - returns False
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = False
         
         # Mock membership check - user has PLANNER role
         mock_membership = MagicMock()
         mock_membership.role = Role.PLANNER
-        mock_session.execute.return_value.scalars.return_value.all.return_value = [mock_membership]
+        mock_result2 = MagicMock()
+        mock_result2.scalars.return_value.all.return_value = [mock_membership]
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2]
         
         # Require VIEWER role
         result = await service.validate_user_in_district(
@@ -143,13 +161,17 @@ class TestTenantValidationService:
         user_sub = "user-123"
         congregation_id = uuid.uuid4()
         
-        # Mock is_superadmin check
-        mock_session.execute.return_value.scalar_one_or_none.return_value = False
+        # Mock is_superadmin check - returns False
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = False
         
-        # Mock membership check
+        # Mock membership check - returns a membership
         mock_membership = MagicMock()
         mock_membership.role = Role.VIEWER
-        mock_session.execute.return_value.scalars.return_value.all.return_value = [mock_membership]
+        mock_result2 = MagicMock()
+        mock_result2.scalars.return_value.all.return_value = [mock_membership]
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2]
         
         result = await service.validate_user_in_congregation(user_sub, congregation_id)
         
@@ -160,12 +182,16 @@ class TestTenantValidationService:
         """Test getting districts for superadmin."""
         user_sub = "user-123"
         
-        # Mock is_superadmin check
-        mock_session.execute.return_value.scalar_one_or_none.return_value = True
+        # Mock is_superadmin check - returns True
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = True
         
         # Mock district query
         mock_district_id = uuid.uuid4()
-        mock_session.execute.return_value.all.return_value = [(mock_district_id,)]
+        mock_result2 = MagicMock()
+        mock_result2.all.return_value = [(mock_district_id,)]
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2]
         
         districts = await service.get_user_districts(user_sub)
         
@@ -176,12 +202,16 @@ class TestTenantValidationService:
         """Test getting districts for regular user."""
         user_sub = "user-123"
         
-        # Mock is_superadmin check
-        mock_session.execute.return_value.scalar_one_or_none.return_value = False
+        # Mock is_superadmin check - returns False
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = False
         
         # Mock membership query
         mock_district_id = uuid.uuid4()
-        mock_session.execute.return_value.all.return_value = [(mock_district_id,)]
+        mock_result2 = MagicMock()
+        mock_result2.all.return_value = [(mock_district_id,)]
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2]
         
         districts = await service.get_user_districts(user_sub)
         
@@ -203,7 +233,9 @@ class TestTenantValidationService:
         district_id = uuid.uuid4()
         
         # Mock congregation query
-        mock_session.execute.return_value.scalar_one_or_none.return_value = district_id
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = district_id
+        mock_session.execute.return_value = mock_result
         
         result = await service.get_tenant_district(congregation_id, "congregation")
         
@@ -215,11 +247,17 @@ class TestTenantValidationService:
         user_sub = "user-123"
         tenant_id = uuid.uuid4()
         
-        # Mock validation
-        mock_session.execute.return_value.scalar_one_or_none.return_value = False
+        # Mock is_superadmin check - returns False
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = False
+        
+        # Mock membership check
         mock_membership = MagicMock()
         mock_membership.role = Role.VIEWER
-        mock_session.execute.return_value.scalars.return_value.all.return_value = [mock_membership]
+        mock_result2 = MagicMock()
+        mock_result2.scalars.return_value.all.return_value = [mock_membership]
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2]
         
         result = await service.validate_cross_tenant_access(
             user_sub=user_sub,
@@ -238,14 +276,21 @@ class TestTenantValidationService:
         district_id = uuid.uuid4()
         congregation_id = uuid.uuid4()
         
-        # Mock user validation in district
-        mock_session.execute.return_value.scalar_one_or_none.side_effect = [
-            False,  # is_superadmin
-            district_id,  # congregation.district_id
-        ]
+        # Mock is_superadmin check - returns False
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = False
+        
+        # Mock membership check - user has DISTRICT_ADMIN role
         mock_membership = MagicMock()
         mock_membership.role = Role.DISTRICT_ADMIN
-        mock_session.execute.return_value.scalars.return_value.all.return_value = [mock_membership]
+        mock_result2 = MagicMock()
+        mock_result2.scalars.return_value.all.return_value = [mock_membership]
+        
+        # Mock congregation.district_id query
+        mock_result3 = MagicMock()
+        mock_result3.scalar_one_or_none.return_value = district_id
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2, mock_result3]
         
         result = await service.validate_cross_tenant_access(
             user_sub=user_sub,
@@ -264,14 +309,21 @@ class TestTenantValidationService:
         district_id = uuid.uuid4()
         other_district_id = uuid.uuid4()
         
-        # Mock user validation in district
-        mock_session.execute.return_value.scalar_one_or_none.side_effect = [
-            False,  # is_superadmin
-            other_district_id,  # congregation.district_id (different from access district)
-        ]
+        # Mock is_superadmin check - returns False
+        mock_result1 = MagicMock()
+        mock_result1.scalar_one_or_none.return_value = False
+        
+        # Mock membership check - user has DISTRICT_ADMIN role
         mock_membership = MagicMock()
         mock_membership.role = Role.DISTRICT_ADMIN
-        mock_session.execute.return_value.scalars.return_value.all.return_value = [mock_membership]
+        mock_result2 = MagicMock()
+        mock_result2.scalars.return_value.all.return_value = [mock_membership]
+        
+        # Mock congregation.district_id query - returns different district
+        mock_result3 = MagicMock()
+        mock_result3.scalar_one_or_none.return_value = other_district_id
+        
+        mock_session.execute.side_effect = [mock_result1, mock_result2, mock_result3]
         
         with pytest.raises(TenantValidationError) as exc_info:
             await service.validate_cross_tenant_access(
