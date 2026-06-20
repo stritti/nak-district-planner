@@ -148,7 +148,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 if "sub" in payload:
                     return f"user:{payload['sub']}"
             except (IndexError, ValueError, json.JSONDecodeError):
-                pass
+                pass  # Malformed token — safe to ignore, fall back to IP-based limiting
 
         # Fall back to IP address
         ip_address = self._get_client_ip(request)
