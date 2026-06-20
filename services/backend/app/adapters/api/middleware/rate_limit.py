@@ -4,20 +4,24 @@ This middleware implements rate limiting using Redis-based sliding window algori
 """
 
 import logging
-from typing import Callable, Awaitable
 
 from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 
-from app.application.rate_limiter import RateLimitConfig, RateLimitResult, rate_limiter
+from app.application.rate_limiter import RateLimitConfig, rate_limiter
 
 logger = logging.getLogger(__name__)
 
 
-class RateLimitMiddleware:
+class RateLimitMiddleware(BaseHTTPMiddleware):
     """FastAPI Middleware for rate limiting.
     
+    Registered via ``app.add_middleware()`` — Starlette instantiates it
+    as ASGI middleware and calls ``dispatch(request, call_next)`` for
+    each request.
+
     This middleware:
     - Checks rate limits for each request
     - Returns HTTP 429 when rate limit is exceeded
@@ -28,7 +32,7 @@ class RateLimitMiddleware:
     def __init__(
         self,
         app,
-        rate_limiter: rate_limiter = rate_limiter,
+        rate_limiter=rate_limiter,
         config: RateLimitConfig | None = None,
         exempt_paths: set[str] | None = None,
         exempt_methods: set[str] | None = None,
@@ -42,16 +46,16 @@ class RateLimitMiddleware:
             exempt_paths: Set of paths to exempt from rate limiting.
             exempt_methods: Set of HTTP methods to exempt.
         """
-        self.app = app
+        super().__init__(app)
         self.rate_limiter = rate_limiter
         self.config = config or RateLimitConfig()
         self.exempt_paths = exempt_paths or {"/api/health"}
         self.exempt_methods = exempt_methods or {"OPTIONS"}
 
-    async def __call__(
+    async def dispatch(
         self,
         request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
+        call_next,
     ) -> Response:
         """Process a request through the middleware.
         
@@ -64,13 +68,11 @@ class RateLimitMiddleware:
         """
         # Skip rate limiting for exempt paths
         if request.url.path in self.exempt_paths:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
         
         # Skip rate limiting for exempt methods
         if request.method in self.exempt_methods:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
         
         # Get identifier (user sub or IP address)
         identifier = self._get_identifier(request)
@@ -83,6 +85,7 @@ class RateLimitMiddleware:
             identifier=identifier,
             endpoint=request.url.path,
             is_authenticated=is_authenticated,
+            config=self.config,
         )
         
         # If rate limit exceeded, return 429
@@ -151,24 +154,32 @@ class RateLimitMiddleware:
     def _get_client_ip(self, request: Request) -> str | None:
         """Extract client IP address from request.
         
+        Trust model: behind nginx reverse proxy. The proxy sets
+        ``X-Real-IP`` to ``$remote_addr``. If that header is absent,
+        takes the last entry from ``X-Forwarded-For`` (the proxy-appended
+        value), which is not spoofable by external clients because ``nginx``
+        appends ``$remote_addr`` to any incoming header via
+        ``$proxy_add_x_forwarded_for``.
+        
         Args:
             request: HTTP request.
             
         Returns:
             Client IP address, or None if not available.
         """
-        # Check for forwarded headers (reverse proxy)
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            # Take the first IP in the chain
-            return forwarded_for.split(",")[0].strip()
-        
-        # Check for real IP header
+        # 1. X-Real-IP — set by nginx to $remote_addr, not alterable by client
         real_ip = request.headers.get("x-real-ip")
         if real_ip:
             return real_ip
         
-        # Fall back to client address
+        # 2. X-Forwarded-For — last entry is the proxy-appended $remote_addr
+        forwarded_for = request.headers.get("x-forwarded-for")
+        if forwarded_for:
+            ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
+            if ips:
+                return ips[-1]
+        
+        # 3. Fall back to direct client address
         if hasattr(request, "client") and request.client:
             return request.client.host
         

@@ -129,6 +129,7 @@ class RateLimiter:
         identifier: str,
         endpoint: str,
         is_authenticated: bool = False,
+        config: RateLimitConfig | None = None,
     ) -> RateLimitResult:
         """Check if a request should be rate limited.
         
@@ -136,12 +137,13 @@ class RateLimiter:
             identifier: User identifier (sub) or IP address.
             endpoint: API endpoint path.
             is_authenticated: Whether the user is authenticated.
+            config: Optional override config. If None, uses self.config.
             
         Returns:
             RateLimitResult with allowed status and rate limit information.
         """
-        # Get configuration for this endpoint
-        limit, window = self._get_endpoint_config(endpoint, is_authenticated)
+        # Get configuration for this endpoint (use override config if provided)
+        limit, window = self._get_endpoint_config(endpoint, is_authenticated, config)
         
         # Generate Redis key
         key = self._get_key(identifier, endpoint, window)
@@ -155,6 +157,13 @@ class RateLimiter:
         timestamp_score = int(now.timestamp() * 1000)  # Milliseconds for precision
         
         try:
+            # Prune entries older than the window before adding the new one
+            await self._redis.zremrangebyscore(
+                key,
+                0,
+                int(window_start.timestamp() * 1000),
+            )
+            
             # Add current request
             await self._redis.zadd(key, {str(timestamp_score): timestamp_score})
             
@@ -168,9 +177,7 @@ class RateLimiter:
             # Set expiration on key
             await self._redis.expire(key, window)
             
-            # Check if allowed (count includes the current request)
-            # We want to deny when count > limit, which means at exactly limit we're still allowed
-            # But the test expects to deny at exactly limit, so use <
+            # Check if allowed
             remaining = max(0, limit - count)
             allowed = count < limit
             
@@ -226,39 +233,44 @@ class RateLimiter:
         self,
         endpoint: str,
         is_authenticated: bool,
+        config: RateLimitConfig | None = None,
     ) -> tuple[int, int]:
         """Get rate limit configuration for an endpoint.
         
         Args:
             endpoint: API endpoint path.
             is_authenticated: Whether the user is authenticated.
+            config: Optional override config. Falls back to self.config.
             
         Returns:
             Tuple of (limit, window_seconds).
         """
+        # Use override config if provided, otherwise self.config
+        cfg = config or self.config
+        
         # Clean endpoint
         clean_endpoint = endpoint.split("?")[0].split("#")[0]
         
         # Check for exact match
-        if clean_endpoint in self.config.endpoint_limits:
-            config = self.config.endpoint_limits[clean_endpoint]
-            limit = config.get("limit", self.config.default_limit)
-            window = config.get("window", self.config.default_window_seconds)
+        if clean_endpoint in cfg.endpoint_limits:
+            ep_config = cfg.endpoint_limits[clean_endpoint]
+            limit = ep_config.get("limit", cfg.default_limit)
+            window = ep_config.get("window", cfg.default_window_seconds)
         
         # Check for wildcard match
         else:
-            for pattern, config in self.config.endpoint_limits.items():
+            for pattern, ep_config in cfg.endpoint_limits.items():
                 if pattern.endswith("*") and clean_endpoint.startswith(pattern[:-1]):
-                    limit = config.get("limit", self.config.default_limit)
-                    window = config.get("window", self.config.default_window_seconds)
+                    limit = ep_config.get("limit", cfg.default_limit)
+                    window = ep_config.get("window", cfg.default_window_seconds)
                     break
             else:
-                limit = self.config.default_limit
-                window = self.config.default_window_seconds
+                limit = cfg.default_limit
+                window = cfg.default_window_seconds
         
         # Apply authenticated multiplier
         if is_authenticated:
-            limit = int(limit * self.config.authenticated_multiplier)
+            limit = int(limit * cfg.authenticated_multiplier)
         
         return limit, window
 

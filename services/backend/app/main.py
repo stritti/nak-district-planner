@@ -109,13 +109,27 @@ async def lifespan(app: FastAPI):
             result["invalid_configurations"],
         )
 
-    # Start rate limiter
-    await rate_limiter.connect()
+    # Start rate limiter — fail-open: if Redis is unavailable, requests proceed without
+    # rate limiting until Redis comes back (check_rate_limit already returns allowed=True on error).
+    try:
+        await rate_limiter.connect()
+        logger = logging.getLogger(__name__)
+        logger.info("Rate limiter connected to Redis")
+    except Exception:
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "Rate limiter could not connect to Redis — requests will not be rate limited "
+            "until Redis becomes available"
+        )
+
     yield
 
     # Cleanup
     await oidc_adapter.close()
-    await rate_limiter.close()
+    try:
+        await rate_limiter.close()
+    except Exception:
+        pass
 
 
 app = FastAPI(
