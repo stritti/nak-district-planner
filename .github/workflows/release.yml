@@ -22,7 +22,7 @@ jobs:
       changelog_content: ${{ steps.changelog.outputs.content }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -222,7 +222,7 @@ jobs:
             context: services/frontend
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release.outputs.tag }}
 
