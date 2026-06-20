@@ -118,6 +118,24 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
 
+    # Backfill planning_slots for all existing Gottesdienst events so that
+    # the FK from service_assignments.planning_slot_id → planning_slots.id
+    # does not fail for pre-existing events (ServiceAssignment.create()
+    # defaults planning_slot_id to event_id).
+    backfill = sa.text("""
+        INSERT INTO planning_slots (id, district_id, congregation_id, category,
+                                    planning_date, planning_time, status,
+                                    created_at, updated_at)
+        SELECT e.id, e.district_id, e.congregation_id, e.category,
+               e.start_at::date, e.start_at::time,
+               'ACTIVE'::planning_slot_status,
+               now() AT TIME ZONE 'utc', now() AT TIME ZONE 'utc'
+        FROM events e
+        WHERE e.category = 'Gottesdienst'
+          AND NOT EXISTS (SELECT 1 FROM planning_slots ps WHERE ps.id = e.id)
+    """)
+    op.execute(backfill)
+
     op.add_column(
         "service_assignments",
         sa.Column("planning_slot_id", postgresql.UUID(as_uuid=True), nullable=True),

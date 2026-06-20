@@ -493,10 +493,8 @@ async def get_matrix(
         if existing_event is None or event.start_at < existing_event.start_at:
             event_by_owner_date[key] = event
 
-    # Batch-load leaders for this district
-    leaders = await SqlLeaderRepository(db).list_by_district(district_id)
-    leaders_by_id = {leader.id: leader for leader in leaders}
-
+    # Include slot-only dates in the date column set so planning slots whose
+    # date is not already covered by schedules / holidays / events remain visible.
     slots = await SqlPlanningSlotRepository(db).list_for_date_range(
         district_id=district_id,
         from_date=from_date,
@@ -510,6 +508,11 @@ async def get_matrix(
         existing_slot = slot_by_owner_date.get(key)
         if existing_slot is None or slot.planning_time < existing_slot.planning_time:
             slot_by_owner_date[key] = slot
+    # Add slot dates to the column set so slot-only dates remain visible
+    for slot in gottesdienst_slots:
+        all_dates.add(slot.planning_date.isoformat())
+    sorted_dates = sorted(all_dates)
+
     instances = await SqlEventInstanceRepository(db).list_by_planning_slots(
         [slot.id for slot in gottesdienst_slots]
     )
