@@ -522,11 +522,20 @@ async def get_matrix(
         [slot.id for slot in gottesdienst_slots]
     )
     assignment_by_slot_id: dict[uuid.UUID, object] = {}
+    leader_ids: set[uuid.UUID] = set()
     for a in assignments:
         # `event_id` is kept as a temporary compatibility key for older assignment rows.
         assignment_key = a.planning_slot_id or a.event_id
         if assignment_key not in assignment_by_slot_id:
             assignment_by_slot_id[assignment_key] = a
+        if a.leader_id:
+            leader_ids.add(a.leader_id)
+
+    # Preload leader info for name resolution
+    leaders_by_id = {}
+    if leader_ids:
+        leaders = await SqlLeaderRepository(db).list_by_district(district_id)
+        leaders_by_id = {ldr.id: ldr for ldr in leaders}
 
     # Build matrix rows
     rows: list[MatrixRow] = []
@@ -604,7 +613,7 @@ async def get_matrix(
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
-                event_id=event.id if event is not None else instance.id if instance is not None else None,
+                event_id=event.id if event is not None else instance.id if instance is not None else slot.id if slot is not None else None,
                 planning_slot_id=slot.id if slot is not None else None,
                 assignment_event_id=assignment_event_id,
                 invitation_source_congregation_name=source_congregation_names.get(
