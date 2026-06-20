@@ -6,11 +6,20 @@
  */
 
 import { ref, onMounted } from 'vue'
-import { useCookies } from '@vueuse/integrations/useCookies'
 
 export interface CSRFConfig {
   cookieName?: string
   headerName?: string
+}
+
+/**
+ * Get cookie value by name from document.cookie
+ */
+function getCookie(name: string): string | null {
+  const value = `; ${document.cookie}`
+  const parts = value.split(`; ${name}=`)
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || null
+  return null
 }
 
 export function useCSRF(config: CSRFConfig = {}) {
@@ -19,14 +28,13 @@ export function useCSRF(config: CSRFConfig = {}) {
     headerName = 'X-CSRF-Token',
   } = config
 
-  const cookies = useCookies()
   const csrfToken = ref<string>('')
 
   /**
    * Load CSRF token from cookie
    */
   const loadCSRFToken = () => {
-    csrfToken.value = cookies.get(cookieName) || ''
+    csrfToken.value = getCookie(cookieName) || ''
   }
 
   /**
