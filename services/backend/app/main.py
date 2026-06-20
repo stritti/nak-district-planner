@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from alembic import command
 from app.adapters.api import deps
+from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.routers import (
     auth,
     calendar_integrations,
@@ -25,6 +26,7 @@ from app.adapters.api.routers import (
     system,
 )
 from app.adapters.auth.oidc import OIDCAdapter
+from app.application.csrf import CSRFTokenService
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
@@ -119,6 +121,21 @@ app = FastAPI(
 )
 
 setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
+
+# Initialize CSRF protection
+csrf_service = CSRFTokenService()
+app.add_middleware(
+    CSRFMiddleware,
+    csrf_service=csrf_service,
+    cookie_name="csrf_token",
+    header_name="X-CSRF-Token",
+    exempt_paths={
+        "/api/health",
+        "/api/v1/auth/oidc/discovery",
+        "/api/v1/auth/oidc/token",
+    },
+    exempt_methods={"GET", "HEAD", "OPTIONS"},
+)
 
 
 @app.exception_handler(Exception)
