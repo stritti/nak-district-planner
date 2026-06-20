@@ -27,45 +27,46 @@ The implementation provides:
 ```python
 class AuditLogORM(Base):
     __tablename__ = "audit_logs"
-    
+
     # Identification
     id: UUID
     timestamp: datetime
-    
+
     # Who: User information
-    user_sub: str | None        # OIDC subject
+    user_sub: str | None  # OIDC subject
     user_email: str | None
     user_roles: list[str] | None
-    
+
     # What: Action details
-    action: AuditAction        # CREATE, UPDATE, DELETE, LOGIN, LOGOUT, EXPORT, etc.
-    resource_type: str        # e.g., "event", "user", "district"
+    action: AuditAction  # CREATE, UPDATE, DELETE, LOGIN, LOGOUT, EXPORT, etc.
+    resource_type: str  # e.g., "event", "user", "district"
     resource_id: UUID | None
-    
+
     # Where: Tenant context
     district_id: UUID | None
     congregation_id: UUID | None
-    
+
     # Details: Change information
-    changes: dict | None       # Summary of changes
-    old_values: dict | None    # Previous values (for DELETE/UPDATE)
-    new_values: dict | None    # New values (for CREATE/UPDATE)
-    
+    changes: dict | None  # Summary of changes
+    old_values: dict | None  # Previous values (for DELETE/UPDATE)
+    new_values: dict | None  # New values (for CREATE/UPDATE)
+
     # Context: Request information
     ip_address: str | None
     user_agent: str | None
     request_id: str | None
-    
+
     # Status
-    status: AuditStatus        # success, failed
+    status: AuditStatus  # success, failed
     error_message: str | None
-    
+
     # Metadata
-    metadata: dict | None
+    extra_metadata: dict | None
     created_at: datetime
 ```
 
 **Indices:**
+
 - `timestamp` - for time-based queries
 - `user_sub` - for user-specific queries
 - `action + resource_type` - for action analysis
@@ -95,6 +96,7 @@ class AuditStatus(Enum):
 ### Repository (`app/adapters/db/repositories/audit_log.py`)
 
 Provides async CRUD operations:
+
 - `create()` - Create a new audit log entry
 - `get_by_id()` - Get an audit log by ID
 - `list_by_user()` - List logs for a specific user
@@ -107,19 +109,20 @@ Provides async CRUD operations:
 ```python
 class AuditService:
     """High-level interface for audit logging."""
-    
+
     async def start() -> None
     async def stop() -> None
     async def log(...) -> None
     async def log_event(event: AuditEvent, context: AuditContext) -> None
     async def log_batch(events: list[AuditEvent], context: AuditContext) -> None
-    
+
     @asynccontextmanager
     async def context(...) -> AuditContext:
         """Context manager for request-scoped audit context."""
 ```
 
 **Features:**
+
 - Async writing to minimize performance impact
 - Queue-based processing
 - Batch logging support
@@ -130,7 +133,7 @@ class AuditService:
 ```python
 class AuditMiddleware:
     """FastAPI middleware for automatic audit logging."""
-    
+
     async def __call__(self, request: Request, call_next: Callable) -> Response:
         # Generate request ID
         # Extract context (user, IP, user agent, etc.)
@@ -139,6 +142,7 @@ class AuditMiddleware:
 ```
 
 **Features:**
+
 - Automatic audit logging for all state-changing requests
 - Request ID generation for tracing
 - Error handling and failed attempt logging
@@ -194,8 +198,9 @@ await audit_service.log(
     resource_id=event.id,
     context=context,
     new_values={"title": event.title, "date": str(event.date)},
-    metadata={"source": "api"},
+    extra_metadata={"source": "api"},
 )
+```
 ```
 
 ## Usage Examples
@@ -254,9 +259,11 @@ await audit_service.log_batch(events, context=ctx)
 The following are exempt from automatic audit logging:
 
 ### Exempt Paths
+
 - `/api/health` - Health check endpoint
 
 ### Exempt Methods
+
 - `GET` - Read-only operations
 - `HEAD` - Read-only operations
 - `OPTIONS` - CORS preflight
@@ -293,16 +300,19 @@ alembic upgrade head
 ## Security Features
 
 ### Immutability
+
 - Audit log entries cannot be modified after creation
 - No UPDATE or DELETE operations are permitted on the table
 - Only INSERT operations are allowed
 
 ### Data Retention
+
 - Audit logs are retained indefinitely by default
 - Can be configured to archive or purge old logs based on retention policies
 - Archiving should be done via separate processes, not by modifying the table
 
 ### Access Control
+
 - Audit logs should be accessible only to users with appropriate permissions
 - Consider implementing row-level security (RLS) for tenant isolation
 - API endpoints for audit log access should require elevated privileges
@@ -356,7 +366,7 @@ This implementation addresses the following security and compliance requirements
 
 Audit logging failures are logged with the following information:
 
-```
+```text
 ERROR: Failed to write audit log: <error message>
 ```
 
@@ -385,11 +395,13 @@ These should be monitored and alerted on, as they indicate potential issues with
 ### Common Issues
 
 1. **Audit logs not being written**
+
    - Check that the audit service is started
    - Verify the middleware is configured correctly
    - Check for errors in the audit writer task
 
 2. **Missing user information**
+
    - Ensure user context is being set in request state
    - Verify authentication middleware runs before audit middleware
 
