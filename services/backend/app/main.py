@@ -124,7 +124,25 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    """Health check endpoint.
+
+    Returns basic health status including database connectivity.
+    Used by Docker Compose healthchecks and monitoring.
+    """
+    status: dict = {"status": "ok", "version": settings.app_version}
+
+    # Check database connectivity
+    try:
+        from sqlalchemy import text as sa_text
+
+        async with AsyncSessionLocal() as session:
+            await session.execute(sa_text("SELECT 1"))
+        status["database"] = "ok"
+    except Exception as e:
+        status["database"] = f"error: {e}"
+        status["status"] = "degraded"
+
+    return status
 
 
 # Register routers
