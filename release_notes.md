@@ -1,4 +1,4 @@
-## [v0.14.0] - 2026-06-19
+## [v0.14.1] - 2026-06-20
 
 ### Features
 * Merge pull request #170 from stritti/feature/rbac-completion-1-4 (4ac8a98)
@@ -25,6 +25,9 @@
 * test: fix matrix e2e syntax (561e68a)
 
 ### Other Changes
+* Merge pull request #183 from stritti/dependabot/uv/services/backend/pydantic-settings-2.14.2 (5d5dddf)
+* build(deps): Bump pydantic-settings in /services/backend (c7f4f16)
+* chore: release v0.14.0 (aaf93f5)
 * chore: release v0.13.0 (f724043)
 * Merge pull request #167 from stritti/vibe/security-analysis-5ad88e (cb306cf)
 * chore: release v0.12.6 (e7bcebf)
@@ -32,6 +35,3 @@
 * docs: update OpenSpec specs and add implementation tasks (5ceb5b4)
 * docs: add refined OpenSpec gap analysis v2.1 with domain expert confirmations (de6bbc7)
 * chore: release v0.12.5 (a868a32)
-* chore: activate Mistral Vibe Code for OpenSpec (aa5ce32)
-* chore: release v0.12.4 (dcf9e8f)
-* Merge pull request #140 from stritti/dependabot/uv/services/backend/ruff-0.15.16 (35f8618)
