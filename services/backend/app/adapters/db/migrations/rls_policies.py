@@ -32,7 +32,7 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         JOIN congregations c ON c.id = m.scope_id
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'congregation'
+                        AND m.scope_type = 'CONGREGATION'
                         AND m.scope_id = events.congregation_id
                     ))
                     OR
@@ -40,7 +40,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'district'
+                        AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = events.district_id
                     ))
                 );
@@ -57,7 +57,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'congregation'
+                        AND m.scope_type = 'CONGREGATION'
                         AND m.scope_id = events.congregation_id
                         AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
@@ -66,7 +66,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'district'
+                        AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = events.district_id
                         AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
@@ -83,14 +83,14 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'congregation'
+                        AND m.scope_type = 'CONGREGATION'
                         AND m.scope_id = events.congregation_id
                     ))
                     OR
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'district'
+                        AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = events.district_id
                     ))
                 )
@@ -101,7 +101,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'congregation'
+                        AND m.scope_type = 'CONGREGATION'
                         AND m.scope_id = events.congregation_id
                         AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
@@ -109,7 +109,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'district'
+                        AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = events.district_id
                         AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
@@ -127,7 +127,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'congregation'
+                        AND m.scope_type = 'CONGREGATION'
                         AND m.scope_id = events.congregation_id
                         AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
@@ -136,7 +136,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'district'
+                        AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = events.district_id
                         AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
@@ -160,7 +160,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'congregation'
+                        AND m.scope_type = 'CONGREGATION'
                         AND m.scope_id = service_assignments.congregation_id
                     ))
                     OR
@@ -169,7 +169,7 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         JOIN congregations c ON c.id = service_assignments.congregation_id
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'district'
+                        AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = c.district_id
                     ))
                 );
@@ -192,7 +192,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'congregation'
+                        AND m.scope_type = 'CONGREGATION'
                         AND m.scope_id = leaders.congregation_id
                     ))
                     OR
@@ -201,7 +201,7 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         JOIN congregations c ON c.id = leaders.congregation_id
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'district'
+                        AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = c.district_id
                     ))
                 );
@@ -224,7 +224,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'congregation'
+                        AND m.scope_type = 'CONGREGATION'
                         AND m.scope_id = invitations.congregation_id
                     ))
                     OR
@@ -233,7 +233,7 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         JOIN congregations c ON c.id = invitations.congregation_id
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'district'
+                        AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = c.district_id
                     ))
                 );
@@ -256,7 +256,7 @@ RLS_POLICIES = {
                     (EXISTS (
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'congregation'
+                        AND m.scope_type = 'CONGREGATION'
                         AND m.scope_id = calendar_integrations.congregation_id
                     ))
                     OR
@@ -265,7 +265,7 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         JOIN congregations c ON c.id = calendar_integrations.congregation_id
                         WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'district'
+                        AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = c.district_id
                     ))
                 );

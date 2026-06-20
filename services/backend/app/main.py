@@ -124,13 +124,16 @@ app = FastAPI(
 setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
 
 # Initialize Tenant Isolation
+# NOTE: registration order matters — Starlette runs the LAST-added middleware
+# first (outermost). TenantMiddleware must run BEFORE TenantValidationMiddleware
+# so that tenant context (incl. user_sub) is already extracted when validation runs.
 app.add_middleware(
-    TenantMiddleware,
+    TenantValidationMiddleware,
     exempt_paths={"/api/health", "/api/v1/auth"},
     exempt_methods={"OPTIONS"},
 )
 app.add_middleware(
-    TenantValidationMiddleware,
+    TenantMiddleware,
     exempt_paths={"/api/health", "/api/v1/auth"},
     exempt_methods={"OPTIONS"},
 )

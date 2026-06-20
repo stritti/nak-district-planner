@@ -92,6 +92,14 @@ class TenantMiddleware(BaseHTTPMiddleware):
     def _extract_tenant_context(self, request: Request) -> dict:
         """Extract tenant context from request.
         
+        Since this runs as ASGI middleware before FastAPI dependencies,
+        ``request.state.user`` is normally not populated yet.  The method
+        first tries ``request.state.user`` (for cases where an outer
+        middleware or route has already resolved), then falls back to
+        extracting the ``sub`` claim directly from the Bearer JWT payload
+        without verifying the signature — safe because the value is used
+        only for tenant-context extraction, not authentication.
+        
         Args:
             request: HTTP request.
             
@@ -100,11 +108,18 @@ class TenantMiddleware(BaseHTTPMiddleware):
         """
         context = {}
         
-        # Extract user information
+        # Extract user information (may not be populated yet — middleware runs before deps)
+        user_sub = None
         if hasattr(request.state, "user") and request.state.user:
             user = request.state.user
-            context["user_sub"] = getattr(user, "sub", None)
+            user_sub = getattr(user, "sub", None)
             context["user_email"] = getattr(user, "email", None)
+        
+        # Fallback: extract sub from Bearer JWT payload
+        if not user_sub:
+            user_sub = self._extract_sub_from_bearer(request)
+        
+        context["user_sub"] = user_sub
         
         # Extract user roles
         if hasattr(request.state, "user_roles"):
@@ -148,6 +163,38 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 logger.warning(f"Invalid congregation ID in header: {congregation_id}")
         
         return context
+
+    @staticmethod
+    def _extract_sub_from_bearer(request: Request) -> str | None:
+        """Extract the ``sub`` claim from a Bearer JWT without verification.
+        
+        Safe because the extracted value is used only for tenant-context
+        grouping, not authentication. Full token verification happens in
+        the route dependency.
+        
+        Args:
+            request: HTTP request.
+            
+        Returns:
+            User subject string, or None if not extractable.
+        """
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.lower().startswith("bearer "):
+            return None
+        
+        import base64
+        import json
+        
+        try:
+            token = auth_header[7:]
+            payload_b64 = token.split(".")[1]
+            padding = 4 - len(payload_b64) % 4
+            if padding != 4:
+                payload_b64 += "=" * padding
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+            return payload.get("sub")
+        except (IndexError, ValueError, json.JSONDecodeError):
+            return None
 
 
 class TenantValidationMiddleware(BaseHTTPMiddleware):

@@ -99,16 +99,17 @@ class TenantValidationService:
         # Check required role
         if required_role:
             for membership in memberships:
-                if membership.role >= required_role:
+                # membership.role is a plain DB string — wrap in Role for comparison
+                if Role(membership.role) >= required_role:
                     return True
-            
+
             raise TenantValidationError(
                 f"User {user_sub} requires role {required_role.value} in district {district_id}",
                 {
                     "user_sub": user_sub,
                     "district_id": str(district_id),
                     "required_role": required_role.value,
-                    "actual_roles": [m.role.value for m in memberships],
+                    "actual_roles": [m.role for m in memberships],
                 },
             )
         
@@ -164,16 +165,17 @@ class TenantValidationService:
         # Check required role
         if required_role:
             for membership in memberships:
-                if membership.role >= required_role:
+                # membership.role is a plain DB string — wrap in Role for comparison
+                if Role(membership.role) >= required_role:
                     return True
-            
+
             raise TenantValidationError(
                 f"User {user_sub} requires role {required_role.value} in congregation {congregation_id}",
                 {
                     "user_sub": user_sub,
                     "congregation_id": str(congregation_id),
                     "required_role": required_role.value,
-                    "actual_roles": [m.role.value for m in memberships],
+                    "actual_roles": [m.role for m in memberships],
                 },
             )
         
