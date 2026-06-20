@@ -18,6 +18,7 @@ from app.adapters.api.schemas.event import (
 )
 from app.adapters.auth.permissions import (
     PermissionError,
+    assert_has_role_in_congregation,
     assert_has_role_in_district,
 )
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
@@ -38,9 +39,24 @@ async def create_event(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> EventResponse:
-    # Check if user has PLANNER role (or higher) in the district
+    # Check permission: district-level PLANNER+ or congregation-level CONGREGATION_ADMIN
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, body.district_id)
+        if body.congregation_id is not None:
+            # Try congregation_admin first, fall back to district-level PLANNER+
+            try:
+                assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, body.congregation_id)
+                # Validate congregation belongs to the specified district
+                cong_repo = SqlCongregationRepository(db)
+                congregation = await cong_repo.get(body.congregation_id)
+                if congregation is None or congregation.district_id != body.district_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Gemeinde nicht gefunden",
+                    )
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.PLANNER, body.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.PLANNER, body.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -201,14 +217,32 @@ async def update_event(
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
-    # Check if user has PLANNER role (or higher) in the current district
+    # Check permission: district-level PLANNER+ or congregation-level CONGREGATION_ADMIN
+    is_congregation_scoped = False
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+        if event.congregation_id is not None:
+            try:
+                assert_has_role_in_congregation(
+                    auth, Role.CONGREGATION_ADMIN, event.congregation_id
+                )
+                is_congregation_scoped = True
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
-    # If reassigning to a different district, check access there too
     fields = body.model_fields_set
+
+    # Congregation-scoped callers must not reassign scope
+    if is_congregation_scoped and ("congregation_id" in fields or "district_id" in fields):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Congregation admin darf die Zuordnung (congregation_id/district_id) nicht ändern",
+        )
+
+    # If reassigning to a different district, check access there too
     if (
         "district_id" in fields
         and body.district_id is not None

@@ -1,9 +1,11 @@
 import { useAuthStore } from '../stores/auth'
 import { useOIDC } from '../composables/useOIDC'
+import { useCSRF } from '../composables/useCSRF'
 import { router } from '../router'
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const authStore = useAuthStore()
+  const { getCSRFHeaders } = useCSRF()
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -14,6 +16,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
+
+  // Add CSRF token for state-changing requests
+  const csrfHeaders = getCSRFHeaders()
+  Object.assign(headers, csrfHeaders)
 
   let res = await fetch(path, {
     ...options,
@@ -56,6 +62,14 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
+    
+    // Handle CSRF validation failure
+    if (res.status === 403 && text.includes('CSRF validation failed')) {
+      // Token might be expired, reload page to get new token
+      window.location.reload()
+      throw new Error('CSRF validation failed - page reloaded')
+    }
+    
     throw new Error(`${res.status} ${res.statusText}${text ? ': ' + text : ''}`)
   }
 

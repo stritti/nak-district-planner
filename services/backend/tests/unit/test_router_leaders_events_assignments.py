@@ -473,3 +473,89 @@ async def test_bulk_update_approval_status() -> None:
         new_status=EventApprovalStatus.CONFIRMED,
         congregation_id=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_event_update_congregation_admin_cannot_reassign_scope() -> None:
+    """Congregation admin is forbidden from changing congregation_id or district_id."""
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    now = datetime.now(UTC)
+    event = Event.create(
+        title="Gottesdienst",
+        start_at=now,
+        end_at=now + timedelta(hours=1),
+        district_id=district_id,
+        congregation_id=congregation_id,
+    )
+    db = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.events.assert_has_role_in_congregation"),
+        patch("app.adapters.api.routers.events.SqlEventRepository") as repo_cls,
+    ):
+        repo = AsyncMock()
+        repo.get.return_value = event
+        repo_cls.return_value = repo
+
+        # Trying to set congregation_id=None (promote to district-level)
+        with pytest.raises(HTTPException) as exc:
+            await events_router.update_event(
+                event.id,
+                EventUpdate(congregation_id=None),
+                type("A", (), {"memberships": [], "user": None})(),
+                db,
+            )
+        assert exc.value.status_code == 403
+
+        # Trying to move to another district
+        other_district = uuid.uuid4()
+        with pytest.raises(HTTPException) as exc2:
+            await events_router.update_event(
+                event.id,
+                EventUpdate(district_id=other_district),
+                type("A", (), {"memberships": [], "user": None})(),
+                db,
+            )
+        assert exc2.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_event_update_congregation_admin_can_update_own_event_fields() -> None:
+    """Congregation admin can update non-scope fields of their congregation's event."""
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    now = datetime.now(UTC)
+    event = Event.create(
+        title="Gottesdienst",
+        start_at=now,
+        end_at=now + timedelta(hours=1),
+        district_id=district_id,
+        congregation_id=congregation_id,
+    )
+    db = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.events.assert_has_role_in_congregation"),
+        patch("app.adapters.api.routers.events.SqlEventRepository") as repo_cls,
+        patch(
+            "app.adapters.api.routers.events.sync_linked_invitation_event_schedule",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.adapters.api.routers.events.propagate_source_event_update",
+            new=AsyncMock(),
+        ),
+    ):
+        repo = AsyncMock()
+        repo.get.return_value = event
+        repo_cls.return_value = repo
+
+        updated = await events_router.update_event(
+            event.id,
+            EventUpdate(title="Neuer Titel"),
+            type("A", (), {"memberships": [], "user": None})(),
+            db,
+        )
+
+    assert updated.title == "Neuer Titel"

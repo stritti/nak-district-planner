@@ -3,6 +3,13 @@ import { apiFetch } from './client'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
 
+// Mock useCSRF composable
+vi.mock('../composables/useCSRF', () => ({
+  useCSRF: () => ({
+    getCSRFHeaders: () => ({ 'X-CSRF-Token': 'mock-csrf-token' }),
+  }),
+}))
+
 function makeResponse(
   body: unknown,
   {
