@@ -233,23 +233,24 @@ class TestRateLimiter:
     async def test_check_rate_limit_denied(self, mock_redis):
         """Test rate limit check when request is denied."""
         with patch("app.application.rate_limiter.redis.from_url", return_value=mock_redis):
-            # Mock Redis responses - already at limit
+            # Mock Redis responses — count exceeds limit (count includes current request,
+            # and count <= limit is allowed, so count must be > limit to deny)
             mock_redis.zadd.return_value = 1
-            mock_redis.zcount.return_value = 100
+            mock_redis.zcount.return_value = 101
             mock_redis.expire.return_value = True
             mock_redis.zrange.return_value = [(b"1234567890", 1234567890)]
-            
+
             limiter = RateLimiter(config=RateLimitConfig(default_limit=100))
             await limiter.connect()
-            
+
             result = await limiter.check_rate_limit(
                 identifier="user:123",
                 endpoint="/api/test",
                 is_authenticated=False,
             )
-            
+
             assert result.allowed is False
-            assert result.remaining == 0
+            assert result.remaining == max(0, 100 - 101)
             assert result.retry_after is not None
 
     @pytest.mark.asyncio

@@ -76,18 +76,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         
         # Get identifier (user sub or IP address)
         identifier = self._get_identifier(request)
-        
+
         # Check if user is authenticated
         is_authenticated = self._is_authenticated(request)
-        
-        # Check rate limit
+
+        # Check normal sliding-window rate limit
         result = await self.rate_limiter.check_rate_limit(
             identifier=identifier,
             endpoint=request.url.path,
             is_authenticated=is_authenticated,
             config=self.config,
         )
-        
+
         # If rate limit exceeded, return 429
         if not result.allowed:
             logger.warning(
@@ -97,6 +97,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 status_code=HTTP_429_TOO_MANY_REQUESTS,
                 content={"detail": "Rate limit exceeded"},
                 headers=await self.rate_limiter.get_rate_limit_headers(result),
+            )
+
+        # Enforce burst limit (short-window spike protection)
+        burst_result = await self.rate_limiter.check_burst_limit(
+            identifier=identifier,
+            endpoint=request.url.path,
+            config=self.config,
+        )
+        if not burst_result.allowed:
+            logger.warning(
+                f"Burst rate limit exceeded for {identifier} on {request.method} {request.url.path}"
+            )
+            return JSONResponse(
+                status_code=HTTP_429_TOO_MANY_REQUESTS,
+                content={"detail": "Rate limit exceeded"},
+                headers=await self.rate_limiter.get_rate_limit_headers(burst_result),
             )
         
         # Process request

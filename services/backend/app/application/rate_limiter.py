@@ -219,20 +219,32 @@ class RateLimiter:
         self,
         identifier: str,
         endpoint: str,
+        config: RateLimitConfig | None = None,
     ) -> RateLimitResult:
-        """Check burst rate limit (short window).
+        """Check burst rate limit (short-window spike protection).
+        
+        Uses ``burst_limit`` and ``burst_window_seconds`` from the config
+        (defaults to 10 requests per 1 second).
         
         Args:
             identifier: User identifier or IP address.
             endpoint: API endpoint path.
+            config: Optional override config. Falls back to self.config.
             
         Returns:
             RateLimitResult for burst limit check.
         """
+        cfg = config or self.config
+        burst_endpoint = f"{endpoint}__burst__"
         return await self.check_rate_limit(
             identifier=identifier,
-            endpoint=endpoint,
+            endpoint=burst_endpoint,
             is_authenticated=False,  # Burst limit applies to all
+            config=RateLimitConfig(
+                default_limit=cfg.burst_limit,
+                default_window_seconds=cfg.burst_window_seconds,
+                authenticated_multiplier=1.0,
+            ),
         )
 
     def _get_endpoint_config(
