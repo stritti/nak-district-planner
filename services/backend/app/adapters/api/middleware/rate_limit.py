@@ -128,12 +128,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _get_identifier(self, request: Request) -> str:
         """Get identifier for rate limiting (user sub or IP address).
 
-        Since middleware runs before FastAPI dependencies (get_current_user),
-        ``request.state.user`` may not be populated yet. As a fallback this
-        method extracts the ``sub`` claim directly from the Bearer JWT payload
-        without verifying the signature — safe because the value is used only
-        for rate-limit grouping, not authentication. Full token verification
-        happens later in the route dependency.
+        Only ``request.state.user`` (set by the auth dependency after
+        route resolution) is trusted for per-user rate limiting — we do
+        not extract the ``sub`` claim from an unverified JWT to avoid
+        allowing an unauthenticated client to impersonate a user's rate-
+        limit bucket.
+        
+        Since middleware runs before FastAPI dependencies, user-based
+        identifiers are only available for requests that have passed
+        through an outer middleware or setup that populates
+        ``request.state.user``.  In all other cases IP-based or
+        anonymous limiting is used.
 
         Args:
             request: HTTP request.
@@ -146,25 +151,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             user = request.state.user
             if hasattr(user, "sub") and user.sub:
                 return f"user:{user.sub}"
-
-        # Fallback: extract sub from Bearer JWT payload without verification
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.lower().startswith("bearer "):
-            token = auth_header[7:]
-            import base64
-            import json
-
-            try:
-                # JWT: header.payload.signature — decode payload segment
-                payload_b64 = token.split(".")[1]
-                padding = 4 - len(payload_b64) % 4
-                if padding != 4:
-                    payload_b64 += "=" * padding
-                payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-                if "sub" in payload:
-                    return f"user:{payload['sub']}"
-            except (IndexError, ValueError, json.JSONDecodeError):
-                pass  # Malformed token — safe to ignore, fall back to IP-based limiting
 
         # Fall back to IP address
         ip_address = self._get_client_ip(request)
