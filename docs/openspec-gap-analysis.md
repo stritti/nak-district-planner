@@ -24,7 +24,7 @@ This document identifies gaps between the **current implementation** and the **O
 
 | # | Gap | OpenSpec Change | Component | Status | Priority | Effort | Risk | Notes |
 |---|-----|-----------------|-----------|--------|----------|--------|------|-------|
-| 1 | RBAC guards missing on auth.py, system.py routers | introduce-rbac-permissions-model | Backend | ❌ Missing | 🔴 Critical | Medium | High | No permission checks on auth and system endpoints |
+| 1 | RBAC guard gaps in events.py and remaining routers | introduce-rbac-permissions-model | Backend | ⚠️ Partial | 🟡 Medium | Medium | Medium | system.py already requires CurrentUserWithMemberships + admin/superadmin; auth.py has intentionally public OIDC endpoints and authenticated /me/access. Remaining routers lack systematic checks |
 | 2 | RBAC guards incomplete on events.py router | introduce-rbac-permissions-model | Backend | ⚠️ Partial | 🔴 Critical | Medium | Medium | Only 7 checks found, likely incomplete |
 | 3 | ExternalEventCandidate model not implemented | planning-slot-hybrid-sync | Backend | ❌ Missing | 🔴 Critical | High | High | Required for candidate review workflow |
 | 4 | ExternalEventLink model not implemented | planning-slot-hybrid-sync | Backend | ❌ Missing | 🔴 Critical | High | High | Required for sync metadata tracking |
