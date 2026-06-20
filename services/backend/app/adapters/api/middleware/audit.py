@@ -146,9 +146,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if hasattr(request.state, "user_roles"):
             user_roles = request.state.user_roles
         
-        # Extract tenant context
-        district_id = getattr(request.state, "district_id", None)
-        congregation_id = getattr(request.state, "congregation_id", None)
+        # Extract tenant context from path params (populated by FastAPI routing)
+        path_params = getattr(request, "path_params", {}) or {}
+        district_id = path_params.get("district_id", getattr(request.state, "district_id", None))
+        congregation_id = path_params.get("congregation_id", getattr(request.state, "congregation_id", None))
         
         # Extract request information (or use pre-extracted values)
         if ip_address is None:
@@ -232,8 +233,8 @@ class AuditMiddleware(BaseHTTPMiddleware):
             duration: Request duration in seconds.
         """
         try:
-            # Determine action based on HTTP method
-            action = self._get_action_from_method(request.method)
+            # Determine action based on HTTP method and path
+            action = self._get_action_from_method(request.method, request.url.path)
             
             # Determine resource type from path
             resource_type = self._get_resource_type(request.url.path)
@@ -250,6 +251,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
             
             # Extract resource ID from path if available
             resource_id = self._extract_resource_id(request.url.path)
+            # For CREATE responses with no path UUID, try Location header
+            if resource_id is None and action == AuditAction.CREATE and response:
+                location = response.headers.get("Location")
+                if location:
+                    resource_id = self._extract_resource_id(location)
             
             # Log the audit event
             await self.audit_service.log(
@@ -272,11 +278,12 @@ class AuditMiddleware(BaseHTTPMiddleware):
             # Don't let audit logging failures break the request
             logger.error(f"Failed to log audit event: {e}")
 
-    def _get_action_from_method(self, method: str) -> AuditAction:
+    def _get_action_from_method(self, method: str, path: str = "") -> AuditAction:
         """Map HTTP method to audit action.
         
         Args:
             method: HTTP method.
+            path: Request URL path (used to detect command-style POST routes).
             
         Returns:
             Corresponding AuditAction.
@@ -284,6 +291,8 @@ class AuditMiddleware(BaseHTTPMiddleware):
         method_upper = method.upper()
         
         if method_upper == "POST":
+            if path and self._is_command_action(path):
+                return AuditAction.UPDATE
             return AuditAction.CREATE
         elif method_upper == "PUT":
             return AuditAction.UPDATE
@@ -292,8 +301,41 @@ class AuditMiddleware(BaseHTTPMiddleware):
         elif method_upper == "DELETE":
             return AuditAction.DELETE
         else:
-            # For other methods, use a generic action
             return AuditAction.UPDATE
+
+    @staticmethod
+    def _is_command_action(path: str) -> bool:
+        """Detect if a POST route is a command-style action, not a resource create.
+        
+        Command-style POST routes (e.g. ``POST /api/v1/events/bulk-approval-status``)
+        update existing resources rather than creating new ones.  Detection heuristic:
+        if the last path segment is neither a known collection name nor a UUID,
+        treat it as a command action.
+        
+        Args:
+            path: Request URL path.
+            
+        Returns:
+            True if the route is a command action.
+        """
+        clean = path.rstrip("/")
+        last_segment = clean.split("/")[-1] if "/" in clean else clean
+        
+        # UUID-pattern segment → resource parameter, not a command
+        if re.search(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", last_segment):
+            return False
+        
+        # Known collection names → resource create, not a command
+        resource_names = {
+            "events", "districts", "congregations", "leaders", "invitations",
+            "service-assignments", "calendar-integrations", "memberships",
+            "users", "export", "auth", "oidc", "token", "discovery",
+        }
+        if last_segment in resource_names:
+            return False
+        
+        # Anything else (hyphenated or multi-word segment) → command-style action
+        return True
 
     def _get_resource_type(self, path: str) -> str:
         """Extract resource type from URL path.
