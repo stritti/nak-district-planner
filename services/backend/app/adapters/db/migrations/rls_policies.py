@@ -45,11 +45,11 @@ RLS_POLICIES = {
                     ))
                 );
             """,
-            # Allow insert/update for users with write access
+            # Allow insert for users with write access
             """
-            CREATE POLICY events_write_policy ON events
-                FOR INSERT OR UPDATE
-                USING (
+            CREATE POLICY events_insert_policy ON events
+                FOR INSERT
+                WITH CHECK (
                     -- User is superadmin
                     (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
                     OR
@@ -58,7 +58,7 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
                         AND m.scope_type = 'congregation'
-                        AND m.scope_id = NEW.congregation_id
+                        AND m.scope_id = events.congregation_id
                         AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
                     OR
@@ -67,7 +67,50 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
                         AND m.scope_type = 'district'
-                        AND m.scope_id = NEW.district_id
+                        AND m.scope_id = events.district_id
+                        AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+                    ))
+                );
+            """,
+            # Allow update for users with write access
+            """
+            CREATE POLICY events_update_policy ON events
+                FOR UPDATE
+                USING (
+                    -- Same visibility conditions as SELECT
+                    (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
+                    OR
+                    (EXISTS (
+                        SELECT 1 FROM memberships m
+                        WHERE m.user_sub = current_setting('app.current_user_sub')
+                        AND m.scope_type = 'congregation'
+                        AND m.scope_id = events.congregation_id
+                    ))
+                    OR
+                    (EXISTS (
+                        SELECT 1 FROM memberships m
+                        WHERE m.user_sub = current_setting('app.current_user_sub')
+                        AND m.scope_type = 'district'
+                        AND m.scope_id = events.district_id
+                    ))
+                )
+                WITH CHECK (
+                    -- User is superadmin or has write role on the target row
+                    (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
+                    OR
+                    (EXISTS (
+                        SELECT 1 FROM memberships m
+                        WHERE m.user_sub = current_setting('app.current_user_sub')
+                        AND m.scope_type = 'congregation'
+                        AND m.scope_id = events.congregation_id
+                        AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+                    ))
+                    OR
+                    (EXISTS (
+                        SELECT 1 FROM memberships m
+                        WHERE m.user_sub = current_setting('app.current_user_sub')
+                        AND m.scope_type = 'district'
+                        AND m.scope_id = events.district_id
                         AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
                 );
@@ -85,7 +128,7 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
                         AND m.scope_type = 'congregation'
-                        AND m.scope_id = OLD.congregation_id
+                        AND m.scope_id = events.congregation_id
                         AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
                     OR
@@ -94,7 +137,7 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
                         AND m.scope_type = 'district'
-                        AND m.scope_id = OLD.district_id
+                        AND m.scope_id = events.district_id
                         AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
                     ))
                 );

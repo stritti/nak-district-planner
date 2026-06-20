@@ -9,13 +9,14 @@ import logging
 import uuid
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.district import DistrictORM
 from app.adapters.db.orm_models.membership import MembershipORM
 from app.adapters.db.orm_models.user import UserORM
+from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class TenantValidationService:
             .where(
                 and_(
                     MembershipORM.user_sub == user_sub,
-                    MembershipORM.scope_type == "district",
+                    MembershipORM.scope_type == ScopeType.DISTRICT.value,
                     MembershipORM.scope_id == district_id,
                 )
             )
@@ -147,7 +148,7 @@ class TenantValidationService:
             .where(
                 and_(
                     MembershipORM.user_sub == user_sub,
-                    MembershipORM.scope_type == "congregation",
+                    MembershipORM.scope_type == ScopeType.CONGREGATION.value,
                     MembershipORM.scope_id == congregation_id,
                 )
             )
@@ -242,7 +243,7 @@ class TenantValidationService:
             .where(
                 and_(
                     MembershipORM.user_sub == user_sub,
-                    MembershipORM.scope_type == "district",
+                    MembershipORM.scope_type == ScopeType.DISTRICT.value,
                 )
             )
             .distinct()
@@ -278,34 +279,32 @@ class TenantValidationService:
             return [row[0] for row in result.all()]
         
         # Get user's congregation memberships
-        query = select(MembershipORM.scope_id).where(
-            and_(
-                MembershipORM.user_sub == user_sub,
-                MembershipORM.scope_type == "congregation",
-            )
-        )
-        
-        if district_id:
-            # Filter by district
-            query = select(MembershipORM.scope_id).where(
+        result = await self.session.execute(
+            select(MembershipORM.scope_id).where(
                 and_(
                     MembershipORM.user_sub == user_sub,
-                    MembershipORM.scope_type == "congregation",
+                    MembershipORM.scope_type == ScopeType.CONGREGATION.value,
                 )
             )
-            # Need to join with congregation to filter by district
-            query = select(CongregationORM.id).join(
-                MembershipORM,
-                and_(
-                    CongregationORM.id == MembershipORM.scope_id,
-                    MembershipORM.scope_type == "congregation",
-                    MembershipORM.user_sub == user_sub,
-                    CongregationORM.district_id == district_id,
-                ),
-            )
+            .distinct()
+        )
         
-        result = await self.session.execute(query.distinct())
-        return [row[0] for row in result.all()]
+        congregation_ids = [row[0] for row in result.all()]
+        
+        if district_id and congregation_ids:
+            # Filter by district — join with congregation to check district_id
+            result = await self.session.execute(
+                select(CongregationORM.id)
+                .where(
+                    and_(
+                        CongregationORM.id.in_(congregation_ids),
+                        CongregationORM.district_id == district_id,
+                    )
+                )
+            )
+            return [row[0] for row in result.all()]
+        
+        return congregation_ids
 
     async def get_tenant_district(
         self,

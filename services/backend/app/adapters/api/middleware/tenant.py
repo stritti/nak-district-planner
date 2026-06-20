@@ -4,25 +4,26 @@ This middleware extracts tenant context from requests and enforces tenant isolat
 """
 
 import logging
-from typing import Callable, Awaitable
+import uuid
 
 from fastapi import Request
-from starlette.responses import JSONResponse, Response
-from starlette.status import HTTP_403_FORBIDDEN
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
-from app.application.tenant_validation import TenantValidationError, TenantValidationService
 from app.tenant import TenantContext
 
 logger = logging.getLogger(__name__)
 
 
-class TenantMiddleware:
+class TenantMiddleware(BaseHTTPMiddleware):
     """FastAPI Middleware for tenant isolation.
     
+    Registered via ``app.add_middleware()`` — Starlette calls
+    ``dispatch(request, call_next)`` for each request.
+
     This middleware:
     - Extracts tenant context from request (district, congregation, user)
     - Sets tenant context variables for use by other components
-    - Validates tenant access for authenticated users
     - Adds tenant information to request state
     """
 
@@ -36,17 +37,17 @@ class TenantMiddleware:
         
         Args:
             app: FastAPI application instance.
-            exempt_paths: Set of paths to exempt from tenant validation.
+            exempt_paths: Set of paths to exempt from tenant context extraction.
             exempt_methods: Set of HTTP methods to exempt.
         """
-        self.app = app
+        super().__init__(app)
         self.exempt_paths = exempt_paths or {"/api/health"}
         self.exempt_methods = exempt_methods or {"OPTIONS"}
 
-    async def __call__(
+    async def dispatch(
         self,
         request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
+        call_next,
     ) -> Response:
         """Process a request through the middleware.
         
@@ -57,15 +58,13 @@ class TenantMiddleware:
         Returns:
             HTTP response.
         """
-        # Skip tenant validation for exempt paths
+        # Skip for exempt paths
         if request.url.path in self.exempt_paths:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
         
-        # Skip tenant validation for exempt methods
+        # Skip for exempt methods
         if request.method in self.exempt_methods:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
         
         # Extract tenant context from request
         tenant_context = self._extract_tenant_context(request)
@@ -151,11 +150,14 @@ class TenantMiddleware:
         return context
 
 
-class TenantValidationMiddleware:
+class TenantValidationMiddleware(BaseHTTPMiddleware):
     """FastAPI Middleware for tenant validation.
     
+    Registered via ``app.add_middleware()`` — Starlette calls
+    ``dispatch(request, call_next)`` for each request.
+
     This middleware validates that authenticated users have access to
-    the requested tenant resources.
+    the requested tenant resources by calling ``TenantValidationService``.
     """
 
     def __init__(
@@ -171,14 +173,14 @@ class TenantValidationMiddleware:
             exempt_paths: Set of paths to exempt from validation.
             exempt_methods: Set of HTTP methods to exempt.
         """
-        self.app = app
+        super().__init__(app)
         self.exempt_paths = exempt_paths or {"/api/health", "/api/v1/auth"}
         self.exempt_methods = exempt_methods or {"GET", "HEAD", "OPTIONS"}
 
-    async def __call__(
+    async def dispatch(
         self,
         request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
+        call_next,
     ) -> Response:
         """Process a request through the middleware.
         
@@ -191,56 +193,63 @@ class TenantValidationMiddleware:
         """
         # Skip validation for exempt paths
         if any(request.url.path.startswith(path) for path in self.exempt_paths):
-            response = await call_next(request)
-            return response
+            return await call_next(request)
         
         # Skip validation for exempt methods
         if request.method in self.exempt_methods:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
         
         # Skip validation for unauthenticated requests
         if not self._is_authenticated(request):
-            response = await call_next(request)
-            return response
+            return await call_next(request)
         
         # Get tenant context from request
         tenant_context = getattr(request.state, "tenant_context", {})
         
         # If no tenant context, allow request (will be validated at service level)
         if not tenant_context:
-            response = await call_next(request)
-            return response
+            return await call_next(request)
         
-        # Validate tenant access
-        try:
-            user_sub = tenant_context.get("user_sub")
-            tenant_id = tenant_context.get("tenant_id")
-            tenant_type = tenant_context.get("tenant_type")
-            
-            if user_sub and tenant_id and tenant_type:
-                # This validation would normally use a service
-                # For now, we just log and allow
-                logger.debug(
-                    f"Tenant validation: user={user_sub}, "
-                    f"tenant={tenant_id}, type={tenant_type}"
-                )
-            
-            response = await call_next(request)
-            return response
-            
-        except TenantValidationError as e:
-            logger.warning(f"Tenant validation failed: {e}")
-            return JSONResponse(
-                status_code=HTTP_403_FORBIDDEN,
-                content={"detail": "Access denied: insufficient permissions"},
+        user_sub = tenant_context.get("user_sub")
+        tenant_id = tenant_context.get("tenant_id")
+        tenant_type = tenant_context.get("tenant_type")
+        
+        # Only validate when we have both user and tenant context
+        if user_sub and tenant_id and tenant_type:
+            from app.adapters.db.session import AsyncSessionLocal
+            from app.application.tenant_validation import (
+                TenantValidationError,
+                TenantValidationService,
             )
-        except Exception as e:
-            logger.error(f"Tenant validation error: {e}")
-            return JSONResponse(
-                status_code=HTTP_403_FORBIDDEN,
-                content={"detail": "Access denied"},
-            )
+            
+            async with AsyncSessionLocal() as session:
+                validation_service = TenantValidationService(session)
+                try:
+                    await validation_service.validate_user_in_tenant(
+                        user_sub=user_sub,
+                        tenant_id=(
+                            uuid.UUID(tenant_id)
+                            if isinstance(tenant_id, str)
+                            else tenant_id
+                        ),
+                        tenant_type=tenant_type,
+                    )
+                except TenantValidationError as e:
+                    logger.warning(
+                        "Tenant validation denied: user=%s tenant=%s type=%s: %s",
+                        user_sub,
+                        tenant_id,
+                        tenant_type,
+                        e,
+                    )
+                    from starlette.responses import JSONResponse
+                    from starlette.status import HTTP_403_FORBIDDEN
+                    return JSONResponse(
+                        status_code=HTTP_403_FORBIDDEN,
+                        content={"detail": str(e)},
+                    )
+        
+        return await call_next(request)
 
     def _is_authenticated(self, request: Request) -> bool:
         """Check if request is authenticated.
