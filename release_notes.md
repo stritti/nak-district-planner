@@ -1,16 +1,16 @@
-## [v0.18.0] - 2026-06-20
+## [v0.19.0] - 2026-06-20
 
 ### Features
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
 * Merge pull request #184 from stritti/feat/health-check-endpoint (9a5df96)
 * Merge pull request #174 from stritti/feature/matrix-rendering-migration-1-1 (55355e8)
 * Merge pull request #169 from stritti/feature/security-csrf-protection-sec-004 (55fb297)
 * Merge pull request #154 from stritti/feat/p0-blitzer-production-readiness (8220231)
 * feat(security): implement CSRF protection (SEC-004) (36a14c8)
+* feat: add toast notification system and confirm dialog component (a300ac5)
 * feat: add database health check to /api/health endpoint (52df2a9)
 * feat: add database migration for PlanningSlot and Invitation new fields (c5b4beb)
 * feat: migrate matrix rendering to use only PlanningSlot/EventInstance (Task 1.1) (52d74f1)
-* feat: add missing fields to PlanningSlot and Invitation models for matrix migration (c8441dd)
-* Merge pull request #170 from stritti/feature/rbac-completion-1-4 (4ac8a98)
 
 ### Bug Fixes
 * Fix duplicate starlette dependency and update requests version (e376147)
@@ -25,6 +25,7 @@
 * fix: adjust RBAC guard for /access endpoint to allow PENDING_APPROVAL users (df3d466)
 
 ### Other Changes
+* chore: release v0.18.0 (eea4ae3)
 * chore: release v0.17.0 (769c3e8)
 * chore: release v0.16.0 (2c8b5ec)
 * chore: release v0.15.0 (5640fc2)
@@ -34,4 +35,3 @@
 * Merge pull request #178 from stritti/dependabot/uv/services/backend/ruff-0.15.18 (83ba7ce)
 * Merge pull request #177 from stritti/dependabot/github_actions/actions/upload-artifact-7 (ee63451)
 * chore: release v0.14.4 (2135e23)
-* Merge pull request #175 from stritti/dependabot/github_actions/actions/checkout-7 (ab23b8d)
