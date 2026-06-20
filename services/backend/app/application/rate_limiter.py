@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -164,8 +165,11 @@ class RateLimiter:
                 int(window_start.timestamp() * 1000),
             )
             
-            # Add current request
-            await self._redis.zadd(key, {str(timestamp_score): timestamp_score})
+            # Add current request — member includes a nonce so requests
+            # arriving in the same millisecond each produce a unique member
+            # (otherwise ZADD silently overwrites same-key entries).
+            nonce = uuid.uuid4().hex[:8]
+            await self._redis.zadd(key, {f"{timestamp_score}:{nonce}": timestamp_score})
             
             # Count requests in window (includes the one we just added)
             count = await self._redis.zcount(
@@ -178,8 +182,10 @@ class RateLimiter:
             await self._redis.expire(key, window)
             
             # Check if allowed
+            # count already includes the current request, so count == limit
+            # represents the last request that should be allowed.
             remaining = max(0, limit - count)
-            allowed = count < limit
+            allowed = count <= limit
             
             # Calculate reset time
             # Get the oldest request to determine when the window will slide

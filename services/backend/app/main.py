@@ -129,7 +129,7 @@ async def lifespan(app: FastAPI):
     try:
         await rate_limiter.close()
     except Exception:
-        pass
+        pass  # Shutting down — Redis connection may already be gone, safe to ignore
 
 
 app = FastAPI(
