@@ -1,6 +1,6 @@
 <template>
-  <div class="p-6 max-w-3xl">
-    <div class="flex items-center justify-between mb-5">
+  <div class="p-4 sm:p-6 max-w-3xl">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-2">
       <h1 class="page-title mb-0">Kalender-Export</h1>
       <button
         class="btn-primary"
@@ -46,23 +46,45 @@
             <!-- ICS URL -->
             <div class="flex items-center gap-2">
               <code class="text-xs bg-gray-100 dark:bg-gray-700 rounded px-2 py-1 text-gray-700 dark:text-gray-300 truncate max-w-sm block">
-                {{ icsUrl(t.token) }}
+                {{ icsUrl(t.token, tokenFilter[t.id]) }}
               </code>
               <button
                 class="btn-icon shrink-0"
                 title="URL kopieren"
-                @click="copyUrl(t.token)"
+                @click="copyUrl(t.token, tokenFilter[t.id])"
               >
                 <ClipboardDocumentIcon class="h-4 w-4" />
               </button>
               <a
-                :href="icsUrl(t.token)"
+                :href="icsUrl(t.token, tokenFilter[t.id])"
                 target="_blank"
                 class="btn-icon shrink-0"
                 title="Im Browser öffnen"
               >
                 <ArrowTopRightOnSquareIcon class="h-4 w-4" />
               </a>
+            </div>
+            <!-- approval_status filter -->
+            <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span class="text-[11px] text-gray-400 dark:text-gray-500">Freigabe:</span>
+              <button
+                class="text-[11px] px-2 py-0.5 rounded border transition-colors"
+                :class="(tokenFilter[t.id] ?? defaultFilter(t)) === 'confirmed_only'
+                  ? 'bg-green-100 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-300'
+                  : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400'"
+                @click="tokenFilter[t.id] = 'confirmed_only'"
+              >
+                Nur Bestätigte
+              </button>
+              <button
+                class="text-[11px] px-2 py-0.5 rounded border transition-colors"
+                :class="(tokenFilter[t.id] ?? defaultFilter(t)) === 'include_planned'
+                  ? 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-300'
+                  : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400'"
+                @click="tokenFilter[t.id] = 'include_planned'"
+              >
+                Inkl. Geplante
+              </button>
             </div>
             <p v-if="copiedToken === t.token" class="text-xs text-green-600 mt-1">Kopiert!</p>
           </div>
@@ -254,6 +276,7 @@ onMounted(async () => {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const allCongregations = ref<CongregationResponse[]>([])
+const tokenFilter = ref<Record<string, 'confirmed_only' | 'include_planned'>>({})
 
 async function ensureAllCongregations() {
   if (allCongregations.value.length > 0) return
@@ -271,12 +294,20 @@ function congregationName(id: string): string {
   return allCongregations.value.find((c) => c.id === id)?.name ?? id
 }
 
-function icsUrl(token: string): string {
-  return `${window.location.origin}/api/v1/export/${token}/calendar.ics`
+function defaultFilter(t: ExportTokenResponse): 'confirmed_only' | 'include_planned' {
+  // Match backend logic: public tokens without leader → confirmed_only, else include_planned
+  if (t.token_type === 'PUBLIC' && !t.leader_id) return 'confirmed_only'
+  return 'include_planned'
 }
 
-async function copyUrl(token: string) {
-  await navigator.clipboard.writeText(icsUrl(token))
+function icsUrl(token: string, filter?: 'confirmed_only' | 'include_planned'): string {
+  const base = `${window.location.origin}/api/v1/export/${token}/calendar.ics`
+  if (filter) return `${base}?approval_status=${filter}`
+  return base
+}
+
+async function copyUrl(token: string, filter?: 'confirmed_only' | 'include_planned') {
+  await navigator.clipboard.writeText(icsUrl(token, filter))
   copiedToken.value = token
   setTimeout(() => { copiedToken.value = null }, 2000)
 }

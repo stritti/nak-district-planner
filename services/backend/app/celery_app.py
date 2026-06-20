@@ -57,6 +57,11 @@ celery.conf.update(
             "task": "generate_draft_services_window",
             "schedule": crontab(hour="1", minute="10"),
         },
+        # Every 6 hours — check ghcr.io for newer Docker image versions
+        "check-version": {
+            "task": "check_version",
+            "schedule": crontab(minute="0", hour="*/6"),
+        },
     },
 )
 

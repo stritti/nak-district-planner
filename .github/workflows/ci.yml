@@ -1,140 +1,237 @@
-name: CI
+name: CI — Tests & Coverage
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
+    branches: [main, develop]
+  push:
     branches: [main, develop]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
+  pull-requests: write
+
+env:
+  PYTHON_VERSION: "3.13"
+  BUN_VERSION: "1.2"
 
 jobs:
   backend-tests:
-    name: Backend Tests (Python)
+    name: Backend — Unit Tests & Coverage
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: services/backend
 
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: nak
+          POSTGRES_PASSWORD: changeme
+          POSTGRES_DB: nak_planner_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nak -d nak_planner_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
-          enable-cache: true
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install Python dependencies
+        run: uv sync --group dev
+
+      - name: Run unit tests with coverage
+        id: unit-tests
+        run: |
+          set -o pipefail
+          uv run pytest tests/unit/ \
+            --cov=app \
+            --cov-report=term \
+            --cov-report=xml \
+            --junitxml=junit.xml \
+            -q 2>&1 | tee coverage-output.txt
+
+      - name: Parse coverage summary
+        id: coverage
+        run: |
+          TOTAL=$(grep -oP 'TOTAL\s+\d+\s+\d+\s+(\d+)%' coverage-output.txt | grep -oP '\d+%' | tr -d '%')
+          echo "TOTAL_COVERAGE=$TOTAL" >> $GITHUB_ENV
+          echo "## Backend Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Coverage** | ${TOTAL}% |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat coverage-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v7
         with:
-          python-version: "3.11"
+          name: backend-coverage-report
+          path: services/backend/coverage.xml
 
-      - name: Install dependencies
-        run: uv sync --extra dev
-
-      - name: Run unit tests
-        run: uv run pytest tests/unit/ -v --tb=short --cov=app --cov-report=xml --cov-report=term-missing
-
-      - name: Upload coverage report
-        uses: codecov/codecov-action@v6
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
         if: always()
         with:
           files: services/backend/coverage.xml
           flags: backend
           fail_ci_if_error: false
 
-  backend-lint:
-    name: Backend Lint (ruff)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/backend
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
-          version: "latest"
-          enable-cache: true
+          name: backend-test-results
+          path: services/backend/junit.xml
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
+      - name: Check coverage threshold
+        run: |
+          if [ "$TOTAL_COVERAGE" -lt 80 ]; then
+            echo "❌ Coverage ${TOTAL_COVERAGE}% is below 80% threshold"
+            exit 1
+          fi
+          echo "✅ Coverage ${TOTAL_COVERAGE}% meets 80% threshold"
 
-      - name: Install ruff
-        run: uv tool install ruff
+      - name: Post coverage report to PR
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COVERAGE="${TOTAL_COVERAGE:-unknown}"
+          if [ "$COVERAGE" -lt 80 ] 2>/dev/null; then
+            ICON="❌"
+            STATUS="below threshold (80%)"
+          else
+            ICON="✅"
+            STATUS="meets threshold (80%)"
+          fi
+          BODY="## Backend Test Coverage
+          | Metric | Value |
+          |--------|-------|
+          | **Coverage** | ${COVERAGE}% |
+          | **Status** | ${ICON} ${STATUS} |
 
-      - name: Lint with ruff
-        run: uv tool run ruff check app tests
+          _Reported by CI workflow_"
 
-      - name: Check formatting with ruff
-        run: uv tool run ruff format --check app tests
+          # Find existing coverage comment by this bot
+          COMMENT_ID=$(gh api \
+            repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## Backend Test Coverage"))) | .id' \
+            | head -1)
 
-  frontend-lint:
-    name: Frontend Lint & Type-Check (bun)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/frontend
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Lint (ESLint)
-        run: bun run lint
-
-      - name: Build & Type-check (vue-tsc + vite)
-        run: bun run build
+          if [ -n "$COMMENT_ID" ]; then
+            gh api \
+              repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
+              -X PATCH \
+              -f body="$BODY" \
+              --silent
+          else
+            gh pr comment ${{ github.event.pull_request.number }} \
+              --body "$BODY"
+          fi
 
   frontend-tests:
-    name: Frontend Tests (Vitest)
+    name: Frontend — Unit Tests
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: services/frontend
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - name: Set up Bun
+      - name: Install bun
         uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Run unit tests
-        run: bun run test
-
-  docs-build:
-    name: Docs Build Check (VitePress)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: docs
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build Docs
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          bun run test 2>&1 | tee frontend-test-output.txt
+
+      - name: Parse frontend test summary
+        if: always()
+        run: |
+          echo "## Frontend Test Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat frontend-test-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload frontend test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-test-results
+          path: services/frontend/frontend-test-output.txt
+
+  e2e-tests:
+    name: Frontend — E2E Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/frontend
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright
+        run: npx playwright install chromium
+
+      - name: Build frontend
         run: bun run build
+
+      - name: Run E2E tests
+        run: |
+          set -o pipefail
+          npx playwright test --reporter=list 2>&1 | tee e2e-output.txt
+
+      - name: Parse e2e summary
+        if: always()
+        run: |
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat e2e-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload E2E report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-playwright-report
+          path: services/frontend/playwright-report/

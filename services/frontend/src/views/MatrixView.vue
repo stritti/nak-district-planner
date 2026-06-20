@@ -1,12 +1,12 @@
 <template>
   <div class="p-2 sm:p-4">
-    <h1 class="page-title mb-4">Dienstplan-Matrix</h1>
+    <h1 class="page-title">Dienstplan-Matrix</h1>
 
     <!-- Filter-Leiste -->
     <div class="filter-bar mb-4">
 
       <!-- Schnellfilter -->
-      <div class="flex items-center gap-2 mb-3">
+      <div class="flex items-center gap-2 mb-3 flex-wrap">
         <span class="text-xs text-gray-400 dark:text-gray-500 font-medium mr-1">Schnellfilter:</span>
         <button
           v-for="preset in presets"
@@ -23,7 +23,7 @@
 
       <!-- Bezirk + Datumsfelder -->
       <div class="flex flex-wrap items-end gap-3">
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Bezirk</label>
           <select
             v-model="districtsStore.selectedDistrictId"
@@ -35,7 +35,7 @@
           </select>
         </div>
 
-        <div v-if="districtsStore.groups.length > 0">
+        <div v-if="districtsStore.groups.length > 0" class="w-full sm:w-auto">
           <label class="filter-label">Gruppe</label>
           <select
             v-model="matrixStore.groupId"
@@ -49,7 +49,7 @@
           </select>
         </div>
 
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Sortierung</label>
           <select
             v-model="matrixSortMode"
@@ -61,7 +61,7 @@
           </select>
         </div>
 
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Von</label>
           <input
             v-model="matrixStore.fromDt"
@@ -70,7 +70,7 @@
           />
         </div>
 
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Bis</label>
           <input
             v-model="matrixStore.toDt"
@@ -106,7 +106,16 @@
           {{ generatingDrafts ? 'Generiere…' : 'Entwuerfe erzeugen' }}
         </button>
 
-        <div class="ml-auto inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+        <button
+          class="flex items-center gap-1.5 bg-teal-600 text-white text-sm px-4 py-1.5 rounded hover:bg-teal-700 disabled:opacity-50"
+          :disabled="!matrixStore.districtId || matrixStore.loading"
+          @click="showReleaseDialog = true"
+        >
+          <ArrowPathIcon class="h-4 w-4" />
+          Freigabe
+        </button>
+
+        <div class="sm:ml-auto inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
           <button
             class="px-3 py-1.5 text-xs font-medium transition-colors"
             :class="!compactMode
@@ -128,6 +137,9 @@
         </div>
       </div>
 
+      <p v-if="releaseMessage" class="mt-2 text-xs text-teal-700 dark:text-teal-400">
+        {{ releaseMessage }}
+      </p>
       <p v-if="generationMessage" class="mt-2 text-xs text-green-700 dark:text-green-400">
         {{ generationMessage }}
       </p>
@@ -244,6 +256,11 @@
                   >
                     {{ row.cells[date].leader_name }}
                   </div>
+                  <EventApprovalStatusBadge
+                    v-if="row.cells[date].approval_status"
+                    :status="row.cells[date].approval_status"
+                    class="mt-0.5"
+                  />
                   <div v-if="row.cells[date].category" class="text-gray-400 dark:text-gray-500">
                     {{ row.cells[date].category }}
                   </div>
@@ -441,6 +458,12 @@
       </div>
     </div>
 
+    <MonthlyReleaseDialog
+      :open="showReleaseDialog"
+      :district-id="matrixStore.districtId"
+      @close="showReleaseDialog = false"
+      @released="onReleaseComplete"
+    />
   </div>
 </template>
 
@@ -462,6 +485,8 @@ import type { MatrixCell, MatrixRow } from '../api/matrix'
 import { sortMatrixRows } from '../utils/matrixRows'
 import { exportMatrixToExcel } from '../composables/useExcelExport'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '../components/AutocompleteInput.vue'
+import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
+import MonthlyReleaseDialog from '../components/MonthlyReleaseDialog.vue'
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
@@ -508,6 +533,15 @@ const COMPACT_MODE_STORAGE_KEY = 'matrix.compactMode'
 const MATRIX_SORT_MODE_STORAGE_KEY = 'matrix.sortMode'
 const compactMode = ref(false)
 const matrixSortMode = ref<'default' | 'grouped'>('default')
+const showReleaseDialog = ref(false)
+const releaseMessage = ref('')
+
+function onReleaseComplete(count: number) {
+  showReleaseDialog.value = false
+  releaseMessage.value = `${count} Termin${count === 1 ? '' : 'e'} bestätigt.`
+  setTimeout(() => { releaseMessage.value = '' }, 4000)
+  matrixStore.fetch() // refresh matrix after release
+}
 
 const tableClass = computed(() => {
   return [

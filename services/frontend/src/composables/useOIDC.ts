@@ -23,11 +23,11 @@ export interface OIDCDiscovery {
   revocation_endpoint?: string
   end_session_endpoint?: string
   jwks_uri?: string
+  /** Added by backend proxy — the OIDC client ID for this application */
+  client_id?: string
 }
 
 export interface OIDCConfig {
-  discoveryUrl: string
-  clientId: string
   redirectUri: string
   scope: string
 }
@@ -36,9 +36,7 @@ const SESSION_CODE_VERIFIER_KEY = 'oidc_code_verifier'
 const SESSION_STATE_KEY = 'oidc_state'
 
 const envConfig: OIDCConfig = {
-  discoveryUrl: import.meta.env.VITE_OIDC_DISCOVERY_URL || '',
-  clientId: import.meta.env.VITE_OIDC_CLIENT_ID || '',
-  redirectUri: import.meta.env.VITE_OIDC_REDIRECT_URI || '',
+  redirectUri: `${window.location.origin}/auth/callback`,
   scope: import.meta.env.VITE_OIDC_SCOPE || 'openid profile email',
 }
 
@@ -83,6 +81,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   const oidcConfig: OIDCConfig = { ...envConfig, ...(config || {}) }
 
   const discovery = ref<OIDCDiscovery | null>(null)
+  const clientId = ref<string>('')
   const discoveryPromise = ref<Promise<void> | null>(null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -100,12 +99,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   function getRouter(): Router {
     if (!injectedRouter) injectedRouter = useRouter()
     return injectedRouter
-  }
-
-  function assertConfig(): void {
-    if (!oidcConfig.discoveryUrl) throw new Error('OIDC discovery URL is not configured')
-    if (!oidcConfig.clientId) throw new Error('OIDC client ID is not configured')
-    if (!oidcConfig.redirectUri) throw new Error('OIDC redirect URI is not configured')
   }
 
   function clearLocalArtifacts(): void {
@@ -138,16 +131,16 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     if (discovery.value) return
     if (discoveryPromise.value) return discoveryPromise.value
 
-    assertConfig()
-
     const promise = (async () => {
       isLoading.value = true
       error.value = null
 
       try {
-        const response = await fetch(oidcConfig.discoveryUrl)
+        // Fetch discovery document from backend proxy (avoids CORS + build-time env)
+        const response = await fetch('/api/v1/auth/oidc/discovery')
         if (!response.ok) {
-          throw new Error(`Failed to load OIDC discovery (${response.status})`)
+          const body = await response.text().catch(() => '')
+          throw new Error(`OIDC discovery failed (${response.status}): ${body}`)
         }
 
         const data = (await response.json()) as OIDCDiscovery
@@ -156,6 +149,12 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
 
         discovery.value = data
+        // client_id is provided by the backend alongside the discovery doc
+        if (data.client_id) {
+          clientId.value = data.client_id
+        } else {
+          throw new Error('OIDC client ID not provided by backend')
+        }
       } catch (err) {
         error.value = err instanceof Error ? err.message : 'Discovery failed'
         throw err
@@ -184,7 +183,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     sessionStorage.setItem(SESSION_STATE_KEY, state)
 
     const params = new URLSearchParams({
-      client_id: oidcConfig.clientId,
+      client_id: clientId.value,
       redirect_uri: oidcConfig.redirectUri,
       response_type: 'code',
       scope: oidcConfig.scope,
@@ -207,18 +206,16 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     error.value = null
 
     try {
-      const body = new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: oidcConfig.clientId,
-        code,
-        redirect_uri: oidcConfig.redirectUri,
-        code_verifier: codeVerifier,
-      })
-
-      const response = await fetch(discovery.value.token_endpoint, {
+      // Send code + PKCE verifier to backend proxy; backend adds client_secret
+      const response = await fetch('/api/v1/auth/oidc/token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: oidcConfig.redirectUri,
+          code_verifier: codeVerifier,
+        }),
       })
 
       if (!response.ok) {
@@ -279,20 +276,14 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         return
       }
 
-      await loadDiscovery()
-      if (!discovery.value) throw new Error('Discovery not loaded')
-
       try {
-        const body = new URLSearchParams({
-          grant_type: 'refresh_token',
-          client_id: oidcConfig.clientId,
-          refresh_token: current.refreshToken,
-        })
-
-        const response = await fetch(discovery.value.token_endpoint, {
+        const response = await fetch('/api/v1/auth/oidc/token', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString(),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: current.refreshToken,
+          }),
         })
 
         if (!response.ok) {
@@ -376,7 +367,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       const revocationEndpoint = discovery.value?.revocation_endpoint
       if (current && revocationEndpoint) {
         const body = new URLSearchParams({
-          client_id: oidcConfig.clientId,
+          client_id: clientId.value,
           token: current.refreshToken || current.accessToken,
         })
 

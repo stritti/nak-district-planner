@@ -1,6 +1,6 @@
 <template>
   <div class="p-6 max-w-3xl">
-    <div class="flex items-center justify-between mb-5">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-2">
       <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Bezirke & Gemeinden</h1>
       <button
         class="btn-primary"
@@ -571,25 +571,30 @@ async function saveEditCong() {
 
 onMounted(loadAll)
 
-async function loadAll() {
-  loadingDistricts.value = true
-  globalError.value = ''
-  try {
-    districts.value = await listDistricts()
-    districtsStore.districts = districts.value
-    districtsStore.ensureSelectedDistrict()
-    await Promise.all(
-      districts.value.map(async (d) => {
-        congregationsByDistrict[d.id] = await listCongregations(d.id)
-        groupsByDistrict[d.id] = await listGroups(d.id)
-      }),
-    )
-  } catch (e) {
-    globalError.value = e instanceof Error ? e.message : 'Fehler beim Laden'
-  } finally {
-    loadingDistricts.value = false
+  async function loadAll() {
+    loadingDistricts.value = true
+    globalError.value = ''
+    try {
+      districts.value = await listDistricts()
+      districtsStore.districts = districts.value
+      districtsStore.ensureSelectedDistrict()
+      await Promise.all(
+        districts.value.map(async (d) => {
+          try {
+            congregationsByDistrict[d.id] = (await listCongregations(d.id)) || []
+            groupsByDistrict[d.id] = (await listGroups(d.id)) || []
+          } catch (e) {
+            congregationsByDistrict[d.id] = []
+            groupsByDistrict[d.id] = []
+          }
+        }),
+      )
+    } catch (e) {
+      globalError.value = e instanceof Error ? e.message : 'Fehler beim Laden'
+    } finally {
+      loadingDistricts.value = false
+    }
   }
-}
 
 // ── Districts ─────────────────────────────────────────────────────────────────
 

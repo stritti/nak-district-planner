@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import Response
 from icalendar import Calendar
 from icalendar import Event as ICalEvent
@@ -19,7 +20,7 @@ from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
-from app.domain.models.event import EventStatus
+from app.domain.models.event import EventApprovalStatus, EventStatus
 from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.role import Role
 
@@ -118,7 +119,11 @@ def _token_response(token: ExportToken) -> ExportTokenResponse:
 
 
 @router.get("/export/{token_str}/calendar.ics", include_in_schema=False)
-async def export_calendar_ics(token_str: str, session: DbSession) -> Response:
+async def export_calendar_ics(
+    token_str: str,
+    session: DbSession,
+    approval_status: Literal["confirmed_only", "include_planned"] | None = Query(None),
+) -> Response:
     token_repo = SqlExportTokenRepository(session)
     export_token = await token_repo.get_by_token(token_str)
     if not export_token:
@@ -153,6 +158,27 @@ async def export_calendar_ics(token_str: str, session: DbSession) -> Response:
             status=EventStatus.PUBLISHED,
             limit=1000,
             offset=0,
+        )
+
+    # Apply approval_status filter
+    # - If query param is set → use it
+    # - For public tokens without query param → default to confirmed_only
+    # - For internal/leader tokens without query param → include_planned
+    if approval_status is None:
+        if export_token.token_type == TokenType.PUBLIC and export_token.leader_id is None:
+            approval_status = "confirmed_only"
+        else:
+            approval_status = "include_planned"
+
+    if approval_status == "confirmed_only":
+        events = [e for e in events if e.approval_status == EventApprovalStatus.CONFIRMED]
+    elif approval_status == "include_planned":
+        pass  # include all events
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ungültiger approval_status-Filter: {approval_status}. "
+            f"Erlaubte Werte: confirmed_only, include_planned",
         )
 
     # Load assignments in one batch query
@@ -214,6 +240,11 @@ async def export_calendar_ics(token_str: str, session: DbSession) -> Response:
         vevent.add("dtstart", event.start_at)
         vevent.add("dtend", event.end_at)
         vevent.add("dtstamp", event.created_at)
+
+        # Mark PLANNED events as tentative in the calendar
+        if event.approval_status == EventApprovalStatus.PLANNED:
+            vevent.add("status", "TENTATIVE")
+            vevent.add("x-nak-approval-status", "PLANNED")
 
         if event.congregation_id and event.congregation_id in cong_map:
             vevent.add("location", cong_map[event.congregation_id])

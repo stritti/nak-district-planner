@@ -468,6 +468,8 @@ async def test_get_matrix_success() -> None:
         patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
         patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
         patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventInstanceRepository") as instance_repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
         ) as group_repo_cls,
@@ -487,8 +489,16 @@ async def test_get_matrix_success() -> None:
         event_repo_cls.return_value = event_repo
 
         sa_repo = AsyncMock()
-        sa_repo.list_by_events.return_value = [assignment]
+        sa_repo.list_by_planning_slots.return_value = [assignment]
         sa_repo_cls.return_value = sa_repo
+
+        slot_repo = AsyncMock()
+        slot_repo.list_for_date_range.return_value = []
+        slot_repo_cls.return_value = slot_repo
+
+        instance_repo = AsyncMock()
+        instance_repo.list_by_planning_slots.return_value = []
+        instance_repo_cls.return_value = instance_repo
 
         leader_repo = AsyncMock()
         leader_repo.list_by_district.return_value = [
@@ -617,6 +627,8 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
         patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
         patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
         patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventInstanceRepository") as instance_repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
         ) as group_repo_cls,
@@ -639,8 +651,16 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
         event_repo_cls.return_value = event_repo
 
         sa_repo = AsyncMock()
-        sa_repo.list_by_events.return_value = [assignment]
+        sa_repo.list_by_planning_slots.return_value = [assignment]
         sa_repo_cls.return_value = sa_repo
+
+        slot_repo = AsyncMock()
+        slot_repo.list_for_date_range.return_value = []
+        slot_repo_cls.return_value = slot_repo
+
+        instance_repo = AsyncMock()
+        instance_repo.list_by_planning_slots.return_value = []
+        instance_repo_cls.return_value = instance_repo
 
         leader_repo = AsyncMock()
         leader_repo.list_by_district.return_value = [leader]
@@ -723,6 +743,8 @@ async def test_get_matrix_defaults_to_4_weeks_when_range_missing() -> None:
         patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
         patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
         patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventInstanceRepository") as instance_repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
         ) as group_repo_cls,
@@ -742,8 +764,16 @@ async def test_get_matrix_defaults_to_4_weeks_when_range_missing() -> None:
         event_repo_cls.return_value = event_repo
 
         sa_repo = AsyncMock()
-        sa_repo.list_by_events.return_value = []
+        sa_repo.list_by_planning_slots.return_value = []
         sa_repo_cls.return_value = sa_repo
+
+        slot_repo = AsyncMock()
+        slot_repo.list_for_date_range.return_value = []
+        slot_repo_cls.return_value = slot_repo
+
+        instance_repo = AsyncMock()
+        instance_repo.list_by_planning_slots.return_value = []
+        instance_repo_cls.return_value = instance_repo
 
         leader_repo = AsyncMock()
         leader_repo.list_by_district.return_value = []
@@ -788,6 +818,8 @@ async def test_get_matrix_derives_from_dt_from_to_dt_when_missing() -> None:
         patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
         patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
         patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventInstanceRepository") as instance_repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
         ) as group_repo_cls,
@@ -807,8 +839,16 @@ async def test_get_matrix_derives_from_dt_from_to_dt_when_missing() -> None:
         event_repo_cls.return_value = event_repo
 
         sa_repo = AsyncMock()
-        sa_repo.list_by_events.return_value = []
+        sa_repo.list_by_planning_slots.return_value = []
         sa_repo_cls.return_value = sa_repo
+
+        slot_repo = AsyncMock()
+        slot_repo.list_for_date_range.return_value = []
+        slot_repo_cls.return_value = slot_repo
+
+        instance_repo = AsyncMock()
+        instance_repo.list_by_planning_slots.return_value = []
+        instance_repo_cls.return_value = instance_repo
 
         leader_repo = AsyncMock()
         leader_repo.list_by_district.return_value = []
@@ -848,6 +888,8 @@ async def test_get_matrix_derives_to_dt_from_from_dt_when_missing() -> None:
         patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
         patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
         patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventInstanceRepository") as instance_repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
         ) as group_repo_cls,
@@ -867,8 +909,16 @@ async def test_get_matrix_derives_to_dt_from_from_dt_when_missing() -> None:
         event_repo_cls.return_value = event_repo
 
         sa_repo = AsyncMock()
-        sa_repo.list_by_events.return_value = []
+        sa_repo.list_by_planning_slots.return_value = []
         sa_repo_cls.return_value = sa_repo
+
+        slot_repo = AsyncMock()
+        slot_repo.list_for_date_range.return_value = []
+        slot_repo_cls.return_value = slot_repo
+
+        instance_repo = AsyncMock()
+        instance_repo.list_by_planning_slots.return_value = []
+        instance_repo_cls.return_value = instance_repo
 
         leader_repo = AsyncMock()
         leader_repo.list_by_district.return_value = []
@@ -909,6 +959,8 @@ async def test_get_matrix_normalizes_naive_query_datetimes_to_utc() -> None:
         patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
         patch("app.adapters.api.routers.districts.SqlServiceAssignmentRepository") as sa_repo_cls,
         patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.adapters.api.routers.districts.SqlEventInstanceRepository") as instance_repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
         ) as group_repo_cls,
@@ -928,8 +980,16 @@ async def test_get_matrix_normalizes_naive_query_datetimes_to_utc() -> None:
         event_repo_cls.return_value = event_repo
 
         sa_repo = AsyncMock()
-        sa_repo.list_by_events.return_value = []
+        sa_repo.list_by_planning_slots.return_value = []
         sa_repo_cls.return_value = sa_repo
+
+        slot_repo = AsyncMock()
+        slot_repo.list_for_date_range.return_value = []
+        slot_repo_cls.return_value = slot_repo
+
+        instance_repo = AsyncMock()
+        instance_repo.list_by_planning_slots.return_value = []
+        instance_repo_cls.return_value = instance_repo
 
         leader_repo = AsyncMock()
         leader_repo.list_by_district.return_value = []

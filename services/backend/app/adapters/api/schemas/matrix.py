@@ -5,6 +5,7 @@ from datetime import datetime, time
 
 from pydantic import BaseModel
 
+from app.domain.models.event import EventApprovalStatus
 from app.domain.models.service_assignment import AssignmentStatus
 
 
@@ -26,6 +27,7 @@ class MatrixCell(BaseModel):
     actual_end_at: datetime | None = None
     has_deviation: bool = False
     is_assignment_editable: bool = True
+    approval_status: EventApprovalStatus | None = None
     assignment_id: uuid.UUID | None = None
     assignment_status: AssignmentStatus | None = None
     leader_id: uuid.UUID | None = None

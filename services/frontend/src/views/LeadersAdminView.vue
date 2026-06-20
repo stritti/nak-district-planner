@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 max-w-5xl">
+  <div class="p-4 sm:p-6 max-w-5xl">
     <h1 class="page-title">Amtstragende</h1>
 
     <!-- Bezirk wählen -->
@@ -20,7 +20,7 @@
 
     <template v-else>
       <!-- Tab bar -->
-      <div class="flex gap-1 mb-6 border-b border-gray-200">
+      <div class="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto">
         <button
           class="px-4 py-2 text-sm font-medium rounded-t transition-colors"
           :class="activeTab === 'leaders'
@@ -77,7 +77,8 @@
 
         <!-- Leaders table -->
         <div v-else class="card overflow-hidden">
-          <table class="w-full text-sm">
+          <div class="table-scroll">
+          <table class="table-min-w w-full text-sm">
             <thead class="table-thead">
               <tr>
                 <th class="table-th py-2">Grad</th>
@@ -153,6 +154,7 @@
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </template>
@@ -167,7 +169,8 @@
       </div>
 
       <div v-else class="border border-gray-200 rounded-lg overflow-hidden">
-        <table class="w-full text-sm">
+        <div class="table-scroll">
+        <table class="table-min-w w-full text-sm">
           <thead class="bg-gray-50 text-xs text-gray-500 font-medium">
             <tr>
               <th class="px-4 py-2 text-left">Name</th>
@@ -256,6 +259,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
     </template>
     <!-- /Registrations tab -->

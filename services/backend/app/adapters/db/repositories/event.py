@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,13 @@ from app.application.planning_model_bridge import (
     event_instance_from_event,
     planning_slot_from_event,
 )
-from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.domain.models.event import (
+    Event,
+    EventApprovalStatus,
+    EventSource,
+    EventStatus,
+    EventVisibility,
+)
 from app.domain.ports.repositories import EventRepository
 
 
@@ -33,6 +39,7 @@ def _orm_to_domain(row: EventORM) -> Event:
         category=row.category,
         source=EventSource(row.source),
         status=EventStatus(row.status),
+        approval_status=EventApprovalStatus(row.approval_status),
         visibility=EventVisibility(row.visibility),
         audiences=list(row.audiences or []),
         applicability=[uuid.UUID(str(u)) for u in (row.applicability or [])],
@@ -59,6 +66,7 @@ def _domain_to_orm(event: Event, existing: EventORM | None = None) -> EventORM:
     row.category = event.category
     row.source = event.source
     row.status = event.status
+    row.approval_status = event.approval_status
     row.visibility = event.visibility
     row.audiences = event.audiences
     row.applicability = event.applicability
@@ -115,6 +123,7 @@ class SqlEventRepository(EventRepository):
         group_id: uuid.UUID | None = None,
         only_district_level: bool = False,
         status: EventStatus | None = None,
+        approval_status: EventApprovalStatus | None = None,
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
         limit: int = 100,
@@ -142,6 +151,9 @@ class SqlEventRepository(EventRepository):
         if status is not None:
             query = query.where(EventORM.status == status)
             count_query = count_query.where(EventORM.status == status)
+        if approval_status is not None:
+            query = query.where(EventORM.approval_status == approval_status)
+            count_query = count_query.where(EventORM.approval_status == approval_status)
         if from_dt is not None:
             query = query.where(EventORM.start_at >= from_dt)
             count_query = count_query.where(EventORM.start_at >= from_dt)
@@ -210,6 +222,33 @@ class SqlEventRepository(EventRepository):
         )
         row = result.scalar_one_or_none()
         return _orm_to_domain(row) if row else None
+
+    async def bulk_update_approval_status(
+        self,
+        *,
+        district_id: uuid.UUID,
+        year: int,
+        month: int,
+        new_status: EventApprovalStatus,
+        congregation_id: uuid.UUID | None = None,
+    ) -> int:
+        """Update approval_status for all events in a given month."""
+        from sqlalchemy import update
+
+        stmt = (
+            update(EventORM)
+            .where(
+                EventORM.district_id == district_id,
+                func.extract("year", EventORM.start_at) == year,
+                func.extract("month", EventORM.start_at) == month,
+            )
+            .values(approval_status=new_status, updated_at=datetime.now(UTC))
+        )
+        if congregation_id is not None:
+            stmt = stmt.where(EventORM.congregation_id == congregation_id)
+        result = await self._session.execute(stmt)
+        await self._session.flush()
+        return result.rowcount
 
     async def delete_before(self, cutoff: datetime) -> int:
         """Delete all events whose end_at is before *cutoff*.

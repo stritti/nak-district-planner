@@ -1,0 +1,6 @@
+name: improve-tenant-isolation
+status: proposed
+priority: high
+risk: critical
+team: backend
+milestone: security-q4-2025

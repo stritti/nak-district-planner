@@ -104,6 +104,42 @@ class TestEventCreateSchema:
         with pytest.raises(ValidationError):
             EventCreate(**data)
 
+    def test_event_create_approval_status_planned(self):
+        """EventCreate with approval_status=PLANNED should pass."""
+        data = {
+            "title": "Gottesdienst",
+            "district_id": str(uuid.uuid4()),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
+            "approval_status": "PLANNED",
+        }
+        event = EventCreate(**data)
+        assert event.approval_status == "PLANNED"
+
+    def test_event_create_approval_status_confirmed(self):
+        """EventCreate with approval_status=CONFIRMED should pass."""
+        data = {
+            "title": "Gottesdienst",
+            "district_id": str(uuid.uuid4()),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
+            "approval_status": "CONFIRMED",
+        }
+        event = EventCreate(**data)
+        assert event.approval_status == "CONFIRMED"
+
+    def test_event_create_invalid_approval_status(self):
+        """EventCreate with invalid approval_status should fail."""
+        data = {
+            "title": "Gottesdienst",
+            "district_id": str(uuid.uuid4()),
+            "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),
+            "end_at": datetime(2026, 4, 15, 12, 0, tzinfo=UTC),
+            "approval_status": "INVALID",
+        }
+        with pytest.raises(ValidationError):
+            EventCreate(**data)
+
 
 class TestEventUpdateSchema:
     """Tests for EventUpdate schema validation."""
@@ -129,6 +165,18 @@ class TestEventUpdateSchema:
         with pytest.raises(ValidationError):
             EventUpdate(**data)
 
+    def test_event_update_approval_status(self):
+        """EventUpdate with approval_status should pass."""
+        data = {"approval_status": "CONFIRMED"}
+        event = EventUpdate(**data)
+        assert event.approval_status == "CONFIRMED"
+
+    def test_event_update_approval_status_planned(self):
+        """EventUpdate with approval_status=PLANNED should pass."""
+        data = {"approval_status": "PLANNED"}
+        event = EventUpdate(**data)
+        assert event.approval_status == "PLANNED"
+
 
 class TestEventResponseSchema:
     """Tests for EventResponse schema."""
@@ -147,6 +195,7 @@ class TestEventResponseSchema:
             "source": "INTERNAL",
             "status": "DRAFT",
             "visibility": "INTERNAL",
+            "approval_status": "PLANNED",
             "audiences": [],
             "applicability": [],
             "start_at": datetime(2026, 4, 15, 10, 0, tzinfo=UTC),

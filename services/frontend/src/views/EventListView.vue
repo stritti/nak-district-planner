@@ -1,12 +1,12 @@
 <template>
   <div>
     <!-- Header -->
-    <div class="flex items-center justify-between mb-5">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-2">
       <div class="flex items-center gap-3">
         <h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Ereignisse</h1>
         <span v-if="viewMode === 'list'" class="text-sm text-gray-400 dark:text-gray-500">{{ eventsStore.total }} gesamt</span>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <!-- Excel Export (list mode only) -->
         <div v-if="viewMode === 'list'" class="flex flex-col items-end gap-1">
           <button
@@ -40,10 +40,11 @@
     <div class="filter-bar mb-5">
 
       <!-- Zeile 1: Schnellfilter (Liste) oder Perioden-Navigation (Woche/Monat) -->
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <template v-if="viewMode === 'list'">
             <span class="text-xs text-gray-400 dark:text-gray-500 font-medium mr-1">Schnellfilter:</span>
+            <div class="flex flex-wrap gap-1">
             <button
               v-for="preset in presets"
               :key="preset.key"
@@ -53,6 +54,7 @@
             >
               {{ preset.label }}
             </button>
+            </div>
           </template>
           <template v-else>
             <button
@@ -83,7 +85,7 @@
       <!-- Zeile 2: Filter-Felder -->
       <div class="flex flex-wrap gap-3">
         <!-- Bezirk -->
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Bezirk</label>
           <select
             v-model="districtsStore.selectedDistrictId"
@@ -96,7 +98,7 @@
         </div>
 
         <!-- Gemeinde -->
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Gemeinde</label>
           <select
             v-model="selectedCongregationId"
@@ -113,7 +115,7 @@
         </div>
 
         <!-- Gruppe -->
-        <div v-if="districtsStore.groups.length > 0">
+        <div v-if="districtsStore.groups.length > 0" class="w-full sm:w-auto">
           <label class="filter-label">Gruppe (optional)</label>
           <select
             v-model="selectedGroupId"
@@ -128,7 +130,7 @@
         </div>
 
         <!-- Status -->
-        <div>
+        <div class="w-full sm:w-auto">
           <label class="filter-label">Status</label>
           <select
             v-model="selectedStatus"
@@ -142,9 +144,23 @@
           </select>
         </div>
 
+        <!-- Genehmigungsstatus -->
+        <div class="w-full sm:w-auto">
+          <label class="filter-label">Freigabe</label>
+          <select
+            v-model="selectedApprovalStatus"
+            class="form-select px-2"
+            @change="onFilterChange"
+          >
+            <option value="">Alle</option>
+            <option value="PLANNED">Geplant</option>
+            <option value="CONFIRMED">Bestätigt</option>
+          </select>
+        </div>
+
         <!-- Datumsfelder: nur in der Listenansicht -->
         <template v-if="viewMode === 'list'">
-          <div>
+          <div class="w-full sm:w-auto">
             <label class="filter-label">Von</label>
             <input
               v-model="fromDate"
@@ -153,7 +169,7 @@
               @change="applyFilters"
             />
           </div>
-          <div>
+          <div class="w-full sm:w-auto">
             <label class="filter-label">Bis</label>
             <input
               v-model="toDate"
@@ -169,7 +185,8 @@
     <!-- ── Listenansicht ───────────────────────────────────────────────────── -->
     <template v-if="viewMode === 'list'">
       <div class="table-container">
-        <table class="w-full text-sm">
+        <div class="table-scroll">
+        <table class="table-min-w w-full text-sm">
           <thead>
             <tr class="table-thead">
               <th class="table-th">Titel</th>
@@ -178,19 +195,20 @@
               <th class="table-th">Zuordnung</th>
               <th class="table-th">Einladung</th>
               <th class="table-th">Status</th>
+              <th class="table-th">Freigabe</th>
               <th class="table-th">Quelle</th>
               <th class="table-th"></th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="eventsStore.loading">
-              <td colspan="8" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
+              <td colspan="9" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
             </tr>
             <tr v-else-if="eventsStore.error">
-              <td colspan="8" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
+              <td colspan="9" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
             </tr>
             <tr v-else-if="eventsStore.items.length === 0">
-              <td colspan="8" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
+              <td colspan="9" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
             </tr>
             <tr
               v-else
@@ -221,6 +239,9 @@
                 </span>
               </td>
               <td class="px-4 py-3">
+                <EventApprovalStatusBadge :status="event.approval_status" />
+              </td>
+              <td class="px-4 py-3">
                 <span
                   class="badge"
                   :class="event.source === 'EXTERNAL' ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'"
@@ -240,12 +261,13 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       <!-- Pagination -->
       <div
         v-if="eventsStore.totalPages > 1"
-        class="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400"
+        class="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 flex-wrap gap-2"
       >
         <span>Seite {{ eventsStore.currentPage }} von {{ eventsStore.totalPages }}</span>
         <div class="flex gap-2">
@@ -437,6 +459,16 @@
             </select>
           </div>
           <div>
+            <label class="form-label">Freigabestatus</label>
+            <select
+              v-model="editForm.approval_status"
+              class="form-input"
+            >
+              <option value="PLANNED">Geplant</option>
+              <option value="CONFIRMED">Bestätigt</option>
+            </select>
+          </div>
+          <div>
             <label class="form-label">
               Kategorie <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
             </label>
@@ -484,6 +516,7 @@ import { useEventsStore } from '../stores/events'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import { listEvents, updateEvent, type EventListParams, type EventResponse } from '../api/events'
 import { exportEventsToExcel } from '../composables/useExcelExport'
+import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
@@ -582,6 +615,7 @@ async function fetchCalendar() {
     }
     if (selectedGroupId.value)        params.group_id        = selectedGroupId.value
     if (selectedStatus.value)         params.status          = selectedStatus.value
+    if (selectedApprovalStatus.value) params.approval_status = selectedApprovalStatus.value
     const res = await listEvents(params)
     let events = res.items
 
@@ -686,6 +720,7 @@ const periodLabel = computed(() => {
 const selectedCongregationId = ref('')
 const selectedGroupId        = ref('')
 const selectedStatus         = ref('')
+const selectedApprovalStatus = ref('')
 const fromDate               = ref('')
 const toDate                 = ref('')
 
@@ -757,6 +792,7 @@ function applyFilters() {
     group_id:        selectedGroupId.value || undefined,
     only_district_level: isDistrictOnly,
     status:          selectedStatus.value || undefined,
+    approval_status: selectedApprovalStatus.value || undefined,
     from_dt: fromDate.value ? fromDate.value + 'T00:00:00' : undefined,
     to_dt:   toDate.value   ? toDate.value   + 'T23:59:59' : undefined,
   })
@@ -827,7 +863,7 @@ const editSaving       = ref(false)
 const editError        = ref('')
 const editCongregations = ref<CongregationResponse[]>([])
 
-const editForm = reactive({ district_id: '', congregation_id: '', status: 'DRAFT', category: '' })
+const editForm = reactive({ district_id: '', congregation_id: '', status: 'DRAFT', approval_status: 'PLANNED', category: '' })
 
 watch(() => editForm.district_id, async (id) => {
   editForm.congregation_id = ''
@@ -840,6 +876,7 @@ async function openEdit(event: EventResponse) {
   editForm.district_id     = event.district_id
   editForm.congregation_id = event.congregation_id ?? ''
   editForm.status          = event.status
+  editForm.approval_status = event.approval_status
   editForm.category        = event.category ?? ''
   editCongregations.value  = []
   if (event.district_id) listCongregations(event.district_id).then(cs => { editCongregations.value = cs }).catch(() => {})
@@ -854,6 +891,7 @@ async function saveEdit() {
       district_id:     editForm.district_id || undefined,
       congregation_id: editForm.congregation_id || null,
       status:          editForm.status || undefined,
+      approval_status: editForm.approval_status || undefined,
       category:        editForm.category || null,
     })
     // In-place update je nach aktiver Ansicht

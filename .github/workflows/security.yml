@@ -26,13 +26,14 @@ jobs:
         language: [python, javascript-typescript]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           queries: security-and-quality
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v4
@@ -50,7 +51,7 @@ jobs:
         working-directory: services/backend
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -70,7 +71,6 @@ jobs:
         uses: pypa/gh-action-pip-audit@v1.1.0
         with:
           inputs: /tmp/requirements-audit.txt
-          vulnerability-service: osv
 
   npm-audit:
     name: Frontend Dependency Audit (npm audit)
@@ -80,7 +80,7 @@ jobs:
         working-directory: services/frontend
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2

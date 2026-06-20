@@ -1,6 +1,6 @@
 <template>
-  <div class="p-6 max-w-4xl">
-    <div class="flex items-center justify-between mb-5">
+  <div class="p-4 sm:p-6 max-w-4xl">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-2">
       <h1 class="page-title mb-0">Kalender-Integrationen</h1>
       <button
         class="btn-primary"
@@ -493,7 +493,7 @@
           <!-- Capabilities -->
           <div>
             <label class="form-label">Fähigkeiten</label>
-            <div class="flex gap-4">
+            <div class="flex gap-4 flex-wrap">
               <label v-for="cap in ALL_CAPABILITIES" :key="cap" class="flex items-center gap-1.5 text-sm">
                 <input
                   type="checkbox"

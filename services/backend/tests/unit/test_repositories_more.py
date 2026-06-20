@@ -157,6 +157,7 @@ async def test_repository_mapping_helpers() -> None:
             visibility=e.visibility,
             audiences=e.audiences,
             applicability=e.applicability,
+            approval_status=e.approval_status,
             external_uid=None,
             calendar_integration_id=None,
             content_hash=None,
@@ -267,6 +268,7 @@ async def test_repository_mapping_helpers() -> None:
         _row(
             id=assignment.id,
             event_id=assignment.event_id,
+            planning_slot_id=assignment.planning_slot_id,
             leader_id=assignment.leader_id,
             leader_name=assignment.leader_name,
             status=assignment.status,
@@ -391,7 +393,7 @@ async def test_repository_methods_with_mocked_session() -> None:
 
     # assignment
     assignment_repo = SqlServiceAssignmentRepository(session)
-    assert await assignment_repo.list_by_events([]) == []
+    assert await assignment_repo.list_by_planning_slots([]) == []
 
     # user
     user_repo = SqlUserRepository(session)

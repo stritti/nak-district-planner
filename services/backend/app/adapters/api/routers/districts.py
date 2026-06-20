@@ -26,6 +26,7 @@ from app.adapters.api.schemas.district import (
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
 from app.adapters.auth.permissions import (
     PermissionError,
+    assert_has_role_in_congregation,
     assert_has_role_in_district,
     get_districts_where_user_has_role,
 )
@@ -246,8 +247,14 @@ async def update_congregation(
     congregation = await repo.get(congregation_id)
     if not congregation or congregation.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gemeinde nicht gefunden")
+    # Determine if request comes through congregation_admin fallback
+    is_congregation_scoped = False
     try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+        try:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+        except PermissionError:
+            assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, congregation_id)
+            is_congregation_scoped = True
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     if body.name is not None:
@@ -255,6 +262,11 @@ async def update_congregation(
     if body.service_times is not None:
         congregation.service_times = [st.model_dump() for st in body.service_times]
     if "group_id" in body.model_fields_set:
+        if is_congregation_scoped:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Nur DISTRICT_ADMIN darf die Gruppenzugehörigkeit ändern",
+            )
         await _validate_group_assignment(db, district_id, body.group_id)
         congregation.group_id = body.group_id
     if "invitation_target_type" in body.model_fields_set:
@@ -492,7 +504,6 @@ async def get_matrix(
         existing_event = event_by_owner_date.get(key)
         if existing_event is None or event.start_at < existing_event.start_at:
             event_by_owner_date[key] = event
-
     # Include slot-only dates in the date column set so planning slots whose
     # date is not already covered by schedules / holidays / events remain visible.
     slots = await SqlPlanningSlotRepository(db).list_for_date_range(
@@ -570,7 +581,6 @@ async def get_matrix(
             event = event_by_owner_date.get((congregation.id, date_key))
             if event is None:
                 event = event_by_owner_date.get((district_id, date_key))
-
             # Check for planning slot first so slot-only dates survive early-exit
             slot = slot_by_owner_date.get((congregation.id, date_key))
             if slot is None:
@@ -585,7 +595,6 @@ async def get_matrix(
                 # Im Zeitplan erwartet, aber noch kein Event oder Planning-Slot angelegt
                 cells[date_key] = MatrixCell()
                 continue
-
             slot_or_event_id = slot.id if slot is not None else event.id
             instance = instance_by_slot_id.get(slot.id) if slot is not None else None
             assignment = assignment_by_slot_id.get(slot_or_event_id)
@@ -613,7 +622,13 @@ async def get_matrix(
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
             cells[date_key] = MatrixCell(
-                event_id=event.id if event is not None else instance.id if instance is not None else slot.id if slot is not None else None,
+                event_id=event.id
+                if event is not None
+                else instance.id
+                if instance is not None
+                else slot.id
+                if slot is not None
+                else None,
                 planning_slot_id=slot.id if slot is not None else None,
                 assignment_event_id=assignment_event_id,
                 invitation_source_congregation_name=source_congregation_names.get(
@@ -621,7 +636,11 @@ async def get_matrix(
                 )
                 if event is not None and event.invitation_source_congregation_id is not None
                 else None,
-                event_title=instance.title if instance is not None else event.title if event is not None else None,
+                event_title=instance.title
+                if instance is not None
+                else event.title
+                if event is not None
+                else None,
                 event_start_at=(
                     instance.actual_start_at
                     if instance is not None
@@ -636,7 +655,12 @@ async def get_matrix(
                     if event is not None
                     else None
                 ),
-                category=slot.category if slot is not None else event.category if event is not None else None,
+                category=slot.category
+                if slot is not None
+                else event.category
+                if event is not None
+                else None,
+                approval_status=event.approval_status if event is not None else None,
                 is_gap=(assignment is None and not is_invitation_copy),
                 planned_time=(
                     slot.planning_time

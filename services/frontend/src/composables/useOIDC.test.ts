@@ -18,8 +18,6 @@ vi.mock('vue-router', () => ({
 describe('useOIDC', () => {
   function createOidc() {
     return useOIDC(undefined, {
-      discoveryUrl: 'https://auth.example.com/.well-known/openid-configuration',
-      clientId: 'frontend-test-client',
       redirectUri: 'http://localhost:5173/auth/callback',
       scope: 'openid profile email',
     })
@@ -43,6 +41,7 @@ describe('useOIDC', () => {
             authorization_endpoint: 'https://auth.example.com/authorize',
             token_endpoint: 'https://auth.example.com/token',
             userinfo_endpoint: 'https://auth.example.com/userinfo',
+            client_id: 'frontend-test-client',
           }),
           { status: 200 }
         )
@@ -65,6 +64,7 @@ describe('useOIDC', () => {
             authorization_endpoint: 'https://auth.example.com/authorize',
             token_endpoint: 'https://auth.example.com/token',
             userinfo_endpoint: 'https://auth.example.com/userinfo',
+            client_id: 'frontend-test-client',
           }),
           { status: 200 }
         )
@@ -89,6 +89,7 @@ describe('useOIDC', () => {
             authorization_endpoint: 'https://auth.example.com/authorize',
             token_endpoint: 'https://auth.example.com/token',
             userinfo_endpoint: 'https://auth.example.com/userinfo',
+            client_id: 'frontend-test-client',
           }),
           { status: 200 }
         )
@@ -119,6 +120,7 @@ describe('useOIDC', () => {
             authorization_endpoint: 'https://auth.example.com/authorize',
             token_endpoint: 'https://auth.example.com/token',
             userinfo_endpoint: 'https://auth.example.com/userinfo',
+            client_id: 'frontend-test-client',
           }),
           { status: 200 }
         )
