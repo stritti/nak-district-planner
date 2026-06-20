@@ -14,7 +14,9 @@ def test_configure_logging_runs() -> None:
 @pytest.mark.asyncio
 async def test_health_endpoint() -> None:
     out = await main.health()
-    assert out == {"status": "ok"}
+    assert out["status"] == "ok"
+    assert out["version"] == main.settings.app_version
+    assert "database" in out
 
 
 @pytest.mark.asyncio
