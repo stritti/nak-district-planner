@@ -3,23 +3,26 @@
 This middleware automatically logs audit events for all requests.
 """
 
+import logging
 import time
 import uuid
-from typing import Callable, Awaitable
 
 from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from app.application.audit_service import AuditAction, AuditContext, AuditStatus, audit_service
 
-import logging
-
 logger = logging.getLogger(__name__)
 
 
-class AuditMiddleware:
+class AuditMiddleware(BaseHTTPMiddleware):
     """FastAPI Middleware for automatic audit logging.
-    
+
+    Registered via ``app.add_middleware()`` — Starlette instantiates it
+    as ASGI middleware and calls ``dispatch(request, call_next)`` for
+    each request.
+
     This middleware:
     - Generates a unique request ID for each request
     - Tracks request start time
@@ -30,50 +33,50 @@ class AuditMiddleware:
     def __init__(
         self,
         app,
-        audit_service: audit_service = audit_service,
+        audit_service=audit_service,
         exempt_paths: set[str] | None = None,
         exempt_methods: set[str] | None = None,
     ):
         """Initialize the audit middleware.
-        
+
         Args:
             app: FastAPI application instance.
             audit_service: Audit service instance.
             exempt_paths: Set of paths to exempt from audit logging.
             exempt_methods: Set of HTTP methods to exempt.
         """
-        self.app = app
+        super().__init__(app)
         self.audit_service = audit_service
         self.exempt_paths = exempt_paths or {"/api/health"}
         self.exempt_methods = exempt_methods or {"GET", "HEAD", "OPTIONS"}
 
-    async def __call__(
+    async def dispatch(
         self,
         request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
+        call_next,
     ) -> Response:
         """Process a request through the middleware.
-        
+
         Args:
             request: Incoming HTTP request.
             call_next: Next middleware or route handler.
-            
+
         Returns:
             HTTP response.
         """
         # Generate request ID
         request_id = str(uuid.uuid4())
-        
+
         # Track start time
         start_time = time.time()
-        
+
         # Extract context information
         context = self._extract_context(request, request_id)
-        
+
         # Process request
         response = None
         error = None
-        
+
         try:
             response = await call_next(request)
             return response
@@ -83,7 +86,7 @@ class AuditMiddleware:
         finally:
             # Calculate duration
             duration = time.time() - start_time
-            
+
             # Log audit event if needed
             if self._should_log_audit(request):
                 await self._log_audit_event(
@@ -210,9 +213,15 @@ class AuditMiddleware:
             # Determine resource type from path
             resource_type = self._get_resource_type(request.url.path)
             
-            # Determine status
-            status = AuditStatus.FAILED if error else AuditStatus.SUCCESS
-            error_message = str(error) if error else None
+            # Determine status — mark as FAILED for exceptions and non-2xx/3xx responses
+            status = AuditStatus.SUCCESS
+            if error:
+                status = AuditStatus.FAILED
+            elif response and response.status_code >= 400:
+                status = AuditStatus.FAILED
+            error_message = str(error) if error else (
+                f"HTTP {response.status_code}" if response and response.status_code >= 400 else None
+            )
             
             # Extract resource ID from path if available
             resource_id = self._extract_resource_id(request.url.path)

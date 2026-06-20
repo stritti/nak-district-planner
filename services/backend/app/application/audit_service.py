@@ -10,13 +10,13 @@ import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from app.adapters.db.repositories.audit_log import SqlAuditLogRepository
 from app.adapters.db.session import AsyncSessionLocal
-from app.domain.models.audit_log import AuditAction, AuditLog, AuditLogCreate, AuditStatus
+from app.domain.models.audit_log import AuditAction, AuditLogCreate, AuditStatus
 
 logger = logging.getLogger(__name__)
 
