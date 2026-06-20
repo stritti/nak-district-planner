@@ -183,6 +183,83 @@ RLS_POLICIES = {
                     ))
                 );
             """,
+            # Write access — users with PLANNER role or higher on the related event
+            """
+            CREATE POLICY service_assignments_insert_policy ON service_assignments
+                FOR INSERT
+                WITH CHECK (
+                    (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
+                    OR
+                    (EXISTS (
+                        SELECT 1 FROM events e
+                        WHERE (e.id = service_assignments.event_id
+                               OR e.id = service_assignments.planning_slot_id)
+                        AND EXISTS (
+                            SELECT 1 FROM memberships m
+                            WHERE m.user_sub = current_setting('app.current_user_sub')
+                            AND m.scope_id = e.district_id
+                            AND m.scope_type = 'DISTRICT'
+                            AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+                        )
+                    ))
+                );
+            """,
+            """
+            CREATE POLICY service_assignments_update_policy ON service_assignments
+                FOR UPDATE
+                USING (
+                    (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
+                    OR
+                    (EXISTS (
+                        SELECT 1 FROM events e
+                        WHERE (e.id = service_assignments.event_id
+                               OR e.id = service_assignments.planning_slot_id)
+                        AND EXISTS (
+                            SELECT 1 FROM memberships m
+                            WHERE m.user_sub = current_setting('app.current_user_sub')
+                            AND m.scope_id = e.district_id
+                            AND m.scope_type = 'DISTRICT'
+                            AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+                        )
+                    ))
+                )
+                WITH CHECK (
+                    (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
+                    OR
+                    (EXISTS (
+                        SELECT 1 FROM events e
+                        WHERE (e.id = service_assignments.event_id
+                               OR e.id = service_assignments.planning_slot_id)
+                        AND EXISTS (
+                            SELECT 1 FROM memberships m
+                            WHERE m.user_sub = current_setting('app.current_user_sub')
+                            AND m.scope_id = e.district_id
+                            AND m.scope_type = 'DISTRICT'
+                            AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+                        )
+                    ))
+                );
+            """,
+            """
+            CREATE POLICY service_assignments_delete_policy ON service_assignments
+                FOR DELETE
+                USING (
+                    (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
+                    OR
+                    (EXISTS (
+                        SELECT 1 FROM events e
+                        WHERE (e.id = service_assignments.event_id
+                               OR e.id = service_assignments.planning_slot_id)
+                        AND EXISTS (
+                            SELECT 1 FROM memberships m
+                            WHERE m.user_sub = current_setting('app.current_user_sub')
+                            AND m.scope_id = e.district_id
+                            AND m.scope_type = 'DISTRICT'
+                            AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+                        )
+                    ))
+                );
+            """,
         ],
     },
     
@@ -219,13 +296,13 @@ RLS_POLICIES = {
         ],
     },
     
-    # Invitations table
-    "invitations": {
-        "enable": "ALTER TABLE invitations ENABLE ROW LEVEL SECURITY;",
+    # Invitations table (ORM table name: congregation_invitations)
+    "congregation_invitations": {
+        "enable": "ALTER TABLE congregation_invitations ENABLE ROW LEVEL SECURITY;",
         "policies": [
             # Read access
             """
-            CREATE POLICY invitations_tenant_isolation_policy ON invitations
+            CREATE POLICY invitations_tenant_isolation_policy ON congregation_invitations
                 FOR SELECT
                 USING (
                     -- User is superadmin
@@ -236,13 +313,13 @@ RLS_POLICIES = {
                         SELECT 1 FROM memberships m
                         WHERE m.user_sub = current_setting('app.current_user_sub')
                         AND m.scope_type = 'CONGREGATION'
-                        AND m.scope_id = invitations.congregation_id
+                        AND m.scope_id = congregation_invitations.congregation_id
                     ))
                     OR
                     -- Invitation belongs to a district user has access to
                     (EXISTS (
                         SELECT 1 FROM memberships m
-                        JOIN congregations c ON c.id = invitations.congregation_id
+                        JOIN congregations c ON c.id = congregation_invitations.congregation_id
                         WHERE m.user_sub = current_setting('app.current_user_sub')
                         AND m.scope_type = 'DISTRICT'
                         AND m.scope_id = c.district_id
@@ -289,41 +366,17 @@ RLS_POLICIES = {
     "memberships": {
         "enable": "ALTER TABLE memberships ENABLE ROW LEVEL SECURITY;",
         "policies": [
-            # Read access - only admins can see memberships
+            # Read access — only the user's own memberships or superadmin.
+            # NOTE: We avoid querying ``memberships`` inside the ``USING``
+            # clause because that would apply RLS recursively (the same
+            # policy would be re-evaluated for the subquery).  Admin-level
+            # access is enforced at the application layer instead.
             """
             CREATE POLICY memberships_tenant_isolation_policy ON memberships
                 FOR SELECT
                 USING (
                     -- User is superadmin
                     (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
-                    OR
-                    -- User is district admin and membership is in their district
-                    (EXISTS (
-                        SELECT 1 FROM memberships m2
-                        WHERE m2.user_sub = current_setting('app.current_user_sub')
-                        AND m2.scope_type = 'district'
-                        AND m2.role IN ('DISTRICT_ADMIN')
-                        AND (
-                            (memberships.scope_type = 'district' AND memberships.scope_id = m2.scope_id)
-                            OR
-                            (memberships.scope_type = 'congregation' AND 
-                             EXISTS (
-                                 SELECT 1 FROM congregations c
-                                 WHERE c.id = memberships.scope_id
-                                 AND c.district_id = m2.scope_id
-                             ))
-                        )
-                    ))
-                    OR
-                    -- User is congregation admin and membership is in their congregation
-                    (EXISTS (
-                        SELECT 1 FROM memberships m2
-                        WHERE m2.user_sub = current_setting('app.current_user_sub')
-                        AND m2.scope_type = 'congregation'
-                        AND m2.role IN ('CONGREGATION_ADMIN')
-                        AND memberships.scope_type = 'congregation'
-                        AND memberships.scope_id = m2.scope_id
-                    ))
                     OR
                     -- User can see their own memberships
                     (memberships.user_sub = current_setting('app.current_user_sub'))
