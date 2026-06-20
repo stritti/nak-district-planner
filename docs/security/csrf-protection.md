@@ -25,13 +25,14 @@ The implementation uses the **Double-Submit Pattern** which:
 ```python
 class CSRFTokenService:
     """HMAC-SHA256 based CSRF token generation and validation."""
-    
+
     def generate_token(self, session_id: Optional[str] = None) -> str
     def validate_token(self, token: str, session_id: Optional[str] = None) -> bool
     def get_token_age(self, token: str) -> timedelta
 ```
 
 **Features:**
+
 - HMAC-SHA256 signing for cryptographic integrity
 - Optional session binding for additional security
 - Configurable token lifetime (default: 24 hours)
@@ -42,11 +43,12 @@ class CSRFTokenService:
 ```python
 class CSRFMiddleware:
     """FastAPI middleware for CSRF protection."""
-    
+
     async def __call__(self, request: Request, call_next: Callable) -> Response
 ```
 
 **Features:**
+
 - Automatic CSRF cookie setting on responses
 - Token validation on state-changing requests (POST, PUT, DELETE, PATCH)
 - Configurable exempt paths and methods
@@ -75,16 +77,17 @@ app.add_middleware(
 export function useCSRF(config: CSRFConfig = {}) {
   const csrfToken = ref<string>('')
   const cookies = useCookies()
-  
+
   const loadCSRFToken = () => { ... }
   const getCSRFHeaders = () => { ... }
   const hasCSRFToken = () => { ... }
-  
+
   return { csrfToken, loadCSRFToken, getCSRFHeaders, hasCSRFToken }
 }
 ```
 
 **Features:**
+
 - Automatic token loading from cookies
 - CSRF header generation for API requests
 - Token availability checking
@@ -98,6 +101,7 @@ Object.assign(headers, csrfHeaders)
 ```
 
 **Features:**
+
 - Automatic CSRF header inclusion in all API requests
 - CSRF failure handling with page reload
 
@@ -155,16 +159,19 @@ app.add_middleware(
 The following are exempt from CSRF protection:
 
 ### Exempt Paths
+
 - `/api/health` - Health check endpoint
 - `/api/v1/auth/oidc/discovery` - OIDC discovery
 - `/api/v1/auth/oidc/token` - OIDC token exchange (protected by PKCE)
 
 ### Exempt Methods
+
 - `GET` - Read-only operations
 - `HEAD` - Read-only operations
 - `OPTIONS` - CORS preflight
 
 ### Exempt Authentication
+
 - Requests with `X-API-Key` header (machine-to-machine communication)
 
 ## Testing
@@ -186,11 +193,13 @@ pytest tests/integration/test_csrf_middleware.py -v
 ### Manual Testing
 
 1. **GET Request**: Should receive CSRF cookie
+
    ```bash
    curl -v http://localhost:8000/api/health
    ```
 
 2. **POST Request without CSRF**: Should fail with 403
+
    ```bash
    curl -X POST http://localhost:8000/api/v1/events \
      -H "Content-Type: application/json" \
@@ -198,10 +207,11 @@ pytest tests/integration/test_csrf_middleware.py -v
    ```
 
 3. **POST Request with CSRF**: Should succeed
+
    ```bash
    # First get the CSRF token
    CSRF_TOKEN=$(curl -s -c - http://localhost:8000/api/health | grep csrf_token | awk '{print $7}')
-   
+
    # Then use it in the request
    curl -X POST http://localhost:8000/api/v1/events \
      -H "Content-Type: application/json" \
@@ -213,7 +223,7 @@ pytest tests/integration/test_csrf_middleware.py -v
 
 CSRF validation failures are logged with the following information:
 
-```
+```text
 WARNING: CSRF validation failed for POST /api/v1/events: CSRF token missing
 ```
 
@@ -254,16 +264,19 @@ This implementation addresses the following security requirements:
 ### Common Issues
 
 1. **403 Forbidden on POST/PUT/DELETE**
+
    - Ensure the `X-CSRF-Token` header is being sent
    - Verify the token matches the cookie value
    - Check that the token hasn't expired
 
 2. **CSRF cookie not being set**
+
    - Ensure the domain matches the cookie domain
    - Check for SameSite attribute conflicts
    - Verify HTTPS is being used in production
 
 3. **Token validation failures**
+
    - Check that the secret key is consistent
    - Verify the token format is correct
    - Ensure the session ID matches (if using session binding)
