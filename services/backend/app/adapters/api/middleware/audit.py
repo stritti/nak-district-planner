@@ -4,6 +4,7 @@ This middleware automatically logs audit events for all requests.
 """
 
 import logging
+import re
 import time
 import uuid
 
@@ -70,8 +71,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
         # Track start time
         start_time = time.time()
 
-        # Extract context information
-        context = self._extract_context(request, request_id)
+        # Extract pre-call information available before deps run
+        ip_address = self._get_client_ip(request)
+        user_agent = request.headers.get("user-agent")
 
         # Process request
         response = None
@@ -88,7 +90,16 @@ class AuditMiddleware(BaseHTTPMiddleware):
             duration = time.time() - start_time
 
             # Log audit event if needed
+            # NOTE: context is extracted *after call_next* so FastAPI
+            # dependency resolution (get_current_user etc.) has already
+            # populated request.state.user before we read it.
             if self._should_log_audit(request):
+                context = self._extract_context(
+                    request,
+                    request_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
                 await self._log_audit_event(
                     request,
                     response,
@@ -98,12 +109,24 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     duration,
                 )
 
-    def _extract_context(self, request: Request, request_id: str) -> AuditContext:
+    def _extract_context(
+        self,
+        request: Request,
+        request_id: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> AuditContext:
         """Extract audit context from request.
+        
+        Called *after* await call_next(request) so that FastAPI
+        dependency resolution (get_current_user etc.) has already
+        populated request.state.user before we read it.
         
         Args:
             request: HTTP request.
             request_id: Unique request ID.
+            ip_address: Pre-extracted client IP (optional).
+            user_agent: Pre-extracted user-agent (optional).
             
         Returns:
             AuditContext with extracted information.
@@ -127,9 +150,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
         district_id = getattr(request.state, "district_id", None)
         congregation_id = getattr(request.state, "congregation_id", None)
         
-        # Extract request information
-        ip_address = self._get_client_ip(request)
-        user_agent = request.headers.get("user-agent")
+        # Extract request information (or use pre-extracted values)
+        if ip_address is None:
+            ip_address = self._get_client_ip(request)
+        if user_agent is None:
+            user_agent = request.headers.get("user-agent")
         
         return AuditContext(
             user_sub=user_sub,
@@ -273,6 +298,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
     def _get_resource_type(self, path: str) -> str:
         """Extract resource type from URL path.
         
+        For nested resource routes (e.g. ``/api/v1/events/{id}/assignments/{aid}``)
+        the segment *before* the last UUID-parameter is used so the audit entry
+        references the innermost resource type (e.g. ``assignments`` rather than
+        ``events``).
+        
         Args:
             path: URL path.
             
@@ -284,8 +314,14 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if clean_path.startswith("api/v1/"):
             clean_path = clean_path[7:]  # Remove "api/v1/"
         
-        # Get the first path segment
         parts = clean_path.split("/")
+        
+        # For nested resource routes, find the segment before the last UUID
+        uuid_pattern = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+        for i in range(len(parts) - 1, 0, -1):
+            if re.match(uuid_pattern, parts[i]):
+                return parts[i - 1]
+        
         if parts:
             return parts[0]
         
@@ -304,8 +340,6 @@ class AuditMiddleware(BaseHTTPMiddleware):
         Returns:
             Resource ID as UUID, or None if not found.
         """
-        import re
-        
         # Look for UUID patterns in the path — use *last* match for nested routes
         uuid_pattern = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
         matches = re.findall(uuid_pattern, path)
