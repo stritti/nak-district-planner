@@ -53,9 +53,9 @@ def get_token_claims() -> dict:
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
     session: AsyncSession = Depends(get_db_session),
-    request: Request | None = None,
 ) -> User:
     """Dependency to extract and validate current user from Bearer token.
 
@@ -109,8 +109,7 @@ async def get_current_user(
             existing_user.family_name = user_info["family_name"]
             existing_user.is_superadmin = is_superadmin
             await user_repo.save(existing_user)
-            if request is not None:
-                request.state.user = existing_user
+            request.state.user = existing_user
             return existing_user
         else:
             # Auto-create user on first login
@@ -125,8 +124,7 @@ async def get_current_user(
             )
             await user_repo.save(new_user)
             logger.info(f"Auto-created user: {new_user.sub} ({new_user.email})")
-            if request is not None:
-                request.state.user = new_user
+            request.state.user = new_user
             return new_user
 
     except TokenValidationError as e:

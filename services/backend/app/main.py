@@ -128,14 +128,6 @@ app = FastAPI(
 
 setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
 
-# Initialize Audit Logging
-app.add_middleware(
-    AuditMiddleware,
-    audit_service=audit_service,
-    exempt_paths={"/api/health"},
-    exempt_methods={"GET", "HEAD", "OPTIONS"},
-)
-
 # Initialize CSRF protection
 csrf_service = CSRFTokenService()
 app.add_middleware(
@@ -148,6 +140,15 @@ app.add_middleware(
         "/api/v1/auth/oidc/discovery",
         "/api/v1/auth/oidc/token",
     },
+    exempt_methods={"GET", "HEAD", "OPTIONS"},
+)
+
+# Initialize Audit Logging (registered last = outermost, catches all requests
+# including those that fail CSRF or other inner middleware)
+app.add_middleware(
+    AuditMiddleware,
+    audit_service=audit_service,
+    exempt_paths={"/api/health"},
     exempt_methods={"GET", "HEAD", "OPTIONS"},
 )
 
