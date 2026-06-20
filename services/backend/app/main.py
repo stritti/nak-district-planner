@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from alembic import command
 from app.adapters.api import deps
 from app.adapters.api.middleware.audit import AuditMiddleware
+from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
 from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.routers import (
     auth,
@@ -34,6 +35,7 @@ from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
+from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
 
@@ -112,11 +114,28 @@ async def lifespan(app: FastAPI):
             result["invalid_configurations"],
         )
 
+    # Start rate limiter — fail-open: if Redis is unavailable, requests proceed without
+    # rate limiting until Redis comes back (check_rate_limit already returns allowed=True on error).
+    try:
+        await rate_limiter.connect()
+        logger = logging.getLogger(__name__)
+        logger.info("Rate limiter connected to Redis")
+    except Exception:
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "Rate limiter could not connect to Redis — requests will not be rate limited "
+            "until Redis becomes available"
+        )
+
     yield
 
     # Cleanup
     await oidc_adapter.close()
     await audit_service.stop()
+    try:
+        await rate_limiter.close()
+    except Exception:
+        pass  # Shutting down — Redis connection may already be gone, safe to ignore
 
 
 app = FastAPI(
@@ -127,6 +146,29 @@ app = FastAPI(
 )
 
 setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
+
+# Initialize Rate Limiting
+rate_limit_config = RateLimitConfig(
+    default_limit=200,
+    default_window_seconds=60,
+    authenticated_multiplier=2.0,
+    burst_limit=10,
+    burst_window_seconds=1,
+    endpoint_limits={
+        "/api/health": {"limit": 60, "window": 60},
+        "/api/v1/auth/oidc/discovery": {"limit": 100, "window": 60},
+        "/api/v1/auth/oidc/token": {"limit": 100, "window": 60},
+        "/api/v1/export/*": {"limit": 60, "window": 60},
+        "/api/v1/events": {"limit": 100, "window": 60},
+    },
+)
+app.add_middleware(
+    RateLimitMiddleware,
+    rate_limiter=rate_limiter,
+    config=rate_limit_config,
+    exempt_paths={"/api/health"},
+    exempt_methods={"OPTIONS"},
+)
 
 # Initialize CSRF protection
 csrf_service = CSRFTokenService()
@@ -163,7 +205,25 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    """Health check endpoint.
+
+    Returns basic health status including optional database connectivity.
+    The endpoint always returns ``status: ok`` as long as the app responds,
+    making it safe for Docker Compose healthchecks.
+    """
+    result: dict = {"status": "ok", "version": settings.app_version}
+
+    # Check database connectivity (informational — does not affect health status)
+    try:
+        from sqlalchemy import text as sa_text
+
+        async with AsyncSessionLocal() as session:
+            await session.execute(sa_text("SELECT 1"))
+        result["database"] = "ok"
+    except Exception:
+        result["database"] = "unavailable"
+
+    return result
 
 
 # Register routers

@@ -3,12 +3,13 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, time
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Time
+from sqlalchemy import ARRAY, Date, DateTime, ForeignKey, String, Time
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.adapters.db.base import Base
+from app.domain.models.event import EventApprovalStatus
 from app.domain.models.planning_slot import PlanningSlotStatus
 
 
@@ -26,6 +27,23 @@ class PlanningSlotORM(Base):
         UUID(as_uuid=True), ForeignKey("congregations.id", ondelete="SET NULL"), nullable=True
     )
     category: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Title for the slot (used when no EventInstance exists or as fallback)
+    title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Approval status for planning workflow (migrated from Event.approval_status)
+    approval_status: Mapped[EventApprovalStatus | None] = mapped_column(
+        SAEnum(EventApprovalStatus, name="event_approval_status", create_type=False), nullable=True
+    )
+    # Invitation tracking fields (migrated from Event)
+    invitation_source_congregation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("congregations.id", ondelete="SET NULL"), nullable=True
+    )
+    invitation_source_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id", ondelete="SET NULL"), nullable=True
+    )
+    # List of congregation IDs that this slot applies to (for district-wide holidays)
+    applicability: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), nullable=False, default=[]
+    )
     planning_date: Mapped[date] = mapped_column(Date, nullable=False)
     planning_time: Mapped[time] = mapped_column(Time(timezone=False), nullable=False)
     status: Mapped[PlanningSlotStatus] = mapped_column(
