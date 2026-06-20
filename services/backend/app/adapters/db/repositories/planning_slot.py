@@ -18,6 +18,11 @@ def _orm_to_domain(row: PlanningSlotORM) -> PlanningSlot:
         district_id=row.district_id,
         congregation_id=row.congregation_id,
         category=row.category,
+        title=row.title,
+        approval_status=row.approval_status,
+        invitation_source_congregation_id=row.invitation_source_congregation_id,
+        invitation_source_event_id=row.invitation_source_event_id,
+        applicability=row.applicability or [],
         planning_date=row.planning_date,
         planning_time=row.planning_time,
         status=PlanningSlotStatus(row.status),
@@ -60,6 +65,11 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row.district_id = slot.district_id
         row.congregation_id = slot.congregation_id
         row.category = slot.category
+        row.title = slot.title
+        row.approval_status = slot.approval_status
+        row.invitation_source_congregation_id = slot.invitation_source_congregation_id
+        row.invitation_source_event_id = slot.invitation_source_event_id
+        row.applicability = slot.applicability
         row.planning_date = slot.planning_date
         row.planning_time = slot.planning_time
         row.status = slot.status

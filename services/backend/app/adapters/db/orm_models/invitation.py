@@ -23,6 +23,10 @@ class CongregationInvitationORM(Base):
     source_event_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
     )
+    # New field for PlanningSlot-based invitations
+    source_planning_slot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("planning_slots.id", ondelete="SET NULL"), nullable=True
+    )
     source_congregation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("congregations.id", ondelete="CASCADE"), nullable=False
     )

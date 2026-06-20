@@ -16,6 +16,7 @@ def _orm_to_domain(row: CongregationInvitationORM) -> CongregationInvitation:
     return CongregationInvitation(
         id=row.id,
         source_event_id=row.source_event_id,
+        source_planning_slot_id=row.source_planning_slot_id,
         source_congregation_id=row.source_congregation_id,
         target_type=InvitationTargetType(row.target_type),
         target_congregation_id=row.target_congregation_id,
@@ -67,6 +68,7 @@ class SqlInvitationRepository(InvitationRepository):
             row = existing
         row.id = invitation.id
         row.source_event_id = invitation.source_event_id
+        row.source_planning_slot_id = invitation.source_planning_slot_id
         row.source_congregation_id = invitation.source_congregation_id
         row.target_type = invitation.target_type
         row.target_congregation_id = invitation.target_congregation_id
@@ -75,6 +77,30 @@ class SqlInvitationRepository(InvitationRepository):
         row.created_at = invitation.created_at
         row.updated_at = invitation.updated_at
         await self._session.flush()
+
+    async def list_by_source_planning_slot(
+        self, source_planning_slot_id: uuid.UUID
+    ) -> list[CongregationInvitation]:
+        """List invitations by source planning slot ID."""
+        result = await self._session.execute(
+            select(CongregationInvitationORM).where(
+                CongregationInvitationORM.source_planning_slot_id == source_planning_slot_id
+            )
+        )
+        return [_orm_to_domain(r) for r in result.scalars().all()]
+
+    async def list_by_source_planning_slots(
+        self, source_planning_slot_ids: list[uuid.UUID]
+    ) -> list[CongregationInvitation]:
+        """List invitations by multiple source planning slot IDs."""
+        if not source_planning_slot_ids:
+            return []
+        result = await self._session.execute(
+            select(CongregationInvitationORM).where(
+                CongregationInvitationORM.source_planning_slot_id.in_(source_planning_slot_ids)
+            )
+        )
+        return [_orm_to_domain(r) for r in result.scalars().all()]
 
     async def delete(self, invitation_id: uuid.UUID) -> None:
         row = await self._session.get(CongregationInvitationORM, invitation_id)
