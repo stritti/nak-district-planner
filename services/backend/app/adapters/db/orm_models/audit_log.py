@@ -33,10 +33,10 @@ class AuditAction(str, Enum):
 
 
 class AuditStatus(str, Enum):
-    """Status of the audited action."""
+    """Status of the audited action — values match the PostgreSQL ENUM."""
 
-    SUCCESS = "success"
-    FAILED = "failed"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
 
 
 class AuditLogORM(Base):
