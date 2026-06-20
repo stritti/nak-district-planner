@@ -28,14 +28,14 @@ The implementation uses:
 ```python
 class RateLimiter:
     """Redis-based rate limiter with sliding window algorithm."""
-    
+
     async def check_rate_limit(
         self,
         identifier: str,
         endpoint: str,
         is_authenticated: bool = False,
     ) -> RateLimitResult
-    
+
     async def get_rate_limit_headers(
         self,
         result: RateLimitResult,
@@ -43,6 +43,7 @@ class RateLimiter:
 ```
 
 **Algorithm:**
+
 1. Each request is stored as a timestamp in a Redis sorted set
 2. The key is a hash of: `rate_limit:{window}:{identifier}:{endpoint}`
 3. On each request, count elements in the sorted set within the time window
@@ -50,6 +51,7 @@ class RateLimiter:
 5. Set key expiration to window size for automatic cleanup
 
 **Features:**
+
 - Sliding window for accuracy
 - SHA-256 hashed keys for efficiency
 - Millisecond precision timestamps
@@ -61,7 +63,7 @@ class RateLimiter:
 ```python
 class RateLimitMiddleware:
     """FastAPI middleware for rate limiting."""
-    
+
     async def __call__(
         self,
         request: Request,
@@ -70,6 +72,7 @@ class RateLimitMiddleware:
 ```
 
 **Features:**
+
 - Automatic rate limit checking for all requests
 - Returns HTTP 429 when limit is exceeded
 - Adds standard rate limit headers to all responses
@@ -124,10 +127,10 @@ Endpoint-specific limits can be configured with wildcard support:
 endpoint_limits = {
     # Exact match
     "/api/health": {"limit": 60, "window": 60},
-    
+
     # Wildcard match (all export endpoints)
     "/api/v1/export/*": {"limit": 60, "window": 60},
-    
+
     # Specific endpoint
     "/api/v1/events": {"limit": 100, "window": 60},
 }
@@ -138,14 +141,17 @@ endpoint_limits = {
 The middleware identifies users in the following order:
 
 1. **Authenticated Users**: Uses `user.sub` from OIDC token
+
    - Format: `user:{sub}`
    - Gets multiplied limit (default: 2x)
 
 2. **Unauthenticated Users**: Uses client IP address
+
    - Format: `ip:{ip_address}`
    - Gets standard limit
 
 3. **Fallback**: Uses "anonymous" identifier
+
    - Only if neither user nor IP can be determined
 
 ## Rate Limit Headers
@@ -164,9 +170,11 @@ All responses include standard rate limit headers:
 The following are exempt from rate limiting:
 
 ### Exempt Paths
+
 - `/api/health` - Health check endpoint
 
 ### Exempt Methods
+
 - `OPTIONS` - CORS preflight requests
 
 ## Performance
@@ -191,12 +199,14 @@ The following are exempt from rate limiting:
 ### Sliding Window Algorithm
 
 Unlike fixed windows, sliding windows:
+
 - Count requests in a rolling time period
 - Prevent burst attacks at window boundaries
 - Provide consistent rate limiting
 
 **Example:**
-```
+
+```text
 Fixed Window (60s):  [0-60s] [60-120s] [120-180s]
                   |------|------|------|
                   Attacker sends 200 requests at 59s and 61s
@@ -212,6 +222,7 @@ Sliding Window (60s):
 ### Fail-Open Behavior
 
 If Redis is unavailable:
+
 - Requests are **allowed** (fail-open)
 - Error is logged for investigation
 - Prevents complete service outage
@@ -219,6 +230,7 @@ If Redis is unavailable:
 ### Per-Endpoint Limits
 
 Sensitive endpoints can have stricter limits:
+
 - Authentication endpoints: Higher limits for OIDC flows
 - Export endpoints: Lower limits to prevent data scraping
 - Health endpoints: Exempt or very high limits
@@ -226,6 +238,7 @@ Sensitive endpoints can have stricter limits:
 ### Authenticated vs Unauthenticated
 
 Authenticated users get higher limits:
+
 - Default: 200 requests/minute
 - Authenticated: 400 requests/minute (2x multiplier)
 - Can be customized per endpoint
@@ -241,24 +254,27 @@ pytest tests/unit/test_rate_limiter.py -v
 
 ### Manual Testing
 
-1. **Check rate limit headers**:
+1. **Check rate limit headers:**
+
    ```bash
    curl -v http://localhost:8000/api/health
    # Look for X-RateLimit-* headers
    ```
 
-2. **Test rate limiting**:
+2. **Test rate limiting:**
+
    ```bash
    # Send many requests quickly
    for i in {1..201}; do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/v1/events; done
    # Should see 200 for first 200, then 429
    ```
 
-3. **Test authenticated user limits**:
+3. **Test authenticated user limits:**
+
    ```bash
    # With valid token
    TOKEN=$(get_oidc_token)
-   for i in {1..401}; do 
+   for i in {1..401}; do
      curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/events
    done
    # Should see 200 for first 400 (2x limit), then 429
@@ -268,11 +284,12 @@ pytest tests/unit/test_rate_limiter.py -v
 
 Rate limit events are logged with the following information:
 
-```
+```text
 WARNING: Rate limit exceeded for user:123 on POST /api/v1/events
 ```
 
 These logs can be monitored for:
+
 - Potential DoS attacks
 - Unusual traffic patterns
 - Misconfigured clients
@@ -291,20 +308,24 @@ This implementation addresses the following security requirements:
 ### Common Issues
 
 1. **All requests getting 429**
+
    - Check Redis connection
    - Verify rate limit configuration
    - Check if identifier extraction is working
 
 2. **Rate limit headers missing**
+
    - Verify middleware is configured
    - Check that middleware runs before route handlers
 
 3. **Redis memory growing too fast**
+
    - Verify key expiration is set
    - Check for unusual traffic patterns
    - Consider reducing window sizes
 
 4. **Authenticated users not getting higher limits**
+
    - Verify `authenticated_multiplier` is set
    - Check that user authentication is detected correctly
 
