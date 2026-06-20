@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from alembic import command
 from app.adapters.api import deps
 from app.adapters.api.middleware.audit import AuditMiddleware
+from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.routers import (
     auth,
     calendar_integrations,
@@ -27,12 +28,13 @@ from app.adapters.api.routers import (
 )
 from app.adapters.auth.oidc import OIDCAdapter
 from app.application.audit_service import audit_service
+from app.application.csrf import CSRFTokenService
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
-from app.config import settings
+from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
 
 
@@ -49,6 +51,13 @@ async def lifespan(app: FastAPI):
     import asyncio
 
     configure_logging()
+
+    # Production guard — fail fast on unsafe config
+    try:
+        production_guard(settings)
+    except RuntimeError as e:
+        print("🚨", str(e))
+        sys.exit(1)
 
     # Run migrations
     cfg = Config("alembic.ini")
@@ -124,6 +133,21 @@ app.add_middleware(
     AuditMiddleware,
     audit_service=audit_service,
     exempt_paths={"/api/health"},
+    exempt_methods={"GET", "HEAD", "OPTIONS"},
+)
+
+# Initialize CSRF protection
+csrf_service = CSRFTokenService()
+app.add_middleware(
+    CSRFMiddleware,
+    csrf_service=csrf_service,
+    cookie_name="csrf_token",
+    header_name="X-CSRF-Token",
+    exempt_paths={
+        "/api/health",
+        "/api/v1/auth/oidc/discovery",
+        "/api/v1/auth/oidc/token",
+    },
     exempt_methods={"GET", "HEAD", "OPTIONS"},
 )
 

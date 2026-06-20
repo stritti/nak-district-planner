@@ -17,9 +17,11 @@ from app.adapters.api.schemas.calendar_integration import (
 )
 from app.adapters.auth.permissions import (
     PermissionError,
+    assert_has_role_in_congregation,
     assert_has_role_in_district,
 )
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.application.crypto import CryptoError, encrypt_credentials
 from app.application.sync_service import run_sync
 from app.domain.models.calendar_integration import CalendarIntegration
@@ -51,9 +53,23 @@ async def create_calendar_integration(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> CalendarIntegrationResponse:
-    # Check if user has DISTRICT_ADMIN role in the district
+    # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+        if body.congregation_id is not None:
+            try:
+                assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, body.congregation_id)
+                # Validate congregation belongs to the specified district
+                cong_repo = SqlCongregationRepository(db)
+                congregation = await cong_repo.get(body.congregation_id)
+                if congregation is None or congregation.district_id != body.district_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Gemeinde nicht gefunden",
+                    )
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -78,24 +94,39 @@ async def list_calendar_integrations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     district_id: uuid.UUID | None = None,
+    congregation_id: uuid.UUID | None = None,
 ) -> CalendarIntegrationListResponse:
-    if district_id is None and not auth.user.is_superadmin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="district_id ist erforderlich, außer für Superadmin.",
-        )
+    repo = SqlCalendarIntegrationRepository(db)
 
-    if district_id is not None:
+    if congregation_id is not None:
+        # Congregation-scoped listing: require CONGREGATION_ADMIN for that congregation
+        try:
+            assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, congregation_id)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        # When district_id is also provided, validate the congregation belongs to it
+        if district_id is not None:
+            cong_repo = SqlCongregationRepository(db)
+            congregation = await cong_repo.get(congregation_id)
+            if congregation is None or congregation.district_id != district_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Gemeinde nicht gefunden",
+                )
+        items = await repo.list_by_congregation(congregation_id)
+    elif district_id is not None:
         try:
             assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
         except PermissionError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
-
-    repo = SqlCalendarIntegrationRepository(db)
-    if district_id is not None:
         items = await repo.list_by_district(district_id)
-    else:
+    elif auth.user.is_superadmin:
         items = await repo.list_active()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="district_id oder congregation_id ist erforderlich, außer für Superadmin.",
+        )
     return CalendarIntegrationListResponse(
         items=[_to_response(i) for i in items],
         total=len(items),
@@ -151,9 +182,17 @@ async def update_calendar_integration(
             status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden"
         )
 
-    # Check if user has DISTRICT_ADMIN role in the district
+    # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+        if integration.congregation_id is not None:
+            try:
+                assert_has_role_in_congregation(
+                    auth, Role.CONGREGATION_ADMIN, integration.congregation_id
+                )
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -187,9 +226,17 @@ async def delete_calendar_integration(
             status_code=status.HTTP_404_NOT_FOUND, detail="Integration nicht gefunden"
         )
 
-    # Check if user has DISTRICT_ADMIN role in the district
+    # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+        if integration.congregation_id is not None:
+            try:
+                assert_has_role_in_congregation(
+                    auth, Role.CONGREGATION_ADMIN, integration.congregation_id
+                )
+            except PermissionError:
+                assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
+        else:
+            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
