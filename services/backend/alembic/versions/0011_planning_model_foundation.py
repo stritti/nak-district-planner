@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0011_planning_model_foundation"
-down_revision: str | None = "0010_leader_registrations"
+down_revision: str | None = "e4b2a9d7f110"
 __all__ = ("revision", "down_revision", "upgrade", "downgrade")
 
 

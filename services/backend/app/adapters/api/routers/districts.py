@@ -561,16 +561,19 @@ async def get_matrix(
             event = event_by_owner_date.get((congregation.id, date_key))
             if event is None:
                 event = event_by_owner_date.get((district_id, date_key))
-            if event is None and date_key not in cong_expected:
-                # Neither expected by schedule nor explicitly present as event.
-                cells[date_key] = MatrixCell()
-                continue
 
+            # Check for planning slot first so slot-only dates survive early-exit
             slot = slot_by_owner_date.get((congregation.id, date_key))
             if slot is None:
                 slot = slot_by_owner_date.get((district_id, date_key))
+
+            if event is None and date_key not in cong_expected and slot is None:
+                # Neither expected by schedule, existing event, nor planning slot.
+                cells[date_key] = MatrixCell()
+                continue
+
             if event is None and slot is None:
-                # Im Zeitplan erwartet, aber noch kein Event angelegt
+                # Im Zeitplan erwartet, aber noch kein Event oder Planning-Slot angelegt
                 cells[date_key] = MatrixCell()
                 continue
 
