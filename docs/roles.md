@@ -317,6 +317,51 @@ Wird ein Benutzer deaktiviert (`is_active = false`):
 
 ---
 
+## 6. Implementierungsstatus
+
+Dieser Abschnitt dokumentiert, welche Permission-Guards in den einzelnen API-Routern aktiv sind (Stand: Phase 1 P0-Blitzer).
+
+:   **Legende:** ✅ Vollständig · ◐ Teilweise (congregation-fallback ergänzt) · 🔷 Abweichendes Auth-Modell · ❌ Nicht geschützt
+
+| Router | Guard-Status | Anmerkungen |
+|--------|-------------|-------------|
+| `events.py` | ◐ | `assert_has_role_in_congregation`-Fallback für `create_event`/`update_event` ergänzt. Lesen-Dienste bleiben öffentlich innerhalb des Bezirks. |
+| `districts.py` | ◐ | `update_congregation` hat `assert_has_role_in_congregation`-Fallback. |
+| `calendar_integrations.py` | ◐ | `create`/`update`/`delete` haben `assert_has_role_in_congregation`-Fallback. |
+| `leaders.py` | ✅ | Vollständige Guards via `assert_has_role_in_district`/`assert_has_role_in_congregation`. |
+| `service_assignments.py` | ✅ | Vollständige Guards via `assert_has_role_in_district`/`assert_has_role_in_congregation`. |
+| `invitations.py` | ✅ | Vollständige Guards via `assert_has_role_in_district`/`assert_has_role_in_congregation`. |
+| `registrations.py` | ✅ | `assert_has_role_in_district` für listen/delete (selbst-registrierte User). |
+| `system.py` | ✅ | `system_admin`-Guard für alle administrativen Endpoints. |
+| `export.py` | 🔷 | Token-basiertes Auth-Modell (kein Rollen-Guard nötig; Berechtigung ergibt sich aus Token-Typ PUBLIC/INTERNAL). |
+| `auth.py` | 🔷 | Verwendet `get_current_user` direkt; Rollenprüfung erfolgt nachgelagert in den aufgerufenen Endpoints. |
+
+### 6.1 Cross-Tenant-Isolation
+
+Die Mandantentrennung wird auf Permission-Ebene durchgesetzt:
+
+- **`has_role_in_district(district_id, …)`** — prüft, ob der User eine Rolle im angegebenen Bezirk besitzt
+- **`assert_has_role_in_district(district_id, …)`** — wie oben, löst aber `HTTPException(403)` bei Fehlschlag
+- **`has_role_in_congregation(congregation_id, …)`** — prüft Gemeinde-Scope innerhalb des Bezirks
+- **`assert_has_role_in_congregation(congregation_id, …)`** — wie oben, mit 403 bei Fehlschlag
+- **Sonderfall `system_admin`** — überspringt alle Mandantenprüfungen (volle Zugriffe)
+
+Die Permissions-Schicht ist als reine Python-Domainlogik implementiert (keine DB-Anfragen für Rollenabfragen; erwartet `AuthContext` mit vorab geladenen `Membership`-Objekten).
+
+### 6.2 Router-Abdeckung nach Rolle
+
+Die folgende Tabelle zeigt, welche Rollen in welchen Endpoints aktiv geprüft werden:
+
+| Rolle | Router mit aktivem Guard |
+|-------|-------------------------|
+| `system_admin` | `system.py`, alle `*_admin`-Endpoints in anderen Routern (als Fallback) |
+| `district_admin` | `districts.py`, `events.py`, `leaders.py`, `service_assignments.py`, `calendar_integrations.py`, `invitations.py`, `registrations.py` |
+| `congregation_admin` | `events.py` (create/update), `districts.py` (update_congregation), `calendar_integrations.py` (CRUD), `leaders.py` (eigene Gemeinde), `service_assignments.py` (eigene Gemeinde) |
+| `planner` | `service_assignments.py`, `events.py` (lesen), `leaders.py` (lesen) |
+| `viewer` | Lesende Endpoints in allen Routern |
+
+> **Hinweis:** Die tatsächliche Berechtigungsprüfung erfolgt stets über die `assert_has_role_in_*`-Familie. Ein Endpoint, der z. B. `assert_has_role_in_district(…, [DISTRICT_ADMIN, PLANNER])` aufruft, prüft beide Rollen — unabhängig von der konkreten Router-Zuordnung.
+
 ## 5. Design-Entscheidungen
 
 Die folgenden Entscheidungen wurden im Rahmen der Konzeptentwicklung getroffen und sind verbindlich für die Implementierung.
