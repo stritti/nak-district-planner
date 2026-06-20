@@ -13,6 +13,7 @@
     <main :class="mainClass">
       <RouterView />
     </main>
+    <ToastContainer />
   </div>
 </template>
 
@@ -21,6 +22,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppNav from './components/AppNav.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
+import ToastContainer from './components/ToastContainer.vue'
 import { useOIDC } from './composables/useOIDC'
 import { useAuthStore } from './stores/auth'
 
