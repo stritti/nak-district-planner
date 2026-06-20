@@ -17,15 +17,18 @@ In a multi-tenant application, insufficient tenant isolation can lead to:
 The implementation provides **Defense in Depth** with multiple layers of tenant isolation:
 
 ### Layer 1: Application-Level (Middleware)
+
 - **TenantMiddleware**: Extracts tenant context from requests
 - **TenantValidationMiddleware**: Validates tenant access
 - **Permission Checks**: Role-based access control
 
 ### Layer 2: Service-Level (Validation)
+
 - **TenantValidationService**: Validates user memberships in tenants
 - **Cross-Tenant Access Validation**: Validates access across tenant hierarchies
 
 ### Layer 3: Database-Level (RLS Policies)
+
 - **PostgreSQL Row-Level Security**: Enforces tenant isolation at the database level
 - **Automatic Filtering**: Database automatically filters rows based on tenant context
 
@@ -95,30 +98,31 @@ class TenantContext:
 ### Tenant Middleware (`app/adapters/api/middleware/tenant.py`)
 
 ```python
+```python
 class TenantMiddleware:
     """Extracts tenant context from requests."""
-    
+
     async def __call__(self, request: Request, call_next: Callable) -> Response:
         # Extract tenant context from path params, query params, or headers
         tenant_context = self._extract_tenant_context(request)
-        
+
         # Set tenant context variables
         TenantContext.set_context(**tenant_context)
-        
+
         # Add to request state
         request.state.tenant_context = tenant_context
-        
+
         # Process request
         response = await call_next(request)
-        
+
         # Clear context
         TenantContext.clear_context()
-        
+
         return response
 
 class TenantValidationMiddleware:
     """Validates tenant access for authenticated users."""
-    
+
     async def __call__(self, request: Request, call_next: Callable) -> Response:
         # Skip for exempt paths/methods
         # Validate tenant access
@@ -130,24 +134,24 @@ class TenantValidationMiddleware:
 ```python
 class TenantValidationService:
     """Validates tenant access and memberships."""
-    
+
     async def validate_user_in_district(
         self, user_sub: str, district_id: uuid.UUID, required_role: Role | None = None
     ) -> bool
-    
+
     async def validate_user_in_congregation(
         self, user_sub: str, congregation_id: uuid.UUID, required_role: Role | None = None
     ) -> bool
-    
+
     async def validate_user_in_tenant(
         self, user_sub: str, tenant_id: uuid.UUID, tenant_type: str, required_role: Role | None = None
     ) -> bool
-    
+
     async def validate_cross_tenant_access(
         self, user_sub: str, resource_tenant_id: uuid.UUID, resource_tenant_type: str,
         access_tenant_id: uuid.UUID | None = None, access_tenant_type: str | None = None
     ) -> bool
-    
+
     async def get_user_districts(self, user_sub: str) -> list[uuid.UUID]
     async def get_user_congregations(self, user_sub: str, district_id: uuid.UUID | None = None) -> list[uuid.UUID]
     async def get_tenant_district(self, tenant_id: uuid.UUID, tenant_type: str) -> uuid.UUID | None
@@ -244,15 +248,15 @@ class EventService:
         district_id = TenantContext.get_district()
         congregation_id = TenantContext.get_congregation()
         user_sub = TenantContext.get_user_sub()
-        
+
         # Use context in queries
         query = select(EventORM)
-        
+
         if district_id:
             query = query.where(EventORM.district_id == district_id)
         elif congregation_id:
             query = query.where(EventORM.congregation_id == congregation_id)
-        
+
         # Execute query
         result = await session.execute(query)
         return result.scalars().all()
@@ -274,7 +278,7 @@ class EventService:
             district_id=event_data.district_id,
             required_role=Role.PLANNER,
         )
-        
+
         # Create event
         event = EventORM(**event_data.dict())
         session.add(event)
@@ -306,6 +310,7 @@ class EventService:
 ### PostgreSQL RLS Setup
 
 RLS policies are applied to the following tables:
+
 - `events` - Events belong to congregations and districts
 - `service_assignments` - Assignments belong to congregations
 - `leaders` - Leaders belong to congregations
@@ -331,22 +336,22 @@ class TenantMiddleware:
     async def __call__(self, request: Request, call_next: Callable) -> Response:
         # Extract tenant context
         tenant_context = self._extract_tenant_context(request)
-        
+
         # Set context variables
         TenantContext.set_context(**tenant_context)
-        
+
         # Set PostgreSQL settings (if using RLS)
         if tenant_context.get("user_sub"):
             await self._set_postgres_settings(tenant_context)
-        
+
         # Process request
         response = await call_next(request)
-        
+
         # Clear context
         TenantContext.clear_context()
-        
+
         return response
-    
+
     async def _set_postgres_settings(self, context: dict) -> None:
         """Set PostgreSQL settings for RLS."""
         # This would execute SQL to set the settings
@@ -407,35 +412,38 @@ pytest tests/unit/test_tenant_validation.py -v
 
 ### Manual Testing
 
-1. **Test tenant isolation**:
+1. **Test tenant isolation:**
+
    ```bash
    # Get token for user in district 1
    TOKEN=$(get_token_for_user_in_district_1)
-   
+
    # Try to access district 2's events
    curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/districts/2/events
    # Should return 403 Forbidden
    ```
 
-2. **Test cross-tenant access**:
+2. **Test cross-tenant access:**
+
    ```bash
    # Get token for district admin
    TOKEN=$(get_district_admin_token)
-   
+
    # Try to access congregation in their district
    curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/congregations/1/events
    # Should return 200 OK (if congregation is in their district)
-   
+
    # Try to access congregation in another district
    curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/congregations/2/events
    # Should return 403 Forbidden
    ```
 
-3. **Test superadmin access**:
+3. **Test superadmin access:**
+
    ```bash
    # Get token for superadmin
    TOKEN=$(get_superadmin_token)
-   
+
    # Try to access any district/congregation
    curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/districts/1/events
    curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/congregations/1/events
@@ -446,11 +454,12 @@ pytest tests/unit/test_tenant_validation.py -v
 
 Tenant access violations are logged with the following information:
 
-```
+```text
 WARNING: Tenant validation failed: User user-123 has no membership in district 12345678-1234-1234-1234-123456789012
 ```
 
 These logs can be monitored for:
+
 - Potential cross-tenant access attempts
 - Misconfigured permissions
 - Security incidents
@@ -470,6 +479,7 @@ This implementation addresses the following security and compliance requirements
 ### Database Migration
 
 A new database migration is required to:
+
 1. Enable RLS on tenant-specific tables
 2. Create RLS policies for each table
 
@@ -493,21 +503,25 @@ alembic upgrade head
 ### Common Issues
 
 1. **403 Forbidden on all requests**
+
    - Check that tenant context is being extracted correctly
    - Verify middleware is configured and running
    - Check that user has appropriate memberships
 
 2. **RLS policies blocking all queries**
+
    - Verify PostgreSQL settings are being set
    - Check RLS policy definitions
    - Test with RLS temporarily disabled
 
 3. **Cross-tenant access not working**
+
    - Verify tenant hierarchy (congregation belongs to district)
    - Check user's role in the access tenant
    - Verify cross-tenant validation logic
 
 4. **Performance issues**
+
    - Check for N+1 queries in tenant validation
    - Consider caching tenant memberships
    - Review RLS policy complexity
