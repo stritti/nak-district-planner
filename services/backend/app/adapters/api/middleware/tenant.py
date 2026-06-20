@@ -89,16 +89,19 @@ class TenantMiddleware(BaseHTTPMiddleware):
         
         return response
 
+    UUID_PATTERN = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+
     def _extract_tenant_context(self, request: Request) -> dict:
         """Extract tenant context from request.
         
         Since this runs as ASGI middleware before FastAPI dependencies,
-        ``request.state.user`` is normally not populated yet.  The method
-        first tries ``request.state.user`` (for cases where an outer
-        middleware or route has already resolved), then falls back to
-        extracting the ``sub`` claim directly from the Bearer JWT payload
-        without verifying the signature — safe because the value is used
-        only for tenant-context extraction, not authentication.
+        ``request.state.user`` and ``request.path_params`` are normally
+        not populated yet.  The method:
+        - extracts user info from ``request.state.user`` (if set) or the
+          Bearer JWT payload (without verification — safe because it is
+          used only for context extraction, not authentication).
+        - extracts tenant IDs by parsing the URL path directly (not via
+          ``request.path_params``) so it works reliably in middleware.
         
         Args:
             request: HTTP request.
@@ -125,16 +128,9 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if hasattr(request.state, "user_roles"):
             context["user_roles"] = request.state.user_roles
         
-        # Try to extract tenant from path parameters
-        path_params = getattr(request, "path_params", {})
-        if "district_id" in path_params:
-            context["district_id"] = path_params["district_id"]
-            context["tenant_id"] = path_params["district_id"]
-            context["tenant_type"] = "district"
-        elif "congregation_id" in path_params:
-            context["congregation_id"] = path_params["congregation_id"]
-            context["tenant_id"] = path_params["congregation_id"]
-            context["tenant_type"] = "congregation"
+        # Extract tenant IDs from URL path (parsed directly, not via
+        # request.path_params, which is only populated after routing).
+        self._extract_tenant_from_path(request.url.path, context)
         
         # Try to extract tenant from query parameters
         query_params = getattr(request, "query_params", {})
@@ -163,6 +159,42 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 logger.warning(f"Invalid congregation ID in header: {congregation_id}")
         
         return context
+
+    @staticmethod
+    def _extract_tenant_from_path(path: str, context: dict) -> None:
+        """Parse tenant IDs directly from the URL path.
+        
+        Scans for UUID-like segments preceded by known resource names
+        (``districts``, ``congregations``) so path-scoped routes such
+        as ``POST /api/v1/districts/{district_id}/leaders`` are handled
+        correctly even when ``request.path_params`` is still empty.
+        
+        Args:
+            path: URL path string (from ``request.url.path``).
+            context: Mutable context dict to populate.
+        """
+        import re
+        
+        clean = path.lstrip("/")
+        if clean.startswith("api/v1/"):
+            clean = clean[7:]
+        parts = clean.split("/")
+        
+        for i, part in enumerate(parts):
+            if part == "districts" and i + 1 < len(parts):
+                m = re.match(TenantMiddleware.UUID_PATTERN, parts[i + 1])
+                if m:
+                    context["district_id"] = uuid.UUID(m.group())
+                    context["tenant_id"] = context["district_id"]
+                    context["tenant_type"] = "district"
+            elif part == "congregations" and i + 1 < len(parts):
+                m = re.match(TenantMiddleware.UUID_PATTERN, parts[i + 1])
+                if m:
+                    context["congregation_id"] = uuid.UUID(m.group())
+                    # If no district scope is already set, prefer congregation as tenant
+                    if "tenant_id" not in context:
+                        context["tenant_id"] = context["congregation_id"]
+                        context["tenant_type"] = "congregation"
 
     @staticmethod
     def _extract_sub_from_bearer(request: Request) -> str | None:

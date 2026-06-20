@@ -23,6 +23,7 @@ RLS_POLICIES = {
             # Allow read access to events in user's districts/congregations
             """
             CREATE POLICY events_tenant_isolation_policy ON events
+                FOR SELECT
                 USING (
                     -- User is superadmin
                     (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
@@ -149,28 +150,36 @@ RLS_POLICIES = {
     "service_assignments": {
         "enable": "ALTER TABLE service_assignments ENABLE ROW LEVEL SECURITY;",
         "policies": [
-            # Read access
+            # Read access — service_assignments does not have a congregation_id column
+            # directly; we derive tenant via JOIN through events (event_id) and
+            # planning_slots (planning_slot_id → events).
             """
             CREATE POLICY service_assignments_tenant_isolation_policy ON service_assignments
+                FOR SELECT
                 USING (
                     -- User is superadmin
                     (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
                     OR
-                    -- Assignment belongs to a congregation user has access to
+                    -- Assignment references an event in a congregation the user can see
                     (EXISTS (
-                        SELECT 1 FROM memberships m
-                        WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'CONGREGATION'
-                        AND m.scope_id = service_assignments.congregation_id
-                    ))
-                    OR
-                    -- Assignment belongs to a district user has access to
-                    (EXISTS (
-                        SELECT 1 FROM memberships m
-                        JOIN congregations c ON c.id = service_assignments.congregation_id
-                        WHERE m.user_sub = current_setting('app.current_user_sub')
-                        AND m.scope_type = 'DISTRICT'
-                        AND m.scope_id = c.district_id
+                        SELECT 1 FROM events e
+                        WHERE (e.id = service_assignments.event_id
+                               OR e.id = service_assignments.planning_slot_id)
+                        AND (
+                            EXISTS (
+                                SELECT 1 FROM memberships m
+                                WHERE m.user_sub = current_setting('app.current_user_sub')
+                                AND m.scope_type = 'CONGREGATION'
+                                AND m.scope_id = e.congregation_id
+                            )
+                            OR
+                            EXISTS (
+                                SELECT 1 FROM memberships m
+                                WHERE m.user_sub = current_setting('app.current_user_sub')
+                                AND m.scope_type = 'DISTRICT'
+                                AND m.scope_id = e.district_id
+                            )
+                        )
                     ))
                 );
             """,
@@ -184,6 +193,7 @@ RLS_POLICIES = {
             # Read access
             """
             CREATE POLICY leaders_tenant_isolation_policy ON leaders
+                FOR SELECT
                 USING (
                     -- User is superadmin
                     (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
@@ -216,6 +226,7 @@ RLS_POLICIES = {
             # Read access
             """
             CREATE POLICY invitations_tenant_isolation_policy ON invitations
+                FOR SELECT
                 USING (
                     -- User is superadmin
                     (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
@@ -248,6 +259,7 @@ RLS_POLICIES = {
             # Read access
             """
             CREATE POLICY calendar_integrations_tenant_isolation_policy ON calendar_integrations
+                FOR SELECT
                 USING (
                     -- User is superadmin
                     (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
@@ -280,6 +292,7 @@ RLS_POLICIES = {
             # Read access - only admins can see memberships
             """
             CREATE POLICY memberships_tenant_isolation_policy ON memberships
+                FOR SELECT
                 USING (
                     -- User is superadmin
                     (EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub') AND is_superadmin = true))
