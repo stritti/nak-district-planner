@@ -294,6 +294,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
     def _extract_resource_id(self, path: str) -> uuid.UUID | None:
         """Extract resource ID from URL path if available.
         
+        For nested resource routes (e.g. ``/api/v1/districts/{d}/congregations/{c}``)
+        the *last* UUID in the path is used so the audit entry references the
+        most specific (innermost) resource.
+        
         Args:
             path: URL path.
             
@@ -302,13 +306,13 @@ class AuditMiddleware(BaseHTTPMiddleware):
         """
         import re
         
-        # Look for UUID patterns in the path
+        # Look for UUID patterns in the path — use *last* match for nested routes
         uuid_pattern = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-        match = re.search(uuid_pattern, path)
+        matches = re.findall(uuid_pattern, path)
         
-        if match:
+        if matches:
             try:
-                return uuid.UUID(match.group())
+                return uuid.UUID(matches[-1])
             except ValueError:
                 pass
         
