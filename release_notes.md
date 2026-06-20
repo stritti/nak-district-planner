@@ -1,4 +1,4 @@
-## [v0.14.4] - 2026-06-20
+## [v0.14.5] - 2026-06-20
 
 ### Features
 * Merge pull request #170 from stritti/feature/rbac-completion-1-4 (4ac8a98)
@@ -25,6 +25,8 @@
 * test: fix matrix e2e syntax (561e68a)
 
 ### Other Changes
+* Merge pull request #177 from stritti/dependabot/github_actions/actions/upload-artifact-7 (ee63451)
+* chore: release v0.14.4 (2135e23)
 * Merge pull request #175 from stritti/dependabot/github_actions/actions/checkout-7 (ab23b8d)
 * chore: release v0.14.3 (ea78759)
 * Merge pull request #176 from stritti/dependabot/github_actions/astral-sh/setup-uv-7 (89ac858)
@@ -33,5 +35,3 @@
 * chore: release v0.14.1 (9e22bd3)
 * Merge pull request #183 from stritti/dependabot/uv/services/backend/pydantic-settings-2.14.2 (5d5dddf)
 * build(deps): Bump pydantic-settings in /services/backend (c7f4f16)
-* build(deps): Update sqlalchemy[asyncio] requirement in /services/backend (a588c47)
-* build(deps): Bump astral-sh/setup-uv from 5 to 7 (747b020)
