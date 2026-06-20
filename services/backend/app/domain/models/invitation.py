@@ -27,6 +27,7 @@ class OverwriteDecisionStatus(StrEnum):
 class CongregationInvitation:
     id: uuid.UUID
     source_event_id: uuid.UUID
+    source_planning_slot_id: uuid.UUID | None
     source_congregation_id: uuid.UUID
     target_type: InvitationTargetType
     target_congregation_id: uuid.UUID | None
@@ -40,6 +41,7 @@ class CongregationInvitation:
         cls,
         *,
         source_event_id: uuid.UUID,
+        source_planning_slot_id: uuid.UUID | None = None,
         source_congregation_id: uuid.UUID,
         target_type: InvitationTargetType,
         target_congregation_id: uuid.UUID | None = None,
@@ -58,6 +60,7 @@ class CongregationInvitation:
         return cls(
             id=uuid.uuid4(),
             source_event_id=source_event_id,
+            source_planning_slot_id=source_planning_slot_id,
             source_congregation_id=source_congregation_id,
             target_type=target_type,
             target_congregation_id=target_congregation_id,

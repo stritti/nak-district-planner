@@ -4,19 +4,25 @@
 2. Kirchliche Festtage (berechnet): NAK-relevante bewegliche Festtage aus dem Ostertermin
 
 Idempotent: UIDs sind stabil — wiederholter Import überschreibt nur bei Änderungen.
+
+NOTE: Since matrix rendering migration (Task Group 1.1), holidays are now stored as
+PlanningSlots instead of Events to support the unified PlanningSlot/EventInstance architecture.
 """
 
 from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.db.repositories.event import SqlEventRepository
-from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+from app.domain.models.event import EventSource, EventVisibility
+from app.domain.models.event_instance import EventInstance
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 
 NAGER_DATE_URL = "https://date.nager.at/api/v3/PublicHolidays/{year}/DE"
 
@@ -111,7 +117,7 @@ async def import_feiertage(
     state_code: str | None,
     session: AsyncSession,
 ) -> dict[str, int]:
-    """Fetch German public holidays from Nager.Date and upsert as district events.
+    """Fetch German public holidays from Nager.Date and upsert as district PlanningSlots.
 
     Args:
         district_id: Target district.
@@ -136,40 +142,48 @@ async def import_feiertage(
         if h.get("counties") is None or (de_county and de_county in (h.get("counties") or []))
     ]
 
-    event_repo = SqlEventRepository(session)
+    slot_repo = SqlPlanningSlotRepository(session)
     created = updated = skipped = 0
 
     for h in relevant:
         date_str: str = h["date"]
         name: str = h["localName"]
-        uid = _external_uid(district_id, date_str, name)
         chash = _content_hash(date_str, name)
-        start_at, end_at = _parse_day(date_str)
+        holiday_date = date.fromisoformat(date_str)
+        # For holidays, use midnight as the planning time
+        planning_time = time(0, 0, 0)
 
-        existing = await event_repo.get_by_external_uid_district(uid, district_id)
+        # Check if a PlanningSlot for this holiday already exists
+        # We query by district, date, and category to find existing holiday slots
+        existing_slots = await slot_repo.list_for_date_range(
+            district_id=district_id,
+            from_date=holiday_date,
+            to_date=holiday_date,
+        )
+        existing = None
+        for slot in existing_slots:
+            if slot.category == "Feiertag" and slot.title == name:
+                existing = slot
+                break
 
         if existing is None:
-            event = Event.create(
-                title=name,
-                start_at=start_at,
-                end_at=end_at,
+            # Create new PlanningSlot for the holiday
+            slot = PlanningSlot.create(
                 district_id=district_id,
-                source=EventSource.EXTERNAL,
-                status=EventStatus.PUBLISHED,
-                visibility=EventVisibility.PUBLIC,
-                external_uid=uid,
-                content_hash=chash,
+                planning_date=holiday_date,
+                planning_time=planning_time,
                 category="Feiertag",
+                title=name,
+                status=PlanningSlotStatus.ACTIVE,
             )
-            await event_repo.save(event)
+            await slot_repo.save(slot)
             created += 1
-        elif existing.content_hash != chash:
+        elif existing.title != name or existing.planning_date != holiday_date:
+            # Update existing slot
             existing.title = name
-            existing.start_at = start_at
-            existing.end_at = end_at
-            existing.content_hash = chash
+            existing.planning_date = holiday_date
             existing.updated_at = datetime.now(UTC)
-            await event_repo.save(existing)
+            await slot_repo.save(existing)
             updated += 1
         else:
             skipped += 1
@@ -187,9 +201,11 @@ async def import_kirchliche_festtage(
     - Entschlafenen-Gottesdienste: erster Sonntag im März, Juli und November
 
     No external API call — purely computed.  Applies to all districts regardless of state_code.
+    
+    NOTE: Creates PlanningSlots instead of Events for matrix rendering compatibility.
     """
     easter = _easter_sunday(year)
-    event_repo = SqlEventRepository(session)
+    slot_repo = SqlPlanningSlotRepository(session)
     created = updated = skipped = 0
 
     festtage: list[tuple[str, date]] = []
@@ -200,34 +216,40 @@ async def import_kirchliche_festtage(
 
     for name, day in festtage:
         date_str = day.isoformat()
-        uid = _external_uid(district_id, date_str, name)
         chash = _content_hash(date_str, name)
-        start_at, end_at = _parse_day(date_str)
+        # For church holidays, use the actual date's time (midnight for all-day)
+        planning_time = time(0, 0, 0)
 
-        existing = await event_repo.get_by_external_uid_district(uid, district_id)
+        # Check if a PlanningSlot for this holiday already exists
+        existing_slots = await slot_repo.list_for_date_range(
+            district_id=district_id,
+            from_date=day,
+            to_date=day,
+        )
+        existing = None
+        for slot in existing_slots:
+            if slot.category == "Feiertag" and slot.title == name:
+                existing = slot
+                break
 
         if existing is None:
-            event = Event.create(
-                title=name,
-                start_at=start_at,
-                end_at=end_at,
+            # Create new PlanningSlot for the church holiday
+            slot = PlanningSlot.create(
                 district_id=district_id,
-                source=EventSource.EXTERNAL,
-                status=EventStatus.PUBLISHED,
-                visibility=EventVisibility.PUBLIC,
-                external_uid=uid,
-                content_hash=chash,
+                planning_date=day,
+                planning_time=planning_time,
                 category="Feiertag",
+                title=name,
+                status=PlanningSlotStatus.ACTIVE,
             )
-            await event_repo.save(event)
+            await slot_repo.save(slot)
             created += 1
-        elif existing.content_hash != chash:
+        elif existing.title != name or existing.planning_date != day:
+            # Update existing slot
             existing.title = name
-            existing.start_at = start_at
-            existing.end_at = end_at
-            existing.content_hash = chash
+            existing.planning_date = day
             existing.updated_at = datetime.now(UTC)
-            await event_repo.save(existing)
+            await slot_repo.save(existing)
             updated += 1
         else:
             skipped += 1
@@ -240,26 +262,38 @@ async def reference_feiertage_for_congregation(
     congregation_id: uuid.UUID,
     session: AsyncSession,
 ) -> int:
-    """Reference all district holiday events for a congregation.
+    """Reference all district holiday PlanningSlots for a congregation.
 
-    Adds the congregation ID to `applicability` for district-level Feiertag events.
+    Adds the congregation ID to `applicability` for district-level Feiertag PlanningSlots.
     Existing references are kept untouched.
 
     Returns:
-        Number of events that were updated.
+        Number of slots that were updated.
     """
-    event_repo = SqlEventRepository(session)
-    events, _ = await event_repo.list(district_id=district_id, limit=10000, offset=0)
+    slot_repo = SqlPlanningSlotRepository(session)
+    # Get all slots for the district (we need to fetch a reasonable date range)
+    # For holidays, we typically look at a year's worth of data
+    from_date = date(datetime.now(UTC).year - 1, 1, 1)
+    to_date = date(datetime.now(UTC).year + 2, 12, 31)
+    
+    slots = await slot_repo.list_for_date_range(
+        district_id=district_id,
+        from_date=from_date,
+        to_date=to_date,
+    )
 
     updated = 0
-    for event in events:
-        if event.category != "Feiertag" or event.congregation_id is not None:
+    for slot in slots:
+        if slot.category != "Feiertag":
             continue
-        if congregation_id in event.applicability:
+        # District-level holidays have no congregation_id
+        if slot.congregation_id is not None:
             continue
-        event.applicability = [*event.applicability, congregation_id]
-        event.updated_at = datetime.now(UTC)
-        await event_repo.save(event)
+        if congregation_id in slot.applicability:
+            continue
+        slot.applicability = [*slot.applicability, congregation_id]
+        slot.updated_at = datetime.now(UTC)
+        await slot_repo.save(slot)
         updated += 1
 
     return updated

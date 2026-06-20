@@ -237,6 +237,18 @@ class InvitationRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_by_source_planning_slot(
+        self, source_planning_slot_id: uuid.UUID
+    ) -> list[CongregationInvitation]:
+        pass
+
+    @abstractmethod
+    async def list_by_source_planning_slots(
+        self, source_planning_slot_ids: list[uuid.UUID]
+    ) -> list[CongregationInvitation]:
+        pass
+
+    @abstractmethod
     async def save(self, invitation: CongregationInvitation) -> None:
         pass
 

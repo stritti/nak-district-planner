@@ -49,6 +49,10 @@ from app.application.feiertage_service import (
     reference_feiertage_for_congregation,
 )
 from app.domain.models.congregation import Congregation
+from app.domain.models.event_instance import EventInstance
+from app.domain.models.invitation import CongregationInvitation
+from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import EventStatus
@@ -419,6 +423,14 @@ async def get_matrix(
     to_dt: datetime | None = Query(None),
     group_id: uuid.UUID | None = Query(None),
 ) -> MatrixResponse:
+    """Return matrix view for a district.
+    
+    Uses PlanningSlot as the authoritative source for all matrix cells.
+    Holidays (Feiertag) are now stored as PlanningSlots with category="Feiertag".
+    Event fallback has been removed as per OpenSpec requirement.
+    
+    **RBAC:** Requires VIEWER role in the district.
+    """
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     try:
@@ -470,67 +482,58 @@ async def get_matrix(
         c.id: _expected_dates(c.service_times, from_date, to_date) for c in congregations
     }
 
-    # Load all events for the district in the date range (single query)
-    events, _ = await SqlEventRepository(db).list(
-        district_id=district_id,
-        from_dt=effective_from_dt,
-        to_dt=effective_to_dt,
-        limit=5000,
-        offset=0,
-    )
-
-    # Build holidays dict and collect Feiertag dates for the column set
-    holidays: dict[str, list[str]] = {}
-    for event in events:
-        if event.category == "Feiertag":
-            date_key = event.start_at.date().isoformat()
-            holidays.setdefault(date_key, []).append(event.title)
-
-    # Collect all unique dates: congregation schedules + Feiertag dates + existing service dates
-    all_dates: set[str] = set()
-    for dates in expected_by_cong.values():
-        all_dates.update(dates)
-    all_dates.update(holidays.keys())  # kirchliche Feiertage immer als Spalten
-    for event in events:
-        if event.category == "Gottesdienst":
-            all_dates.add(event.start_at.date().isoformat())
-    sorted_dates = sorted(all_dates)
-
-    gottesdienst_events = [event for event in events if event.category == "Gottesdienst"]
-    event_by_owner_date: dict[tuple[uuid.UUID, str], object] = {}
-    for event in gottesdienst_events:
-        owner_id = event.congregation_id or event.district_id
-        key = (owner_id, event.start_at.date().isoformat())
-        existing_event = event_by_owner_date.get(key)
-        if existing_event is None or event.start_at < existing_event.start_at:
-            event_by_owner_date[key] = event
-
-    # Batch-load leaders for this district
-    leaders = await SqlLeaderRepository(db).list_by_district(district_id)
-    leaders_by_id = {leader.id: leader for leader in leaders}
-
-    slots = await SqlPlanningSlotRepository(db).list_for_date_range(
+    # Load all PlanningSlots for the district in the date range
+    # This includes both Gottesdienst and Feiertag slots
+    all_slots: list[PlanningSlot] = await SqlPlanningSlotRepository(db).list_for_date_range(
         district_id=district_id,
         from_date=from_date,
         to_date=to_date,
     )
-    gottesdienst_slots = [slot for slot in slots if slot.category == "Gottesdienst"]
-    slot_by_owner_date: dict[tuple[uuid.UUID, str], object] = {}
+
+    # Separate slots by category
+    gottesdienst_slots: list[PlanningSlot] = [slot for slot in all_slots if slot.category == "Gottesdienst"]
+    feiertag_slots: list[PlanningSlot] = [slot for slot in all_slots if slot.category == "Feiertag"]
+
+    # Build holidays dict from Feiertag PlanningSlots
+    holidays: dict[str, list[str]] = {}
+    for slot in feiertag_slots:
+        date_key = slot.planning_date.isoformat()
+        holidays.setdefault(date_key, []).append(slot.title)
+
+    # Collect all unique dates: congregation schedules + Feiertag dates + Gottesdienst slot dates
+    all_dates: set[str] = set()
+    for dates in expected_by_cong.values():
+        all_dates.update(dates)
+    all_dates.update(holidays.keys())  # kirchliche Feiertage immer als Spalten
+    for slot in gottesdienst_slots:
+        all_dates.add(slot.planning_date.isoformat())
+    sorted_dates: list[str] = sorted(all_dates)
+
+    # Build slot lookup: (owner_id, date_key) -> slot
+    # For Gottesdienst slots, owner can be congregation or district
+    slot_by_owner_date: dict[tuple[uuid.UUID, str], PlanningSlot] = {}
     for slot in gottesdienst_slots:
         owner_id = slot.congregation_id or slot.district_id
         key = (owner_id, slot.planning_date.isoformat())
         existing_slot = slot_by_owner_date.get(key)
         if existing_slot is None or slot.planning_time < existing_slot.planning_time:
             slot_by_owner_date[key] = slot
-    instances = await SqlEventInstanceRepository(db).list_by_planning_slots(
-        [slot.id for slot in gottesdienst_slots]
-    )
-    instance_by_slot_id = {instance.planning_slot_id: instance for instance in instances}
 
-    assignments = await SqlServiceAssignmentRepository(db).list_by_planning_slots(
+    # Batch-load leaders for this district
+    leaders = await SqlLeaderRepository(db).list_by_district(district_id)
+    leaders_by_id = {leader.id: leader for leader in leaders}
+
+    # Load EventInstances for all Gottesdienst slots
+    instances: list[EventInstance] = await SqlEventInstanceRepository(db).list_by_planning_slots(
         [slot.id for slot in gottesdienst_slots]
     )
-    assignment_by_slot_id: dict[uuid.UUID, object] = {}
+    instance_by_slot_id: dict[uuid.UUID, EventInstance] = {instance.planning_slot_id: instance for instance in instances}
+
+    # Load assignments for all Gottesdienst slots
+    assignments: list[ServiceAssignment] = await SqlServiceAssignmentRepository(db).list_by_planning_slots(
+        [slot.id for slot in gottesdienst_slots]
+    )
+    assignment_by_slot_id: dict[uuid.UUID, ServiceAssignment] = {}
     for a in assignments:
         # `event_id` is kept as a temporary compatibility key for older assignment rows.
         assignment_key = a.planning_slot_id or a.event_id
@@ -543,12 +546,13 @@ async def get_matrix(
     group_names = {group.id: group.name for group in groups}
     congregation_name_by_id = {c.id: c.name for c in congregations}
 
-    source_congregation_ids = {
-        e.invitation_source_congregation_id
-        for e in gottesdienst_events
-        if e.invitation_source_congregation_id is not None
+    # Build source congregation names from slots with invitation_source_congregation_id
+    source_congregation_ids: set[uuid.UUID] = {
+        slot.invitation_source_congregation_id
+        for slot in gottesdienst_slots
+        if slot.invitation_source_congregation_id is not None
     }
-    source_congregation_names = congregation_name_by_id.copy()
+    source_congregation_names: dict[uuid.UUID, str] = congregation_name_by_id.copy()
     if source_congregation_ids:
         source_congregations = await SqlCongregationRepository(db).list_by_ids(
             list(source_congregation_ids)
@@ -556,51 +560,56 @@ async def get_matrix(
         for source in source_congregations:
             source_congregation_names[source.id] = source.name
 
-    source_event_ids = [e.id for e in gottesdienst_events if e.invitation_source_event_id is None]
-    invitations = await SqlInvitationRepository(db).list_by_source_events(source_event_ids)
-    invitation_by_source_event: dict[uuid.UUID, list] = {}
+    # Build invitation lookup: source_slot_id -> list of invitations
+    # Use source_planning_slot_id if available, otherwise fall back to source_event_id
+    source_slot_ids: list[uuid.UUID] = [slot.id for slot in gottesdienst_slots if slot.invitation_source_event_id is None]
+    invitations: list[CongregationInvitation] = await SqlInvitationRepository(db).list_by_source_planning_slots(source_slot_ids)
+    invitation_by_source_slot: dict[uuid.UUID, list[CongregationInvitation]] = {}
     for invitation in invitations:
-        invitation_by_source_event.setdefault(invitation.source_event_id, []).append(invitation)
+        if invitation.source_planning_slot_id:
+            invitation_by_source_slot.setdefault(invitation.source_planning_slot_id, []).append(invitation)
 
     for congregation in congregations:
-        cong_expected = set(expected_by_cong[congregation.id])
+        cong_expected: set[str] = set(expected_by_cong[congregation.id])
         cells: dict[str, MatrixCell] = {}
 
         for date_key in sorted_dates:
-            event = event_by_owner_date.get((congregation.id, date_key))
-            if event is None:
-                event = event_by_owner_date.get((district_id, date_key))
-            if event is None and date_key not in cong_expected:
-                # Neither expected by schedule nor explicitly present as event.
-                cells[date_key] = MatrixCell()
-                continue
+            # Check if this date is expected for this congregation
+            if date_key not in cong_expected:
+                # Check if there's a Feiertag on this date (always shown as column)
+                if date_key not in holidays:
+                    # Neither expected by schedule nor a holiday
+                    cells[date_key] = MatrixCell()
+                    continue
 
-            slot = slot_by_owner_date.get((congregation.id, date_key))
+            # Get slot for this congregation and date
+            slot: PlanningSlot | None = slot_by_owner_date.get((congregation.id, date_key))
             if slot is None:
+                # Try district-level slot
                 slot = slot_by_owner_date.get((district_id, date_key))
-            if event is None and slot is None:
-                # Im Zeitplan erwartet, aber noch kein Event angelegt
+            
+            if slot is None:
+                # Expected by schedule but no slot exists yet
                 cells[date_key] = MatrixCell()
                 continue
 
-            slot_or_event_id = slot.id if slot is not None else event.id
-            instance = instance_by_slot_id.get(slot.id) if slot is not None else None
-            assignment = assignment_by_slot_id.get(slot_or_event_id)
-            is_invitation_copy = event.invitation_source_event_id is not None if event else False
-            assignment_event_id = event.id if event is not None else slot_or_event_id
-            if (
-                assignment is None
-                and is_invitation_copy
-                and event is not None
-                and event.invitation_source_event_id is not None
-            ):
-                assignment = assignment_by_slot_id.get(event.invitation_source_event_id)
+            # Get instance and assignment for this slot
+            instance: EventInstance | None = instance_by_slot_id.get(slot.id)
+            assignment: ServiceAssignment | None = assignment_by_slot_id.get(slot.id)
+            
+            # Check if this is an invitation copy
+            is_invitation_copy = slot.invitation_source_event_id is not None
+            assignment_slot_id: uuid.UUID | None = slot.id
+            
+            # For invitation copies, try to get assignment from source
+            if assignment is None and is_invitation_copy and slot.invitation_source_event_id is not None:
+                assignment = assignment_by_slot_id.get(slot.invitation_source_event_id)
                 if assignment is not None:
-                    assignment_event_id = event.invitation_source_event_id
+                    assignment_slot_id = slot.invitation_source_event_id
 
             # Resolve leader name from leader_id if leader_name is not set directly
             leader_name: str | None = None
-            leader_id = None
+            leader_id: uuid.UUID | None = None
             if assignment:
                 leader_id = assignment.leader_id
                 if assignment.leader_name:
@@ -609,64 +618,40 @@ async def get_matrix(
                     ldr = leaders_by_id[assignment.leader_id]
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
+            
+            # Get invitation count for this slot
+            invitation_count: int = len(invitation_by_source_slot.get(slot.id, []))
+            
             cells[date_key] = MatrixCell(
-                event_id=event.id
-                if event is not None
-                else instance.id
-                if instance is not None
-                else None,
-                planning_slot_id=slot.id if slot is not None else None,
-                assignment_event_id=assignment_event_id,
+                event_id=str(slot.id),  # For frontend compatibility - use slot.id as event_id
+                planning_slot_id=slot.id,
+                assignment_event_id=assignment_slot_id,
                 invitation_source_congregation_name=source_congregation_names.get(
-                    event.invitation_source_congregation_id
-                )
-                if event is not None and event.invitation_source_congregation_id is not None
-                else None,
-                event_title=instance.title
-                if instance is not None
-                else event.title
-                if event is not None
-                else None,
+                    slot.invitation_source_congregation_id
+                ) if slot.invitation_source_congregation_id is not None else None,
+                event_title=instance.title if instance is not None else slot.title,
                 event_start_at=(
                     instance.actual_start_at
                     if instance is not None
-                    else event.start_at
-                    if event is not None
                     else None
                 ),
                 event_end_at=(
                     instance.actual_end_at
                     if instance is not None
-                    else event.end_at
-                    if event is not None
                     else None
                 ),
-                category=slot.category
-                if slot is not None
-                else event.category
-                if event is not None
-                else None,
-                approval_status=event.approval_status,
+                category=slot.category,
+                approval_status=slot.approval_status,
                 is_gap=(assignment is None and not is_invitation_copy),
-                planned_time=(
-                    slot.planning_time
-                    if slot is not None
-                    else event.start_at.timetz().replace(tzinfo=None)
-                    if event is not None
-                    else None
-                ),
+                planned_time=slot.planning_time,
                 actual_start_at=(
                     instance.actual_start_at
                     if instance is not None
-                    else event.start_at
-                    if event is not None
                     else None
                 ),
                 actual_end_at=(
                     instance.actual_end_at
                     if instance is not None
-                    else event.end_at
-                    if event is not None
                     else None
                 ),
                 has_deviation=instance.deviation_flag if instance is not None else False,
@@ -675,7 +660,7 @@ async def get_matrix(
                 assignment_status=assignment.status if assignment else None,
                 leader_id=leader_id,
                 leader_name=leader_name,
-                invitation_count=len(invitation_by_source_event.get(event.id, [])) if event else 0,
+                invitation_count=invitation_count,
             )
 
         rows.append(
