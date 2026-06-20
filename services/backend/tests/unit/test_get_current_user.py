@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.api.deps import get_current_user, set_oidc_adapter
@@ -32,7 +33,7 @@ def mock_session():
 @pytest.fixture
 def mock_credentials():
     """Create mock HTTP Bearer credentials."""
-    credentials = MagicMock()
+    credentials = MagicMock(spec=HTTPAuthorizationCredentials)
     credentials.credentials = "test-jwt-token"
     return credentials
 
