@@ -539,14 +539,6 @@ async def get_matrix(
         assignment_key = a.planning_slot_id or a.event_id
         if assignment_key not in assignment_by_slot_id:
             assignment_by_slot_id[assignment_key] = a
-        if a.leader_id:
-            leader_ids.add(a.leader_id)
-
-    # Preload leader info for name resolution
-    leaders_by_id = {}
-    if leader_ids:
-        leaders = await SqlLeaderRepository(db).list_by_district(district_id)
-        leaders_by_id = {ldr.id: ldr for ldr in leaders}
 
     # Build matrix rows
     rows: list[MatrixRow] = []
