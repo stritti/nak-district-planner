@@ -34,7 +34,7 @@ The current sync pipeline processes external calendar data and writes directly t
 
 ### 2. Deviation Handling Flow
 
-```
+```mermaid
 External sync ──▶ Field classifier
                        │
             ┌──────────┼──────────┐

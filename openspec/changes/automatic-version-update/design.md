@@ -30,7 +30,7 @@ There is currently no mechanism for the running application to detect that a new
 
 ### 1. Version Detection — GitHub Container Registry API
 
-```
+```mermaid
 ┌─────────────┐     GET /v2/.../backend/tags/list     ┌──────────┐
 │  Backend     │──────────────────────────────────────▶│ ghcr.io  │
 │  (Celery     │◀──────────────────────────────────────│  API     │
@@ -91,7 +91,7 @@ async def trigger_update(admin: User = Depends(require_admin)):
 
 ### 5. UI — Update Banner
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │  ● New version 0.5.0 available   [View Release Notes]   │
 │  Release: v0.5.0 · 2026-06-10                            │

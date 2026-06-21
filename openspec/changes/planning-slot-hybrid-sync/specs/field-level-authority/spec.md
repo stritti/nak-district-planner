@@ -1,8 +1,8 @@
 # Field-Level Sync Authority Specification
 
-> **Status:** Draft - Based on gap analysis findings  
-> **OpenSpec Change:** planning-slot-hybrid-sync  
-> **Related:** hybrid-calendar-sync, external-event-ingestion  
+> **Status:** Draft - Based on gap analysis findings
+> **OpenSpec Change:** planning-slot-hybrid-sync
+> **Related:** hybrid-calendar-sync, external-event-ingestion
 > **Priority:** 🔴 CRITICAL - Currently NOT implemented
 
 ---
@@ -106,13 +106,13 @@ FIELD_AUTHORITY = {
     (PlanningSlot, 'planning_date'): FieldAuthority.STRUCTURAL,
     (PlanningSlot, 'planning_time'): FieldAuthority.STRUCTURAL,
     (PlanningSlot, 'status'): FieldAuthority.STRUCTURAL,
-    
+
     # CONDITIONAL fields
     (Event, 'start_at'): FieldAuthority.CONDITIONAL,
     (Event, 'end_at'): FieldAuthority.CONDITIONAL,
     (EventInstance, 'actual_start_at'): FieldAuthority.CONDITIONAL,
     (EventInstance, 'actual_end_at'): FieldAuthority.CONDITIONAL,
-    
+
     # SOFT fields
     (Event, 'title'): FieldAuthority.SOFT,
     (Event, 'description'): FieldAuthority.SOFT,
@@ -135,10 +135,10 @@ def process_external_event_update(existing_event: Event, raw_event: RawCalendarE
     Returns: (updated_event, has_deviation)
     """
     has_deviation = False
-    
+
     for field_name, new_value in raw_event.dict().items():
         authority = FIELD_AUTHORITY.get((type(existing_event).__name__, field_name))
-        
+
         if authority == FieldAuthority.STRUCTURAL:
             # IGNORE external changes to structural fields
             logger.warning(
@@ -155,23 +155,23 @@ def process_external_event_update(existing_event: Event, raw_event: RawCalendarE
                 current_value=getattr(existing_event, field_name)
             )
             continue
-            
+
         elif authority == FieldAuthority.CONDITIONAL:
             # ACCEPT change but track deviation
             old_value = getattr(existing_event, field_name)
             if old_value != new_value:
                 setattr(existing_event, field_name, new_value)
                 has_deviation = True
-                
+
         elif authority == FieldAuthority.SOFT:
             # ACCEPT change without deviation tracking
             setattr(existing_event, field_name, new_value)
-        
+
         else:
             # Unknown field - log warning but accept
             logger.warning(f"Unknown field authority for {field_name}")
             setattr(existing_event, field_name, new_value)
-    
+
     return existing_event, has_deviation
 ```
 
@@ -182,7 +182,7 @@ When a CONDITIONAL field is modified:
 1. **For EventInstance:**
    - Set `deviation_flag = true`
    - Store original planned time in a separate field or audit log
-   
+
 2. **For Event (legacy):**
    - If `generation_slot_key` exists, find the corresponding PlanningSlot
    - Create or update EventInstance with `deviation_flag = true`
@@ -207,15 +207,15 @@ from enum import Enum
 
 class FieldAuthority(str, Enum):
     """Field-level authority classification for sync operations."""
-    
+
     STRUCTURAL = "STRUCTURAL"
     # Never externally mutable. Defines normative planning structure.
     # Changes from external systems MUST BE IGNORED.
-    
+
     CONDITIONAL = "CONDITIONAL"
     # Externally mutable but represents deviation from plan.
     # Changes MUST BE ACCEPTED and deviation_flag SET.
-    
+
     SOFT = "SOFT"
     # Externally mutable without governance implications.
     # Changes MUST BE ACCEPTED without deviation tracking.
@@ -241,11 +241,11 @@ FIELD_AUTHORITY_MAP: dict[tuple[type, str], FieldAuthority] = {
     (Event, 'approval_status'): FieldAuthority.STRUCTURAL,
     (Event, 'source'): FieldAuthority.STRUCTURAL,
     (Event, 'visibility'): FieldAuthority.STRUCTURAL,
-    
+
     # Event - CONDITIONAL
     (Event, 'start_at'): FieldAuthority.CONDITIONAL,
     (Event, 'end_at'): FieldAuthority.CONDITIONAL,
-    
+
     # Event - SOFT
     (Event, 'title'): FieldAuthority.SOFT,
     (Event, 'description'): FieldAuthority.SOFT,
@@ -253,7 +253,7 @@ FIELD_AUTHORITY_MAP: dict[tuple[type, str], FieldAuthority] = {
     (Event, 'external_uid'): FieldAuthority.SOFT,
     (Event, 'content_hash'): FieldAuthority.SOFT,
     (Event, 'calendar_integration_id'): FieldAuthority.SOFT,
-    
+
     # PlanningSlot - ALL STRUCTURAL (aggregate root)
     (PlanningSlot, 'id'): FieldAuthority.STRUCTURAL,
     (PlanningSlot, 'district_id'): FieldAuthority.STRUCTURAL,
@@ -263,11 +263,11 @@ FIELD_AUTHORITY_MAP: dict[tuple[type, str], FieldAuthority] = {
     (PlanningSlot, 'planning_date'): FieldAuthority.STRUCTURAL,
     (PlanningSlot, 'planning_time'): FieldAuthority.STRUCTURAL,
     (PlanningSlot, 'status'): FieldAuthority.STRUCTURAL,
-    
+
     # EventInstance - CONDITIONAL
     (EventInstance, 'actual_start_at'): FieldAuthority.CONDITIONAL,
     (EventInstance, 'actual_end_at'): FieldAuthority.CONDITIONAL,
-    
+
     # EventInstance - SOFT
     (EventInstance, 'title'): FieldAuthority.SOFT,
     (EventInstance, 'description'): FieldAuthority.SOFT,
@@ -297,7 +297,7 @@ logger = logging.getLogger(__name__)
 
 class FieldAuthorityEnforcer:
     """Enforces field-level authority rules during sync operations."""
-    
+
     @staticmethod
     def enforce_field_update(
         entity: Event | EventInstance,
@@ -307,27 +307,27 @@ class FieldAuthorityEnforcer:
     ) -> tuple[bool, bool]:
         """
         Enforce field-level authority for a field update.
-        
+
         Args:
             entity: The entity being updated
             field_name: The field being modified
             new_value: The new value from external source
             source: The source of the change ('external' or 'internal')
-        
+
         Returns:
             tuple: (should_apply_change, is_deviation)
         """
         if source != "external":
             # Internal changes always allowed
             return True, False
-        
+
         authority = get_field_authority(type(entity), field_name)
-        
+
         if authority is None:
             # Unknown field - log warning but allow
             logger.warning(f"Unknown field authority for {type(entity).__name__}.{field_name}")
             return True, False
-        
+
         if authority == FieldAuthority.STRUCTURAL:
             # NEVER allow external modification of structural fields
             current_value = getattr(entity, field_name)
@@ -337,7 +337,7 @@ class FieldAuthorityEnforcer:
                 f"Attempted: {new_value}, Current: {current_value}"
             )
             return False, False
-        
+
         elif authority == FieldAuthority.CONDITIONAL:
             # Allow change but mark as deviation
             current_value = getattr(entity, field_name)
@@ -348,7 +348,7 @@ class FieldAuthorityEnforcer:
                 )
                 return True, True
             return True, False
-        
+
         else:  # SOFT
             # Allow change without deviation tracking
             return True, False
@@ -364,12 +364,12 @@ from app.application.field_authority_enforcer import FieldAuthorityEnforcer
 async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str, int]:
     """Sync one integration with field-level authority enforcement."""
     # ... existing setup code ...
-    
+
     created = updated = cancelled = deviations = governance_violations = 0
-    
+
     for raw in raw_events:
         existing = await event_repo.get_by_external_uid(raw.uid, integration.id)
-        
+
         if existing is None:
             # New external event - create ExternalEventCandidate (future implementation)
             # For now, create Event directly (legacy behavior)
@@ -390,7 +390,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
             )
             await event_repo.save(event)
             created += 1
-        
+
         else:
             if raw.is_cancelled and existing.status != EventStatus.CANCELLED:
                 # Deletion handling
@@ -398,12 +398,12 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
                 existing.updated_at = datetime.now(UTC)
                 await event_repo.save(existing)
                 cancelled += 1
-            
+
             elif not raw.is_cancelled and existing.content_hash != raw.content_hash:
                 # Update with authority enforcement
                 has_deviation = False
                 changes_applied = {}
-                
+
                 # Check each field with authority enforcer
                 for field_name, new_value in [
                     ('title', raw.title),
@@ -416,30 +416,30 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
                     should_apply, is_deviation = FieldAuthorityEnforcer.enforce_field_update(
                         existing, field_name, new_value, source="external"
                     )
-                    
+
                     if should_apply:
                         setattr(existing, field_name, new_value)
                         changes_applied[field_name] = (getattr(existing, field_name), new_value)
-                    
+
                     if is_deviation:
                         has_deviation = True
-                
+
                 if changes_applied:
                     # Apply auto-categorization on update
                     existing.apply_auto_categorization()
-                    
+
                     existing.content_hash = raw.content_hash
                     existing.updated_at = datetime.now(UTC)
                     await event_repo.save(existing)
                     updated += 1
-                
+
                 if has_deviation:
                     deviations += 1
                     # TODO: Create deviation notification when Notification system is implemented
                     logger.info(f"Deviation detected for event {existing.id}")
-    
+
     # ... existing cleanup code ...
-    
+
     return {
         "created": created,
         "updated": updated,
@@ -489,7 +489,7 @@ class TestFieldAuthorityEnforcer:
         )
         assert should_apply is False
         assert is_deviation is False
-    
+
     def test_conditional_field_accepted_with_deviation(self, sample_event):
         """CONDITIONAL fields should be accepted and flagged as deviation."""
         new_time = datetime(2024, 1, 1, 12, 0, tzinfo=UTC)
@@ -498,7 +498,7 @@ class TestFieldAuthorityEnforcer:
         )
         assert should_apply is True
         assert is_deviation is True
-    
+
     def test_soft_field_accepted_without_deviation(self, sample_event):
         """SOFT fields should be accepted without deviation flag."""
         should_apply, is_deviation = FieldAuthorityEnforcer.enforce_field_update(
@@ -506,7 +506,7 @@ class TestFieldAuthorityEnforcer:
         )
         assert should_apply is True
         assert is_deviation is False
-    
+
     def test_internal_changes_always_allowed(self, sample_event):
         """Internal changes should always be allowed."""
         should_apply, is_deviation = FieldAuthorityEnforcer.enforce_field_update(
@@ -539,7 +539,7 @@ async def test_sync_respects_field_authority(async_session):
         type=CalendarType.GOOGLE,
         # ... other fields
     )
-    
+
     event = Event.create(
         title="Original Title",
         start_at=datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
@@ -553,12 +553,12 @@ async def test_sync_respects_field_authority(async_session):
         calendar_integration_id=integration.id,
         content_hash="old-hash",
     )
-    
+
     # Save to DB
     async_session.add(integration)
     async_session.add(event)
     await async_session.commit()
-    
+
     # Create raw event with changes
     class MockRawEvent:
         uid = "ext-123"
@@ -568,28 +568,28 @@ async def test_sync_respects_field_authority(async_session):
         description = "New description"  # SOFT - should be accepted
         is_cancelled = False
         content_hash = "new-hash"
-    
+
     # Mock connector to return our raw event
     # ... setup mock ...
-    
+
     # Run sync
     result = await run_sync(integration.id, async_session)
-    
+
     # Verify results
     assert result["updated"] == 1
     assert result["deviations"] == 1  # start_at and end_at changes
-    
+
     # Reload event
     await async_session.refresh(event)
-    
+
     # SOFT fields should be updated
     assert event.title == "Modified Title"
     assert event.description == "New description"
-    
+
     # CONDITIONAL fields should be updated
     assert event.start_at == datetime(2024, 1, 1, 12, 0, tzinfo=UTC)
     assert event.end_at == datetime(2024, 1, 1, 13, 0, tzinfo=UTC)
-    
+
     # STRUCTURAL fields should NOT be updated
     # congregation_id should remain unchanged (not updated from integration.congregation_id)
     assert event.congregation_id != integration.congregation_id

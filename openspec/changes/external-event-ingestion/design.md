@@ -21,7 +21,7 @@ The `planning-slot-hybrid-sync` change established `PlanningSlot` as the authori
 
 ### 1. ExternalEventCandidate Entity
 
-```
+```text
 ExternalEventCandidate
 ──────────────────────
   id: UUID
@@ -44,7 +44,7 @@ ExternalEventCandidate
 
 ### 2. Auto-Mapping Logic
 
-```
+```mermaid
 External event detected
        │
        ▼

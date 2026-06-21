@@ -24,7 +24,7 @@ The system already has Celery tasks for background work. Notifications are purel
 
 ### 1. Notification Entity
 
-```
+```text
 Notification
 ──────────────────────
   id: UUID
@@ -44,7 +44,7 @@ Notification
 
 ### 2. Notification Scope
 
-```
+```text
 EXTERNAL_EVENT_DETECTED
   → Created by: external-event-ingestion (candidate creation)
   → Visible to: district administrators
@@ -55,7 +55,7 @@ EXTERNAL_EVENT_DETECTED
 
 ### 3. API Design
 
-```
+```http
 GET    /api/v1/notifications?district_id={id}&unread_only=true
          → Returns notifications, newest first, with total_unread count
 
@@ -73,7 +73,7 @@ POST   /api/v1/notifications/read-all
 
 ### 4. Frontend Integration
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │  [🔔 3]  Dashboard  Matrix  Settings        │ (badge in nav)
 └─────────────────────────────────────────────┘

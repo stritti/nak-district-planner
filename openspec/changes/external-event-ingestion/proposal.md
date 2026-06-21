@@ -24,4 +24,5 @@ When an external calendar creates a new event that has no corresponding Planning
 - **Database** — New migration for `external_event_candidates` table
 - **Sync Engine** — Detection logic triggers candidate creation or auto-mapping
 - **API** — New endpoints for candidate listing, acceptance, and dismissal
-- **Frontend** — Candidate review modal/UI
+- **Frontend** — Candidate review modal/UI openspec/changes/hybrid-calendar-sync/proposal.md openspec/changes/in-app-notifications/proposal.md openspec/changes/openspec-gap-analysis.md
+
