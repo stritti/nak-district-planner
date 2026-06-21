@@ -1,4 +1,4 @@
-## [v0.21.0] - 2026-06-20
+## [v0.22.0] - 2026-06-21
 
 ### Features
 * Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
@@ -13,25 +13,25 @@
 * feat: add sync status card component and calendar integrations store (da2bb9f)
 
 ### Bug Fixes
+* Fix MegaLinter issues: add language specifiers to code blocks, fix trailing spaces, fix table columns, ensure files end with newline (e0a544e)
+* fix: remove undefined leader_ids variable from matrix view (7c5e5ca)
+* fix: align test files with refactored matrix implementation (c814262)
 * fix: correct RBAC gap classification per review feedback (2748d25)
 * fix: remove unverified JWT extraction from rate-limit keys; use Docker Redis URL (e79749e)
+* fix: restore leader preload for name resolution; fallback event_id for slot-only cells (ce64617)
 * fix: update uv.lock, enforce burst limit, fix denial test (9bbb0bf)
 * fix: add explanatory comment to CodeQL empty except (013fda3)
+* fix: chain migration from current head e4b2a9d7f110; preserve slot-only dates (4d33a6e)
 * fix: 4 review issues — CodeQL empty-except, JWT sub extraction, Redis member nonce, count <= limit (33045cc)
-* fix: address all review comments on rate-limiting PR (3ebfe61)
-* fix: resolve merge conflicts between rate-limit, csrf middleware (d47cfef)
-* Fix MegaLinter markdown issues in rate limiting documentation (d16acc2)
-* Add missing redis_url config and fix rate limit comparison (1e03f21)
-* Fix duplicate starlette dependency and update requests version (e376147)
 
 ### Other Changes
+* Merge pull request #148 from stritti/copilot/implement-planningslot-planningseries (837697e)
+* Merge remote-tracking branch 'origin/main' into copilot/implement-planningslot-planningseries (fe0bf8f)
+* chore: release v0.21.0 (624e522)
 * Merge pull request #166 from stritti/vibe/openspec-gap-analysis-71c667 (b081d2c)
+* Merge remote-tracking branch 'origin/main' into copilot/implement-planningslot-planningseries (84b257b)
 * docs: add OpenSpec gap analysis with prioritized table (1d112d6)
 * chore: release v0.20.0 (884b919)
 * chore: release v0.19.0 (06ee992)
 * chore: release v0.18.0 (eea4ae3)
 * chore: release v0.17.0 (769c3e8)
-* chore: release v0.16.0 (2c8b5ec)
-* chore: release v0.15.0 (5640fc2)
-* Merge pull request #181 from stritti/dependabot/uv/services/backend/fastapi-0.138.0 (9678d97)
-* Merge pull request #180 from stritti/dependabot/uv/services/backend/pytest-9.1.1 (bc754c6)
