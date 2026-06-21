@@ -346,9 +346,9 @@ This document provides **actionable implementation tasks** to close the gaps ide
 
 ### Task Group 4.1: Copy-to-Clipboard (1 Woche)
 
-| # | Task | Priority | Effort | Status |
-|---|------|----------|--------|--------|
-| 4.1.1 | Add copy-to-clipboard to ExportTokensView.vue | 🟢 | 2d | ⬜ Todo |
+| # | Task | Priority | Effort | Depends On | Status |
+|---|------|----------|--------|------------|--------|
+| 4.1.1 | Add copy-to-clipboard to ExportTokensView.vue | 🟢 | 2d | 4.1.0 | ⬜ Todo |
 | 4.1.2 | Add success feedback (toast) | 🟢 | 1d | 4.1.1 | ⬜ Todo |
 | 4.1.3 | Add tests | 🟢 | 1d | 4.1.2 | ⬜ Todo |
 
@@ -358,9 +358,9 @@ This document provides **actionable implementation tasks** to close the gaps ide
 
 ### Task Group 4.2: Mobile Matrix View (2-3 Wochen)
 
-| # | Task | Priority | Effort | Status |
-|---|------|----------|--------|--------|
-| 4.2.1 | Design mobile matrix view | 🟢 | 3d | ⬜ Todo |
+| # | Task | Priority | Effort | Depends On | Status |
+|---|------|----------|--------|------------|--------|
+| 4.2.1 | Design mobile matrix view | 🟢 | 3d | 4.2.0 | ⬜ Todo |
 | 4.2.2 | Implement responsive matrix layout | 🟢 | 5d | 4.2.1 | ⬜ Todo |
 | 4.2.3 | Add mobile-specific UX elements | 🟢 | 3d | 4.2.2 | ⬜ Todo |
 | 4.2.4 | Add tests | 🟢 | 2d | 4.2.3 | ⬜ Todo |

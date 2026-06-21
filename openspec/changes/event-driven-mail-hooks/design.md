@@ -32,7 +32,7 @@ Each of these sites currently has no mechanism to trigger outbound communication
 
 ### 1. Domain Event Bus — In-Process Observer Pattern
 
-```
+```mermaid
 ┌─────────────────────────────────────────────────────────────┐
 │                    DomainEventBus                             │
 │                                                              │
@@ -61,7 +61,7 @@ Each of these sites currently has no mechanism to trigger outbound communication
 
 ### 2. EventMailHook Domain Model
 
-```
+```text
 EventMailHook
 ──────────────────────
   id: UUID
@@ -90,7 +90,7 @@ EventMailHook
 
 ### 3. Hook Evaluator — Subscribes to All Events
 
-```
+```mermaid
 Event emitted ──▶ HookEvaluator.on_event(event)
                        │
                        ▼
@@ -158,7 +158,7 @@ The `district_id` is required — all hooks are per-district, so without a distr
 
 ### 7. API Layer
 
-```
+```http
 GET    /api/v1/districts/{district_id}/event-hooks
 POST   /api/v1/districts/{district_id}/event-hooks
 PUT    /api/v1/districts/{district_id}/event-hooks/{hook_id}

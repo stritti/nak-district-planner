@@ -150,8 +150,8 @@ durchführen – ohne manuelle Aufrufe in jedem Service.
 
 ### 3.1 ✅ Erledigt: PlanningSlot / PlanningSeries eingeführt
 
-**Status:** → OpenSpec-Change
-[`planning-slot-hybrid-sync`](/openspec/changes/planning-slot-hybrid-sync/proposal)
+**Status:** Implementiert über den OpenSpec-Change
+[`planning-slot-hybrid-sync`](../openspec/changes/planning-slot-hybrid-sync/proposal.md)
 
 **Beschreibung:** Das bisherige `Event`-Modell vermischte Planungs- (Soll), Ausführungs- (Ist)
 und Sync-Metadaten. Dafür wurde nun die geplante Trennung eingeführt:

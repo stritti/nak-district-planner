@@ -1,9 +1,9 @@
 # RBAC Completion Plan - Task Group 1.4
 
-> **OpenSpec Change:** introduce-rbac-permissions-model  
-> **Task Group:** 1.4 (Authorization Layer)  
-> **Priority:** 🔴 CRITICAL  
-> **Effort:** 16 days (3.2 weeks)  
+> **OpenSpec Change:** introduce-rbac-permissions-model
+> **Task Group:** 1.4 (Authorization Layer)
+> **Priority:** 🔴 CRITICAL
+> **Effort:** 16 days (3.2 weeks)
 > **Status:** In Progress
 
 ---
@@ -51,18 +51,18 @@ This document provides a **detailed implementation plan** for completing RBAC (R
 1. **`/oidc/discovery`** - **PUBLIC** ✅
    - Must remain unauthenticated (frontend needs it before login)
    - No RBAC guard needed
-   
+
 2. **`/oidc/token`** - **PUBLIC** ✅
    - Must remain unauthenticated (called during OIDC callback)
    - No RBAC guard needed
-   
+
 3. **`/me`** - **AUTHENTICATED** ⚠️
    - Currently requires valid Bearer token
    - Should this also require a minimum role? **Question:**
    - **Option A:** No RBAC (any authenticated user can see their own info)
    - **Option B:** Require VIEWER role (but this might break existing flows)
    - **Recommendation:** **Option A** - No RBAC, authentication is sufficient
-   
+
 4. **`/access`** - **AUTHENTICATED** ⚠️
    - Returns user's memberships for frontend UX
    - Should require at least VIEWER role?
@@ -101,7 +101,7 @@ from app.domain.models.role import Role  # NEW
 @router.get("/me", response_model=UserOut)
 async def get_current_user_info(user: AuthenticatedUser) -> UserOut:
     """Get current authenticated user info.
-    
+
     **Security:** Requires valid Bearer token in Authorization header.
     **RBAC:** No role requirement - any authenticated user can access their own info.
     """
@@ -119,7 +119,7 @@ async def get_current_user_info(user: AuthenticatedUser) -> UserOut:
 @router.get("/access", response_model=AccessContextOut)
 async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessContextOut:
     """Return effective memberships for access-aware frontend UX.
-    
+
     **Security:** Requires valid Bearer token.
     **RBAC:** Requires VIEWER role in at least one district.
     """
@@ -132,7 +132,7 @@ async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessConte
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Nur Benutzer mit VIEWER-Rolle in mindestens einem Bezirk können auf diese Ressource zugreifen.",
         )
-    
+
     memberships = [
         MembershipOut(
             role=m.role.value,
@@ -167,7 +167,7 @@ async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessConte
 
 #### Analysis:
 
-Both endpoints in system.py **already have RBAC guards**! 
+Both endpoints in system.py **already have RBAC guards**!
 
 However, we should:
 1. **Verify** the guards are correct
@@ -228,7 +228,7 @@ async def get_version(
     refresh: bool = Query(False, description="Force a fresh version check"),
 ) -> SystemVersionResponse:
     """Return the current running version and the latest available version.
-    
+
     **RBAC:** Requires DISTRICT_ADMIN or CONGREGATION_ADMIN role.
     """
     # NEW: Use standardized guard
@@ -242,7 +242,7 @@ async def get_version(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Nur Administratoren können die Version abfragen.",
         )
-    
+
     # ... rest of function ...
 
 
@@ -251,7 +251,7 @@ async def trigger_update(
     auth: CurrentUserWithMemberships,
 ) -> UpdateResponse:
     """Trigger a system update.
-    
+
     **RBAC:** Requires superadmin role.
     """
     # NEW: Use standardized guard
@@ -260,7 +260,7 @@ async def trigger_update(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Nur Superadministratoren können das System aktualisieren.",
         )
-    
+
     # ... rest of function ...
 ```
 
@@ -336,10 +336,10 @@ async def trigger_update(
 ```markdown
 # RBAC Coverage Report
 
-> **Generated:** [date]  
-> **Status:** [Draft/Final]  
-> **Total Endpoints:** [X]  
-> **Protected Endpoints:** [Y]  
+> **Generated:** [date]
+> **Status:** [Draft/Final]
+> **Total Endpoints:** [X]
+> **Protected Endpoints:** [Y]
 > **Coverage:** [Z]%
 
 ## Summary
@@ -449,20 +449,20 @@ def district_id():
 
 class TestRBACCoverage:
     """Test RBAC guard coverage across all endpoints."""
-    
+
     # Public endpoints (should work without auth)
     PUBLIC_ENDPOINTS = [
         ("/api/v1/auth/oidc/discovery", "GET"),
         ("/api/v1/auth/oidc/token", "POST"),
         ("/api/health", "GET"),
     ]
-    
+
     # Endpoints that should require authentication
     AUTHENTICATED_ENDPOINTS = [
         ("/api/v1/auth/me", "GET"),
         ("/api/v1/auth/access", "GET"),
     ]
-    
+
     # Endpoints that should require specific roles
     ROLE_REQUIRED_ENDPOINTS = {
         "VIEWER": [
@@ -486,7 +486,7 @@ class TestRBACCoverage:
             # Add more superadmin endpoints
         ],
     }
-    
+
     @pytest.mark.parametrize("endpoint,method", PUBLIC_ENDPOINTS)
     def test_public_endpoints_accessible_without_auth(
         self, unauthenticated_client, endpoint, method
@@ -494,38 +494,38 @@ class TestRBACCoverage:
         """Public endpoints should be accessible without authentication."""
         # Format endpoint with sample IDs if needed
         test_endpoint = endpoint.format(district_id=uuid.uuid4())
-        
+
         if method == "GET":
             response = unauthenticated_client.get(test_endpoint)
         elif method == "POST":
             response = unauthenticated_client.post(test_endpoint, json={})
         else:
             pytest.skip(f"Method {method} not implemented in test")
-        
+
         # Public endpoints should return 200 or 400 (bad request), not 401/403
         assert response.status_code not in [401, 403], (
             f"Public endpoint {endpoint} returned {response.status_code}"
         )
-    
+
     @pytest.mark.parametrize("endpoint,method", AUTHENTICATED_ENDPOINTS)
     def test_authenticated_endpoints_require_auth(
         self, unauthenticated_client, endpoint, method
     ):
         """Authenticated endpoints should require valid authentication."""
         test_endpoint = endpoint.format(district_id=uuid.uuid4())
-        
+
         if method == "GET":
             response = unauthenticated_client.get(test_endpoint)
         elif method == "POST":
             response = unauthenticated_client.post(test_endpoint, json={})
         else:
             pytest.skip(f"Method {method} not implemented in test")
-        
+
         # Should return 401 (unauthorized) without valid token
         assert response.status_code == 401, (
             f"Authenticated endpoint {endpoint} should require auth, got {response.status_code}"
         )
-    
+
     @pytest.mark.parametrize("role,endpoints", ROLE_REQUIRED_ENDPOINTS.items())
     @pytest.mark.parametrize("endpoint,method", endpoints)
     def test_role_required_endpoints(
@@ -533,7 +533,7 @@ class TestRBACCoverage:
     ):
         """Endpoints requiring specific roles should enforce RBAC."""
         test_endpoint = endpoint.format(district_id=district_id)
-        
+
         # Test with viewer token (should fail for PLANNER/DISTRICT_ADMIN/SUPERADMIN endpoints)
         if role != "VIEWER":
             client.headers["Authorization"] = f"Bearer {viewer_token(district_id)}"
@@ -541,12 +541,12 @@ class TestRBACCoverage:
                 response = client.get(test_endpoint)
             else:
                 response = client.post(test_endpoint, json={})
-            
+
             # Should return 403 for insufficient permissions
             assert response.status_code == 403, (
                 f"Endpoint {endpoint} requiring {role} should reject VIEWER, got {response.status_code}"
             )
-        
+
         # Test with correct role token (should succeed)
         if role == "VIEWER":
             client.headers["Authorization"] = f"Bearer {viewer_token(district_id)}"
@@ -556,12 +556,12 @@ class TestRBACCoverage:
             client.headers["Authorization"] = f"Bearer {district_admin_token(district_id)}"
         elif role == "SUPERADMIN":
             client.headers["Authorization"] = f"Bearer {superadmin_token()}"
-        
+
         if method == "GET":
             response = client.get(test_endpoint)
         else:
             response = client.post(test_endpoint, json={})
-        
+
         # Should succeed with correct role
         assert response.status_code not in [401, 403], (
             f"Endpoint {endpoint} requiring {role} should accept {role} token, got {response.status_code}"
@@ -570,13 +570,13 @@ class TestRBACCoverage:
 
 class TestRBACGuardConsistency:
     """Test that RBAC guards are implemented consistently."""
-    
+
     def test_all_guards_use_permissions_module(self, client):
         """All RBAC guards should use the permissions module."""
         # This is a static analysis test - would need to inspect source code
         # For now, this is a placeholder for manual verification
         pass
-    
+
     def test_all_guards_check_memberships(self, client):
         """All RBAC guards should check user memberships."""
         # Placeholder for static analysis

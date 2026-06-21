@@ -30,7 +30,7 @@ There is currently **no mail delivery infrastructure** in the system — no SMTP
 
 ### 1. MailService Port — Abstract interface with pluggable adapters
 
-```
+```mermaid
 ┌─────────────────────────────────────────────────────┐
 │                  MailService (ABC)                    │
 │  + send(to: list[str], subject: str, body: str)      │
@@ -54,7 +54,7 @@ There is currently **no mail delivery infrastructure** in the system — no SMTP
 
 ### 2. Domain Model — DistrictReminderConfig
 
-```
+```text
 DistrictReminderConfig
 ──────────────────────
   id: UUID
@@ -83,7 +83,7 @@ Recipients are resolved at send-time by querying all users who have a `Membershi
 
 A single daily task `check_due_reminders` runs at 01:00 Europe/Berlin. It queries all active `DistrictReminderConfig` records where `day_of_month == today.day` and `time_of_day <= current_time`. For each match, it resolves recipients and sends the mail.
 
-```
+```mermaid
 01:00 daily ──▶ check_due_reminders()
                     │
                     ▼
@@ -112,7 +112,7 @@ A single daily task `check_due_reminders` runs at 01:00 Europe/Berlin. It querie
 Templates are stored as plain strings (subject + body) in the `DistrictReminderConfig`. They support simple placeholder substitution (`{district_name}`, `{month}`, `{year}`, `{day}`). No HTML templating engine — plain text initially.
 
 The system footer is appended to every outgoing mail body as a final paragraph:
-```
+```text
 ───
 <footer_text>
 ```

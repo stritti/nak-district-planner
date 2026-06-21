@@ -25,7 +25,7 @@ Dieses Dokument beschreibt den produktiven Onboarding-Ablauf fuer Benutzer, die 
 
 Nachfolgend wird Schritt für Schritt beschrieben, was im Backend passiert, wenn ein Bezirksadministrator eine Registrierung freigibt.
 
-```
+```mermaid
 Approval-Request
     │
     ├─ 1. Leader-Datensatz anlegen
@@ -83,7 +83,7 @@ Falls kein Provider konfiguriert ist (`get_idp_provisioner()` gibt `None` zurü
 
 **Datei:** `services/backend/app/adapters/idp/keycloak_provisioner.py`
 
-```
+```mermaid
 provision_user(email, name, ...)
     │
     ├─ _get_admin_token()
@@ -124,7 +124,7 @@ Erst nach diesen beiden Schritten ist der Account aktiv und der Login möglich.
 
 Sendet einen HTTP-POST an eine konfigurierte externe URL:
 
-```json
+```http
 POST {endpoint}
 Authorization: Bearer {api_key}
 {
@@ -215,7 +215,7 @@ Dies ist für den Fall gedacht, dass die Registration ohne vorherigen Login (un
 
 ### Vollständiger Login-Ablauf (Sequenz)
 
-```
+```mermaid
 Benutzer                         Browser/Frontend                   Backend                        Keycloak/IDP
    │                                    │                              │                              │
    │  1. E-Mail-Link (Passwort setzen)  │                              │                              │
@@ -265,7 +265,7 @@ Benutzer                         Browser/Frontend                   Backend     
 
 ### Produktions-Konfiguration (Keycloak)
 
-```env
+```bash
 IDP_PROVISIONING_ENABLED=true
 IDP_PROVISIONING_PROVIDER=keycloak
 IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://auth.example.com
@@ -293,7 +293,7 @@ Diese Felder werden bei jeder Freigabe zunächst zurückgesetzt (`None`) und d
 
 Der IdP-Status wird im Admin-Dialog als Badge angezeigt:
 
-```
+```text
 APPROVED + IDP: CREATED_INVITED  →  blauer Badge "IDP: CREATED_INVITED"
 APPROVED + IDP: FAILED           →  roter Badge "IDP: FAILED"
                                   + Fehlermeldung darunter (idp_provision_error)

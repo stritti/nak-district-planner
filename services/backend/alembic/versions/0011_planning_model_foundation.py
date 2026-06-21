@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0011_planning_model_foundation"
-down_revision: str | None = "0010_leader_registrations"
+down_revision: str | None = "e4b2a9d7f110"
 __all__ = ("revision", "down_revision", "upgrade", "downgrade")
 
 
@@ -117,6 +117,24 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
+
+    # Backfill planning_slots for all existing Gottesdienst events so that
+    # the FK from service_assignments.planning_slot_id → planning_slots.id
+    # does not fail for pre-existing events (ServiceAssignment.create()
+    # defaults planning_slot_id to event_id).
+    backfill = sa.text("""
+        INSERT INTO planning_slots (id, district_id, congregation_id, category,
+                                    planning_date, planning_time, status,
+                                    created_at, updated_at)
+        SELECT e.id, e.district_id, e.congregation_id, e.category,
+               e.start_at::date, e.start_at::time,
+               'ACTIVE'::planning_slot_status,
+               now() AT TIME ZONE 'utc', now() AT TIME ZONE 'utc'
+        FROM events e
+        WHERE e.category = 'Gottesdienst'
+          AND NOT EXISTS (SELECT 1 FROM planning_slots ps WHERE ps.id = e.id)
+    """)
+    op.execute(backfill)
 
     op.add_column(
         "service_assignments",

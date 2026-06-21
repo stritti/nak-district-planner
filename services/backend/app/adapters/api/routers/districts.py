@@ -587,7 +587,7 @@ async def get_matrix(
             if slot is None:
                 # Try district-level slot
                 slot = slot_by_owner_date.get((district_id, date_key))
-            
+
             if slot is None:
                 # Expected by schedule but no slot exists yet
                 cells[date_key] = MatrixCell()
