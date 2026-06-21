@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,11 +38,17 @@ def mock_credentials():
     return credentials
 
 
+@pytest.fixture
+def mock_request():
+    """Create a mock FastAPI Request."""
+    return MagicMock(spec=Request)
+
+
 class TestGetCurrentUserAutoCreation:
     """Test get_current_user with auto-creation of new users."""
 
     @pytest.mark.asyncio
-    async def test_auto_create_new_user(self, mock_oidc_adapter, mock_session, mock_credentials):
+    async def test_auto_create_new_user(self, mock_oidc_adapter, mock_session, mock_credentials, mock_request):
         """Test that new user is automatically created on first login."""
         # Mock OIDC token validation
         token_claims = {
@@ -73,7 +79,7 @@ class TestGetCurrentUserAutoCreation:
             MockRepo.return_value = mock_repo_instance
 
             # Call the dependency
-            user = await get_current_user(mock_credentials, mock_session)
+            user = await get_current_user(mock_request, mock_credentials, mock_session)
 
             # Verify user was created
             assert user.sub == "user-123"
@@ -85,7 +91,7 @@ class TestGetCurrentUserAutoCreation:
             mock_repo_instance.save.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_update_existing_user(self, mock_oidc_adapter, mock_session, mock_credentials):
+    async def test_update_existing_user(self, mock_oidc_adapter, mock_session, mock_credentials, mock_request):
         """Test that existing user is updated with latest token info."""
         token_claims = {
             "sub": "user-456",
@@ -118,7 +124,7 @@ class TestGetCurrentUserAutoCreation:
             mock_repo_instance.save = AsyncMock()
             MockRepo.return_value = mock_repo_instance
 
-            user = await get_current_user(mock_credentials, mock_session)
+            user = await get_current_user(mock_request, mock_credentials, mock_session)
 
             # Verify user was updated
             assert user.email == "newemail@example.com"
@@ -133,33 +139,33 @@ class TestGetCurrentUserErrors:
     """Test get_current_user error handling."""
 
     @pytest.mark.asyncio
-    async def test_missing_bearer_token(self, mock_session):
+    async def test_missing_bearer_token(self, mock_session, mock_request):
         """Test 401 error when Bearer token is missing."""
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(None, mock_session)
+            await get_current_user(mock_request, None, mock_session)
 
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_invalid_token(self, mock_oidc_adapter, mock_session, mock_credentials):
+    async def test_invalid_token(self, mock_oidc_adapter, mock_session, mock_credentials, mock_request):
         """Test 401 error when token validation fails."""
         from app.adapters.auth.oidc import TokenValidationError
 
         mock_oidc_adapter.validate_token.side_effect = TokenValidationError("Invalid token")
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(mock_credentials, mock_session)
+            await get_current_user(mock_request, mock_credentials, mock_session)
 
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_adapter_not_initialized(self, mock_session, mock_credentials):
+    async def test_adapter_not_initialized(self, mock_session, mock_credentials, mock_request):
         """Test 500 error when OIDC adapter is not initialized."""
         # Reset adapter to None
         set_oidc_adapter(None)
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(mock_credentials, mock_session)
+            await get_current_user(mock_request, mock_credentials, mock_session)
 
         assert exc_info.value.status_code == 500
 
@@ -169,7 +175,7 @@ class TestUserCreationFlow:
 
     @pytest.mark.asyncio
     async def test_standard_oidc_claims_extraction(
-        self, mock_oidc_adapter, mock_session, mock_credentials
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
     ):
         """Test that standard OIDC claims are properly extracted."""
         # Minimal claims (only required fields)
@@ -193,7 +199,7 @@ class TestUserCreationFlow:
             mock_repo_instance.save = AsyncMock()
             MockRepo.return_value = mock_repo_instance
 
-            user = await get_current_user(mock_credentials, mock_session)
+            user = await get_current_user(mock_request, mock_credentials, mock_session)
 
             # Verify minimal user was created
         assert user.sub == "user-789"
