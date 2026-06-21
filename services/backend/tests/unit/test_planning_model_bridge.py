@@ -7,7 +7,13 @@ from app.application.planning_model_bridge import (
     event_instance_from_event,
     planning_slot_from_event,
 )
-from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.domain.models.event import (
+    Event,
+    EventApprovalStatus,
+    EventSource,
+    EventStatus,
+    EventVisibility,
+)
 from app.domain.models.planning_slot import PlanningSlotStatus
 from app.domain.models.service_assignment import ServiceAssignment
 
@@ -36,6 +42,7 @@ def _sample_event(*, status: EventStatus = EventStatus.DRAFT) -> Event:
         external_uid=None,
         calendar_integration_id=None,
         content_hash=None,
+        approval_status=EventApprovalStatus.PLANNED,
         created_at=now,
         updated_at=now,
     )
