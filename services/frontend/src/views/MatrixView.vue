@@ -243,6 +243,17 @@
                   :disabled="row.cells[date].is_assignment_editable === false"
                   @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
+                  <!-- Deviation Indicator -->
+                  <div v-if="row.cells[date].has_deviation" class="flex items-center gap-1">
+                    <DeviationIndicator
+                      :has-deviation="true"
+                      :planned-time="formatTime(row.cells[date].planned_time)"
+                      :actual-time="formatTime(row.cells[date].actual_start_at)"
+                      :start-diff-minutes="row.cells[date].deviation_start_diff_minutes"
+                      :end-diff-minutes="row.cells[date].deviation_end_diff_minutes"
+                      :compact="compactMode"
+                    />
+                  </div>
                   <div
                     v-overflow-title="row.cells[date].event_title ?? ''"
                     :class="eventTitleClass"
@@ -487,6 +498,7 @@ import { exportMatrixToExcel } from '../composables/useExcelExport'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '../components/AutocompleteInput.vue'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 import MonthlyReleaseDialog from '../components/MonthlyReleaseDialog.vue'
+import DeviationIndicator from '../components/DeviationIndicator.vue'
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
@@ -694,10 +706,26 @@ function formatWeekday(iso: string): string {
   return WEEKDAY_SHORT[new Date(year, month - 1, day).getDay()]
 }
 
+function formatTime(timeOrDate: string | Date | undefined): string {
+  if (!timeOrDate) return ''
+  // Handle both time strings (HH:MM:SS) and datetime strings (YYYY-MM-DDTHH:MM:SS)
+  let timeString = typeof timeOrDate === 'string' ? timeOrDate : timeOrDate.toISOString()
+  
+  // If it's a full datetime, extract the time part
+  if (timeString.includes('T')) {
+    timeString = timeString.split('T')[1] || ''
+  }
+  
+  // Extract HH:MM
+  const [hours, minutes] = timeString.split(':')
+  return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`
+}
+
 function cellClass(cell: MatrixCell | undefined): string {
   if (!cell?.event_id) return 'bg-white dark:bg-gray-900'
   if (cell.is_gap) return 'bg-red-100 dark:bg-red-900/20 cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/30 ring-1 ring-inset ring-red-300 dark:ring-red-700'
   if (cell.is_assignment_editable === false) return 'bg-white dark:bg-gray-900 opacity-80'
+  if (cell.has_deviation) return 'bg-amber-50 dark:bg-amber-900/20 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30'
   return 'bg-white dark:bg-gray-900 cursor-pointer'
 }
 

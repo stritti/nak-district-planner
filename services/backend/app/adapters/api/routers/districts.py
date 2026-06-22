@@ -661,7 +661,18 @@ async def get_matrix(
                 leader_id=leader_id,
                 leader_name=leader_name,
                 invitation_count=invitation_count,
+                deviation_start_diff_minutes=None,
+                deviation_end_diff_minutes=None,
             )
+            
+            # Calculate deviation details if instance exists and has deviation
+            if instance is not None and instance.deviation_flag:
+                from app.application.matrix_service import MatrixService
+                start_diff, end_diff = MatrixService.calculate_deviation_minutes(
+                    slot, instance
+                )
+                cells[date_key].deviation_start_diff_minutes = start_diff
+                cells[date_key].deviation_end_diff_minutes = end_diff
 
         rows.append(
             MatrixRow(

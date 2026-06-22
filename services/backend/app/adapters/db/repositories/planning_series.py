@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.planning_series import PlanningSeriesORM
@@ -32,6 +33,24 @@ class SqlPlanningSeriesRepository(PlanningSeriesRepository):
     async def get(self, series_id: uuid.UUID) -> PlanningSeries | None:
         row = await self._session.get(PlanningSeriesORM, series_id)
         return _orm_to_domain(row) if row else None
+
+    async def list_by_district(self, district_id: uuid.UUID) -> list[PlanningSeries]:
+        """List all PlanningSeries for a district."""
+        result = await self._session.execute(
+            select(PlanningSeriesORM)
+            .where(PlanningSeriesORM.district_id == district_id)
+            .order_by(PlanningSeriesORM.created_at)
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
+    async def list_all_active(self) -> list[PlanningSeries]:
+        """List all active PlanningSeries across all districts."""
+        result = await self._session.execute(
+            select(PlanningSeriesORM)
+            .where(PlanningSeriesORM.is_active)
+            .order_by(PlanningSeriesORM.district_id, PlanningSeriesORM.created_at)
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
 
     async def save(self, series: PlanningSeries) -> None:
         existing = await self._session.get(PlanningSeriesORM, series.id)

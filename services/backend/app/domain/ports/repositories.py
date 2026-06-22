@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import date, datetime
 
 from app.domain.models.calendar_integration import CalendarIntegration
 from app.domain.models.congregation import Congregation
@@ -171,6 +171,16 @@ class PlanningSeriesRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_by_district(self, district_id: uuid.UUID) -> list[PlanningSeries]:
+        """List all PlanningSeries for a district."""
+        pass
+
+    @abstractmethod
+    async def list_all_active(self) -> list[PlanningSeries]:
+        """List all active PlanningSeries across all districts."""
+        pass
+
+    @abstractmethod
     async def save(self, series: PlanningSeries) -> None:
         pass
 
@@ -181,6 +191,24 @@ class PlanningSlotRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_by_series_and_date(
+        self, series_id: uuid.UUID, planning_date: date
+    ) -> PlanningSlot | None:
+        """Get PlanningSlot by series_id and planning_date."""
+        pass
+
+    @abstractmethod
+    async def list_for_date_range(
+        self,
+        *,
+        district_id: uuid.UUID,
+        from_date: date,
+        to_date: date,
+    ) -> list[PlanningSlot]:
+        """List all PlanningSlots for a district in a date range."""
+        pass
+
+    @abstractmethod
     async def save(self, slot: PlanningSlot) -> None:
         pass
 
@@ -188,6 +216,20 @@ class PlanningSlotRepository(ABC):
 class EventInstanceRepository(ABC):
     @abstractmethod
     async def get(self, instance_id: uuid.UUID) -> EventInstance | None:
+        pass
+
+    @abstractmethod
+    async def list_by_planning_slot(
+        self, planning_slot_id: uuid.UUID
+    ) -> list[EventInstance]:
+        """List all EventInstances for a specific PlanningSlot."""
+        pass
+
+    @abstractmethod
+    async def list_by_planning_slots(
+        self, planning_slot_ids: list[uuid.UUID]
+    ) -> list[EventInstance]:
+        """List all EventInstances for multiple PlanningSlots."""
         pass
 
     @abstractmethod

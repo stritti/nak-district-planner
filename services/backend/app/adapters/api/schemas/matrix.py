@@ -32,6 +32,9 @@ class MatrixCell(BaseModel):
     assignment_status: AssignmentStatus | None = None
     leader_id: uuid.UUID | None = None
     leader_name: str | None = None
+    # Deviation details for frontend display
+    deviation_start_diff_minutes: int | None = None
+    deviation_end_diff_minutes: int | None = None
 
 
 class MatrixRow(BaseModel):

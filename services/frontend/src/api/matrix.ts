@@ -21,6 +21,9 @@ export interface MatrixCell {
   assignment_status: 'OPEN' | 'ASSIGNED' | 'CONFIRMED' | null
   leader_id: string | null
   leader_name: string | null
+  // Deviation details for tooltip
+  deviation_start_diff_minutes?: number | null
+  deviation_end_diff_minutes?: number | null
 }
 
 export interface MatrixRow {
