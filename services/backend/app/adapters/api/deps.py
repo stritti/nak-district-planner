@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated, NamedTuple
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,6 +53,7 @@ def get_token_claims() -> dict:
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
     session: AsyncSession = Depends(get_db_session),
 ) -> User:
@@ -61,6 +62,7 @@ async def get_current_user(
     - Validates JWT signature, issuer, expiration
     - Auto-creates user on first login
     - Returns authenticated User object
+    - Populates request.state.user for downstream middleware (e.g. audit logging)
 
     Raises:
         HTTPException: 401 if token is missing or invalid
@@ -107,6 +109,7 @@ async def get_current_user(
             existing_user.family_name = user_info["family_name"]
             existing_user.is_superadmin = is_superadmin
             await user_repo.save(existing_user)
+            request.state.user = existing_user
             return existing_user
         else:
             # Auto-create user on first login
@@ -121,6 +124,7 @@ async def get_current_user(
             )
             await user_repo.save(new_user)
             logger.info(f"Auto-created user: {new_user.sub} ({new_user.email})")
+            request.state.user = new_user
             return new_user
 
     except TokenValidationError as e:

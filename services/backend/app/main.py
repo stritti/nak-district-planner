@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from alembic import command
 from app.adapters.api import deps
+from app.adapters.api.middleware.audit import AuditMiddleware
 from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
 from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.routers import (
@@ -27,6 +28,7 @@ from app.adapters.api.routers import (
     system,
 )
 from app.adapters.auth.oidc import OIDCAdapter
+from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
@@ -63,6 +65,9 @@ async def lifespan(app: FastAPI):
     cfg = Config("alembic.ini")
     # env.py uses asyncio.run() internally — must run in a thread without an active loop
     await asyncio.to_thread(command.upgrade, cfg, "head")
+
+    # Start audit service
+    await audit_service.start()
 
     # Initialize OIDC adapter
     httpx_client = httpx.AsyncClient()
@@ -126,6 +131,7 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     await oidc_adapter.close()
+    await audit_service.stop()
     try:
         await rate_limiter.close()
     except Exception:
@@ -176,6 +182,15 @@ app.add_middleware(
         "/api/v1/auth/oidc/discovery",
         "/api/v1/auth/oidc/token",
     },
+    exempt_methods={"GET", "HEAD", "OPTIONS"},
+)
+
+# Initialize Audit Logging (registered last = outermost, catches all requests
+# including those that fail CSRF or other inner middleware)
+app.add_middleware(
+    AuditMiddleware,
+    audit_service=audit_service,
+    exempt_paths={"/api/health"},
     exempt_methods={"GET", "HEAD", "OPTIONS"},
 )
 

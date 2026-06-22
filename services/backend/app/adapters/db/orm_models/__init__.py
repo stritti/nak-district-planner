@@ -1,4 +1,5 @@
 # Side-effect imports: register all ORM models on Base.metadata (required for Alembic autogenerate)
+from app.adapters.db.orm_models.audit_log import AuditLogORM
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.congregation_group import CongregationGroupORM
