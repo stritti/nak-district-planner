@@ -244,7 +244,7 @@
                   @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
                   <!-- Deviation Indicator -->
-                  <div v-if="row.cells[date]?.has_deviation === true" class="flex items-center gap-1">
+                  <div v-if="false && row.cells[date]?.has_deviation === true" class="flex items-center gap-1">
                     <DeviationIndicator
                       :has-deviation="row.cells[date]?.has_deviation ?? false"
                       :planned-time="formatTime(row.cells[date]?.planned_time)"
@@ -725,7 +725,7 @@ function cellClass(cell: MatrixCell | undefined): string {
   if (!cell?.event_id) return 'bg-white dark:bg-gray-900'
   if (cell.is_gap) return 'bg-red-100 dark:bg-red-900/20 cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/30 ring-1 ring-inset ring-red-300 dark:ring-red-700'
   if (cell.is_assignment_editable === false) return 'bg-white dark:bg-gray-900 opacity-80'
-  if (cell?.has_deviation === true) return 'bg-amber-50 dark:bg-amber-900/20 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30'
+  // if (cell?.has_deviation === true) return 'bg-amber-50 dark:bg-amber-900/20 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30'
   return 'bg-white dark:bg-gray-900 cursor-pointer'
 }
 
