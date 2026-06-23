@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="hasDeviation"
+    v-if="hasDeviation === true"
     class="deviation-indicator-group"
     :class="{
       'deviation-indicator-group-compact': compact,
