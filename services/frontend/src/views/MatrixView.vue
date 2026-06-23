@@ -244,9 +244,9 @@
                   @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
                   <!-- Deviation Indicator -->
-                  <div v-if="row.cells[date].has_deviation === true" class="flex items-center gap-1">
+                  <div v-if="row.cells[date]?.has_deviation === true" class="flex items-center gap-1">
                     <DeviationIndicator
-                      :has-deviation="true"
+                      :has-deviation="row.cells[date]?.has_deviation ?? false"
                       :planned-time="formatTime(row.cells[date]?.planned_time)"
                       :actual-time="formatTime(row.cells[date]?.actual_start_at)"
                       :start-diff-minutes="row.cells[date]?.deviation_start_diff_minutes ?? null"
