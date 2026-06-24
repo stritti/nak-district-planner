@@ -14,6 +14,7 @@ from alembic import command
 from app.adapters.api import deps
 from app.adapters.api.middleware.audit import AuditMiddleware
 from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
+from app.adapters.api.middleware.tenant import TenantMiddleware, TenantValidationMiddleware
 from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.routers import (
     auth,
@@ -168,6 +169,21 @@ app.add_middleware(
     rate_limiter=rate_limiter,
     config=rate_limit_config,
     exempt_paths={"/api/health"},
+    exempt_methods={"OPTIONS"},
+)
+
+# Initialize Tenant Isolation
+# NOTE: registration order matters — Starlette runs the LAST-added middleware
+# first (outermost). TenantMiddleware must run BEFORE TenantValidationMiddleware
+# so that tenant context (incl. user_sub) is already extracted when validation runs.
+app.add_middleware(
+    TenantValidationMiddleware,
+    exempt_paths={"/api/health", "/api/v1/auth"},
+    exempt_methods={"OPTIONS"},
+)
+app.add_middleware(
+    TenantMiddleware,
+    exempt_paths={"/api/health", "/api/v1/auth"},
     exempt_methods={"OPTIONS"},
 )
 
