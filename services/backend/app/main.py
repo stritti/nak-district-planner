@@ -23,6 +23,7 @@ from app.adapters.api.routers import (
     export,
     invitations,
     leaders,
+    planning_series,
     registrations,
     service_assignments,
     system,
@@ -234,6 +235,7 @@ app.include_router(service_assignments.router)
 app.include_router(calendar_integrations.router)
 app.include_router(districts.router)
 app.include_router(leaders.router)
+app.include_router(planning_series.router)
 app.include_router(registrations.public_router)
 app.include_router(registrations.overview_router)
 app.include_router(registrations.router)

@@ -39,6 +39,21 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row = await self._session.get(PlanningSlotORM, slot_id)
         return _orm_to_domain(row) if row else None
 
+    async def get_by_series_and_date(
+        self, series_id: uuid.UUID, planning_date: date
+    ) -> PlanningSlot | None:
+        """Get PlanningSlot by series_id and planning_date."""
+        result = await self._session.execute(
+            select(PlanningSlotORM)
+            .where(
+                PlanningSlotORM.series_id == series_id,
+                PlanningSlotORM.planning_date == planning_date,
+            )
+            .limit(1)
+        )
+        row = result.scalar_one_or_none()
+        return _orm_to_domain(row) if row else None
+
     async def list_for_date_range(
         self,
         *,

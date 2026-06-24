@@ -35,7 +35,17 @@ class SqlEventInstanceRepository(EventInstanceRepository):
         row = await self._session.get(EventInstanceORM, instance_id)
         return _orm_to_domain(row) if row else None
 
+    async def list_by_planning_slot(self, planning_slot_id: uuid.UUID) -> list[EventInstance]:
+        """List all EventInstances for a specific PlanningSlot."""
+        result = await self._session.execute(
+            select(EventInstanceORM).where(
+                EventInstanceORM.planning_slot_id == planning_slot_id
+            )
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
     async def list_by_planning_slots(self, slot_ids: list[uuid.UUID]) -> list[EventInstance]:
+        """List all EventInstances for multiple PlanningSlots."""
         if not slot_ids:
             return []
         result = await self._session.execute(

@@ -384,3 +384,45 @@ def trigger_docker_update() -> dict:
     success = results.get("pull") == "ok" and results.get("up") == "ok"
     logger.info("trigger_docker_update: completed: %s", results)
     return {"status": "ok" if success else "error", "details": results}
+
+
+@celery.task(name="generate_planning_slots")
+def generate_planning_slots() -> dict:
+    """Celery beat task — runs daily at 02:00 Europe/Berlin.
+
+    Generates PlanningSlots from all active PlanningSeries for the next 6-12 months.
+    This ensures that the matrix view always has up-to-date planning data.
+
+    The task:
+    - Processes all active PlanningSeries across all districts
+    - Generates slots for the configured horizon (default: 6 months)
+    - Skips existing slots (idempotent)
+    - Logs results for monitoring
+    """
+    from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
+    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+    from app.adapters.db.session import AsyncSessionLocal
+    from app.application.planning_series_service import PlanningSeriesSlotGenerationService
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as session:
+            service = PlanningSeriesSlotGenerationService(
+                series_repo=SqlPlanningSeriesRepository(session),
+                slot_repo=SqlPlanningSlotRepository(session),
+                horizon_months=6,
+            )
+
+            result = await service.generate_all_slots(horizon_months=6)
+            await session.commit()
+
+            return result
+
+    result = asyncio.run(_run())
+    logger.info(
+        "generate_planning_slots: generated=%d, skipped=%d, series_processed=%d, districts_processed=%d",
+        result.get("generated", 0),
+        result.get("skipped", 0),
+        result.get("series_processed", 0),
+        result.get("districts_processed", 0),
+    )
+    return result
