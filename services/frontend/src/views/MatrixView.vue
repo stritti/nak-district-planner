@@ -243,6 +243,17 @@
                   :disabled="row.cells[date].is_assignment_editable === false"
                   @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
+                  <!-- Deviation Indicator -->
+                  <div v-if="row.cells[date]?.has_deviation === true" class="flex items-center gap-1">
+                    <DeviationIndicator
+                      :has-deviation="true"
+                      :planned-time="formatTime(row.cells[date]?.planned_time)"
+                      :actual-time="formatTime(row.cells[date]?.actual_start_at)"
+                      :start-diff-minutes="row.cells[date]?.deviation_start_diff_minutes ?? null"
+                      :end-diff-minutes="row.cells[date]?.deviation_end_diff_minutes ?? null"
+                      :compact="compactMode"
+                    />
+                  </div>
 
                   <div
                     v-overflow-title="row.cells[date].event_title ?? ''"
@@ -486,6 +497,7 @@ import type { MatrixCell, MatrixRow } from '../api/matrix'
 import { sortMatrixRows } from '../utils/matrixRows'
 import { exportMatrixToExcel } from '../composables/useExcelExport'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '../components/AutocompleteInput.vue'
+import DeviationIndicator from '../components/DeviationIndicator.vue'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 import MonthlyReleaseDialog from '../components/MonthlyReleaseDialog.vue'
 
@@ -715,7 +727,7 @@ function cellClass(cell: MatrixCell | undefined): string {
   if (!cell?.event_id) return 'bg-white dark:bg-gray-900'
   if (cell.is_gap) return 'bg-red-100 dark:bg-red-900/20 cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/30 ring-1 ring-inset ring-red-300 dark:ring-red-700'
   if (cell.is_assignment_editable === false) return 'bg-white dark:bg-gray-900 opacity-80'
-  // if (cell?.has_deviation === true) return 'bg-amber-50 dark:bg-amber-900/20 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30'
+  if (cell?.has_deviation === true) return 'bg-amber-50 dark:bg-amber-900/20 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30'
   return 'bg-white dark:bg-gray-900 cursor-pointer'
 }
 
