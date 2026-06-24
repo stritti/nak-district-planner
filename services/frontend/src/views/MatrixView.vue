@@ -243,17 +243,7 @@
                   :disabled="row.cells[date].is_assignment_editable === false"
                   @click="openModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
-                  <!-- Deviation Indicator -->
-                  <div v-if="false && row.cells[date]?.has_deviation === true" class="flex items-center gap-1">
-                    <DeviationIndicator
-                      :has-deviation="row.cells[date]?.has_deviation ?? false"
-                      :planned-time="formatTime(row.cells[date]?.planned_time)"
-                      :actual-time="formatTime(row.cells[date]?.actual_start_at)"
-                      :start-diff-minutes="row.cells[date]?.deviation_start_diff_minutes ?? null"
-                      :end-diff-minutes="row.cells[date]?.deviation_end_diff_minutes ?? null"
-                      :compact="compactMode"
-                    />
-                  </div>
+
                   <div
                     v-overflow-title="row.cells[date].event_title ?? ''"
                     :class="eventTitleClass"
@@ -498,7 +488,7 @@ import { exportMatrixToExcel } from '../composables/useExcelExport'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from '../components/AutocompleteInput.vue'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 import MonthlyReleaseDialog from '../components/MonthlyReleaseDialog.vue'
-import DeviationIndicator from '../components/DeviationIndicator.vue'
+
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
