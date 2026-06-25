@@ -57,6 +57,11 @@ celery.conf.update(
             "task": "generate_draft_services_window",
             "schedule": crontab(hour="1", minute="10"),
         },
+        # Daily at 01:20 Europe/Berlin — generate PlanningSlot + EventInstance from PlanningSeries
+        "generate-planning-series-slots": {
+            "task": "generate_planning_series_slots",
+            "schedule": crontab(hour="1", minute="20"),
+        },
         # Every 6 hours — check ghcr.io for newer Docker image versions
         "check-version": {
             "task": "check_version",

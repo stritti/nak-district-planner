@@ -12,8 +12,10 @@ from app.adapters.auth.jwt_claims import extract_memberships_from_claims
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
+from app.adapters.db.repositories.notification import SqlNotificationRepository
 from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
+from app.application.notification_service import NotificationService
 from app.config import settings
 from app.domain.models.membership import Membership
 from app.domain.models.user import User
@@ -226,6 +228,14 @@ async def get_current_active_user(
 ) -> User:
     """Return authenticated and approved user entity."""
     return auth.user
+
+
+async def get_notification_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> NotificationService:
+    """Dependency that provides the notification service."""
+    repo = SqlNotificationRepository(session)
+    return NotificationService(notification_repo=repo)
 
 
 # Type aliases for dependency injection

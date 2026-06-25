@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     idp_provisioning_keycloak_admin_password: str | None = None
     idp_provisioning_keycloak_invite_on_approval: bool = True
     startup_generate_draft_services: bool = False
+    use_series_generation: bool = True
 
     # Version check & self-update
     ghcr_owner: str = "stritti"

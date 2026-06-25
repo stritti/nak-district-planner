@@ -230,6 +230,17 @@
                    >
                      {{ row.cells[date].event_title }}
                    </div>
+                  <!-- Deviation indicator for gap cells -->
+                  <div
+                    v-if="row.cells[date].has_deviation"
+                    class="flex items-center gap-1 mt-1"
+                  >
+                    <span class="inline-block w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                    <span class="text-[10px] text-amber-700 dark:text-amber-400">
+                      Plan: {{ formatTime(row.cells[date].planned_time) }}
+                      · Ist: {{ formatTime(row.cells[date].actual_start_at) }}
+                    </span>
+                  </div>
                   <div
                     v-if="(row.cells[date].invitation_count ?? 0) > 0"
                     class="text-[10px] text-sky-700 dark:text-sky-300"
@@ -275,6 +286,16 @@
                   />
                   <div v-if="row.cells[date].category" class="text-gray-400 dark:text-gray-500">
                     {{ row.cells[date].category }}
+                  </div>
+                  <!-- Deviation indicator for non-gap cells -->
+                  <div
+                    v-if="row.cells[date].has_deviation"
+                    class="flex items-center gap-1 mt-0.5"
+                  >
+                    <span class="inline-block w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                    <span class="text-[10px] text-amber-700 dark:text-amber-400" :title="'Geplante Zeit: ' + formatTime(row.cells[date].planned_time) + ' · Tatsächliche Zeit: ' + formatTime(row.cells[date].actual_start_at)">
+                      Abweichung
+                    </span>
                   </div>
                   <div
                     v-if="row.cells[date].invitation_source_congregation_name"
@@ -708,27 +729,23 @@ function formatWeekday(iso: string): string {
   return WEEKDAY_SHORT[new Date(year, month - 1, day).getDay()]
 }
 
-function formatTime(timeOrDate: string | Date | null | undefined): string {
-  if (!timeOrDate) return ''
-  // Handle both time strings (HH:MM:SS) and datetime strings (YYYY-MM-DDTHH:MM:SS)
-  let timeString = typeof timeOrDate === 'string' ? timeOrDate : timeOrDate.toISOString()
-  
-  // If it's a full datetime, extract the time part
-  if (timeString.includes('T')) {
-    timeString = timeString.split('T')[1] || ''
-  }
-  
-  // Extract HH:MM
-  const [hours, minutes] = timeString.split(':')
-  return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`
-}
 
 function cellClass(cell: MatrixCell | undefined): string {
   if (!cell?.event_id) return 'bg-white dark:bg-gray-900'
   if (cell.is_gap) return 'bg-red-100 dark:bg-red-900/20 cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/30 ring-1 ring-inset ring-red-300 dark:ring-red-700'
   if (cell.is_assignment_editable === false) return 'bg-white dark:bg-gray-900 opacity-80'
-  if (cell?.has_deviation === true) return 'bg-amber-50 dark:bg-amber-900/20 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30'
+  if (cell.has_deviation) return 'bg-amber-50 dark:bg-amber-900/10 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/20 ring-1 ring-inset ring-amber-300 dark:ring-amber-700'
   return 'bg-white dark:bg-gray-900 cursor-pointer'
+}
+
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) return ''
+  // Handle full ISO datetime or time string
+  if (iso.includes('T')) {
+    const d = new Date(iso)
+    return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  }
+  return iso.slice(0, 5)
 }
 
 // ── Assignment Modal ──────────────────────────────────────────────────────────
