@@ -1,4 +1,4 @@
-## [v0.26.0] - 2026-06-25
+## [v0.26.1] - 2026-06-25
 
 ### Features
 * feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
@@ -25,6 +25,8 @@
 * fix: 4 review issues — CodeQL empty-except, JWT sub extraction, Redis member nonce, count <= limit (33045cc)
 
 ### Other Changes
+* M2 — Notification-System, PlanningSeries Auto-Gen, Matrix-Deviation, Auto-Matching (#189) (e707d5d)
+* chore: release v0.26.0 (ded67c9)
 * chore: release v0.25.0 (5adc99a)
 * chore: release v0.24.0 (1f56d93)
 * chore: release v0.23.0 (56bb2ae)
@@ -33,5 +35,3 @@
 * Merge remote-tracking branch 'origin/main' into copilot/implement-planningslot-planningseries (fe0bf8f)
 * chore: release v0.21.0 (624e522)
 * Merge pull request #166 from stritti/vibe/openspec-gap-analysis-71c667 (b081d2c)
-* Merge remote-tracking branch 'origin/main' into copilot/implement-planningslot-planningseries (84b257b)
-* docs: add OpenSpec gap analysis with prioritized table (1d112d6)
