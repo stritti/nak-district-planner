@@ -106,6 +106,8 @@ class _SyncMocks:
         self.event_repo = MagicMock()
         self.event_repo.get_by_external_uid = AsyncMock()
         self.event_repo.save = AsyncMock()
+        self.planning_slot_repo = MagicMock()
+        self.planning_slot_repo.list_for_date_range = AsyncMock(return_value=[])
         self.connector = MagicMock()
         self.connector.fetch_events = AsyncMock()
 
@@ -118,6 +120,10 @@ class _SyncMocks:
             patch(
                 "app.application.sync_service.SqlEventRepository",
                 return_value=self.event_repo,
+            ),
+            patch(
+                "app.application.sync_service.SqlPlanningSlotRepository",
+                return_value=self.planning_slot_repo,
             ),
             patch(
                 "app.application.sync_service.decrypt_credentials",
@@ -163,7 +169,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, m.session)
 
-        assert result == {"created": 1, "updated": 0, "cancelled": 0}
+        assert result == {"created": 1, "updated": 0, "cancelled": 0, "auto_matched": 0}
         m.event_repo.save.assert_called_once()
         saved_event: Event = m.event_repo.save.call_args[0][0]
         assert saved_event.external_uid == raw.uid
@@ -179,7 +185,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, m.session)
 
-        assert result == {"created": 0, "updated": 0, "cancelled": 0}
+        assert result == {"created": 0, "updated": 0, "cancelled": 0, "auto_matched": 0}
         m.event_repo.save.assert_not_called()
 
     async def test_changed_event_is_updated(self, m):
@@ -194,7 +200,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, m.session)
 
-        assert result == {"created": 0, "updated": 1, "cancelled": 0}
+        assert result == {"created": 0, "updated": 1, "cancelled": 0, "auto_matched": 0}
         assert existing.title == "Neuer Titel"
         assert existing.content_hash == "hash-v2"
         m.event_repo.save.assert_called_once_with(existing)
@@ -210,7 +216,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, m.session)
 
-        assert result == {"created": 0, "updated": 0, "cancelled": 0}
+        assert result == {"created": 0, "updated": 0, "cancelled": 0, "auto_matched": 0}
         m.event_repo.save.assert_not_called()
 
     async def test_existing_event_cancelled(self, m):
@@ -224,7 +230,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, m.session)
 
-        assert result == {"created": 0, "updated": 0, "cancelled": 1}
+        assert result == {"created": 0, "updated": 0, "cancelled": 1, "auto_matched": 0}
         assert existing.status == EventStatus.CANCELLED
         m.event_repo.save.assert_called_once_with(existing)
 
@@ -239,7 +245,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, m.session)
 
-        assert result == {"created": 0, "updated": 0, "cancelled": 0}
+        assert result == {"created": 0, "updated": 0, "cancelled": 0, "auto_matched": 0}
         m.event_repo.save.assert_not_called()
 
     async def test_integration_last_synced_at_updated(self, m):
@@ -286,7 +292,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, m.session)
 
-        assert result == {"created": 1, "updated": 1, "cancelled": 1}
+        assert result == {"created": 1, "updated": 1, "cancelled": 1, "auto_matched": 0}
 
     async def test_congregation_id_set_from_integration(self, m):
         """Events inherit congregation_id from the CalendarIntegration."""

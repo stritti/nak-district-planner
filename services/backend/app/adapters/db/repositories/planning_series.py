@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +35,15 @@ class SqlPlanningSeriesRepository(PlanningSeriesRepository):
         row = await self._session.get(PlanningSeriesORM, series_id)
         return _orm_to_domain(row) if row else None
 
+    async def list_all(self) -> list[PlanningSeries]:
+        """List all PlanningSeries across all districts."""
+        result = await self._session.execute(
+            select(PlanningSeriesORM).order_by(
+                PlanningSeriesORM.district_id, PlanningSeriesORM.created_at
+            )
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
     async def list_by_district(self, district_id: uuid.UUID) -> list[PlanningSeries]:
         """List all PlanningSeries for a district."""
         result = await self._session.execute(
@@ -48,6 +58,24 @@ class SqlPlanningSeriesRepository(PlanningSeriesRepository):
         result = await self._session.execute(
             select(PlanningSeriesORM)
             .where(PlanningSeriesORM.is_active)
+            .order_by(PlanningSeriesORM.district_id, PlanningSeriesORM.created_at)
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
+    async def list_active(self) -> list[PlanningSeries]:
+        """List all active PlanningSeries with valid date range."""
+        today = date.today()
+        result = await self._session.execute(
+            select(PlanningSeriesORM)
+            .where(PlanningSeriesORM.is_active.is_(True))
+            .where(
+                PlanningSeriesORM.active_from.is_(None)
+                | (PlanningSeriesORM.active_from <= today)
+            )
+            .where(
+                PlanningSeriesORM.active_until.is_(None)
+                | (PlanningSeriesORM.active_until >= today)
+            )
             .order_by(PlanningSeriesORM.district_id, PlanningSeriesORM.created_at)
         )
         return [_orm_to_domain(row) for row in result.scalars().all()]

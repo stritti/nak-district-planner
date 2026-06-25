@@ -19,6 +19,7 @@ from app.domain.models.invitation import (
 )
 from app.domain.models.leader import Leader
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
+from app.domain.models.notification import Notification, NotificationType
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
@@ -171,13 +172,23 @@ class PlanningSeriesRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_all(self) -> list[PlanningSeries]:
+        """List all planning series across all districts."""
+        pass
+
+    @abstractmethod
     async def list_by_district(self, district_id: uuid.UUID) -> list[PlanningSeries]:
-        """List all PlanningSeries for a district."""
+        """List all planning series for a given district."""
         pass
 
     @abstractmethod
     async def list_all_active(self) -> list[PlanningSeries]:
         """List all active PlanningSeries across all districts."""
+        pass
+
+    @abstractmethod
+    async def list_active(self) -> list[PlanningSeries]:
+        """List all active planning series (is_active=True, within active_from/active_until window)."""
         pass
 
     @abstractmethod
@@ -195,6 +206,17 @@ class PlanningSlotRepository(ABC):
         self, series_id: uuid.UUID, planning_date: date
     ) -> PlanningSlot | None:
         """Get PlanningSlot by series_id and planning_date."""
+        pass
+
+    @abstractmethod
+    async def get_by_series_date(
+        self,
+        *,
+        series_id: uuid.UUID,
+        planning_date: date,
+        congregation_id: uuid.UUID | None,
+    ) -> PlanningSlot | None:
+        """Check if a slot already exists for this series on a given date."""
         pass
 
     @abstractmethod
@@ -226,6 +248,11 @@ class EventInstanceRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_by_planning_slot(self, planning_slot_id: uuid.UUID) -> EventInstance | None:
+        """Get the first EventInstance for a PlanningSlot (auto-matching)."""
+        pass
+
+    @abstractmethod
     async def list_by_planning_slots(
         self, planning_slot_ids: list[uuid.UUID]
     ) -> list[EventInstance]:
@@ -243,9 +270,7 @@ class ServiceAssignmentRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_by_planning_slot(
-        self, slot_or_event_id: uuid.UUID
-    ) -> list[ServiceAssignment]:
+    async def list_by_planning_slot(self, slot_or_event_id: uuid.UUID) -> list[ServiceAssignment]:
         pass
 
     @abstractmethod
@@ -405,6 +430,37 @@ class UserRepository(ABC):
     @abstractmethod
     async def has_any_user(self) -> bool:
         """Check whether at least one user exists."""
+        pass
+
+
+class NotificationRepository(ABC):
+    @abstractmethod
+    async def get(self, notification_id: uuid.UUID) -> Notification | None:
+        pass
+
+    @abstractmethod
+    async def list_by_district(
+        self,
+        district_id: uuid.UUID,
+        *,
+        unread_only: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[Notification], int]:
+        """List notifications for a district, newest first. Returns (items, total)."""
+        pass
+
+    @abstractmethod
+    async def save(self, notification: Notification) -> None:
+        pass
+
+    @abstractmethod
+    async def mark_read(self, notification_id: uuid.UUID) -> None:
+        pass
+
+    @abstractmethod
+    async def mark_all_read(self, district_id: uuid.UUID, user_sub: str) -> int:
+        """Mark all unread notifications as read for a district. Returns count."""
         pass
 
 

@@ -50,6 +50,13 @@
 
         <!-- Right: Dark mode toggle + User Menu or Login Button -->
         <div class="flex items-center gap-2 shrink-0">
+          <!-- Notification Bell (authenticated, requires selected district) -->
+          <NotificationBell
+            v-if="authStore.isAuthenticated && districtStore.selectedDistrictId"
+            :district-id="districtStore.selectedDistrictId"
+            @notification-click="handleNotificationClick"
+          />
+
           <!-- Dark mode toggle -->
           <button
             class="btn-icon p-2 rounded-md hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -220,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowDownTrayIcon,
@@ -237,15 +244,45 @@ import {
 } from '@heroicons/vue/24/outline'
 import { useDarkMode } from '../composables/useDarkMode'
 import { useAuthStore } from '../stores/auth'
+import { useDistrictsStore } from '../stores/districts'
+import { useNotificationStore } from '../stores/notifications'
 import { useOIDC } from '../composables/useOIDC'
+import NotificationBell from './NotificationBell.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const districtStore = useDistrictsStore()
+const notificationStore = useNotificationStore()
 const oidc = useOIDC(router)
 const { isDark, toggle } = useDarkMode()
 
 const menuOpen = ref(false)
 const mobileNavOpen = ref(false)
+
+// Start/stop notification polling based on auth state
+watch(() => authStore.isAuthenticated, (authenticated) => {
+  if (authenticated && districtStore.selectedDistrictId) {
+    notificationStore.startPolling(districtStore.selectedDistrictId)
+  } else {
+    notificationStore.stopPolling()
+  }
+}, { immediate: true })
+
+watch(() => districtStore.selectedDistrictId, (districtId) => {
+  if (authStore.isAuthenticated && districtId) {
+    notificationStore.startPolling(districtId)
+  }
+})
+
+onUnmounted(() => {
+  notificationStore.stopPolling()
+})
+
+function handleNotificationClick(notification: { id: string; type: string; payload: Record<string, unknown> }) {
+  // Router navigation based on notification type can be added later
+  // e.g., for type "registration": router.push('/admin/leaders')
+  console.debug('Notification clicked:', notification.type, notification.payload)
+}
 
 const links = [
   { to: '/events',          label: 'Ereignisse',        icon: CalendarDaysIcon },

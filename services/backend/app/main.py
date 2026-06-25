@@ -24,6 +24,7 @@ from app.adapters.api.routers import (
     export,
     invitations,
     leaders,
+    notifications,
     planning_series,
     registrations,
     service_assignments,
@@ -257,3 +258,4 @@ app.include_router(registrations.overview_router)
 app.include_router(registrations.router)
 app.include_router(export.router, prefix="/api/v1")
 app.include_router(system.router)
+app.include_router(notifications.router)
