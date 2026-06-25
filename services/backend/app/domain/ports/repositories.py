@@ -241,9 +241,7 @@ class EventInstanceRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_by_planning_slot(
-        self, planning_slot_id: uuid.UUID
-    ) -> list[EventInstance]:
+    async def list_by_planning_slot(self, planning_slot_id: uuid.UUID) -> list[EventInstance]:
         """List all EventInstances for a specific PlanningSlot."""
         pass
 

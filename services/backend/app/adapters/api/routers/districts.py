@@ -43,22 +43,22 @@ from app.adapters.db.repositories import (
 )
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
-from app.application.planning_series_generator import PlanningSeriesGenerator
 from app.application.feiertage_service import (
     DE_STATES,
     import_feiertage,
     import_kirchliche_festtage,
     reference_feiertage_for_congregation,
 )
+from app.application.planning_series_generator import PlanningSeriesGenerator
 from app.domain.models.congregation import Congregation
-from app.domain.models.event_instance import EventInstance
-from app.domain.models.invitation import CongregationInvitation
-from app.domain.models.planning_slot import PlanningSlot
-from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event import EventStatus
+from app.domain.models.event_instance import EventInstance
+from app.domain.models.invitation import CongregationInvitation
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.role import Role
+from app.domain.models.service_assignment import ServiceAssignment
 
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
 
@@ -426,11 +426,11 @@ async def get_matrix(
     group_id: uuid.UUID | None = Query(None),
 ) -> MatrixResponse:
     """Return matrix view for a district.
-    
+
     Uses PlanningSlot as the authoritative source for all matrix cells.
     Holidays (Feiertag) are now stored as PlanningSlots with category="Feiertag".
     Event fallback has been removed as per OpenSpec requirement.
-    
+
     **RBAC:** Requires VIEWER role in the district.
     """
     if not await SqlDistrictRepository(db).get(district_id):
@@ -598,11 +598,11 @@ async def get_matrix(
             # Get instance and assignment for this slot
             instance: EventInstance | None = instance_by_slot_id.get(slot.id)
             assignment: ServiceAssignment | None = assignment_by_slot_id.get(slot.id)
-            
+
             # Check if this is an invitation copy
             is_invitation_copy = slot.invitation_source_event_id is not None
             assignment_slot_id: uuid.UUID | None = slot.id
-            
+
             # For invitation copies, try to get assignment from source
             if assignment is None and is_invitation_copy and slot.invitation_source_event_id is not None:
                 assignment = assignment_by_slot_id.get(slot.invitation_source_event_id)
@@ -620,10 +620,10 @@ async def get_matrix(
                     ldr = leaders_by_id[assignment.leader_id]
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
-            
+
             # Get invitation count for this slot
             invitation_count: int = len(invitation_by_source_slot.get(slot.id, []))
-            
+
             cells[date_key] = MatrixCell(
                 event_id=str(slot.id),  # For frontend compatibility - use slot.id as event_id
                 planning_slot_id=slot.id,
@@ -666,7 +666,7 @@ async def get_matrix(
                 deviation_start_diff_minutes=None,
                 deviation_end_diff_minutes=None,
             )
-            
+
             # Calculate deviation details if instance exists and has deviation
             if instance is not None and instance.deviation_flag:
                 from app.application.matrix_service import MatrixService

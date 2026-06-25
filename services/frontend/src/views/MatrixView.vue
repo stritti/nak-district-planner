@@ -729,20 +729,6 @@ function formatWeekday(iso: string): string {
   return WEEKDAY_SHORT[new Date(year, month - 1, day).getDay()]
 }
 
-function formatTime(timeOrDate: string | Date | null | undefined): string {
-  if (!timeOrDate) return ''
-  // Handle both time strings (HH:MM:SS) and datetime strings (YYYY-MM-DDTHH:MM:SS)
-  let timeString = typeof timeOrDate === 'string' ? timeOrDate : timeOrDate.toISOString()
-  
-  // If it's a full datetime, extract the time part
-  if (timeString.includes('T')) {
-    timeString = timeString.split('T')[1] || ''
-  }
-  
-  // Extract HH:MM
-  const [hours, minutes] = timeString.split(':')
-  return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`
-}
 
 function cellClass(cell: MatrixCell | undefined): string {
   if (!cell?.event_id) return 'bg-white dark:bg-gray-900'

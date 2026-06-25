@@ -13,9 +13,9 @@ from fastapi.responses import JSONResponse
 from alembic import command
 from app.adapters.api import deps
 from app.adapters.api.middleware.audit import AuditMiddleware
+from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
 from app.adapters.api.middleware.tenant import TenantMiddleware, TenantValidationMiddleware
-from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.routers import (
     auth,
     calendar_integrations,
@@ -31,12 +31,12 @@ from app.adapters.api.routers import (
     system,
 )
 from app.adapters.auth.oidc import OIDCAdapter
-from app.application.audit_service import audit_service
-from app.application.csrf import CSRFTokenService
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
+from app.application.audit_service import audit_service
+from app.application.csrf import CSRFTokenService
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
 from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings

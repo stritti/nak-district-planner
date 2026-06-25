@@ -69,12 +69,10 @@ class SqlPlanningSeriesRepository(PlanningSeriesRepository):
             select(PlanningSeriesORM)
             .where(PlanningSeriesORM.is_active.is_(True))
             .where(
-                PlanningSeriesORM.active_from.is_(None)
-                | (PlanningSeriesORM.active_from <= today)
+                PlanningSeriesORM.active_from.is_(None) | (PlanningSeriesORM.active_from <= today)
             )
             .where(
-                PlanningSeriesORM.active_until.is_(None)
-                | (PlanningSeriesORM.active_until >= today)
+                PlanningSeriesORM.active_until.is_(None) | (PlanningSeriesORM.active_until >= today)
             )
             .order_by(PlanningSeriesORM.district_id, PlanningSeriesORM.created_at)
         )

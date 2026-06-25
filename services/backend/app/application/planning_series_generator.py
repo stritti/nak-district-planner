@@ -114,9 +114,7 @@ class PlanningSeriesGenerator:
         from_date = now.date()
         to_date = self._add_months(from_date, self._horizon_months)
 
-        return await self.run_for_window(
-            from_date=from_date, to_date_exclusive=to_date
-        )
+        return await self.run_for_window(from_date=from_date, to_date_exclusive=to_date)
 
     async def run_for_window(
         self,
@@ -140,9 +138,7 @@ class PlanningSeriesGenerator:
 
             processed_series += 1
             effective_from = max(from_date, series.active_from or from_date)
-            effective_to = min(
-                to_date_exclusive, series.active_until or to_date_exclusive
-            )
+            effective_to = min(to_date_exclusive, series.active_until or to_date_exclusive)
             if effective_to <= effective_from:
                 skipped += 1
                 continue
@@ -167,10 +163,7 @@ class PlanningSeriesGenerator:
 
                 # Create PlanningSlot
                 planning_time = (
-                    datetime.combine(
-                        gslot.planning_date, datetime.min.time()
-                    )
-                    + gslot.planning_time
+                    datetime.combine(gslot.planning_date, datetime.min.time()) + gslot.planning_time
                 ).time()
 
                 slot = PlanningSlot.create(
@@ -192,9 +185,7 @@ class PlanningSeriesGenerator:
                     actual_start_at=datetime.combine(
                         gslot.planning_date, planning_time, tzinfo=UTC
                     ),
-                    actual_end_at=datetime.combine(
-                        gslot.planning_date, planning_time, tzinfo=UTC
-                    )
+                    actual_end_at=datetime.combine(gslot.planning_date, planning_time, tzinfo=UTC)
                     + timedelta(hours=1, minutes=30),
                     source=EventSource.INTERNAL,
                     visibility=EventVisibility.INTERNAL,
