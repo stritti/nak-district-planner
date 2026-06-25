@@ -708,7 +708,7 @@ function formatWeekday(iso: string): string {
   return WEEKDAY_SHORT[new Date(year, month - 1, day).getDay()]
 }
 
-function formatTime(timeOrDate: string | Date | undefined): string {
+function formatTime(timeOrDate: string | Date | null | undefined): string {
   if (!timeOrDate) return ''
   // Handle both time strings (HH:MM:SS) and datetime strings (YYYY-MM-DDTHH:MM:SS)
   let timeString = typeof timeOrDate === 'string' ? timeOrDate : timeOrDate.toISOString()
