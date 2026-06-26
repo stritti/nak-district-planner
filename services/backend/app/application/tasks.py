@@ -71,7 +71,7 @@ def sync_all_active_integrations() -> dict:
 
     ids = asyncio.run(_run())
     for integration_id in ids:
-        sync_calendar_integration.delay(integration_id)
+        sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
     logger.info("Dispatched sync for %d integration(s)", len(ids))
     return {"dispatched": len(ids)}
 
@@ -107,7 +107,7 @@ def cleanup_old_events() -> dict:
                 PlanningSlotORM.planning_date < cutoff_date
             )
             result = await session.execute(stmt)
-            deleted = result.rowcount
+            deleted = result.rowcount  # type: ignore[attr-defined]
 
         return {"deleted": deleted, "cutoff": cutoff.isoformat()}
 
@@ -459,10 +459,10 @@ def generate_planning_slots() -> dict:
             service = PlanningSeriesSlotGenerationService(
                 series_repo=SqlPlanningSeriesRepository(session),
                 slot_repo=SqlPlanningSlotRepository(session),
-                horizon_months=6,
+                default_horizon_months=6,
             )
 
-            result = await service.generate_all_slots(horizon_months=6)
+            result = await service.generate_all_slots()
             await session.commit()
 
             return result

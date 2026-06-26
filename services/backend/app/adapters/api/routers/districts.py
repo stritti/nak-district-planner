@@ -236,7 +236,7 @@ async def list_congregations(
     )
     groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
     group_names = {group.id: group.name for group in groups}
-    return [_cong_response(c, group_name=group_names.get(c.group_id)) for c in congregations]
+    return [_cong_response(c, group_name=group_names.get(c.group_id) if c.group_id else None) for c in congregations]
 
 
 @router.patch("/{district_id}/congregations/{congregation_id}", response_model=CongregationResponse)
@@ -452,11 +452,13 @@ async def get_matrix(
         effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
         effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_from_dt is None:
+        assert utc_to_dt is not None  # guaranteed by first branch
         end_date = utc_to_dt.date()
         start_date = end_date - timedelta(days=27)
         effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
         effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_to_dt is None:
+        assert utc_from_dt is not None  # guaranteed by first branch
         start_date = utc_from_dt.date()
         end_date = start_date + timedelta(days=27)
         effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
@@ -498,7 +500,7 @@ async def get_matrix(
     holidays: dict[str, list[str]] = {}
     for slot in feiertag_slots:
         date_key = slot.planning_date.isoformat()
-        holidays.setdefault(date_key, []).append(slot.title)
+        holidays.setdefault(date_key, []).append(slot.title or "Feiertag")
 
     # Collect all unique dates: congregation schedules + Feiertag dates + Gottesdienst slot dates
     all_dates: set[str] = set()
@@ -623,7 +625,7 @@ async def get_matrix(
             invitation_count: int = len(invitation_by_source_slot.get(slot.id, []))
 
             cells[date_key] = MatrixCell(
-                event_id=str(slot.id),  # For frontend compatibility - use slot.id as event_id
+                event_id=slot.id,
                 planning_slot_id=slot.id,
                 assignment_event_id=assignment_slot_id,
                 invitation_source_congregation_name=source_congregation_names.get(
@@ -679,7 +681,7 @@ async def get_matrix(
                 congregation_id=congregation.id,
                 congregation_name=congregation.name,
                 group_id=congregation.group_id,
-                group_name=group_names.get(congregation.group_id),
+                group_name=group_names.get(congregation.group_id) if congregation.group_id else None,
                 cells=cells,
             )
         )
