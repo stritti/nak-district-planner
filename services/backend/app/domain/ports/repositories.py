@@ -146,6 +146,11 @@ class PlanningSlotRepository(ABC):
     async def save(self, slot: PlanningSlot) -> None:
         pass
 
+    @abstractmethod
+    async def delete(self, slot_id: uuid.UUID) -> None:
+        """Delete a PlanningSlot by its ID."""
+        pass
+
 
 class EventInstanceRepository(ABC):
     @abstractmethod
@@ -185,6 +190,11 @@ class EventInstanceRepository(ABC):
         self, calendar_integration_id: uuid.UUID
     ) -> list[EventInstance]:
         """List all EventInstances for a CalendarIntegration."""
+        pass
+
+    @abstractmethod
+    async def delete(self, instance_id: uuid.UUID) -> None:
+        """Delete an EventInstance by its ID."""
         pass
 
 

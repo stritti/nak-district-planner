@@ -138,7 +138,7 @@ async def create_invitations_for_event(
                 target_type=target.target_type,
                 target_congregation_id=target.target_congregation_id,
                 external_target_note=None,
-                linked_event_id=None,
+                linked_event_id=target_slot.id,
             )
             await invitation_repo.save(invitation)
             created.append(invitation)
@@ -171,12 +171,29 @@ async def delete_invitation(
     *,
     invitation_id: uuid.UUID,
 ) -> bool:
-    """Delete an invitation by its ID."""
+    """Delete an invitation by its ID.
+
+    Also removes the target PlanningSlot and its EventInstance when the
+    invitation has a linked_event_id (created via DISTRICT_CONGREGATION).
+    """
     invitation_repo = SqlInvitationRepository(session)
+    slot_repo = SqlPlanningSlotRepository(session)
+    event_instance_repo = SqlEventInstanceRepository(session)
 
     invitation = await invitation_repo.get(invitation_id)
     if invitation is None:
         return False
+
+    # Remove the target PlanningSlot + EventInstance that was created for this invitation
+    if invitation.linked_event_id is not None:
+        target_instance = await event_instance_repo.get_by_planning_slot(
+            invitation.linked_event_id
+        )
+        if target_instance is not None:
+            await event_instance_repo.delete(target_instance.id)
+        target_slot = await slot_repo.get(invitation.linked_event_id)
+        if target_slot is not None:
+            await slot_repo.delete(target_slot.id)
 
     await invitation_repo.delete(invitation.id)
     return True
