@@ -35,7 +35,6 @@ from app.adapters.db.repositories import (
     SqlCongregationRepository,
     SqlDistrictRepository,
     SqlEventInstanceRepository,
-    SqlEventRepository,
     SqlLeaderRepository,
     SqlPlanningSeriesRepository,
     SqlPlanningSlotRepository,
@@ -53,7 +52,6 @@ from app.application.planning_series_generator import PlanningSeriesGenerator
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
-from app.domain.models.event import EventStatus
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import CongregationInvitation
 from app.domain.models.planning_slot import PlanningSlot
@@ -717,7 +715,7 @@ async def generate_matrix_drafts(
     use_case = GenerateDraftServicesUseCase(
         district_repo=SqlDistrictRepository(db),
         congregation_repo=SqlCongregationRepository(db),
-        event_repo=SqlEventRepository(db),
+        event_repo=None,  # TODO: refactor to PlanningSlotRepository
     )
     full_result = await use_case.run_for_window(
         from_date=from_date,
@@ -728,21 +726,10 @@ async def generate_matrix_drafts(
 
     district_congregations = await SqlCongregationRepository(db).list_by_district(district_id)
     district_congregation_ids = {c.id for c in district_congregations}
-    events, _ = await SqlEventRepository(db).list(
-        district_id=district_id,
-        from_dt=from_dt,
-        to_dt=to_dt,
-        limit=5000,
-        offset=0,
-    )
-    generated_in_range = sum(
-        1
-        for event in events
-        if event.congregation_id in district_congregation_ids
-        and event.status == EventStatus.DRAFT
-        and event.category == "Gottesdienst"
-        and event.generation_slot_key is not None
-    )
+    events: list = []
+    total = 0
+    # TODO: refactor to PlanningSlotRepository + EventInstanceRepository
+    generated_in_range = 0
 
     return {
         **full_result,

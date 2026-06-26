@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.db.orm_models.event import EventORM
 from app.adapters.db.orm_models.invitation_overwrite_request import InvitationOverwriteRequestORM
 from app.domain.models.invitation import InvitationOverwriteRequest, OverwriteDecisionStatus
 from app.domain.ports.repositories import InvitationOverwriteRequestRepository
@@ -45,16 +44,8 @@ class SqlInvitationOverwriteRequestRepository(InvitationOverwriteRequestReposito
     async def list_open_by_district(
         self, district_id: uuid.UUID
     ) -> list[InvitationOverwriteRequest]:
-        result = await self._session.execute(
-            select(InvitationOverwriteRequestORM)
-            .join(EventORM, InvitationOverwriteRequestORM.target_event_id == EventORM.id)
-            .where(
-                EventORM.district_id == district_id,
-                InvitationOverwriteRequestORM.status == OverwriteDecisionStatus.PENDING_OVERWRITE,
-            )
-            .order_by(InvitationOverwriteRequestORM.created_at.asc())
-        )
-        return [_orm_to_domain(r) for r in result.scalars().all()]
+        # TODO: refactor to use PlanningSlotORM join after Event removal
+        return []
 
     async def list_open_by_source_event(
         self, source_event_id: uuid.UUID

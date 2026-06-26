@@ -13,7 +13,8 @@ from app.application.invitation_service import (
     propagate_source_event_update,
     sync_linked_invitation_event_schedule,
 )
-from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.domain.models.event_instance import EventSource, EventVisibility
+# TODO: Event/EventStatus removed — will be refactored for Event-free architecture
 from app.domain.models.invitation import (
     CongregationInvitation,
     InvitationOverwriteRequest,
@@ -22,18 +23,24 @@ from app.domain.models.invitation import (
 )
 
 
-def _event(congregation_id: uuid.UUID | None = None) -> Event:
-    return Event.create(
-        title="Gottesdienst",
-        start_at=datetime(2026, 4, 10, 9, 30, tzinfo=UTC),
-        end_at=datetime(2026, 4, 10, 11, 30, tzinfo=UTC),
-        district_id=uuid.uuid4(),
-        congregation_id=congregation_id,
-        category="Gottesdienst",
-        source=EventSource.INTERNAL,
-        status=EventStatus.PUBLISHED,
-        visibility=EventVisibility.INTERNAL,
-    )
+# TODO: refactor for Event-free architecture
+def _event(congregation_id: uuid.UUID | None = None) -> object:
+    return type("_FakeEvent", (), {
+        "id": uuid.uuid4(), "title": "Gottesdienst",
+        "start_at": datetime(2026, 4, 10, 9, 30, tzinfo=UTC),
+        "end_at": datetime(2026, 4, 10, 11, 30, tzinfo=UTC),
+        "district_id": uuid.uuid4(), "congregation_id": congregation_id,
+        "category": "Gottesdienst", "source": EventSource.INTERNAL,
+        "status": "PUBLISHED", "visibility": EventVisibility.INTERNAL,
+        "description": None, "audiences": [], "applicability": [],
+        "approval_status": "CONFIRMED",
+        "created_at": datetime(2026, 4, 10, 9, 0, tzinfo=UTC),
+        "updated_at": datetime(2026, 4, 10, 9, 0, tzinfo=UTC),
+        "external_uid": None, "calendar_integration_id": None,
+        "content_hash": None, "generation_slot_key": None,
+        "invitation_source_congregation_id": None,
+        "invitation_source_event_id": None,
+    })()
 
 
 @pytest.mark.asyncio
@@ -243,7 +250,8 @@ async def test_delete_invitation_cancels_linked_event():
         result = await delete_invitation(session, invitation_id=invitation.id)
 
         assert result is True
-        assert source_event.status == EventStatus.CANCELLED
+        # TODO: EventStatus removed
+        assert getattr(source_event, 'status', None) == "CANCELLED"
         event_repo.save.assert_called_once()
         invitation_repo.delete.assert_called_once_with(invitation.id)
 

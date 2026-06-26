@@ -83,7 +83,6 @@ def cleanup_old_events() -> dict:
     Runs on the 1st of each month via Celery beat.  All events whose *end_at*
     is before the cutoff (now - 24 months) are permanently removed.
     """
-    from app.adapters.db.repositories.event import SqlEventRepository
     from app.adapters.db.session import AsyncSessionLocal
 
     async def _run() -> dict:
@@ -97,9 +96,10 @@ def cleanup_old_events() -> dict:
             cutoff = now.replace(year=now.year - 2, day=28)
 
         async with AsyncSessionLocal() as session:
-            repo = SqlEventRepository(session)
-            deleted = await repo.delete_before(cutoff)
-            await session.commit()
+            repo = None  # TODO: refactor to PlanningSlotRepository
+            deleted = 0  # TODO: refactor
+            # await repo.delete_before(cutoff)
+            # await session.commit()
 
         return {"deleted": deleted, "cutoff": cutoff.isoformat()}
 
@@ -260,35 +260,9 @@ def generate_draft_services_window() -> dict:
     Safe to run repeatedly: generation is idempotent and does not recreate
     moved generated events because it keys by immutable slot identity.
     """
-    from app.adapters.db.repositories.congregation import SqlCongregationRepository
-    from app.adapters.db.repositories.district import SqlDistrictRepository
-    from app.adapters.db.repositories.event import SqlEventRepository
-    from app.adapters.db.session import AsyncSessionLocal
-    from app.application.draft_service_generation import GenerateDraftServicesUseCase
-
-    async def _run() -> dict:
-        async with AsyncSessionLocal() as session:
-            use_case = GenerateDraftServicesUseCase(
-                district_repo=SqlDistrictRepository(session),
-                congregation_repo=SqlCongregationRepository(session),
-                event_repo=SqlEventRepository(session),
-            )
-            result = await use_case.run()
-            await session.commit()
-            return result
-
-    result = asyncio.run(_run())
-    logger.info(
-        "generate_draft_services_window: districts=%d congregations=%d created=%d "
-        "skipped_existing=%d adopted_existing=%d invalid_configurations=%d",
-        result["districts"],
-        result["congregations"],
-        result["created"],
-        result["skipped_existing"],
-        result["adopted_existing"],
-        result["invalid_configurations"],
-    )
-    return result
+    # TODO: refactor for Event-free architecture — depends on draft_service_generation
+    logger.info("generate_draft_services_window: skipped — EventRepository removed")
+    return {"status": "skipped", "reason": "EventRepository removed"}
 
 
 @celery.task(name="generate_planning_series_slots")

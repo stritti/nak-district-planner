@@ -15,7 +15,6 @@ from app.adapters.api.schemas.invitation import (
 )
 from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
-from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
 from app.adapters.db.repositories.invitation_overwrite_request import (
     SqlInvitationOverwriteRequestRepository,
@@ -41,8 +40,8 @@ async def create_invitations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> list[InvitationResponse]:
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(event_id)
+    event_repo = None  # TODO: refactor to PlanningSlotRepository
+    event = None  # TODO: refactor
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
 
@@ -80,8 +79,8 @@ async def list_event_invitations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> list[InvitationResponse]:
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(event_id)
+    event_repo = None  # TODO: refactor to PlanningSlotRepository
+    event = None  # TODO: refactor
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
 
@@ -119,7 +118,8 @@ async def remove_invitation(
             status_code=status.HTTP_404_NOT_FOUND, detail="Einladung nicht gefunden"
         )
 
-    event = await SqlEventRepository(db).get(invitation.source_event_id)
+    # TODO: refactor to PlanningSlotRepository
+    event = None
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
 
@@ -147,20 +147,15 @@ async def list_overwrite_requests(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     req_repo = SqlInvitationOverwriteRequestRepository(db)
-    event_repo = SqlEventRepository(db)
+    event_repo = None  # TODO: refactor to PlanningSlotRepository
     source_repo = SqlCongregationRepository(db)
     requests = await req_repo.list_open_by_district(district_id)
 
     result: list[OverwriteRequestResponse] = []
     for request in requests:
-        source_event = await event_repo.get(request.source_event_id)
-        target_event = await event_repo.get(request.target_event_id)
+        source_event = None  # TODO: refactor to PlanningSlotRepository
+        target_event = None  # TODO: refactor to PlanningSlotRepository
         source_name = None
-        if target_event is not None and target_event.invitation_source_congregation_id is not None:
-            source_congregation = await source_repo.get(
-                target_event.invitation_source_congregation_id
-            )
-            source_name = source_congregation.name if source_congregation else None
         result.append(
             OverwriteRequestResponse(
                 id=request.id,
@@ -204,7 +199,7 @@ async def decide_overwrite_request(
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Anfrage nicht gefunden")
 
-    target_event = await SqlEventRepository(db).get(existing.target_event_id)
+    target_event = None  # TODO: refactor to PlanningSlotRepository
     if target_event is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Ziel-Event nicht gefunden"
@@ -219,8 +214,8 @@ async def decide_overwrite_request(
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Anfrage nicht gefunden")
 
-    source_event = await SqlEventRepository(db).get(updated.source_event_id)
-    target_event = await SqlEventRepository(db).get(updated.target_event_id)
+    source_event = None  # TODO: refactor to PlanningSlotRepository
+    target_event = None  # TODO: refactor to PlanningSlotRepository
     return OverwriteRequestResponse(
         id=updated.id,
         invitation_id=updated.invitation_id,

@@ -3,9 +3,15 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
-from enum import Enum
+from enum import Enum, StrEnum
 
-from app.domain.models.event import EventApprovalStatus
+
+class EventApprovalStatus(StrEnum):
+    """Planning/release workflow status."""
+    DRAFT = "DRAFT"
+    PLANNED = "PLANNED"
+    CONFIRMED = "CONFIRMED"
+    CANCELLED = "CANCELLED"
 
 
 class PlanningSlotStatus(str, Enum):

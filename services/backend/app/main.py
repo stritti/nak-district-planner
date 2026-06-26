@@ -20,7 +20,6 @@ from app.adapters.api.routers import (
     auth,
     calendar_integrations,
     districts,
-    events,
     export,
     invitations,
     leaders,
@@ -31,13 +30,9 @@ from app.adapters.api.routers import (
     system,
 )
 from app.adapters.auth.oidc import OIDCAdapter
-from app.adapters.db.repositories.congregation import SqlCongregationRepository
-from app.adapters.db.repositories.district import SqlDistrictRepository
-from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
-from app.application.draft_service_generation import GenerateDraftServicesUseCase
 from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
@@ -93,29 +88,6 @@ async def lifespan(app: FastAPI):
 
     # Set global OIDC adapter for use in dependencies
     deps.set_oidc_adapter(oidc_adapter)
-
-    if settings.startup_generate_draft_services:
-        logger = logging.getLogger(__name__)
-
-        async with AsyncSessionLocal() as session:
-            use_case = GenerateDraftServicesUseCase(
-                district_repo=SqlDistrictRepository(session),
-                congregation_repo=SqlCongregationRepository(session),
-                event_repo=SqlEventRepository(session),
-            )
-            result = await use_case.run()
-            await session.commit()
-
-        logger.info(
-            "startup draft generation: districts=%d congregations=%d created=%d "
-            "skipped_existing=%d adopted_existing=%d invalid_configurations=%d",
-            result["districts"],
-            result["congregations"],
-            result["created"],
-            result["skipped_existing"],
-            result["adopted_existing"],
-            result["invalid_configurations"],
-        )
 
     # Start rate limiter — fail-open: if Redis is unavailable, requests proceed without
     # rate limiting until Redis comes back (check_rate_limit already returns allowed=True on error).
@@ -246,7 +218,6 @@ async def health() -> dict:
 
 # Register routers
 app.include_router(auth.router)
-app.include_router(events.router)
 app.include_router(invitations.router)
 app.include_router(service_assignments.router)
 app.include_router(calendar_integrations.router)

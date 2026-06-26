@@ -21,7 +21,7 @@ class CongregationInvitationORM(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     source_event_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), nullable=False
     )
     # New field for PlanningSlot-based invitations
     source_planning_slot_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -39,7 +39,7 @@ class CongregationInvitationORM(Base):
     )
     external_target_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     linked_event_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("events.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

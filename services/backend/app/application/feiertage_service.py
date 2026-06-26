@@ -20,8 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-from app.domain.models.event import EventSource, EventVisibility
-from app.domain.models.event_instance import EventInstance
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 
 NAGER_DATE_URL = "https://date.nager.at/api/v3/PublicHolidays/{year}/DE"

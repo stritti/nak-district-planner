@@ -9,8 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.adapters.db.base import Base
-from app.domain.models.event import EventApprovalStatus
-from app.domain.models.planning_slot import PlanningSlotStatus
+from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlotStatus
 
 
 class PlanningSlotORM(Base):
@@ -38,7 +37,7 @@ class PlanningSlotORM(Base):
         UUID(as_uuid=True), ForeignKey("congregations.id", ondelete="SET NULL"), nullable=True
     )
     invitation_source_event_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("events.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), nullable=True
     )
     # List of congregation IDs that this slot applies to (for district-wide holidays)
     applicability: Mapped[list[uuid.UUID]] = mapped_column(

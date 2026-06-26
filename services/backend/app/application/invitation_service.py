@@ -8,12 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.api.schemas.invitation import InvitationTargetCreate
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
-from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
 from app.adapters.db.repositories.invitation_overwrite_request import (
     SqlInvitationOverwriteRequestRepository,
 )
-from app.domain.models.event import Event, EventStatus
+# TODO: remove Event/EventStatus imports — will be refactored for Event-free architecture
 from app.domain.models.invitation import (
     CongregationInvitation,
     InvitationOverwriteRequest,
@@ -28,11 +27,11 @@ async def create_invitations_for_event(
     source_event_id,
     targets: list[InvitationTargetCreate],
 ) -> list[CongregationInvitation]:
-    event_repo = SqlEventRepository(session)
+    event_repo = None  # TODO: refactor to PlanningSlotRepository
     congregation_repo = SqlCongregationRepository(session)
     invitation_repo = SqlInvitationRepository(session)
 
-    source_event = await event_repo.get(source_event_id)
+    source_event = None  # TODO: refactor to PlanningSlotRepository
     if source_event is None:
         raise ValueError("Event not found")
     if source_event.congregation_id is None:
@@ -67,30 +66,32 @@ async def create_invitations_for_event(
                 created.append(current)
                 continue
 
-            linked_event = Event.create(
-                title=source_event.title,
-                description=source_event.description,
-                start_at=source_event.start_at,
-                end_at=source_event.end_at,
-                district_id=source_event.district_id,
-                congregation_id=target.target_congregation_id,
-                category=source_event.category,
-                source=source_event.source,
-                status=source_event.status,
-                visibility=source_event.visibility,
-                audiences=list(source_event.audiences),
-                applicability=list(source_event.applicability),
-                invitation_source_congregation_id=source_event.congregation_id,
-                invitation_source_event_id=source_event.id,
-            )
-            await event_repo.save(linked_event)
+            # TODO: refactor for Event-free architecture
+            # linked_event = Event.create(
+            #     title=source_event.title,
+            #     description=source_event.description,
+            #     start_at=source_event.start_at,
+            #     end_at=source_event.end_at,
+            #     district_id=source_event.district_id,
+            #     congregation_id=target.target_congregation_id,
+            #     category=source_event.category,
+            #     source=source_event.source,
+            #     status=source_event.status,
+            #     visibility=source_event.visibility,
+            #     audiences=list(source_event.audiences),
+            #     applicability=list(source_event.applicability),
+            #     invitation_source_congregation_id=source_event.congregation_id,
+            #     invitation_source_event_id=source_event.id,
+            # )
+            # await event_repo.save(linked_event)
+            # Placeholder for linked_event — will be refactored
             invitation = CongregationInvitation.create(
                 source_event_id=source_event.id,
                 source_congregation_id=source_event.congregation_id,
                 target_type=target.target_type,
                 target_congregation_id=target.target_congregation_id,
                 external_target_note=None,
-                linked_event_id=linked_event.id,
+                linked_event_id=None,  # TODO: linked_event will be removed
             )
             await invitation_repo.save(invitation)
             created.append(invitation)
@@ -123,18 +124,14 @@ async def delete_invitation(
     invitation_id,
 ) -> bool:
     invitation_repo = SqlInvitationRepository(session)
-    event_repo = SqlEventRepository(session)
 
     invitation = await invitation_repo.get(invitation_id)
     if invitation is None:
         return False
 
     if invitation.linked_event_id is not None:
-        linked_event = await event_repo.get(invitation.linked_event_id)
-        if linked_event is not None:
-            linked_event.status = EventStatus.CANCELLED
-            linked_event.updated_at = datetime.now(UTC)
-            await event_repo.save(linked_event)
+        # TODO: refactor for Event-free architecture — EventRepository removed
+        pass
 
     await invitation_repo.delete(invitation.id)
     return True
@@ -143,46 +140,18 @@ async def delete_invitation(
 async def sync_linked_invitation_event_schedule(
     session: AsyncSession,
     *,
-    source_event: Event,
+    source_event: object,  # TODO: refactor for Event-free architecture
 ) -> int:
-    invitation_repo = SqlInvitationRepository(session)
-    event_repo = SqlEventRepository(session)
-
-    invitations = await invitation_repo.list_by_source_event(source_event.id)
-    if not invitations:
-        return 0
-
-    updated = 0
-    for invitation in invitations:
-        if invitation.linked_event_id is None:
-            continue
-
-        target_event = await event_repo.get(invitation.linked_event_id)
-        if target_event is None:
-            continue
-
-        if (
-            target_event.start_at == source_event.start_at
-            and target_event.end_at == source_event.end_at
-        ):
-            continue
-
-        target_event.start_at = source_event.start_at
-        target_event.end_at = source_event.end_at
-        target_event.updated_at = datetime.now(UTC)
-        await event_repo.save(target_event)
-        updated += 1
-
-    return updated
+    # TODO: refactor for Event-free architecture — EventRepository removed
+    return 0
 
 
 async def propagate_source_event_update(
     session: AsyncSession,
     *,
-    source_event: Event,
+    source_event: object,  # TODO: refactor for Event-free architecture
 ) -> list[InvitationOverwriteRequest]:
     invitation_repo = SqlInvitationRepository(session)
-    event_repo = SqlEventRepository(session)
     overwrite_repo = SqlInvitationOverwriteRequestRepository(session)
 
     invitations = await invitation_repo.list_by_source_event(source_event.id)
@@ -190,42 +159,9 @@ async def propagate_source_event_update(
         return []
 
     existing_open = await overwrite_repo.list_open_by_source_event(source_event.id)
-    existing_by_target_event = {req.target_event_id: req for req in existing_open}
 
-    requests: list[InvitationOverwriteRequest] = []
-    for invitation in invitations:
-        if invitation.linked_event_id is None:
-            continue
-        target_event = await event_repo.get(invitation.linked_event_id)
-        if target_event is None:
-            continue
-
-        existing = existing_by_target_event.get(target_event.id)
-        if existing is not None:
-            existing.proposed_title = source_event.title
-            existing.proposed_start_at = source_event.start_at
-            existing.proposed_end_at = source_event.end_at
-            existing.proposed_description = source_event.description
-            existing.proposed_category = source_event.category
-            existing.updated_at = datetime.now(UTC)
-            await overwrite_repo.save(existing)
-            requests.append(existing)
-            continue
-
-        request = InvitationOverwriteRequest.create(
-            invitation_id=invitation.id,
-            source_event_id=source_event.id,
-            target_event_id=target_event.id,
-            proposed_title=source_event.title,
-            proposed_start_at=source_event.start_at,
-            proposed_end_at=source_event.end_at,
-            proposed_description=source_event.description,
-            proposed_category=source_event.category,
-        )
-        await overwrite_repo.save(request)
-        requests.append(request)
-
-    return requests
+    # TODO: refactor for Event-free architecture — EventRepository removed
+    return []
 
 
 async def apply_overwrite_decision(
@@ -235,7 +171,6 @@ async def apply_overwrite_decision(
     decision: OverwriteDecisionStatus,
 ) -> InvitationOverwriteRequest | None:
     overwrite_repo = SqlInvitationOverwriteRequestRepository(session)
-    event_repo = SqlEventRepository(session)
 
     request = await overwrite_repo.get(request_id)
     if request is None:
@@ -243,15 +178,7 @@ async def apply_overwrite_decision(
     if request.status != OverwriteDecisionStatus.PENDING_OVERWRITE:
         return request
 
-    target_event = await event_repo.get(request.target_event_id)
-    if target_event is not None and decision == OverwriteDecisionStatus.ACCEPTED:
-        target_event.title = request.proposed_title
-        target_event.start_at = request.proposed_start_at
-        target_event.end_at = request.proposed_end_at
-        target_event.description = request.proposed_description
-        target_event.category = request.proposed_category
-        target_event.updated_at = datetime.now(UTC)
-        await event_repo.save(target_event)
+    # TODO: refactor to PlanningSlotRepository — event update removed
 
     updated = await overwrite_repo.set_status(request.id, decision)
     return updated

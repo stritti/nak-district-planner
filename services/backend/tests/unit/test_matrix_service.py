@@ -7,8 +7,7 @@ from datetime import date, datetime, time, timedelta
 import uuid
 
 from app.application.matrix_service import MatrixService
-from app.domain.models.event_instance import EventInstance
-from app.domain.models.event import EventSource, EventVisibility
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 
 

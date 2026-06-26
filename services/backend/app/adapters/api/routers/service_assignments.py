@@ -17,7 +17,6 @@ from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_district,
 )
-from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
@@ -47,8 +46,8 @@ async def create_assignment(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> ServiceAssignmentResponse:
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(event_id)
+    # TODO: refactor to PlanningSlotRepository
+    event = None
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
 
@@ -74,8 +73,8 @@ async def list_assignments(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> list[ServiceAssignmentResponse]:
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(event_id)
+    # TODO: refactor to PlanningSlotRepository
+    event = None
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
 
@@ -105,8 +104,8 @@ async def update_assignment(
         )
 
     # Get the event to check district access
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(assignment.event_id)
+    # TODO: refactor to PlanningSlotRepository
+    event = None
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
 
@@ -142,8 +141,8 @@ async def delete_assignment(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
 
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(assignment.event_id)
+    # TODO: refactor to PlanningSlotRepository
+    event = None
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
 

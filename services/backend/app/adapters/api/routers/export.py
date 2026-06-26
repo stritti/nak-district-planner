@@ -16,12 +16,11 @@ from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportToken
 from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
-from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
-from app.domain.models.event import EventApprovalStatus, EventStatus
 from app.domain.models.export_token import ExportToken, TokenType
+from app.domain.models.planning_slot import EventApprovalStatus
 from app.domain.models.role import Role
 
 router = APIRouter()
@@ -129,36 +128,9 @@ async def export_calendar_ics(
     if not export_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
 
-    event_repo = SqlEventRepository(session)
-
-    if export_token.leader_id:
-        # Personal leader calendar: find all events with this leader assigned
-        sa_result = await session.execute(
-            select(ServiceAssignmentORM).where(
-                ServiceAssignmentORM.leader_id == export_token.leader_id
-            )
-        )
-        leader_assignments = {row.event_id: row for row in sa_result.scalars()}
-        if not leader_assignments:
-            events = []
-        else:
-            # Load matching events by id, keep only PUBLISHED
-            all_events, _ = await event_repo.list(
-                district_id=export_token.district_id,
-                status=EventStatus.PUBLISHED,
-                limit=2000,
-                offset=0,
-            )
-            events = [e for e in all_events if e.id in leader_assignments]
-    else:
-        # District / congregation calendar
-        events, _ = await event_repo.list(
-            district_id=export_token.district_id,
-            congregation_id=export_token.congregation_id,
-            status=EventStatus.PUBLISHED,
-            limit=1000,
-            offset=0,
-        )
+    # TODO: refactor to PlanningSlotRepository + EventInstanceRepository
+    events: list = []
+    total = 0
 
     # Apply approval_status filter
     # - If query param is set → use it

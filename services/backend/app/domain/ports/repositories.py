@@ -10,8 +10,8 @@ from app.domain.models.calendar_integration import CalendarIntegration
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
-from app.domain.models.event import Event, EventApprovalStatus, EventStatus
 from app.domain.models.event_instance import EventInstance
+from app.domain.models.external_event_link import ExternalEventLink
 from app.domain.models.invitation import (
     CongregationInvitation,
     InvitationOverwriteRequest,
@@ -21,7 +21,7 @@ from app.domain.models.leader import Leader
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.notification import Notification, NotificationType
 from app.domain.models.planning_series import PlanningSeries
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
 
@@ -75,94 +75,6 @@ class CongregationRepository(ABC):
 
     @abstractmethod
     async def save(self, congregation: Congregation) -> None:
-        pass
-
-
-class EventRepository(ABC):
-    @abstractmethod
-    async def get(self, event_id: uuid.UUID) -> Event | None:
-        pass
-
-    @abstractmethod
-    async def list(
-        self,
-        *,
-        district_id: uuid.UUID | None = None,
-        congregation_id: uuid.UUID | None = None,
-        group_id: uuid.UUID | None = None,
-        only_district_level: bool = False,
-        status: EventStatus | None = None,
-        approval_status: EventApprovalStatus | None = None,
-        from_dt: datetime | None = None,
-        to_dt: datetime | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> tuple[list[Event], int]:
-        pass
-
-    @abstractmethod
-    async def get_by_external_uid(
-        self, external_uid: str, calendar_integration_id: uuid.UUID
-    ) -> Event | None:
-        pass
-
-    @abstractmethod
-    async def get_by_external_uid_district(
-        self, external_uid: str, district_id: uuid.UUID
-    ) -> Event | None:
-        pass
-
-    @abstractmethod
-    async def list_linked_by_source_event(self, source_event_id: uuid.UUID) -> list[Event]:
-        pass
-
-    @abstractmethod
-    async def get_by_generation_slot_key(
-        self,
-        *,
-        district_id: uuid.UUID,
-        congregation_id: uuid.UUID,
-        generation_slot_key: str,
-    ) -> Event | None:
-        pass
-
-    @abstractmethod
-    async def get_matching_draft_service_slot(
-        self,
-        *,
-        district_id: uuid.UUID,
-        congregation_id: uuid.UUID,
-        start_at: datetime,
-        end_at: datetime,
-    ) -> Event | None:
-        pass
-
-    @abstractmethod
-    async def save(self, event: Event) -> None:
-        pass
-
-    @abstractmethod
-    async def bulk_update_approval_status(
-        self,
-        *,
-        district_id: uuid.UUID,
-        year: int,
-        month: int,
-        new_status: EventApprovalStatus,
-        congregation_id: uuid.UUID | None = None,
-    ) -> int:
-        """Update approval_status for all events in a given month.
-
-        Returns the number of updated rows.
-        """
-        pass
-
-    @abstractmethod
-    async def delete_before(self, cutoff: datetime) -> int:
-        """Delete all events whose end_at is before *cutoff*.
-
-        Returns the number of deleted rows.
-        """
         pass
 
 
@@ -259,6 +171,48 @@ class EventInstanceRepository(ABC):
 
     @abstractmethod
     async def save(self, instance: EventInstance) -> None:
+        pass
+
+    @abstractmethod
+    async def get_by_external_uid(
+        self, external_uid: str, calendar_integration_id: uuid.UUID
+    ) -> EventInstance | None:
+        """Get EventInstance by external UID and integration."""
+        pass
+
+    @abstractmethod
+    async def list_by_calendar_integration(
+        self, calendar_integration_id: uuid.UUID
+    ) -> list[EventInstance]:
+        """List all EventInstances for a CalendarIntegration."""
+        pass
+
+
+class ExternalEventLinkRepository(ABC):
+    @abstractmethod
+    async def get(self, link_id: uuid.UUID) -> ExternalEventLink | None:
+        pass
+
+    @abstractmethod
+    async def get_by_external_event(
+        self, provider: str, external_event_id: str
+    ) -> ExternalEventLink | None:
+        """Find link by provider + external event ID (for dedup)."""
+        pass
+
+    @abstractmethod
+    async def list_by_event_instance(
+        self, event_instance_id: uuid.UUID
+    ) -> list[ExternalEventLink]:
+        """List all links for a given EventInstance."""
+        pass
+
+    @abstractmethod
+    async def save(self, link: ExternalEventLink) -> None:
+        pass
+
+    @abstractmethod
+    async def delete(self, link_id: uuid.UUID) -> None:
         pass
 
 

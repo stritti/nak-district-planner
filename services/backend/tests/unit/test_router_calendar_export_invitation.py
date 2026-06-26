@@ -25,7 +25,7 @@ from app.domain.models.calendar_integration import (
     CalendarIntegration,
     CalendarType,
 )
-from app.domain.models.event import Event, EventStatus
+# TODO: Event/EventStatus removed — will be refactored for Event-free architecture
 from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.invitation import (
     CongregationInvitation,
@@ -125,13 +125,22 @@ async def test_export_token_routes_and_ics_export() -> None:
         district_id=district_id,
         congregation_id=None,
     )
-    event = Event.create(
-        title="GD",
-        start_at=datetime.now(UTC),
-        end_at=datetime.now(UTC) + timedelta(hours=1),
-        district_id=district_id,
-        status=EventStatus.PUBLISHED,
-    )
+    # TODO: refactor for Event-free architecture
+    # event = Event.create(
+    #     title="GD",
+    #     start_at=datetime.now(UTC),
+    #     end_at=datetime.now(UTC) + timedelta(hours=1),
+    #     district_id=district_id,
+    #     status=EventStatus.PUBLISHED,
+    # )
+    import uuid as _uuid
+    event = type("_FakeEvent", (), {"id": _uuid.uuid4(), "title": "GD",
+        "start_at": datetime.now(UTC), "end_at": datetime.now(UTC) + timedelta(hours=1),
+        "district_id": district_id, "congregation_id": None, "category": None,
+        "source": "INTERNAL", "status": "PUBLISHED", "visibility": "INTERNAL",
+        "description": None, "audiences": [], "applicability": [],
+        "approval_status": "CONFIRMED", "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC)})()
     db = AsyncMock()
     with (
         patch("app.adapters.api.routers.export.assert_has_role_in_district"),

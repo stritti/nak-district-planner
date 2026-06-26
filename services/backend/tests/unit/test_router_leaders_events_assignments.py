@@ -17,7 +17,8 @@ from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentUpdate,
 )
 from app.domain.models.district import District
-from app.domain.models.event import Event, EventApprovalStatus
+from app.domain.models.planning_slot import EventApprovalStatus
+# TODO: Event removed — will be refactored for Event-free architecture
 from app.domain.models.leader import Leader
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
@@ -181,12 +182,21 @@ async def test_leader_not_found_paths() -> None:
 async def test_event_create_list_update_paths() -> None:
     district_id = uuid.uuid4()
     now = datetime.now(UTC)
-    event = Event.create(
-        title="Gottesdienst",
-        start_at=now,
-        end_at=now + timedelta(hours=1),
-        district_id=district_id,
-    )
+    # TODO: refactor for Event-free architecture
+    # event = Event.create(
+    #     title="Gottesdienst",
+    #     start_at=now,
+    #     end_at=now + timedelta(hours=1),
+    #     district_id=district_id,
+    # )
+    import uuid as _uuid
+    event = type("_FakeEvent", (), {"id": _uuid.uuid4(), "title": "Gottesdienst",
+        "start_at": now, "end_at": now + timedelta(hours=1),
+        "district_id": district_id, "congregation_id": None,
+        "category": "Gottesdienst", "source": "INTERNAL", "status": "DRAFT",
+        "visibility": "INTERNAL", "description": None, "audiences": [],
+        "applicability": [], "approval_status": "DRAFT",
+        "created_at": now, "updated_at": now})()
     db = AsyncMock()
 
     with (

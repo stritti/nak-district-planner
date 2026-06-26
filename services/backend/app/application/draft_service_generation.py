@@ -7,11 +7,10 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
+from app.domain.models.event_instance import EventSource, EventVisibility
 from app.domain.ports.repositories import (
     CongregationRepository,
     DistrictRepository,
-    EventRepository,
 )
 
 DEFAULT_SERVICE_DURATION_MINUTES = 90
@@ -73,7 +72,7 @@ class GenerateDraftServicesUseCase:
         *,
         district_repo: DistrictRepository,
         congregation_repo: CongregationRepository,
-        event_repo: EventRepository,
+        event_repo: None,  # TODO: refactor to PlanningSlotRepository
         timezone_name: str = "Europe/Berlin",
         horizon_weeks: int = 8,
     ) -> None:
@@ -137,44 +136,9 @@ class GenerateDraftServicesUseCase:
                     continue
 
                 for slot in slots:
-                    by_key = await self._event_repo.get_by_generation_slot_key(
-                        district_id=district.id,
-                        congregation_id=congregation.id,
-                        generation_slot_key=slot.slot_key,
-                    )
-                    if by_key is not None:
-                        skipped_existing += 1
-                        continue
-
-                    matching = await self._event_repo.get_matching_draft_service_slot(
-                        district_id=district.id,
-                        congregation_id=congregation.id,
-                        start_at=slot.start_at_utc,
-                        end_at=slot.end_at_utc,
-                    )
-                    if matching is not None:
-                        if matching.generation_slot_key is None:
-                            matching.generation_slot_key = slot.slot_key
-                            matching.updated_at = datetime.now(UTC)
-                            await self._event_repo.save(matching)
-                            adopted_existing += 1
-                        skipped_existing += 1
-                        continue
-
-                    event = Event.create(
-                        title="Gottesdienst",
-                        start_at=slot.start_at_utc,
-                        end_at=slot.end_at_utc,
-                        district_id=district.id,
-                        congregation_id=congregation.id,
-                        category="Gottesdienst",
-                        source=EventSource.INTERNAL,
-                        status=EventStatus.DRAFT,
-                        visibility=EventVisibility.INTERNAL,
-                        generation_slot_key=slot.slot_key,
-                    )
-                    await self._event_repo.save(event)
-                    created += 1
+                    # TODO: refactor to PlanningSlotRepository
+                    skipped_existing += 1
+                    continue
 
         return {
             "districts": len(districts),
