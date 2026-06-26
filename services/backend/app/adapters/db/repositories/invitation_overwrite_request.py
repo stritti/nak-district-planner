@@ -7,7 +7,10 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
+from app.adapters.db.orm_models.congregation import CongregationORM
+from app.adapters.db.orm_models.invitation import CongregationInvitationORM
 from app.adapters.db.orm_models.invitation_overwrite_request import InvitationOverwriteRequestORM
 from app.domain.models.invitation import InvitationOverwriteRequest, OverwriteDecisionStatus
 from app.domain.ports.repositories import InvitationOverwriteRequestRepository
@@ -44,8 +47,23 @@ class SqlInvitationOverwriteRequestRepository(InvitationOverwriteRequestReposito
     async def list_open_by_district(
         self, district_id: uuid.UUID
     ) -> list[InvitationOverwriteRequest]:
-        # TODO: refactor to use PlanningSlotORM join after Event removal
-        return []
+        # Join through congregation_invitations → congregations to scope by district
+        result = await self._session.execute(
+            select(InvitationOverwriteRequestORM)
+            .join(
+                CongregationInvitationORM,
+                CongregationInvitationORM.id == InvitationOverwriteRequestORM.invitation_id,
+            )
+            .join(
+                CongregationORM,
+                CongregationORM.id == CongregationInvitationORM.source_congregation_id,
+            )
+            .where(
+                CongregationORM.district_id == district_id,
+                InvitationOverwriteRequestORM.status == OverwriteDecisionStatus.PENDING_OVERWRITE,
+            )
+        )
+        return [_orm_to_domain(r) for r in result.scalars().all()]
 
     async def list_open_by_source_event(
         self, source_event_id: uuid.UUID

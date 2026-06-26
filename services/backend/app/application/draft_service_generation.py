@@ -7,10 +7,13 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from app.domain.models.event_instance import EventSource, EventVisibility
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.repositories import (
     CongregationRepository,
     DistrictRepository,
+    EventInstanceRepository,
+    PlanningSlotRepository,
 )
 
 DEFAULT_SERVICE_DURATION_MINUTES = 90
@@ -66,19 +69,26 @@ def expand_service_slots(
     return slots
 
 
+def _planning_time_from_utc(dt: datetime, tz_name: str) -> time:
+    """Extract local planning time from a UTC datetime."""
+    return dt.astimezone(ZoneInfo(tz_name)).time()
+
+
 class GenerateDraftServicesUseCase:
     def __init__(
         self,
         *,
         district_repo: DistrictRepository,
         congregation_repo: CongregationRepository,
-        event_repo: None,  # TODO: refactor to PlanningSlotRepository
+        slot_repo: PlanningSlotRepository,
+        instance_repo: EventInstanceRepository,
         timezone_name: str = "Europe/Berlin",
         horizon_weeks: int = 8,
     ) -> None:
         self._district_repo = district_repo
         self._congregation_repo = congregation_repo
-        self._event_repo = event_repo
+        self._slot_repo = slot_repo
+        self._instance_repo = instance_repo
         self._timezone_name = timezone_name
         self._horizon_weeks = horizon_weeks
 
@@ -135,10 +145,56 @@ class GenerateDraftServicesUseCase:
                     invalid_configurations += 1
                     continue
 
+                # Load existing gaps PlanningSlots for this congregation in the window
+                existing_slots = await self._slot_repo.list_for_date_range(
+                    district_id=district.id,
+                    from_date=from_date,
+                    to_date=(to_date_exclusive - timedelta(days=1)),
+                )
+                existing_for_congregation = {
+                    (
+                        slot.planning_date.isoformat(),
+                        slot.planning_time.isoformat(),
+                    )
+                    for slot in existing_slots
+                    if slot.congregation_id == congregation.id
+                    and slot.category == "Gottesdienst"
+                }
+
                 for slot in slots:
-                    # TODO: refactor to PlanningSlotRepository
-                    skipped_existing += 1
-                    continue
+                    planning_time = _planning_time_from_utc(
+                        slot.start_at_utc, self._timezone_name
+                    )
+                    key = (slot.start_at_utc.date().isoformat(), planning_time.isoformat())
+
+                    if key in existing_for_congregation:
+                        skipped_existing += 1
+                        continue
+
+                    planning_slot = PlanningSlot.create(
+                        district_id=district.id,
+                        congregation_id=congregation.id,
+                        category="Gottesdienst",
+                        planning_date=slot.start_at_utc.date(),
+                        planning_time=planning_time,
+                        status=PlanningSlotStatus.ACTIVE,
+                    )
+                    await self._slot_repo.save(planning_slot)
+
+                    instance = EventInstance.create(
+                        planning_slot_id=planning_slot.id,
+                        title=(
+                            f"Gottesdienst {congregation.name}"
+                            if congregation.name
+                            else "Gottesdienst"
+                        ),
+                        actual_start_at=slot.start_at_utc,
+                        actual_end_at=slot.end_at_utc,
+                        source=EventSource.INTERNAL,
+                        visibility=EventVisibility.PUBLIC,
+                    )
+                    await self._instance_repo.save(instance)
+                    created += 1
 
         return {
             "districts": len(districts),

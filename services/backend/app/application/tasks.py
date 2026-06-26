@@ -96,10 +96,18 @@ def cleanup_old_events() -> dict:
             cutoff = now.replace(year=now.year - 2, day=28)
 
         async with AsyncSessionLocal() as session:
-            repo = None  # TODO: refactor to PlanningSlotRepository
-            deleted = 0  # TODO: refactor
-            # await repo.delete_before(cutoff)
-            # await session.commit()
+            from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+            repo = SqlPlanningSlotRepository(session)
+            # PlanningSlot uses planning_date (date), not end_at (datetime).
+            # Delete slots with planning_date before cutoff date.
+            cutoff_date = cutoff.date()
+            from sqlalchemy import delete
+            from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+            stmt = delete(PlanningSlotORM).where(
+                PlanningSlotORM.planning_date < cutoff_date
+            )
+            result = await session.execute(stmt)
+            deleted = result.rowcount
 
         return {"deleted": deleted, "cutoff": cutoff.isoformat()}
 
@@ -257,12 +265,37 @@ def import_kirchliche_festtage_task(district_id: str, year: int) -> dict:
 def generate_draft_services_window() -> dict:
     """Generate draft worship services for the rolling next 8 weeks.
 
-    Safe to run repeatedly: generation is idempotent and does not recreate
-    moved generated events because it keys by immutable slot identity.
+    Generates PlanningSlot + EventInstance from congregation service_times.
+    Safe to run repeatedly: generation is idempotent.
     """
-    # TODO: refactor for Event-free architecture — depends on draft_service_generation
-    logger.info("generate_draft_services_window: skipped — EventRepository removed")
-    return {"status": "skipped", "reason": "EventRepository removed"}
+    from app.adapters.db.repositories.congregation import SqlCongregationRepository
+    from app.adapters.db.repositories.district import SqlDistrictRepository
+    from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+    from app.adapters.db.session import AsyncSessionLocal
+    from app.application.draft_service_generation import GenerateDraftServicesUseCase
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as session:
+            use_case = GenerateDraftServicesUseCase(
+                district_repo=SqlDistrictRepository(session),
+                congregation_repo=SqlCongregationRepository(session),
+                slot_repo=SqlPlanningSlotRepository(session),
+                instance_repo=SqlEventInstanceRepository(session),
+            )
+            result = await use_case.run()
+            await session.commit()
+            return result
+
+    result = asyncio.run(_run())
+    logger.info(
+        "generate_draft_services_window: districts=%d congregations=%d created=%d skipped=%d",
+        result["districts"],
+        result["congregations"],
+        result["created"],
+        result["skipped_existing"],
+    )
+    return result
 
 
 @celery.task(name="generate_planning_series_slots")

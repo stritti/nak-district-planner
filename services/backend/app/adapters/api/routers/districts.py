@@ -715,7 +715,8 @@ async def generate_matrix_drafts(
     use_case = GenerateDraftServicesUseCase(
         district_repo=SqlDistrictRepository(db),
         congregation_repo=SqlCongregationRepository(db),
-        event_repo=None,  # TODO: refactor to PlanningSlotRepository
+        slot_repo=SqlPlanningSlotRepository(db),
+        instance_repo=SqlEventInstanceRepository(db),
     )
     full_result = await use_case.run_for_window(
         from_date=from_date,
@@ -724,17 +725,7 @@ async def generate_matrix_drafts(
     )
     await db.commit()
 
-    district_congregations = await SqlCongregationRepository(db).list_by_district(district_id)
-    district_congregation_ids = {c.id for c in district_congregations}
-    events: list = []
-    total = 0
-    # TODO: refactor to PlanningSlotRepository + EventInstanceRepository
-    generated_in_range = 0
-
-    return {
-        **full_result,
-        "generated_in_requested_range": generated_in_range,
-    }
+    return full_result
 
 
 # ── PlanningSeries Auto-Generation ────────────────────────────────────────────
