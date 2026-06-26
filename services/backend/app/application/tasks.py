@@ -108,6 +108,7 @@ def cleanup_old_events() -> dict:
             )
             result = await session.execute(stmt)
             deleted = result.rowcount  # type: ignore[attr-defined]
+            await session.commit()
 
         return {"deleted": deleted, "cutoff": cutoff.isoformat()}
 
