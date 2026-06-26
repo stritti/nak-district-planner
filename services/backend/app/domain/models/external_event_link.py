@@ -19,6 +19,7 @@ class ExternalEventLink:
     event_instance_id: uuid.UUID
     provider: str  # e.g. "ICAL", "GOOGLE", "MICROSOFT", "CALDAV"
     external_event_id: str  # Stable UID from the external calendar
+    calendar_integration_id: uuid.UUID  # scopes the link to one integration
     last_synced_hash: str | None = None
     revision_marker: str | None = None  # ETag or revision sequence from provider
     created_at: datetime | None = None
@@ -31,6 +32,7 @@ class ExternalEventLink:
         event_instance_id: uuid.UUID,
         provider: str,
         external_event_id: str,
+        calendar_integration_id: uuid.UUID,
         last_synced_hash: str | None = None,
         revision_marker: str | None = None,
     ) -> ExternalEventLink:
@@ -40,6 +42,7 @@ class ExternalEventLink:
             event_instance_id=event_instance_id,
             provider=provider,
             external_event_id=external_event_id,
+            calendar_integration_id=calendar_integration_id,
             last_synced_hash=last_synced_hash,
             revision_marker=revision_marker,
             created_at=now,

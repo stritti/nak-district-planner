@@ -195,9 +195,9 @@ class ExternalEventLinkRepository(ABC):
 
     @abstractmethod
     async def get_by_external_event(
-        self, provider: str, external_event_id: str
+        self, provider: str, external_event_id: str, calendar_integration_id: uuid.UUID
     ) -> ExternalEventLink | None:
-        """Find link by provider + external event ID (for dedup)."""
+        """Find link by provider + external event ID (for dedup), scoped to one integration."""
         pass
 
     @abstractmethod

@@ -19,6 +19,7 @@ def _orm_to_domain(row: ExternalEventLinkORM) -> ExternalEventLink:
         event_instance_id=row.event_instance_id,
         provider=row.provider,
         external_event_id=row.external_event_id,
+        calendar_integration_id=row.calendar_integration_id,
         last_synced_hash=row.last_synced_hash,
         revision_marker=row.revision_marker,
         created_at=row.created_at,
@@ -37,12 +38,13 @@ class SqlExternalEventLinkRepository(ExternalEventLinkRepository):
         return _orm_to_domain(row) if row else None
 
     async def get_by_external_event(
-        self, provider: str, external_event_id: str
+        self, provider: str, external_event_id: str, calendar_integration_id: uuid.UUID
     ) -> ExternalEventLink | None:
         result = await self._session.execute(
             select(ExternalEventLinkORM).where(
                 ExternalEventLinkORM.provider == provider,
                 ExternalEventLinkORM.external_event_id == external_event_id,
+                ExternalEventLinkORM.calendar_integration_id == calendar_integration_id,
             )
         )
         row = result.scalar_one_or_none()

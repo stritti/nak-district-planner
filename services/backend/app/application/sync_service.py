@@ -143,12 +143,18 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
         existing_link = await link_repo.get_by_external_event(
             provider=integration.type.value,
             external_event_id=raw.uid,
+            calendar_integration_id=integration_id,
         )
 
         new_content_hash = _compute_content_hash(raw)
 
         if existing_link is None:
             # ── NEW external event ──
+
+            # Skip cancelled events — don't create phantom slots for them
+            if raw.is_cancelled:
+                continue
+
             matched_slot = await _find_matching_planning_slot(
                 session=session,
                 district_id=integration.district_id,
@@ -180,6 +186,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
                         event_instance_id=instance.id,
                         provider=integration.type.value,
                         external_event_id=raw.uid,
+                        calendar_integration_id=integration_id,
                         last_synced_hash=new_content_hash,
                     )
                     await link_repo.save(link)
@@ -218,6 +225,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
                 event_instance_id=instance.id,
                 provider=integration.type.value,
                 external_event_id=raw.uid,
+                calendar_integration_id=integration_id,
                 last_synced_hash=new_content_hash,
             )
             await link_repo.save(link)

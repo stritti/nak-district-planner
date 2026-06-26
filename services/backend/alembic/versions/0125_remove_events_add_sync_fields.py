@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -27,12 +28,28 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # ── 0. Create sync_state enum type before adding columns ──
+    postgresql.ENUM(
+        "CLEAN",
+        "DIRTY_INTERNAL",
+        "DIRTY_EXTERNAL",
+        "CONFLICT",
+        name="sync_state",
+    ).create(op.get_bind(), checkfirst=True)
+
     # ── 1. Add M3 sync fields to event_instances ──
     op.add_column(
         "event_instances",
         sa.Column(
             "sync_state",
-            sa.Enum("CLEAN", "DIRTY_INTERNAL", "DIRTY_EXTERNAL", "CONFLICT", name="sync_state"),
+            postgresql.ENUM(
+                "CLEAN",
+                "DIRTY_INTERNAL",
+                "DIRTY_EXTERNAL",
+                "CONFLICT",
+                name="sync_state",
+                create_type=False,
+            ),
             nullable=False,
             server_default="CLEAN",
         ),
@@ -73,6 +90,7 @@ def upgrade() -> None:
         sa.Column("event_instance_id", sa.Uuid(), nullable=False),
         sa.Column("provider", sa.String(50), nullable=False),
         sa.Column("external_event_id", sa.String(500), nullable=False),
+        sa.Column("calendar_integration_id", sa.Uuid(), nullable=False),
         sa.Column("last_synced_hash", sa.String(64), nullable=True),
         sa.Column("revision_marker", sa.String(500), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -82,12 +100,17 @@ def upgrade() -> None:
             ["event_instances.id"],
             ondelete="CASCADE",
         ),
+        sa.ForeignKeyConstraint(
+            ["calendar_integration_id"],
+            ["calendar_integrations.id"],
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "ix_external_event_links_provider_event",
+        "ix_external_event_links_provider_integration_event",
         "external_event_links",
-        ["provider", "external_event_id"],
+        ["provider", "external_event_id", "calendar_integration_id"],
         unique=True,
     )
 
@@ -100,19 +123,19 @@ def upgrade() -> None:
     )
     # planning_slots.invitation_source_event_id
     op.drop_constraint(
-        "planning_slots_invitation_source_event_id_fkey",
+        "fk_planning_slots_invitation_source_event_id_events",
         "planning_slots",
         type_="foreignkey",
     )
-    # invitation_overwrite_request.source_event_id, target_event_id
+    # invitation_overwrite_requests.source_event_id, target_event_id
     op.drop_constraint(
-        "invitation_overwrite_request_source_event_id_fkey",
-        "invitation_overwrite_request",
+        "invitation_overwrite_requests_source_event_id_fkey",
+        "invitation_overwrite_requests",
         type_="foreignkey",
     )
     op.drop_constraint(
-        "invitation_overwrite_request_target_event_id_fkey",
-        "invitation_overwrite_request",
+        "invitation_overwrite_requests_target_event_id_fkey",
+        "invitation_overwrite_requests",
         type_="foreignkey",
     )
     # congregation_invitations.source_event_id, linked_event_id
@@ -170,7 +193,7 @@ def downgrade() -> None:
         ondelete="CASCADE",
     )
     op.create_foreign_key(
-        "planning_slots_invitation_source_event_id_fkey",
+        "fk_planning_slots_invitation_source_event_id_events",
         "planning_slots",
         "events",
         ["invitation_source_event_id"],
@@ -178,16 +201,16 @@ def downgrade() -> None:
         ondelete="SET NULL",
     )
     op.create_foreign_key(
-        "invitation_overwrite_request_source_event_id_fkey",
-        "invitation_overwrite_request",
+        "invitation_overwrite_requests_source_event_id_fkey",
+        "invitation_overwrite_requests",
         "events",
         ["source_event_id"],
         ["id"],
         ondelete="CASCADE",
     )
     op.create_foreign_key(
-        "invitation_overwrite_request_target_event_id_fkey",
-        "invitation_overwrite_request",
+        "invitation_overwrite_requests_target_event_id_fkey",
+        "invitation_overwrite_requests",
         "events",
         ["target_event_id"],
         ["id"],
@@ -211,7 +234,7 @@ def downgrade() -> None:
     )
 
     # ── Reverse 2: Drop external_event_links table ──
-    op.drop_index("ix_external_event_links_provider_event", table_name="external_event_links")
+    op.drop_index("ix_external_event_links_provider_integration_event", table_name="external_event_links")
     op.drop_table("external_event_links")
 
     # ── Reverse 1: Remove M3 sync fields from event_instances ──
@@ -226,4 +249,4 @@ def downgrade() -> None:
     op.drop_column("event_instances", "content_hash")
     op.drop_column("event_instances", "external_uid")
     op.drop_column("event_instances", "sync_state")
-    sa.Enum(name="sync_state").drop(op.get_bind())
+    postgresql.ENUM(name="sync_state").drop(op.get_bind(), checkfirst=True)
