@@ -1,4 +1,4 @@
-## [v0.26.1] - 2026-06-25
+## [v0.26.2] - 2026-06-26
 
 ### Features
 * feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
@@ -13,6 +13,7 @@
 * Merge pull request #169 from stritti/feature/security-csrf-protection-sec-004 (55fb297)
 
 ### Bug Fixes
+* fix: add district role checks to notification endpoints (P1) (#191) (25bc47e)
 * Fix MegaLinter issues: add language specifiers to code blocks, fix trailing spaces, fix table columns, ensure files end with newline (e0a544e)
 * fix: remove undefined leader_ids variable from matrix view (7c5e5ca)
 * fix: align test files with refactored matrix implementation (c814262)
@@ -22,9 +23,9 @@
 * fix: update uv.lock, enforce burst limit, fix denial test (9bbb0bf)
 * fix: add explanatory comment to CodeQL empty except (013fda3)
 * fix: chain migration from current head e4b2a9d7f110; preserve slot-only dates (4d33a6e)
-* fix: 4 review issues — CodeQL empty-except, JWT sub extraction, Redis member nonce, count <= limit (33045cc)
 
 ### Other Changes
+* chore: release v0.26.1 (402e69e)
 * M2 — Notification-System, PlanningSeries Auto-Gen, Matrix-Deviation, Auto-Matching (#189) (e707d5d)
 * chore: release v0.26.0 (ded67c9)
 * chore: release v0.25.0 (5adc99a)
@@ -34,4 +35,3 @@
 * Merge pull request #148 from stritti/copilot/implement-planningslot-planningseries (837697e)
 * Merge remote-tracking branch 'origin/main' into copilot/implement-planningslot-planningseries (fe0bf8f)
 * chore: release v0.21.0 (624e522)
-* Merge pull request #166 from stritti/vibe/openspec-gap-analysis-71c667 (b081d2c)
