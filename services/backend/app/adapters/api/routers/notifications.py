@@ -8,10 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
-    get_current_user_with_memberships,
     get_notification_service,
 )
-from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
+)
 from app.application.notification_service import NotificationService
 from app.domain.models.role import Role
 
@@ -24,7 +26,7 @@ async def list_notifications(
     unread_only: bool = False,
     limit: int = 50,
     offset: int = 0,
-    auth: CurrentUserWithMemberships = Depends(get_current_user_with_memberships),
+    auth: CurrentUserWithMemberships = Depends(),
     service: NotificationService = Depends(get_notification_service),
 ) -> dict:
     """List notifications for a district, newest first."""
@@ -38,7 +40,7 @@ async def list_notifications(
 @router.get("/{district_id}/unread-count")
 async def unread_count(
     district_id: uuid.UUID,
-    auth: CurrentUserWithMemberships = Depends(get_current_user_with_memberships),
+    auth: CurrentUserWithMemberships = Depends(),
     service: NotificationService = Depends(get_notification_service),
 ) -> dict:
     """Get unread notification count for a district."""
@@ -53,7 +55,7 @@ async def unread_count(
 @router.post("/{notification_id}/read", status_code=status.HTTP_204_NO_CONTENT)
 async def mark_read(
     notification_id: uuid.UUID,
-    auth: CurrentUserWithMemberships = Depends(get_current_user_with_memberships),
+    auth: CurrentUserWithMemberships = Depends(),
     service: NotificationService = Depends(get_notification_service),
 ) -> None:
     """Mark a single notification as read."""
@@ -70,7 +72,7 @@ async def mark_read(
 @router.post("/{district_id}/read-all", status_code=status.HTTP_200_OK)
 async def mark_all_read(
     district_id: uuid.UUID,
-    auth: CurrentUserWithMemberships = Depends(get_current_user_with_memberships),
+    auth: CurrentUserWithMemberships = Depends(),
     service: NotificationService = Depends(get_notification_service),
 ) -> dict:
     """Mark all unread notifications as read for a district."""

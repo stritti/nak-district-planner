@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta, timezone
 
 from app.application.draft_service_generation import (
     GenerateDraftServicesUseCase,
@@ -9,7 +9,12 @@ from app.application.draft_service_generation import (
 )
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
-from app.domain.models.event import Event, EventStatus
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.ports.repositories import EventInstanceRepository, PlanningSlotRepository
+
+
+# ── In-memory fakes ──────────────────────────────────────────────────────
 
 
 class InMemoryDistrictRepo:
@@ -30,45 +35,96 @@ class InMemoryCongregationRepo:
         return list(self._congregation_by_district.get(district_id, []))
 
 
-class InMemoryEventRepo:
+class InMemoryPlanningSlotRepo(PlanningSlotRepository):
     def __init__(self) -> None:
-        self.saved: list[Event] = []
-        self.by_slot_key: dict[tuple[uuid.UUID, uuid.UUID, str], Event] = {}
-        self.by_datetime: dict[tuple[uuid.UUID, uuid.UUID, datetime, datetime], Event] = {}
+        self._slots: dict[uuid.UUID, PlanningSlot] = {}
 
-    async def get_by_generation_slot_key(
+    async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None:
+        return self._slots.get(slot_id)
+
+    async def get_by_series_and_date(
+        self, series_id: uuid.UUID, planning_date: date
+    ) -> PlanningSlot | None:
+        for slot in self._slots.values():
+            if slot.series_id == series_id and slot.planning_date == planning_date:
+                return slot
+        return None
+
+    async def get_by_series_date(
+        self,
+        *,
+        series_id: uuid.UUID,
+        planning_date: date,
+        congregation_id: uuid.UUID | None,
+    ) -> PlanningSlot | None:
+        for slot in self._slots.values():
+            if (
+                slot.series_id == series_id
+                and slot.planning_date == planning_date
+                and slot.congregation_id == congregation_id
+            ):
+                return slot
+        return None
+
+    async def list_for_date_range(
         self,
         *,
         district_id: uuid.UUID,
-        congregation_id: uuid.UUID,
-        generation_slot_key: str,
-    ) -> Event | None:
-        return self.by_slot_key.get((district_id, congregation_id, generation_slot_key))
+        from_date: date,
+        to_date: date,
+    ) -> list[PlanningSlot]:
+        return [
+            slot
+            for slot in self._slots.values()
+            if slot.district_id == district_id
+            and from_date <= slot.planning_date <= to_date
+        ]
 
-    async def get_matching_draft_service_slot(
-        self,
-        *,
-        district_id: uuid.UUID,
-        congregation_id: uuid.UUID,
-        start_at: datetime,
-        end_at: datetime,
-    ) -> Event | None:
-        event = self.by_datetime.get((district_id, congregation_id, start_at, end_at))
-        if event is None:
-            return None
-        if event.category != "Gottesdienst" or event.status != EventStatus.DRAFT:
-            return None
-        return event
+    async def save(self, slot: PlanningSlot) -> None:
+        self._slots[slot.id] = slot
 
-    async def save(self, event: Event) -> None:
-        self.saved.append(event)
-        if event.generation_slot_key is not None:
-            self.by_slot_key[
-                (event.district_id, event.congregation_id, event.generation_slot_key)
-            ] = event
-        self.by_datetime[
-            (event.district_id, event.congregation_id, event.start_at, event.end_at)
-        ] = event
+
+class InMemoryEventInstanceRepo(EventInstanceRepository):
+    def __init__(self) -> None:
+        self._instances: dict[uuid.UUID, EventInstance] = {}
+
+    async def get(self, instance_id: uuid.UUID) -> EventInstance | None:
+        return self._instances.get(instance_id)
+
+    async def list_by_planning_slot(self, planning_slot_id: uuid.UUID) -> list[EventInstance]:
+        return [
+            inst
+            for inst in self._instances.values()
+            if inst.planning_slot_id == planning_slot_id
+        ]
+
+    async def get_by_planning_slot(self, planning_slot_id: uuid.UUID) -> EventInstance | None:
+        for inst in self._instances.values():
+            if inst.planning_slot_id == planning_slot_id:
+                return inst
+        return None
+
+    async def list_by_planning_slots(
+        self, planning_slot_ids: list[uuid.UUID]
+    ) -> list[EventInstance]:
+        ids_set = set(planning_slot_ids)
+        return [inst for inst in self._instances.values() if inst.planning_slot_id in ids_set]
+
+    async def save(self, instance: EventInstance) -> None:
+        self._instances[instance.id] = instance
+
+    async def get_by_external_uid(
+        self, external_uid: str, calendar_integration_id: uuid.UUID
+    ) -> EventInstance | None:
+        return None
+
+    async def list_by_calendar_integration(
+        self, calendar_integration_id: uuid.UUID
+    ) -> list[EventInstance]:
+        return []
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────
 
 
 def _make_district() -> District:
@@ -90,6 +146,9 @@ def _make_congregation(
         created_at=now,
         updated_at=now,
     )
+
+
+# ── expand_service_slots tests (unchanged — pure function) ────────────────
 
 
 def test_expand_service_slots_honors_horizon_and_weekday() -> None:
@@ -119,35 +178,49 @@ def test_expand_service_slots_is_timezone_aware_and_handles_dst() -> None:
     assert (slots[2].end_at_utc - slots[2].start_at_utc) == timedelta(minutes=90)
 
 
-async def test_use_case_creates_draft_without_assignment() -> None:
+# ── Use case tests ──────────────────────────────────────────────────────
+
+
+async def test_use_case_creates_planning_slots_and_instances() -> None:
     district = _make_district()
     congregation = _make_congregation(district.id)
-    event_repo = InMemoryEventRepo()
+    slot_repo = InMemoryPlanningSlotRepo()
+    instance_repo = InMemoryEventInstanceRepo()
 
     use_case = GenerateDraftServicesUseCase(
         district_repo=InMemoryDistrictRepo([district]),
         congregation_repo=InMemoryCongregationRepo({district.id: [congregation]}),
-        event_repo=event_repo,
+        slot_repo=slot_repo,
+        instance_repo=instance_repo,
     )
 
     result = await use_case.run(now=datetime(2026, 4, 1, 8, 0, tzinfo=UTC))
 
     assert result["created"] > 0
-    created = [event for event in event_repo.saved if event.generation_slot_key is not None]
-    assert created
-    assert all(event.status == EventStatus.DRAFT for event in created)
-    assert all(event.category == "Gottesdienst" for event in created)
+    assert result["invalid_configurations"] == 0
+    # Verify that PlanningSlots and EventInstances were created
+    assert len(slot_repo._slots) == result["created"]
+    assert len(instance_repo._instances) == result["created"]
+    # All created slots should be "Gottesdienst" category
+    for slot in slot_repo._slots.values():
+        assert slot.category == "Gottesdienst"
+        assert slot.congregation_id == congregation.id
+    # All created instances should have INTERNAL source
+    for inst in instance_repo._instances.values():
+        assert inst.source == EventSource.INTERNAL
 
 
 async def test_use_case_is_idempotent_on_second_run() -> None:
     district = _make_district()
     congregation = _make_congregation(district.id)
-    event_repo = InMemoryEventRepo()
+    slot_repo = InMemoryPlanningSlotRepo()
+    instance_repo = InMemoryEventInstanceRepo()
 
     use_case = GenerateDraftServicesUseCase(
         district_repo=InMemoryDistrictRepo([district]),
         congregation_repo=InMemoryCongregationRepo({district.id: [congregation]}),
-        event_repo=event_repo,
+        slot_repo=slot_repo,
+        instance_repo=instance_repo,
     )
 
     first = await use_case.run(now=datetime(2026, 4, 1, 8, 0, tzinfo=UTC))
@@ -156,65 +229,53 @@ async def test_use_case_is_idempotent_on_second_run() -> None:
     assert first["created"] > 0
     assert second["created"] == 0
     assert second["skipped_existing"] >= first["created"]
+    # Total stored slots should stay the same (no duplicates)
+    assert len(slot_repo._slots) == first["created"]
 
 
-async def test_moved_event_blocks_regeneration_of_original_slot() -> None:
+async def test_skips_congregations_without_service_times() -> None:
     district = _make_district()
-    congregation = _make_congregation(district.id)
-    event_repo = InMemoryEventRepo()
+    congregation = _make_congregation(district.id, service_times=[])
+    slot_repo = InMemoryPlanningSlotRepo()
+    instance_repo = InMemoryEventInstanceRepo()
 
     use_case = GenerateDraftServicesUseCase(
         district_repo=InMemoryDistrictRepo([district]),
         congregation_repo=InMemoryCongregationRepo({district.id: [congregation]}),
-        event_repo=event_repo,
-    )
-
-    await use_case.run(now=datetime(2026, 5, 20, 8, 0, tzinfo=UTC))
-    generated = next(iter(event_repo.by_slot_key.values()))
-    original_slot_key = generated.generation_slot_key
-
-    del event_repo.by_datetime[
-        (generated.district_id, generated.congregation_id, generated.start_at, generated.end_at)
-    ]
-    generated.start_at = generated.start_at + timedelta(days=1)
-    generated.end_at = generated.end_at + timedelta(days=1)
-    await event_repo.save(generated)
-
-    rerun = await use_case.run(now=datetime(2026, 5, 20, 8, 0, tzinfo=UTC))
-    assert rerun["created"] == 0
-    assert (district.id, congregation.id, original_slot_key) in event_repo.by_slot_key
-
-
-async def test_existing_matching_slot_adopts_generation_key() -> None:
-    district = _make_district()
-    congregation = _make_congregation(district.id)
-    event_repo = InMemoryEventRepo()
-
-    slots = expand_service_slots(
-        service_times=congregation.service_times,
-        from_date=date(2026, 4, 1),
-        to_date_exclusive=date(2026, 4, 30),
-        timezone_name="Europe/Berlin",
-    )
-    first_slot = slots[0]
-
-    existing = Event.create(
-        title="Gottesdienst",
-        start_at=first_slot.start_at_utc,
-        end_at=first_slot.end_at_utc,
-        district_id=district.id,
-        congregation_id=congregation.id,
-        category="Gottesdienst",
-        status=EventStatus.DRAFT,
-    )
-    await event_repo.save(existing)
-
-    use_case = GenerateDraftServicesUseCase(
-        district_repo=InMemoryDistrictRepo([district]),
-        congregation_repo=InMemoryCongregationRepo({district.id: [congregation]}),
-        event_repo=event_repo,
+        slot_repo=slot_repo,
+        instance_repo=instance_repo,
     )
 
     result = await use_case.run(now=datetime(2026, 4, 1, 8, 0, tzinfo=UTC))
-    assert result["adopted_existing"] >= 1
-    assert existing.generation_slot_key is not None
+
+    assert result["created"] == 0
+    assert result["invalid_configurations"] >= 1
+
+
+async def test_respects_district_ids_filter() -> None:
+    district_a = _make_district()
+    district_b = _make_district()
+    cong_a = _make_congregation(district_a.id)
+    cong_b = _make_congregation(district_b.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    instance_repo = InMemoryEventInstanceRepo()
+
+    use_case = GenerateDraftServicesUseCase(
+        district_repo=InMemoryDistrictRepo([district_a, district_b]),
+        congregation_repo=InMemoryCongregationRepo({
+            district_a.id: [cong_a],
+            district_b.id: [cong_b],
+        }),
+        slot_repo=slot_repo,
+        instance_repo=instance_repo,
+    )
+
+    result = await use_case.run(
+        now=datetime(2026, 4, 1, 8, 0, tzinfo=UTC),
+        district_ids={district_a.id},
+    )
+
+    assert result["created"] > 0
+    # Only district_a should have been processed
+    for slot_id in slot_repo._slots:
+        assert slot_repo._slots[slot_id].district_id == district_a.id

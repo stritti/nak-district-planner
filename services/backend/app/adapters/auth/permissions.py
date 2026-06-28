@@ -24,8 +24,10 @@ class PermissionError(Exception):
 class AuthContext(Protocol):
     """Context containing user and their role assignments."""
 
-    user_sub: str
-    memberships: list[Membership]
+    @property
+    def user_sub(self) -> str: ...
+    @property
+    def memberships(self) -> list[Membership]: ...
 
 
 def has_role_in_district(

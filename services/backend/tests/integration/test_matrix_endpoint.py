@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app.adapters.api import deps
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
-from app.domain.models.event import Event
+# TODO: Event removed — will be refactored for Event-free architecture
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 from app.main import app
 
@@ -48,22 +48,38 @@ def test_matrix_endpoint_returns_gap_assigned_and_empty_cells(mock_oidc_adapter)
     gap_start = datetime(2026, 4, 8, 18, 0, tzinfo=UTC)
     assigned_start = datetime(2026, 4, 10, 18, 0, tzinfo=UTC)
 
-    gap_event = Event.create(
-        title="Gottesdienst Mittwoch",
-        start_at=gap_start,
-        end_at=gap_start + timedelta(hours=1),
-        district_id=district_id,
-        congregation_id=congregation.id,
-        category="Gottesdienst",
-    )
-    assigned_event = Event.create(
-        title="Gottesdienst Freitag",
-        start_at=assigned_start,
-        end_at=assigned_start + timedelta(hours=1),
-        district_id=district_id,
-        congregation_id=congregation.id,
-        category="Gottesdienst",
-    )
+    # TODO: refactor for Event-free architecture
+    # gap_event = Event.create(
+    #     title="Gottesdienst Mittwoch",
+    #     start_at=gap_start,
+    #     end_at=gap_start + timedelta(hours=1),
+    #     district_id=district_id,
+    #     congregation_id=congregation.id,
+    #     category="Gottesdienst",
+    # )
+    # assigned_event = Event.create(
+    #     title="Gottesdienst Freitag",
+    #     start_at=assigned_start,
+    #     end_at=assigned_start + timedelta(hours=1),
+    #     district_id=district_id,
+    #     congregation_id=congregation.id,
+    #     category="Gottesdienst",
+    # )
+    import uuid as _uuid
+    gap_event = type("_FakeEvent", (), {"id": _uuid.uuid4(), "title": "Gottesdienst Mittwoch",
+        "start_at": gap_start, "end_at": gap_start + timedelta(hours=1),
+        "district_id": district_id, "congregation_id": congregation.id,
+        "category": "Gottesdienst", "source": "INTERNAL", "status": "DRAFT",
+        "visibility": "INTERNAL", "description": None, "audiences": [],
+        "applicability": [], "approval_status": "DRAFT",
+        "created_at": gap_start, "updated_at": gap_start})()
+    assigned_event = type("_FakeEvent", (), {"id": _uuid.uuid4(), "title": "Gottesdienst Freitag",
+        "start_at": assigned_start, "end_at": assigned_start + timedelta(hours=1),
+        "district_id": district_id, "congregation_id": congregation.id,
+        "category": "Gottesdienst", "source": "INTERNAL", "status": "DRAFT",
+        "visibility": "INTERNAL", "description": None, "audiences": [],
+        "applicability": [], "approval_status": "DRAFT",
+        "created_at": assigned_start, "updated_at": assigned_start})()
     assignment = ServiceAssignment.create(
         event_id=assigned_event.id,
         leader_name="Pr. Beispiel",

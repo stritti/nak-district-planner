@@ -111,3 +111,9 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         if existing is None:
             self._session.add(row)
         await self._session.flush()
+
+    async def delete(self, slot_id: uuid.UUID) -> None:
+        row = await self._session.get(PlanningSlotORM, slot_id)
+        if row:
+            await self._session.delete(row)
+            await self._session.flush()

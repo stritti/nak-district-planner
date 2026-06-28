@@ -95,6 +95,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { BellIcon, BellSlashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { useNotificationStore } from '../stores/notifications'
 
@@ -107,11 +108,8 @@ const emit = defineEmits<{
 }>()
 
 const store = useNotificationStore()
+const { items, unreadCount, loading } = storeToRefs(store)
 const open = ref(false)
-
-const items = store.items
-const unreadCount = store.unreadCount
-const loading = store.loading
 
 function toggleOpen() {
   open.value = !open.value

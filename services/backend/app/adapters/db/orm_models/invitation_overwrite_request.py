@@ -26,10 +26,10 @@ class InvitationOverwriteRequestORM(Base):
         nullable=False,
     )
     source_event_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), nullable=False
     )
     target_event_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), nullable=False
     )
     proposed_title: Mapped[str] = mapped_column(String(500), nullable=False)
     proposed_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

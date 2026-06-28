@@ -14,8 +14,11 @@ from app.adapters.api.schemas.invitation import (
     OverwriteRequestResponse,
 )
 from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
+from app.adapters.db.repositories import (
+    SqlEventInstanceRepository,
+    SqlPlanningSlotRepository,
+)
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
-from app.adapters.db.repositories.event import SqlEventRepository
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
 from app.adapters.db.repositories.invitation_overwrite_request import (
     SqlInvitationOverwriteRequestRepository,
@@ -41,19 +44,18 @@ async def create_invitations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> list[InvitationResponse]:
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(event_id)
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    if planning_slot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
 
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     try:
         invitations = await create_invitations_for_event(
-            db, source_event_id=event_id, targets=body.targets
+            db, source_planning_slot_id=event_id, targets=body.targets
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
@@ -80,13 +82,12 @@ async def list_event_invitations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> list[InvitationResponse]:
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(event_id)
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    if planning_slot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
 
     try:
-        assert_has_role_in_district(auth, Role.VIEWER, event.district_id)
+        assert_has_role_in_district(auth, Role.VIEWER, planning_slot.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -119,12 +120,12 @@ async def remove_invitation(
             status_code=status.HTTP_404_NOT_FOUND, detail="Einladung nicht gefunden"
         )
 
-    event = await SqlEventRepository(db).get(invitation.source_event_id)
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+    planning_slot = await SqlPlanningSlotRepository(db).get(invitation.source_event_id)
+    if planning_slot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
 
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -133,6 +134,48 @@ async def remove_invitation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Einladung nicht gefunden"
         )
+
+
+def _build_overwrite_response(
+    request,
+    source_slot,
+    target_slot,
+    instance_by_slot: dict,
+) -> OverwriteRequestResponse:
+    """Build OverwriteRequestResponse from domain models."""
+    src_title = source_slot.title if source_slot else None
+    tgt_title = target_slot.title if target_slot else None
+    tgt_cong_id = target_slot.congregation_id if target_slot else None
+
+    # Try to get current actual times from target EventInstance
+    tgt_instance = instance_by_slot.get(target_slot.id) if target_slot else None
+    current_start = tgt_instance.actual_start_at if tgt_instance else None
+    current_end = tgt_instance.actual_end_at if tgt_instance else None
+    current_desc = tgt_instance.description if tgt_instance else None
+
+    return OverwriteRequestResponse(
+        id=request.id,
+        invitation_id=request.invitation_id,
+        source_event_id=request.source_event_id,
+        source_event_title=src_title,
+        target_event_id=request.target_event_id,
+        target_event_title=tgt_title,
+        target_congregation_id=tgt_cong_id,
+        current_title=tgt_title,
+        current_start_at=current_start,
+        current_end_at=current_end,
+        current_description=current_desc,
+        current_category=target_slot.category if target_slot else None,
+        proposed_title=request.proposed_title,
+        proposed_start_at=request.proposed_start_at,
+        proposed_end_at=request.proposed_end_at,
+        proposed_description=request.proposed_description,
+        proposed_category=request.proposed_category,
+        status=request.status,
+        decided_at=request.decided_at,
+        created_at=request.created_at,
+        updated_at=request.updated_at,
+    )
 
 
 @router.get("/invitations/overwrite-requests", response_model=list[OverwriteRequestResponse])
@@ -147,46 +190,39 @@ async def list_overwrite_requests(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     req_repo = SqlInvitationOverwriteRequestRepository(db)
-    event_repo = SqlEventRepository(db)
-    source_repo = SqlCongregationRepository(db)
+    slot_repo = SqlPlanningSlotRepository(db)
+    instance_repo = SqlEventInstanceRepository(db)
+
     requests = await req_repo.list_open_by_district(district_id)
 
-    result: list[OverwriteRequestResponse] = []
-    for request in requests:
-        source_event = await event_repo.get(request.source_event_id)
-        target_event = await event_repo.get(request.target_event_id)
-        source_name = None
-        if target_event is not None and target_event.invitation_source_congregation_id is not None:
-            source_congregation = await source_repo.get(
-                target_event.invitation_source_congregation_id
-            )
-            source_name = source_congregation.name if source_congregation else None
-        result.append(
-            OverwriteRequestResponse(
-                id=request.id,
-                invitation_id=request.invitation_id,
-                source_event_id=request.source_event_id,
-                source_event_title=source_event.title if source_event else source_name,
-                target_event_id=request.target_event_id,
-                target_event_title=target_event.title if target_event else None,
-                target_congregation_id=target_event.congregation_id if target_event else None,
-                current_title=target_event.title if target_event else None,
-                current_start_at=target_event.start_at if target_event else None,
-                current_end_at=target_event.end_at if target_event else None,
-                current_description=target_event.description if target_event else None,
-                current_category=target_event.category if target_event else None,
-                proposed_title=request.proposed_title,
-                proposed_start_at=request.proposed_start_at,
-                proposed_end_at=request.proposed_end_at,
-                proposed_description=request.proposed_description,
-                proposed_category=request.proposed_category,
-                status=request.status,
-                decided_at=request.decided_at,
-                created_at=request.created_at,
-                updated_at=request.updated_at,
-            )
+    # Collect all slot references (source_event_id and target_event_id are now planning_slot_ids)
+    slot_ids = set()
+    for req in requests:
+        if req.source_event_id:
+            slot_ids.add(req.source_event_id)
+        if req.target_event_id:
+            slot_ids.add(req.target_event_id)
+
+    # Batch-load PlanningSlots
+    slots: dict = {}
+    instances: dict = {}
+    for slot_id in slot_ids:
+        slot = await slot_repo.get(slot_id)
+        if slot:
+            slots[slot_id] = slot
+            inst = await instance_repo.get_by_planning_slot(slot_id)
+            if inst:
+                instances[slot_id] = inst
+
+    return [
+        _build_overwrite_response(
+            req,
+            source_slot=slots.get(req.source_event_id),
+            target_slot=slots.get(req.target_event_id),
+            instance_by_slot=instances,
         )
-    return result
+        for req in requests
+    ]
 
 
 @router.post(
@@ -200,18 +236,21 @@ async def decide_overwrite_request(
     db: DbSession,
 ) -> OverwriteRequestResponse:
     req_repo = SqlInvitationOverwriteRequestRepository(db)
+    slot_repo = SqlPlanningSlotRepository(db)
+    instance_repo = SqlEventInstanceRepository(db)
+
     existing = await req_repo.get(request_id)
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Anfrage nicht gefunden")
 
-    target_event = await SqlEventRepository(db).get(existing.target_event_id)
-    if target_event is None:
+    target_slot = await slot_repo.get(existing.target_event_id)
+    if target_slot is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Ziel-Event nicht gefunden"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Ziel-Planungseintrag nicht gefunden"
         )
 
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, target_event.district_id)
+        assert_has_role_in_district(auth, Role.PLANNER, target_slot.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -219,28 +258,17 @@ async def decide_overwrite_request(
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Anfrage nicht gefunden")
 
-    source_event = await SqlEventRepository(db).get(updated.source_event_id)
-    target_event = await SqlEventRepository(db).get(updated.target_event_id)
-    return OverwriteRequestResponse(
-        id=updated.id,
-        invitation_id=updated.invitation_id,
-        source_event_id=updated.source_event_id,
-        source_event_title=source_event.title if source_event else None,
-        target_event_id=updated.target_event_id,
-        target_event_title=target_event.title if target_event else None,
-        target_congregation_id=target_event.congregation_id if target_event else None,
-        current_title=target_event.title if target_event else None,
-        current_start_at=target_event.start_at if target_event else None,
-        current_end_at=target_event.end_at if target_event else None,
-        current_description=target_event.description if target_event else None,
-        current_category=target_event.category if target_event else None,
-        proposed_title=updated.proposed_title,
-        proposed_start_at=updated.proposed_start_at,
-        proposed_end_at=updated.proposed_end_at,
-        proposed_description=updated.proposed_description,
-        proposed_category=updated.proposed_category,
-        status=updated.status,
-        decided_at=updated.decided_at,
-        created_at=updated.created_at,
-        updated_at=updated.updated_at,
+    source_slot = await slot_repo.get(existing.source_event_id)
+    target_slot = await slot_repo.get(existing.target_event_id)
+    instances: dict = {}
+    if target_slot:
+        inst = await instance_repo.get_by_planning_slot(target_slot.id)
+        if inst:
+            instances[target_slot.id] = inst
+
+    return _build_overwrite_response(
+        updated,
+        source_slot=source_slot,
+        target_slot=target_slot,
+        instance_by_slot=instances,
     )

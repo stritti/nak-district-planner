@@ -5,14 +5,9 @@ from app.domain.models.calendar_integration import (
 )
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
-from app.domain.models.event import (
-    Event,
-    EventApprovalStatus,
-    EventSource,
-    EventStatus,
-    EventVisibility,
-)
-from app.domain.models.event_instance import EventInstance
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
+from app.domain.models.external_event_link import ExternalEventLink
+from app.domain.models.planning_slot import EventApprovalStatus
 from app.domain.models.invitation import (
     CongregationInvitation,
     InvitationOverwriteRequest,
@@ -33,12 +28,12 @@ __all__ = [
     "Congregation",
     "CongregationInvitation",
     "District",
-    "Event",
     "EventApprovalStatus",
     "EventInstance",
     "EventSource",
-    "EventStatus",
+    "ExternalEventLink",
     "EventVisibility",
+    "SyncState",
     "InvitationOverwriteRequest",
     "InvitationTargetType",
     "Leader",

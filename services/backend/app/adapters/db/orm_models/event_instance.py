@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.adapters.db.base import Base
-from app.domain.models.event import EventSource, EventVisibility
+from app.domain.models.event_instance import EventSource, EventVisibility, SyncState
 
 
 class EventInstanceORM(Base):
@@ -35,5 +35,23 @@ class EventInstanceORM(Base):
         SAEnum(EventVisibility, name="event_visibility", create_type=False), nullable=False
     )
     deviation_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sync_state: Mapped[SyncState] = mapped_column(
+        SAEnum(SyncState, name="sync_state", create_type=False),
+        nullable=False,
+        default=SyncState.CLEAN,
+    )
+    external_uid: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    calendar_integration_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("calendar_integrations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    last_external_modified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_internal_modified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

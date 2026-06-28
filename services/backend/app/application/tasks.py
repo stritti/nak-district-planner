@@ -71,7 +71,7 @@ def sync_all_active_integrations() -> dict:
 
     ids = asyncio.run(_run())
     for integration_id in ids:
-        sync_calendar_integration.delay(integration_id)
+        sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
     logger.info("Dispatched sync for %d integration(s)", len(ids))
     return {"dispatched": len(ids)}
 
@@ -83,7 +83,6 @@ def cleanup_old_events() -> dict:
     Runs on the 1st of each month via Celery beat.  All events whose *end_at*
     is before the cutoff (now - 24 months) are permanently removed.
     """
-    from app.adapters.db.repositories.event import SqlEventRepository
     from app.adapters.db.session import AsyncSessionLocal
 
     async def _run() -> dict:
@@ -97,8 +96,18 @@ def cleanup_old_events() -> dict:
             cutoff = now.replace(year=now.year - 2, day=28)
 
         async with AsyncSessionLocal() as session:
-            repo = SqlEventRepository(session)
-            deleted = await repo.delete_before(cutoff)
+            from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+            repo = SqlPlanningSlotRepository(session)
+            # PlanningSlot uses planning_date (date), not end_at (datetime).
+            # Delete slots with planning_date before cutoff date.
+            cutoff_date = cutoff.date()
+            from sqlalchemy import delete
+            from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+            stmt = delete(PlanningSlotORM).where(
+                PlanningSlotORM.planning_date < cutoff_date
+            )
+            result = await session.execute(stmt)
+            deleted = result.rowcount  # type: ignore[attr-defined]
             await session.commit()
 
         return {"deleted": deleted, "cutoff": cutoff.isoformat()}
@@ -257,12 +266,13 @@ def import_kirchliche_festtage_task(district_id: str, year: int) -> dict:
 def generate_draft_services_window() -> dict:
     """Generate draft worship services for the rolling next 8 weeks.
 
-    Safe to run repeatedly: generation is idempotent and does not recreate
-    moved generated events because it keys by immutable slot identity.
+    Generates PlanningSlot + EventInstance from congregation service_times.
+    Safe to run repeatedly: generation is idempotent.
     """
     from app.adapters.db.repositories.congregation import SqlCongregationRepository
     from app.adapters.db.repositories.district import SqlDistrictRepository
-    from app.adapters.db.repositories.event import SqlEventRepository
+    from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
     from app.adapters.db.session import AsyncSessionLocal
     from app.application.draft_service_generation import GenerateDraftServicesUseCase
 
@@ -271,7 +281,8 @@ def generate_draft_services_window() -> dict:
             use_case = GenerateDraftServicesUseCase(
                 district_repo=SqlDistrictRepository(session),
                 congregation_repo=SqlCongregationRepository(session),
-                event_repo=SqlEventRepository(session),
+                slot_repo=SqlPlanningSlotRepository(session),
+                instance_repo=SqlEventInstanceRepository(session),
             )
             result = await use_case.run()
             await session.commit()
@@ -279,14 +290,54 @@ def generate_draft_services_window() -> dict:
 
     result = asyncio.run(_run())
     logger.info(
-        "generate_draft_services_window: districts=%d congregations=%d created=%d "
-        "skipped_existing=%d adopted_existing=%d invalid_configurations=%d",
+        "generate_draft_services_window: districts=%d congregations=%d created=%d skipped=%d",
         result["districts"],
         result["congregations"],
         result["created"],
         result["skipped_existing"],
-        result["adopted_existing"],
-        result["invalid_configurations"],
+    )
+    return result
+
+
+@celery.task(name="generate_planning_series_slots")
+def generate_planning_series_slots() -> dict:
+    """Generate PlanningSlot + EventInstance from active PlanningSeries.
+
+    Runs daily to keep a rolling 12-month window of generated slots.
+    Safe to run repeatedly: skips existing slots by (series_id, date, congregation).
+    """
+    from app.adapters.db.repositories.congregation import SqlCongregationRepository
+    from app.adapters.db.repositories.district import SqlDistrictRepository
+    from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+    from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
+    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+    from app.adapters.db.session import AsyncSessionLocal
+    from app.application.planning_series_generator import PlanningSeriesGenerator
+    from app.config import settings
+
+    if not settings.use_series_generation:
+        logger.info("generate_planning_series_slots: disabled via USE_SERIES_GENERATION=False")
+        return {"status": "disabled"}
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as session:
+            generator = PlanningSeriesGenerator(
+                series_repo=SqlPlanningSeriesRepository(session),
+                slot_repo=SqlPlanningSlotRepository(session),
+                instance_repo=SqlEventInstanceRepository(session),
+                district_repo=SqlDistrictRepository(session),
+                congregation_repo=SqlCongregationRepository(session),
+            )
+            result = await generator.run()
+            await session.commit()
+            return result
+
+    result = asyncio.run(_run())
+    logger.info(
+        "generate_planning_series_slots: series=%d created=%d skipped=%d",
+        result["series_processed"],
+        result["slots_created"],
+        result["slots_skipped"],
     )
     return result
 
@@ -452,10 +503,10 @@ def generate_planning_slots() -> dict:
             service = PlanningSeriesSlotGenerationService(
                 series_repo=SqlPlanningSeriesRepository(session),
                 slot_repo=SqlPlanningSlotRepository(session),
-                horizon_months=6,
+                default_horizon_months=6,
             )
 
-            result = await service.generate_all_slots(horizon_months=6)
+            result = await service.generate_all_slots()
             await session.commit()
 
             return result

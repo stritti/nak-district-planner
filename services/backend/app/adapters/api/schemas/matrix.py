@@ -5,7 +5,7 @@ from datetime import datetime, time
 
 from pydantic import BaseModel
 
-from app.domain.models.event import EventApprovalStatus
+from app.domain.models.planning_slot import EventApprovalStatus
 from app.domain.models.service_assignment import AssignmentStatus
 
 

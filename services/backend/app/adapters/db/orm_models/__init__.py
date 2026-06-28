@@ -4,8 +4,8 @@ from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationO
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.congregation_group import CongregationGroupORM
 from app.adapters.db.orm_models.district import DistrictORM
-from app.adapters.db.orm_models.event import EventORM
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
+from app.adapters.db.orm_models.external_event_link import ExternalEventLinkORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
 from app.adapters.db.orm_models.invitation import CongregationInvitationORM
 from app.adapters.db.orm_models.invitation_overwrite_request import (

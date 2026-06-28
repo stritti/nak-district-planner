@@ -17,7 +17,6 @@ class NotificationService:
     async def get(self, notification_id: uuid.UUID) -> Notification | None:
         """Retrieve a single notification by ID."""
         return await self._repo.get(notification_id)
-
     async def create_notification(
         self,
         *,

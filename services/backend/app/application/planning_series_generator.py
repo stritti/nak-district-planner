@@ -12,8 +12,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.domain.models.event import EventSource, EventVisibility
-from app.domain.models.event_instance import EventInstance
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.repositories import (

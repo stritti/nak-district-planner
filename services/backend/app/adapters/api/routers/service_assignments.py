@@ -17,7 +17,7 @@ from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_district,
 )
-from app.adapters.db.repositories.event import SqlEventRepository
+from app.adapters.db.repositories import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
@@ -47,14 +47,13 @@ async def create_assignment(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> ServiceAssignmentResponse:
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(event_id)
-    if not event:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    if not planning_slot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
 
     # Check if user has PLANNER role (or higher) in the district
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -74,14 +73,13 @@ async def list_assignments(
     auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> list[ServiceAssignmentResponse]:
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(event_id)
-    if not event:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    if not planning_slot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
 
     # Check if user has VIEWER role (or higher) in the district
     try:
-        assert_has_role_in_district(auth, Role.VIEWER, event.district_id)
+        assert_has_role_in_district(auth, Role.VIEWER, planning_slot.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -104,15 +102,16 @@ async def update_assignment(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
 
-    # Get the event to check district access
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(assignment.event_id)
-    if not event:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+    # Verify PlanningSlot exists and check district access
+    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    if not planning_slot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
 
     # Check if user has PLANNER role (or higher) in the district
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -142,13 +141,14 @@ async def delete_assignment(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
 
-    event_repo = SqlEventRepository(db)
-    event = await event_repo.get(assignment.event_id)
-    if not event:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event nicht gefunden")
+    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    if not planning_slot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
 
     try:
-        assert_has_role_in_district(auth, Role.PLANNER, event.district_id)
+        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 

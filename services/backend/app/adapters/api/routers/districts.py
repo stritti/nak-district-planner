@@ -35,7 +35,6 @@ from app.adapters.db.repositories import (
     SqlCongregationRepository,
     SqlDistrictRepository,
     SqlEventInstanceRepository,
-    SqlEventRepository,
     SqlLeaderRepository,
     SqlPlanningSeriesRepository,
     SqlPlanningSlotRepository,
@@ -53,7 +52,6 @@ from app.application.planning_series_generator import PlanningSeriesGenerator
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
-from app.domain.models.event import EventStatus
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import CongregationInvitation
 from app.domain.models.planning_slot import PlanningSlot
@@ -238,7 +236,7 @@ async def list_congregations(
     )
     groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
     group_names = {group.id: group.name for group in groups}
-    return [_cong_response(c, group_name=group_names.get(c.group_id)) for c in congregations]
+    return [_cong_response(c, group_name=group_names.get(c.group_id) if c.group_id else None) for c in congregations]
 
 
 @router.patch("/{district_id}/congregations/{congregation_id}", response_model=CongregationResponse)
@@ -454,11 +452,13 @@ async def get_matrix(
         effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
         effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_from_dt is None:
+        assert utc_to_dt is not None  # guaranteed by first branch
         end_date = utc_to_dt.date()
         start_date = end_date - timedelta(days=27)
         effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
         effective_to_dt = datetime.combine(end_date, time.max, tzinfo=UTC)
     elif utc_to_dt is None:
+        assert utc_from_dt is not None  # guaranteed by first branch
         start_date = utc_from_dt.date()
         end_date = start_date + timedelta(days=27)
         effective_from_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
@@ -500,7 +500,7 @@ async def get_matrix(
     holidays: dict[str, list[str]] = {}
     for slot in feiertag_slots:
         date_key = slot.planning_date.isoformat()
-        holidays.setdefault(date_key, []).append(slot.title)
+        holidays.setdefault(date_key, []).append(slot.title or "Feiertag")
 
     # Collect all unique dates: congregation schedules + Feiertag dates + Gottesdienst slot dates
     all_dates: set[str] = set()
@@ -625,7 +625,7 @@ async def get_matrix(
             invitation_count: int = len(invitation_by_source_slot.get(slot.id, []))
 
             cells[date_key] = MatrixCell(
-                event_id=str(slot.id),  # For frontend compatibility - use slot.id as event_id
+                event_id=slot.id,
                 planning_slot_id=slot.id,
                 assignment_event_id=assignment_slot_id,
                 invitation_source_congregation_name=source_congregation_names.get(
@@ -681,7 +681,7 @@ async def get_matrix(
                 congregation_id=congregation.id,
                 congregation_name=congregation.name,
                 group_id=congregation.group_id,
-                group_name=group_names.get(congregation.group_id),
+                group_name=group_names.get(congregation.group_id) if congregation.group_id else None,
                 cells=cells,
             )
         )
@@ -717,7 +717,8 @@ async def generate_matrix_drafts(
     use_case = GenerateDraftServicesUseCase(
         district_repo=SqlDistrictRepository(db),
         congregation_repo=SqlCongregationRepository(db),
-        event_repo=SqlEventRepository(db),
+        slot_repo=SqlPlanningSlotRepository(db),
+        instance_repo=SqlEventInstanceRepository(db),
     )
     full_result = await use_case.run_for_window(
         from_date=from_date,
@@ -726,28 +727,42 @@ async def generate_matrix_drafts(
     )
     await db.commit()
 
-    district_congregations = await SqlCongregationRepository(db).list_by_district(district_id)
-    district_congregation_ids = {c.id for c in district_congregations}
-    events, _ = await SqlEventRepository(db).list(
-        district_id=district_id,
-        from_dt=from_dt,
-        to_dt=to_dt,
-        limit=5000,
-        offset=0,
-    )
-    generated_in_range = sum(
-        1
-        for event in events
-        if event.congregation_id in district_congregation_ids
-        and event.status == EventStatus.DRAFT
-        and event.category == "Gottesdienst"
-        and event.generation_slot_key is not None
-    )
+    return full_result
 
-    return {
-        **full_result,
-        "generated_in_requested_range": generated_in_range,
-    }
+
+# ── PlanningSeries Auto-Generation ────────────────────────────────────────────
+
+
+@router.post("/{district_id}/generate-planning-series")
+async def generate_planning_series_slots(
+    district_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    from_dt: datetime = Query(...),
+    to_dt: datetime = Query(...),
+) -> dict[str, int]:
+    """Manually trigger PlanningSlot generation from active PlanningSeries."""
+    if not await SqlDistrictRepository(db).get(district_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    generator = PlanningSeriesGenerator(
+        series_repo=SqlPlanningSeriesRepository(db),
+        slot_repo=SqlPlanningSlotRepository(db),
+        instance_repo=SqlEventInstanceRepository(db),
+        district_repo=SqlDistrictRepository(db),
+        congregation_repo=SqlCongregationRepository(db),
+    )
+    result = await generator.run_for_window(
+        from_date=from_dt.date(),
+        to_date_exclusive=to_dt.date() + timedelta(days=1),
+        district_ids={district_id},
+    )
+    await db.commit()
+    return result
 
 
 # ── PlanningSeries Auto-Generation ────────────────────────────────────────────

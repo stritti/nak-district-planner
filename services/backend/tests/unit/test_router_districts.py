@@ -19,8 +19,7 @@ from app.adapters.api.schemas.district import (
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
-from app.domain.models.event import Event, EventSource, EventStatus, EventVisibility
-from app.domain.models.event_instance import EventInstance
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.invitation import CongregationInvitation, InvitationTargetType
 from app.domain.models.leader import Leader, LeaderRank
 from app.domain.models.membership import Membership, ScopeType
@@ -1040,16 +1039,25 @@ async def test_generate_matrix_drafts_success() -> None:
     db = AsyncMock()
     now = datetime.now(UTC)
     congregation = Congregation.create(name="G", district_id=district_id)
-    event = Event.create(
-        title="Gottesdienst",
-        start_at=now,
-        end_at=now + timedelta(hours=1),
-        district_id=district_id,
-        congregation_id=congregation.id,
-        status=EventStatus.DRAFT,
-        category="Gottesdienst",
-        generation_slot_key="slot-1",
-    )
+    # TODO: refactor for Event-free architecture
+    # event = Event.create(
+    #     title="Gottesdienst",
+    #     start_at=now,
+    #     end_at=now + timedelta(hours=1),
+    #     district_id=district_id,
+    #     congregation_id=congregation.id,
+    #     status=EventStatus.DRAFT,
+    #     category="Gottesdienst",
+    #     generation_slot_key="slot-1",
+    # )
+    event = type("_FakeEvent", (), {"id": uuid.uuid4(), "title": "Gottesdienst",
+        "start_at": now, "end_at": now + timedelta(hours=1),
+        "district_id": district_id, "congregation_id": congregation.id,
+        "category": "Gottesdienst", "status": "DRAFT",
+        "generation_slot_key": "slot-1", "source": "INTERNAL",
+        "visibility": "INTERNAL", "description": None, "audiences": [],
+        "applicability": [], "approval_status": "DRAFT",
+        "created_at": now, "updated_at": now})()
 
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,

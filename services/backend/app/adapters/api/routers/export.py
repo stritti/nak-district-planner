@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -15,16 +16,20 @@ from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportTokenResponse
 from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
-from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
-from app.adapters.db.repositories.event import SqlEventRepository
+from app.adapters.db.repositories import (
+    SqlEventInstanceRepository,
+    SqlPlanningSlotRepository,
+)
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
-from app.domain.models.event import EventApprovalStatus, EventStatus
+from app.domain.models.event_instance import EventInstance
 from app.domain.models.export_token import ExportToken, TokenType
+from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.role import Role
 
 router = APIRouter()
+
 
 # ── Token management (requires API key) ──────────────────────────────────────
 
@@ -117,6 +122,14 @@ def _token_response(token: ExportToken) -> ExportTokenResponse:
 
 # ── Public ICS export (no auth) ──────────────────────────────────────────────
 
+_EXPORT_WINDOW_YEARS = 3
+
+
+def _synthesize_datetime(slot: PlanningSlot, default_time: time = time(0, 0, 0)) -> datetime:
+    """Synthesize a datetime from PlanningSlot date+time, with UTC timezone."""
+    dt = datetime.combine(slot.planning_date, slot.planning_time or default_time, tzinfo=UTC)
+    return dt
+
 
 @router.get("/export/{token_str}/calendar.ics", include_in_schema=False)
 async def export_calendar_ics(
@@ -129,41 +142,33 @@ async def export_calendar_ics(
     if not export_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
 
-    event_repo = SqlEventRepository(session)
+    slot_repo = SqlPlanningSlotRepository(session)
+    instance_repo = SqlEventInstanceRepository(session)
 
-    if export_token.leader_id:
-        # Personal leader calendar: find all events with this leader assigned
-        sa_result = await session.execute(
-            select(ServiceAssignmentORM).where(
-                ServiceAssignmentORM.leader_id == export_token.leader_id
-            )
-        )
-        leader_assignments = {row.event_id: row for row in sa_result.scalars()}
-        if not leader_assignments:
-            events = []
-        else:
-            # Load matching events by id, keep only PUBLISHED
-            all_events, _ = await event_repo.list(
-                district_id=export_token.district_id,
-                status=EventStatus.PUBLISHED,
-                limit=2000,
-                offset=0,
-            )
-            events = [e for e in all_events if e.id in leader_assignments]
-    else:
-        # District / congregation calendar
-        events, _ = await event_repo.list(
-            district_id=export_token.district_id,
-            congregation_id=export_token.congregation_id,
-            status=EventStatus.PUBLISHED,
-            limit=1000,
-            offset=0,
-        )
+    # Load PlanningSlots for a wide window (past 1 year, future 2 years)
+    now = datetime.now(UTC).date()
+    from_date = now - timedelta(days=365)
+    to_date = now + timedelta(days=365 * 2)
+    all_slots = await slot_repo.list_for_date_range(
+        district_id=export_token.district_id,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+    # Narrow by congregation if token is congregation-scoped
+    if export_token.congregation_id:
+        all_slots = [s for s in all_slots if s.congregation_id == export_token.congregation_id]
+
+    # Load all EventInstances for these slots
+    slot_ids = [s.id for s in all_slots]
+    instances: list[EventInstance] = []
+    if slot_ids:
+        instances = await instance_repo.list_by_planning_slots(slot_ids)
+    instance_by_slot: dict[uuid.UUID, EventInstance] = {
+        inst.planning_slot_id: inst for inst in instances
+    }
 
     # Apply approval_status filter
-    # - If query param is set → use it
-    # - For public tokens without query param → default to confirmed_only
-    # - For internal/leader tokens without query param → include_planned
     if approval_status is None:
         if export_token.token_type == TokenType.PUBLIC and export_token.leader_id is None:
             approval_status = "confirmed_only"
@@ -171,19 +176,17 @@ async def export_calendar_ics(
             approval_status = "include_planned"
 
     if approval_status == "confirmed_only":
-        events = [e for e in events if e.approval_status == EventApprovalStatus.CONFIRMED]
-    elif approval_status == "include_planned":
-        pass  # include all events
-    else:
+        all_slots = [s for s in all_slots if s.approval_status == EventApprovalStatus.CONFIRMED]
+    elif approval_status != "include_planned":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Ungültiger approval_status-Filter: {approval_status}. "
             f"Erlaubte Werte: confirmed_only, include_planned",
         )
 
-    # Load assignments in one batch query
+    # Load assignments in one batch query (keyed by planning_slot_id via event_id)
     sa_repo = SqlServiceAssignmentRepository(session)
-    assignments = await sa_repo.list_by_planning_slots([e.id for e in events])
+    assignments = await sa_repo.list_by_planning_slots(slot_ids)
 
     # For leader tokens: keep only assignments for this specific leader
     if export_token.leader_id:
@@ -208,10 +211,11 @@ async def export_calendar_ics(
             rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
             display_name = f"{rank_prefix}{ldr.name}"
 
-        # For each event keep the best name (non-None wins over None)
-        existing = assignment_map.get(a.event_id)
-        if a.event_id not in assignment_map or (display_name is not None and existing is None):
-            assignment_map[a.event_id] = display_name
+        # For each slot keep the best name (non-None wins over None)
+        slot_key = a.event_id  # event_id is now the planning_slot_id
+        existing = assignment_map.get(slot_key)
+        if slot_key not in assignment_map or (display_name is not None and existing is None):
+            assignment_map[slot_key] = display_name
 
     # Load congregation names for LOCATION field
     cong_result = await session.execute(
@@ -227,35 +231,45 @@ async def export_calendar_ics(
     cal.add("x-wr-calname", export_token.label)
     cal.add("x-wr-timezone", "Europe/Berlin")
 
-    for event in events:
+    for slot in all_slots:
+        instance = instance_by_slot.get(slot.id)
+        # Use stable UID based on PlanningSlot ID (not EventInstance ID)
         vevent = ICalEvent()
-        vevent.add("uid", f"{event.id}@nak-bezirksplaner")
+        vevent.add("uid", f"{slot.id}@nak-bezirksplaner")
 
+        title = instance.title if instance else (slot.title or "Gottesdienst")
         # Personal leader calendar: include congregation name in summary
-        if export_token.leader_id and event.congregation_id and event.congregation_id in cong_map:
-            vevent.add("summary", f"{event.title} – {cong_map[event.congregation_id]}")
+        if export_token.leader_id and slot.congregation_id and slot.congregation_id in cong_map:
+            vevent.add("summary", f"{title} – {cong_map[slot.congregation_id]}")
         else:
-            vevent.add("summary", event.title)
+            vevent.add("summary", title)
 
-        vevent.add("dtstart", event.start_at)
-        vevent.add("dtend", event.end_at)
-        vevent.add("dtstamp", event.created_at)
+        if instance:
+            vevent.add("dtstart", instance.actual_start_at)
+            vevent.add("dtend", instance.actual_end_at)
+            vevent.add("dtstamp", instance.created_at)
+        else:
+            # Synthesize from PlanningSlot when no EventInstance exists
+            vt = _synthesize_datetime(slot)
+            vevent.add("dtstart", vt)
+            vevent.add("dtend", vt + timedelta(hours=2))
+            vevent.add("dtstamp", slot.created_at)
 
         # Mark PLANNED events as tentative in the calendar
-        if event.approval_status == EventApprovalStatus.PLANNED:
+        if slot.approval_status == EventApprovalStatus.PLANNED:
             vevent.add("status", "TENTATIVE")
             vevent.add("x-nak-approval-status", "PLANNED")
 
-        if event.congregation_id and event.congregation_id in cong_map:
-            vevent.add("location", cong_map[event.congregation_id])
+        if slot.congregation_id and slot.congregation_id in cong_map:
+            vevent.add("location", cong_map[slot.congregation_id])
 
-        if event.category:
-            vevent.add("categories", event.category)
+        if slot.category:
+            vevent.add("categories", slot.category)
 
-        if event.description:
-            vevent.add("description", event.description)
+        if instance and instance.description:
+            vevent.add("description", instance.description)
 
-        leader = assignment_map.get(event.id)
+        leader = assignment_map.get(slot.id)
         if leader:
             # Personal leader token → always show full name (INTERNAL behaviour)
             if export_token.leader_id or export_token.token_type == TokenType.INTERNAL:

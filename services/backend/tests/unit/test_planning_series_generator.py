@@ -12,8 +12,7 @@ from app.application.planning_series_generator import (
     PlanningSeriesGenerator,
     _expand_recurrence,
 )
-from app.domain.models.event import EventSource, EventVisibility
-from app.domain.models.event_instance import EventInstance
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 
