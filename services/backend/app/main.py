@@ -31,9 +31,12 @@ from app.adapters.api.routers import (
     system,
 )
 from app.adapters.auth.oidc import OIDCAdapter
+from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
+from app.application.draft_service_generation import GenerateDraftServicesUseCase
 from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry

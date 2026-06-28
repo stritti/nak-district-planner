@@ -765,6 +765,41 @@ async def generate_planning_series_slots(
     return result
 
 
+# ── PlanningSeries Auto-Generation ────────────────────────────────────────────
+
+
+@router.post("/{district_id}/generate-planning-series")
+async def generate_planning_series_slots(
+    district_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    from_dt: datetime = Query(...),
+    to_dt: datetime = Query(...),
+) -> dict[str, int]:
+    """Manually trigger PlanningSlot generation from active PlanningSeries."""
+    if not await SqlDistrictRepository(db).get(district_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    try:
+        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    generator = PlanningSeriesGenerator(
+        series_repo=SqlPlanningSeriesRepository(db),
+        slot_repo=SqlPlanningSlotRepository(db),
+        instance_repo=SqlEventInstanceRepository(db),
+        district_repo=SqlDistrictRepository(db),
+        congregation_repo=SqlCongregationRepository(db),
+    )
+    result = await generator.run_for_window(
+        from_date=from_dt.date(),
+        to_date_exclusive=to_dt.date() + timedelta(days=1),
+        district_ids={district_id},
+    )
+    await db.commit()
+    return result
+
+
 # ── Feiertage ─────────────────────────────────────────────────────────────────
 
 

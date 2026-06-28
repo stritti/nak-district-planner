@@ -59,10 +59,14 @@ async def mark_read(
     service: NotificationService = Depends(get_notification_service),
 ) -> None:
     """Mark a single notification as read."""
-    _ = auth  # auth ensures user has at least one approved membership
-    ok = await service.mark_read(notification_id)
-    if not ok:
+    notification = await service.get(notification_id)
+    if notification is None:
         raise HTTPException(status_code=404, detail="Notification not found")
+    try:
+        assert_has_role_in_district(auth, Role.VIEWER, notification.district_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    await service.mark_read(notification_id)
 
 
 @router.post("/{district_id}/read-all", status_code=status.HTTP_200_OK)

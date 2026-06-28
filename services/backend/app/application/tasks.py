@@ -342,6 +342,49 @@ def generate_planning_series_slots() -> dict:
     return result
 
 
+@celery.task(name="generate_planning_series_slots")
+def generate_planning_series_slots() -> dict:
+    """Generate PlanningSlot + EventInstance from active PlanningSeries.
+
+    Runs daily to keep a rolling 12-month window of generated slots.
+    Safe to run repeatedly: skips existing slots by (series_id, date, congregation).
+    """
+    from app.adapters.db.repositories.congregation import SqlCongregationRepository
+    from app.adapters.db.repositories.district import SqlDistrictRepository
+    from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+    from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
+    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+    from app.adapters.db.session import AsyncSessionLocal
+    from app.application.planning_series_generator import PlanningSeriesGenerator
+    from app.config import settings
+
+    if not settings.use_series_generation:
+        logger.info("generate_planning_series_slots: disabled via USE_SERIES_GENERATION=False")
+        return {"status": "disabled"}
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as session:
+            generator = PlanningSeriesGenerator(
+                series_repo=SqlPlanningSeriesRepository(session),
+                slot_repo=SqlPlanningSlotRepository(session),
+                instance_repo=SqlEventInstanceRepository(session),
+                district_repo=SqlDistrictRepository(session),
+                congregation_repo=SqlCongregationRepository(session),
+            )
+            result = await generator.run()
+            await session.commit()
+            return result
+
+    result = asyncio.run(_run())
+    logger.info(
+        "generate_planning_series_slots: series=%d created=%d skipped=%d",
+        result["series_processed"],
+        result["slots_created"],
+        result["slots_skipped"],
+    )
+    return result
+
+
 @celery.task(name="check_version")
 def check_version() -> dict:
     """Celery beat task — runs every 6 hours.

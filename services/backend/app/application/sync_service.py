@@ -5,12 +5,12 @@ Implements deterministic, idempotent sync with state machine:
   2. Decrypt credentials
   3. Fetch raw events from external source
   4. For each raw event:
-     a. Look up ExternalEventLink by (provider, uid)
+     a. Look up ExternalEventLink by (provider, uid, calendar_integration_id)
      b. If NEW:
+        - Skip cancelled events
         - Try auto-match to PlanningSlot (congregation, date, time ±2h, category)
-        - If matched: update EventInstance actual times, set sync_state=CLEAN
-        - If unmatched: create new PlanningSlot + EventInstance (source=EXTERNAL)
-        - Create ExternalEventLink mapping
+        - If matched: update EventInstance actual times, set sync_state=CLEAN, create link
+        - If unmatched: create new PlanningSlot + EventInstance (source=EXTERNAL) + link
      c. If EXISTING:
         - Compare content_hash → skip if unchanged
         - If raw.is_cancelled → CANCELLED status
@@ -22,7 +22,7 @@ Implements deterministic, idempotent sync with state machine:
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,11 +55,7 @@ def _get_connector(calendar_type: CalendarType) -> CalendarConnector:
 
 
 def _compute_content_hash(raw_event) -> str:
-    """Compute deterministic SHA-256 hash for external event change detection.
-
-    Uses the same fields as RawCalendarEvent.content_hash but recomputes
-    from the raw data for comparison with ExternalEventLink.last_synced_hash.
-    """
+    """Compute deterministic SHA-256 hash for external event change detection."""
     import hashlib
 
     raw_str = (
@@ -83,7 +79,6 @@ async def _find_matching_planning_slot(
     Returns the matching PlanningSlot if found, or None.
     """
     slot_repo = SqlPlanningSlotRepository(session)
-    instance_repo = SqlEventInstanceRepository(session)
 
     event_date = event_start.date()
     event_minutes = event_start.hour * 60 + event_start.minute
@@ -102,11 +97,6 @@ async def _find_matching_planning_slot(
 
         slot_minutes = slot.planning_time.hour * 60 + slot.planning_time.minute
         if abs(slot_minutes - event_minutes) > tolerance_minutes:
-            continue
-
-        # Check that slot has an EventInstance
-        instance = await instance_repo.get_by_planning_slot(slot.id)
-        if instance is None:
             continue
 
         return slot
@@ -146,7 +136,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
             calendar_integration_id=integration_id,
         )
 
-        new_content_hash = _compute_content_hash(raw)
+        new_content_hash = raw.content_hash if hasattr(raw, "content_hash") else _compute_content_hash(raw)
 
         if existing_link is None:
             # ── NEW external event ──
@@ -155,6 +145,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
             if raw.is_cancelled:
                 continue
 
+            # Auto-matching: try to match to an existing PlanningSlot first
             matched_slot = await _find_matching_planning_slot(
                 session=session,
                 district_id=integration.district_id,
@@ -201,7 +192,6 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
                 congregation_id=integration.congregation_id,
                 category=integration.default_category or raw.title,
                 title=raw.title,
-                status=PlanningSlotStatus.ACTIVE,
             )
             await slot_repo.save(slot)
 
@@ -210,14 +200,13 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
                 title=raw.title,
                 actual_start_at=raw.start_at,
                 actual_end_at=raw.end_at,
+                description=raw.description,
                 source=EventSource.EXTERNAL,
                 visibility=EventVisibility.PUBLIC,
-                description=raw.description,
                 sync_state=SyncState.CLEAN,
-                external_uid=raw.uid,
                 content_hash=new_content_hash,
+                external_uid=raw.uid,
                 calendar_integration_id=integration_id,
-                last_external_modified_at=datetime.now(UTC),
             )
             await instance_repo.save(instance)
 
@@ -232,47 +221,47 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
             created += 1
 
         else:
-            # ── EXISTING event ──
+            # ── EXISTING external event ──
             instance = await instance_repo.get(existing_link.event_instance_id)
             if instance is None:
                 continue
 
-            # Handle deletion
+            if existing_link.last_synced_hash == new_content_hash:
+                continue  # Unchanged — skip
+
             if raw.is_cancelled:
+                # Mark slot as CANCELLED
                 slot = await slot_repo.get(instance.planning_slot_id)
-                if slot is not None:
+                if slot and slot.status != PlanningSlotStatus.CANCELLED:
                     slot.status = PlanningSlotStatus.CANCELLED
                     slot.updated_at = datetime.now(UTC)
                     await slot_repo.save(slot)
-                instance.sync_state = SyncState.DIRTY_EXTERNAL
-                instance.updated_at = datetime.now(UTC)
-                await instance_repo.save(instance)
-                cancelled += 1
+                    cancelled += 1
+
+                existing_link.last_synced_hash = new_content_hash
+                existing_link.updated_at = datetime.now(UTC)
+                await link_repo.save(existing_link)
                 continue
 
-            # Skip if unchanged
-            if existing_link.last_synced_hash == new_content_hash:
-                continue
-
-            # Hash changed — update EventInstance
+            # Update EventInstance fields
             instance.title = raw.title
-            instance.description = raw.description
             instance.actual_start_at = raw.start_at
             instance.actual_end_at = raw.end_at
-            instance.content_hash = new_content_hash
+            instance.description = raw.description
+            instance.source = EventSource.EXTERNAL
             instance.sync_state = SyncState.DIRTY_EXTERNAL
+            instance.content_hash = new_content_hash
             instance.last_external_modified_at = datetime.now(UTC)
             instance.updated_at = datetime.now(UTC)
             await instance_repo.save(instance)
 
-            # Update ExternalEventLink
             existing_link.last_synced_hash = new_content_hash
             existing_link.updated_at = datetime.now(UTC)
             await link_repo.save(existing_link)
             updated += 1
 
+    # Update integration last_synced_at
     integration.last_synced_at = datetime.now(UTC)
-    integration.updated_at = datetime.now(UTC)
     await integration_repo.save(integration)
 
     return {
