@@ -20,6 +20,7 @@ from app.adapters.api.routers import (
     auth,
     calendar_integrations,
     districts,
+    events_compat,
     export,
     invitations,
     leaders,
@@ -218,6 +219,7 @@ async def health() -> dict:
 
 # Register routers
 app.include_router(auth.router)
+app.include_router(events_compat.router)
 app.include_router(invitations.router)
 app.include_router(service_assignments.router)
 app.include_router(calendar_integrations.router)

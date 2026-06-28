@@ -150,7 +150,56 @@ def upgrade() -> None:
         type_="foreignkey",
     )
 
-    # ── 4. Drop the legacy events table ──
+    # ── 4. Migrate events data to planning_slots + event_instances ──
+    op.execute(
+        """
+        INSERT INTO planning_slots (id, district_id, planning_date, planning_time,
+            congregation_id, category, title, status, approval_status,
+            invitation_source_congregation_id, invitation_source_event_id,
+            applicability, created_at, updated_at)
+        SELECT gen_random_uuid(), district_id, start_at::date, start_at::time,
+            congregation_id, category, title,
+            CASE WHEN status = 'CANCELLED' THEN 'CANCELLED' ELSE 'ACTIVE' END,
+            COALESCE(approval_status, 'PLANNED'),
+            invitation_source_congregation_id, id,
+            applicability, created_at, updated_at
+        FROM events
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO event_instances (id, planning_slot_id, title, description,
+            actual_start_at, actual_end_at, source, visibility,
+            deviation_flag, sync_state,
+            external_uid, content_hash, calendar_integration_id,
+            created_at, updated_at)
+        SELECT gen_random_uuid(), ps.id, COALESCE(e.title, ''), e.description,
+            e.start_at, e.end_at, e.source, e.visibility,
+            FALSE, 'CLEAN',
+            e.external_uid, e.content_hash, e.calendar_integration_id,
+            e.created_at, e.updated_at
+        FROM events e
+        JOIN planning_slots ps ON ps.invitation_source_event_id = e.id
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO external_event_links (id, event_instance_id, provider,
+            external_event_id, calendar_integration_id, last_synced_hash,
+            created_at, updated_at)
+        SELECT gen_random_uuid(), ei.id, COALESCE(ci.type, 'GOOGLE'),
+            e.external_uid, e.calendar_integration_id, e.content_hash,
+            now(), now()
+        FROM events e
+        JOIN planning_slots ps ON ps.invitation_source_event_id = e.id
+        JOIN event_instances ei ON ei.planning_slot_id = ps.id
+        LEFT JOIN calendar_integrations ci ON ci.id = e.calendar_integration_id
+        WHERE e.external_uid IS NOT NULL
+          AND e.calendar_integration_id IS NOT NULL
+        """
+    )
+
+    # ── 5. Drop the legacy events table ──
     op.drop_table("events")
 
 

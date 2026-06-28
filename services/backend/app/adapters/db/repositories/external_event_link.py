@@ -73,6 +73,7 @@ class SqlExternalEventLinkRepository(ExternalEventLinkRepository):
         row.external_event_id = link.external_event_id
         row.last_synced_hash = link.last_synced_hash
         row.revision_marker = link.revision_marker
+        row.calendar_integration_id = link.calendar_integration_id
         row.created_at = link.created_at or datetime.now(UTC)
         row.updated_at = link.updated_at or datetime.now(UTC)
         await self._session.flush()

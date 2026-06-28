@@ -155,6 +155,10 @@ async def export_calendar_ics(
         to_date=to_date,
     )
 
+    # Narrow by congregation if token is congregation-scoped
+    if export_token.congregation_id:
+        all_slots = [s for s in all_slots if s.congregation_id == export_token.congregation_id]
+
     # Load all EventInstances for these slots
     slot_ids = [s.id for s in all_slots]
     instances: list[EventInstance] = []
