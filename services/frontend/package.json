@@ -36,6 +36,6 @@
     "vitest": "^4.1",
     "vue-eslint-parser": "^10.0.0",
     "vue-tsc": "^3.3.1",
-    "@playwright/test": "^1.52"
+    "@playwright/test": "^1.61"
   }
 }
