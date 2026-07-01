@@ -7,8 +7,8 @@ M3 — Sync Algorithm Hardening:
   - Drop FK constraints referencing events.id
   - Drop the legacy events table
 
-Revision ID: 0125_remove_events_add_sync_fields
-Revises: 0124_create_notifications_table
+Revision ID: 0125
+Revises: 0124
 Create Date: 2026-06-25 20:00:00.000000
 """
 
@@ -21,8 +21,8 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "0125_remove_events_add_sync_fields"
-down_revision: str | None = "0124_create_notifications_table"
+revision: str = "0125"
+down_revision: str | None = "0124"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

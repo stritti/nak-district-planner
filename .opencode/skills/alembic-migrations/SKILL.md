@@ -96,6 +96,25 @@ Migration filenames: `<revision>_<short_description>.py`
 - Use 4-hex-digit or random-looking IDs for branch or ad-hoc migrations (`ae6c055cc050`, `e5a2b3c4d5f0`)
 - Merge migrations: `<revision>_merge_<description>.py`
 
+## Revision ID Length Limit
+
+Alembic stores the current revision in a `VARCHAR(32)` column. Revision IDs
+must be **32 characters or fewer** — otherwise `alembic upgrade head` fails
+with `value too long for type character varying(32)`.
+
+**Bad — 46 characters:**
+```python
+revision = "0123_matrix_migration_add_planning_slot_fields"  # ❌
+```
+
+**Good — 4 digits:**
+```python
+revision = "0123"  # ✅
+```
+
+This applies to the `revision` field in the migration file AND to its
+references in `down_revision` of dependent migrations and merge migrations.
+
 ## PostgreSQL FK Name Limit
 
 PostgreSQL limits identifiers (including constraint names) to **63 characters**.

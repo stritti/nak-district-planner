@@ -13,7 +13,7 @@ PlanningSlot:
 CongregationInvitation:
 - source_planning_slot_id: uuid.UUID | None - Source PlanningSlot for invitations
 
-Revision ID: 0123_matrix_migration_add_planning_slot_fields
+Revision ID: 0123
 Revises: ed967c737376
 Create Date: 2025-06-19
 
@@ -28,7 +28,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "0123_matrix_migration_add_planning_slot_fields"
+revision = "0123"
 down_revision = "ed967c737376"
 branch_labels = None
 depends_on = None
