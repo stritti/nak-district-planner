@@ -81,7 +81,7 @@ def upgrade() -> None:
     
     # Add foreign key constraints for the new UUID fields
     op.create_foreign_key(
-        "fk_planning_slots_invitation_source_congregation_id_congregations",
+        "fk_planning_slots_inv_src_congregation_id_congregations",
         "planning_slots",
         "congregations",
         ["invitation_source_congregation_id"],
@@ -106,7 +106,7 @@ def upgrade() -> None:
     
     # Add foreign key constraint
     op.create_foreign_key(
-        "fk_congregation_invitations_source_planning_slot_id_planning_slots",
+        "fk_cong_invitations_src_planning_slot_id_planning_slots",
         "congregation_invitations",
         "planning_slots",
         ["source_planning_slot_id"],
@@ -119,7 +119,7 @@ def downgrade() -> None:
     """Remove the fields added in upgrade."""
     # Remove foreign key constraints first
     op.drop_constraint(
-        "fk_congregation_invitations_source_planning_slot_id_planning_slots",
+        "fk_cong_invitations_src_planning_slot_id_planning_slots",
         "congregation_invitations",
         type_="foreignkey",
     )
@@ -131,7 +131,7 @@ def downgrade() -> None:
     )
     
     op.drop_constraint(
-        "fk_planning_slots_invitation_source_congregation_id_congregations",
+        "fk_planning_slots_inv_src_congregation_id_congregations",
         "planning_slots",
         type_="foreignkey",
     )
