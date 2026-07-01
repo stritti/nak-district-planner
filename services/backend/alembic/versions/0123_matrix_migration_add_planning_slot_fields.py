@@ -14,7 +14,7 @@ CongregationInvitation:
 - source_planning_slot_id: uuid.UUID | None - Source PlanningSlot for invitations
 
 Revision ID: 0123_matrix_migration_add_planning_slot_fields
-Revises: faecec299731
+Revises: ed967c737376
 Create Date: 2025-06-19
 
 """
@@ -29,7 +29,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "0123_matrix_migration_add_planning_slot_fields"
-down_revision = "faecec299731"
+down_revision = "ed967c737376"
 branch_labels = None
 depends_on = None
 
