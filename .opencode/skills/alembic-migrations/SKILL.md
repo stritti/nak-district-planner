@@ -159,6 +159,53 @@ for f in sys.argv[1:]:
 echo -n "fk_your_table_your_column_referenced_table" | wc -c
 ```
 
+## ENUM Type Handling in Async Context
+
+**Problem:** A migration that calls `sa.Enum(...).create(op.get_bind())`
+followed by a column definition with `create_type=False` on the same type
+can fail with `type "xxx" already exists` in async/asyncpg Alembic context.
+The standalone `.create()` and column `create_type=False` do not coordinate
+correctly, causing the column to attempt re-creating the type.
+
+**Good — Let the column definition create the enum automatically:**
+```python
+op.create_table(
+    "audit_logs",
+    sa.Column(
+        "action",
+        sa.Enum(
+            "CREATE", "UPDATE", "DELETE",
+            name="auditaction",          # ← type created here
+        ),                                # ← no create_type=False
+        nullable=False,
+    ),
+)
+```
+
+**Bad — Separated create + create_type=False:**
+```python
+# ❌ Standalone create ...
+sa.Enum("CREATE", "UPDATE", name="auditaction").create(op.get_bind())
+
+op.create_table(
+    "audit_logs",
+    sa.Column(
+        "action",
+        sa.Enum(
+            "CREATE", "UPDATE",
+            name="auditaction",
+            create_type=False,  # ❌ ... and then column tries to re-create it anyway
+        ),
+    ),
+)
+```
+
+**Rule:** If a migration creates an ENUM type, let the column definition
+create it via `sa.Enum(...)` inside the column. Do NOT add a separate
+`sa.Enum(...).create(op.get_bind())` call AND do NOT add `create_type=False`
+to the column definition. SQLAlchemy's column ENUM creation is idempotent
+within a single `op.create_table()` call.
+
 ## Verification Checklist
 
 Before committing migration changes:
@@ -168,9 +215,11 @@ Before committing migration changes:
 - [ ] No FK constraint name exceeds 63 characters (grep for `fk_` names)
 - [ ] `downgrade()` function is implemented (mirrors upgrade)
 - [ ] Migration applies cleanly on a fresh database (`alembic upgrade head`)
+- [ ] No `sa.Enum(...).create(op.get_bind())` + `create_type=False` anti-pattern
 
 ## CI
 
 A GitHub Actions workflow (`.github/workflows/alembic-check.yml`) runs
 automatically on every PR to verify head count, FK name lengths, and offline
-SQL generation.
+SQL generation. It also runs `alembic upgrade head` on a fresh PostgreSQL
+service container to ensure production-like DB apply passes.
