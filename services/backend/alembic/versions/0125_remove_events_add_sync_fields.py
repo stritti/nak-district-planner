@@ -159,8 +159,8 @@ def upgrade() -> None:
             applicability, created_at, updated_at)
         SELECT gen_random_uuid(), district_id, start_at::date, start_at::time,
             congregation_id, category, title,
-            CASE WHEN status = 'CANCELLED' THEN 'CANCELLED' ELSE 'ACTIVE' END,
-            COALESCE(approval_status, 'PLANNED'),
+            CASE WHEN status = 'CANCELLED' THEN 'CANCELLED'::planning_slot_status ELSE 'ACTIVE'::planning_slot_status END,
+            COALESCE(approval_status, 'PLANNED'::event_approval_status),
             invitation_source_congregation_id, id,
             applicability, created_at, updated_at
         FROM events
@@ -175,7 +175,7 @@ def upgrade() -> None:
             created_at, updated_at)
         SELECT gen_random_uuid(), ps.id, COALESCE(e.title, ''), e.description,
             e.start_at, e.end_at, e.source, e.visibility,
-            FALSE, 'CLEAN',
+            FALSE, 'CLEAN'::sync_state,
             e.external_uid, e.content_hash, e.calendar_integration_id,
             e.created_at, e.updated_at
         FROM events e
