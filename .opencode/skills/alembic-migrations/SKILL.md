@@ -55,6 +55,39 @@ def downgrade() -> None:
 - `ed967c737376_merge_planning_model_with_main_chain.py` — merges `0011_planning_model_foundation` and `e4b2a9d7f110`
 - `ae6c055cc051_merge_0125_with_0012.py` — 3-way merge of `0012`, `0125_remove_events_add_sync_fields`, and `e5a2b3c4d5f0`
 
+### Dependency Ordering: Respect Table Creation Order
+
+`down_revision` determines when a migration runs in the topological order.
+If your migration references a table, the `down_revision` chain MUST include
+the migration that **creates** that table as an ancestor.
+
+**Bad — references table that doesn't exist yet:**
+```python
+# 0123_matrix_migration_add_planning_slot_fields.py
+down_revision = "faecec299731"   # ← branches BEFORE planning_slots was created
+
+def upgrade():
+    op.add_column("planning_slots", ...)   # ❌ relation "planning_slots" does not exist
+```
+
+**Good — chain includes the table-creating migration:**
+```python
+# 0123_matrix_migration_add_planning_slot_fields.py (fixed)
+down_revision = "ed967c737376"   # ← merge that brought planning_slots into main chain
+
+def upgrade():
+    op.add_column("planning_slots", ...)   # ✅ table exists
+```
+
+**Rule of thumb:** If you reference a table or column that was added in a
+migration from a different branch, anchor your migration at or after the
+**merge point** that brought that feature in, not at a revision before it.
+
+To find where a table was created:
+```bash
+grep -l "create_table('your_table'" alembic/versions/*.py
+```
+
 ### Naming Convention
 
 Migration filenames: `<revision>_<short_description>.py`
