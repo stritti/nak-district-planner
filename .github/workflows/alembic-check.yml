@@ -95,7 +95,7 @@ jobs:
       - name: Apply migrations to test database
         run: |
           set -o pipefail
-          uv run alembic upgrade head 2>&1 | tail -10
+          uv run alembic upgrade head 2>&1
           echo "✅ Migrations applied successfully to test database"
 
       - name: Verify current state matches exactly one head
