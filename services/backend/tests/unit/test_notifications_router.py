@@ -12,6 +12,19 @@ from app.adapters.api.routers import notifications as r
 from app.domain.models.user import User
 
 
+def _fake_auth(*, is_superadmin: bool = True) -> object:
+    """Return a minimal auth context compatible with CurrentUserWithMemberships."""
+    return type(
+        "A",
+        (),
+        {
+            "memberships": [],
+            "user_sub": "test-user",
+            "user": type("U", (), {"is_superadmin": is_superadmin, "sub": "test-user"})(),
+        },
+    )()
+
+
 def _fake_user() -> User:
     return User(sub="test-user", email="test@example.com", username="test-user", name="Test")
 
@@ -26,10 +39,10 @@ class TestNotificationsRouter:
 
         result = await r.list_notifications(
             district_id=district_id,
+            auth=_fake_auth(),
             unread_only=False,
             limit=50,
             offset=0,
-            _user=_fake_user(),
             service=service,
         )
         assert result["total"] == 0
@@ -43,10 +56,10 @@ class TestNotificationsRouter:
 
         await r.list_notifications(
             district_id=district_id,
+            auth=_fake_auth(),
             unread_only=True,
             limit=10,
             offset=5,
-            _user=_fake_user(),
             service=service,
         )
         service.list.assert_awaited_once_with(district_id, unread_only=True, limit=10, offset=5)
@@ -58,7 +71,7 @@ class TestNotificationsRouter:
 
         result = await r.unread_count(
             district_id=district_id,
-            _user=_fake_user(),
+            auth=_fake_auth(),
             service=service,
         )
         assert result == {"count": 7}
@@ -71,7 +84,7 @@ class TestNotificationsRouter:
 
         result = await r.unread_count(
             district_id=district_id,
-            _user=_fake_user(),
+            auth=_fake_auth(),
             service=service,
         )
         assert result == {"count": 0}
@@ -83,7 +96,7 @@ class TestNotificationsRouter:
 
         result = await r.mark_read(
             notification_id=notification_id,
-            _user=_fake_user(),
+            auth=_fake_auth(),
             service=service,
         )
         assert result is None  # 204 No Content
@@ -92,12 +105,13 @@ class TestNotificationsRouter:
     async def test_mark_read_not_found(self):
         notification_id = uuid.uuid4()
         service = AsyncMock()
+        service.get = AsyncMock(return_value=None)
         service.mark_read = AsyncMock(return_value=False)
 
         with pytest.raises(HTTPException) as exc:
             await r.mark_read(
                 notification_id=notification_id,
-                _user=_fake_user(),
+                auth=_fake_auth(),
                 service=service,
             )
         assert exc.value.status_code == 404
@@ -109,7 +123,7 @@ class TestNotificationsRouter:
 
         result = await r.mark_all_read(
             district_id=district_id,
-            _user=_fake_user(),
+            auth=_fake_auth(),
             service=service,
         )
         assert result == {"marked_read": 3}
@@ -122,7 +136,7 @@ class TestNotificationsRouter:
 
         result = await r.mark_all_read(
             district_id=district_id,
-            _user=_fake_user(),
+            auth=_fake_auth(),
             service=service,
         )
         assert result == {"marked_read": 0}
