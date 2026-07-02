@@ -22,8 +22,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # Create the enum type first
-    sa.Enum("PLANNED", "CONFIRMED", name="event_approval_status").create(op.get_bind())
+    # Create the enum type first (checkfirst=True so it's safe if 0123 already created it)
+    sa.Enum("PLANNED", "CONFIRMED", name="event_approval_status").create(op.get_bind(), checkfirst=True)
 
     # Add the column as nullable initially so we can backfill
     op.add_column(

@@ -24,7 +24,7 @@ from alembic import op
 revision: str = "0125"
 down_revision: str | None = "0124"
 branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = "e5a2b3c4d5f0"
 
 
 def upgrade() -> None:
