@@ -286,3 +286,80 @@ async def test_respects_district_ids_filter() -> None:
     # Only district_a should have been processed
     for slot_id in slot_repo._slots:
         assert slot_repo._slots[slot_id].district_id == district_a.id
+
+
+# ── expand_service_slots edge cases ────────────────────────────────────
+
+
+def test_expand_service_slots_skips_invalid_time_value() -> None:
+    """When service_time has no valid 'time' field, it should be skipped."""
+    slots = expand_service_slots(
+        service_times=[{"weekday": 2}, {"weekday": 2, "time": "20:00"}],
+        from_date=date(2026, 4, 1),
+        to_date_exclusive=date(2026, 4, 15),
+        timezone_name="Europe/Berlin",
+    )
+    # Only the entry with a valid time should produce a slot
+    assert len(slots) == 2
+    assert all(s.slot_key.endswith("|20:00") for s in slots)
+
+
+def test_expand_service_slots_skips_invalid_time_string() -> None:
+    """When service_time has an unparseable time string, it should be skipped."""
+    slots = expand_service_slots(
+        service_times=[
+            {"weekday": 2, "time": "abc"},
+            {"weekday": 2, "time": "99:99"},
+        ],
+        from_date=date(2026, 4, 1),
+        to_date_exclusive=date(2026, 4, 15),
+        timezone_name="Europe/Berlin",
+    )
+    assert len(slots) == 0  # Both service times are invalid
+
+
+# ── GenerateDraftServicesUseCase edge cases ─────────────────────────────
+
+
+async def test_run_for_window_empty_range() -> None:
+    """When to_date_exclusive <= from_date, result should be zero."""
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    use_case = GenerateDraftServicesUseCase(
+        district_repo=InMemoryDistrictRepo([district]),
+        congregation_repo=InMemoryCongregationRepo({district.id: [congregation]}),
+        slot_repo=InMemoryPlanningSlotRepo(),
+        instance_repo=InMemoryEventInstanceRepo(),
+    )
+
+    result = await use_case.run_for_window(
+        from_date=date(2026, 4, 10),
+        to_date_exclusive=date(2026, 4, 10),  # same as from_date
+    )
+
+    assert result["created"] == 0
+    assert result["invalid_configurations"] == 0
+
+
+async def test_run_for_window_all_slots_invalid() -> None:
+    """When all service times produce no valid slots, count as invalid configs."""
+    district = _make_district()
+    # Service time with invalid time string
+    congregation = _make_congregation(
+        district.id,
+        service_times=[{"weekday": 2, "time": "ungültig"}],
+    )
+    use_case = GenerateDraftServicesUseCase(
+        district_repo=InMemoryDistrictRepo([district]),
+        congregation_repo=InMemoryCongregationRepo({district.id: [congregation]}),
+        slot_repo=InMemoryPlanningSlotRepo(),
+        instance_repo=InMemoryEventInstanceRepo(),
+    )
+
+    result = await use_case.run_for_window(
+        from_date=date(2026, 4, 1),
+        to_date_exclusive=date(2026, 4, 15),
+    )
+
+    assert result["created"] == 0
+    assert result["invalid_configurations"] >= 1

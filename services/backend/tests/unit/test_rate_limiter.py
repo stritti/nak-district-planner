@@ -142,6 +142,32 @@ class TestRateLimiter:
         assert len(key1) == 64
         assert all(c in "0123456789abcdef" for c in key1)
 
+    @pytest.mark.asyncio
+    async def test_check_burst_rate_limit(self, mock_redis):
+        """Test burst rate limit check."""
+        with patch("app.application.rate_limiter.redis.from_url", return_value=mock_redis):
+            mock_redis.zadd.return_value = 1
+            mock_redis.zcount.return_value = 1
+            mock_redis.expire.return_value = True
+            mock_redis.zrange.return_value = []
+
+            config = RateLimitConfig(
+                default_limit=100,
+                default_window_seconds=60,
+                burst_limit=10,
+                burst_window_seconds=1,
+            )
+            limiter = RateLimiter(config=config)
+            await limiter.connect()
+
+            result = await limiter.check_burst_limit(
+                identifier="user:123",
+                endpoint="/api/test",
+            )
+
+            assert result.allowed is True
+            assert result.limit == 10
+
     def test_get_endpoint_config_exact_match(self):
         """Test endpoint config with exact match."""
         config = RateLimitConfig(
@@ -228,6 +254,9 @@ class TestRateLimiter:
             assert result.remaining == 50
             assert result.limit == 100
             assert result.retry_after is None
+            
+            # Verify that the reset_in is set
+            assert result.reset_in is not None
 
     @pytest.mark.asyncio
     async def test_check_rate_limit_denied(self, mock_redis):

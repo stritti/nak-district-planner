@@ -28,6 +28,9 @@ class TestCSRFTokenService:
         parts = token.split(":")
         assert len(parts) == 4  # random:timestamp:session_id:signature
         assert parts[2] == "user-123"
+        
+        # Verify that the timestamp is set
+        assert parts[1] is not None
 
     def test_validate_token_success(self):
         """Test successful token validation."""
@@ -135,13 +138,65 @@ class TestCSRFTokenService:
         """Test that tokens contain a valid HMAC-SHA256 signature."""
         service = CSRFTokenService(secret_key="test-secret-key")
         token = service.generate_token()
-        
+
         parts = token.split(":")
         signature = parts[-1]
-        
+
         # HMAC-SHA256 produces 64 hex characters
         assert len(signature) == 64
         assert all(c in "0123456789abcdef" for c in signature)
+
+    def test_validate_token_bad_base64_padding(self):
+        """Test token validation fails with bad base64 padding."""
+        service = CSRFTokenService(secret_key="test-secret-key")
+        token = service.generate_token()
+
+        # Tamper with the token to have bad base64 padding
+        tampered_token = token + "="
+
+        with pytest.raises(CSRFError):
+            service.validate_token(tampered_token)
+
+    def test_validate_token_missing_parts(self):
+        """Test token validation fails with missing parts."""
+        service = CSRFTokenService(secret_key="test-secret-key")
+
+        # Create a token with missing parts
+        bad_token = "random_hex:timestamp"
+
+        with pytest.raises(CSRFError):
+            service.validate_token(bad_token)
+
+    def test_validate_token_unparseable_timestamp(self):
+        """Test token validation fails with unparseable timestamp (ValueError path)."""
+        service = CSRFTokenService(secret_key="test-secret-key")
+
+        # Create a token with bad timestamp that triggers ValueError in int()
+        bad_token = "random_hex:not-a-number:signature"
+
+        with pytest.raises(CSRFError, match="CSRF validation failed"):
+            service.validate_token(bad_token)
+
+    def test_get_token_age_less_than_two_parts(self):
+        """Test get_token_age returns timedelta(0) for tokens with less than 2 parts."""
+        service = CSRFTokenService(secret_key="test-secret-key")
+
+        # Create a token with less than 2 parts
+        bad_token = "random_hex"
+
+        age = service.get_token_age(bad_token)
+        assert age == timedelta(0)
+
+    def test_get_token_age_unparseable_timestamp(self):
+        """Test get_token_age returns timedelta(0) for tokens with unparseable timestamp."""
+        service = CSRFTokenService(secret_key="test-secret-key")
+
+        # Create a token with unparseable timestamp
+        bad_token = "random_hex:not-a-timestamp:signature"
+
+        age = service.get_token_age(bad_token)
+        assert age == timedelta(0)
+
 
 
 class TestCSRFError:

@@ -100,6 +100,10 @@ class TestVersionCache:
         cache.set("0.5.0")
         assert cache.last_checked is not None
 
+    def test_ttl(self):
+        cache = VersionCache(ttl_seconds=7200)
+        assert cache.ttl == 7200
+
     def test_clear(self):
         cache = VersionCache()
         cache.set("0.5.0")
@@ -133,6 +137,20 @@ class TestGhcrTagFetcher:
         with patch("httpx.Client") as mock_client:
             mock_client.return_value.__enter__.return_value.get.side_effect = Exception(
                 "Connection error"
+            )
+            tags = fetcher.fetch_tags("backend")
+
+        assert tags == []
+
+    def test_fetch_tags_httpx_error(self):
+        import httpx
+        from app.adapters.version_check.ghcr import GhcrTagFetcher
+
+        fetcher = GhcrTagFetcher(owner="test", repo="test")
+
+        with patch("httpx.Client") as mock_client:
+            mock_client.return_value.__enter__.return_value.get.side_effect = httpx.HTTPError(
+                "HTTP 404"
             )
             tags = fetcher.fetch_tags("backend")
 
