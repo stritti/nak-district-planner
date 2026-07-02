@@ -80,6 +80,9 @@ class InMemoryPlanningSlotRepo(PlanningSlotRepository):
             and from_date <= slot.planning_date <= to_date
         ]
 
+    async def delete(self, slot_id: uuid.UUID) -> None:
+        self._slots.pop(slot_id, None)
+
     async def save(self, slot: PlanningSlot) -> None:
         self._slots[slot.id] = slot
 
@@ -109,6 +112,9 @@ class InMemoryEventInstanceRepo(EventInstanceRepository):
     ) -> list[EventInstance]:
         ids_set = set(planning_slot_ids)
         return [inst for inst in self._instances.values() if inst.planning_slot_id in ids_set]
+
+    async def delete(self, instance_id: uuid.UUID) -> None:
+        self._instances.pop(instance_id, None)
 
     async def save(self, instance: EventInstance) -> None:
         self._instances[instance.id] = instance
@@ -270,8 +276,9 @@ async def test_respects_district_ids_filter() -> None:
         instance_repo=instance_repo,
     )
 
-    result = await use_case.run(
-        now=datetime(2026, 4, 1, 8, 0, tzinfo=UTC),
+    result = await use_case.run_for_window(
+        from_date=date(2026, 4, 1),
+        to_date_exclusive=date(2026, 4, 15),
         district_ids={district_a.id},
     )
 
