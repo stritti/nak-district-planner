@@ -173,3 +173,39 @@ def test_production_guard_idp_keycloak_valid() -> None:
         idp_provisioning_keycloak_admin_password="strong-admin-password-123",
     )
     production_guard(settings)  # should not raise
+
+
+# ── production_guard OIDC default checks (model-validator skipped in dev) ──
+
+
+def test_production_guard_oidc_client_secret_default() -> None:
+    """production_guard catches default OIDC_CLIENT_SECRET when constructed in dev mode."""
+    settings = Settings(
+        app_env="development",
+        oidc_client_secret="replace-with-oidc-client-secret",
+    )
+    settings.app_env = "production"
+    with pytest.raises(RuntimeError, match="OIDC_CLIENT_SECRET"):
+        production_guard(settings)
+
+
+def test_production_guard_oidc_discovery_url_default() -> None:
+    """production_guard catches default OIDC_DISCOVERY_URL when constructed in dev mode."""
+    settings = Settings(
+        app_env="development",
+        oidc_discovery_url="https://oidc.example.com/.well-known/openid-configuration",
+    )
+    settings.app_env = "production"
+    with pytest.raises(RuntimeError, match="OIDC_DISCOVERY_URL"):
+        production_guard(settings)
+
+
+def test_production_guard_oidc_client_id_default() -> None:
+    """production_guard catches default OIDC_CLIENT_ID when constructed in dev mode."""
+    settings = Settings(
+        app_env="development",
+        oidc_client_id="replace-with-oidc-client-id",
+    )
+    settings.app_env = "production"
+    with pytest.raises(RuntimeError, match="OIDC_CLIENT_ID"):
+        production_guard(settings)

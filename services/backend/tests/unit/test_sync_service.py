@@ -39,6 +39,21 @@ _START = datetime(2026, 4, 10, 9, 0, tzinfo=UTC)
 _END = datetime(2026, 4, 10, 10, 0, tzinfo=UTC)
 
 
+# ── helpers ────────────────────────────────────────────────────────────────────
+
+
+def _hash(uid: str, start_at=..., end_at=..., title: str = "Gottesdienst", description: str | None = "Beschreibung") -> str:
+    """Compute a deterministic SHA-256 hash matching sync_service._compute_content_hash."""
+    import hashlib
+
+    if start_at is ...:
+        start_at = _START
+    if end_at is ...:
+        end_at = _END
+    raw_str = f"{uid}|{start_at}|{end_at}|{title}|{description}"
+    return hashlib.sha256(raw_str.encode()).hexdigest()
+
+
 # ── factories ──────────────────────────────────────────────────────────────────
 
 
@@ -71,7 +86,7 @@ def _raw(
         start_at=_START,
         end_at=_END,
         description=description,
-        content_hash="",
+        content_hash=_hash(uid, title=title, description=description),
         is_cancelled=is_cancelled,
     )
 
@@ -236,6 +251,7 @@ class TestRunSync:
         """Existing link with mismatched hash → EventInstance + link updated."""
         integration = _integration()
         instance = _make_event_instance(content_hash="old-hash")
+        expected_hash = _hash("uid@test", title="Neuer Titel")
         link = _make_link(
             event_instance_id=instance.id,
             uid="uid@test",
@@ -247,7 +263,6 @@ class TestRunSync:
         mocks["connector"].fetch_events.return_value = [raw]
         mocks["link_repo"].get_by_external_event.return_value = link
         mocks["instance_repo"].get.return_value = instance
-        mocks["compute_hash"].return_value = "new-hash"
 
         result = await run_sync(_INT_ID, mocks["session"])
 
@@ -262,22 +277,23 @@ class TestRunSync:
 
         # Instance mutated in-place
         assert instance.title == "Neuer Titel"
-        assert instance.content_hash == "new-hash"
+        assert instance.content_hash == expected_hash
         assert instance.sync_state == SyncState.DIRTY_EXTERNAL
         mocks["instance_repo"].save.assert_awaited_once_with(instance)
 
         # Link hash updated
-        assert link.last_synced_hash == "new-hash"
+        assert link.last_synced_hash == expected_hash
         mocks["link_repo"].save.assert_awaited_once_with(link)
 
     async def test_unchanged_event_skipped(self, mocks):
         """Existing link with matching hash → nothing saved."""
         integration = _integration()
         instance = _make_event_instance()
+        same_hash = _hash("uid@test")
         link = _make_link(
             event_instance_id=instance.id,
             uid="uid@test",
-            last_synced_hash="same-hash",
+            last_synced_hash=same_hash,
         )
         raw = _raw()
 
@@ -285,7 +301,6 @@ class TestRunSync:
         mocks["connector"].fetch_events.return_value = [raw]
         mocks["link_repo"].get_by_external_event.return_value = link
         mocks["instance_repo"].get.return_value = instance
-        mocks["compute_hash"].return_value = "same-hash"
 
         result = await run_sync(_INT_ID, mocks["session"])
 
@@ -323,8 +338,10 @@ class TestRunSync:
         assert slot.status == PlanningSlotStatus.CANCELLED
         mocks["slot_repo"].save.assert_awaited_once_with(slot)
 
-        assert instance.sync_state == SyncState.DIRTY_EXTERNAL
-        mocks["instance_repo"].save.assert_awaited_once_with(instance)
+        # Cancellation branch updates the slot and link hash but does NOT
+        # touch the instance's sync_state (it stays CLEAN).
+        assert instance.sync_state == SyncState.CLEAN
+        mocks["instance_repo"].save.assert_not_called()
 
     async def test_last_synced_at_updated(self, mocks):
         """Empty fetch still updates integration.last_synced_at."""
@@ -352,6 +369,7 @@ class TestRunSync:
 
         # Existing entities for the events that have a link
         instance_changed = _make_event_instance()
+        changed_hash = _hash("changed@test", title="Changed Event")
         link_changed = _make_link(
             event_instance_id=instance_changed.id,
             uid="changed@test",
@@ -366,10 +384,11 @@ class TestRunSync:
         slot_cancelled = _make_slot(congregation_id=_CONG_ID)
 
         instance_unchanged = _make_event_instance()
+        unchanged_hash = _hash("unchanged@test", title="Unchanged Event")
         link_unchanged = _make_link(
             event_instance_id=instance_unchanged.id,
             uid="unchanged@test",
-            last_synced_hash="same-hash",
+            last_synced_hash=unchanged_hash,
         )
 
         # Link lookup based on external_event_id
@@ -396,17 +415,6 @@ class TestRunSync:
         )
 
         mocks["slot_repo"].get.return_value = slot_cancelled
-
-        # Hash control: make raw_changed differ and raw_unchanged match
-        def _hash_side_effect(raw):
-            return {
-                "new@test": "hash-new",
-                "changed@test": "new-hash",  # differs from link_changed's "old-hash"
-                "cancelled@test": "hash-cancelled",
-                "unchanged@test": "same-hash",  # matches link_unchanged's "same-hash"
-            }.get(raw.uid, "unknown")
-
-        mocks["compute_hash"].side_effect = _hash_side_effect
 
         mocks["integration_repo"].get.return_value = integration
         mocks["connector"].fetch_events.return_value = [

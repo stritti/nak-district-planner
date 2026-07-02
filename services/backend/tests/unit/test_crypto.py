@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.application.crypto import decrypt_credentials, encrypt_credentials
+from app.application.crypto import CryptoError, decrypt_credentials, encrypt_credentials
 
 
 class TestCrypto:
@@ -47,3 +47,14 @@ class TestCrypto:
         encrypted = encrypt_credentials(original)
         decrypted = decrypt_credentials(encrypted)
         assert decrypted == original
+
+    def test_decrypt_non_string_input(self):
+        """Test decrypting with non-string input raises CryptoError."""
+        with pytest.raises(CryptoError):
+            decrypt_credentials(123)
+
+    def test_decrypt_malformed_data(self):
+        """Test decrypting malformed data raises CryptoError."""
+        with pytest.raises(CryptoError):
+            decrypt_credentials("malformed-data")
+

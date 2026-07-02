@@ -23,18 +23,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # Create enum types
-    sa.Enum(
-        "CREATE", "UPDATE", "DELETE", "LOGIN", "LOGOUT",
-        "EXPORT", "IMPORT", "BULK_OPERATION",
-        name="auditaction",
-    ).create(op.get_bind())
-    sa.Enum(
-        "SUCCESS", "FAILED",
-        name="auditstatus",
-    ).create(op.get_bind())
-
     # Create the audit_logs table
+    # Enum types (auditaction, auditstatus) are created automatically
+    # by the column definitions below.
     op.create_table(
         "audit_logs",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
@@ -48,7 +39,6 @@ def upgrade() -> None:
                 "CREATE", "UPDATE", "DELETE", "LOGIN", "LOGOUT",
                 "EXPORT", "IMPORT", "BULK_OPERATION",
                 name="auditaction",
-                create_type=False,
             ),
             nullable=False,
             index=True,
@@ -68,7 +58,6 @@ def upgrade() -> None:
             sa.Enum(
                 "SUCCESS", "FAILED",
                 name="auditstatus",
-                create_type=False,
             ),
             nullable=False,
             index=True,

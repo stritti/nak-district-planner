@@ -83,7 +83,7 @@ class TestNotificationService:
     async def test_create(self, service: NotificationService, repo: MagicMock):
         district_id = uuid.uuid4()
         repo.save = AsyncMock()
-
+        
         notification = await service.create_notification(
             district_id=district_id,
             type=NotificationType.SYSTEM,
@@ -93,6 +93,10 @@ class TestNotificationService:
         assert notification.title == "Test"
         assert notification.district_id == district_id
         repo.save.assert_awaited_once()
+        
+        # Verify that the created_at timestamp is set
+        assert notification.created_at is not None
+
 
     async def test_create_with_all_params(self, service: NotificationService, repo: MagicMock):
         district_id = uuid.uuid4()
@@ -162,6 +166,28 @@ class TestNotificationService:
         count = await service.mark_all_read(district_id, "user_sub_abc")
         assert count == 5
         repo.mark_all_read.assert_awaited_once_with(district_id, "user_sub_abc")
+
+    async def test_get_found(self, service: NotificationService, repo: MagicMock):
+        notification_id = uuid.uuid4()
+        notification = Notification(
+            id=notification_id,
+            district_id=uuid.uuid4(),
+            type=NotificationType.SYSTEM,
+            title="Test",
+            body="",
+            created_at=datetime.now(timezone.utc),
+        )
+        repo.get = AsyncMock(return_value=notification)
+
+        result = await service.get(notification_id)
+        assert result is not None
+        assert result.id == notification_id
+        repo.get.assert_awaited_once_with(notification_id)
+
+    async def test_get_not_found(self, service: NotificationService, repo: MagicMock):
+        repo.get = AsyncMock(return_value=None)
+        result = await service.get(uuid.uuid4())
+        assert result is None
 
     async def test_get_unread_count(self, service: NotificationService, repo: MagicMock):
         district_id = uuid.uuid4()

@@ -243,3 +243,21 @@ class TestFetchEvents:
         )
         with pytest.raises(ValueError, match="HTML"):
             await connector.fetch_events(CREDS)
+
+    async def test_invalid_ical_content_raises_value_error(self):
+        """Invalid iCal content raises ValueError."""
+        connector = ICalConnector(client=_mock_http(b"not valid ical data"))
+        with pytest.raises(ValueError, match="Ungültiges iCal-Format"):
+            await connector.fetch_events(CREDS)
+
+    async def test_event_without_dtstart_is_skipped(self):
+        """VEVENT without DTSTART is skipped."""
+        vevent_no_dtstart = (
+            "BEGIN:VEVENT\r\n"
+            "UID:uid-nodtstart@test\r\n"
+            "SUMMARY:Kein Start\r\n"
+            "END:VEVENT"
+        )
+        connector = ICalConnector(client=_mock_http(_ics(vevent_no_dtstart)))
+        events = await connector.fetch_events(CREDS)
+        assert len(events) == 0

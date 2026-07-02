@@ -2,8 +2,8 @@
 
 Task Group 2.1 of M2 — Notification System.
 
-Revision ID: 0124_create_notifications_table
-Revises: 0123_matrix_migration_add_planning_slot_fields
+Revision ID: 0124
+Revises: 0123
 Create Date: 2026-06-24
 """
 from __future__ import annotations
@@ -14,8 +14,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0124_create_notifications_table"
-down_revision: str | None = "0123_matrix_migration_add_planning_slot_fields"
+revision: str = "0124"
+down_revision: str | None = "0123"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

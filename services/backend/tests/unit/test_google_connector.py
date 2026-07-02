@@ -378,3 +378,24 @@ class TestFetchEvents:
 
         with pytest.raises(ValueError, match="URL liefert HTML"):
             await connector.fetch_events(CREDS)
+
+    async def test_invalid_datetime_skipped(
+        self, connector: GoogleCalendarConnector, mock_client: MagicMock
+    ) -> None:
+        """Event with unparseable datetime is skipped (ValueError caught)."""
+        _setup_mock_client(
+            mock_client,
+            {
+                "items": [
+                    _make_event(
+                        id="uid@test",
+                        summary="Bad date",
+                        start={"dateTime": "not-a-date"},
+                        end={"dateTime": "2026-04-05T11:00:00Z"},
+                    ),
+                ],
+            },
+        )
+
+        raw_events = await connector.fetch_events(CREDS)
+        assert len(raw_events) == 0
