@@ -72,19 +72,7 @@ jobs:
           echo "✅ Exactly one migration head"
 
       - name: Check FK constraint names do not exceed PostgreSQL 63-char limit
-        run: |
-          EXIT_CODE=0
-          while IFS= read -r line; do
-            FK_NAME=$(echo "$line" | sed -n 's/.*"\(fk_[^"]*\)".*/\1/p')
-            if [ -n "$FK_NAME" ] && [ ${#FK_NAME} -gt 63 ]; then
-              echo "❌ FK name exceeds 63 chars: $FK_NAME (${#FK_NAME} chars)"
-              EXIT_CODE=1
-            fi
-          done < <(grep -rn 'create_foreign_key\|drop_constraint.*foreignkey' alembic/versions/ --include='*.py')
-          if [ $EXIT_CODE -eq 0 ]; then
-            echo "✅ All FK constraint names within 63-char limit"
-          fi
-          exit $EXIT_CODE
+        run: uv run python scripts/check_fk_names.py
 
       - name: Validate offline SQL generation
         run: |
