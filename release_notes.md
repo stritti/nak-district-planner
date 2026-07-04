@@ -1,4 +1,4 @@
-## [v0.27.0] - 2026-06-28
+## [v0.27.1] - 2026-07-04
 
 ### Features
 * feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
@@ -13,6 +13,7 @@
 * Merge pull request #174 from stritti/feature/matrix-rendering-migration-1-1 (55355e8)
 
 ### Bug Fixes
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 * fix: add district role checks to notification endpoints (P1) (#191) (25bc47e)
 * Fix MegaLinter issues: add language specifiers to code blocks, fix trailing spaces, fix table columns, ensure files end with newline (e0a544e)
 * fix: remove undefined leader_ids variable from matrix view (7c5e5ca)
@@ -22,9 +23,9 @@
 * fix: restore leader preload for name resolution; fallback event_id for slot-only cells (ce64617)
 * fix: update uv.lock, enforce burst limit, fix denial test (9bbb0bf)
 * fix: add explanatory comment to CodeQL empty except (013fda3)
-* fix: chain migration from current head e4b2a9d7f110; preserve slot-only dates (4d33a6e)
 
 ### Other Changes
+* chore: release v0.27.0 (fad556f)
 * chore: release v0.26.2 (3d4804f)
 * chore: release v0.26.1 (402e69e)
 * M2 — Notification-System, PlanningSeries Auto-Gen, Matrix-Deviation, Auto-Matching (#189) (e707d5d)
@@ -34,4 +35,3 @@
 * chore: release v0.23.0 (56bb2ae)
 * chore: release v0.22.0 (c6a5d30)
 * Merge pull request #148 from stritti/copilot/implement-planningslot-planningseries (837697e)
-* Merge remote-tracking branch 'origin/main' into copilot/implement-planningslot-planningseries (fe0bf8f)
