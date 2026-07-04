@@ -1,4 +1,4 @@
-## [v0.27.1] - 2026-07-04
+## [v0.27.2] - 2026-07-04
 
 ### Features
 * feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
@@ -13,25 +13,25 @@
 * Merge pull request #174 from stritti/feature/matrix-rendering-migration-1-1 (55355e8)
 
 ### Bug Fixes
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
-* fix: add district role checks to notification endpoints (P1) (#191) (25bc47e)
-* Fix MegaLinter issues: add language specifiers to code blocks, fix trailing spaces, fix table columns, ensure files end with newline (e0a544e)
-* fix: remove undefined leader_ids variable from matrix view (7c5e5ca)
-* fix: align test files with refactored matrix implementation (c814262)
-* fix: correct RBAC gap classification per review feedback (2748d25)
-* fix: remove unverified JWT extraction from rate-limit keys; use Docker Redis URL (e79749e)
-* fix: restore leader preload for name resolution; fallback event_id for slot-only cells (ce64617)
-* fix: update uv.lock, enforce burst limit, fix denial test (9bbb0bf)
-* fix: add explanatory comment to CodeQL empty except (013fda3)
+* fix: 0125 als e5a2-Parent statt depends_on — schließt Multiple-Head-Lücke (c6dc17a)
+* fix: remove e5a2 from merge parents (already consumed by 0125 depends_on) (6d20f11)
+* fix: make 0125 depend on e5a2 approval-status migration (d3555fd)
+* fix: use Python AST for FK name length check (c5d090b)
+* fix: resolve 5 pre-existing unit test failures (b467acc)
+* fix: remove Depends() from auth params in notifications router (334f407)
+* fix: let column definitions create enum types automatically in 0012 migration (2093069)
+* fix: remove tail from alembic upgrade for full log output (24095f6)
 
 ### Other Changes
+* Clean Code: Refactoring und DRY-Verbesserungen (#206) (aa695f9)
+* Clean Code Skill hinzugefügt (9f14d85)
+* Clean Code: Refactoring und DRY-Verbesserungen (d039cb9)
+* chore: release v0.27.1 (e810d6e)
+* test: coverage >80% mit Tests für Pydantic-Validatoren, Writer-Loop, MS-Connector, ServiceAssignment u.a. (3f030d9)
+* docs: add ENUM type handling pattern to alembic skill doc (0fcb965)
+* docs: add dependency ordering section to alembic skill (dd1f128)
 * chore: release v0.27.0 (fad556f)
 * chore: release v0.26.2 (3d4804f)
 * chore: release v0.26.1 (402e69e)
-* M2 — Notification-System, PlanningSeries Auto-Gen, Matrix-Deviation, Auto-Matching (#189) (e707d5d)
-* chore: release v0.26.0 (ded67c9)
-* chore: release v0.25.0 (5adc99a)
-* chore: release v0.24.0 (1f56d93)
-* chore: release v0.23.0 (56bb2ae)
-* chore: release v0.22.0 (c6a5d30)
-* Merge pull request #148 from stritti/copilot/implement-planningslot-planningseries (837697e)
