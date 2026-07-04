@@ -143,8 +143,8 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
             # Move to next month
             current_month += rule.interval
             if current_month > 12:
-                current_month = current_month % 12
-                current_year += current_month // 12
+                current_year += (current_month - 1) // 12
+                current_month = ((current_month - 1) % 12) + 1
 
             if date(current_year, current_month, 1) > to_date:
                 break

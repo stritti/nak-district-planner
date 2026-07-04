@@ -1,0 +1,129 @@
+name: Alembic Migration Check
+
+on:
+  pull_request:
+    paths:
+      - "services/backend/alembic/**"
+      - "services/backend/app/adapters/db/**"
+      - "services/backend/app/domain/models/**"
+  push:
+    branches: [main, develop]
+    paths:
+      - "services/backend/alembic/**"
+      - "services/backend/app/adapters/db/**"
+      - "services/backend/app/domain/models/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  PYTHON_VERSION: "3.13"
+  DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
+
+jobs:
+  alembic-check:
+    name: Migration Graph & FK Names
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/backend
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: nak
+          POSTGRES_PASSWORD: changeme
+          POSTGRES_DB: nak_planner_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nak -d nak_planner_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: uv sync --group dev
+
+      - name: Check for exactly one migration head
+        run: |
+          HEAD_COUNT=$(uv run alembic heads | grep -c "(head)" || true)
+          echo "Head count: $HEAD_COUNT"
+          if [ "$HEAD_COUNT" -ne 1 ]; then
+            echo "❌ Expected 1 migration head, found $HEAD_COUNT"
+            uv run alembic heads
+            exit 1
+          fi
+          echo "✅ Exactly one migration head"
+
+      - name: Check FK constraint names do not exceed PostgreSQL 63-char limit
+        run: uv run python scripts/check_fk_names.py
+
+      - name: Validate offline SQL generation
+        run: |
+          set -o pipefail
+          uv run alembic upgrade head --sql 2>&1 | tail -5
+          echo "✅ Offline SQL generation successful"
+
+      - name: Apply migrations to test database
+        run: |
+          set -o pipefail
+          uv run alembic upgrade head 2>&1
+          echo "✅ Migrations applied successfully to test database"
+
+      - name: Verify current state matches exactly one head
+        run: |
+          HEAD_COUNT=$(uv run alembic heads | grep -c "(head)" || true)
+          echo "Post-upgrade head count: $HEAD_COUNT"
+          if [ "$HEAD_COUNT" -ne 1 ]; then
+            echo "❌ Multiple heads after upgrade"
+            uv run alembic heads
+            exit 1
+          fi
+          CURRENT=$(uv run alembic current 2>&1 | head -1)
+          echo "Current revision: $CURRENT"
+          echo "✅ Migration chain is consistent"
+
+      - name: Post migration check summary to PR
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SUMMARY="## Alembic Migration Check
+
+          | Check | Status |
+          |-------|--------|
+          | **Single Head** | ${{ job.status == 'success' && '✅' || '❌' }} |
+          | **FK Names ≤63 chars** | ${{ job.status == 'success' && '✅' || '❌' }} |
+          | **SQL Generation** | ${{ job.status == 'success' && '✅' || '❌' }} |
+          | **DB Apply** | ${{ job.status == 'success' && '✅' || '❌' }} |
+          | **Chain Consistent** | ${{ job.status == 'success' && '✅' || '❌' }} |
+          "
+
+          if [ "${{ job.status }}" = "success" ]; then
+            SUMMARY="$SUMMARY
+
+          _All migration checks passed._"
+          else
+            SUMMARY="$SUMMARY
+
+          _Some checks failed — inspect workflow logs for details._"
+          fi
+
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "$SUMMARY" 2>/dev/null || true

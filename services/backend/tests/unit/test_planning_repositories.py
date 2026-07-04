@@ -284,6 +284,7 @@ class TestSqlEventInstanceRepository:
                 source="INTERNAL",
                 visibility="INTERNAL",
                 deviation_flag=False,
+                sync_state="CLEAN",
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )
@@ -307,6 +308,7 @@ class TestSqlEventInstanceRepository:
             source="INTERNAL",
             visibility="INTERNAL",
             deviation_flag=False,
+            sync_state="CLEAN",
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
@@ -326,6 +328,7 @@ class TestSqlEventInstanceRepository:
             source="INTERNAL",
             visibility="INTERNAL",
             deviation_flag=False,
+            sync_state="CLEAN",
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
@@ -355,6 +358,7 @@ class TestSqlEventInstanceRepository:
             source="INTERNAL",
             visibility="INTERNAL",
             deviation_flag=False,
+            sync_state="CLEAN",
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )

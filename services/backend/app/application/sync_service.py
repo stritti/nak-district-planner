@@ -136,7 +136,8 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
             calendar_integration_id=integration_id,
         )
 
-        new_content_hash = raw.content_hash if hasattr(raw, "content_hash") else _compute_content_hash(raw)
+        # content_hash is always set by the connector; use it directly.
+        new_content_hash = raw.content_hash
 
         if existing_link is None:
             # ── NEW external event ──

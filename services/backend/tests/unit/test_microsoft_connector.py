@@ -309,3 +309,48 @@ class TestFetchEvents:
 
         with pytest.raises(ValueError, match="HTTP 500"):
             await connector.fetch_events(CREDS)
+
+    async def test_event_without_start_is_skipped(
+        self, connector: MicrosoftGraphCalendarConnector, mock_client: MagicMock
+    ) -> None:
+        """Event with no start dateTime is skipped."""
+        _setup_mock_client(
+            mock_client,
+            [
+                _make_event(
+                    id="no-dt",
+                    subject="Missing dateTime",
+                    start={},  # empty start — no dateTime key
+                    end={"dateTime": "2026-04-05T11:00:00Z"},
+                ),
+                _make_event(
+                    id="valid@test",
+                    subject="Valid",
+                    start={"dateTime": "2026-04-05T12:00:00Z"},
+                    end={"dateTime": "2026-04-05T13:00:00Z"},
+                ),
+            ],
+        )
+
+        raw_events = await connector.fetch_events(CREDS)
+        assert len(raw_events) == 1
+        assert raw_events[0].uid == "valid@test"
+
+    async def test_invalid_datetime_skipped(
+        self, connector: MicrosoftGraphCalendarConnector, mock_client: MagicMock
+    ) -> None:
+        """Event with unparseable datetime is skipped."""
+        _setup_mock_client(
+            mock_client,
+            [
+                _make_event(
+                    id="uid@test",
+                    subject="Bad date",
+                    start={"dateTime": "not-a-date"},
+                    end={"dateTime": "2026-04-05T11:00:00Z"},
+                ),
+            ],
+        )
+
+        raw_events = await connector.fetch_events(CREDS)
+        assert len(raw_events) == 0

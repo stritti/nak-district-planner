@@ -1039,32 +1039,12 @@ async def test_generate_matrix_drafts_success() -> None:
     db = AsyncMock()
     now = datetime.now(UTC)
     congregation = Congregation.create(name="G", district_id=district_id)
-    # TODO: refactor for Event-free architecture
-    # event = Event.create(
-    #     title="Gottesdienst",
-    #     start_at=now,
-    #     end_at=now + timedelta(hours=1),
-    #     district_id=district_id,
-    #     congregation_id=congregation.id,
-    #     status=EventStatus.DRAFT,
-    #     category="Gottesdienst",
-    #     generation_slot_key="slot-1",
-    # )
-    event = type("_FakeEvent", (), {"id": uuid.uuid4(), "title": "Gottesdienst",
-        "start_at": now, "end_at": now + timedelta(hours=1),
-        "district_id": district_id, "congregation_id": congregation.id,
-        "category": "Gottesdienst", "status": "DRAFT",
-        "generation_slot_key": "slot-1", "source": "INTERNAL",
-        "visibility": "INTERNAL", "description": None, "audiences": [],
-        "applicability": [], "approval_status": "DRAFT",
-        "created_at": now, "updated_at": now})()
 
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
         patch("app.adapters.api.routers.districts.GenerateDraftServicesUseCase") as use_case_cls,
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
-        patch("app.adapters.api.routers.districts.SqlEventRepository") as event_repo_cls,
     ):
         district_repo = AsyncMock()
         district_repo.get.return_value = District.create(name="D")
@@ -1085,10 +1065,6 @@ async def test_generate_matrix_drafts_success() -> None:
         cong_repo.list_by_district.return_value = [congregation]
         cong_repo_cls.return_value = cong_repo
 
-        event_repo = AsyncMock()
-        event_repo.list.return_value = ([event], 1)
-        event_repo_cls.return_value = event_repo
-
         out = await r.generate_matrix_drafts(
             district_id,
             object(),
@@ -1096,7 +1072,7 @@ async def test_generate_matrix_drafts_success() -> None:
             from_dt=now - timedelta(days=1),
             to_dt=now + timedelta(days=1),
         )
-    assert out["generated_in_requested_range"] == 1
+    assert out["created"] == 1
 
 
 @pytest.mark.asyncio

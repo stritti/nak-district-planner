@@ -205,6 +205,9 @@ class TestAuditService:
         assert entry.district_id == context.district_id
         assert entry.changes == {"title": "new title"}
         
+        # Verify that the timestamp is set
+        assert entry.timestamp is not None
+        
         await service.stop()
 
     @pytest.mark.asyncio
@@ -264,12 +267,123 @@ class TestAuditService:
         await service.stop()
 
     @pytest.mark.asyncio
+    async def test_log_event_with_all_fields(self):
+        """Test log_event with a fully populated AuditEvent."""
+        service = AuditService()
+        await service.start()
+
+        import uuid
+        event = AuditEvent(
+            action=AuditAction.CREATE,
+            resource_type="user",
+            resource_id=uuid.uuid4(),
+            changes={"name": "new name"},
+            old_values={"name": "old name"},
+            status=AuditStatus.FAILED,
+            error_message="Test error",
+            extra_metadata={"key": "value"},
+        )
+
+        put_calls = []
+        original_put = service._queue.put
+
+        async def mock_put(item):
+            put_calls.append(item)
+            await original_put(item)
+
+        service._queue.put = mock_put
+
+        await service.log_event(event)
+
+        assert len(put_calls) == 1
+        entry = put_calls[0]
+        assert entry.changes == {"name": "new name"}
+        assert entry.extra_metadata == {"key": "value"}
+        assert entry.status == AuditStatus.FAILED
+        assert entry.error_message == "Test error"
+
+        await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_log_batch(self):
+        """Test logging multiple events in batch."""
+        service = AuditService()
+        await service.start()
+
+        events = [
+            AuditEvent(action=AuditAction.CREATE, resource_type="user"),
+            AuditEvent(action=AuditAction.UPDATE, resource_type="event"),
+            AuditEvent(action=AuditAction.DELETE, resource_type="leader"),
+        ]
+
+        put_calls = []
+        original_put = service._queue.put
+
+        async def mock_put(item):
+            put_calls.append(item)
+            await original_put(item)
+
+        service._queue.put = mock_put
+
+        await service.log_batch(events)
+
+        # Each event should be logged separately via log_event
+        assert len(put_calls) == 3
+        assert put_calls[0].action == AuditAction.CREATE
+        assert put_calls[1].action == AuditAction.UPDATE
+        assert put_calls[2].action == AuditAction.DELETE
+
+        await service.stop()
+
+    @pytest.mark.asyncio
     async def test_stop_without_start(self):
         """Test that stopping without starting doesn't cause issues."""
         service = AuditService()
         await service.stop()  # Should not raise
         
         assert service._running is False
+
+    @pytest.mark.asyncio
+    async def test_writer_commits_successfully(self):
+        """Writer commits audit log when DB operations succeed."""
+        service = AuditService()
+        await service.start()
+
+        mock_session = AsyncMock()
+        mock_session.commit.return_value = None
+        mock_session.rollback.return_value = None
+
+        with patch(
+            "app.application.audit_service.AsyncSessionLocal",
+            return_value=mock_session,
+        ):
+            await service.log(
+                action=AuditAction.CREATE,
+                resource_type="user",
+            )
+            # Let writer process the queue item
+            await asyncio.sleep(0.05)
+
+        await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_writer_handles_db_error(self):
+        """Writer handles exceptions when AsyncSessionLocal fails."""
+        service = AuditService()
+        await service.start()
+
+        with patch(
+            "app.application.audit_service.AsyncSessionLocal",
+            side_effect=RuntimeError("DB connection failed"),
+        ):
+            await service.log(
+                action=AuditAction.CREATE,
+                resource_type="user",
+            )
+            # Let writer process — should hit outer except Exception
+            await asyncio.sleep(0.05)
+
+        await service.stop()
 
 
 class TestAuditAction:

@@ -7,8 +7,8 @@ M3 — Sync Algorithm Hardening:
   - Drop FK constraints referencing events.id
   - Drop the legacy events table
 
-Revision ID: 0125_remove_events_add_sync_fields
-Revises: 0124_create_notifications_table
+Revision ID: 0125
+Revises: 0124
 Create Date: 2026-06-25 20:00:00.000000
 """
 
@@ -21,8 +21,8 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "0125_remove_events_add_sync_fields"
-down_revision: str | None = "0124_create_notifications_table"
+revision: str = "0125"
+down_revision: str | tuple[str, ...] | None = ("0124", "e5a2b3c4d5f0")
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -159,8 +159,8 @@ def upgrade() -> None:
             applicability, created_at, updated_at)
         SELECT gen_random_uuid(), district_id, start_at::date, start_at::time,
             congregation_id, category, title,
-            CASE WHEN status = 'CANCELLED' THEN 'CANCELLED' ELSE 'ACTIVE' END,
-            COALESCE(approval_status, 'PLANNED'),
+            CASE WHEN status = 'CANCELLED' THEN 'CANCELLED'::planning_slot_status ELSE 'ACTIVE'::planning_slot_status END,
+            COALESCE(approval_status, 'PLANNED'::event_approval_status),
             invitation_source_congregation_id, id,
             applicability, created_at, updated_at
         FROM events
@@ -175,7 +175,7 @@ def upgrade() -> None:
             created_at, updated_at)
         SELECT gen_random_uuid(), ps.id, COALESCE(e.title, ''), e.description,
             e.start_at, e.end_at, e.source, e.visibility,
-            FALSE, 'CLEAN',
+            FALSE, 'CLEAN'::sync_state,
             e.external_uid, e.content_hash, e.calendar_integration_id,
             e.created_at, e.updated_at
         FROM events e
