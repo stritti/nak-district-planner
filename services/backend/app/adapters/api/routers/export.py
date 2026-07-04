@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportTokenResponse
-from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
+from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.repositories import (
     SqlEventInstanceRepository,
@@ -42,10 +42,7 @@ router = APIRouter()
 async def create_export_token(
     auth: CurrentUserWithMemberships, body: ExportTokenCreate, session: DbSession
 ) -> ExportTokenResponse:
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
 
     token = ExportToken.create(
         label=body.label,
@@ -75,10 +72,7 @@ async def list_export_tokens(
         )
 
     if district_id is not None:
-        try:
-            assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-        except PermissionError as e:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
     repo = SqlExportTokenRepository(session)
     tokens = await repo.list_by_district(district_id) if district_id else await repo.list_all()
@@ -99,10 +93,7 @@ async def delete_export_token(
     if token is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht gefunden")
 
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, token.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, token.district_id)
 
     await repo.delete(token_id)
 
@@ -123,6 +114,8 @@ def _token_response(token: ExportToken) -> ExportTokenResponse:
 # ── Public ICS export (no auth) ──────────────────────────────────────────────
 
 _EXPORT_WINDOW_YEARS = 3
+# Default duration for events that only have a PlanningSlot (no EventInstance yet).
+_SYNTHESIZED_EVENT_DURATION = timedelta(hours=2)
 
 
 def _synthesize_datetime(slot: PlanningSlot, default_time: time = time(0, 0, 0)) -> datetime:
@@ -252,7 +245,7 @@ async def export_calendar_ics(
             # Synthesize from PlanningSlot when no EventInstance exists
             vt = _synthesize_datetime(slot)
             vevent.add("dtstart", vt)
-            vevent.add("dtend", vt + timedelta(hours=2))
+            vevent.add("dtend", vt + _SYNTHESIZED_EVENT_DURATION)
             vevent.add("dtstamp", slot.created_at)
 
         # Mark PLANNED events as tentative in the calendar

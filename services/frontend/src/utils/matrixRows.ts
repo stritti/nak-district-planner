@@ -8,8 +8,8 @@ export function sortMatrixRows(rows: MatrixRow[], mode: MatrixSortMode): MatrixR
   }
 
   return rows.slice().sort((a, b) => {
-    const aGroup = (a.group_name ?? '').trim().toLocaleLowerCase('de')
-    const bGroup = (b.group_name ?? '').trim().toLocaleLowerCase('de')
+    const aGroup = (a.group_name ?? '').trim().toLowerCase()
+    const bGroup = (b.group_name ?? '').trim().toLowerCase()
 
     if (aGroup && bGroup && aGroup !== bGroup) {
       return aGroup.localeCompare(bGroup, 'de')
