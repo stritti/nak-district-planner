@@ -22,9 +22,9 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0125"
-down_revision: str | None = "0124"
+down_revision: str | tuple[str, ...] | None = ("0124", "e5a2b3c4d5f0")
 branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = "e5a2b3c4d5f0"
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
