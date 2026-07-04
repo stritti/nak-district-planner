@@ -109,6 +109,24 @@ def assert_has_role_in_district(
         )
 
 
+def require_role_in_district(
+    auth_context: AuthContext,
+    required_role: Role,
+    district_id: uuid.UUID,
+) -> None:
+    """Assert role in district and raise 403 HTTPException on failure.
+
+    Thin convenience wrapper that converts PermissionError into a FastAPI
+    403 response so routers don't repeat the try/except pattern.
+    """
+    try:
+        assert_has_role_in_district(auth_context, required_role, district_id)
+    except PermissionError as e:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+
+
 def assert_has_role_in_congregation(
     auth_context: AuthContext,
     required_role: Role,

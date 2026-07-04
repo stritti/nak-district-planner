@@ -31,14 +31,14 @@ from app.adapters.api.schemas.registration import (
     RegistrationResponse,
 )
 from app.adapters.auth.oidc import TokenValidationError
-from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
+from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.idp.provisioning import IdpProvisioningError, get_idp_provisioner
-from app.domain.models.leader import Leader
+from app.domain.models.leader import Leader, LeaderRank, SpecialRole
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
@@ -114,6 +114,7 @@ _optional_bearer = HTTPBearer(auto_error=False)
 
 
 def _to_response(reg: LeaderRegistration) -> RegistrationResponse:
+    """Map a domain LeaderRegistration to its API response schema."""
     return RegistrationResponse(
         id=reg.id,
         district_id=reg.district_id,
@@ -219,10 +220,7 @@ async def list_registrations(
     status_filter: RegistrationStatus | None = Query(default=None, alias="status"),
 ) -> list[RegistrationResponse]:
     """List registration requests for a district (DISTRICT_ADMIN only)."""
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
@@ -283,13 +281,40 @@ async def approve_registration(
     Creates an active Leader record and marks the registration as APPROVED.
     The admin may override the congregation, rank, or special role.
     """
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
     reg_repo = SqlLeaderRegistrationRepository(db)
     reg = await reg_repo.get(registration_id)
+
+    await _validate_registration_pending(reg, district_id)
+    # reg is guaranteed non-None after _validate_registration_pending passes
+    assert reg is not None
+    await _validate_scope_assignment(db, body, district_id)
+
+    # Determine effective values (admin overrides take precedence)
+    congregation_id = (
+        body.congregation_id if body.congregation_id is not None else reg.congregation_id
+    )
+    rank = body.rank if body.rank is not None else reg.rank
+    special_role = body.special_role if body.special_role is not None else reg.special_role
+
+    await _create_leader_and_approve(
+        db, reg, body, auth, district_id, congregation_id, rank, special_role
+    )
+    await _create_membership_if_linked(db, reg, body)
+    await _handle_idp_provisioning(db, reg, body, district_id)
+
+    await reg_repo.save(reg)
+
+    logger.info("Registration approved; leader record created.")
+    return _to_response(reg)
+
+
+async def _validate_registration_pending(
+    reg: LeaderRegistration | None,
+    district_id: uuid.UUID,
+) -> None:
+    """Raise 404/409 if registration does not exist or is not in PENDING status."""
     if not reg or reg.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Registrierung nicht gefunden"
@@ -300,14 +325,13 @@ async def approve_registration(
             detail=f"Registrierung ist bereits {reg.status.value}",
         )
 
-    # Admin can override congregation / rank / special_role from the request
-    congregation_id = (
-        body.congregation_id if body.congregation_id is not None else reg.congregation_id
-    )
-    rank = body.rank if body.rank is not None else reg.rank
-    special_role = body.special_role if body.special_role is not None else reg.special_role
 
-    # Validate scope assignment consistency with district context.
+async def _validate_scope_assignment(
+    db: DbSession,
+    body: RegistrationApprove,
+    district_id: uuid.UUID,
+) -> None:
+    """Check that scope_type/scope_id are consistent with the district."""
     if body.scope_type == ScopeType.DISTRICT:
         if body.scope_id != district_id:
             raise HTTPException(
@@ -322,7 +346,18 @@ async def approve_registration(
                 detail="scope_id muss eine Gemeinde des Bezirkes sein, wenn scope_type=CONGREGATION",
             )
 
-    # Create the Leader
+
+async def _create_leader_and_approve(
+    db: DbSession,
+    reg: LeaderRegistration,
+    body: RegistrationApprove,
+    auth: CurrentUserWithMemberships,
+    district_id: uuid.UUID,
+    congregation_id: uuid.UUID | None,
+    rank: LeaderRank | None,
+    special_role: SpecialRole | None,
+) -> None:
+    """Create the Leader record and mark the registration as APPROVED."""
     leader = Leader.create(
         name=reg.name,
         district_id=district_id,
@@ -336,19 +371,25 @@ async def approve_registration(
     )
     await SqlLeaderRepository(db).save(leader)
 
-    # Update registration status
+    now = datetime.now(UTC)
     reg.status = RegistrationStatus.APPROVED
     reg.assigned_role = body.role
     reg.assigned_scope_type = body.scope_type
     reg.assigned_scope_id = body.scope_id
     reg.approved_by_sub = auth.user_sub
-    reg.approved_at = datetime.now(UTC)
+    reg.approved_at = now
     reg.idp_provision_status = None
     reg.idp_provision_error = None
     reg.idp_provisioned_at = None
-    reg.updated_at = datetime.now(UTC)
+    reg.updated_at = now
 
-    # Create/update membership only when user is linked.
+
+async def _create_membership_if_linked(
+    db: DbSession,
+    reg: LeaderRegistration,
+    body: RegistrationApprove,
+) -> None:
+    """Create/update membership when the registrant already has an OIDC user_sub."""
     if reg.user_sub is not None:
         await SqlMembershipRepository(db).upsert_by_scope(
             user_sub=reg.user_sub,
@@ -357,38 +398,42 @@ async def approve_registration(
             scope_id=body.scope_id,
         )
 
-    # Optional IDP provisioning/invite webhook.
+
+async def _handle_idp_provisioning(
+    db: DbSession,
+    reg: LeaderRegistration,
+    body: RegistrationApprove,
+    district_id: uuid.UUID,
+) -> None:
+    """Optionally provision the user in the external IDP and capture the result."""
     provisioner = get_idp_provisioner()
-    if provisioner is not None:
-        try:
-            provision_result = await provisioner.provision_user(
-                email=reg.email,
-                name=reg.name,
-                district_id=str(district_id),
-                registration_id=str(reg.id),
-                role=body.role.value,
-                scope_type=body.scope_type.value,
-                scope_id=str(body.scope_id),
+    if provisioner is None:
+        return
+
+    try:
+        provision_result = await provisioner.provision_user(
+            email=reg.email,
+            name=reg.name,
+            district_id=str(district_id),
+            registration_id=str(reg.id),
+            role=body.role.value,
+            scope_type=body.scope_type.value,
+            scope_id=str(body.scope_id),
+        )
+        reg.idp_provision_status = provision_result.status
+        reg.idp_provision_error = None
+        reg.idp_provisioned_at = datetime.now(UTC)
+        if reg.user_sub is None and provision_result.user_sub:
+            reg.user_sub = provision_result.user_sub
+            await SqlMembershipRepository(db).upsert_by_scope(
+                user_sub=reg.user_sub,
+                role=body.role,
+                scope_type=body.scope_type,
+                scope_id=body.scope_id,
             )
-            reg.idp_provision_status = provision_result.status
-            reg.idp_provision_error = None
-            reg.idp_provisioned_at = datetime.now(UTC)
-            if reg.user_sub is None and provision_result.user_sub:
-                reg.user_sub = provision_result.user_sub
-                await SqlMembershipRepository(db).upsert_by_scope(
-                    user_sub=reg.user_sub,
-                    role=body.role,
-                    scope_type=body.scope_type,
-                    scope_id=body.scope_id,
-                )
-        except IdpProvisioningError as exc:
-            reg.idp_provision_status = "FAILED"
-            reg.idp_provision_error = str(exc)
-
-    await reg_repo.save(reg)
-
-    logger.info("Registration approved; leader record created.")
-    return _to_response(reg)
+    except IdpProvisioningError as exc:
+        reg.idp_provision_status = "FAILED"
+        reg.idp_provision_error = str(exc)
 
 
 @router.post(
@@ -403,10 +448,7 @@ async def reject_registration(
     db: DbSession,
 ) -> RegistrationResponse:
     """Reject a registration request (DISTRICT_ADMIN only)."""
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
     reg_repo = SqlLeaderRegistrationRepository(db)
     reg = await reg_repo.get(registration_id)
@@ -437,10 +479,7 @@ async def delete_registration(
     db: DbSession,
 ) -> None:
     """Delete a registration request (DISTRICT_ADMIN only)."""
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
     reg_repo = SqlLeaderRegistrationRepository(db)
     reg = await reg_repo.get(registration_id)

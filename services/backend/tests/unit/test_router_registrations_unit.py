@@ -73,7 +73,7 @@ async def test_list_registrations_and_pending_overview() -> None:
     auth = _auth(is_superadmin=True)
 
     with (
-        patch("app.adapters.api.routers.registrations.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.registrations.require_role_in_district"),
         patch("app.adapters.api.routers.registrations.SqlDistrictRepository") as district_repo_cls,
         patch(
             "app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository"
@@ -109,7 +109,7 @@ async def test_approve_reject_delete_paths() -> None:
     auth = _auth()
 
     with (
-        patch("app.adapters.api.routers.registrations.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.registrations.require_role_in_district"),
         patch(
             "app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository"
         ) as reg_repo_cls,
@@ -183,7 +183,7 @@ async def test_approve_provisioning_failure_sets_status() -> None:
     provisioner.provision_user.side_effect = rr.IdpProvisioningError("boom")
 
     with (
-        patch("app.adapters.api.routers.registrations.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.registrations.require_role_in_district"),
         patch(
             "app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository"
         ) as reg_repo_cls,

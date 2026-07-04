@@ -6,10 +6,10 @@ for a rolling window (default 6-12 months ahead).
 
 from __future__ import annotations
 
+import calendar
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
@@ -22,6 +22,10 @@ from app.domain.ports.repositories import (
     PlanningSeriesRepository,
     PlanningSlotRepository,
 )
+
+# Default event duration when generating instances from a PlanningSeries.
+# Used as the difference between actual_start_at and actual_end_at.
+_DEFAULT_EVENT_DURATION = timedelta(hours=1, minutes=30)
 
 
 @dataclass(frozen=True)
@@ -185,7 +189,7 @@ class PlanningSeriesGenerator:
                         gslot.planning_date, planning_time, tzinfo=UTC
                     ),
                     actual_end_at=datetime.combine(gslot.planning_date, planning_time, tzinfo=UTC)
-                    + timedelta(hours=1, minutes=30),
+                    + _DEFAULT_EVENT_DURATION,
                     source=EventSource.INTERNAL,
                     visibility=EventVisibility.INTERNAL,
                     deviation_flag=False,
@@ -205,7 +209,5 @@ class PlanningSeriesGenerator:
         month = source.month - 1 + months
         year = source.year + month // 12
         month = month % 12 + 1
-        import calendar
-
         day = min(source.day, calendar.monthrange(year, month)[1])
         return date(year, month, day)

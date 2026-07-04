@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
-import uuid
-from datetime import date, datetime, time, timedelta
+from dataclasses import dataclass
+from datetime import datetime, time, timedelta
 
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.planning_slot import PlanningSlot
+
+
+@dataclass(frozen=True)
+class _ExpectedTimes:
+    """Expected start and end datetimes derived from a PlanningSlot."""
+    expected_start: datetime
+    expected_end: datetime
 
 
 class MatrixService:
@@ -17,6 +24,24 @@ class MatrixService:
     - Formatting time differences for display
     - Building matrix cell data with deviation information
     """
+
+    @staticmethod
+    def _expected_times(
+        slot: PlanningSlot,
+        default_duration_minutes: int = 90,
+    ) -> _ExpectedTimes:
+        """Compute expected start/end from a PlanningSlot (Soll-Zeiten)."""
+        expected_start = datetime.combine(slot.planning_date, slot.planning_time)
+        expected_end = expected_start + timedelta(minutes=default_duration_minutes)
+        return _ExpectedTimes(expected_start=expected_start, expected_end=expected_end)
+
+    @staticmethod
+    def _actual_times(instance: EventInstance) -> tuple[datetime, datetime]:
+        """Return actual start/end with tzinfo stripped for comparison."""
+        return (
+            instance.actual_start_at.replace(tzinfo=None),
+            instance.actual_end_at.replace(tzinfo=None),
+        )
 
     @staticmethod
     def calculate_deviation_minutes(
@@ -35,22 +60,12 @@ class MatrixService:
             Tuple of (start_difference_minutes, end_difference_minutes)
             Returns (None, None) if no deviation
         """
-        # Calculate expected times from slot
-        expected_start = datetime.combine(slot.planning_date, slot.planning_time)
-        expected_end = expected_start + timedelta(minutes=default_duration_minutes)
+        exp = MatrixService._expected_times(slot, default_duration_minutes)
+        actual_start, actual_end = MatrixService._actual_times(instance)
 
-        # Get actual times (remove timezone for comparison)
-        actual_start = instance.actual_start_at.replace(tzinfo=None)
-        actual_end = instance.actual_end_at.replace(tzinfo=None)
+        start_diff_minutes = int((actual_start - exp.expected_start).total_seconds() / 60)
+        end_diff_minutes = int((actual_end - exp.expected_end).total_seconds() / 60)
 
-        # Calculate differences
-        start_diff = actual_start - expected_start
-        end_diff = actual_end - expected_end
-
-        start_diff_minutes = int(start_diff.total_seconds() / 60)
-        end_diff_minutes = int(end_diff.total_seconds() / 60)
-
-        # Only return if there's an actual deviation
         if start_diff_minutes == 0 and end_diff_minutes == 0:
             return (None, None)
 
@@ -80,10 +95,7 @@ class MatrixService:
         if not instance:
             return False
 
-        expected_start = datetime.combine(slot.planning_date, slot.planning_time)
-        expected_end = expected_start + timedelta(minutes=default_duration_minutes)
+        exp = MatrixService._expected_times(slot, default_duration_minutes)
+        actual_start, actual_end = MatrixService._actual_times(instance)
 
-        actual_start = instance.actual_start_at.replace(tzinfo=None)
-        actual_end = instance.actual_end_at.replace(tzinfo=None)
-
-        return actual_start != expected_start or actual_end != expected_end
+        return actual_start != exp.expected_start or actual_end != exp.expected_end

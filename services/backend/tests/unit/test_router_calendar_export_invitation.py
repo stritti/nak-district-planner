@@ -278,7 +278,7 @@ async def test_export_token_crud() -> None:
     db = AsyncMock()
 
     with (
-        patch("app.adapters.api.routers.export.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.export.require_role_in_district"),
         patch("app.adapters.api.routers.export.SqlExportTokenRepository") as token_repo_cls,
     ):
         token_repo = AsyncMock()
@@ -580,8 +580,8 @@ async def test_export_token_write_routes_forbidden_without_permission() -> None:
     with (
         patch("app.adapters.api.routers.export.SqlExportTokenRepository") as token_repo_cls,
         patch(
-            "app.adapters.api.routers.export.assert_has_role_in_district",
-            side_effect=export_router.PermissionError("forbidden"),
+            "app.adapters.api.routers.export.require_role_in_district",
+            side_effect=HTTPException(status_code=403, detail="forbidden"),
         ),
     ):
         token_repo = AsyncMock()
