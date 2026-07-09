@@ -84,4 +84,30 @@ describe('ConfirmDialog', () => {
     await confirmButton.trigger('click')
     expect(wrapper.emitted('confirm')).toHaveLength(1)
   })
+
+  it('keeps confirm disabled in dangerous mode while loading, even with the correct word typed', async () => {
+    const wrapper = mount(ConfirmDialog, {
+      ...globalStubs,
+      props: {
+        open: true,
+        title: 'Integration löschen?',
+        message: 'Wird unwiderruflich gelöscht.',
+        variant: 'danger',
+        dangerous: true,
+        loading: true,
+      },
+    })
+    const input = wrapper.find('input')
+    await input.setValue('LÖSCHEN')
+
+    const confirmButton = wrapper.findAll('button')[1]!
+    expect(confirmButton.attributes('disabled')).toBeDefined()
+
+    await confirmButton.trigger('click')
+    expect(wrapper.emitted('confirm')).toBeUndefined()
+
+    // Enter key in the input goes through the same onConfirm() guard.
+    await input.trigger('keydown.enter')
+    expect(wrapper.emitted('confirm')).toBeUndefined()
+  })
 })
