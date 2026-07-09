@@ -161,12 +161,15 @@ async def link_self_to_leader(
     db: DbSession,
 ) -> LeaderSelfLinkResponse:
     repo = SqlLeaderRepository(db)
-    require_role_in_district(auth, Role.VIEWER, district_id)
     target = await repo.get(body.leader_id)
     if not target or target.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
+    congregation_ids = {target.congregation_id} if target.congregation_id else None
+    require_role_in_district(
+        auth, Role.VIEWER, district_id, congregation_ids_in_district=congregation_ids
+    )
 
     existing_link = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
     if existing_link and existing_link.id != target.id:
@@ -193,8 +196,11 @@ async def unlink_self_from_leader(
     db: DbSession,
 ) -> LeaderSelfLinkResponse:
     repo = SqlLeaderRepository(db)
-    require_role_in_district(auth, Role.VIEWER, district_id)
     linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
+    congregation_ids = {linked.congregation_id} if linked and linked.congregation_id else None
+    require_role_in_district(
+        auth, Role.VIEWER, district_id, congregation_ids_in_district=congregation_ids
+    )
     if not linked:
         return LeaderSelfLinkResponse(linked=False, leader=None)
 
@@ -211,8 +217,11 @@ async def get_self_link(
     db: DbSession,
 ) -> LeaderSelfLinkResponse:
     repo = SqlLeaderRepository(db)
-    require_role_in_district(auth, Role.VIEWER, district_id)
     linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
+    congregation_ids = {linked.congregation_id} if linked and linked.congregation_id else None
+    require_role_in_district(
+        auth, Role.VIEWER, district_id, congregation_ids_in_district=congregation_ids
+    )
     if not linked:
         return LeaderSelfLinkResponse(linked=False, leader=None)
     return LeaderSelfLinkResponse(linked=True, leader=_leader_response(linked))

@@ -65,19 +65,34 @@ def _event_instance(planning_slot_id: uuid.UUID, **overrides: object) -> EventIn
     )
 
 
-def _auth_context(*, is_superadmin: bool = True, district_id: uuid.UUID | None = None) -> object:
+def _auth_context(
+    *,
+    is_superadmin: bool = True,
+    district_id: uuid.UUID | None = None,
+    congregation_id: uuid.UUID | None = None,
+) -> object:
     """Return a minimal auth context compatible with CurrentUserWithMemberships."""
-    memberships = (
-        [
+    memberships: list[object] = []
+    if district_id:
+        memberships.append(
             type(
                 "M",
                 (),
                 {"scope_type": ScopeType.DISTRICT, "scope_id": district_id, "role": Role.VIEWER},
             )()
-        ]
-        if district_id
-        else []
-    )
+        )
+    if congregation_id:
+        memberships.append(
+            type(
+                "M",
+                (),
+                {
+                    "scope_type": ScopeType.CONGREGATION,
+                    "scope_id": congregation_id,
+                    "role": Role.VIEWER,
+                },
+            )()
+        )
     return type(
         "A",
         (),
@@ -336,6 +351,33 @@ async def test_leader_link_self_success_with_district_membership() -> None:
 
 
 @pytest.mark.asyncio
+async def test_leader_link_self_success_with_congregation_membership() -> None:
+    """Linking to a leader with VIEWER role only in the leader's congregation succeeds.
+
+    Regression test: a user with a CONGREGATION-scoped membership (a supported
+    approval path, see registrations.py) must not be rejected just because
+    they lack a DISTRICT-scoped membership.
+    """
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    leader = Leader.create(name="L", district_id=district_id, congregation_id=congregation_id)
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
+        leader_repo = AsyncMock()
+        leader_repo.get.return_value = leader
+        leader_repo_cls.return_value = leader_repo
+
+        result = await leaders_router.link_self_to_leader(
+            district_id,
+            LeaderSelfLinkRequest(leader_id=leader.id),
+            _auth_context(is_superadmin=False, congregation_id=congregation_id),
+            db,
+        )
+    assert result.linked is True
+
+
+@pytest.mark.asyncio
 async def test_leader_link_self_conflict() -> None:
     """Linking to a leader that is already linked to a different user returns 409."""
     district_id = uuid.uuid4()
@@ -442,6 +484,29 @@ async def test_leader_unlink_self_success_with_district_membership() -> None:
 
 
 @pytest.mark.asyncio
+async def test_leader_unlink_self_success_with_congregation_membership() -> None:
+    """Unlinking with VIEWER role only in the linked leader's congregation succeeds."""
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    leader = Leader.create(
+        name="L", district_id=district_id, congregation_id=congregation_id, user_sub="u"
+    )
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
+        leader_repo = AsyncMock()
+        leader_repo.get_by_user_sub.return_value = leader
+        leader_repo_cls.return_value = leader_repo
+
+        result = await leaders_router.unlink_self_from_leader(
+            district_id,
+            _auth_context(is_superadmin=False, congregation_id=congregation_id),
+            db,
+        )
+    assert result.linked is False
+
+
+@pytest.mark.asyncio
 async def test_leader_unlink_self_no_link() -> None:
     """Unlinking when no self-link exists returns linked=False."""
     district_id = uuid.uuid4()
@@ -496,6 +561,29 @@ async def test_leader_get_self_link_success_with_district_membership() -> None:
         result = await leaders_router.get_self_link(
             district_id,
             _auth_context(is_superadmin=False, district_id=district_id),
+            db,
+        )
+    assert result.linked is True
+
+
+@pytest.mark.asyncio
+async def test_leader_get_self_link_success_with_congregation_membership() -> None:
+    """Getting self-link with VIEWER role only in the linked leader's congregation succeeds."""
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    leader = Leader.create(
+        name="L", district_id=district_id, congregation_id=congregation_id, user_sub="u"
+    )
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
+        leader_repo = AsyncMock()
+        leader_repo.get_by_user_sub.return_value = leader
+        leader_repo_cls.return_value = leader_repo
+
+        result = await leaders_router.get_self_link(
+            district_id,
+            _auth_context(is_superadmin=False, congregation_id=congregation_id),
             db,
         )
     assert result.linked is True

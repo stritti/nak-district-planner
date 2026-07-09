@@ -113,14 +113,22 @@ def require_role_in_district(
     auth_context: AuthContext,
     required_role: Role,
     district_id: uuid.UUID,
+    congregation_ids_in_district: set[uuid.UUID] | None = None,
 ) -> None:
-    """Assert role in district and raise 403 HTTPException on failure.
+    """Assert role in district (or given congregations within it) and raise 403 on failure.
 
     Thin convenience wrapper that converts PermissionError into a FastAPI
-    403 response so routers don't repeat the try/except pattern.
+    403 response so routers don't repeat the try/except pattern. Pass
+    `congregation_ids_in_district` to also honor CONGREGATION-scoped
+    memberships for entities that belong to a specific congregation.
     """
     try:
-        assert_has_role_in_district(auth_context, required_role, district_id)
+        assert_has_role_in_district(
+            auth_context,
+            required_role,
+            district_id,
+            congregation_ids_in_district=congregation_ids_in_district,
+        )
     except PermissionError as e:
         from fastapi import HTTPException, status
 
