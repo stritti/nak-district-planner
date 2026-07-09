@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.api.schemas.leader import (
     LeaderCreate,
     LeaderResponse,
@@ -15,7 +15,11 @@ from app.adapters.api.schemas.leader import (
     LeaderSelfLinkResponse,
     LeaderUpdate,
 )
-from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
+from app.adapters.auth.permissions import (
+    PermissionError,
+    assert_has_role_in_district,
+    require_role_in_district,
+)
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.domain.models.leader import Leader
@@ -153,29 +157,30 @@ async def delete_leader(
 async def link_self_to_leader(
     district_id: uuid.UUID,
     body: LeaderSelfLinkRequest,
-    user: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> LeaderSelfLinkResponse:
     repo = SqlLeaderRepository(db)
+    require_role_in_district(auth, Role.VIEWER, district_id)
     target = await repo.get(body.leader_id)
     if not target or target.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
 
-    existing_link = await repo.get_by_user_sub(user.sub, district_id=district_id)
+    existing_link = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
     if existing_link and existing_link.id != target.id:
         existing_link.user_sub = None
         existing_link.updated_at = datetime.now(UTC)
         await repo.save(existing_link)
 
-    if target.user_sub and target.user_sub != user.sub:
+    if target.user_sub and target.user_sub != auth.user_sub:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Dieses Amt ist bereits mit einem anderen Benutzer verknuepft",
         )
 
-    target.user_sub = user.sub
+    target.user_sub = auth.user_sub
     target.updated_at = datetime.now(UTC)
     await repo.save(target)
     return LeaderSelfLinkResponse(linked=True, leader=_leader_response(target))
@@ -184,11 +189,12 @@ async def link_self_to_leader(
 @router.delete("/link-self", response_model=LeaderSelfLinkResponse)
 async def unlink_self_from_leader(
     district_id: uuid.UUID,
-    user: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> LeaderSelfLinkResponse:
     repo = SqlLeaderRepository(db)
-    linked = await repo.get_by_user_sub(user.sub, district_id=district_id)
+    require_role_in_district(auth, Role.VIEWER, district_id)
+    linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
     if not linked:
         return LeaderSelfLinkResponse(linked=False, leader=None)
 
@@ -201,11 +207,12 @@ async def unlink_self_from_leader(
 @router.get("/link-self", response_model=LeaderSelfLinkResponse)
 async def get_self_link(
     district_id: uuid.UUID,
-    user: CurrentUser,
+    auth: CurrentUserWithMemberships,
     db: DbSession,
 ) -> LeaderSelfLinkResponse:
     repo = SqlLeaderRepository(db)
-    linked = await repo.get_by_user_sub(user.sub, district_id=district_id)
+    require_role_in_district(auth, Role.VIEWER, district_id)
+    linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
     if not linked:
         return LeaderSelfLinkResponse(linked=False, leader=None)
     return LeaderSelfLinkResponse(linked=True, leader=_leader_response(linked))

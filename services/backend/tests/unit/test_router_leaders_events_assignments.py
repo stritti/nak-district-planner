@@ -23,9 +23,10 @@ from app.adapters.api.schemas.service_assignment import (
 from app.domain.models.district import District
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.leader import Leader
+from app.domain.models.membership import ScopeType
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
+from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
-
 
 # ---------------------------------------------------------------------------
 # Factory helpers
@@ -64,13 +65,24 @@ def _event_instance(planning_slot_id: uuid.UUID, **overrides: object) -> EventIn
     )
 
 
-def _auth_context(*, is_superadmin: bool = True) -> object:
+def _auth_context(*, is_superadmin: bool = True, district_id: uuid.UUID | None = None) -> object:
     """Return a minimal auth context compatible with CurrentUserWithMemberships."""
+    memberships = (
+        [
+            type(
+                "M",
+                (),
+                {"scope_type": ScopeType.DISTRICT, "scope_id": district_id, "role": Role.VIEWER},
+            )()
+        ]
+        if district_id
+        else []
+    )
     return type(
         "A",
         (),
         {
-            "memberships": [],
+            "memberships": memberships,
             "user_sub": "u",
             "user": type("U", (), {"is_superadmin": is_superadmin})(),
         },
@@ -113,17 +125,17 @@ async def test_leader_crud_and_self_link_paths() -> None:
         link = await leaders_router.link_self_to_leader(
             district_id,
             LeaderSelfLinkRequest(leader_id=leader.id),
-            type("U", (), {"sub": "oidc|1"})(),
+            _auth_context(district_id=district_id),
             db,
         )
         unlink = await leaders_router.unlink_self_from_leader(
             district_id,
-            type("U", (), {"sub": "oidc|1"})(),
+            _auth_context(district_id=district_id),
             db,
         )
         self_link = await leaders_router.get_self_link(
             district_id,
-            type("U", (), {"sub": "oidc|1"})(),
+            _auth_context(district_id=district_id),
             db,
         )
 
@@ -281,6 +293,49 @@ async def test_leader_delete_wrong_district() -> None:
 
 
 @pytest.mark.asyncio
+async def test_leader_link_self_forbidden_without_district_membership() -> None:
+    """Linking to a leader without VIEWER role in district returns 403."""
+    district_id = uuid.uuid4()
+    leader = Leader.create(name="L", district_id=district_id)
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
+        leader_repo = AsyncMock()
+        leader_repo.get.return_value = leader
+        leader_repo_cls.return_value = leader_repo
+
+        with pytest.raises(HTTPException) as exc:
+            await leaders_router.link_self_to_leader(
+                district_id,
+                LeaderSelfLinkRequest(leader_id=leader.id),
+                _auth_context(is_superadmin=False),
+                db,
+            )
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_leader_link_self_success_with_district_membership() -> None:
+    """Linking to a leader with VIEWER role in district succeeds."""
+    district_id = uuid.uuid4()
+    leader = Leader.create(name="L", district_id=district_id)
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
+        leader_repo = AsyncMock()
+        leader_repo.get.return_value = leader
+        leader_repo_cls.return_value = leader_repo
+
+        result = await leaders_router.link_self_to_leader(
+            district_id,
+            LeaderSelfLinkRequest(leader_id=leader.id),
+            _auth_context(is_superadmin=False, district_id=district_id),
+            db,
+        )
+    assert result.linked is True
+
+
+@pytest.mark.asyncio
 async def test_leader_link_self_conflict() -> None:
     """Linking to a leader that is already linked to a different user returns 409."""
     district_id = uuid.uuid4()
@@ -296,7 +351,7 @@ async def test_leader_link_self_conflict() -> None:
             await leaders_router.link_self_to_leader(
                 district_id,
                 LeaderSelfLinkRequest(leader_id=leader.id),
-                type("U", (), {"sub": "current-user"})(),
+                _auth_context(district_id=district_id),
                 db,
             )
     assert exc.value.status_code == 409
@@ -317,7 +372,7 @@ async def test_leader_link_self_leader_not_found() -> None:
             await leaders_router.link_self_to_leader(
                 district_id,
                 LeaderSelfLinkRequest(leader_id=uuid.uuid4()),
-                type("U", (), {"sub": "u"})(),
+                _auth_context(district_id=district_id),
                 db,
             )
     assert exc.value.status_code == 404
@@ -340,10 +395,50 @@ async def test_leader_link_self_leader_wrong_district() -> None:
             await leaders_router.link_self_to_leader(
                 district_id,
                 LeaderSelfLinkRequest(leader_id=leader.id),
-                type("U", (), {"sub": "u"})(),
+                _auth_context(district_id=district_id),
                 db,
             )
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_leader_unlink_self_forbidden_without_district_membership() -> None:
+    """Unlinking from a leader without VIEWER role in district returns 403."""
+    district_id = uuid.uuid4()
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
+        leader_repo = AsyncMock()
+        leader_repo.get_by_user_sub.return_value = None
+        leader_repo_cls.return_value = leader_repo
+
+        with pytest.raises(HTTPException) as exc:
+            await leaders_router.unlink_self_from_leader(
+                district_id,
+                _auth_context(is_superadmin=False),
+                db,
+            )
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_leader_unlink_self_success_with_district_membership() -> None:
+    """Unlinking from a leader with VIEWER role in district succeeds."""
+    district_id = uuid.uuid4()
+    leader = Leader.create(name="L", district_id=district_id, user_sub="u")
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
+        leader_repo = AsyncMock()
+        leader_repo.get_by_user_sub.return_value = leader
+        leader_repo_cls.return_value = leader_repo
+
+        result = await leaders_router.unlink_self_from_leader(
+            district_id,
+            _auth_context(is_superadmin=False, district_id=district_id),
+            db,
+        )
+    assert result.linked is False
 
 
 @pytest.mark.asyncio
@@ -359,11 +454,51 @@ async def test_leader_unlink_self_no_link() -> None:
 
         result = await leaders_router.unlink_self_from_leader(
             district_id,
-            type("U", (), {"sub": "u"})(),
+            _auth_context(district_id=district_id),
             db,
         )
     assert result.linked is False
     assert result.leader is None
+
+
+@pytest.mark.asyncio
+async def test_leader_get_self_link_forbidden_without_district_membership() -> None:
+    """Getting self-link without VIEWER role in district returns 403."""
+    district_id = uuid.uuid4()
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
+        leader_repo = AsyncMock()
+        leader_repo.get_by_user_sub.return_value = None
+        leader_repo_cls.return_value = leader_repo
+
+        with pytest.raises(HTTPException) as exc:
+            await leaders_router.get_self_link(
+                district_id,
+                _auth_context(is_superadmin=False),
+                db,
+            )
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_leader_get_self_link_success_with_district_membership() -> None:
+    """Getting self-link with VIEWER role in district succeeds."""
+    district_id = uuid.uuid4()
+    leader = Leader.create(name="L", district_id=district_id, user_sub="u")
+    db = AsyncMock()
+
+    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
+        leader_repo = AsyncMock()
+        leader_repo.get_by_user_sub.return_value = leader
+        leader_repo_cls.return_value = leader_repo
+
+        result = await leaders_router.get_self_link(
+            district_id,
+            _auth_context(is_superadmin=False, district_id=district_id),
+            db,
+        )
+    assert result.linked is True
 
 
 @pytest.mark.asyncio
@@ -379,7 +514,7 @@ async def test_leader_get_self_link_no_link() -> None:
 
         result = await leaders_router.get_self_link(
             district_id,
-            type("U", (), {"sub": "u"})(),
+            _auth_context(district_id=district_id),
             db,
         )
     assert result.linked is False
