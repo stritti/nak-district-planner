@@ -191,35 +191,18 @@
       </div>
     </div>
 
-    <!-- Delete confirm modal -->
-    <div
-      v-if="deleteTarget"
-      class="modal-backdrop"
-      @click.self="deleteTarget = null"
-    >
-      <div class="modal-panel max-w-sm">
-        <h2 class="modal-title mb-2">Token löschen?</h2>
-        <p class="text-sm text-gray-600 dark:text-gray-400 mb-5">
-          Der Token <strong>{{ deleteTarget.label }}</strong> wird unwiderruflich gelöscht.
-          Bestehende Kalender-Abonnements funktionieren danach nicht mehr.
-        </p>
-        <div class="flex justify-end gap-3">
-          <button
-            class="btn-secondary"
-            @click="deleteTarget = null"
-          >
-            Abbrechen
-          </button>
-          <button
-            class="btn-primary px-4 py-2 bg-red-600 hover:bg-red-700"
-            :disabled="deleting"
-            @click="doDelete"
-          >
-            {{ deleting ? 'Löschen…' : 'Löschen' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Delete confirm dialog -->
+    <ConfirmDialog
+      :open="deleteTarget !== null"
+      variant="danger"
+      dangerous
+      title="Token löschen?"
+      :message="deleteTarget ? `Der Token „${deleteTarget.label}“ wird unwiderruflich gelöscht. Bestehende Kalender-Abonnements funktionieren danach nicht mehr.` : ''"
+      confirm-text="Endgültig löschen"
+      :loading="deleting"
+      @confirm="doDelete"
+      @cancel="deleteTarget = null"
+    />
   </div>
 </template>
 
@@ -233,6 +216,7 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import {
   createExportToken,
   deleteExportToken,
@@ -241,8 +225,10 @@ import {
 } from '../api/exportTokens'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import { useDistrictsStore } from '../stores/districts'
+import { useToastStore } from '../stores/toast'
 
 const districtsStore = useDistrictsStore()
+const toastStore = useToastStore()
 const tokens = ref<ExportTokenResponse[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -347,6 +333,7 @@ async function saveToken() {
     tokens.value.unshift(created)
     await ensureAllCongregations()
     form.open = false
+    toastStore.success('Export-Token erstellt', created.label)
   } catch (e) {
     form.error = e instanceof Error ? e.message : 'Fehler'
   } finally {
@@ -362,11 +349,15 @@ function confirmDelete(t: ExportTokenResponse) {
 
 async function doDelete() {
   if (!deleteTarget.value) return
+  const label = deleteTarget.value.label
   deleting.value = true
   try {
     await deleteExportToken(deleteTarget.value.id)
     tokens.value = tokens.value.filter((t) => t.id !== deleteTarget.value!.id)
     deleteTarget.value = null
+    toastStore.success('Export-Token gelöscht', label)
+  } catch (e) {
+    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
   } finally {
     deleting.value = false
   }

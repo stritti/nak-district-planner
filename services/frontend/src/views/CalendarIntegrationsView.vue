@@ -190,43 +190,18 @@
       </div>
     </div>
 
-    <!-- Delete confirmation modal -->
-    <div
-      v-if="deleteTarget"
-      class="modal-backdrop"
-      @click.self="deleteTarget = null"
-    >
-      <div class="modal-panel max-w-sm">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="modal-title">Integration löschen?</h2>
-          <button class="modal-close" @click="deleteTarget = null">
-            <XMarkIcon class="h-5 w-5" />
-          </button>
-        </div>
-        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">
-          <span class="font-medium">{{ deleteTarget.name }}</span> wird unwiderruflich gelöscht.
-        </p>
-        <p class="text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 rounded px-3 py-2 mt-3">
-          Alle importierten Ereignisse dieser Integration bleiben erhalten, sind aber nicht mehr mit einem Kalender verknüpft.
-        </p>
-        <p v-if="deleteError" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ deleteError }}</p>
-        <div class="flex justify-end gap-3 mt-5">
-          <button
-            class="text-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
-            @click="deleteTarget = null"
-          >
-            Abbrechen
-          </button>
-          <button
-            class="btn-primary px-4 py-2 bg-red-600 hover:bg-red-700"
-            :disabled="deleting"
-            @click="executeDelete"
-          >
-            {{ deleting ? 'Löschen…' : 'Endgültig löschen' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Delete confirmation dialog -->
+    <ConfirmDialog
+      :open="deleteTarget !== null"
+      variant="danger"
+      dangerous
+      title="Integration löschen?"
+      :message="deleteTarget ? `„${deleteTarget.name}“ wird unwiderruflich gelöscht. Alle importierten Ereignisse dieser Integration bleiben erhalten, sind aber nicht mehr mit einem Kalender verknüpft.` : ''"
+      confirm-text="Endgültig löschen"
+      :loading="deleting"
+      @confirm="executeDelete"
+      @cancel="deleteTarget = null"
+    />
 
     <!-- Edit modal -->
     <div
@@ -545,7 +520,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ArrowDownTrayIcon, ArrowPathIcon, PencilSquareIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useDistrictsStore } from '../stores/districts'
+import { useToastStore } from '../stores/toast'
 import {
   importFeiertage,
   listCongregations,
@@ -573,6 +550,7 @@ const DE_STATES: Record<string, string> = {
 }
 
 const districtsStore = useDistrictsStore()
+const toastStore = useToastStore()
 
 const integrations = ref<CalendarIntegrationResponse[]>([])
 const loading = ref(false)
@@ -657,23 +635,22 @@ function typeBadge(type: CalendarType): string {
 // --- Delete ---
 const deleteTarget = ref<CalendarIntegrationResponse | null>(null)
 const deleting = ref(false)
-const deleteError = ref('')
 
 function confirmDelete(item: CalendarIntegrationResponse) {
   deleteTarget.value = item
-  deleteError.value = ''
 }
 
 async function executeDelete() {
   if (!deleteTarget.value) return
+  const name = deleteTarget.value.name
   deleting.value = true
-  deleteError.value = ''
   try {
     await deleteIntegration(deleteTarget.value.id)
     integrations.value = integrations.value.filter((i) => i.id !== deleteTarget.value!.id)
     deleteTarget.value = null
+    toastStore.success('Integration gelöscht', name)
   } catch (e) {
-    deleteError.value = e instanceof Error ? e.message : 'Fehler beim Löschen'
+    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
   } finally {
     deleting.value = false
   }
