@@ -197,7 +197,7 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": detail})
 
 
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD", "OPTIONS"])
 async def health() -> dict:
     """Health check endpoint.
 

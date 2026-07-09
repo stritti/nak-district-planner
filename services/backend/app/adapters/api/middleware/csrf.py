@@ -3,22 +3,22 @@
 This module provides middleware for CSRF protection using the Double-Submit Pattern.
 """
 
-from typing import Callable, Awaitable, Optional, Set
+import logging
+from collections.abc import Awaitable, Callable
 
 from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.status import HTTP_403_FORBIDDEN
 
 from app.application.csrf import CSRFError, CSRFTokenService
 
-import logging
-
 logger = logging.getLogger(__name__)
 
 
-class CSRFMiddleware:
+class CSRFMiddleware(BaseHTTPMiddleware):
     """FastAPI Middleware for CSRF protection.
-    
+
     Implements the Double-Submit Pattern for CSRF protection:
     - CSRF token is sent both as a cookie and in a custom header
     - Token is validated on state-changing requests (POST, PUT, DELETE, PATCH)
@@ -31,11 +31,11 @@ class CSRFMiddleware:
         csrf_service: CSRFTokenService,
         cookie_name: str = "csrf_token",
         header_name: str = "X-CSRF-Token",
-        exempt_paths: Optional[Set[str]] = None,
-        exempt_methods: Optional[Set[str]] = None,
+        exempt_paths: set[str] | None = None,
+        exempt_methods: set[str] | None = None,
     ):
         """Initialize the CSRF middleware.
-        
+
         Args:
             app: FastAPI application instance.
             csrf_service: CSRF token service for generation and validation.
@@ -44,24 +44,24 @@ class CSRFMiddleware:
             exempt_paths: Set of paths to exempt from CSRF protection.
             exempt_methods: Set of HTTP methods to exempt (default: GET, HEAD, OPTIONS).
         """
-        self.app = app
+        super().__init__(app)
         self.csrf_service = csrf_service
         self.cookie_name = cookie_name
         self.header_name = header_name
         self.exempt_paths = exempt_paths or {"/api/health"}
         self.exempt_methods = exempt_methods or {"GET", "HEAD", "OPTIONS"}
 
-    async def __call__(
+    async def dispatch(
         self,
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         """Process a request through the middleware.
-        
+
         Args:
             request: Incoming HTTP request.
             call_next: Next middleware or route handler.
-            
+
         Returns:
             HTTP response, potentially with CSRF cookie set.
         """
@@ -91,9 +91,7 @@ class CSRFMiddleware:
             self.csrf_service.validate_token(csrf_token, session_id)
 
         except CSRFError as e:
-            logger.warning(
-                f"CSRF validation failed for {request.method} {request.url.path}: {e}"
-            )
+            logger.warning(f"CSRF validation failed for {request.method} {request.url.path}: {e}")
             return JSONResponse(
                 status_code=HTTP_403_FORBIDDEN,
                 content={"detail": "CSRF validation failed"},
@@ -105,12 +103,12 @@ class CSRFMiddleware:
         # Add new CSRF token to response (token rotation)
         return self._add_csrf_cookie(response, request)
 
-    def _get_csrf_token(self, request: Request) -> Optional[str]:
+    def _get_csrf_token(self, request: Request) -> str | None:
         """Extract CSRF token from header or cookie.
-        
+
         Args:
             request: HTTP request.
-            
+
         Returns:
             CSRF token string, or None if not found.
         """
@@ -125,15 +123,15 @@ class CSRFMiddleware:
 
         return None
 
-    def _get_session_id(self, request: Request) -> Optional[str]:
+    def _get_session_id(self, request: Request) -> str | None:
         """Extract session ID from request.
-        
+
         For JWT-based auth, uses the user's sub claim as session ID.
         For cookie-based sessions, uses the session_id cookie.
-        
+
         Args:
             request: HTTP request.
-            
+
         Returns:
             Session ID string, or None if not available.
         """
@@ -155,11 +153,11 @@ class CSRFMiddleware:
         request: Request,
     ) -> Response:
         """Add a new CSRF token as a cookie to the response.
-        
+
         Args:
             response: HTTP response.
             request: HTTP request (for session ID).
-            
+
         Returns:
             Response with CSRF cookie set.
         """
