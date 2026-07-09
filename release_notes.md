@@ -1,4 +1,4 @@
-## [v0.27.4] - 2026-07-09
+## [v0.27.5] - 2026-07-09
 
 ### Features
 * feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
@@ -25,6 +25,9 @@
 * fix: make 0125 depend on e5a2 approval-status migration (d3555fd)
 
 ### Other Changes
+* Merge pull request #194 from stritti/dependabot/uv/services/backend/sqlalchemy-asyncio--gte-2.0.51 (02b6fc1)
+* chore: release v0.27.4 (cf8c23e)
+* build(deps): Update sqlalchemy[asyncio] requirement in /services/backend (8fef6d9)
 * chore: release v0.27.3 (1d10135)
 * chore: release v0.27.2 (8d7df18)
 * Clean Code: Refactoring und DRY-Verbesserungen (#206) (aa695f9)
@@ -32,6 +35,3 @@
 * Clean Code: Refactoring und DRY-Verbesserungen (d039cb9)
 * chore: release v0.27.1 (e810d6e)
 * test: coverage >80% mit Tests für Pydantic-Validatoren, Writer-Loop, MS-Connector, ServiceAssignment u.a. (3f030d9)
-* docs: add ENUM type handling pattern to alembic skill doc (0fcb965)
-* docs: add dependency ordering section to alembic skill (dd1f128)
-* chore: release v0.27.0 (fad556f)
