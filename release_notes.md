@@ -1,4 +1,4 @@
-## [v0.27.2] - 2026-07-04
+## [v0.27.3] - 2026-07-09
 
 ### Features
 * feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
@@ -13,6 +13,8 @@
 * Merge pull request #174 from stritti/feature/matrix-rendering-migration-1-1 (55355e8)
 
 ### Bug Fixes
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
 * fix: Unit-Tests an require_role_in_district() angepasst (8805894)
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 * fix: 0125 als e5a2-Parent statt depends_on — schließt Multiple-Head-Lücke (c6dc17a)
@@ -21,10 +23,9 @@
 * fix: use Python AST for FK name length check (c5d090b)
 * fix: resolve 5 pre-existing unit test failures (b467acc)
 * fix: remove Depends() from auth params in notifications router (334f407)
-* fix: let column definitions create enum types automatically in 0012 migration (2093069)
-* fix: remove tail from alembic upgrade for full log output (24095f6)
 
 ### Other Changes
+* chore: release v0.27.2 (8d7df18)
 * Clean Code: Refactoring und DRY-Verbesserungen (#206) (aa695f9)
 * Clean Code Skill hinzugefügt (9f14d85)
 * Clean Code: Refactoring und DRY-Verbesserungen (d039cb9)
@@ -34,4 +35,3 @@
 * docs: add dependency ordering section to alembic skill (dd1f128)
 * chore: release v0.27.0 (fad556f)
 * chore: release v0.26.2 (3d4804f)
-* chore: release v0.26.1 (402e69e)
