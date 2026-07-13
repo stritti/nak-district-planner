@@ -7,13 +7,13 @@ No database or network access is required.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.sync_service import run_sync
+from app.application.sync_service import _get_connector, _has_significant_deviation, run_sync
 from app.domain.models.calendar_integration import (
     CalendarCapability,
     CalendarIntegration,
@@ -42,7 +42,13 @@ _END = datetime(2026, 4, 10, 10, 0, tzinfo=UTC)
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 
-def _hash(uid: str, start_at=..., end_at=..., title: str = "Gottesdienst", description: str | None = "Beschreibung") -> str:
+def _hash(
+    uid: str,
+    start_at=...,
+    end_at=...,
+    title: str = "Gottesdienst",
+    description: str | None = "Beschreibung",
+) -> str:
     """Compute a deterministic SHA-256 hash matching sync_service._compute_content_hash."""
     import hashlib
 
@@ -362,14 +368,11 @@ class TestRunSync:
 
         raw_new = _raw(uid="new@test", title="New Event")
         raw_changed = _raw(uid="changed@test", title="Changed Event")
-        raw_cancelled = _raw(
-            uid="cancelled@test", title="Cancelled Event", is_cancelled=True
-        )
+        raw_cancelled = _raw(uid="cancelled@test", title="Cancelled Event", is_cancelled=True)
         raw_unchanged = _raw(uid="unchanged@test", title="Unchanged Event")
 
         # Existing entities for the events that have a link
         instance_changed = _make_event_instance()
-        changed_hash = _hash("changed@test", title="Changed Event")
         link_changed = _make_link(
             event_instance_id=instance_changed.id,
             uid="changed@test",
@@ -410,9 +413,7 @@ class TestRunSync:
             instance_cancelled.id: instance_cancelled,
             instance_unchanged.id: instance_unchanged,
         }
-        mocks["instance_repo"].get.side_effect = (
-            lambda instance_id: instance_map.get(instance_id)
-        )
+        mocks["instance_repo"].get.side_effect = lambda instance_id: instance_map.get(instance_id)
 
         mocks["slot_repo"].get.return_value = slot_cancelled
 
@@ -461,3 +462,122 @@ class TestRunSync:
 
         saved_slot = mocks["slot_repo"].save.call_args[0][0]
         assert saved_slot.congregation_id is None
+
+    async def test_auto_match_updates_existing_instance(self, mocks):
+        """New external event matching an existing PlanningSlot updates that
+        slot's EventInstance instead of creating a new PlanningSlot (UC-02
+        auto-matching / hardened sync).
+        """
+        integration = _integration()
+        slot = _make_slot(congregation_id=_CONG_ID, planning_time=_START.time())
+        instance = _make_event_instance(planning_slot_id=slot.id, title="Alter Titel")
+        raw = _raw(title="Gottesdienst")  # matches slot.category="Gottesdienst"
+
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["slot_repo"].list_for_date_range = AsyncMock(return_value=[slot])
+        mocks["instance_repo"].get_by_planning_slot = AsyncMock(return_value=instance)
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result == {"created": 0, "updated": 0, "cancelled": 0, "auto_matched": 1}
+
+        # Existing instance is mutated in place, not a new slot/instance created.
+        mocks["slot_repo"].save.assert_not_called()
+        assert instance.title == "Gottesdienst"
+        assert instance.source == EventSource.EXTERNAL
+        assert instance.sync_state == SyncState.CLEAN
+        assert instance.external_uid == raw.uid
+        assert instance.calendar_integration_id == _INT_ID
+        assert instance.deviation_flag is False
+        mocks["instance_repo"].save.assert_awaited_once_with(instance)
+
+        saved_link = mocks["link_repo"].save.call_args[0][0]
+        assert saved_link.event_instance_id == instance.id
+        assert saved_link.last_synced_hash == raw.content_hash
+
+    async def test_auto_match_flags_significant_deviation(self, mocks):
+        """Auto-matched event starting >5 min from the planned time sets
+        deviation_flag=True (but still matches within the 120 min tolerance).
+        """
+        integration = _integration()
+        slot = _make_slot(congregation_id=_CONG_ID, planning_time=_START.time())
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        deviated_start = _START + timedelta(minutes=15)
+        raw = RawCalendarEvent(
+            uid="uid@test",
+            title="Gottesdienst",
+            start_at=deviated_start,
+            end_at=deviated_start + timedelta(hours=1),
+            description="Beschreibung",
+            content_hash="hash-deviated",
+            is_cancelled=False,
+        )
+
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["slot_repo"].list_for_date_range = AsyncMock(return_value=[slot])
+        mocks["instance_repo"].get_by_planning_slot = AsyncMock(return_value=instance)
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result["auto_matched"] == 1
+        assert instance.deviation_flag is True
+
+    async def test_auto_match_no_matching_slot_creates_new(self, mocks):
+        """A PlanningSlot exists but for a different congregation → no match,
+        falls back to creating a new PlanningSlot (existing 'created' path).
+        """
+        integration = _integration()
+        other_slot = _make_slot(congregation_id=uuid.uuid4(), planning_time=_START.time())
+        raw = _raw()
+
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["slot_repo"].list_for_date_range = AsyncMock(return_value=[other_slot])
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result == {"created": 1, "updated": 0, "cancelled": 0, "auto_matched": 0}
+        mocks["slot_repo"].save.assert_awaited_once()
+
+
+class TestGetConnector:
+    """Test suite for the calendar connector factory dispatch."""
+
+    def test_dispatches_ics(self):
+        from app.adapters.calendar.ical_connector import ICalConnector
+
+        assert isinstance(_get_connector(CalendarType.ICS), ICalConnector)
+
+    def test_dispatches_caldav(self):
+        from app.adapters.calendar.caldav_connector import CalDAVConnector
+
+        assert isinstance(_get_connector(CalendarType.CALDAV), CalDAVConnector)
+
+    def test_dispatches_google(self):
+        from app.adapters.calendar.google_connector import GoogleCalendarConnector
+
+        assert isinstance(_get_connector(CalendarType.GOOGLE), GoogleCalendarConnector)
+
+    def test_dispatches_microsoft(self):
+        from app.adapters.calendar.microsoft_connector import (
+            MicrosoftGraphCalendarConnector,
+        )
+
+        assert isinstance(_get_connector(CalendarType.MICROSOFT), MicrosoftGraphCalendarConnector)
+
+
+class TestHasSignificantDeviation:
+    """Test suite for the pure _has_significant_deviation() helper."""
+
+    def test_no_deviation_within_five_minutes(self):
+        slot = _make_slot(planning_time=_START.time())
+        assert _has_significant_deviation(slot, _START + timedelta(minutes=4)) is False
+
+    def test_deviation_beyond_five_minutes(self):
+        slot = _make_slot(planning_time=_START.time())
+        assert _has_significant_deviation(slot, _START + timedelta(minutes=6)) is True
