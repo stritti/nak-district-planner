@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
-from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
+from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.repositories import (
     SqlEventInstanceRepository,
     SqlPlanningSlotRepository,
@@ -93,9 +93,7 @@ class BulkApprovalStatusResponse(BaseModel):
 # ── Helpers ─────────────────────────────────────────────────────────────
 
 
-def _slot_to_event(
-    slot: PlanningSlot, instance: EventInstance | None
-) -> EventCompatResponse:
+def _slot_to_event(slot: PlanningSlot, instance: EventInstance | None) -> EventCompatResponse:
     """Convert a PlanningSlot (+ optional EventInstance) to EventResponse shape."""
     # Map slot status to old Event status
     status_map = {
@@ -135,19 +133,23 @@ def _slot_to_event(
         audiences=list(slot.audiences) if hasattr(slot, "audiences") and slot.audiences else [],
         applicability=list(slot.applicability or []),
         invitation_source_congregation_id=(
-            str(slot.invitation_source_congregation_id) if slot.invitation_source_congregation_id else None
+            str(slot.invitation_source_congregation_id)
+            if slot.invitation_source_congregation_id
+            else None
         ),
         invitation_source_event_id=(
             str(slot.invitation_source_event_id) if slot.invitation_source_event_id else None
         ),
-        created_at=slot.created_at.isoformat() if slot.created_at else datetime.now(UTC).isoformat(),
-        updated_at=slot.updated_at.isoformat() if slot.updated_at else datetime.now(UTC).isoformat(),
+        created_at=slot.created_at.isoformat()
+        if slot.created_at
+        else datetime.now(UTC).isoformat(),
+        updated_at=slot.updated_at.isoformat()
+        if slot.updated_at
+        else datetime.now(UTC).isoformat(),
     )
 
 
-async def _load_instances(
-    slot_ids: list[uuid.UUID], session
-) -> dict[uuid.UUID, EventInstance]:
+async def _load_instances(slot_ids: list[uuid.UUID], session) -> dict[uuid.UUID, EventInstance]:
     """Batch load EventInstances for the given slot IDs."""
     inst_repo = SqlEventInstanceRepository(session)
     instances = await inst_repo.list_by_planning_slots(slot_ids)
@@ -176,10 +178,7 @@ async def compat_list_events(
             detail="district_id ist erforderlich, außer für Superadmin.",
         )
     if district_id is not None:
-        try:
-            assert_has_role_in_district(auth, Role.VIEWER, district_id)
-        except PermissionError as e:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        require_role_in_district(auth, Role.VIEWER, district_id)
 
     slot_repo = SqlPlanningSlotRepository(session)
 
@@ -229,10 +228,7 @@ async def compat_update_event(
     if slot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
 
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, slot.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, slot.district_id)
 
     # Map updates to PlanningSlot fields
     changed = False
@@ -241,7 +237,9 @@ async def compat_update_event(
         changed = True
     if body.status is not None:
         try:
-            slot.status = PlanningSlotStatus(body.status.lower() if isinstance(body.status, str) else body.status)
+            slot.status = PlanningSlotStatus(
+                body.status.lower() if isinstance(body.status, str) else body.status
+            )
             changed = True
         except ValueError:
             pass
@@ -282,10 +280,7 @@ async def compat_bulk_approval_status(
             detail="district_id ist erforderlich, außer für Superadmin.",
         )
     if district_id is not None:
-        try:
-            assert_has_role_in_district(auth, Role.PLANNER, district_id)
-        except PermissionError as e:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        require_role_in_district(auth, Role.PLANNER, district_id)
 
     slot_repo = SqlPlanningSlotRepository(session)
     from_date = date(body.year, body.month, 1)
@@ -303,11 +298,7 @@ async def compat_bulk_approval_status(
     # Apply congregation filter
     congregation_id = body.congregation_id_str or body.congregation_id
     if congregation_id is not None:
-        all_slots = [
-            s
-            for s in all_slots
-            if s.congregation_id == uuid.UUID(congregation_id)
-        ]
+        all_slots = [s for s in all_slots if s.congregation_id == uuid.UUID(congregation_id)]
 
     # Map approval_status string
     try:

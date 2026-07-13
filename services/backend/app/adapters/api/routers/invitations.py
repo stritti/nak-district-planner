@@ -13,7 +13,7 @@ from app.adapters.api.schemas.invitation import (
     OverwriteDecisionRequest,
     OverwriteRequestResponse,
 )
-from app.adapters.auth.permissions import PermissionError, assert_has_role_in_district
+from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.repositories import (
     SqlEventInstanceRepository,
     SqlPlanningSlotRepository,
@@ -46,12 +46,11 @@ async def create_invitations(
 ) -> list[InvitationResponse]:
     planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
     if planning_slot is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
 
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     try:
         invitations = await create_invitations_for_event(
@@ -84,12 +83,11 @@ async def list_event_invitations(
 ) -> list[InvitationResponse]:
     planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
     if planning_slot is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
 
-    try:
-        assert_has_role_in_district(auth, Role.VIEWER, planning_slot.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.VIEWER, planning_slot.district_id)
 
     invitations = await SqlInvitationRepository(db).list_by_source_event(event_id)
     return [
@@ -122,12 +120,11 @@ async def remove_invitation(
 
     planning_slot = await SqlPlanningSlotRepository(db).get(invitation.source_event_id)
     if planning_slot is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
 
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     removed = await delete_invitation(db, invitation_id=invitation_id)
     if not removed:
@@ -184,10 +181,7 @@ async def list_overwrite_requests(
     db: DbSession,
     district_id: uuid.UUID = Query(...),
 ) -> list[OverwriteRequestResponse]:
-    try:
-        assert_has_role_in_district(auth, Role.VIEWER, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.VIEWER, district_id)
 
     req_repo = SqlInvitationOverwriteRequestRepository(db)
     slot_repo = SqlPlanningSlotRepository(db)
@@ -249,10 +243,7 @@ async def decide_overwrite_request(
             status_code=status.HTTP_404_NOT_FOUND, detail="Ziel-Planungseintrag nicht gefunden"
         )
 
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, target_slot.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, target_slot.district_id)
 
     updated = await apply_overwrite_decision(db, request_id=request_id, decision=body.decision)
     if updated is None:

@@ -16,8 +16,6 @@ from app.adapters.api.schemas.leader import (
     LeaderUpdate,
 )
 from app.adapters.auth.permissions import (
-    PermissionError,
-    assert_has_role_in_district,
     require_role_in_district,
 )
 from app.adapters.db.repositories.district import SqlDistrictRepository
@@ -54,10 +52,7 @@ async def list_leaders(
 ) -> list[LeaderResponse]:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-    try:
-        assert_has_role_in_district(auth, Role.VIEWER, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.VIEWER, district_id)
     leaders = await SqlLeaderRepository(db).list_by_district(district_id)
     return [_leader_response(leader) for leader in leaders]
 
@@ -71,10 +66,7 @@ async def create_leader(
 ) -> LeaderResponse:
     if not await SqlDistrictRepository(db).get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, district_id)
     leader = Leader.create(
         name=body.name,
         district_id=district_id,
@@ -105,10 +97,7 @@ async def update_leader(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, district_id)
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
         leader.name = body.name
@@ -146,10 +135,7 @@ async def delete_leader(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, district_id)
     await repo.delete(leader_id)
 
 

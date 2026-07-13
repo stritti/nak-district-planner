@@ -116,7 +116,7 @@ async def test_leader_crud_and_self_link_paths() -> None:
     leader = Leader.create(name="L", district_id=district_id)
     db = AsyncMock()
     with (
-        patch("app.adapters.api.routers.leaders.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.leaders.require_role_in_district"),
         patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls,
     ):
@@ -174,8 +174,8 @@ async def test_leader_crud_forbidden_without_permission() -> None:
         patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls,
         patch(
-            "app.adapters.api.routers.leaders.assert_has_role_in_district",
-            side_effect=leaders_router.PermissionError("forbidden"),
+            "app.adapters.api.routers.leaders.require_role_in_district",
+            side_effect=HTTPException(status_code=403, detail="forbidden"),
         ),
     ):
         district_repo = AsyncMock()
@@ -213,8 +213,8 @@ async def test_leader_list_forbidden_without_permission() -> None:
     with (
         patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
         patch(
-            "app.adapters.api.routers.leaders.assert_has_role_in_district",
-            side_effect=leaders_router.PermissionError("forbidden"),
+            "app.adapters.api.routers.leaders.require_role_in_district",
+            side_effect=HTTPException(status_code=403, detail="forbidden"),
         ),
     ):
         district_repo = AsyncMock()
@@ -623,7 +623,7 @@ async def test_service_assignment_crud_paths() -> None:
     db = AsyncMock()
 
     with (
-        patch("app.adapters.api.routers.service_assignments.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
         patch(
             "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
         ) as slot_repo_cls,
@@ -728,8 +728,8 @@ async def test_service_assignment_create_forbidden() -> None:
             "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
         ) as slot_repo_cls,
         patch(
-            "app.adapters.api.routers.service_assignments.assert_has_role_in_district",
-            side_effect=sa_router.PermissionError("forbidden"),
+            "app.adapters.api.routers.service_assignments.require_role_in_district",
+            side_effect=HTTPException(status_code=403, detail="forbidden"),
         ),
     ):
         slot_repo = AsyncMock()
@@ -759,8 +759,8 @@ async def test_service_assignment_list_forbidden() -> None:
             "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
         ) as slot_repo_cls,
         patch(
-            "app.adapters.api.routers.service_assignments.assert_has_role_in_district",
-            side_effect=sa_router.PermissionError("forbidden"),
+            "app.adapters.api.routers.service_assignments.require_role_in_district",
+            side_effect=HTTPException(status_code=403, detail="forbidden"),
         ),
     ):
         slot_repo = AsyncMock()
@@ -955,7 +955,7 @@ async def test_service_assignment_list_empty() -> None:
     db = AsyncMock()
 
     with (
-        patch("app.adapters.api.routers.service_assignments.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
         patch(
             "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
         ) as slot_repo_cls,
