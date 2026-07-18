@@ -111,3 +111,22 @@ def test_extract_memberships_from_claims_variants() -> None:
     }
     out2 = jwt_claims.extract_memberships_from_claims(mixed)
     assert len(out2) == 1
+
+
+def test_extract_memberships_skips_claims_with_missing_fields() -> None:
+    """Cover lines 59-60: claim missing required role/scope_type/scope_id."""
+    # Empty role string
+    result = jwt_claims.extract_memberships_from_claims({
+        "memberships": [{"role": "", "scope_type": "DISTRICT", "scope_id": str(uuid.uuid4())}]
+    })
+    assert result == []
+    # Empty scope_type string
+    result = jwt_claims.extract_memberships_from_claims({
+        "memberships": [{"role": "VIEWER", "scope_type": "", "scope_id": str(uuid.uuid4())}]
+    })
+    assert result == []
+    # Empty scope_id string
+    result = jwt_claims.extract_memberships_from_claims({
+        "memberships": [{"role": "VIEWER", "scope_type": "DISTRICT", "scope_id": ""}]
+    })
+    assert result == []

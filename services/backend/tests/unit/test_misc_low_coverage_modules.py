@@ -58,6 +58,21 @@ def test_validate_membership_claims_invalid_cases() -> None:
                 ]
             }
         )
+    # claim is not a dict
+    with pytest.raises(InvalidMembershipClaimError):
+        validate_membership_claims({"memberships": [123]})
+    # missing scope_type
+    with pytest.raises(InvalidMembershipClaimError):
+        validate_membership_claims({"memberships": [{"role": "VIEWER", "scope_id": str(uuid.uuid4())}]})
+    # missing scope_id
+    with pytest.raises(InvalidMembershipClaimError):
+        validate_membership_claims({"memberships": [{"role": "VIEWER", "scope_type": "DISTRICT"}]})
+    # invalid scope_type enum
+    with pytest.raises(InvalidMembershipClaimError):
+        validate_membership_claims({"memberships": [{"role": "VIEWER", "scope_type": "GARBAGE", "scope_id": str(uuid.uuid4())}]})
+    # invalid scope_id UUID
+    with pytest.raises(InvalidMembershipClaimError):
+        validate_membership_claims({"memberships": [{"role": "VIEWER", "scope_type": "DISTRICT", "scope_id": "kein-uuid"}]})
 
 
 def test_validate_token_claim_consistency() -> None:

@@ -5,9 +5,10 @@ Tests use mocked OIDC provider responses to ensure provider-agnostic behavior.
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+import jwt
 import pytest
 
 from app.adapters.auth.oidc import (
@@ -594,3 +595,219 @@ class TestOIDCClose:
         )
         adapter._httpx_client = None
         await adapter.close()  # Should not crash
+
+
+class TestGetHttpxClient:
+    @pytest.mark.asyncio
+    async def test_get_httpx_client_creates_when_none(self):
+        """Line 89: get_httpx_client() creates a new client when _httpx_client is None."""
+        adapter = OIDCAdapter(
+            discovery_url="https://example.com",
+            client_id="test",
+            client_secret="secret",
+            httpx_client=None,
+        )
+        client = await adapter.get_httpx_client()
+        assert client is not None
+        await adapter.close()
+
+
+class TestJWKSParseErrorWithStaleCache:
+    @pytest.mark.asyncio
+    async def test_fetch_jwks_parse_error_with_stale_cache(self, oidc_adapter, mock_httpx_client):
+        """Lines 182-191: JSONDecodeError from JWKS returns stale cache if available."""
+        oidc_adapter._jwks_cache = MOCK_JWKS
+        oidc_adapter._jwks_cache_time = datetime.now(UTC)
+
+        mock_discover_resp = AsyncMock(status_code=200, json=lambda: MOCK_DISCOVERY)
+        mock_jwks_response = AsyncMock()
+        mock_jwks_response.json = MagicMock(side_effect=json.JSONDecodeError("bad json", "", 0))
+        mock_httpx_client.get.side_effect = [mock_discover_resp, mock_jwks_response]
+
+        result = await oidc_adapter.fetch_jwks()
+        assert result == MOCK_JWKS
+
+
+class TestJWTValidationInternal:
+    """Tests for _validate_jwt_token (lines 276-353)."""
+
+    FAKE_TOKEN = "eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Qta2V5LWlkIn0.eyJzdWIiOiJ1c2VyMTIzIiwiaXNzIjoiaHR0cHM6Ly9vaWRjLmV4YW1wbGUuY29tIn0.fakesig"
+
+    @staticmethod
+    def _mock_decode_ok_first(**raise_on_second):
+        """Return a jwt.decode mock that succeeds for unverified decode."""
+        exc_type = raise_on_second.get("exc_type", jwt.DecodeError)
+        exc_msg = raise_on_second.get("exc_msg", "simulated error")
+
+        def _decode(token, key=None, **kwargs):
+            if kwargs.get("options", {}).get("verify_signature") is False:
+                return {"iss": "https://oidc.example.com", "sub": "user123"}
+            raise exc_type(exc_msg)
+
+        return _decode
+
+    @pytest.fixture
+    def _setup_jwks(self, oidc_adapter):
+        """Pre-populate discovery and JWKS cache to avoid HTTP calls."""
+        oidc_adapter.issuer = "https://oidc.example.com"
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        oidc_adapter._jwks_cache = MOCK_JWKS
+        oidc_adapter._jwks_cache_time = datetime.now(UTC)
+        return oidc_adapter
+
+    @pytest.mark.asyncio
+    async def test_jwt_validation_empty_jwks_keys(self, oidc_adapter, mock_httpx_client):
+        """Empty keys list in JWKS raises TokenValidationError."""
+        oidc_adapter.issuer = "https://oidc.example.com"
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        oidc_adapter._jwks_cache = {"keys": []}
+        oidc_adapter._jwks_cache_time = datetime.now(UTC)
+
+        with pytest.raises(TokenValidationError, match="No keys"):
+            await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+
+    @pytest.mark.asyncio
+    async def test_jwt_validation_decode_error(self, _setup_jwks):
+        """Lines 345-346: jwt.DecodeError → TokenValidationError."""
+        oidc_adapter = _setup_jwks
+        with patch(
+            "app.adapters.auth.oidc.jwt.decode",
+            side_effect=self._mock_decode_ok_first(exc_type=jwt.DecodeError, exc_msg="bad token"),
+        ):
+            with pytest.raises(TokenValidationError, match="decode"):
+                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+
+    @pytest.mark.asyncio
+    async def test_jwt_validation_expired_signature(self, _setup_jwks):
+        """Lines 347-348: jwt.ExpiredSignatureError → TokenValidationError."""
+        oidc_adapter = _setup_jwks
+        with patch(
+            "app.adapters.auth.oidc.jwt.decode",
+            side_effect=self._mock_decode_ok_first(exc_type=jwt.ExpiredSignatureError, exc_msg="expired"),
+        ):
+            with pytest.raises(TokenValidationError, match="expired"):
+                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+
+    @pytest.mark.asyncio
+    async def test_jwt_validation_invalid_token(self, _setup_jwks):
+        """Lines 349-350: jwt.InvalidTokenError → TokenValidationError."""
+        oidc_adapter = _setup_jwks
+        with patch(
+            "app.adapters.auth.oidc.jwt.decode",
+            side_effect=self._mock_decode_ok_first(exc_type=jwt.InvalidTokenError, exc_msg="invalid"),
+        ):
+            with pytest.raises(TokenValidationError, match="Invalid"):
+                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+
+    @pytest.mark.asyncio
+    async def test_jwt_validation_generic_exception(self, _setup_jwks):
+        """Lines 351-353: generic Exception → TokenValidationError."""
+        oidc_adapter = _setup_jwks
+        with patch(
+            "app.adapters.auth.oidc.jwt.decode",
+            side_effect=self._mock_decode_ok_first(exc_type=ValueError, exc_msg="unexpected"),
+        ):
+            with pytest.raises(TokenValidationError, match="unexpected"):
+                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+
+    @pytest.mark.asyncio
+    async def test_jwt_validation_kid_not_found_refresh(self, oidc_adapter, mock_httpx_client):
+        """kid not in JWKS → triggers force refresh, still not found → TokenValidationError."""
+        oidc_adapter.issuer = "https://oidc.example.com"
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        oidc_adapter._jwks_cache = MOCK_JWKS
+        oidc_adapter._jwks_cache_time = datetime.now(UTC)
+
+        # Force refresh also returns same MOCK_JWKS (kid stays missing)
+        mock_jwks_resp = AsyncMock(status_code=200, json=lambda: MOCK_JWKS)
+        mock_httpx_client.get.return_value = mock_jwks_resp
+
+        with patch(
+            "app.adapters.auth.oidc.jwt.get_unverified_header",
+            return_value={"kid": "unknown-kid"},
+        ):
+            with pytest.raises(TokenValidationError, match="Signing key not found"):
+                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+
+
+class TestUserInfoEndpointErrors:
+    """Coverage for userinfo error paths not yet tested."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_userinfo_http_500(self, oidc_adapter, mock_httpx_client):
+        """Line 375: userinfo ≥400 that is not 401 raises TokenValidationError."""
+        oidc_adapter._discovery_cache = {
+            "userinfo_endpoint": "https://oidc.example.com/oauth/userinfo"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=500)
+        mock_httpx_client.get = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="500"):
+            await oidc_adapter._fetch_userinfo_claims("token")
+
+    @pytest.mark.asyncio
+    async def test_fetch_userinfo_missing_sub(self, oidc_adapter, mock_httpx_client):
+        """Line 387: userinfo response missing sub claim."""
+        oidc_adapter._discovery_cache = {
+            "userinfo_endpoint": "https://oidc.example.com/oauth/userinfo"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=200)
+        mock_response.json = MagicMock(return_value={"email": "u@example.com"})
+        mock_httpx_client.get = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="missing sub"):
+            await oidc_adapter._fetch_userinfo_claims("token")
+
+
+class TestIntrospectionEdgeCases:
+    """Coverage for introspection error paths not yet tested."""
+
+    @pytest.mark.asyncio
+    async def test_introspect_token_invalid_shape(self, oidc_adapter, mock_httpx_client):
+        """Line 425: introspection response is not a dict."""
+        oidc_adapter._discovery_cache = {
+            "introspection_endpoint": "https://oidc.example.com/oauth/introspect"
+        }
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+
+        mock_response = AsyncMock(status_code=200)
+        mock_response.json = MagicMock(return_value="not-a-dict")
+        mock_httpx_client.post = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(TokenValidationError, match="invalid shape"):
+            await oidc_adapter._introspect_token("token")
+
+
+class TestValidateTokenExceptionPaths:
+    """Cover validate_token introspection fallback exception handlers (lines 256, 264)."""
+
+    @pytest.mark.asyncio
+    async def test_introspect_fallback_generic_exception(self, oidc_adapter):
+        """Line 256: introspection raises generic Exception → combined error message."""
+        oidc_adapter._validate_jwt_token = AsyncMock(side_effect=TokenValidationError("jwt fail"))
+        oidc_adapter._fetch_userinfo_claims = AsyncMock(
+            side_effect=TokenValidationError("userinfo fail")
+        )
+        oidc_adapter._introspect_token = AsyncMock(side_effect=ValueError("introspect crash"))
+
+        with pytest.raises(TokenValidationError, match="introspect"):
+            await oidc_adapter.validate_token("bad-token")
+
+    @pytest.mark.asyncio
+    async def test_all_fallbacks_fail_with_generic_introspect_exception(self, oidc_adapter):
+        """Lines 257-264: introspection raises non-TokenValidationError."""
+        oidc_adapter._validate_jwt_token = AsyncMock(side_effect=TokenValidationError("jwt fail"))
+        oidc_adapter._fetch_userinfo_claims = AsyncMock(
+            side_effect=TokenValidationError("userinfo fail")
+        )
+        oidc_adapter._introspect_token = AsyncMock(side_effect=RuntimeError("unexpected"))
+
+        with pytest.raises(TokenValidationError, match="unexpected"):
+            await oidc_adapter.validate_token("bad-token")
