@@ -1,4 +1,4 @@
-## [v0.28.1] - 2026-07-18
+## [v0.28.2] - 2026-07-18
 
 ### Features
 * Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
@@ -25,6 +25,8 @@
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
+* test: coverage oidc 92%, claims_validation 96%, jwt_claims 89% (6fd4a68)
+* chore: release v0.28.1 (bf6ef39)
 * refactor: RBAC-Guard-Konsolidierung auf require_role_in_district() (PR-4) (5d6c43e)
 * chore: release v0.28.0 (2e72c48)
 * Merge pull request #212 from stritti/test/coverage-verification-auth-rbac-sync (5e65fbf)
@@ -33,5 +35,3 @@
 * Merge pull request #220 from stritti/dependabot/bun/services/frontend/tailwindcss/vite-4.3.2 (f40c01c)
 * build(deps-dev): Bump @tailwindcss/vite in /services/frontend (778532e)
 * Merge pull request #221 from stritti/dependabot/uv/services/backend/icalendar-7.2.0 (2a14ff5)
-* Merge pull request #219 from stritti/dependabot/uv/services/backend/setuptools-gte-83.0.0 (b402534)
-* Merge pull request #217 from stritti/dependabot/bun/services/frontend/vitest-4.1.10 (10701ce)
