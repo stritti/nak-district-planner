@@ -10,10 +10,7 @@ from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     get_notification_service,
 )
-from app.adapters.auth.permissions import (
-    PermissionError,
-    assert_has_role_in_district,
-)
+from app.adapters.auth.permissions import require_role_in_district
 from app.application.notification_service import NotificationService
 from app.domain.models.role import Role
 
@@ -30,10 +27,7 @@ async def list_notifications(
     service: NotificationService = Depends(get_notification_service),
 ) -> dict:
     """List notifications for a district, newest first."""
-    try:
-        assert_has_role_in_district(auth, Role.VIEWER, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.VIEWER, district_id)
     return await service.list(district_id, unread_only=unread_only, limit=limit, offset=offset)
 
 
@@ -44,10 +38,7 @@ async def unread_count(
     service: NotificationService = Depends(get_notification_service),
 ) -> dict:
     """Get unread notification count for a district."""
-    try:
-        assert_has_role_in_district(auth, Role.VIEWER, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.VIEWER, district_id)
     count = await service.get_unread_count(district_id)
     return {"count": count}
 
@@ -62,10 +53,7 @@ async def mark_read(
     notification = await service.get(notification_id)
     if notification is None:
         raise HTTPException(status_code=404, detail="Notification not found")
-    try:
-        assert_has_role_in_district(auth, Role.VIEWER, notification.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.VIEWER, notification.district_id)
     await service.mark_read(notification_id)
 
 
@@ -76,9 +64,6 @@ async def mark_all_read(
     service: NotificationService = Depends(get_notification_service),
 ) -> dict:
     """Mark all unread notifications as read for a district."""
-    try:
-        assert_has_role_in_district(auth, Role.VIEWER, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.VIEWER, district_id)
     count = await service.mark_all_read(district_id, auth.user.sub)
     return {"marked_read": count}

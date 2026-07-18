@@ -62,6 +62,9 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --group dev
 
+      - name: Check RBAC guard pattern in routers
+        run: uv run python scripts/check_rbac_guard_pattern.py
+
       - name: Run unit tests with coverage
         id: unit-tests
         run: |
