@@ -1,5 +1,7 @@
 # Architekturstatus (Ist vs. Ziel)
 
+> **Letztes Update:** Juli 2026 — aktualisiert basierend auf `docs/code-review-2026-07.md`
+
 Diese Seite zeigt den aktuellen Stand gegenueber der Zielarchitektur aus OpenSpec.
 
 Legende: ✅ umgesetzt · 🟡 teilweise · ❌ offen
@@ -15,23 +17,24 @@ Legende: ✅ umgesetzt · 🟡 teilweise · ❌ offen
 ## 2. Architektur-Fundament
 
 - Hexagonale Struktur (Domain/Application/Adapters): ✅
-- PlanningSlot/PlanningSeries-Modell: ❌
-- EventInstance (Soll/Ist-Trennung): ❌
-- ExternalEventCandidate-Review: ❌
+- PlanningSlot/PlanningSeries-Modell: ✅
+- EventInstance (Soll/Ist-Trennung): ✅
+- ExternalEventLink: ✅ (teilweise — Modell und Repository vorhanden)
+- ExternalEventCandidate-Review: ❌ (Phase 2, Produktentscheidung ausstehend)
 
 ## 3. Security und Governance
 
 - OIDC/PKCE-Login: ✅
 - Rollenmodell dokumentiert: ✅
-- RBAC-Guards vollstaendig in allen Services: 🟡
-- Audit-Logging vollstaendig: 🟡
-- Rate-Limiting oeffentlicher Endpunkte: ❌
+- RBAC-Guards vollstaendig in allen Services: ✅ (DRY-Konsolidierung abgeschlossen, siehe PR-4)
+- Audit-Logging vollstaendig: ✅ (Middleware + Queue-Writer aktiv in main.py verdrahtet)
+- Rate-Limiting oeffentlicher Endpunkte: ✅ (pfadspezifische Limits fuer `/api/v1/export/*` aktiv)
 
 ## 4. Sync und Robustheit
 
 - Zyklischer Sync + Hash-Deduplizierung: ✅
-- ExternalEventLink/Sync-Metadata: ❌
-- Gehärtete Sync-State-Machine: ❌
+- ExternalEventLink/Sync-Metadata: ✅
+- Gehärtete Sync-State-Machine: ✅ (SyncState: CLEAN/DIRTY_INTERNAL/DIRTY_EXTERNAL/CONFLICT)
 
 ## 5. Self-Update (Automatic Version Update)
 
@@ -55,3 +58,5 @@ Legende: ✅ umgesetzt · 🟡 teilweise · ❌ offen
 - Zielbild: `openspec/architecture/overview.md`
 - Umsetzungsreihenfolge: `openspec/architecture/implementation-roadmap.md`
 - Detailanalyse: `docs/improvement-proposals.md`
+- Code-Review (Juli 2026): `docs/code-review-2026-07.md`
+- Aktionsplan: `docs/code-review-2026-07-action-plan.md`

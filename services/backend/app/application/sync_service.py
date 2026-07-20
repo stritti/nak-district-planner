@@ -22,6 +22,7 @@ Implements deterministic, idempotent sync with state machine:
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,16 +43,35 @@ from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.calendar import CalendarConnector
 
 
+@dataclass
+class SyncResult:
+    """Result of a calendar sync operation.
+
+    Attributes:
+        created: Number of new EventInstances created.
+        updated: Number of existing EventInstances updated.
+        cancelled: Number of existing EventInstances cancelled.
+        auto_matched: Number of events auto-matched to existing PlanningSlots.
+    """
+    created: int = 0
+    updated: int = 0
+    cancelled: int = 0
+    auto_matched: int = 0
+
+
+_CONNECTOR_MAP: dict[CalendarType, type[CalendarConnector]] = {
+    CalendarType.ICS: ICalConnector,
+    CalendarType.GOOGLE: GoogleCalendarConnector,
+    CalendarType.MICROSOFT: MicrosoftGraphCalendarConnector,
+    CalendarType.CALDAV: CalDAVConnector,
+}
+
+
 def _get_connector(calendar_type: CalendarType) -> CalendarConnector:
-    if calendar_type == CalendarType.ICS:
-        return ICalConnector()
-    elif calendar_type == CalendarType.GOOGLE:
-        return GoogleCalendarConnector()
-    elif calendar_type == CalendarType.MICROSOFT:
-        return MicrosoftGraphCalendarConnector()
-    elif calendar_type == CalendarType.CALDAV:
-        return CalDAVConnector()
-    raise NotImplementedError(f"No connector implemented for {calendar_type}")
+    connector_cls = _CONNECTOR_MAP.get(calendar_type)
+    if connector_cls is None:
+        raise NotImplementedError(f"No connector implemented for {calendar_type}")
+    return connector_cls()
 
 
 def _compute_content_hash(raw_event) -> str:
@@ -110,7 +130,7 @@ def _has_significant_deviation(slot: PlanningSlot, event_start: datetime) -> boo
     return abs((event_start - slot_dt).total_seconds()) > 300
 
 
-async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str, int]:
+async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResult:
     """Sync one CalendarIntegration. Returns {created, updated, cancelled, auto_matched}."""
     integration_repo = SqlCalendarIntegrationRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
@@ -265,9 +285,9 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> dict[str
     integration.last_synced_at = datetime.now(UTC)
     await integration_repo.save(integration)
 
-    return {
-        "created": created,
-        "updated": updated,
-        "cancelled": cancelled,
-        "auto_matched": auto_matched,
-    }
+    return SyncResult(
+        created=created,
+        updated=updated,
+        cancelled=cancelled,
+        auto_matched=auto_matched,
+    )

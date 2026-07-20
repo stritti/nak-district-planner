@@ -15,6 +15,11 @@ class EventApprovalStatus(StrEnum):
 
 
 class PlanningSlotStatus(str, Enum):
+    """Status of a planning slot in the system.
+
+    ACTIVE slots are usable for service assignments; CANCELLED slots
+    are excluded from the planning matrix and assignment flow.
+    """
     ACTIVE = "ACTIVE"
     CANCELLED = "CANCELLED"
 

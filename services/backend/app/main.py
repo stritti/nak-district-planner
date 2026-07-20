@@ -37,7 +37,7 @@ from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
-from app.application.rate_limiter import RateLimitConfig, rate_limiter
+from app.application.rate_limiter import RateLimitConfig, increment_fail_open_counter, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
 
@@ -105,6 +105,7 @@ async def lifespan(app: FastAPI):
             "Rate limiter could not connect to Redis — requests will not be rate limited "
             "until Redis becomes available"
         )
+        increment_fail_open_counter("startup_connect")
 
     yield
 
@@ -201,7 +202,7 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
 async def health() -> dict:
     """Health check endpoint.
 
-    Returns basic health status including optional database connectivity.
+    Returns basic health status including database and Redis connectivity.
     The endpoint always returns ``status: ok`` as long as the app responds,
     making it safe for Docker Compose healthchecks.
     """
@@ -216,6 +217,18 @@ async def health() -> dict:
         result["database"] = "ok"
     except Exception:
         result["database"] = "unavailable"
+
+    # Check Redis connectivity (informational — does not affect health status)
+    try:
+        from app.application.rate_limiter import rate_limiter
+
+        if rate_limiter._redis is not None:
+            await rate_limiter._redis.ping()
+            result["redis"] = "ok"
+        else:
+            result["redis"] = "disconnected"
+    except Exception:
+        result["redis"] = "unavailable"
 
     return result
 

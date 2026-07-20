@@ -11,7 +11,12 @@ from .role import Role
 
 
 class ScopeType(StrEnum):
-    """Scope type for membership assignments."""
+    """Whether the membership applies to an entire district or a single congregation.
+
+    ``DISTRICT`` memberships grant the role across all congregations within
+    that district.  ``CONGREGATION`` memberships are scoped to one specific
+    congregation only.
+    """
 
     DISTRICT = "DISTRICT"
     CONGREGATION = "CONGREGATION"
