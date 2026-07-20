@@ -1,4 +1,4 @@
-## [v0.28.4] - 2026-07-20
+## [v0.28.5] - 2026-07-20
 
 ### Features
 * Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
@@ -25,6 +25,8 @@
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
+* build(deps-dev): Bump @pinia/testing in /services/frontend (#229) (edd0b89)
+* chore: release v0.28.4 (7d869f3)
 * build(deps): Bump alembic from 1.18.4 to 1.18.5 in /services/backend (#230) (02c3c5d)
 * chore: release v0.28.3 (92006de)
 * build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
@@ -33,5 +35,3 @@
 * chore: release v0.28.1 (bf6ef39)
 * refactor: RBAC-Guard-Konsolidierung auf require_role_in_district() (PR-4) (5d6c43e)
 * chore: release v0.28.0 (2e72c48)
-* Merge pull request #212 from stritti/test/coverage-verification-auth-rbac-sync (5e65fbf)
-* Merge pull request #222 from stritti/dependabot/uv/services/backend/uvicorn-standard--gte-0.51.0 (e2e006a)
