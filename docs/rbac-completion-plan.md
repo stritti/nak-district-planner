@@ -4,7 +4,12 @@
 > **Task Group:** 1.4 (Authorization Layer)
 > **Priority:** 🔴 CRITICAL
 > **Effort:** 16 days (3.2 weeks)
-> **Status:** In Progress
+> **Status:** ✅ DONE — Siehe `docs/code-review-2026-07.md` für Verifikation
+>
+> **Hinweis (Juli 2026):** Dieses Dokument ist größtenteils abgeschlossen. Der `/access`-Guard in
+> `auth.py` wurde implementiert, `system.py` hat Guards, die DRY-Konsolidierung auf
+> `require_role_in_district()` ist abgeschlossen. Der verbleibende Punkt Task 1.4.6
+> (RBAC-Coverage-Dokument) ist noch offen und wird in PR-6 des Aktionsplans adressiert.
 
 ---
 

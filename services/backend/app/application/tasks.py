@@ -1,8 +1,25 @@
 """Celery tasks for calendar synchronisation (UC-02) and system maintenance.
 
-Tasks intentionally run synchronous Celery workers; asyncio.run() bridges
-to the async database/HTTP layer.  This is the standard pattern for Celery
-+ SQLAlchemy async without a dedicated async worker library.
+IMPORTANT — async bridge pattern
+=================================
+Celery workers execute synchronous task functions.  To call async database/HTTP
+code from a sync task, we use ``asyncio.run()`` inside each task function.
+This is the standard, documented pattern for Celery + SQLAlchemy async without
+a dedicated async Celery worker library.
+
+Each task follows the same structure::
+
+    @celery.task(...)
+    def my_task(...) -> dict:
+        async def _run() -> dict:
+            async with AsyncSessionLocal() as session:
+                ...  # async work here
+                return result
+
+        return asyncio.run(_run())
+
+The ``_run()`` inner coroutine keeps the async logic isolated and testable
+independently of Celery.
 """
 
 from __future__ import annotations
@@ -21,7 +38,7 @@ logger = logging.getLogger(__name__)
 def sync_calendar_integration(self, integration_id: str) -> dict:
     """Sync a single CalendarIntegration by ID.
 
-    Returns a summary dict: {"created": int, "updated": int, "cancelled": int}
+    Returns a dict with ``created``, ``updated``, ``cancelled``, ``auto_matched`` counts.
     """
     from app.adapters.db.session import AsyncSessionLocal
     from app.application.sync_service import run_sync
@@ -30,7 +47,12 @@ def sync_calendar_integration(self, integration_id: str) -> dict:
         async with AsyncSessionLocal() as session:
             result = await run_sync(uuid.UUID(integration_id), session)
             await session.commit()
-            return result
+            return {
+                "created": result.created,
+                "updated": result.updated,
+                "cancelled": result.cancelled,
+                "auto_matched": result.auto_matched,
+            }
 
     try:
         summary = asyncio.run(_run())

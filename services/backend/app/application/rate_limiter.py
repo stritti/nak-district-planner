@@ -19,6 +19,24 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+from opentelemetry.metrics import get_meter
+
+_meter = get_meter(__name__)
+_rate_limiter_fail_open_counter = _meter.create_counter(
+    "rate_limiter.fail_open",
+    description="Counts requests where rate limiter failed open (Redis unavailable or error)",
+    unit="1",
+)
+
+
+def increment_fail_open_counter(reason: str) -> None:
+    """Increment the rate limiter fail-open counter.
+
+    Args:
+        reason: Short description of the fail-open cause (e.g. startup_connect, RedisError).
+    """
+    _rate_limiter_fail_open_counter.add(1, {"reason": reason})
+
 
 @dataclass
 class RateLimitConfig:
@@ -207,6 +225,7 @@ class RateLimiter:
             
         except Exception as e:
             logger.error(f"Rate limit check failed: {e}")
+            increment_fail_open_counter(type(e).__name__)
             # Fail open - allow request if rate limiting fails
             return RateLimitResult(
                 allowed=True,

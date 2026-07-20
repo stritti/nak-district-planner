@@ -18,7 +18,12 @@ class CalendarType(StrEnum):
 
 
 class CalendarCapability(StrEnum):
-    """CalendarCapability domain model."""
+    """Capabilities supported for a calendar integration.
+
+    ``READ`` — events can be fetched from the external source (minimal).
+    ``WRITE`` — events can be created/updated on the external source.
+    ``WEBHOOK`` — the external source supports push-based change notifications.
+    """
 
     READ = "READ"
     WRITE = "WRITE"

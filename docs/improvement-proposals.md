@@ -412,17 +412,18 @@ kritisch sind, sollten sie dokumentiert werden.
 
 ### 5.1 🔴 Fehlendes globales Feedback-System (Toast/Notification)
 
-**Status:** → OpenSpec-Change
-[`ux-improvements`](/openspec/changes/ux-improvements/proposal)
+**Status:** ✅ UMGESETZT — siehe PR [#210](https://github.com/stritti/nak-district-planner/pull/210)
 
-**Problem:** Fehler werden inline angezeigt, Erfolgsmeldungen erscheinen in vielen Fällen gar
-nicht. Nutzer erhalten kein konsistentes Feedback nach Aktionen (z.B. „Leader gespeichert",
-„Sync gestartet").
+**Problem (historisch):** Fehler wurden inline angezeigt, Erfolgsmeldungen erschienen in vielen
+Fällen gar nicht. Nutzer erhielten kein konsistentes Feedback nach Aktionen.
 
-**Lösung:** Eine globale Toast-Komponente (z.B. mit einem `useToast()`-Composable und
-Pinia-Store) einführen. Alle API-Aktionen lösen Success/Error-Toasts aus.
+**Lösung:** `ToastContainer.vue` + `useToast()`-Composable + Pinia-Store existieren und sind in
+allen kritischen Views verdrahtet. Erfolgs-/Fehler-Toasts erscheinen bei Leader speichern, Sync
+starten, Registrierung entscheiden, Export-Token erstellen. `ConfirmDialog.vue` ist bei allen
+destruktiven Aktionen eingebunden (Integration löschen, Event stornieren, Registrierung ablehnen,
+Token widerrufen). Vitest + Playwright-Tests decken die Bestätigungsflüsse ab.
 
-**Aufwand:** Mittel. **Priorität:** 🔴 Hoch.
+**Aufwand:** Mittel. **Priorität:** 🔴 Hoch (inzwischen erledigt).
 
 ---
 
@@ -483,19 +484,21 @@ nicht offensichtlich. Insbesondere auf Touch-Geräten.
 
 ### 5.5 🟠 Keine Bestätigungsdialoge für destruktive Aktionen
 
-**Status:** → OpenSpec-Change
-[`ux-improvements`](/openspec/changes/ux-improvements/proposal)
+**Status:** ✅ UMGESETZT — siehe PR [#210](https://github.com/stritti/nak-district-planner/pull/210)
 
-**Problem:** Aktionen wie „Integration löschen", „Registrierung ablehnen" oder
-„Event stornieren" werden ohne Rückfrage ausgeführt.
+**Problem (historisch):** Aktionen wie „Integration löschen", „Registrierung ablehnen" oder
+„Event stornieren" wurden ohne Rückfrage ausgeführt.
 
-**Lösung:** Einfaches Bestätigungsmodal (`ConfirmModal.vue`) mit:
+**Lösung:** `ConfirmDialog.vue` ist eingebunden bei:
+- Kalender-Integration löschen
+- Registrierung ablehnen
+- Event stornieren
+- Export-Token widerrufen
 
-- Beschreibung der Aktion
-- Warnung (rot) bei unumkehrbaren Aktionen
-- „Bestätigen" / „Abbrechen"-Buttons
+Die Komponente unterstützt Warnung (rot) bei unumkehrbaren Aktionen sowie
+„Bestätigen" / „Abbrechen"-Buttons inkl. loading-Prop.
 
-**Aufwand:** Gering (einmalig + konsequente Nutzung). **Priorität:** 🟠 Mittel.
+**Aufwand:** Gering. **Priorität:** 🟠 Mittel (inzwischen erledigt).
 
 ---
 
