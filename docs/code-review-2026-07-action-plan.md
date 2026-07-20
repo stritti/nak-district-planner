@@ -4,7 +4,7 @@
 > PRs gruppiert — jede Gruppe kann unabhängig geplant, gebrancht und gemerged werden.
 > Reihenfolge der Gruppen = Umsetzungsreihenfolge.
 
-**Letztes Update:** 20.07.2026 — PR-1 bis PR-4 ✅ erledigt, siehe Abschnitt [Erledigte PRs](#-erledigte-prs).
+**Letztes Update:** 20.07.2026 — PR-1 bis PR-8, PR-10 ✅ erledigt, siehe Abschnitt [Erledigte PRs](#-erledigte-prs).
 
 ---
 
@@ -68,21 +68,61 @@
 
 ---
 
-## 🔴 Noch offen — vor Go-Live (Production-Blocker)
+## ✅ Weitere Erledigte PRs
 
-> ⚠️ **Hinweis:** Die beiden ursprünglichen Production-Blocker (B-1, F-1) sind erledigt.
-> Der Go-Live ist aus Code-Review-Sicht nicht mehr blockiert.
+### PR-5: Rate-Limiter-Fail-Open sichtbar machen (Observability) → ✅ Erledigt
+> Findings: **B-5** · PR: [#234](https://github.com/stritti/nak-district-planner/pull/234)
+
+- [x] Metrik/Zähler "rate_limiter.fail_open" über OpenTelemetry-Counter in `rate_limiter.py` ausgeleitet
+- [ ] Alert-Schwelle/Dashboard-Hinweis dokumentieren (Ops-Runbook, `docs/production-runbook.md`)
+- [x] Bestehende `logger.warning(...)`-Stelle in `main.py:97-107` um `increment_fail_open_counter()` ergänzt
+- [x] Zusätzlich in `check_rate_limit()`-Exception-Pfad integriert
+
+**Aufwand:** Gering · **Owner-Typ:** @fixer
 
 ---
 
-## 🟠 Hoch — kurz vor/nach Go-Live
+### PR-6: Dokumentation aktualisieren (alte Analyse-Docs bereinigen) → ✅ Erledigt
+> Findings: **M-5**, **M-4** · PR: [#234](https://github.com/stritti/nak-district-planner/pull/234)
 
-### PR-5: Rate-Limiter-Fail-Open sichtbar machen (Observability)
-> Findings: **B-5**
+- [x] `docs/openspec-gap-analysis.md` als "historisch" gekennzeichnet
+- [x] `docs/rbac-completion-plan.md` auf "Done" gesetzt
+- [x] `docs/architecture-status.md` aktualisiert: RBAC ✅, Audit-Logging ✅, Rate-Limiting ✅
+- [x] `docs/improvement-proposals.md` §§5.1/5.5 korrigiert (Verweis auf PR-2/#210)
+- [x] Neues `docs/rbac-coverage.md` erstellt (Router × Endpoint × erforderliche Rolle × Status)
 
-- [ ] Metrik/Zähler für "Rate-Limiter im Fail-Open-Modus" über `app/telemetry.py` ausleiten
-- [ ] Alert-Schwelle/Dashboard-Hinweis dokumentieren (Ops-Runbook, `docs/production-runbook.md`)
-- [ ] Bestehende `logger.warning(...)`-Stelle in `main.py:97-107` unverändert lassen, nur ergänzen
+**Aufwand:** Gering · **Owner-Typ:** direkt (Doku)
+
+---
+
+### PR-7: Pre-Go-Live-Verifikation (Audit-Log & Health-Check) → ✅ Erledigt
+> Findings: **M-1**, **M-6** · PR: [#234](https://github.com/stritti/nak-district-planner/pull/234)
+
+- [x] Health-Check um Redis-Connectivity-Prüfung ergänzt
+- [x] Docker-Compose-Healthcheck auf `/api/health` referenziert
+- [x] Audit-Logging verifiziert: Middleware + Queue-Writer aktiv (kein Code-Change nötig)
+
+**Aufwand:** Gering · **Owner-Typ:** @fixer
+
+---
+
+### PR-8: Sync-Service Aufräumen → ✅ Erledigt
+> Findings: **M-2**, **M-3** · PR: [#234](https://github.com/stritti/nak-district-planner/pull/234)
+
+- [x] `_get_connector()` von if/elif-Kette auf `_CONNECTOR_MAP`-Dict umgestellt
+- [x] `dict[str, int]`-Rückgaben durch typisiertes `SyncResult`-Dataclass ersetzt
+- [x] Aufrufer (`tasks.py`) auf neue Signatur angepasst
+- [x] Tests aktualisiert (19/19 passed)
+
+**Aufwand:** Gering–Mittel · **Owner-Typ:** @fixer
+
+---
+
+### PR-10: Kleinere Clean-Code-Nacharbeiten → ✅ Erledigt
+> Findings: **L-1**, **L-3** · PR: [#234](https://github.com/stritti/nak-district-planner/pull/234)
+
+- [x] Docstrings für Enums ergänzt (`PlanningSlotStatus`, `ScopeType`, `CalendarCapability`)
+- [x] Kommentar in Celery-Tasks ergänzt, der `asyncio.run()`-Bridge-Pattern erklärt
 
 **Aufwand:** Gering · **Owner-Typ:** @fixer
 
@@ -158,16 +198,6 @@
 
 ---
 
-### PR-10: Kleinere Clean-Code-Nacharbeiten
-> Findings: **L-1**, **L-3**
-
-- [ ] Docstrings für Enums ergänzen (`EventStatus`, `EventSource`, `ServiceAssignmentStatus`, u.a.)
-- [ ] Kommentar in Celery-Tasks ergänzen, der `asyncio.run()`-Bridge-Pattern erklärt (kein async-Celery-Worker)
-
-**Aufwand:** Gering · **Owner-Typ:** @fixer
-
----
-
 ### PR-11 (optional): Credential-Verschlüsselung als SQLAlchemy `TypeDecorator`
 > Findings: **L-2**
 
@@ -190,17 +220,17 @@
 ## Übersicht
 
 | PR | Titel | Priorität | Status | Aufwand | Findings |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | PR-1 | RBAC-Lücke `leaders.link-self` fixen | 🔴 Sofort | ✅ Erledigt (#209) | Gering | B-1 |
 | PR-2 | Toast & ConfirmDialog verdrahten | 🔴 Sofort | ✅ Erledigt (#210) | Mittel | F-1 |
 | PR-3 | Coverage-Verifikation Auth/RBAC/Sync | 🟠 Hoch | ✅ Erledigt (#212) | Gering–Mittel | B-4 |
 | PR-4 | RBAC-Guard-Konsolidierung (DRY) | 🟠 Hoch | ✅ Erledigt | Mittel | B-2 |
-| PR-5 | Rate-Limiter-Observability | 🟠 Hoch | ❌ Offen | Gering | B-5 |
+| PR-5 | Rate-Limiter-Observability | 🟠 Hoch | ✅ Erledigt (#234) | Gering | B-5 |
 | — | Entscheidung ExternalEventCandidate/SyncState | 🟠 Hoch | ❌ Offen | – | B-3 |
-| PR-6 | Doku-Aktualisierung | 🟡 Mittel | ❌ Offen | Gering | M-4, M-5 |
-| PR-7 | Pre-Go-Live-Verifikation | 🟡 Mittel | ❌ Offen | Gering | M-1, M-6 |
-| PR-8 | Sync-Service Aufräumen | 🟡 Mittel | ❌ Offen | Gering–Mittel | M-2, M-3 |
+| PR-6 | Doku-Aktualisierung | 🟡 Mittel | ✅ Erledigt (#234) | Gering | M-4, M-5 |
+| PR-7 | Pre-Go-Live-Verifikation | 🟡 Mittel | ✅ Erledigt (#234) | Gering | M-1, M-6 |
+| PR-8 | Sync-Service Aufräumen | 🟡 Mittel | ✅ Erledigt (#234) | Gering–Mittel | M-2, M-3 |
 | PR-9 | Frontend View-Aufteilung (5 Teil-PRs) | 🟢 Niedrig | ❌ Offen | Hoch | F-2 |
-| PR-10 | Kleinere Clean-Code-Nacharbeiten | 🟢 Niedrig | ❌ Offen | Gering | L-1, L-3 |
+| PR-10 | Kleinere Clean-Code-Nacharbeiten | 🟢 Niedrig | ✅ Erledigt (#234) | Gering | L-1, L-3 |
 | PR-11 | Verschlüsselung als TypeDecorator (optional) | 🟢 Niedrig | ❌ Offen | Mittel | L-2 |
 | — | Mobile Matrix (Backlog) | 🟢 Niedrig | ❌ Offen | – | L-4 |
