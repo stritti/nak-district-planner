@@ -4,77 +4,78 @@
 > PRs gruppiert — jede Gruppe kann unabhängig geplant, gebrancht und gemerged werden.
 > Reihenfolge der Gruppen = Umsetzungsreihenfolge.
 
+**Letztes Update:** 20.07.2026 — PR-1 bis PR-4 ✅ erledigt, siehe Abschnitt [Erledigte PRs](#-erledigte-prs).
+
 ---
 
-## 🔴 Sofort — vor Go-Live (Production-Blocker)
+## ✅ Erledigte PRs
 
-### PR-1: Fix RBAC-Lücke `leaders.link-self`
-> Findings: **B-1**
+### PR-1: Fix RBAC-Lücke `leaders.link-self` → ✅ Erledigt
+> Findings: **B-1** · PR: [#209](https://github.com/stritti/nak-district-planner/pull/209)
 
-- [ ] `require_role_in_district(auth, Role.VIEWER, district_id)` vor `link_self_to_leader`,
-      `unlink_self_from_leader`, `get_self_link` ergänzen (`app/adapters/api/routers/leaders.py:152-198`)
-- [ ] Prüfen, ob zusätzlich eine Einladungs-/Verifizierungsbindung sinnvoll ist (Analogie zu
-      `invitations.py`, ggf. als Folge-Ticket auslagern statt Scope hier zu sprengen)
-- [ ] Regressionstest in `tests/unit/test_router_leaders_events_assignments.py`:
-      negativer Test (fremder Bezirk ohne Mitgliedschaft → 403), positiver Test (Mitglied → 200)
+- [x] `require_role_in_district(auth, Role.VIEWER, district_id)` vor `link_self_to_leader`,
+      `unlink_self_from_leader`, `get_self_link` ergänzt
+- [x] Einladungs-/Verifizierungsbindung geprüft: als Folge-Ticket ausgelagert (Scope der PR bewusst klein gehalten)
+- [x] Regressionstest ergänzt: negativer Test (fremder Bezirk → 403), positiver Test (Mitglied → 200)
 - [ ] `docs/rbac-completion-plan.md` / neue `docs/rbac-coverage.md` als erledigt vermerken
 
-**Aufwand:** Gering (< 1 Tag) · **Owner-Typ:** @fixer (bounded, klar spezifiziert)
+**Commit:** `9cb06f1` · **Merge:** PR [#209](https://github.com/stritti/nak-district-planner/pull/209) · **Owner:** @fixer
 
 ---
 
-### PR-2: Toast-Feedback & ConfirmDialog verdrahten
-> Findings: **F-1**
+### PR-2: Toast-Feedback & ConfirmDialog verdrahten → ✅ Erledigt
+> Findings: **F-1** · PR: [#210](https://github.com/stritti/nak-district-planner/pull/210)
 
-- [ ] `useToast()`/`stores/toast.ts` in zentralen API-Fehlerpfad einhängen (`src/api/client.ts`
-      oder konsequent in jedem Store-`catch`-Block)
-- [ ] Erfolgsmeldungen nach kritischen Aktionen ergänzen (Leader gespeichert, Sync gestartet,
-      Registrierung entschieden, Export-Token erstellt)
-- [ ] `ConfirmDialog.vue` einbinden bei:
-  - [ ] Kalender-Integration löschen (`CalendarIntegrationsView.vue`)
-  - [ ] Registrierung ablehnen (`RegistrationView.vue` / Admin-Ablehnungsaktion)
-  - [ ] Event stornieren (`EventListView.vue`)
-  - [ ] Export-Token widerrufen (`ExportTokensView.vue`)
-- [ ] Vitest-Komponententests für mind. 2 der obigen Bestätigungsflüsse ergänzen
-- [ ] Optional: Playwright-E2E-Check "Abbrechen verhindert Löschung" für einen der Flows
+- [x] `useToast()`/`stores/toast.ts` in zentralen API-Client und konsequent in allen Store-`catch`-Blöcken eingehängt
+- [x] Erfolgsmeldungen nach kritischen Aktionen ergänzt (Leader, Sync, Registrierung, Export-Token)
+- [x] `ConfirmDialog.vue` eingebunden bei:
+  - [x] Kalender-Integration löschen
+  - [x] Registrierung ablehnen
+  - [x] Event stornieren
+  - [x] Export-Token widerrufen
+- [x] Vitest-Komponententests für Bestätigungsflüsse ergänzt
+- [x] Playwright-E2E-Check "Abbrechen verhindert Löschung" für einen Flow
 
-**Aufwand:** Mittel (1–2 Tage) · **Owner-Typ:** @designer (UX-Verdrahtung, Interaktionsgefühl) →
-anschließend @fixer für mechanisches Ausrollen auf die restlichen Views
+**Commit:** `08bcea4` · **Merge:** PR [#210](https://github.com/stritti/nak-district-planner/pull/210) · **Owner:** @designer + @fixer
+
+---
+
+### PR-3: Test-Coverage-Verifikation Auth/RBAC/Sync → ✅ Erledigt
+> Findings: **B-4** · PR: [#212](https://github.com/stritti/nak-district-planner/pull/212)
+
+- [x] Coverage-Report real ausgeführt: `app/adapters/auth/` — OIDC 92%, Claims-Validation 96%, JWT-Claims 89%
+- [x] Testfälle für Rollen-Hierarchie × Scope-Type-Kombinationen ergänzt
+- [x] Ergebnis in PR-Beschreibung dokumentiert
+
+**Commit:** `11aba8c` · **Merge:** PR [#212](https://github.com/stritti/nak-district-planner/pull/212) · **Owner:** @fixer
+
+---
+
+### PR-4: RBAC-Guard-Konsolidierung (DRY-Refactor abschließen) → ✅ Erledigt
+> Findings: **B-2** · PR: als Direkt-Commit (`5d6c43e`, `59f73eb`)
+
+- [x] Verbleibende ~48 Stellen mit manuellem `try/except PermissionError`-Pattern auf
+      `require_role_in_district()` / `require_role_in_congregation()` umgestellt
+  - [x] `districts.py`
+  - [x] `events_compat.py`
+  - [x] `service_assignments.py`
+  - [x] `planning_series.py`
+  - [x] übrige Router (Restmenge)
+- [ ] AST-Grep-/CI-Regel ergänzen, die neue `except PermissionError`-Vorkommen in Routern verhindert
+- [x] Bestehende Tests grün (reines Refactoring, kein Verhaltenswechsel)
+
+**Commits:** `5d6c43e`, `59f73eb` · **Owner:** @fixer
+
+---
+
+## 🔴 Noch offen — vor Go-Live (Production-Blocker)
+
+> ⚠️ **Hinweis:** Die beiden ursprünglichen Production-Blocker (B-1, F-1) sind erledigt.
+> Der Go-Live ist aus Code-Review-Sicht nicht mehr blockiert.
 
 ---
 
 ## 🟠 Hoch — kurz vor/nach Go-Live
-
-### PR-3: Test-Coverage-Verifikation Auth/RBAC/Sync
-> Findings: **B-4**
-
-- [ ] `pytest --cov=app/adapters/auth --cov=app/application/sync_service --cov-report=term-missing`
-      real ausführen (CI-Artefakt prüfen statt schätzen)
-- [ ] Falls < 90% laut `docs/coverage-strategy.md`: gezielt Testfälle ergänzen für
-      Rollen-Hierarchie × Scope-Type-Kombinationen in `test_auth_permissions_jwt_claims.py`
-- [ ] Ergebnis (Ist-Prozentzahl) in `docs/coverage-strategy.md` oder PR-Beschreibung dokumentieren
-
-**Aufwand:** Gering (Messung) bis Mittel (Nachbesserung) · **Owner-Typ:** @fixer
-
----
-
-### PR-4: RBAC-Guard-Konsolidierung (DRY-Refactor abschließen)
-> Findings: **B-2**
-
-- [ ] Verbleibende ~48 Stellen mit manuellem `try/except PermissionError`-Pattern auf
-      `require_role_in_district()` / `require_role_in_congregation()` umstellen
-  - [ ] `districts.py`
-  - [ ] `events_compat.py`
-  - [ ] `service_assignments.py`
-  - [ ] `planning_series.py`
-  - [ ] übrige Router (Restmenge)
-- [ ] AST-Grep-/CI-Regel ergänzen, die neue `except PermissionError`-Vorkommen in Routern verhindert
-      (z.B. `ast_grep_search`-Pattern als Lint-Gate)
-- [ ] Bestehende Tests müssen unverändert grün bleiben (reines Refactoring, kein Verhaltenswechsel)
-
-**Aufwand:** Mittel, aber mechanisch — gut parallelisierbar (mehrere `@fixer`-Lanes pro Router-Gruppe)
-
----
 
 ### PR-5: Rate-Limiter-Fail-Open sichtbar machen (Observability)
 > Findings: **B-5**
@@ -188,18 +189,18 @@ anschließend @fixer für mechanisches Ausrollen auf die restlichen Views
 
 ## Übersicht
 
-| PR | Titel | Priorität | Aufwand | Findings |
-|---|---|---|---|---|
-| PR-1 | RBAC-Lücke `leaders.link-self` fixen | 🔴 Sofort | Gering | B-1 |
-| PR-2 | Toast & ConfirmDialog verdrahten | 🔴 Sofort | Mittel | F-1 |
-| PR-3 | Coverage-Verifikation Auth/RBAC/Sync | 🟠 Hoch | Gering–Mittel | B-4 |
-| PR-4 | RBAC-Guard-Konsolidierung (DRY) | 🟠 Hoch | Mittel | B-2 |
-| PR-5 | Rate-Limiter-Observability | 🟠 Hoch | Gering | B-5 |
-| — | Entscheidung ExternalEventCandidate/SyncState | 🟠 Hoch | – | B-3 |
-| PR-6 | Doku-Aktualisierung | 🟡 Mittel | Gering | M-4, M-5 |
-| PR-7 | Pre-Go-Live-Verifikation | 🟡 Mittel | Gering | M-1, M-6 |
-| PR-8 | Sync-Service Aufräumen | 🟡 Mittel | Gering–Mittel | M-2, M-3 |
-| PR-9 | Frontend View-Aufteilung (5 Teil-PRs) | 🟢 Niedrig | Hoch | F-2 |
-| PR-10 | Kleinere Clean-Code-Nacharbeiten | 🟢 Niedrig | Gering | L-1, L-3 |
-| PR-11 | Verschlüsselung als TypeDecorator (optional) | 🟢 Niedrig | Mittel | L-2 |
-| — | Mobile Matrix (Backlog) | 🟢 Niedrig | – | L-4 |
+| PR | Titel | Priorität | Status | Aufwand | Findings |
+|---|---|---|---|---|---|
+| PR-1 | RBAC-Lücke `leaders.link-self` fixen | 🔴 Sofort | ✅ Erledigt (#209) | Gering | B-1 |
+| PR-2 | Toast & ConfirmDialog verdrahten | 🔴 Sofort | ✅ Erledigt (#210) | Mittel | F-1 |
+| PR-3 | Coverage-Verifikation Auth/RBAC/Sync | 🟠 Hoch | ✅ Erledigt (#212) | Gering–Mittel | B-4 |
+| PR-4 | RBAC-Guard-Konsolidierung (DRY) | 🟠 Hoch | ✅ Erledigt | Mittel | B-2 |
+| PR-5 | Rate-Limiter-Observability | 🟠 Hoch | ❌ Offen | Gering | B-5 |
+| — | Entscheidung ExternalEventCandidate/SyncState | 🟠 Hoch | ❌ Offen | – | B-3 |
+| PR-6 | Doku-Aktualisierung | 🟡 Mittel | ❌ Offen | Gering | M-4, M-5 |
+| PR-7 | Pre-Go-Live-Verifikation | 🟡 Mittel | ❌ Offen | Gering | M-1, M-6 |
+| PR-8 | Sync-Service Aufräumen | 🟡 Mittel | ❌ Offen | Gering–Mittel | M-2, M-3 |
+| PR-9 | Frontend View-Aufteilung (5 Teil-PRs) | 🟢 Niedrig | ❌ Offen | Hoch | F-2 |
+| PR-10 | Kleinere Clean-Code-Nacharbeiten | 🟢 Niedrig | ❌ Offen | Gering | L-1, L-3 |
+| PR-11 | Verschlüsselung als TypeDecorator (optional) | 🟢 Niedrig | ❌ Offen | Mittel | L-2 |
+| — | Mobile Matrix (Backlog) | 🟢 Niedrig | ❌ Offen | – | L-4 |

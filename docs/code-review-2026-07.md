@@ -1,9 +1,13 @@
 # Code Review — Clean Code & Use-Case-Kohärenz (Juli 2026)
 
-> **Stand:** 09.07.2026, Branch `fix/pip-audit-cve-joserfc` (HEAD `a920f40`)
+> **Stand:** 09.07.2026 (Review-Dokument) · Aktualisiert 20.07.2026 (Status-Update)
 > **Methodik:** Statische Analyse (Lesen von Domain-/Application-/Adapter-Code, gezielte `grep`/AST-Stichproben,
 > Verifikation gegen bestehende Docs). Kein Laufzeit-Test, keine neue Testausführung.
 > **Ziel:** Produktionsreife-Einschätzung mit priorisierten Findings, damit das System zeitnah produktiv gehen kann.
+>
+> **Status der Findings (20.07.2026):** B-1 (PR [#209](https://github.com/stritti/nak-district-planner/pull/209)),
+> F-1 (PR [#210](https://github.com/stritti/nak-district-planner/pull/210)), B-4 (PR [#212](https://github.com/stritti/nak-district-planner/pull/212))
+> und B-2 sind erledigt. Aktionsplan mit detailliertem Status siehe `docs/code-review-2026-07-action-plan.md`.
 
 Dieses Dokument ersetzt **nicht** `docs/openspec-gap-analysis.md` und `docs/improvement-proposals.md`,
 aktualisiert aber deren Kernaussagen anhand des tatsächlichen Codestands (siehe Abschnitt 5).
