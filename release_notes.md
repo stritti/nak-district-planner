@@ -1,4 +1,4 @@
-## [v0.28.2] - 2026-07-18
+## [v0.28.3] - 2026-07-20
 
 ### Features
 * Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
@@ -25,6 +25,8 @@
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
+* build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
+* chore: release v0.28.2 (c4da7eb)
 * test: coverage oidc 92%, claims_validation 96%, jwt_claims 89% (6fd4a68)
 * chore: release v0.28.1 (bf6ef39)
 * refactor: RBAC-Guard-Konsolidierung auf require_role_in_district() (PR-4) (5d6c43e)
@@ -33,5 +35,3 @@
 * Merge pull request #222 from stritti/dependabot/uv/services/backend/uvicorn-standard--gte-0.51.0 (e2e006a)
 * build(deps): Update uvicorn[standard] requirement in /services/backend (19bb03b)
 * Merge pull request #220 from stritti/dependabot/bun/services/frontend/tailwindcss/vite-4.3.2 (f40c01c)
-* build(deps-dev): Bump @tailwindcss/vite in /services/frontend (778532e)
-* Merge pull request #221 from stritti/dependabot/uv/services/backend/icalendar-7.2.0 (2a14ff5)
