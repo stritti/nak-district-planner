@@ -1,4 +1,4 @@
-## [v0.28.6] - 2026-07-20
+## [v0.28.7] - 2026-07-20
 
 ### Features
 * Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
@@ -25,6 +25,8 @@
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
+* build(deps): Bump opentelemetry-instrumentation-celery (#233) (b6a207c)
+* chore: release v0.28.6 (b9b2f6c)
 * build(deps-dev): Bump ruff from 0.15.21 to 0.15.22 in /services/backend (#228) (8a31e1c)
 * chore: release v0.28.5 (a7f1a4c)
 * build(deps-dev): Bump @pinia/testing in /services/frontend (#229) (edd0b89)
@@ -33,5 +35,3 @@
 * chore: release v0.28.3 (92006de)
 * build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
 * chore: release v0.28.2 (c4da7eb)
-* test: coverage oidc 92%, claims_validation 96%, jwt_claims 89% (6fd4a68)
-* chore: release v0.28.1 (bf6ef39)
