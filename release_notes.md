@@ -1,4 +1,4 @@
-## [v0.28.7] - 2026-07-20
+## [v0.28.8] - 2026-07-31
 
 ### Features
 * Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
@@ -25,6 +25,8 @@
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
+* build(deps): Bump vue from 3.5.39 to 3.5.40 in /services/frontend (#226) (8155053)
+* chore: release v0.28.7 (1febdc6)
 * build(deps): Bump opentelemetry-instrumentation-celery (#233) (b6a207c)
 * chore: release v0.28.6 (b9b2f6c)
 * build(deps-dev): Bump ruff from 0.15.21 to 0.15.22 in /services/backend (#228) (8a31e1c)
@@ -33,5 +35,3 @@
 * chore: release v0.28.4 (7d869f3)
 * build(deps): Bump alembic from 1.18.4 to 1.18.5 in /services/backend (#230) (02c3c5d)
 * chore: release v0.28.3 (92006de)
-* build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
-* chore: release v0.28.2 (c4da7eb)
