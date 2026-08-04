@@ -28,7 +28,7 @@
     "eslint": "^10",
     "eslint-plugin-vue": "^10",
     "happy-dom": "^20.10",
-    "tailwindcss": "^4.3.2",
+    "tailwindcss": "^4.3.3",
     "typescript": "^6.0",
     "typescript-eslint": "^8.65",
     "vite": "^8.1",
