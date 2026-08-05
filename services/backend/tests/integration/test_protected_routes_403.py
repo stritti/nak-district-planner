@@ -215,6 +215,8 @@ def test_viewer_get_events_in_own_district_returns_200(auth_client):
         ("post", "/api/v1/districts/{district_id}/groups", Role.VIEWER, True),
         ("patch", "/api/v1/districts/{district_id}/groups/{group_id}", Role.VIEWER, True),
         ("delete", "/api/v1/districts/{district_id}/groups/{group_id}", Role.VIEWER, True),
+        ("post", "/api/v1/districts/{district_id}/matrix/generate-drafts", Role.VIEWER, True),
+        ("post", "/api/v1/districts/{district_id}/generate-planning-series", Role.VIEWER, True),
         # Membership-based: no membership in this district
         ("get", "/api/v1/districts/{district_id}/congregations", None, False),
         ("get", "/api/v1/districts/{district_id}/groups", None, False),
@@ -239,6 +241,13 @@ def test_district_routes_return_403(auth_client, method, path_template, role, me
     if method in {"post", "patch"}:
         if path_template.endswith("/feiertage"):
             kwargs["json"] = {"year": 2026, "state_code": "BY"}
+        elif path_template.endswith("/matrix/generate-drafts") or path_template.endswith(
+            "/generate-planning-series"
+        ):
+            kwargs["params"] = {
+                "from_dt": "2026-01-01T00:00:00Z",
+                "to_dt": "2026-01-08T00:00:00Z",
+            }
         elif path_template.endswith("/congregations/{congregation_id}"):
             kwargs["json"] = {"name": "Updated congregation"}
         elif path_template.endswith("/groups/{group_id}"):
@@ -423,8 +432,9 @@ def test_events_and_related_routes_return_403(
          None, True, "planner"),
         # VIEWER-required routes -> membership-based 403
         ("get", "/api/v1/districts/{district_id}/leaders", None, False, "viewer"),
+        ("get", "/api/v1/districts/{district_id}/leaders/link-self", None, False, "viewer"),
         ("post", "/api/v1/districts/{district_id}/leaders/link-self",
-         {"leader_id": "{leader_id}"}, False, "viewer"),
+          {"leader_id": "{leader_id}"}, False, "viewer"),
     ],
 )
 def test_leader_routes_return_403(
@@ -438,6 +448,7 @@ def test_leader_routes_return_403(
     district_repo.get.return_value = _district_obj(district_id)
     leader_repo = AsyncMock()
     leader_repo.get.return_value = _leader_obj(district_id)
+    leader_repo.get_by_user_sub.return_value = None
 
     with (
         patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as MockDistrictRepo,
