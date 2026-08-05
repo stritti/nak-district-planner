@@ -636,6 +636,29 @@ def test_registration_routes_return_403(auth_client, method, path_template, body
     assert response.status_code == 403
 
 
+def test_pending_overview_returns_empty_for_non_admin(auth_client):
+    client, auth_headers, _ = auth_client
+
+    with (
+        patch("app.adapters.api.routers.registrations.SqlDistrictRepository") as MockDistrictRepo,
+        patch("app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository") as MockRegRepo,
+    ):
+        district_repo = AsyncMock()
+        district_repo.list_all.return_value = []
+        MockDistrictRepo.return_value = district_repo
+
+        reg_repo = AsyncMock()
+        reg_repo.count_by_district.return_value = 0
+        MockRegRepo.return_value = reg_repo
+
+        response = client.get("/api/v1/registrations/pending-overview", headers=auth_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_pending"] == 0
+    assert payload["by_district"] == []
+
+
 # ── System ──────────────────────────────────────────────────────────────
 
 
