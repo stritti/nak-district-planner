@@ -433,6 +433,7 @@ def test_events_and_related_routes_return_403(
         # VIEWER-required routes -> membership-based 403
         ("get", "/api/v1/districts/{district_id}/leaders", None, False, "viewer"),
         ("get", "/api/v1/districts/{district_id}/leaders/link-self", None, False, "viewer"),
+        ("delete", "/api/v1/districts/{district_id}/leaders/link-self", None, False, "viewer"),
         ("post", "/api/v1/districts/{district_id}/leaders/link-self",
           {"leader_id": "{leader_id}"}, False, "viewer"),
     ],
@@ -466,6 +467,70 @@ def test_leader_routes_return_403(
         kwargs["headers"] = auth_headers()
         response = getattr(client, method)(path, **kwargs)
         assert response.status_code == 403
+
+
+@pytest.fixture
+def auth_client_non_viewer(mock_oidc_adapter):
+    """Yield client + auth-header factory. User has CONGREGATION_ADMIN only."""
+    district1 = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    claims = {
+        "sub": "user-403-non-viewer",
+        "email": "user403-nv@example.com",
+        "preferred_username": "user403nv",
+        "name": "User 403 NV",
+        "memberships": [
+            {
+                "role": "CONGREGATION_ADMIN",
+                "scope_type": "CONGREGATION",
+                "scope_id": str(congregation_id),
+            },
+        ],
+    }
+    mock_oidc_adapter.validate_token.return_value = claims
+    mock_oidc_adapter.extract_user_info.return_value = {
+        "sub": "user-403-non-viewer",
+        "email": "user403-nv@example.com",
+        "username": "user403nv",
+        "name": "User 403 NV",
+        "given_name": None,
+        "family_name": None,
+    }
+
+    with (
+        patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
+        patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
+        patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
+    ):
+        user_repo = AsyncMock()
+        user_repo.get_by_sub.return_value = None
+        user_repo.has_any_user.return_value = True
+        user_repo.save = AsyncMock()
+        MockUserRepo.return_value = user_repo
+
+        reg_repo = AsyncMock()
+        reg_repo.list_approved_unlinked_by_email.return_value = []
+        MockRegRepo.return_value = reg_repo
+
+        membership_repo = AsyncMock()
+        membership_repo.get_all_by_user.return_value = []
+        MockMembershipRepo.return_value = membership_repo
+
+        client = TestClient(app)
+
+        def _auth_headers():
+            return {"Authorization": "Bearer t", "X-CSRF-Token": client.cookies.get("csrf_token")}
+
+        client.get("/api/v1/auth/me", headers={"Authorization": "Bearer t"})
+        yield client, _auth_headers, district1
+
+
+def test_auth_access_returns_403_for_non_viewer_membership(auth_client_non_viewer):
+    client, auth_headers, _ = auth_client_non_viewer
+    response = client.get("/api/v1/auth/access", headers=auth_headers())
+    assert response.status_code == 403
+
+
 
 
 # ── Notifications (VIEWER-required) ─────────────────────────────────────

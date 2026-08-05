@@ -122,23 +122,6 @@ async def update_leader(
     return _leader_response(leader)
 
 
-@router.delete("/{leader_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_leader(
-    district_id: uuid.UUID,
-    leader_id: uuid.UUID,
-    auth: CurrentUserWithMemberships,
-    db: DbSession,
-) -> None:
-    repo = SqlLeaderRepository(db)
-    leader = await repo.get(leader_id)
-    if not leader or leader.district_id != district_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
-        )
-    require_role_in_district(auth, Role.PLANNER, district_id)
-    await repo.delete(leader_id)
-
-
 @router.post("/link-self", response_model=LeaderSelfLinkResponse)
 async def link_self_to_leader(
     district_id: uuid.UUID,
@@ -211,3 +194,20 @@ async def get_self_link(
     if not linked:
         return LeaderSelfLinkResponse(linked=False, leader=None)
     return LeaderSelfLinkResponse(linked=True, leader=_leader_response(linked))
+
+
+@router.delete("/{leader_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_leader(
+    district_id: uuid.UUID,
+    leader_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+) -> None:
+    repo = SqlLeaderRepository(db)
+    leader = await repo.get(leader_id)
+    if not leader or leader.district_id != district_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
+        )
+    require_role_in_district(auth, Role.PLANNER, district_id)
+    await repo.delete(leader_id)
