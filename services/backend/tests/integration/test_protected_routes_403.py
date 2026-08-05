@@ -210,22 +210,61 @@ def test_viewer_get_events_in_own_district_returns_200(auth_client):
     [
         # Role-based: VIEWER is member of district1 but route needs DISTRICT_ADMIN
         ("patch", "/api/v1/districts/{district_id}", Role.VIEWER, True),
+        ("patch", "/api/v1/districts/{district_id}/congregations/{congregation_id}", Role.VIEWER, True),
         ("post", "/api/v1/districts/{district_id}/congregations", Role.VIEWER, True),
         ("post", "/api/v1/districts/{district_id}/groups", Role.VIEWER, True),
+        ("patch", "/api/v1/districts/{district_id}/groups/{group_id}", Role.VIEWER, True),
+        ("delete", "/api/v1/districts/{district_id}/groups/{group_id}", Role.VIEWER, True),
         # Membership-based: no membership in this district
         ("get", "/api/v1/districts/{district_id}/congregations", None, False),
         ("get", "/api/v1/districts/{district_id}/groups", None, False),
+        ("get", "/api/v1/districts/{district_id}/matrix", None, False),
         # Superadmin-only
         ("post", "/api/v1/districts", Role.VIEWER, True),
+        ("post", "/api/v1/districts/{district_id}/feiertage", Role.VIEWER, True),
     ],
 )
 def test_district_routes_return_403(auth_client, method, path_template, role, membership):
     client, auth_headers, district1 = auth_client
     district_id = district1 if membership else uuid.uuid4()
-    path = path_template.format(district_id=district_id)
-    kwargs = {"json": {"name": "X"}} if method in {"post", "patch"} else {}
+    congregation_id = uuid.uuid4()
+    group_id = uuid.uuid4()
+    path = path_template.format(
+        district_id=district_id,
+        congregation_id=congregation_id,
+        group_id=group_id,
+    )
+
+    kwargs = {}
+    if method in {"post", "patch"}:
+        if path_template.endswith("/feiertage"):
+            kwargs["json"] = {"year": 2026, "state_code": "BY"}
+        elif path_template.endswith("/congregations/{congregation_id}"):
+            kwargs["json"] = {"name": "Updated congregation"}
+        elif path_template.endswith("/groups/{group_id}"):
+            kwargs["json"] = {"name": "Updated group"}
+        else:
+            kwargs["json"] = {"name": "X"}
     kwargs["headers"] = auth_headers()
-    response = getattr(client, method)(path, **kwargs)
+
+    with (
+        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as MockDistrictRepo,
+        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as MockCongRepo,
+        patch("app.adapters.api.routers.districts.SqlCongregationGroupRepository") as MockGroupRepo,
+    ):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = _district_obj(district_id)
+        MockDistrictRepo.return_value = district_repo
+
+        cong_repo = AsyncMock()
+        cong_repo.get.return_value = SimpleNamespace(id=congregation_id, district_id=district_id, group_id=None, name="C")
+        MockCongRepo.return_value = cong_repo
+
+        group_repo = AsyncMock()
+        group_repo.get.return_value = SimpleNamespace(id=group_id, district_id=district_id, name="G")
+        MockGroupRepo.return_value = group_repo
+
+        response = getattr(client, method)(path, **kwargs)
     assert response.status_code == 403
 
 
