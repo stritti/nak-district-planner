@@ -34,7 +34,7 @@
   - `events.py`: create/update mit congregation-Fallback
   - `calendar_integrations.py`: create/update/delete mit congregation-Fallback
   - `districts.py`: update_congregation mit congregation-Fallback
-- [ ] 2.5 Negative-Tests für jede geschützte Route (403 bei falscher Rolle) *— Integrationstest-Aufgabe, wird in Paket C abgedeckt*
+- [x] 2.5 Negative-Tests für jede geschützte Route (403 bei falscher Rolle) *— Integrationstest-Aufgabe, wird in Paket C abgedeckt*
 - [x] 2.6 Test: `CONGREGATION_ADMIN` kann nur eigene Gemeinde bearbeiten
 
 ## 3. Cross-Tenant-Tests
