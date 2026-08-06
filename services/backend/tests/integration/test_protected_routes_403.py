@@ -115,6 +115,55 @@ def auth_client(mock_oidc_adapter):
         deps._token_claims_context.clear()
 
 
+@pytest.fixture
+def auth_client_no_membership(mock_oidc_adapter):
+    """Yield client + auth-header factory. User has no memberships."""
+    claims = {
+        "sub": "user-403-no-membership",
+        "email": "user403-nm@example.com",
+        "preferred_username": "user403nm",
+        "name": "User 403 NM",
+        "memberships": [],
+    }
+    mock_oidc_adapter.validate_token.return_value = claims
+    mock_oidc_adapter.extract_user_info.return_value = {
+        "sub": "user-403-no-membership",
+        "email": "user403-nm@example.com",
+        "username": "user403nm",
+        "name": "User 403 NM",
+        "given_name": None,
+        "family_name": None,
+    }
+
+    with (
+        patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
+        patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
+        patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
+    ):
+        user_repo = AsyncMock()
+        user_repo.get_by_sub.return_value = None
+        user_repo.has_any_user.return_value = True
+        user_repo.save = AsyncMock()
+        MockUserRepo.return_value = user_repo
+
+        reg_repo = AsyncMock()
+        reg_repo.list_approved_unlinked_by_email.return_value = []
+        MockRegRepo.return_value = reg_repo
+
+        membership_repo = AsyncMock()
+        membership_repo.get_all_by_user.return_value = []
+        MockMembershipRepo.return_value = membership_repo
+
+        client = TestClient(app)
+        client.get("/api/v1/auth/me", headers={"Authorization": "Bearer t"})
+        csrf = client.cookies.get("csrf_token")
+
+        def _auth_headers():
+            return {"Authorization": "Bearer t", "X-CSRF-Token": csrf}
+
+        yield client, _auth_headers
+
+
 # ── Mock object builders ────────────────────────────────────────────────
 
 
@@ -200,6 +249,29 @@ def test_viewer_get_events_in_own_district_returns_200(auth_client):
             headers=auth_headers(),
         )
     assert response.status_code == 200
+
+
+def test_district_list_returns_403_without_membership(auth_client_no_membership):
+    client, auth_headers = auth_client_no_membership
+    response = client.get("/api/v1/districts", headers=auth_headers())
+    assert response.status_code == 403
+
+
+def test_feiertage_states_returns_403_without_membership(auth_client_no_membership):
+    client, auth_headers = auth_client_no_membership
+    district_id = uuid.uuid4()
+
+    with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as MockDistrictRepo:
+        district_repo = AsyncMock()
+        district_repo.get.return_value = _district_obj(district_id)
+        MockDistrictRepo.return_value = district_repo
+
+        response = client.get(
+            f"/api/v1/districts/{district_id}/feiertage/states",
+            headers=auth_headers(),
+        )
+
+    assert response.status_code == 403
 
 
 # ── Districts ───────────────────────────────────────────────────────────
