@@ -153,9 +153,9 @@ async def trigger_sync(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return SyncResult(
         integration_id=integration_id,
-        created=summary["created"],
-        updated=summary["updated"],
-        cancelled=summary["cancelled"],
+        created=summary.created,
+        updated=summary.updated,
+        cancelled=summary.cancelled,
     )
 
 

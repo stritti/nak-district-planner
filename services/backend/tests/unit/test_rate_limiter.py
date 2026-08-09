@@ -4,11 +4,15 @@ from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import FastAPI, Request
+from starlette.responses import Response
+from starlette.testclient import TestClient
 
+from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
 from app.application.rate_limiter import (
     RateLimitConfig,
-    RateLimitResult,
     RateLimiter,
+    RateLimitResult,
 )
 
 
@@ -338,6 +342,33 @@ class TestRateLimiter:
             
             # Should fail open - allow the request
             assert result.allowed is True
+
+    @pytest.mark.asyncio
+    async def test_middleware_records_single_fail_open_event_per_request(self, mock_redis):
+        """Middleware should count one fail-open metric even if both checks fail open."""
+        app = FastAPI()
+        limiter = RateLimiter(config=RateLimitConfig(default_limit=100))
+
+        async def endpoint():
+            return Response("ok")
+
+        with (
+            patch("app.application.rate_limiter.redis.from_url", return_value=mock_redis),
+            patch("app.application.rate_limiter.increment_fail_open_counter") as direct_increment_mock,
+            patch(
+                "app.adapters.api.middleware.rate_limit.increment_fail_open_counter"
+            ) as middleware_increment_mock,
+        ):
+            mock_redis.zadd.side_effect = Exception("Redis error")
+            await limiter.connect()
+            app.add_middleware(RateLimitMiddleware, rate_limiter=limiter)
+            app.add_api_route("/api/test", endpoint, methods=["GET"])
+            with TestClient(app) as client:
+                response = client.get("/api/test")
+
+        assert response.status_code == 200
+        direct_increment_mock.assert_not_called()
+        middleware_increment_mock.assert_called_once_with("Exception")
 
 
 class TestRateLimiterKeyGeneration:
