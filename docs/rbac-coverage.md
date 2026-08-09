@@ -26,10 +26,9 @@ Legende:
 | | `/api/v1/auth/access` | GET | 🔐 Auth + Membership-Check | – | – |
 | **calendar_integrations** | `/api/v1/calendar-integrations` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | – |
 | | | POST | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
-| | `/{id}` | GET | R(VIEWER) | – | – |
-| | | PUT | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
+| | `/{integration_id}` | PATCH | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
 | | | DELETE | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
-| | `/{id}/sync` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/{integration_id}/sync` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
 | **districts** | `/api/v1/districts` | GET | R(VIEWER) | – | – |
 | | | POST | SUPERADMIN | AUDIT | – |
 | | `/{id}` | GET | R(VIEWER) | – | – |
@@ -48,7 +47,10 @@ Legende:
 | **events_compat** | `/api/v1/events` | GET | R(VIEWER) | – | RL |
 | | `/api/v1/events/{event_id}` | PATCH | R(PLANNER) | AUDIT | – |
 | | `/api/v1/events/bulk-approval-status` | POST | R(PLANNER) | AUDIT | – |
-| **export** | `/api/v1/export/{token}/calendar.ics` | GET | 🔓 Public (Token-basiert) | – | RL |
+| **export** | `/api/v1/export-tokens` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/api/v1/export-tokens` | GET | SUPERADMIN / R(DISTRICT_ADMIN) | – | – |
+| | `/api/v1/export-tokens/{token_id}` | DELETE | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/api/v1/export/{token}/calendar.ics` | GET | 🔓 Public (Token-basiert) | – | RL |
 | **invitations** | `/api/v1/events/{event_id}/invitations` | GET | R(VIEWER) | – | – |
 | | | POST | R(PLANNER) | AUDIT | – |
 | | `/api/v1/invitations/{invitation_id}` | DELETE | R(PLANNER) | AUDIT | – |
@@ -76,7 +78,7 @@ Legende:
 | | | POST | R(PLANNER) | AUDIT | – |
 | | `/{id}` | PUT | R(PLANNER) | AUDIT | – |
 | | | DELETE | R(PLANNER) | AUDIT | – |
-| **system** | `/api/v1/system/version` | GET | R(DISTRICT_ADMIN) | – | – |
+| **system** | `/api/v1/system/version` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | – |
 | | `/api/v1/system/update` | POST | SUPERADMIN | AUDIT | – |
 | **health** | `/api/health` | GET/HEAD/OPTIONS | 🔓 Public | – | – |
 
