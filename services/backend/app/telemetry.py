@@ -1,11 +1,11 @@
 """OpenTelemetry setup for the NAK District Planner backend.
 
-Initialises a TracerProvider with an OTLP/HTTP exporter when telemetry is
-enabled.  HTTPX and Celery are instrumented automatically, while FastAPI and
-SQLAlchemy are only instrumented when the corresponding objects are passed to
-``setup_telemetry()``.  All instrumentation is skipped when
-``settings.otel_enabled`` is ``False`` or when a non-default TracerProvider is
-already registered (idempotency guard).
+Initialises tracing and metrics providers with OTLP/HTTP exporters when
+telemetry is enabled.  HTTPX and Celery are instrumented automatically, while
+FastAPI and SQLAlchemy are only instrumented when the corresponding objects are
+passed to ``setup_telemetry()``.  All instrumentation is skipped when
+``settings.otel_enabled`` is ``False`` or when non-default tracer/meter
+providers are already registered (idempotency guard).
 """
 
 from __future__ import annotations
@@ -13,12 +13,16 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from opentelemetry import trace
+from opentelemetry import metrics, trace
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.celery import CeleryInstrumentor
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.metrics._internal import _ProxyMeterProvider
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -50,7 +54,9 @@ def setup_telemetry(
     # Idempotency: skip if a custom TracerProvider is already registered.
     # This prevents duplicate spans when the function is called more than once
     # (e.g. hot-reload, multiple imports, or test suites).
-    if not isinstance(trace.get_tracer_provider(), ProxyTracerProvider):
+    if not isinstance(trace.get_tracer_provider(), ProxyTracerProvider) or not isinstance(
+        metrics.get_meter_provider(), _ProxyMeterProvider
+    ):
         logger.debug("OpenTelemetry already initialized; skipping.")
         return
 
@@ -61,6 +67,11 @@ def setup_telemetry(
     provider = TracerProvider(resource=resource)
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
+
+    metric_exporter = OTLPMetricExporter(endpoint=f"{otel_base_endpoint}/v1/metrics")
+    metric_reader = PeriodicExportingMetricReader(metric_exporter)
+    meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+    metrics.set_meter_provider(meter_provider)
 
     if fastapi_app is not None:
         FastAPIInstrumentor.instrument_app(fastapi_app)
