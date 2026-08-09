@@ -229,6 +229,7 @@ async def health() -> dict:
             result["redis"] = "ok"
         else:
             result["redis"] = "disconnected"
+            degraded = True
     except Exception:
         result["redis"] = "unavailable"
         degraded = True
