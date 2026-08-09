@@ -19,8 +19,54 @@ env:
   BUN_VERSION: "1.2"
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      e2e: ${{ steps.filter.outputs.e2e }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Detect path changes
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            backend:
+              - 'services/backend/**'
+              - '.github/workflows/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'services/frontend/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'docs/package.json'
+              - 'docs/bun.lock'
+              - 'docker-compose*.yml'
+              - '.markdownlint.json'
+              - '.github/workflows/**'
+              - '.github/workflows/ci.yml'
+            e2e:
+              - 'services/frontend/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'docs/package.json'
+              - 'docs/bun.lock'
+              - 'docker-compose*.yml'
+              - '.markdownlint.json'
+              - '.github/workflows/**'
+              - '.github/workflows/ci.yml'
+            workflows:
+              - '.github/workflows/**'
+              - '.github/workflows/ci.yml'
+
   backend-tests:
     name: Backend — Unit Tests & Coverage
+    needs: changes
+    if: ${{ github.event_name == 'push' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.workflows == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,6 +104,10 @@ jobs:
         with:
           version: "latest"
           python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            services/backend/pyproject.toml
+            services/backend/uv.lock
 
       - name: Install Python dependencies
         run: uv sync --group dev
@@ -159,6 +209,8 @@ jobs:
 
   frontend-tests:
     name: Frontend — Unit Tests
+    needs: changes
+    if: ${{ github.event_name == 'push' || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -171,6 +223,12 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -197,6 +255,8 @@ jobs:
 
   e2e-tests:
     name: Frontend — E2E Tests
+    needs: changes
+    if: ${{ github.event_name == 'push' || needs.changes.outputs.e2e == 'true' || needs.changes.outputs.workflows == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -210,11 +270,23 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Install Playwright
-        run: npx playwright install chromium
+        run: bunx playwright install chromium
 
       - name: Build frontend
         run: bun run build
@@ -222,7 +294,7 @@ jobs:
       - name: Run E2E tests
         run: |
           set -o pipefail
-          npx playwright test --reporter=list 2>&1 | tee e2e-output.txt
+          bunx playwright test --reporter=list 2>&1 | tee e2e-output.txt
 
       - name: Parse e2e summary
         if: always()
