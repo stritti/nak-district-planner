@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nak-district-planner-backend"
-version = "0.28.1"
+version = "0.28.7"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.136.1",
-    "starlette>=1.3.1",
-    "uvicorn[standard]>=0.51.0",
+    "fastapi>=0.141.1",
+    "starlette>=1.4.1",
+    "uvicorn[standard]>=0.52.0",
     "sqlalchemy[asyncio]>=2.0.51",
     "asyncpg>=0.29",
-    "alembic>=1.13",
+    "alembic>=1.18.5",
     "celery[sqlalchemy]>=5.6.3",
     "click>=8.3.3",
     "psycopg2-binary>=2.9.12",
@@ -22,20 +22,20 @@ dependencies = [
     "passlib[bcrypt]>=1.7.4",
     "httpx>=0.27",
     "authlib>=1.7.2",
-    "icalendar>=7.2.0",
-    "joserfc>=1.6.8",
-    "mako>=1.3.12",
-    "cryptography>=48.0.1",
+    "icalendar>=7.2.2",
+    "joserfc>=1.7.4",
+    "mako>=1.4.1",
+    "cryptography>=50.0.0",
     "defusedxml>=0.7",
     "opentelemetry-sdk>=1.25",
     "opentelemetry-exporter-otlp-proto-http>=1.43.0",
     "opentelemetry-instrumentation-fastapi>=0.62b1",
     "opentelemetry-instrumentation-sqlalchemy>=0.64b0",
     "opentelemetry-instrumentation-httpx>=0.62b0",
-    "opentelemetry-instrumentation-celery>=0.63b1",
-    "redis>=8.0.1",
+    "opentelemetry-instrumentation-celery>=0.65b0",
+    "redis>=8.1.0",
     "requests>=2.33.1",
-    "starlette>=1.3.1",
+    "starlette>=1.4.1",
 ]
 
 [project.optional-dependencies]
@@ -96,5 +96,5 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.0.0",
-    "ruff>=0.15.21",
+    "ruff>=0.16.1",
 ]

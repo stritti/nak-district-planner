@@ -1,4 +1,4 @@
-## [v0.28.1] - 2026-07-18
+## [v0.28.7] - 2026-07-20
 
 ### Features
 * Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
@@ -25,13 +25,13 @@
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
-* refactor: RBAC-Guard-Konsolidierung auf require_role_in_district() (PR-4) (5d6c43e)
-* chore: release v0.28.0 (2e72c48)
-* Merge pull request #212 from stritti/test/coverage-verification-auth-rbac-sync (5e65fbf)
-* Merge pull request #222 from stritti/dependabot/uv/services/backend/uvicorn-standard--gte-0.51.0 (e2e006a)
-* build(deps): Update uvicorn[standard] requirement in /services/backend (19bb03b)
-* Merge pull request #220 from stritti/dependabot/bun/services/frontend/tailwindcss/vite-4.3.2 (f40c01c)
-* build(deps-dev): Bump @tailwindcss/vite in /services/frontend (778532e)
-* Merge pull request #221 from stritti/dependabot/uv/services/backend/icalendar-7.2.0 (2a14ff5)
-* Merge pull request #219 from stritti/dependabot/uv/services/backend/setuptools-gte-83.0.0 (b402534)
-* Merge pull request #217 from stritti/dependabot/bun/services/frontend/vitest-4.1.10 (10701ce)
+* build(deps): Bump opentelemetry-instrumentation-celery (#233) (b6a207c)
+* chore: release v0.28.6 (b9b2f6c)
+* build(deps-dev): Bump ruff from 0.15.21 to 0.15.22 in /services/backend (#228) (8a31e1c)
+* chore: release v0.28.5 (a7f1a4c)
+* build(deps-dev): Bump @pinia/testing in /services/frontend (#229) (edd0b89)
+* chore: release v0.28.4 (7d869f3)
+* build(deps): Bump alembic from 1.18.4 to 1.18.5 in /services/backend (#230) (02c3c5d)
+* chore: release v0.28.3 (92006de)
+* build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
+* chore: release v0.28.2 (c4da7eb)
