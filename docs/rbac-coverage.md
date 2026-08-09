@@ -24,7 +24,7 @@ Legende:
 | | `/api/v1/auth/oidc/token` | POST | 🔓 Public | – | RL |
 | | `/api/v1/auth/me` | GET | 🔐 Auth | – | – |
 | | `/api/v1/auth/access` | GET | 🔐 Auth + Membership-Check | – | – |
-| **calendar_integrations** | `/api/v1/calendar-integrations` | GET | R(VIEWER) | – | – |
+| **calendar_integrations** | `/api/v1/calendar-integrations` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | – |
 | | | POST | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
 | | `/{id}` | GET | R(VIEWER) | – | – |
 | | | PUT | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
@@ -68,7 +68,7 @@ Legende:
 | | `/{id}` | PUT | R(PLANNER) | AUDIT | – |
 | | | DELETE | R(DISTRICT_ADMIN) | AUDIT | – |
 | **system** | `/api/v1/system/version` | GET | R(DISTRICT_ADMIN) | – | – |
-| | `/api/v1/system/update` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/api/v1/system/update` | POST | SUPERADMIN | AUDIT | – |
 | **health** | `/api/health` | GET/HEAD/OPTIONS | 🔓 Public | – | – |
 
 ## Anmerkungen
