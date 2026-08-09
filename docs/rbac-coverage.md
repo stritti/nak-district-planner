@@ -31,8 +31,7 @@ Legende:
 | | `/{integration_id}/sync` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
 | **districts** | `/api/v1/districts` | GET | R(VIEWER) | – | – |
 | | | POST | SUPERADMIN | AUDIT | – |
-| | `/{id}` | GET | R(VIEWER) | – | – |
-| | | PUT | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/{district_id}` | PATCH | R(DISTRICT_ADMIN) | AUDIT | – |
 | | `/{id}/events` | GET | R(VIEWER) | – | RL |
 | | `/{id}/matrix` | GET | R(VIEWER) | – | – |
 | | `/{id}/leaders` | GET | R(VIEWER) | – | – |
