@@ -29,9 +29,9 @@ Legende:
 | | `/{id}` | GET | R(VIEWER) | – | – |
 | | | PUT | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
 | | | DELETE | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
-| | `/{id}/sync` | POST | R(PLANNER) | AUDIT | – |
+| | `/{id}/sync` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
 | **districts** | `/api/v1/districts` | GET | R(VIEWER) | – | – |
-| | | POST | R(DISTRICT_ADMIN) | AUDIT | – |
+| | | POST | SUPERADMIN | AUDIT | – |
 | | `/{id}` | GET | R(VIEWER) | – | – |
 | | | PUT | R(DISTRICT_ADMIN) | AUDIT | – |
 | | `/{id}/events` | GET | R(VIEWER) | – | RL |
@@ -47,10 +47,8 @@ Legende:
 | | `/{id}/planning-series` | CRUD | R(PLANNER) | AUDIT | – |
 | | `/{id}/feiertage/import` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
 | **events_compat** | `/api/v1/events` | GET | R(VIEWER) | – | RL |
-| | | POST | R(PLANNER) | AUDIT | – |
-| | `/{id}` | GET | R(VIEWER) | – | – |
-| | | PUT | R(PLANNER) | AUDIT | – |
-| | | DELETE | R(PLANNER) | AUDIT | – |
+| | `/api/v1/events/{event_id}` | PATCH | R(PLANNER) | AUDIT | – |
+| | `/api/v1/events/bulk-approval-status` | POST | R(PLANNER) | AUDIT | – |
 | **export** | `/api/v1/export/{token}/calendar.ics` | GET | 🔓 Public (Token-basiert) | – | RL |
 | **invitations** | `/api/v1/invitations` | POST | R(PLANNER) | AUDIT | – |
 | | `/{id}/respond` | POST | 🔐 Auth | AUDIT | – |
@@ -58,7 +56,12 @@ Legende:
 | | (siehe districts oben — alle leaders-Router sind dort sub-routet) | | | | |
 | **notifications** | `/api/v1/notifications` | GET | 🔐 Auth | – | – |
 | | `/{id}/read` | POST | 🔐 Auth | AUDIT | – |
-| **planning_series** | `/api/v1/planning-series` | CRUD | R(PLANNER) | AUDIT | – |
+| **planning_series** | `/api/v1/planning-series` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/{series_id}` | GET | R(VIEWER) | – | – |
+| | | PATCH | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/{series_id}/generate-slots` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/districts/{district_id}/generate-slots` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/generate-all-slots` | POST | SUPERADMIN | AUDIT | – |
 | **registrations** | `/api/v1/registrations` (public) | POST | 🔓 Public | – | – |
 | | `/api/v1/registrations/pending` | GET | R(DISTRICT_ADMIN) | – | – |
 | | `/{id}/approve` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
@@ -66,7 +69,7 @@ Legende:
 | **service_assignments** | `/api/v1/events/{event_id}/assignments` | GET | R(VIEWER) | – | – |
 | | | POST | R(PLANNER) | AUDIT | – |
 | | `/{id}` | PUT | R(PLANNER) | AUDIT | – |
-| | | DELETE | R(DISTRICT_ADMIN) | AUDIT | – |
+| | | DELETE | R(PLANNER) | AUDIT | – |
 | **system** | `/api/v1/system/version` | GET | R(DISTRICT_ADMIN) | – | – |
 | | `/api/v1/system/update` | POST | SUPERADMIN | AUDIT | – |
 | **health** | `/api/health` | GET/HEAD/OPTIONS | 🔓 Public | – | – |
