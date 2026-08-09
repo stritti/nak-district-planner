@@ -14,6 +14,9 @@ COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
 
+# Install curl for container healthchecks
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # Add .venv/bin to PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
