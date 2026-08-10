@@ -1,4 +1,4 @@
-## [v0.29.0] - 2026-08-10
+## [v0.29.1] - 2026-08-10
 
 ### Features
 * feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
@@ -25,6 +25,8 @@
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
+* docs: mark uc-02 last_sync_error tasks complete (9a8c222)
+* chore: release v0.29.0 (4a450bb)
 * docs: mark verified-complete tasks in planning-slot, uc-01, rbac changes (fbe37c6)
 * ci: optimize actions caching and redundant jobs (#263) (b8efe7c)
 * build(deps-dev): Bump vue-tsc to 3.3.9 and typescript-eslint to 8.66.0 in /services/frontend (#262) (b500979)
@@ -33,5 +35,3 @@
 * build(deps): Bump starlette from 1.3.1 to 1.4.1 in /services/backend (#259) (779ce1c)
 * test: Negative-Tests für geschützte Routen (403 bei falscher Rolle) (PR-A) (#251) (d2cdf11)
 * build(deps): Bump mako from 1.3.12 to 1.4.1 in /services/backend (#260) (814322f)
-* build(deps): Bump github/codeql-action from 4.37.3 to 4.37.6 (#261) (93bdf83)
-* build(deps-dev): Bump @playwright/test in /services/frontend (#257) (f66e57d)
