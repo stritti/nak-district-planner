@@ -36,6 +36,7 @@ class CalendarIntegrationORM(Base):
     capabilities: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     default_category: Mapped[str | None] = mapped_column(String(255), nullable=True)

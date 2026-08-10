@@ -36,6 +36,7 @@ class CalendarIntegration:
     capabilities: list[CalendarCapability]
     is_active: bool
     last_synced_at: datetime | None
+    last_sync_error: str | None
     created_at: datetime
     updated_at: datetime
     congregation_id: uuid.UUID | None = None
@@ -66,6 +67,7 @@ class CalendarIntegration:
             capabilities=capabilities or [CalendarCapability.READ],
             is_active=True,
             last_synced_at=None,
+            last_sync_error=None,
             created_at=now,
             updated_at=now,
             default_category=default_category,

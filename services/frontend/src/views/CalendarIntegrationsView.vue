@@ -69,6 +69,9 @@
                 Letzter Sync: {{ formatDt(item.last_synced_at) }}
               </div>
               <div v-else class="text-gray-400 dark:text-gray-500">Noch nicht synchronisiert</div>
+              <div v-if="item.last_sync_error" class="text-red-600 dark:text-red-400 max-w-[24rem] truncate">
+                Letzter Sync-Fehler: {{ item.last_sync_error }}
+              </div>
             </div>
           </div>
 

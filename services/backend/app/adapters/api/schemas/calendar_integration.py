@@ -37,6 +37,7 @@ class CalendarIntegrationResponse(BaseModel):
     capabilities: list[CalendarCapability]
     is_active: bool
     last_synced_at: datetime | None
+    last_sync_error: str | None = None
     created_at: datetime
     updated_at: datetime
     default_category: str | None = None

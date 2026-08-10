@@ -41,6 +41,7 @@ def _to_response(integration: CalendarIntegration) -> CalendarIntegrationRespons
         capabilities=integration.capabilities,
         is_active=integration.is_active,
         last_synced_at=integration.last_synced_at,
+        last_sync_error=integration.last_sync_error,
         created_at=integration.created_at,
         updated_at=integration.updated_at,
         default_category=integration.default_category,
