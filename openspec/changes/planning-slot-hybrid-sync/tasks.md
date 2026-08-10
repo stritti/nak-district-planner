@@ -14,7 +14,7 @@
 
 ## 3. Application Services
 
-- [ ] 3.1 Implement PlanningSeries slot generation service
+- [x] 3.1 Implement PlanningSeries slot generation service
 
 ## 4. API Layer
 
@@ -22,4 +22,4 @@
 
 ## 5. Frontend
 
-- [ ] 5.1 Update matrix UI to display planned and actual time
+- [x] 5.1 Update matrix UI to display planned and actual time
