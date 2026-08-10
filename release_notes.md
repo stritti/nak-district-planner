@@ -1,6 +1,7 @@
-## [v0.28.7] - 2026-07-20
+## [v0.29.0] - 2026-08-10
 
 ### Features
+* feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
 * Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
 * feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
 * feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
@@ -10,7 +11,6 @@
 * feat(security): implement audit logging (SEC-009) (753a502)
 * Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
 * Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
-* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
 
 ### Bug Fixes
 * Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
@@ -25,13 +25,13 @@
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
-* build(deps): Bump opentelemetry-instrumentation-celery (#233) (b6a207c)
-* chore: release v0.28.6 (b9b2f6c)
-* build(deps-dev): Bump ruff from 0.15.21 to 0.15.22 in /services/backend (#228) (8a31e1c)
-* chore: release v0.28.5 (a7f1a4c)
-* build(deps-dev): Bump @pinia/testing in /services/frontend (#229) (edd0b89)
-* chore: release v0.28.4 (7d869f3)
-* build(deps): Bump alembic from 1.18.4 to 1.18.5 in /services/backend (#230) (02c3c5d)
-* chore: release v0.28.3 (92006de)
-* build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
-* chore: release v0.28.2 (c4da7eb)
+* docs: mark verified-complete tasks in planning-slot, uc-01, rbac changes (fbe37c6)
+* ci: optimize actions caching and redundant jobs (#263) (b8efe7c)
+* build(deps-dev): Bump vue-tsc to 3.3.9 and typescript-eslint to 8.66.0 in /services/frontend (#262) (b500979)
+* build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
+* build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
+* build(deps): Bump starlette from 1.3.1 to 1.4.1 in /services/backend (#259) (779ce1c)
+* test: Negative-Tests für geschützte Routen (403 bei falscher Rolle) (PR-A) (#251) (d2cdf11)
+* build(deps): Bump mako from 1.3.12 to 1.4.1 in /services/backend (#260) (814322f)
+* build(deps): Bump github/codeql-action from 4.37.3 to 4.37.6 (#261) (93bdf83)
+* build(deps-dev): Bump @playwright/test in /services/frontend (#257) (f66e57d)
