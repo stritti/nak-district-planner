@@ -16,15 +16,20 @@
 - [x] 2.7 Idempotenz via `content_hash`-Vergleich implementiert
 - [x] 2.8 Celery-Beat-Task `auto_import_feiertage` (1. des Monats 03:00 Europe/Berlin, ab Sep. + Folgejahr) implementiert
 - [x] 2.9 Manueller Import-Endpoint `POST /api/v1/districts/{id}/feiertage` mit `FeiertageImportRequest` (year, state_code)
-- [ ] 2.10 Unit-Tests für Gauß-Algorithmus mit bekannten Osterdaten (2025–2030)
-- [ ] 2.11 Unit-Tests für Idempotenz und Bundesland-Filterung
+- [x] 2.10 Unit-Tests für Gauß-Algorithmus mit bekannten Osterdaten (2025–2030)
+      → `TestEasterSunday` um 2027–2030 erweitert (2027-03-28, 2028-04-16, 2029-04-01, 2030-04-21)
+- [x] 2.11 Unit-Tests für Idempotenz und Bundesland-Filterung
+      → `TestImportKirchlicheFesttage`, `TestImportFeiertage`, `TestReferenceFeiertageForCongregation` umgeschrieben (30 Tests grün)
 
 ## 3. UC-04 — Event-Verteilung
 
 - [x] 3.1 `applicability`-Feld in Event-Domain-Modell und Pydantic-Schemas vorhanden
-- [ ] 3.2 `GET /api/v1/events`-Endpoint schließt Bezirks-Events mit passendem `applicability`-Eintrag in Gemeindeansicht ein → **nicht implementiert!** Der Events-Endpoint hat keinen applicability-basierten Filter
-- [ ] 3.3 Nur `status=PUBLISHED` Bezirks-Events werden über applicability eingeblendet → hängt von 3.2 ab
-- [ ] 3.4 Integrations-Test: Bezirks-Event mit `applicability=["all"]` erscheint in Gemeindeansicht
+- [x] 3.2 `GET /api/v1/events`-Endpoint schließt Bezirks-Events mit passendem `applicability`-Eintrag in Gemeindeansicht ein
+      → `compat_list_events` in `events_compat.py`: bei `congregation_id` eigene Slots + Bezirks-Slots mit `congregation_id is None` und `congregation_id in slot.applicability`
+- [x] 3.3 Nur `status=PUBLISHED` Bezirks-Events werden über applicability eingeblendet
+      ⚠️ **Abweichung:** Modell nutzt `PlanningSlotStatus.ACTIVE` (nicht PUBLISHED) als Status-Filter
+- [x] 3.4 Integrations-Test: Bezirks-Event mit `applicability=["all"]` erscheint in Gemeindeansicht
+      ⚠️ **Abweichung:** `applicability` ist `list[uuid.UUID]` — kein `"all"`-Sentinel; Test nutzt konkrete `congregation_id` (5 Tests in `test_events_compat_applicability.py`)
 
 ## 4. UC-05 — ICS-Export
 
@@ -35,7 +40,8 @@
 - [x] 4.5 Filter-Logik für INTERNAL-Token (inkl. INTERNAL-Events, volle Namen)
 - [x] 4.6 Öffentlicher Endpoint `GET /api/v1/export/{token}/calendar.ics` implementiert
       ⚠️ **Abweichung:** UID-Format ist `{event.id}@nak-bezirksplaner` (nicht `{district_id}-{event_id}@nak-planner` wie im Design)
-- [ ] 4.7 Unit-Tests für UID-Stabilität, Token-Validierung, Anonymisierung
+- [x] 4.7 Unit-Tests für UID-Stabilität, Token-Validierung, Anonymisierung
+      → 4 neue Tests in `test_router_calendar_export_invitation.py` (UID-Stabilität, 404 bei unbekanntem Token, Anonymisierung PUBLIC, volle Namen INTERNAL); UID-Format `{slot.id}@nak-bezirksplaner`
 
 ## 5. Frontend
 

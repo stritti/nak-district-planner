@@ -8,6 +8,7 @@ from enum import Enum, StrEnum
 
 class EventApprovalStatus(StrEnum):
     """Planning/release workflow status."""
+
     DRAFT = "DRAFT"
     PLANNED = "PLANNED"
     CONFIRMED = "CONFIRMED"
@@ -38,8 +39,9 @@ class PlanningSlot:
     # Invitation tracking fields (migrated from Event)
     invitation_source_congregation_id: uuid.UUID | None = None
     invitation_source_event_id: uuid.UUID | None = None
-    # List of congregation IDs that this slot applies to (for district-wide holidays)
-    applicability: list[uuid.UUID] = field(default_factory=list)
+    # List of congregation IDs (as strings) that this slot applies to (for district-wide holidays)
+    # Supports "all" sentinel string for district-wide applicability
+    applicability: list[str] = field(default_factory=list)
 
     @classmethod
     def create(
@@ -55,7 +57,7 @@ class PlanningSlot:
         approval_status: EventApprovalStatus | None = None,
         invitation_source_congregation_id: uuid.UUID | None = None,
         invitation_source_event_id: uuid.UUID | None = None,
-        applicability: list[uuid.UUID] | None = None,
+        applicability: list[str] | None = None,
         status: PlanningSlotStatus = PlanningSlotStatus.ACTIVE,
         slot_id: uuid.UUID | None = None,
     ) -> PlanningSlot:

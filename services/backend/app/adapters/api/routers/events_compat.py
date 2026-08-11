@@ -195,7 +195,19 @@ async def compat_list_events(
 
     # Apply optional filters
     if congregation_id is not None:
-        all_slots = [s for s in all_slots if s.congregation_id == congregation_id]
+        # Congregation view: own slots + district-level slots distributed via
+        # applicability (only ACTIVE/PUBLISHED district events are distributed).
+        # Supports "all" sentinel string for district-wide applicability.
+        all_slots = [
+            s
+            for s in all_slots
+            if s.congregation_id == congregation_id
+            or (
+                s.congregation_id is None
+                and s.status == PlanningSlotStatus.ACTIVE
+                and ("all" in s.applicability or str(congregation_id) in s.applicability)
+            )
+        ]
     if approval_status is not None:
         try:
             status_filter = EventApprovalStatus(approval_status)
