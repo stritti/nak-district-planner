@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 
-from app.application.rate_limiter import RateLimitConfig, increment_fail_open_counter, rate_limiter
+from app.application.rate_limiter import RateLimitConfig, rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +81,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         is_authenticated = self._is_authenticated(request)
 
         # Check normal sliding-window rate limit
-        fail_open_reason: str | None = None
-
         result = await self.rate_limiter.check_rate_limit(
             identifier=identifier,
             endpoint=request.url.path,
@@ -90,9 +88,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             config=self.config,
             record_fail_open_metric=True,
         )
-        if result.fail_open:
-            fail_open_reason = result.fail_open_reason
-
         # If rate limit exceeded, return 429
         if not result.allowed:
             logger.warning(
@@ -111,8 +106,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             config=self.config,
             record_fail_open_metric=False,
         )
-        if burst_result.fail_open and fail_open_reason is None:
-            fail_open_reason = burst_result.fail_open_reason
         if not burst_result.allowed:
             logger.warning(
                 f"Burst rate limit exceeded for {identifier} on {request.method} {request.url.path}"
