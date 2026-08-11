@@ -281,7 +281,6 @@ googleapis/release-please-action
                          → Tag-Push startet Docker-Build
                          → Docker-Images mit Versions-Tag veröffentlicht
 ```
-```
 
 - [ ] **Step 2: Update automatically changed files table**
 
