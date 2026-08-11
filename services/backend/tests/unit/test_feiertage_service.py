@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, timezone
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.application.feiertage_service import (
+    ENTSCHLAFENEN_MONATE,
+    KIRCHLICHE_FESTTAGE,
     _content_hash,
     _easter_sunday,
     _external_uid,
@@ -18,6 +20,7 @@ from app.application.feiertage_service import (
     import_kirchliche_festtage,
     reference_feiertage_for_congregation,
 )
+from app.domain.models.planning_slot import PlanningSlot
 
 
 class TestEasterSunday:
@@ -42,6 +45,26 @@ class TestEasterSunday:
         """Easter Sunday 2000 should be April 23."""
         easter = _easter_sunday(2000)
         assert easter == date(2000, 4, 23)
+
+    def test_easter_2027(self):
+        """Easter Sunday 2027 should be March 28."""
+        easter = _easter_sunday(2027)
+        assert easter == date(2027, 3, 28)
+
+    def test_easter_2028(self):
+        """Easter Sunday 2028 should be April 16."""
+        easter = _easter_sunday(2028)
+        assert easter == date(2028, 4, 16)
+
+    def test_easter_2029(self):
+        """Easter Sunday 2029 should be April 1."""
+        easter = _easter_sunday(2029)
+        assert easter == date(2029, 4, 1)
+
+    def test_easter_2030(self):
+        """Easter Sunday 2030 should be April 21."""
+        easter = _easter_sunday(2030)
+        assert easter == date(2030, 4, 21)
 
 
 class TestFirstSunday:
@@ -157,6 +180,30 @@ class TestParseDay:
 class TestImportKirchlicheFesttage:
     """Tests for import_kirchliche_festtage() function."""
 
+    def _festtag_slots(self, district_id: uuid.UUID) -> dict[date, PlanningSlot]:
+        """Return one existing slot per festtag date for 2026 (idempotent state)."""
+        easter = _easter_sunday(2026)
+        slots: dict[date, PlanningSlot] = {}
+        for name, offset in KIRCHLICHE_FESTTAGE:
+            day = easter + timedelta(days=offset)
+            slots[day] = PlanningSlot.create(
+                district_id=district_id,
+                planning_date=day,
+                planning_time=time(0, 0),
+                category="Feiertag",
+                title=name,
+            )
+        for name, month in ENTSCHLAFENEN_MONATE:
+            day = _first_sunday(2026, month)
+            slots[day] = PlanningSlot.create(
+                district_id=district_id,
+                planning_date=day,
+                planning_time=time(0, 0),
+                category="Feiertag",
+                title=name,
+            )
+        return slots
+
     async def test_import_kirchliche_festtage_creates_slots(self):
         """import_kirchliche_festtage should create PlanningSlots for the year."""
         district_id = uuid.uuid4()
@@ -177,41 +224,237 @@ class TestImportKirchlicheFesttage:
         assert result["skipped"] == 0
         assert slot_repo_mock.save.call_count == result["created"]
 
-    @pytest.mark.skip(reason="Needs update for PlanningSlot migration - Task Group 1.1")
     async def test_import_kirchliche_festtage_skips_existing_unchanged(self):
-        """Existing slots with same hash should be skipped."""
-        # TODO: Update this test after PlanningSlot migration
-        # This test needs to be rewritten to use PlanningSlot instead of Event
-        pass
+        """Existing slots with same title/date should be skipped (idempotent)."""
+        district_id = uuid.uuid4()
+        session = AsyncMock()
 
-    @pytest.mark.skip(reason="Needs update for PlanningSlot migration - Task Group 1.1")
+        existing_by_date = self._festtag_slots(district_id)
+
+        slot_repo_mock = AsyncMock()
+        slot_repo_mock.list_for_date_range.side_effect = lambda district_id, from_date, to_date: [
+            existing_by_date.get(from_date)
+        ]
+        slot_repo_mock.save.return_value = None
+
+        with patch(
+            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        ):
+            result = await import_kirchliche_festtage(district_id, 2026, session)
+
+        assert result["created"] == 0
+        assert result["updated"] == 0
+        assert result["skipped"] == 6  # 3 kirchliche Festtage + 3 Entschlafenen
+        slot_repo_mock.save.assert_not_called()
+
     async def test_import_kirchliche_festtage_updates_changed_events(self):
-        """Existing slots with different hash should be updated."""
-        # TODO: Update this test after PlanningSlot migration
-        pass
+        """Existing slots with different date should be updated."""
+        district_id = uuid.uuid4()
+        session = AsyncMock()
+
+        existing_by_date = self._festtag_slots(district_id)
+        # Corrupt the Ostersonntag slot: wrong planning date
+        wrong_date = date(2026, 4, 6)
+        easter = _easter_sunday(2026)
+        existing_by_date[easter] = PlanningSlot.create(
+            district_id=district_id,
+            planning_date=wrong_date,
+            planning_time=time(0, 0),
+            category="Feiertag",
+            title="Ostersonntag",
+        )
+
+        slot_repo_mock = AsyncMock()
+        slot_repo_mock.list_for_date_range.side_effect = lambda district_id, from_date, to_date: [
+            existing_by_date.get(from_date)
+        ]
+        slot_repo_mock.save.return_value = None
+
+        with patch(
+            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        ):
+            result = await import_kirchliche_festtage(district_id, 2026, session)
+
+        assert result["created"] == 0
+        assert result["updated"] == 1
+        assert result["skipped"] == 5
+        slot_repo_mock.save.assert_called_once()
 
 
-@pytest.mark.skip(reason="Needs update for PlanningSlot migration - Task Group 1.1")
 class TestImportFeiertage:
-    """Tests for import_feiertage() function - TODO: Update for PlanningSlot migration."""
+    """Tests for import_feiertage() — Nager.Date API + state filtering."""
 
-    async def test_import_feiertage_requires_api_call(self):
-        """TODO: Update for PlanningSlot migration."""
-        pass
+    def _mock_nager_client(self, holidays: list[dict]):
+        """Patch httpx.AsyncClient to return the given Nager.Date payload."""
+        resp_mock = MagicMock()
+        resp_mock.json.return_value = holidays
+        resp_mock.raise_for_status.return_value = None
+
+        client_mock = MagicMock()
+        client_mock.get = AsyncMock(return_value=resp_mock)
+
+        async_client_mock = MagicMock()
+        async_client_mock.__aenter__.return_value = client_mock
+        async_client_mock.__aexit__.return_value = None
+        return patch(
+            "app.application.feiertage_service.httpx.AsyncClient", return_value=async_client_mock
+        )
+
+    async def test_import_feiertage_creates_national_holidays(self):
+        """National holidays (counties=None) should be imported."""
+        district_id = uuid.uuid4()
+        session = AsyncMock()
+        holidays = [
+            {"date": "2026-01-01", "localName": "Neujahr", "counties": None},
+            {"date": "2026-10-03", "localName": "Tag der Deutschen Einheit", "counties": None},
+        ]
+
+        slot_repo_mock = AsyncMock()
+        slot_repo_mock.list_for_date_range.return_value = []
+        slot_repo_mock.save.return_value = None
+
+        with self._mock_nager_client(holidays), patch(
+            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        ):
+            result = await import_feiertage(district_id, 2026, None, session)
+
+        assert result["created"] == 2
+        assert result["updated"] == 0
+        assert result["skipped"] == 0
+        assert slot_repo_mock.save.call_count == 2
 
     async def test_import_feiertage_filters_by_state_code(self):
-        """TODO: Update for PlanningSlot migration."""
-        pass
+        """Only national + matching-state holidays should be imported."""
+        district_id = uuid.uuid4()
+        session = AsyncMock()
+        holidays = [
+            {"date": "2026-01-01", "localName": "Neujahr", "counties": None},
+            {"date": "2026-01-06", "localName": "Heilige Drei Könige", "counties": ["DE-BW", "DE-BY"]},
+            {"date": "2026-08-15", "localName": "Mariä Himmelfahrt", "counties": ["DE-BY"]},
+            {"date": "2026-11-01", "localName": "Allerheiligen", "counties": ["DE-NW"]},
+        ]
+
+        slot_repo_mock = AsyncMock()
+        slot_repo_mock.list_for_date_range.return_value = []
+        slot_repo_mock.save.return_value = None
+
+        with self._mock_nager_client(holidays), patch(
+            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        ):
+            result = await import_feiertage(district_id, 2026, "BY", session)
+
+        assert result["created"] == 3  # Neujahr + Heilige Drei Könige + Mariä Himmelfahrt
+        assert result["updated"] == 0
+        assert result["skipped"] == 0
+        # Allerheiligen (NW-only) must not be imported
+        saved_titles = [call.args[0].title for call in slot_repo_mock.save.call_args_list]
+        assert "Allerheiligen" not in saved_titles
+
+    async def test_import_feiertage_idempotent_second_run(self):
+        """Re-importing the same year must not create duplicates."""
+        district_id = uuid.uuid4()
+        session = AsyncMock()
+        holidays = [{"date": "2026-01-01", "localName": "Neujahr", "counties": None}]
+
+        existing = PlanningSlot.create(
+            district_id=district_id,
+            planning_date=date(2026, 1, 1),
+            planning_time=time(0, 0),
+            category="Feiertag",
+            title="Neujahr",
+        )
+        slot_repo_mock = AsyncMock()
+        slot_repo_mock.list_for_date_range.return_value = [existing]
+        slot_repo_mock.save.return_value = None
+
+        with self._mock_nager_client(holidays), patch(
+            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        ):
+            result = await import_feiertage(district_id, 2026, None, session)
+
+        assert result["created"] == 0
+        assert result["updated"] == 0
+        assert result["skipped"] == 1
+        slot_repo_mock.save.assert_not_called()
 
 
-@pytest.mark.skip(reason="Needs update for PlanningSlot migration - Task Group 1.1")
 class TestReferenceFeiertageForCongregation:
-    """Tests for reference_feiertage_for_congregation() function - TODO: Update for PlanningSlot migration."""
+    """Tests for reference_feiertage_for_congregation() function."""
+
+    def _slot(
+        self,
+        district_id: uuid.UUID,
+        *,
+        congregation_id: uuid.UUID | None,
+        category: str,
+        applicability: list[uuid.UUID] | None = None,
+    ) -> PlanningSlot:
+        return PlanningSlot.create(
+            district_id=district_id,
+            planning_date=date(2026, 4, 5),
+            planning_time=time(0, 0),
+            congregation_id=congregation_id,
+            category=category,
+            title="Test",
+            applicability=applicability,
+        )
 
     async def test_references_only_district_holidays(self):
-        """TODO: Update for PlanningSlot migration."""
-        pass
+        """Only district-level Feiertag slots should get the congregation reference."""
+        district_id = uuid.uuid4()
+        congregation_id = uuid.uuid4()
+        session = AsyncMock()
+
+        district_holiday = self._slot(district_id, congregation_id=None, category="Feiertag")
+        congregation_holiday = self._slot(
+            district_id, congregation_id=congregation_id, category="Feiertag"
+        )
+        district_service = self._slot(district_id, congregation_id=None, category="Gottesdienst")
+
+        slot_repo_mock = AsyncMock()
+        slot_repo_mock.list_for_date_range.return_value = [
+            district_holiday,
+            congregation_holiday,
+            district_service,
+        ]
+        slot_repo_mock.save.return_value = None
+
+        with patch(
+            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        ):
+            updated = await reference_feiertage_for_congregation(
+                district_id, congregation_id, session
+            )
+
+        assert updated == 1
+        assert congregation_id in district_holiday.applicability
+        assert congregation_id not in congregation_holiday.applicability
+        assert congregation_id not in district_service.applicability
+        slot_repo_mock.save.assert_called_once_with(district_holiday)
 
     async def test_skips_when_already_referenced(self):
-        """TODO: Update for PlanningSlot migration."""
-        pass
+        """Slots that already reference the congregation must not be updated."""
+        district_id = uuid.uuid4()
+        congregation_id = uuid.uuid4()
+        session = AsyncMock()
+
+        district_holiday = self._slot(
+            district_id,
+            congregation_id=None,
+            category="Feiertag",
+            applicability=[congregation_id],
+        )
+
+        slot_repo_mock = AsyncMock()
+        slot_repo_mock.list_for_date_range.return_value = [district_holiday]
+        slot_repo_mock.save.return_value = None
+
+        with patch(
+            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        ):
+            updated = await reference_feiertage_for_congregation(
+                district_id, congregation_id, session
+            )
+
+        assert updated == 0
+        slot_repo_mock.save.assert_not_called()

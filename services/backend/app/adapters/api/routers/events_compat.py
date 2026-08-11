@@ -131,7 +131,7 @@ def _slot_to_event(slot: PlanningSlot, instance: EventInstance | None) -> EventC
         approval_status=slot.approval_status.value if slot.approval_status else None,
         visibility=str(instance.visibility.value) if instance and instance.visibility else "PUBLIC",
         audiences=list(slot.audiences) if hasattr(slot, "audiences") and slot.audiences else [],
-        applicability=list(slot.applicability or []),
+        applicability=[str(cid) for cid in (slot.applicability or [])],
         invitation_source_congregation_id=(
             str(slot.invitation_source_congregation_id)
             if slot.invitation_source_congregation_id
@@ -195,7 +195,18 @@ async def compat_list_events(
 
     # Apply optional filters
     if congregation_id is not None:
-        all_slots = [s for s in all_slots if s.congregation_id == congregation_id]
+        # Congregation view: own slots + district-level slots distributed via
+        # applicability (only ACTIVE/PUBLISHED district events are distributed).
+        all_slots = [
+            s
+            for s in all_slots
+            if s.congregation_id == congregation_id
+            or (
+                s.congregation_id is None
+                and s.status == PlanningSlotStatus.ACTIVE
+                and congregation_id in s.applicability
+            )
+        ]
     if approval_status is not None:
         try:
             status_filter = EventApprovalStatus(approval_status)
