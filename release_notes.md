@@ -1,4 +1,4 @@
-## [v0.29.2] - 2026-08-11
+## [v0.29.3] - 2026-08-11
 
 ### Features
 * feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
@@ -13,6 +13,7 @@
 * Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
 
 ### Bug Fixes
+* fix: upgrade click to 8.4.2 to resolve PYSEC-2026-2132 command injection vulnerability (16ef998)
 * Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
 * fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
 * fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
@@ -22,9 +23,9 @@
 * Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
 * fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
 * fix: Unit-Tests an require_role_in_district() angepasst (8805894)
-* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
+* chore: release v0.29.2 (4e273b0)
 * refactor(uc-01): extract CalendarIntegrationService and raise CalendarConnectorError (#264) (8166064)
 * chore: release v0.29.1 (63e30eb)
 * docs: mark uc-02 last_sync_error tasks complete (9a8c222)
@@ -34,4 +35,3 @@
 * build(deps-dev): Bump vue-tsc to 3.3.9 and typescript-eslint to 8.66.0 in /services/frontend (#262) (b500979)
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
-* build(deps): Bump starlette from 1.3.1 to 1.4.1 in /services/backend (#259) (779ce1c)
