@@ -71,7 +71,7 @@ def _slot(
     district_id: uuid.UUID,
     *,
     congregation_id: uuid.UUID | None,
-    applicability: list[uuid.UUID] | None = None,
+    applicability: list[str] | None = None,
     status: PlanningSlotStatus = PlanningSlotStatus.ACTIVE,
     title: str = "Gottesdienst",
 ) -> PlanningSlot:
@@ -106,7 +106,7 @@ def _list_events(client, headers, district_id: uuid.UUID, congregation_id: uuid.
 def test_district_slot_with_matching_applicability_appears_in_congregation_view():
     district_id = uuid.uuid4()
     congregation_id = uuid.uuid4()
-    district_slot = _slot(district_id, congregation_id=None, applicability=[congregation_id])
+    district_slot = _slot(district_id, congregation_id=None, applicability=[str(congregation_id)])
     own_slot = _slot(district_id, congregation_id=congregation_id)
     slot_repo, inst_repo = _mock_repos([district_slot, own_slot])
 
@@ -129,7 +129,7 @@ def test_district_slot_with_other_congregation_applicability_excluded():
     district_id = uuid.uuid4()
     congregation_id = uuid.uuid4()
     other_congregation = uuid.uuid4()
-    district_slot = _slot(district_id, congregation_id=None, applicability=[other_congregation])
+    district_slot = _slot(district_id, congregation_id=None, applicability=[str(other_congregation)])
     slot_repo, inst_repo = _mock_repos([district_slot])
 
     with _auth_client(district_id) as (client, headers), patch(
@@ -166,7 +166,7 @@ def test_cancelled_district_slot_excluded_even_with_matching_applicability():
     district_slot = _slot(
         district_id,
         congregation_id=None,
-        applicability=[congregation_id],
+        applicability=[str(congregation_id)],
         status=PlanningSlotStatus.CANCELLED,
     )
     slot_repo, inst_repo = _mock_repos([district_slot])

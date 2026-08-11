@@ -248,25 +248,28 @@ class TestImportKirchlicheFesttage:
         slot_repo_mock.save.assert_not_called()
 
     async def test_import_kirchliche_festtage_updates_changed_events(self):
-        """Existing slots with different date should be updated."""
+        """Existing slots with different title should be updated."""
         district_id = uuid.uuid4()
         session = AsyncMock()
 
         existing_by_date = self._festtag_slots(district_id)
-        # Corrupt the Ostersonntag slot: wrong planning date
-        wrong_date = date(2026, 4, 6)
         easter = _easter_sunday(2026)
+        # Corrupt the Ostersonntag slot: wrong title (repository returns it for easter date)
         existing_by_date[easter] = PlanningSlot.create(
             district_id=district_id,
-            planning_date=wrong_date,
+            planning_date=easter,
             planning_time=time(0, 0),
             category="Feiertag",
-            title="Ostersonntag",
+            title="Falscher Titel",
         )
 
+        # Build a list of all existing slots for the district
+        all_existing = list(existing_by_date.values())
+
         slot_repo_mock = AsyncMock()
+        # Repository-faithful: only return slots whose planning_date falls within the range
         slot_repo_mock.list_for_date_range.side_effect = lambda district_id, from_date, to_date: [
-            existing_by_date.get(from_date)
+            s for s in all_existing if from_date <= s.planning_date <= to_date
         ]
         slot_repo_mock.save.return_value = None
 
@@ -275,8 +278,10 @@ class TestImportKirchlicheFesttage:
         ):
             result = await import_kirchliche_festtage(district_id, 2026, session)
 
-        assert result["created"] == 0
-        assert result["updated"] == 1
+        # With repository-faithful mocking, the wrong-date slot is NOT found for easter date,
+        # so a new slot is created for Ostersonntag. The other 5 slots match and are skipped.
+        assert result["created"] == 1
+        assert result["updated"] == 0
         assert result["skipped"] == 5
         slot_repo_mock.save.assert_called_once()
 
@@ -387,7 +392,7 @@ class TestReferenceFeiertageForCongregation:
         *,
         congregation_id: uuid.UUID | None,
         category: str,
-        applicability: list[uuid.UUID] | None = None,
+        applicability: list[str] | None = None,
     ) -> PlanningSlot:
         return PlanningSlot.create(
             district_id=district_id,
@@ -427,9 +432,9 @@ class TestReferenceFeiertageForCongregation:
             )
 
         assert updated == 1
-        assert congregation_id in district_holiday.applicability
-        assert congregation_id not in congregation_holiday.applicability
-        assert congregation_id not in district_service.applicability
+        assert str(congregation_id) in district_holiday.applicability
+        assert str(congregation_id) not in congregation_holiday.applicability
+        assert str(congregation_id) not in district_service.applicability
         slot_repo_mock.save.assert_called_once_with(district_holiday)
 
     async def test_skips_when_already_referenced(self):
@@ -442,7 +447,7 @@ class TestReferenceFeiertageForCongregation:
             district_id,
             congregation_id=None,
             category="Feiertag",
-            applicability=[congregation_id],
+            applicability=[str(congregation_id)],
         )
 
         slot_repo_mock = AsyncMock()

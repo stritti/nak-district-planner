@@ -288,9 +288,9 @@ async def reference_feiertage_for_congregation(
         # District-level holidays have no congregation_id
         if slot.congregation_id is not None:
             continue
-        if congregation_id in slot.applicability:
+        if str(congregation_id) in slot.applicability or "all" in slot.applicability:
             continue
-        slot.applicability = [*slot.applicability, congregation_id]
+        slot.applicability = [*slot.applicability, str(congregation_id)]
         slot.updated_at = datetime.now(UTC)
         await slot_repo.save(slot)
         updated += 1
