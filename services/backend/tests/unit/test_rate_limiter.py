@@ -352,23 +352,17 @@ class TestRateLimiter:
         async def endpoint():
             return Response("ok")
 
-        with (
-            patch("app.application.rate_limiter.redis.from_url", return_value=mock_redis),
-            patch("app.application.rate_limiter.increment_fail_open_counter") as direct_increment_mock,
-            patch(
-                "app.adapters.api.middleware.rate_limit.increment_fail_open_counter"
-            ) as middleware_increment_mock,
-        ):
-            mock_redis.zadd.side_effect = Exception("Redis error")
-            await limiter.connect()
-            app.add_middleware(RateLimitMiddleware, rate_limiter=limiter)
-            app.add_api_route("/api/test", endpoint, methods=["GET"])
-            with TestClient(app) as client:
-                response = client.get("/api/test")
+        with patch("app.application.rate_limiter.redis.from_url", return_value=mock_redis):
+            with patch("app.application.rate_limiter.increment_fail_open_counter") as increment_mock:
+                mock_redis.zadd.side_effect = Exception("Redis error")
+                await limiter.connect()
+                app.add_middleware(RateLimitMiddleware, rate_limiter=limiter)
+                app.add_api_route("/api/test", endpoint, methods=["GET"])
+                with TestClient(app) as client:
+                    response = client.get("/api/test")
 
         assert response.status_code == 200
-        direct_increment_mock.assert_not_called()
-        middleware_increment_mock.assert_called_once_with("Exception")
+        increment_mock.assert_called_once_with("Exception")
 
 
 class TestRateLimiterKeyGeneration:

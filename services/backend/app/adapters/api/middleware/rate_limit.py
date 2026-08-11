@@ -88,7 +88,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             endpoint=request.url.path,
             is_authenticated=is_authenticated,
             config=self.config,
-            record_fail_open_metric=False,
+            record_fail_open_metric=True,
         )
         if result.fail_open:
             fail_open_reason = result.fail_open_reason

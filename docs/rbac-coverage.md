@@ -22,63 +22,79 @@ Legende:
 |---|---|---|---|---|---|
 | **auth** | `/api/v1/auth/oidc/discovery` | GET | 🔓 Public | – | RL |
 | | `/api/v1/auth/oidc/token` | POST | 🔓 Public | – | RL |
-| | `/api/v1/auth/me` | GET | 🔐 Auth | – | – |
-| | `/api/v1/auth/access` | GET | 🔐 Auth + Membership-Check | – | – |
-| **calendar_integrations** | `/api/v1/calendar-integrations` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | – |
-| | | POST | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
-| | `/{integration_id}` | PATCH | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
-| | | DELETE | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | – |
-| | `/{integration_id}/sync` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
-| **districts** | `/api/v1/districts` | GET | R(VIEWER) | – | – |
-| | | POST | SUPERADMIN | AUDIT | – |
-| | `/{district_id}` | PATCH | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/api/v1/auth/me` | GET | 🔐 Auth | – | RL |
+| | `/api/v1/auth/access` | GET | 🔐 Auth + Membership-Check | – | RL |
+| **calendar_integrations** | `/api/v1/calendar-integrations` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | RL |
+| | | POST | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | RL |
+| | `/{integration_id}` | PATCH | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | RL |
+| | | DELETE | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | RL |
+| | `/{integration_id}/sync` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| **districts** | `/api/v1/districts` | GET | R(VIEWER) | – | RL |
+| | | POST | SUPERADMIN | AUDIT | RL |
+| | `/{district_id}` | PATCH | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/{district_id}/congregations` | GET | R(VIEWER) | – | RL |
+| | | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/{district_id}/congregations/{congregation_id}` | PATCH | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | RL |
+| | `/{district_id}/groups` | GET | R(VIEWER) | – | RL |
+| | | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/{district_id}/groups/{group_id}` | PATCH | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | | DELETE | R(DISTRICT_ADMIN) | AUDIT | RL |
 | | `/{id}/events` | GET | R(VIEWER) | – | RL |
-| | `/{id}/matrix` | GET | R(VIEWER) | – | – |
-| | `/{id}/leaders` | GET | R(VIEWER) | – | – |
-| | | POST | R(PLANNER) | AUDIT | – |
-| | `/{id}/leaders/{leader_id}` | PATCH | R(PLANNER) | AUDIT | – |
-| | | DELETE | R(PLANNER) | AUDIT | – |
-| | `/{id}/leaders/link-self` | GET | R(VIEWER) | – | – |
-| | | POST | R(VIEWER) | AUDIT | – |
-| | | DELETE | R(VIEWER) | AUDIT | – |
-| | `/{id}/planning-series` | CRUD | R(PLANNER) | AUDIT | – |
-| | `/{id}/feiertage/import` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/{id}/matrix` | GET | R(VIEWER) | – | RL |
+| | `/{id}/matrix/generate-drafts` | POST | R(PLANNER) | AUDIT | RL |
+| | `/{id}/leaders` | GET | R(VIEWER) | – | RL |
+| | | POST | R(PLANNER) | AUDIT | RL |
+| | `/{id}/leaders/{leader_id}` | PATCH | R(PLANNER) | AUDIT | RL |
+| | | DELETE | R(PLANNER) | AUDIT | RL |
+| | `/{id}/leaders/link-self` | GET | R(VIEWER) | – | RL |
+| | | POST | R(VIEWER) | AUDIT | RL |
+| | | DELETE | R(VIEWER) | AUDIT | RL |
+| | `/{id}/planning-series` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | | GET | R(VIEWER) | – | RL |
+| | | PATCH | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | | DELETE | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/{id}/generate-planning-series` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/{district_id}/feiertage/states` | GET | 🔐 Auth | – | RL |
+| | `/{district_id}/feiertage` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
 | **events_compat** | `/api/v1/events` | GET | R(VIEWER) | – | RL |
-| | `/api/v1/events/{event_id}` | PATCH | R(PLANNER) | AUDIT | – |
-| | `/api/v1/events/bulk-approval-status` | POST | R(PLANNER) | AUDIT | – |
-| **export** | `/api/v1/export-tokens` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
-| | `/api/v1/export-tokens` | GET | SUPERADMIN / R(DISTRICT_ADMIN) | – | – |
-| | `/api/v1/export-tokens/{token_id}` | DELETE | R(DISTRICT_ADMIN) | AUDIT | – |
+| | `/api/v1/events/{event_id}` | PATCH | R(PLANNER) | AUDIT | RL |
+| | `/api/v1/events/bulk-approval-status` | POST | R(PLANNER) | AUDIT | RL |
+| **export** | `/api/v1/export-tokens` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/api/v1/export-tokens` | GET | SUPERADMIN / R(DISTRICT_ADMIN) | – | RL |
+| | `/api/v1/export-tokens/{token_id}` | DELETE | R(DISTRICT_ADMIN) | AUDIT | RL |
 | | `/api/v1/export/{token}/calendar.ics` | GET | 🔓 Public (Token-basiert) | – | RL |
-| **invitations** | `/api/v1/events/{event_id}/invitations` | GET | R(VIEWER) | – | – |
-| | | POST | R(PLANNER) | AUDIT | – |
-| | `/api/v1/invitations/{invitation_id}` | DELETE | R(PLANNER) | AUDIT | – |
-| | `/api/v1/invitations/overwrite-requests` | GET | R(VIEWER) | – | – |
-| | `/api/v1/invitations/overwrite-requests/{request_id}/decision` | POST | R(PLANNER) | AUDIT | – |
+| **invitations** | `/api/v1/events/{event_id}/invitations` | GET | R(VIEWER) | – | RL |
+| | | POST | R(PLANNER) | AUDIT | RL |
+| | `/api/v1/invitations/{invitation_id}` | DELETE | R(PLANNER) | AUDIT | RL |
+| | `/api/v1/invitations/overwrite-requests` | GET | R(VIEWER) | – | RL |
+| | `/api/v1/invitations/overwrite-requests/{request_id}/decision` | POST | R(PLANNER) | AUDIT | RL |
 | **leaders** | `/api/v1/districts/{district_id}/leaders/...` | – | – | – | – |
 | | (siehe districts oben — alle leaders-Router sind dort sub-routet) | | | | |
-| **notifications** | `/api/v1/notifications/{district_id}` | GET | R(VIEWER) | – | – |
-| | `/api/v1/notifications/{district_id}/unread-count` | GET | R(VIEWER) | – | – |
-| | `/api/v1/notifications/{notification_id}/read` | POST | R(VIEWER) | AUDIT | – |
-| | `/api/v1/notifications/{district_id}/read-all` | POST | R(VIEWER) | AUDIT | – |
-| **planning_series** | `/api/v1/planning-series` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
-| | `/{series_id}` | GET | R(VIEWER) | – | – |
-| | | PATCH | R(DISTRICT_ADMIN) | AUDIT | – |
-| | `/{series_id}/generate-slots` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
-| | `/districts/{district_id}/generate-slots` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
-| | `/generate-all-slots` | POST | SUPERADMIN | AUDIT | – |
-| **registrations** | `/api/v1/districts/{district_id}/registrations` | POST | 🔓 Public | – | – |
-| | | GET | R(DISTRICT_ADMIN) | – | – |
-| | `/{registration_id}/approve` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
-| | `/{registration_id}/reject` | POST | R(DISTRICT_ADMIN) | AUDIT | – |
-| | `/{registration_id}` | DELETE | R(DISTRICT_ADMIN) | AUDIT | – |
-| **registrations_overview** | `/api/v1/registrations/pending-overview` | GET | R(DISTRICT_ADMIN) / SUPERADMIN | – | – |
-| **service_assignments** | `/api/v1/events/{event_id}/assignments` | GET | R(VIEWER) | – | – |
-| | | POST | R(PLANNER) | AUDIT | – |
-| | `/{id}` | PUT | R(PLANNER) | AUDIT | – |
-| | | DELETE | R(PLANNER) | AUDIT | – |
-| **system** | `/api/v1/system/version` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | – |
-| | `/api/v1/system/update` | POST | SUPERADMIN | AUDIT | – |
+| **notifications** | `/api/v1/notifications/{district_id}` | GET | R(VIEWER) | – | RL |
+| | `/api/v1/notifications/{district_id}/unread-count` | GET | R(VIEWER) | – | RL |
+| | `/api/v1/notifications/{notification_id}/read` | POST | R(VIEWER) | AUDIT | RL |
+| | `/api/v1/notifications/{district_id}/read-all` | POST | R(VIEWER) | AUDIT | RL |
+| **planning_series** | `/api/v1/planning-series` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/{series_id}` | GET | R(VIEWER) | – | RL |
+| | | PATCH | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | | DELETE | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/{series_id}/generate-slots` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/districts/{district_id}/generate-slots` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/generate-all-slots` | POST | SUPERADMIN | AUDIT | RL |
+| **registrations** | `/api/v1/public/districts` | GET | 🔓 Public | – | RL |
+| | `/api/v1/public/districts/{district_id}/congregations` | GET | 🔓 Public | – | RL |
+| | `/api/v1/districts/{district_id}/registrations` | POST | 🔓 Public | – | RL |
+| | | GET | R(DISTRICT_ADMIN) | – | RL |
+| | `/{registration_id}/approve` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/{registration_id}/reject` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
+| | `/{registration_id}` | DELETE | R(DISTRICT_ADMIN) | AUDIT | RL |
+| **registrations_overview** | `/api/v1/registrations/pending-overview` | GET | R(DISTRICT_ADMIN) / SUPERADMIN | – | RL |
+| **service_assignments** | `/api/v1/events/{event_id}/assignments` | GET | R(VIEWER) | – | RL |
+| | | POST | R(PLANNER) | AUDIT | RL |
+| | `/{id}` | PUT | R(PLANNER) | AUDIT | RL |
+| | | DELETE | R(PLANNER) | AUDIT | RL |
+| **system** | `/api/v1/system/version` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | RL |
+| | `/api/v1/system/update` | POST | SUPERADMIN | AUDIT | RL |
 | **health** | `/api/health` | GET/HEAD/OPTIONS | 🔓 Public | – | – |
 
 ## Anmerkungen
@@ -93,6 +109,8 @@ Legende:
 4. Der DRY-Refactor (PR-4) hat alle `try/except PermissionError`-Pattern in Routern durch
    `require_role_in_*()`-Aufrufe ersetzt. Eine CI-Lint-Regel (`scripts/check_rbac_guard_pattern.py`)
    verhindert neue Vorkommen des alten Patterns.
+5. **Globales Rate-Limiting**: Alle Routen außer `/api/health` unterliegen dem globalen
+   `RateLimitMiddleware` (Standard: 100 req/min für authentifizierte, 30 req/min für anonyme Nutzer).
 
 ## Siehe auch
 

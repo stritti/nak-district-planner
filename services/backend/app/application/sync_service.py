@@ -285,9 +285,9 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
     integration.last_synced_at = datetime.now(UTC)
     await integration_repo.save(integration)
 
-    return SyncResult(
-        created=created,
-        updated=updated,
-        cancelled=cancelled,
-        auto_matched=auto_matched,
-    )
+    return {
+        "created": created,
+        "updated": updated,
+        "cancelled": cancelled,
+        "auto_matched": auto_matched,
+    }
