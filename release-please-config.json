@@ -1,0 +1,39 @@
+{
+  "include-component-in-tag": false,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "nak-district-planner",
+      "component": "root",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "services/backend": {
+      "release-type": "python",
+      "package-name": "nak-district-planner-backend",
+      "component": "backend",
+      "skip-changelog": true,
+      "skip-github-release": true,
+      "extra-files": [
+        {
+          "path": "uv.lock",
+          "type": "toml",
+          "jsonpath": "$.package[?(@.name.value=='nak-district-planner-backend')].version"
+        }
+      ]
+    },
+    "services/frontend": {
+      "release-type": "node",
+      "package-name": "nak-district-planner-frontend",
+      "component": "frontend",
+      "skip-changelog": true,
+      "skip-github-release": true
+    }
+  },
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "nak-district-planner",
+      "components": ["root", "backend", "frontend"]
+    }
+  ]
+}
