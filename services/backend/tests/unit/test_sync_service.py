@@ -77,6 +77,7 @@ def _integration(**kw) -> CalendarIntegration:
         last_synced_at=None,
         created_at=_NOW,
         updated_at=_NOW,
+        last_sync_error=None,
     )
 
 

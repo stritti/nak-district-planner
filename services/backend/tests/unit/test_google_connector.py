@@ -15,6 +15,7 @@ from app.adapters.calendar.google_connector import (
     GoogleCalendarConnector,
     _content_hash,
 )
+from app.domain.ports.calendar import CalendarConnectorError
 
 CREDS = {"access_token": "test_token"}
 
@@ -341,7 +342,7 @@ class TestFetchEvents:
         )
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(ValueError, match="HTTP 404"):
+        with pytest.raises(CalendarConnectorError, match="HTTP 404"):
             await connector.fetch_events(CREDS)
 
     async def test_http_401_raises_value_error(
@@ -353,7 +354,7 @@ class TestFetchEvents:
         )
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(ValueError, match="HTTP 401"):
+        with pytest.raises(CalendarConnectorError, match="HTTP 401"):
             await connector.fetch_events(CREDS)
 
     async def test_http_500_raises_value_error(
@@ -365,7 +366,7 @@ class TestFetchEvents:
         )
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(ValueError, match="HTTP 500"):
+        with pytest.raises(CalendarConnectorError, match="HTTP 500"):
             await connector.fetch_events(CREDS)
 
     async def test_html_response_raises_value_error(
@@ -376,7 +377,7 @@ class TestFetchEvents:
         mock_response.raise_for_status.return_value = None
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(ValueError, match="URL liefert HTML"):
+        with pytest.raises(CalendarConnectorError, match="URL liefert HTML"):
             await connector.fetch_events(CREDS)
 
     async def test_invalid_datetime_skipped(

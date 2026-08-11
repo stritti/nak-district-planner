@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from app.adapters.calendar.ical_connector import ICalConnector, _content_hash, _to_utc
+from app.domain.ports.calendar import CalendarConnectorError
 
 # ── ICS helpers ───────────────────────────────────────────────────────────────
 
@@ -224,30 +225,30 @@ class TestFetchEvents:
 
     async def test_http_404_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(404)))
-        with pytest.raises(ValueError, match="404"):
+        with pytest.raises(CalendarConnectorError, match="404"):
             await connector.fetch_events(CREDS)
 
     async def test_http_401_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(401)))
-        with pytest.raises(ValueError, match="401"):
+        with pytest.raises(CalendarConnectorError, match="401"):
             await connector.fetch_events(CREDS)
 
     async def test_http_500_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(500)))
-        with pytest.raises(ValueError, match="500"):
+        with pytest.raises(CalendarConnectorError, match="500"):
             await connector.fetch_events(CREDS)
 
     async def test_html_response_raises_value_error(self):
         connector = ICalConnector(
             client=_mock_http(b"<html>login</html>", content_type="text/html; charset=utf-8")
         )
-        with pytest.raises(ValueError, match="HTML"):
+        with pytest.raises(CalendarConnectorError, match="HTML"):
             await connector.fetch_events(CREDS)
 
     async def test_invalid_ical_content_raises_value_error(self):
         """Invalid iCal content raises ValueError."""
         connector = ICalConnector(client=_mock_http(b"not valid ical data"))
-        with pytest.raises(ValueError, match="Ungültiges iCal-Format"):
+        with pytest.raises(CalendarConnectorError, match="Ungültiges iCal-Format"):
             await connector.fetch_events(CREDS)
 
     async def test_event_without_dtstart_is_skipped(self):

@@ -8,6 +8,10 @@ from datetime import datetime
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 
 
+class CalendarConnectorError(Exception):
+    """Raised when a calendar connector cannot fetch or parse events."""
+
+
 class CalendarConnector(ABC):
     """Port: fetch events from an external calendar source.
 
