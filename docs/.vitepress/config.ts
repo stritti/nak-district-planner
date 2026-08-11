@@ -1,11 +1,18 @@
 import { defineConfig } from 'vitepress'
 import { withOpenSpec } from '@stritti/vitepress-plugin-openspec'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const docsDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const repoRoot = resolve(docsDir, '..')
 
 export default defineConfig(
   withOpenSpec({
     lang: 'de-DE',
     title: 'NAK District Planner',
     description: 'Dokumentation für den Bezirksplaner der Neuapostolischen Kirche',
+    ignoreDeadLinks: true,
+    srcExclude: ['superpowers/**'],
     themeConfig: {
       nav: [
         { text: 'Home', link: '/' },
@@ -57,6 +64,6 @@ export default defineConfig(
       ]
     }
   }, {
-    specDir: '../openspec'
+    specDir: resolve(repoRoot, 'openspec')
   })
 )

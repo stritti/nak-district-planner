@@ -70,7 +70,7 @@ git commit -m "docs: Release-Prozess dokumentiert"
 
 Die Release-Pipeline besteht aus zwei GitHub Actions Workflows:
 
-### 1. `release.yml` – Kern der Release-Automatisierung
+### 1. `release.yml` – Release Please + Docker-Veröffentlichung
 
 ```text
 Push auf main
@@ -87,9 +87,10 @@ googleapis/release-please-action
                │         → Release-PR wird erstellt / aktualisiert
                │           (CHANGELOG.md + Versions-Bump in Dateien)
                │
-               └─── Release-PR wird gemergt
-                         → GitHub Release + Git-Tag (z. B. v1.2.3)
-                         → Docker-Images mit Versions-Tag veröffentlicht
+                └─── Release-PR wird gemergt
+                          → GitHub Release + Git-Tag (z. B. v1.2.3)
+                          → Tag-Push startet Docker-Build
+                          → Docker-Images mit Versions-Tag veröffentlicht
 ```
 
 ### 2. `build.yml` – Kontinuierlicher Docker-Build
@@ -104,14 +105,15 @@ Dieser Workflow wird bei jedem Push auf `main` oder `develop` sowie bei Pull Req
 2. Nach dem Merge in `main` analysiert **release-please** alle neuen Commits seit dem letzten Release.
 3. release-please erstellt oder aktualisiert automatisch einen **Release-PR** mit dem Titel z. B. `chore(main): release 1.2.0`.
 4. Dieser PR enthält:
-   - Aktualisiertes `CHANGELOG.md`
+   - Aktualisiertes root-`CHANGELOG.md`
    - Versions-Bump in `package.json` (root + frontend)
    - Versions-Bump in `services/backend/pyproject.toml`
+   - Versions-Bump in `services/backend/uv.lock`
 5. Ein Maintainer **prüft den Release-PR** und **mergt** ihn.
 6. release-please erstellt automatisch:
-   - Einen Git-Tag (z. B. `v1.2.0`)
-   - Einen GitHub Release mit dem CHANGELOG als Beschreibung
-7. Der `release-docker`-Job baut und veröffentlicht Docker-Images mit Versions-Tags.
+    - Einen Git-Tag (z. B. `v1.2.0`)
+    - Einen GitHub Release mit dem CHANGELOG als Beschreibung
+7. Der `docker-build`-Job baut und veröffentlicht Docker-Images mit Versions-Tags.
 
 ---
 
@@ -124,7 +126,9 @@ release-please aktualisiert bei einem Release die Versions-Angaben in folgenden 
 | `package.json` | `"version": "1.2.0"` |
 | `services/frontend/package.json` | `"version": "1.2.0"` |
 | `services/backend/pyproject.toml` | `version = "1.2.0"` (unter `[project]`) |
-| `CHANGELOG.md` | Neuer Abschnitt mit allen Änderungen |
+| `services/backend/uv.lock` | Paketversion von `nak-district-planner-backend` |
+| `.release-please-manifest.json` | Aktuelle Release-Please-Versionen pro Pfad |
+| `CHANGELOG.md` | Neuer Abschnitt mit allen Änderungen (einziges Changelog) |
 
 ---
 
@@ -150,7 +154,7 @@ ghcr.io/stritti/nak-district-planner/frontend:1.2.0
 
 ## Manuelles Auslösen
 
-Ein direktes Auslösen über die GitHub-UI ist derzeit nicht konfiguriert; Releases werden ausschließlich durch Pushes auf `main` gestartet.
+Ein direktes Auslösen über die GitHub-UI ist derzeit nicht konfiguriert; Releases werden ausschließlich durch Pushes auf `main` gestartet, nicht über eine alte Shell-basierte Release-Logik.
 
 ---
 
@@ -160,11 +164,19 @@ Die Release-Pipeline wird durch folgende Dateien konfiguriert:
 
 | Datei | Zweck |
 |-------|-------|
-| `release-please-config.json` | Pakete, Changelog-Abschnitte, Extra-Dateien |
+| `release-please-config.json` | Pakete, linked-versions-Plugin, gemeinsame Tag-Konfiguration |
 | `.release-please-manifest.json` | Aktuelle Versions-Stände (nicht manuell bearbeiten) |
 | `.github/workflows/release.yml` | GitHub Actions Workflow |
 
 ---
+
+## Erforderliches GitHub Secret
+
+Der Workflow erwartet das Repository-Secret `RELEASE_PLEASE_TOKEN`.
+
+Empfohlen ist ein Fine-Grained Personal Access Token mit Schreibrechten für Contents, Pull Requests und Issues. Der normale `GITHUB_TOKEN` sollte nicht für Release Please verwendet werden, weil von ihm erzeugte Tags und Releases nachgelagerte Workflows nicht zuverlässig triggern.
+
+Das Secret darf nicht in Dateien, Logs oder Commits gespeichert werden.
 
 ## Weiterführende Links
 

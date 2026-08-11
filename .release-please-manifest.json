@@ -1,0 +1,5 @@
+{
+  ".": "0.29.1",
+  "services/backend": "0.29.1",
+  "services/frontend": "0.29.1"
+}
