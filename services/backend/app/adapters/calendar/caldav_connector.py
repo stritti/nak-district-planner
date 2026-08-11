@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 
 from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.ports.calendar import CalendarConnector
+from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
 
 def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:
@@ -46,7 +46,7 @@ class CalDAVConnector(CalendarConnector):
             # Basic auth will be handled by httpx if we pass username/password to client
             pass
         else:
-            raise ValueError(
+            raise CalendarConnectorError(
                 "CalDAV credentials must include either access_token or username/password"
             )
 
@@ -75,9 +75,9 @@ class CalDAVConnector(CalendarConnector):
         response = await self._client.request(
             "REPORT",
             report_url,
-            data=calendar_query.encode("utf-8"),
+            data=calendar_query.encode("utf-8"),  # type: ignore[arg-type]
             headers={"Content-Type": "application/xml; charset=utf-8", "Depth": "1", **headers},
-            auth=(credentials.get("username"), credentials.get("password"))
+            auth=(str(credentials["username"]), str(credentials["password"]))
             if "username" in credentials and "password" in credentials
             else None,
         )
@@ -85,7 +85,7 @@ class CalDAVConnector(CalendarConnector):
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise ValueError(
+            raise CalendarConnectorError(
                 f"HTTP {exc.response.status_code} beim Laden des CalDAV Kalenders: {exc}"
             ) from exc
 
@@ -97,7 +97,7 @@ class CalDAVConnector(CalendarConnector):
         try:
             root = ET.fromstring(response.content)
         except ET.ParseError as exc:
-            raise ValueError(f"Ungültige XML-Antwort vom CalDAV Server: {exc}") from exc
+            raise CalendarConnectorError(f"Ungültige XML-Antwort vom CalDAV Server: {exc}") from exc
 
         # Define namespaces
         namespaces = {
@@ -123,7 +123,7 @@ class CalDAVConnector(CalendarConnector):
             try:
                 from icalendar import Calendar as ICalendar
 
-                cal = ICalendar.from_ical(cal_data.encode("utf-8"))
+                cal = ICalendar.from_ical(cal_data)
             except Exception:
                 # Skip invalid iCalendar data
                 continue

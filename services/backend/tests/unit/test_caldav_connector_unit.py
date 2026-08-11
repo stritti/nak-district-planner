@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash
+from app.domain.ports.calendar import CalendarConnectorError
 
 CREDS_BASIC = {"url": "https://caldav.example.com/cal/", "username": "user", "password": "pass"}
 CREDS_BEARER = {"url": "https://caldav.example.com/cal/", "access_token": "tok"}
@@ -266,7 +267,7 @@ class TestFetchEvents:
 
     async def test_missing_auth_raises(self):
         connector = CalDAVConnector(client=_mock_xml_response(MULTISTATUS_WITH_EVENTS))
-        with pytest.raises(ValueError, match="access_token"):
+        with pytest.raises(CalendarConnectorError, match="access_token"):
             await connector.fetch_events(CREDS_INVALID)
 
     async def test_cancelled_status(self):
@@ -300,22 +301,22 @@ class TestFetchEvents:
 
     async def test_http_404_raises(self):
         connector = CalDAVConnector(client=_mock_xml_response("<error/>", status=404))
-        with pytest.raises(ValueError, match="404"):
+        with pytest.raises(CalendarConnectorError, match="404"):
             await connector.fetch_events(CREDS_BASIC)
 
     async def test_http_401_raises(self):
         connector = CalDAVConnector(client=_mock_xml_response("<error/>", status=401))
-        with pytest.raises(ValueError, match="401"):
+        with pytest.raises(CalendarConnectorError, match="401"):
             await connector.fetch_events(CREDS_BASIC)
 
     async def test_http_500_raises(self):
         connector = CalDAVConnector(client=_mock_xml_response("<error/>", status=500))
-        with pytest.raises(ValueError, match="500"):
+        with pytest.raises(CalendarConnectorError, match="500"):
             await connector.fetch_events(CREDS_BASIC)
 
     async def test_invalid_xml_raises(self):
         connector = CalDAVConnector(client=_mock_xml_response("not xml"))
-        with pytest.raises(ValueError, match="XML"):
+        with pytest.raises(CalendarConnectorError, match="XML"):
             await connector.fetch_events(CREDS_BASIC)
 
     async def test_empty_multistatus_returns_empty(self):

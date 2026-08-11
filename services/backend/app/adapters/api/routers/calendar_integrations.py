@@ -23,9 +23,11 @@ from app.adapters.auth.permissions import (
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.application.crypto import CryptoError, encrypt_credentials
+from app.application.services.calendar_integration_service import CalendarIntegrationService
 from app.application.sync_service import run_sync
 from app.domain.models.calendar_integration import CalendarIntegration
 from app.domain.models.role import Role
+from app.domain.ports.calendar import CalendarConnectorError
 
 router = APIRouter(prefix="/api/v1/calendar-integrations", tags=["calendar-integrations"])
 
@@ -71,19 +73,8 @@ async def create_calendar_integration(
     else:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
 
-    credentials_enc = encrypt_credentials(body.credentials)
-    integration = CalendarIntegration.create(
-        district_id=body.district_id,
-        congregation_id=body.congregation_id,
-        name=body.name,
-        type=body.type,
-        credentials_enc=credentials_enc,
-        sync_interval=body.sync_interval,
-        capabilities=body.capabilities,
-        default_category=body.default_category,
-    )
-    repo = SqlCalendarIntegrationRepository(db)
-    await repo.save(integration)
+    service = CalendarIntegrationService(db)
+    integration = await service.create_integration(body)
     return _to_response(integration)
 
 
@@ -150,7 +141,7 @@ async def trigger_sync(
 
     try:
         summary = await run_sync(integration_id, db)
-    except (ValueError, CryptoError) as exc:
+    except (ValueError, CryptoError, CalendarConnectorError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return SyncResult(
         integration_id=integration_id,
@@ -185,20 +176,8 @@ async def update_calendar_integration(
     else:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
 
-    fields = body.model_fields_set
-    if "name" in fields and body.name is not None:
-        integration.name = body.name
-    if "credentials" in fields and body.credentials is not None:
-        integration.credentials_enc = encrypt_credentials(body.credentials)
-    if "sync_interval" in fields and body.sync_interval is not None:
-        integration.sync_interval = body.sync_interval
-    if "capabilities" in fields and body.capabilities is not None:
-        integration.capabilities = body.capabilities
-    if "default_category" in fields:
-        integration.default_category = body.default_category
-
-    integration.updated_at = datetime.now(UTC)
-    await repo.save(integration)
+    service = CalendarIntegrationService(db)
+    integration = await service.update_integration(integration, body)
     return _to_response(integration)
 
 
