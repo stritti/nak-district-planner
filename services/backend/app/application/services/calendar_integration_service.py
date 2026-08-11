@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.api.schemas.calendar_integration import (
@@ -48,5 +50,6 @@ class CalendarIntegrationService:
         if "default_category" in fields:
             integration.default_category = body.default_category
 
+        integration.updated_at = datetime.now(UTC)
         await self._repo.save(integration)
         return integration
