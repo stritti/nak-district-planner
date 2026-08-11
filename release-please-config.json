@@ -12,6 +12,7 @@
       "package-name": "nak-district-planner-backend",
       "component": "backend",
       "skip-changelog": true,
+      "skip-github-release": true,
       "extra-files": [
         {
           "path": "uv.lock",
@@ -24,7 +25,8 @@
       "release-type": "node",
       "package-name": "nak-district-planner-frontend",
       "component": "frontend",
-      "skip-changelog": true
+      "skip-changelog": true,
+      "skip-github-release": true
     }
   },
   "plugins": [
