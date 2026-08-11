@@ -1,4 +1,4 @@
-## [v0.29.1] - 2026-08-10
+## [v0.29.2] - 2026-08-11
 
 ### Features
 * feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
@@ -25,6 +25,8 @@
 * fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
 
 ### Other Changes
+* refactor(uc-01): extract CalendarIntegrationService and raise CalendarConnectorError (#264) (8166064)
+* chore: release v0.29.1 (63e30eb)
 * docs: mark uc-02 last_sync_error tasks complete (9a8c222)
 * chore: release v0.29.0 (4a450bb)
 * docs: mark verified-complete tasks in planning-slot, uc-01, rbac changes (fbe37c6)
@@ -33,5 +35,3 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 * build(deps): Bump starlette from 1.3.1 to 1.4.1 in /services/backend (#259) (779ce1c)
-* test: Negative-Tests für geschützte Routen (403 bei falscher Rolle) (PR-A) (#251) (d2cdf11)
-* build(deps): Bump mako from 1.3.12 to 1.4.1 in /services/backend (#260) (814322f)
