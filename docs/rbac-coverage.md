@@ -110,7 +110,8 @@ Legende:
    `require_role_in_*()`-Aufrufe ersetzt. Eine CI-Lint-Regel (`scripts/check_rbac_guard_pattern.py`)
    verhindert neue Vorkommen des alten Patterns.
 5. **Globales Rate-Limiting**: Alle Routen außer `/api/health` unterliegen dem globalen
-   `RateLimitMiddleware` (Standard: 100 req/min für authentifizierte, 30 req/min für anonyme Nutzer).
+   `RateLimitMiddleware` (Standard: 200 req/min für anonyme, 400 req/min für authentifizierte Nutzer
+   via `default_limit=200` und `authenticated_multiplier=2.0` in `main.py:131-134`).
 
 ## Siehe auch
 

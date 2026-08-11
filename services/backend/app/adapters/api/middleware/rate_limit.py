@@ -126,9 +126,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Process request
         response = await call_next(request)
 
-        if fail_open_reason is not None:
-            increment_fail_open_counter(fail_open_reason)
-        
         # Add rate limit headers to response
         rate_limit_headers = await self.rate_limiter.get_rate_limit_headers(result)
         for header, value in rate_limit_headers.items():
