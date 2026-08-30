@@ -13,7 +13,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.sync_service import SyncResult, _get_connector, _has_significant_deviation, run_sync
+from app.application.sync_service import (
+    SyncResult,
+    _get_connector,
+    _has_significant_deviation,
+    run_sync,
+)
 from app.domain.models.calendar_integration import (
     CalendarCapability,
     CalendarIntegration,
@@ -216,7 +221,11 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == {"created": 1, "updated": 0, "cancelled": 0, "auto_matched": 0}
+        assert isinstance(result, SyncResult)
+        assert result.created == 1
+        assert result.updated == 0
+        assert result.cancelled == 0
+        assert result.auto_matched == 0
 
         mocks["link_repo"].get_by_external_event.assert_awaited_once_with(
             provider=CalendarType.ICS.value,
@@ -247,7 +256,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == {"created": 0, "updated": 0, "cancelled": 0, "auto_matched": 0}
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0)
         mocks["link_repo"].get_by_external_event.assert_awaited_once()
         mocks["slot_repo"].save.assert_not_called()
         mocks["instance_repo"].save.assert_not_called()
@@ -272,7 +281,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == {"created": 0, "updated": 1, "cancelled": 0, "auto_matched": 0}
+        assert result == SyncResult(created=0, updated=1, cancelled=0, auto_matched=0)
 
         mocks["link_repo"].get_by_external_event.assert_awaited_once_with(
             provider=CalendarType.ICS.value,
@@ -310,7 +319,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == {"created": 0, "updated": 0, "cancelled": 0, "auto_matched": 0}
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0)
         mocks["instance_repo"].save.assert_not_called()
         mocks["link_repo"].save.assert_not_called()
         mocks["slot_repo"].save.assert_not_called()
@@ -331,7 +340,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == {"created": 0, "updated": 0, "cancelled": 1, "auto_matched": 0}
+        assert result == SyncResult(created=0, updated=0, cancelled=1, auto_matched=0)
 
         mocks["link_repo"].get_by_external_event.assert_awaited_once_with(
             provider=CalendarType.ICS.value,
@@ -427,7 +436,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == {"created": 1, "updated": 1, "cancelled": 1, "auto_matched": 0}
+        assert result == SyncResult(created=1, updated=1, cancelled=1, auto_matched=0)
 
     async def test_congregation_id_propagated(self, mocks):
         """New event inherits congregation_id from the integration."""
@@ -476,7 +485,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == {"created": 0, "updated": 0, "cancelled": 0, "auto_matched": 1}
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=1)
 
         # Existing instance is mutated in place, not a new slot/instance created.
         mocks["slot_repo"].save.assert_not_called()
@@ -518,7 +527,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result["auto_matched"] == 1
+        assert result.auto_matched == 1
         assert instance.deviation_flag is True
 
     async def test_auto_match_no_matching_slot_creates_new(self, mocks):
@@ -536,7 +545,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == {"created": 1, "updated": 0, "cancelled": 0, "auto_matched": 0}
+        assert result == SyncResult(created=1, updated=0, cancelled=0, auto_matched=0)
         mocks["slot_repo"].save.assert_awaited_once()
 
 

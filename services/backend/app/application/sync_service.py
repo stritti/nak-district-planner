@@ -53,6 +53,7 @@ class SyncResult:
         cancelled: Number of existing EventInstances cancelled.
         auto_matched: Number of events auto-matched to existing PlanningSlots.
     """
+
     created: int = 0
     updated: int = 0
     cancelled: int = 0
@@ -285,9 +286,9 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
     integration.last_synced_at = datetime.now(UTC)
     await integration_repo.save(integration)
 
-    return {
-        "created": created,
-        "updated": updated,
-        "cancelled": cancelled,
-        "auto_matched": auto_matched,
-    }
+    return SyncResult(
+        created=created,
+        updated=updated,
+        cancelled=cancelled,
+        auto_matched=auto_matched,
+    )

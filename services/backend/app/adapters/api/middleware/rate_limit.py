@@ -10,14 +10,18 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 
-from app.application.rate_limiter import RateLimitConfig, rate_limiter
+from app.application.rate_limiter import (
+    RateLimitConfig,
+    increment_fail_open_counter,
+    rate_limiter,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """FastAPI Middleware for rate limiting.
-    
+
     Registered via ``app.add_middleware()`` — Starlette instantiates it
     as ASGI middleware and calls ``dispatch(request, call_next)`` for
     each request.
@@ -38,7 +42,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         exempt_methods: set[str] | None = None,
     ):
         """Initialize the rate limit middleware.
-        
+
         Args:
             app: FastAPI application instance.
             rate_limiter: Rate limiter instance.
@@ -58,22 +62,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         call_next,
     ) -> Response:
         """Process a request through the middleware.
-        
+
         Args:
             request: Incoming HTTP request.
             call_next: Next middleware or route handler.
-            
+
         Returns:
             HTTP response, potentially with rate limit headers.
         """
         # Skip rate limiting for exempt paths
         if request.url.path in self.exempt_paths:
             return await call_next(request)
-        
+
         # Skip rate limiting for exempt methods
         if request.method in self.exempt_methods:
             return await call_next(request)
-        
+
         # Get identifier (user sub or IP address)
         identifier = self._get_identifier(request)
 
@@ -106,6 +110,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             config=self.config,
             record_fail_open_metric=False,
         )
+        if burst_result.fail_open and not result.fail_open and burst_result.fail_open_reason:
+            increment_fail_open_counter(burst_result.fail_open_reason)
         if not burst_result.allowed:
             logger.warning(
                 f"Burst rate limit exceeded for {identifier} on {request.method} {request.url.path}"
@@ -115,7 +121,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Rate limit exceeded"},
                 headers=await self.rate_limiter.get_rate_limit_headers(burst_result),
             )
-        
+
         # Process request
         response = await call_next(request)
 
@@ -123,7 +129,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         rate_limit_headers = await self.rate_limiter.get_rate_limit_headers(result)
         for header, value in rate_limit_headers.items():
             response.headers[header] = value
-        
+
         return response
 
     def _get_identifier(self, request: Request) -> str:
@@ -134,7 +140,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         not extract the ``sub`` claim from an unverified JWT to avoid
         allowing an unauthenticated client to impersonate a user's rate-
         limit bucket.
-        
+
         Since middleware runs before FastAPI dependencies, user-based
         identifiers are only available for requests that have passed
         through an outer middleware or setup that populates
@@ -163,36 +169,36 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _is_authenticated(self, request: Request) -> bool:
         """Check if request is authenticated.
-        
+
         Args:
             request: HTTP request.
-            
+
         Returns:
             True if user is authenticated.
         """
         if hasattr(request.state, "user") and request.state.user:
             return True
-        
+
         # Check for Bearer token
         auth_header = request.headers.get("authorization", "")
         if auth_header.lower().startswith("bearer "):
             return True
-        
+
         return False
 
     def _get_client_ip(self, request: Request) -> str | None:
         """Extract client IP address from request.
-        
+
         Trust model: behind nginx reverse proxy. The proxy sets
         ``X-Real-IP`` to ``$remote_addr``. If that header is absent,
         takes the last entry from ``X-Forwarded-For`` (the proxy-appended
         value), which is not spoofable by external clients because ``nginx``
         appends ``$remote_addr`` to any incoming header via
         ``$proxy_add_x_forwarded_for``.
-        
+
         Args:
             request: HTTP request.
-            
+
         Returns:
             Client IP address, or None if not available.
         """
@@ -200,16 +206,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         real_ip = request.headers.get("x-real-ip")
         if real_ip:
             return real_ip
-        
+
         # 2. X-Forwarded-For — last entry is the proxy-appended $remote_addr
         forwarded_for = request.headers.get("x-forwarded-for")
         if forwarded_for:
             ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
             if ips:
                 return ips[-1]
-        
+
         # 3. Fall back to direct client address
         if hasattr(request, "client") and request.client:
             return request.client.host
-        
+
         return None
