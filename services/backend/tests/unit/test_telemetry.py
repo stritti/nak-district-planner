@@ -326,3 +326,33 @@ class TestSetupTelemetryEnabled:
             mock_reader_cls.assert_called_once_with(mock_exporter)
             mock_mp.assert_called_once()
             mock_set_meter.assert_called_once_with(mock_meter_provider)
+
+    def test_metrics_provider_configured_when_tracing_already_initialized(self):
+        """A preconfigured tracer must not prevent missing metrics setup."""
+        mock_settings = _make_settings(endpoint="http://collector:4318/")
+        mock_meter_provider = MagicMock()
+
+        with (
+            patch("app.telemetry.settings", mock_settings),
+            patch("app.telemetry.Resource.create"),
+            patch("app.telemetry.trace.get_tracer_provider", return_value=MagicMock()),
+            patch("app.telemetry.metrics.get_meter_provider", return_value=_ProxyMeterProvider()),
+            patch("app.telemetry.TracerProvider") as mock_tp,
+            patch("app.telemetry.trace.set_tracer_provider") as mock_set_tracer,
+            patch("app.telemetry.MeterProvider", return_value=mock_meter_provider) as mock_mp,
+            patch("app.telemetry.metrics.set_meter_provider") as mock_set_meter,
+            patch("app.telemetry.OTLPSpanExporter"),
+            patch("app.telemetry.OTLPMetricExporter"),
+            patch("app.telemetry.BatchSpanProcessor"),
+            patch("app.telemetry.PeriodicExportingMetricReader"),
+            patch("app.telemetry.FastAPIInstrumentor"),
+            patch("app.telemetry.SQLAlchemyInstrumentor"),
+            patch("app.telemetry.HTTPXClientInstrumentor"),
+            patch("app.telemetry.CeleryInstrumentor"),
+        ):
+            setup_telemetry()
+
+            mock_tp.assert_not_called()
+            mock_set_tracer.assert_not_called()
+            mock_mp.assert_called_once()
+            mock_set_meter.assert_called_once_with(mock_meter_provider)

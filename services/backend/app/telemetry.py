@@ -51,27 +51,29 @@ def setup_telemetry(
         logger.debug("OpenTelemetry is disabled (OTEL_ENABLED=false).")
         return
 
-    # Idempotency: skip if a custom TracerProvider is already registered.
-    # This prevents duplicate spans when the function is called more than once
-    # (e.g. hot-reload, multiple imports, or test suites).
-    if not isinstance(trace.get_tracer_provider(), ProxyTracerProvider) or not isinstance(
-        metrics.get_meter_provider(), _ProxyMeterProvider
-    ):
-        logger.debug("OpenTelemetry already initialized; skipping.")
+    # Idempotency: configure tracing and metrics independently.  A deployment
+    # may preconfigure one signal while leaving the other on its proxy/default
+    # provider; the missing signal still needs setup.
+    tracing_initialized = not isinstance(trace.get_tracer_provider(), ProxyTracerProvider)
+    metrics_initialized = not isinstance(metrics.get_meter_provider(), _ProxyMeterProvider)
+    if tracing_initialized and metrics_initialized:
+        logger.debug("OpenTelemetry tracing and metrics already initialized; skipping.")
         return
 
     otel_base_endpoint = settings.otel_endpoint.rstrip("/")
     resource = Resource.create({SERVICE_NAME: settings.otel_service_name})
 
-    exporter = OTLPSpanExporter(endpoint=f"{otel_base_endpoint}/v1/traces")
-    provider = TracerProvider(resource=resource)
-    provider.add_span_processor(BatchSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
+    if not tracing_initialized:
+        exporter = OTLPSpanExporter(endpoint=f"{otel_base_endpoint}/v1/traces")
+        provider = TracerProvider(resource=resource)
+        provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
 
-    metric_exporter = OTLPMetricExporter(endpoint=f"{otel_base_endpoint}/v1/metrics")
-    metric_reader = PeriodicExportingMetricReader(metric_exporter)
-    meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
-    metrics.set_meter_provider(meter_provider)
+    if not metrics_initialized:
+        metric_exporter = OTLPMetricExporter(endpoint=f"{otel_base_endpoint}/v1/metrics")
+        metric_reader = PeriodicExportingMetricReader(metric_exporter)
+        meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+        metrics.set_meter_provider(meter_provider)
 
     if fastapi_app is not None:
         FastAPIInstrumentor.instrument_app(fastapi_app)

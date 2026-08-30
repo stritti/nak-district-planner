@@ -21,7 +21,7 @@ Legende:
 | Router | Endpoint | Methode | Guard | Audit | RL |
 |---|---|---|---|---|---|
 | **auth** | `/api/v1/auth/oidc/discovery` | GET | 🔓 Public | – | RL |
-| | `/api/v1/auth/oidc/token` | POST | 🔓 Public | – | RL |
+| | `/api/v1/auth/oidc/token` | POST | 🔓 Public | AUDIT | RL |
 | | `/api/v1/auth/me` | GET | 🔐 Auth | – | RL |
 | | `/api/v1/auth/access` | GET | 🔐 Auth + Membership-Check | – | RL |
 | **calendar_integrations** | `/api/v1/calendar-integrations` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | RL |
@@ -39,7 +39,6 @@ Legende:
 | | | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
 | | `/{district_id}/groups/{group_id}` | PATCH | R(DISTRICT_ADMIN) | AUDIT | RL |
 | | | DELETE | R(DISTRICT_ADMIN) | AUDIT | RL |
-| | `/{id}/events` | GET | R(VIEWER) | – | RL |
 | | `/{id}/matrix` | GET | R(VIEWER) | – | RL |
 | | `/{id}/matrix/generate-drafts` | POST | R(PLANNER) | AUDIT | RL |
 | | `/{id}/leaders` | GET | R(VIEWER) | – | RL |
@@ -56,7 +55,7 @@ Legende:
 | | `/{id}/generate-planning-series` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
 | | `/{district_id}/feiertage/states` | GET | 🔐 Auth | – | RL |
 | | `/{district_id}/feiertage` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
-| **events_compat** | `/api/v1/events` | GET | R(VIEWER) | – | RL |
+| **events_compat** | `/api/v1/events?district_id=...` | GET | R(VIEWER) | – | RL |
 | | `/api/v1/events/{event_id}` | PATCH | R(PLANNER) | AUDIT | RL |
 | | `/api/v1/events/bulk-approval-status` | POST | R(PLANNER) | AUDIT | RL |
 | **export** | `/api/v1/export-tokens` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
@@ -83,7 +82,7 @@ Legende:
 | | `/generate-all-slots` | POST | SUPERADMIN | AUDIT | RL |
 | **registrations** | `/api/v1/public/districts` | GET | 🔓 Public | – | RL |
 | | `/api/v1/public/districts/{district_id}/congregations` | GET | 🔓 Public | – | RL |
-| | `/api/v1/districts/{district_id}/registrations` | POST | 🔓 Public | – | RL |
+| | `/api/v1/districts/{district_id}/registrations` | POST | 🔓 Public | AUDIT | RL |
 | | | GET | R(DISTRICT_ADMIN) | – | RL |
 | | `/{registration_id}/approve` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
 | | `/{registration_id}/reject` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |

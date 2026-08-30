@@ -419,9 +419,11 @@ Fällen gar nicht. Nutzer erhielten kein konsistentes Feedback nach Aktionen.
 
 **Lösung:** `ToastContainer.vue` + `useToast()`-Composable + Pinia-Store existieren und sind in
 allen kritischen Views verdrahtet. Erfolgs-/Fehler-Toasts erscheinen bei Leader speichern, Sync
-starten, Registrierung entscheiden, Export-Token erstellen. `ConfirmDialog.vue` ist bei allen
-destruktiven Aktionen eingebunden (Integration löschen, Event stornieren, Registrierung ablehnen,
-Token widerrufen). Vitest + Playwright-Tests decken die Bestätigungsflüsse ab.
+starten, Registrierung entscheiden, Export-Token erstellen. `ConfirmDialog.vue` ist bereits in
+einzelnen destruktiven Aktionen eingebunden (z.B. Integration löschen, Registrierung ablehnen,
+Token widerrufen), aber die Bestätigung für „Event stornieren“ bleibt noch offen. Die
+Vitest-/Playwright-Abdeckung ist nur teilweise vollständig; nicht alle Confirmation-Flows sind
+durchgehend E2E abgesichert.
 
 **Aufwand:** Mittel. **Priorität:** 🔴 Hoch (inzwischen erledigt).
 
@@ -484,7 +486,7 @@ nicht offensichtlich. Insbesondere auf Touch-Geräten.
 
 ### 5.5 🟠 Keine Bestätigungsdialoge für destruktive Aktionen
 
-**Status:** ✅ UMGESETZT — siehe PR [#210](https://github.com/stritti/nak-district-planner/pull/210)
+**Status:** 🟡 TEILWEISE UMGESETZT — siehe PR [#210](https://github.com/stritti/nak-district-planner/pull/210)
 
 **Problem (historisch):** Aktionen wie „Integration löschen", „Registrierung ablehnen" oder
 „Event stornieren" wurden ohne Rückfrage ausgeführt.
@@ -492,13 +494,15 @@ nicht offensichtlich. Insbesondere auf Touch-Geräten.
 **Lösung:** `ConfirmDialog.vue` ist eingebunden bei:
 - Kalender-Integration löschen
 - Registrierung ablehnen
-- Event stornieren
 - Export-Token widerrufen
+
+Die Bestätigung für „Event stornieren“ ist weiterhin offen und muss separat nachgezogen werden.
+Die vorhandenen Playwright-Tests decken die Confirmation-Flows nicht vollständig ab.
 
 Die Komponente unterstützt Warnung (rot) bei unumkehrbaren Aktionen sowie
 „Bestätigen" / „Abbrechen"-Buttons inkl. loading-Prop.
 
-**Aufwand:** Gering. **Priorität:** 🟠 Mittel (inzwischen erledigt).
+**Aufwand:** Gering. **Priorität:** 🟠 Mittel (teilweise erledigt).
 
 ---
 
