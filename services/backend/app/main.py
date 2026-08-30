@@ -37,7 +37,7 @@ from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
-from app.application.rate_limiter import RateLimitConfig, increment_fail_open_counter, rate_limiter
+from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
 
@@ -105,7 +105,6 @@ async def lifespan(app: FastAPI):
             "Rate limiter could not connect to Redis — requests will not be rate limited "
             "until Redis becomes available"
         )
-        increment_fail_open_counter("startup_connect")
 
     yield
 
