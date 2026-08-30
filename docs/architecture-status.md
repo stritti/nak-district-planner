@@ -1,6 +1,7 @@
 # Architekturstatus (Ist vs. Ziel)
 
-> **Letztes Update:** Juli 2026 — aktualisiert basierend auf `docs/code-review-2026-07.md`
+> **Letztes Update:** Juli 2026 — aktualisiert basierend auf der aktuellen Architektur- und
+> Verbesserungsdokumentation
 
 Diese Seite zeigt den aktuellen Stand gegenueber der Zielarchitektur aus OpenSpec.
 
@@ -58,5 +59,4 @@ Legende: ✅ umgesetzt · 🟡 teilweise · ❌ offen
 - Zielbild: `openspec/architecture/overview.md`
 - Umsetzungsreihenfolge: `openspec/architecture/implementation-roadmap.md`
 - Detailanalyse: `docs/improvement-proposals.md`
-- Code-Review (Juli 2026): `docs/code-review-2026-07.md`
-- Aktionsplan: `docs/code-review-2026-07-action-plan.md`
+- RBAC-Coverage: `docs/rbac-coverage.md`

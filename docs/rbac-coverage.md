@@ -1,6 +1,6 @@
 # RBAC-Coverage: Router × Endpoint × Erforderliche Rolle
 
-> **Stand:** Juli 2026 — basierend auf statischer Analyse (`docs/code-review-2026-07.md` Finding M-4)
+> **Stand:** Juli 2026 — basierend auf statischer Analyse der Router- und RBAC-Guard-Patterns
 > und dem abgeschlossenen DRY-Refactor (PR-4).
 > **Sinn:** Verhindert erneutes manuelles Nachzählen bei künftigen Reviews.
 
@@ -115,6 +115,6 @@ Legende:
 ## Siehe auch
 
 - `docs/roles.md` — Rollenmodell und Berechtigungsmatrix
-- `docs/code-review-2026-07.md` — Code-Review mit detaillierten Findings
-- `docs/code-review-2026-07-action-plan.md` — Aktionsplan mit Status
+- `docs/architecture-status.md` — aktueller Architekturstatus
+- `docs/improvement-proposals.md` — dokumentierte Verbesserungs- und Restarbeiten
 - `services/backend/scripts/check_rbac_guard_pattern.py` — CI-Lint-Regel für RBAC-Guard-Pattern
