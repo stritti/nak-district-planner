@@ -29,7 +29,7 @@ Legende:
 | | `/{integration_id}` | PATCH | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | RL |
 | | | DELETE | R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | AUDIT | RL |
 | | `/{integration_id}/sync` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
-| **districts** | `/api/v1/districts` | GET | R(VIEWER) | – | RL |
+| **districts** | `/api/v1/districts` | GET | 🔐 Auth + sichtbare Bezirke gefiltert | – | RL |
 | | | POST | SUPERADMIN | AUDIT | RL |
 | | `/{district_id}` | PATCH | R(DISTRICT_ADMIN) | AUDIT | RL |
 | | `/{district_id}/congregations` | GET | R(VIEWER) | – | RL |
@@ -48,10 +48,6 @@ Legende:
 | | `/{id}/leaders/link-self` | GET | R(VIEWER) | – | RL |
 | | | POST | R(VIEWER) | AUDIT | RL |
 | | | DELETE | R(VIEWER) | AUDIT | RL |
-| | `/{id}/planning-series` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
-| | | GET | R(VIEWER) | – | RL |
-| | | PATCH | R(DISTRICT_ADMIN) | AUDIT | RL |
-| | | DELETE | R(DISTRICT_ADMIN) | AUDIT | RL |
 | | `/{id}/generate-planning-series` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
 | | `/{district_id}/feiertage/states` | GET | 🔐 Auth | – | RL |
 | | `/{district_id}/feiertage` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
