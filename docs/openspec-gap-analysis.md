@@ -1,8 +1,14 @@
 # OpenSpec Gap Analysis - NAK District Planner
 
 > **Generated:** 2026-06-19  
-> **Status:** Draft Analysis  
-> **Scope:** All active OpenSpec changes vs. current implementation
+> **Status:** ⚠️ HISTORISCH — Siehe `docs/architecture-status.md` und
+> `docs/improvement-proposals.md` für den aktuellen Architekturstand
+> **Scope:** All active OpenSpec changes vs. current implementation  
+>
+> **Hinweis:** Dieses Dokument ist in wesentlichen Punkten veraltet. Aussagen zu "0 RBAC-Checks in
+> auth.py/system.py", "kein Rate-Limiting", "kein Audit-Logging" und "kein Toast-System"
+> sind überholt — diese Komponenten existieren inzwischen. Für den aktuellen Stand siehe
+> `docs/architecture-status.md`, `docs/improvement-proposals.md` und `docs/rbac-coverage.md`.
 
 ---
 

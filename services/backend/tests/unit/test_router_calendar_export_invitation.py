@@ -25,6 +25,7 @@ from app.adapters.api.schemas.invitation import (
     InvitationTargetCreate,
     OverwriteDecisionRequest,
 )
+from app.application.sync_service import SyncResult as SyncServiceResult
 from app.domain.models.calendar_integration import (
     CalendarCapability,
     CalendarIntegration,
@@ -112,7 +113,13 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
         ) as repo_cls,
         patch(
             "app.adapters.api.routers.calendar_integrations.run_sync",
-            new=AsyncMock(return_value={"created": 1, "updated": 2, "cancelled": 3}),
+            new=AsyncMock(
+                return_value=SyncServiceResult(
+                    created=1,
+                    updated=2,
+                    cancelled=3,
+                )
+            ),
         ),
     ):
         repo = AsyncMock()

@@ -19,6 +19,24 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+from opentelemetry.metrics import get_meter
+
+_meter = get_meter(__name__)
+_rate_limiter_fail_open_counter = _meter.create_counter(
+    "rate_limiter.fail_open",
+    description="Counts requests where rate limiter failed open (Redis unavailable or error)",
+    unit="1",
+)
+
+
+def increment_fail_open_counter(reason: str) -> None:
+    """Increment the rate limiter fail-open counter.
+
+    Args:
+        reason: Short description of the fail-open cause (e.g. startup_connect, RedisError).
+    """
+    _rate_limiter_fail_open_counter.add(1, {"reason": reason})
+
 
 @dataclass
 class RateLimitConfig:
@@ -52,6 +70,8 @@ class RateLimitResult:
     limit: int
     reset_in: timedelta
     retry_after: int | None = None
+    fail_open: bool = False
+    fail_open_reason: str | None = None
 
 
 class RateLimiter:
@@ -131,6 +151,7 @@ class RateLimiter:
         endpoint: str,
         is_authenticated: bool = False,
         config: RateLimitConfig | None = None,
+        record_fail_open_metric: bool = True,
     ) -> RateLimitResult:
         """Check if a request should be rate limited.
         
@@ -139,6 +160,7 @@ class RateLimiter:
             endpoint: API endpoint path.
             is_authenticated: Whether the user is authenticated.
             config: Optional override config. If None, uses self.config.
+            record_fail_open_metric: Whether to increment the fail-open metric in this call.
             
         Returns:
             RateLimitResult with allowed status and rate limit information.
@@ -207,12 +229,17 @@ class RateLimiter:
             
         except Exception as e:
             logger.error(f"Rate limit check failed: {e}")
+            fail_open_reason = type(e).__name__
+            if record_fail_open_metric:
+                increment_fail_open_counter(fail_open_reason)
             # Fail open - allow request if rate limiting fails
             return RateLimitResult(
                 allowed=True,
                 remaining=limit,
                 limit=limit,
                 reset_in=timedelta(seconds=window),
+                fail_open=True,
+                fail_open_reason=fail_open_reason,
             )
 
     async def check_burst_limit(
@@ -220,6 +247,7 @@ class RateLimiter:
         identifier: str,
         endpoint: str,
         config: RateLimitConfig | None = None,
+        record_fail_open_metric: bool = True,
     ) -> RateLimitResult:
         """Check burst rate limit (short-window spike protection).
         
@@ -230,6 +258,7 @@ class RateLimiter:
             identifier: User identifier or IP address.
             endpoint: API endpoint path.
             config: Optional override config. Falls back to self.config.
+            record_fail_open_metric: Whether to increment the fail-open metric in this call.
             
         Returns:
             RateLimitResult for burst limit check.
@@ -245,6 +274,7 @@ class RateLimiter:
                 default_window_seconds=cfg.burst_window_seconds,
                 authenticated_multiplier=1.0,
             ),
+            record_fail_open_metric=record_fail_open_metric,
         )
 
     def _get_endpoint_config(

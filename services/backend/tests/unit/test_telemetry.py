@@ -7,6 +7,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+from opentelemetry.metrics._internal import _ProxyMeterProvider
+from opentelemetry.trace import ProxyTracerProvider
+
 from app.telemetry import setup_telemetry
 
 # ---------------------------------------------------------------------------
@@ -21,6 +25,13 @@ def _make_settings(*, otel_enabled: bool = True, endpoint: str = "http://otel:43
     s.otel_service_name = "test-service"
     s.otel_endpoint = endpoint
     return s
+
+
+@pytest.fixture(autouse=True)
+def _mock_set_meter_provider():
+    """Prevent telemetry tests from mutating the global meter provider."""
+    with patch("app.telemetry.metrics.set_meter_provider") as mock_set_meter:
+        yield mock_set_meter
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +283,7 @@ class TestSetupTelemetryEnabled:
         with (
             patch("app.telemetry.settings", mock_settings),
             patch("app.telemetry.trace.get_tracer_provider", return_value=MagicMock()),
+            patch("app.telemetry.metrics.get_meter_provider", return_value=MagicMock()),
             patch("app.telemetry.TracerProvider") as mock_tp,
             patch("app.telemetry.trace.set_tracer_provider"),
             patch("app.telemetry.OTLPSpanExporter"),
@@ -284,3 +296,63 @@ class TestSetupTelemetryEnabled:
             setup_telemetry()
 
             mock_tp.assert_not_called()
+
+    def test_metrics_provider_configured_when_enabled(self):
+        """Telemetry should register a MeterProvider with OTLP metric export."""
+        mock_settings = _make_settings(endpoint="http://collector:4318/")
+        mock_meter_provider = MagicMock()
+        mock_exporter = MagicMock()
+
+        with (
+            patch("app.telemetry.settings", mock_settings),
+            patch("app.telemetry.Resource.create"),
+            patch("app.telemetry.trace.get_tracer_provider", return_value=ProxyTracerProvider()),
+            patch("app.telemetry.metrics.get_meter_provider", return_value=_ProxyMeterProvider()),
+            patch("app.telemetry.TracerProvider"),
+            patch("app.telemetry.MeterProvider", return_value=mock_meter_provider) as mock_mp,
+            patch("app.telemetry.metrics.set_meter_provider") as mock_set_meter,
+            patch("app.telemetry.OTLPSpanExporter"),
+            patch("app.telemetry.OTLPMetricExporter", return_value=mock_exporter) as mock_exp,
+            patch("app.telemetry.BatchSpanProcessor"),
+            patch("app.telemetry.PeriodicExportingMetricReader") as mock_reader_cls,
+            patch("app.telemetry.FastAPIInstrumentor"),
+            patch("app.telemetry.SQLAlchemyInstrumentor"),
+            patch("app.telemetry.HTTPXClientInstrumentor"),
+            patch("app.telemetry.CeleryInstrumentor"),
+        ):
+            setup_telemetry()
+
+            mock_exp.assert_called_once_with(endpoint="http://collector:4318/v1/metrics")
+            mock_reader_cls.assert_called_once_with(mock_exporter)
+            mock_mp.assert_called_once()
+            mock_set_meter.assert_called_once_with(mock_meter_provider)
+
+    def test_metrics_provider_configured_when_tracing_already_initialized(self):
+        """A preconfigured tracer must not prevent missing metrics setup."""
+        mock_settings = _make_settings(endpoint="http://collector:4318/")
+        mock_meter_provider = MagicMock()
+
+        with (
+            patch("app.telemetry.settings", mock_settings),
+            patch("app.telemetry.Resource.create"),
+            patch("app.telemetry.trace.get_tracer_provider", return_value=MagicMock()),
+            patch("app.telemetry.metrics.get_meter_provider", return_value=_ProxyMeterProvider()),
+            patch("app.telemetry.TracerProvider") as mock_tp,
+            patch("app.telemetry.trace.set_tracer_provider") as mock_set_tracer,
+            patch("app.telemetry.MeterProvider", return_value=mock_meter_provider) as mock_mp,
+            patch("app.telemetry.metrics.set_meter_provider") as mock_set_meter,
+            patch("app.telemetry.OTLPSpanExporter"),
+            patch("app.telemetry.OTLPMetricExporter"),
+            patch("app.telemetry.BatchSpanProcessor"),
+            patch("app.telemetry.PeriodicExportingMetricReader"),
+            patch("app.telemetry.FastAPIInstrumentor"),
+            patch("app.telemetry.SQLAlchemyInstrumentor"),
+            patch("app.telemetry.HTTPXClientInstrumentor"),
+            patch("app.telemetry.CeleryInstrumentor"),
+        ):
+            setup_telemetry()
+
+            mock_tp.assert_not_called()
+            mock_set_tracer.assert_not_called()
+            mock_mp.assert_called_once()
+            mock_set_meter.assert_called_once_with(mock_meter_provider)

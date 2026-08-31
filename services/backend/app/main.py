@@ -201,13 +201,14 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
 async def health() -> dict:
     """Health check endpoint.
 
-    Returns basic health status including optional database connectivity.
-    The endpoint always returns ``status: ok`` as long as the app responds,
-    making it safe for Docker Compose healthchecks.
+    Returns basic health status including database and Redis connectivity.
+    Returns HTTP 503 with ``status: degraded`` when a dependency check fails
+    so Docker Compose can detect degraded service health.
     """
     result: dict = {"status": "ok", "version": settings.app_version}
+    degraded = False
 
-    # Check database connectivity (informational — does not affect health status)
+    # Check database connectivity (degraded when unavailable)
     try:
         from sqlalchemy import text as sa_text
 
@@ -216,6 +217,25 @@ async def health() -> dict:
         result["database"] = "ok"
     except Exception:
         result["database"] = "unavailable"
+        degraded = True
+
+    # Check Redis connectivity (degraded when unavailable)
+    try:
+        from app.application.rate_limiter import rate_limiter
+
+        if rate_limiter._redis is not None:
+            await rate_limiter._redis.ping()
+            result["redis"] = "ok"
+        else:
+            result["redis"] = "disconnected"
+            degraded = True
+    except Exception:
+        result["redis"] = "unavailable"
+        degraded = True
+
+    if degraded:
+        result["status"] = "degraded"
+        return JSONResponse(status_code=503, content=result)
 
     return result
 
