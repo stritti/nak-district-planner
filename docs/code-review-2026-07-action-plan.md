@@ -40,12 +40,15 @@
 
 ---
 
-### PR-3: Test-Coverage-Verifikation Auth/RBAC/Sync → ✅ Erledigt
+### PR-3: Test-Coverage-Verifikation Auth/RBAC/Sync → 🟡 Teilweise erledigt
 > Findings: **B-4** · PR: [#212](https://github.com/stritti/nak-district-planner/pull/212)
 
 - [x] Coverage-Report real ausgeführt: `app/adapters/auth/` — OIDC 92%, Claims-Validation 96%, JWT-Claims 89%
 - [x] Testfälle für Rollen-Hierarchie × Scope-Type-Kombinationen ergänzt
 - [x] Ergebnis in PR-Beschreibung dokumentiert
+
+Hinweis: JWT-Claims liegt mit **89%** unter der Zielmarke von 90%. Das gilt nur als Teil-Erledigung;
+für einen vollständigen Abschluss braucht es entweder Nachbesserung oder eine explizit akzeptierte Ausnahme.
 
 **Commit:** `11aba8c` · **Merge:** PR [#212](https://github.com/stritti/nak-district-planner/pull/212) · **Owner:** @fixer
 
@@ -70,13 +73,12 @@
 
 ## ✅ Weitere Erledigte PRs
 
-### PR-5: Rate-Limiter-Fail-Open sichtbar machen (Observability) → ✅ Erledigt
+### PR-5: Rate-Limiter-Fail-Open sichtbar machen (Observability) → 🟡 Folge-PR / offen in diesem Branch
 > Findings: **B-5** · PR: [#234](https://github.com/stritti/nak-district-planner/pull/234)
 
-- [x] Metrik/Zähler "rate_limiter.fail_open" über OpenTelemetry-Counter in `rate_limiter.py` ausgeleitet
+- [ ] Metrik/Zähler "rate_limiter.fail_open" in diesem Branch vorhanden prüfen; falls nur in #234, als Folge-PR belassen
 - [ ] Alert-Schwelle/Dashboard-Hinweis dokumentieren (Ops-Runbook, `docs/production-runbook.md`)
-- [x] Bestehende `logger.warning(...)`-Stelle in `main.py:97-107` um `increment_fail_open_counter()` ergänzt
-- [x] Zusätzlich in `check_rate_limit()`-Exception-Pfad integriert
+- [ ] Umsetzung nur als Verweis auf PR #234 markieren, falls die Änderungen nicht in diesem Tree liegen
 
 **Aufwand:** Gering · **Owner-Typ:** @fixer
 
@@ -95,24 +97,23 @@
 
 ---
 
-### PR-7: Pre-Go-Live-Verifikation (Audit-Log & Health-Check) → ✅ Erledigt
+### PR-7: Pre-Go-Live-Verifikation (Audit-Log & Health-Check) → 🟡 Folge-PR / offen in diesem Branch
 > Findings: **M-1**, **M-6** · PR: [#234](https://github.com/stritti/nak-district-planner/pull/234)
 
-- [x] Health-Check um Redis-Connectivity-Prüfung ergänzt
-- [x] Docker-Compose-Healthcheck auf `/api/health` referenziert
-- [x] Audit-Logging verifiziert: Middleware + Queue-Writer aktiv (kein Code-Change nötig)
+- [ ] Health-Check um Redis-Connectivity-Prüfung nur dann als erledigt markieren, wenn im Branch sichtbar; sonst Folge-PR #234
+- [ ] Docker-Compose-Healthcheck auf `/api/health` referenzieren nur bei vorhandenem Branch-Stand
+- [ ] Audit-Logging verifiziert: nur als geprüft markieren, nicht als Branch-Änderung behaupten, wenn kein Code-Change hier liegt
 
 **Aufwand:** Gering · **Owner-Typ:** @fixer
 
 ---
 
-### PR-8: Sync-Service Aufräumen → ✅ Erledigt
+### PR-8: Sync-Service Aufräumen → 🟡 Folge-PR / offen in diesem Branch
 > Findings: **M-2**, **M-3** · PR: [#234](https://github.com/stritti/nak-district-planner/pull/234)
 
-- [x] `_get_connector()` von if/elif-Kette auf `_CONNECTOR_MAP`-Dict umgestellt
-- [x] `dict[str, int]`-Rückgaben durch typisiertes `SyncResult`-Dataclass ersetzt
-- [x] Aufrufer (`tasks.py`) auf neue Signatur angepasst
-- [x] Tests aktualisiert (19/19 passed)
+- [ ] `_get_connector()` nur dann als umgestellt markieren, wenn die Map-Variante in diesem Tree liegt; sonst als Folge-PR #234 führen
+- [ ] `SyncResult` nur dann als erledigt markieren, wenn im Branch vorhanden
+- [ ] Aufrufer (`tasks.py`) / Tests nur dann als angepasst markieren, wenn Teil dieses Trees
 
 **Aufwand:** Gering–Mittel · **Owner-Typ:** @fixer
 
@@ -220,16 +221,16 @@
 ## Übersicht
 
 | PR | Titel | Priorität | Status | Aufwand | Findings |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | PR-1 | RBAC-Lücke `leaders.link-self` fixen | 🔴 Sofort | ✅ Erledigt (#209) | Gering | B-1 |
 | PR-2 | Toast & ConfirmDialog verdrahten | 🔴 Sofort | ✅ Erledigt (#210) | Mittel | F-1 |
-| PR-3 | Coverage-Verifikation Auth/RBAC/Sync | 🟠 Hoch | ✅ Erledigt (#212) | Gering–Mittel | B-4 |
+| PR-3 | Coverage-Verifikation Auth/RBAC/Sync | 🟠 Hoch | 🟡 Teilweise | Gering–Mittel | B-4 |
 | PR-4 | RBAC-Guard-Konsolidierung (DRY) | 🟠 Hoch | ✅ Erledigt | Mittel | B-2 |
-| PR-5 | Rate-Limiter-Observability | 🟠 Hoch | ✅ Erledigt (#234) | Gering | B-5 |
+| PR-5 | Rate-Limiter-Observability | 🟠 Hoch | 🟡 Offen/Folge-PR (#234) | Gering | B-5 |
 | — | Entscheidung ExternalEventCandidate/SyncState | 🟠 Hoch | ❌ Offen | – | B-3 |
 | PR-6 | Doku-Aktualisierung | 🟡 Mittel | ✅ Erledigt (#234) | Gering | M-4, M-5 |
-| PR-7 | Pre-Go-Live-Verifikation | 🟡 Mittel | ✅ Erledigt (#234) | Gering | M-1, M-6 |
-| PR-8 | Sync-Service Aufräumen | 🟡 Mittel | ✅ Erledigt (#234) | Gering–Mittel | M-2, M-3 |
+| PR-7 | Pre-Go-Live-Verifikation | 🟡 Mittel | 🟡 Offen/Folge-PR (#234) | Gering | M-1, M-6 |
+| PR-8 | Sync-Service Aufräumen | 🟡 Mittel | 🟡 Offen/Folge-PR (#234) | Gering–Mittel | M-2, M-3 |
 | PR-9 | Frontend View-Aufteilung (5 Teil-PRs) | 🟢 Niedrig | ❌ Offen | Hoch | F-2 |
 | PR-10 | Kleinere Clean-Code-Nacharbeiten | 🟢 Niedrig | ✅ Erledigt (#234) | Gering | L-1, L-3 |
 | PR-11 | Verschlüsselung als TypeDecorator (optional) | 🟢 Niedrig | ❌ Offen | Mittel | L-2 |

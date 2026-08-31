@@ -17,8 +17,9 @@ Viele dort als "fehlend" markierte Punkte sind inzwischen umgesetzt; einige sind
 
 ## 1. Executive Summary
 
-**Einschätzung: Das System ist NICHT produktionsreif, ohne vorher 2 harte Blocker zu schließen.**
-Beide Blocker sind mit geringem bis mittlerem Aufwand behebbar (geschätzt 1–3 Personentage zusammen).
+**Einschätzung: Das System ist nicht produktionsreif, solange die verbleibenden kritischen Punkte offen sind.**
+Ein Teil der UX-Schutzmechanismen ist bereits vorhanden; offen bleiben vor allem die konsistente Verdrahtung,
+die Wiederverwendung des ConfirmDialogs und einzelne noch ungeschützte destruktive Flows.
 Alle übrigen Findings sind entweder bekannte, akzeptable MVP-Einschränkungen oder mittel-/langfristige
 Qualitätsverbesserungen, die den Go-Live nicht verzögern müssen.
 
@@ -32,9 +33,10 @@ Qualitätsverbesserungen, die den Go-Live nicht verzögern müssen.
 **Die 2 Blocker:**
 1. Autorisierungslücke bei `leaders.link-self` — jeder authentifizierte Nutzer kann sich beliebigem
    Amtsträger-Datensatz in beliebigem Bezirk zuordnen (Finding B-1).
-2. Gebautes, aber nicht verdrahtetes UX-Sicherheitsnetz (Toast-Feedback + Bestätigungsdialoge) —
-   destruktive Aktionen (Integration löschen, Registrierung ablehnen, Event stornieren) laufen ohne
-   Rückfrage und ohne Fehler-Feedback (Finding F-1).
+2. UX-Sicherheitsnetz mit Lücken (Toast-Feedback + ConfirmDialog-Reuse) — KalenderIntegrationsView,
+   ExportTokensView und LeadersAdminView haben bereits einzelne Bestätigungen; offen bleiben vor allem
+   die konsistente Toast-Rückmeldung, die Wiederverwendung von ConfirmDialog sowie weitere noch nicht
+   abgesicherte destruktive Flows wie Event-Stornierung (Finding F-1).
 
 **Positiv hervorzuheben (bereits solide):**
 - Hexagonale Architektur eingehalten — `domain/` ist tatsächlich frei von FastAPI-/SQLAlchemy-Importen (verifiziert).
@@ -73,28 +75,27 @@ Qualitätsverbesserungen, die den Go-Live nicht verzögern müssen.
   (`test_router_leaders_events_assignments.py`).
 - **Aufwand:** Gering (< 1 Tag inkl. Test).
 
-### F-1 · Toast-Feedback & Bestätigungsdialoge sind gebaut, aber nicht verdrahtet
+### F-1 · Toast-Feedback & Bestätigungsdialoge: teils vorhanden, teils noch zu vereinheitlichen
 
 - **Kategorie:** UX / Data-Safety
 - **Dateien:** `services/frontend/src/stores/toast.ts`, `src/components/ToastContainer.vue`,
   `src/components/ConfirmDialog.vue`
 - **Befund:** Beide Komponenten existieren (im Gegensatz zur veralteten Behauptung in
-  `improvement-proposals.md`, dort seien sie "fehlend"), werden aber **nirgends im Frontend
-  tatsächlich verwendet**:
+  `improvement-proposals.md`, dort seien sie "fehlend"). In den Views gibt es bereits erste
+  Bestätigungsflüsse, aber sie sind nicht konsistent vereinheitlicht:
   - `grep -rl "useToast\|toastStore" src/` findet nur die Store-/Container-Datei selbst — **keine**
     View oder kein Store ruft den Toast beim Erfolg/Fehler eines API-Calls auf (16 View-/Store-Dateien
     mit API-Aufrufen, 0 Toast-Aufrufe).
-  - `grep -rl "ConfirmDialog" src/` liefert **0 Treffer außerhalb der Komponente selbst** —
-    `ConfirmDialog.vue` wird in keiner View importiert/genutzt.
-  - Praktische Folge: destruktive Aktionen (Kalender-Integration löschen, Registrierung ablehnen,
-    Event stornieren, Export-Token widerrufen) laufen weiterhin **ohne Rückfrage** und ohne
-    konsistentes Erfolgs-/Fehler-Feedback — genau das Risiko, das die alte Analyse schon beschrieb,
-    nur dass jetzt totes Code-Gerüst existiert, das den Eindruck erweckt, das Problem sei gelöst.
+  - `ConfirmDialog.vue` wird noch nicht einheitlich als gemeinsames Muster verwendet; einzelne
+    Bestätigungen existieren bereits, aber der Reuse ist nicht überall konsistent.
+  - Praktische Folge: noch nicht abgesicherte destruktive Aktionen (insb. Event-Stornierung) sowie
+    fehlende konsistente Erfolgs-/Fehler-Rückmeldungen bleiben ein reales Risiko.
 - **Auswirkung:** Reales Risiko versehentlicher Datenverluste (z.B. Integration löschen ohne
   Rückfrage) kurz nach Go-Live — Support-/Vertrauensrisiko für eine Kirchenorganisation mit
   ehrenamtlichen Admin-Nutzern.
-- **Empfehlung:** `ConfirmDialog.vue` an die destruktiven Aktionen in `CalendarIntegrationsView.vue`,
-  `RegistrationView`/Registrierungs-Ablehnung, `ExportTokensView.vue`, Event-Stornierung koppeln.
+- **Empfehlung:** `ConfirmDialog.vue` als gemeinsames Muster für verbleibende destruktive Aktionen
+  (insb. Event-Stornierung; vorhandene Bestätigungen in `CalendarIntegrationsView.vue`,
+  `ExportTokensView.vue`, `LeadersAdminView.vue` nur vereinheitlichen) konsequent wiederverwenden.
   `useToast()`/Store in den zentralen API-Client (`src/api/client.ts`) oder zumindest in alle
   `catch`-Blöcke der Stores einhängen, damit Fehler nicht mehr stumm bleiben.
 - **Aufwand:** Mittel (1–2 Tage für konsequente Verdrahtung an allen destruktiven Stellen).
@@ -108,10 +109,11 @@ Qualitätsverbesserungen, die den Go-Live nicht verzögern müssen.
 - **Kategorie:** Clean Code (Wartbarkeit)
 - **Dateien:** `app/adapters/api/routers/*.py` (überwiegend `districts.py`, `events_compat.py`,
   `service_assignments.py`, `planning_series.py`)
-- **Befund:** `permissions.py` bietet bereits `require_role_in_district()` /
-  `require_role_in_congregation()`, die die 403-Konvertierung kapseln (siehe Clean-Code-Skill). Trotz
-  des Commits "Clean Code: Refactoring und DRY-Verbesserungen (#206)" nutzen nur **4 Dateien** diese
-  Helfer, während **48 Stellen** weiterhin das manuelle
+- **Befund:** `permissions.py` bietet bereits `require_role_in_district()`. Für die Gemeinde-Ebene
+  ist `require_role_in_congregation()` in dieser Tree-Variante noch nicht durchgängig als Helfer
+  verfügbar; dort müssen manuelle Fälle bis zur Einführung des Helfers oder bis zur Vereinheitlichung
+  beibehalten werden. Trotz des Commits "Clean Code: Refactoring und DRY-Verbesserungen (#206)"
+  nutzen nur **4 Dateien** die vorhandenen Helfer, während **48 Stellen** weiterhin das manuelle
   `try: assert_has_role_in_district(...); except PermissionError as e: raise HTTPException(403, ...)`
   -Pattern enthalten. Der Refactor wurde offenbar begonnen, aber nicht flächendeckend abgeschlossen.
 - **Auswirkung:** Kein akuter Bug, aber hohes Risiko für zukünftige Inkonsistenzen (z.B. vergessene
@@ -120,13 +122,14 @@ Qualitätsverbesserungen, die den Go-Live nicht verzögern müssen.
   Lint-Check/AST-Grep-Regel als CI-Gate ergänzen, der neue `except PermissionError`-Vorkommen verhindert.
 - **Aufwand:** Mittel (mechanisch, gut parallelisierbar durch mehrere `@fixer`-Läufe pro Router-Gruppe).
 
-### B-3 · `ExternalEventCandidate` / `SyncState` weiterhin nicht implementiert
+### B-3 · `SyncState` vorhanden, `ExternalEventCandidate` weiterhin nicht implementiert
 
 - **Kategorie:** Use-Case-Lücke (UC-02)
-- **Befund:** Verifiziert — es existiert kein `external_event_candidate.py` und keine `SyncState`-Klasse
-  im gesamten Backend. `ExternalEventLink` hingegen **existiert bereits** (Domain-Modell, ORM-Modell,
-  Repository) — das ist neu gegenüber der alten Gap-Analyse. Neue extern importierte Events werden
-  weiterhin direkt übernommen (`Event`/`PlanningSlot`, `source=EXTERNAL`), ohne manuellen Review-Schritt.
+- **Befund:** Verifiziert — `SyncState` existiert bereits. `ExternalEventCandidate` bzw.
+  `external_event_candidate.py` fehlt weiterhin im Backend. `ExternalEventLink` hingegen **existiert
+  bereits** (Domain-Modell, ORM-Modell, Repository) — das ist neu gegenüber der alten Gap-Analyse.
+  Neue extern importierte Events werden weiterhin direkt übernommen (`Event`/`PlanningSlot`,
+  `source=EXTERNAL`), ohne manuellen Review-Schritt.
 - **Auswirkung:** Kein Governance-Filter für unbekannte externe Kalenderquellen — das ist ein
   Produkt-/Fachentscheidung, keine Sicherheitslücke. Für einen MVP-Go-Live mit primär ICS/CalDAV-Quellen
   aus vertrauenswürdigen internen Kalendern ist das vertretbar, **muss aber explizit als bekannte
@@ -134,7 +137,7 @@ Qualitätsverbesserungen, die den Go-Live nicht verzögern müssen.
   gegangen wird — nicht stillschweigend verschieben.
 - **Empfehlung:** Produktentscheidung einholen: "Ship ohne Review-Workflow für v1" ja/nein.
   Falls ja: in `docs/use-cases.md` als "Phase 2" explizit dokumentieren, damit es nicht als Bug gemeldet wird.
-- **Aufwand:** Für Sign-off: keiner. Für Implementierung (falls gefordert): Hoch.
+- **Aufwand:** Für `SyncState`: keiner. Für `ExternalEventCandidate` (falls gefordert): Hoch.
 
 ### F-2 · Frontend-Views deutlich größer als in `improvement-proposals.md` dokumentiert
 
@@ -240,8 +243,8 @@ Qualitätsverbesserungen, die den Go-Live nicht verzögern müssen.
 
 ## 8. Empfohlene Reihenfolge bis Produktivgang
 
-1. **Sofort (vor Go-Live):** B-1 fixen (Aufwand < 1 Tag), F-1 verdrahten (1–2 Tage), B-4 Coverage-Report ziehen und ggf. nachbessern.
-2. **Vor/kurz nach Go-Live:** B-3 Produktentscheidung einholen und dokumentieren, M-1 Audit-Log-Stichprobe verifizieren, M-6 Health-Check-Tiefe verifizieren.
+1. **Sofort (vor Go-Live):** B-1 fixen (Aufwand < 1 Tag), F-1 konsistent verdrahten bzw. verbleibende destruktive Flows absichern (1–2 Tage), B-4 Coverage-Report ziehen und ggf. nachbessern.
+2. **Vor/kurz nach Go-Live:** B-3 Produktentscheidung zu `ExternalEventCandidate` einholen und dokumentieren, M-1 Audit-Log-Stichprobe verifizieren, M-6 Health-Check-Tiefe verifizieren.
 3. **Erster Sprint danach:** B-2 (DRY-Refactor abschließen), M-4 (RBAC-Coverage-Dokument), Doku-Updates (M-5, Abschnitt 7).
 4. **Backlog:** F-2 (View-Aufteilung), M-2/M-3, L-1 bis L-4.
 
