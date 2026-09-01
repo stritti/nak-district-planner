@@ -61,8 +61,8 @@ docker-compose.local.yml
 # Database & Volumes
 # ============================================================
 postgres-data/
-redis-data/
-redis_data/
+valkey-data/
+valkey_data/
 *.sqlite
 *.db
 

@@ -12,7 +12,7 @@ The spec is written in German (NAK = Neuapostolische Kirche / New Apostolic Chur
 
 ```text
 nak-district-planner/
-├── docker-compose.yml              # 5 Services: backend, worker, frontend, db, redis
+├── docker-compose.yml              # 5 Services: backend, worker, frontend, db, valkey
 ├── docker-compose.override.yml     # Dev-Overrides (Hot-Reload, exposed ports)
 ├── .env.example                    # Template — copy to .env and fill in values
 ├── services/
