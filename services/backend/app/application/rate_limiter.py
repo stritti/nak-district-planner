@@ -101,7 +101,7 @@ class RateLimiter:
     async def connect(self) -> None:
         """Connect to Redis."""
         if self._redis is None:
-            self._redis = redis.from_url(self.redis_url, decode_responses=True)
+            self._redis = valkey.from_url(self.valkey_url, decode_responses=True)
         
         # Test connection
         try:
@@ -112,11 +112,11 @@ class RateLimiter:
             raise
 
     async def close(self) -> None:
-        """Close Redis connection."""
+        """Close Valkey connection."""
         if self._redis:
-            await self._redis.close()
+            await self._redis.aclose()
             self._redis = None
-            logger.info("Disconnected from Redis")
+            logger.info("Disconnected from Valkey")
 
     async def __aenter__(self):
         """Async context manager entry."""
