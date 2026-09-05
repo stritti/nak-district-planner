@@ -38,7 +38,7 @@ The implementation provides **Defense in Depth** with multiple layers of tenant 
 
 The NAK District Planner uses a hierarchical tenant model:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                        District (Root Tenant)                 │
 │  ┌─────────────────────────────────────────────────────────┐│
