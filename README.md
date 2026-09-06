@@ -44,8 +44,8 @@ SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
 API_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
 ```
 
-> `DATABASE_URL` und `REDIS_URL` müssen nicht geändert werden — sie verweisen auf die
-> Docker-internen Hostnamen (`db`, `redis`), die im Compose-Netzwerk aufgelöst werden.
+> `DATABASE_URL` und `VALKEY_URL` müssen nicht geändert werden — sie verweisen auf die
+> Docker-internen Hostnamen (`db`, `valkey`), die im Compose-Netzwerk aufgelöst werden.
 
 ---
 
@@ -67,7 +67,7 @@ docker compose up -d
 | Frontend | 80                     | Vue-App via nginx                      |
 | Backend  | 8000                   | FastAPI (direkt erreichbar)            |
 | DB       | 5433 (default: 5432)   | PostgreSQL                             |
-| Redis    | 6379                   | Redis                                  |
+| Valkey   | 6379                   | Valkey                                 |
 
 ---
 
@@ -134,20 +134,20 @@ docker compose run --no-deps --rm backend pytest tests/integration/ -v
 
 ### 6. Lokale Entwicklung (ohne Docker für Frontend / Backend)
 
-Auch bei lokaler Entwicklung werden **PostgreSQL** und **Redis** als Docker-Container benötigt:
+Auch bei lokaler Entwicklung werden **PostgreSQL** und **Valkey** als Docker-Container benötigt:
 
 ```bash
-docker compose up -d db redis
+docker compose up -d db valkey
 ```
 
 > Beim ersten Start ggf. vorher `cp .env.example .env` ausführen und die
 > Platzhalter ersetzen (siehe [Erstkonfiguration](#1-erstkonfiguration)).
-> Für die lokale Entwicklung `DATABASE_URL` und `REDIS_URL` auf `localhost`
+> Für die lokale Entwicklung `DATABASE_URL` und `VALKEY_URL` auf `localhost`
 > anpassen, z. B.:
 >
 > ```dotenv
 > DATABASE_URL=postgresql+asyncpg://nak:<passwort>@localhost:5433/nak_planner
-> REDIS_URL=redis://localhost:6379/0
+> VALKEY_URL=valkey://localhost:6379/0
 > ```
 
 #### Backend (Python / uv)
@@ -223,7 +223,7 @@ POSTGRES_USER=nak
 POSTGRES_PASSWORD=<starkes-passwort>
 POSTGRES_DB=nak_planner
 DATABASE_URL=postgresql+asyncpg://nak:<passwort>@db:5432/nak_planner
-REDIS_URL=redis://redis:6379/0
+VALKEY_URL=valkey://valkey:6379/0
 SECRET_KEY=<64-zeichen-hex>
 API_KEY=<64-zeichen-hex>
 APP_ENV=production
