@@ -201,6 +201,7 @@ await audit_service.log(
     extra_metadata={"source": "api"},
 )
 ```
+```text
 ```
 
 ## Usage Examples

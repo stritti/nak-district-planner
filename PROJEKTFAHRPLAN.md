@@ -341,7 +341,7 @@ Der **NAK Bezirksplaner** ist eine webbasierte Planungsplattform für Neuapostol
 
 ### 1. **Datenmigration (M1, M3)**
 - **Risiko:** Bestehende Daten könnten bei Migration verloren gehen
-- **Mitigation:** 
+- **Mitigation:**
   - Snapshot vor Migration
   - Rollback-Strategie definieren
   - Migration in Staging testen
