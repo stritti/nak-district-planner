@@ -91,7 +91,7 @@ class TestRateLimiter:
         """Create a mock Valkey client."""
         valkey_client = AsyncMock()
         valkey_client.ping = AsyncMock()
-        valkey_client.close = AsyncMock()
+        valkey_client.aclose = AsyncMock()
         valkey_client.zadd = AsyncMock()
         valkey_client.zcount = AsyncMock()
         valkey_client.expire = AsyncMock()
