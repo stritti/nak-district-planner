@@ -18,6 +18,12 @@ from app.config import Settings, production_guard
 def _valid_prod_settings(**overrides: object) -> Settings:
     """Helper: return a Settings object with all OIDC fields set to valid
     production values.  Individual fields can be overridden for testing.
+
+    Passes ``_env_file=None`` so these tests are deterministic regardless of
+    whatever ``.env`` a developer happens to have checked out locally (e.g. a
+    dev ``.env`` with ``IDP_PROVISIONING_PROVIDER=keycloak`` would otherwise
+    silently override fields this helper doesn't set explicitly, since
+    ``Settings.model_config`` loads ``env_file=".env"` by default).
     """
     kwargs: dict = {
         "app_env": "production",
@@ -29,7 +35,7 @@ def _valid_prod_settings(**overrides: object) -> Settings:
         "oidc_client_id": "nak-planner-backend",
     }
     kwargs.update(overrides)
-    return Settings(**kwargs)
+    return Settings(_env_file=None, **kwargs)
 
 
 # ── SECRET_KEY ──────────────────────────────────────────────────────────────
@@ -181,6 +187,7 @@ def test_production_guard_idp_keycloak_valid() -> None:
 def test_production_guard_oidc_client_secret_default() -> None:
     """production_guard catches default OIDC_CLIENT_SECRET when constructed in dev mode."""
     settings = Settings(
+        _env_file=None,
         app_env="development",
         oidc_client_secret="replace-with-oidc-client-secret",
     )
@@ -192,6 +199,7 @@ def test_production_guard_oidc_client_secret_default() -> None:
 def test_production_guard_oidc_discovery_url_default() -> None:
     """production_guard catches default OIDC_DISCOVERY_URL when constructed in dev mode."""
     settings = Settings(
+        _env_file=None,
         app_env="development",
         oidc_discovery_url="https://oidc.example.com/.well-known/openid-configuration",
     )
@@ -203,6 +211,7 @@ def test_production_guard_oidc_discovery_url_default() -> None:
 def test_production_guard_oidc_client_id_default() -> None:
     """production_guard catches default OIDC_CLIENT_ID when constructed in dev mode."""
     settings = Settings(
+        _env_file=None,
         app_env="development",
         oidc_client_id="replace-with-oidc-client-id",
     )
