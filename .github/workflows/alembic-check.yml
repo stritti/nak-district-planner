@@ -99,6 +99,38 @@ jobs:
           echo "Current revision: $CURRENT"
           echo "✅ Migration chain is consistent"
 
+      - name: Downgrade/upgrade roundtrip (last migration is reversible)
+        run: |
+          set -o pipefail
+          uv run alembic downgrade -1 2>&1
+          uv run alembic upgrade head 2>&1
+          echo "✅ Downgrade -1 / upgrade head roundtrip successful"
+
+      - name: Seed dry-run against migrated schema
+        run: |
+          set -o pipefail
+          uv run python seed_testdata.py --dry-run 2>&1
+          echo "✅ Seed dry-run consistent with migrated schema"
+
+      - name: Model/DB schema drift check (informational)
+        id: alembic_check
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          uv run alembic check 2>&1 | tee alembic-check-output.txt
+
+      - name: Report schema drift (non-blocking)
+        if: always()
+        run: |
+          if [ "${{ steps.alembic_check.outcome }}" = "success" ]; then
+            echo "✅ No drift between ORM models and migrated schema"
+          else
+            echo "⚠️  alembic check reports drift between ORM models and the migrated schema."
+            echo "    This does not fail the build (see openspec/changes/p0-strukturell-multi-tenant-operations"
+            echo "    tasks.md, section 3, for the known pre-existing drift and why reconciling it is a"
+            echo "    separate follow-up rather than a blocking gate)."
+          fi
+
       - name: Post migration check summary to PR
         if: always() && github.event_name == 'pull_request'
         env:
@@ -113,6 +145,9 @@ jobs:
           | **SQL Generation** | ${{ job.status == 'success' && '✅' || '❌' }} |
           | **DB Apply** | ${{ job.status == 'success' && '✅' || '❌' }} |
           | **Chain Consistent** | ${{ job.status == 'success' && '✅' || '❌' }} |
+          | **Downgrade/Upgrade Roundtrip** | ${{ job.status == 'success' && '✅' || '❌' }} |
+          | **Seed Dry-Run** | ${{ job.status == 'success' && '✅' || '❌' }} |
+          | **Model/DB Drift (informational)** | ${{ steps.alembic_check.outcome == 'success' && '✅' || '⚠️ drift present, non-blocking' }} |
           "
 
           if [ "${{ job.status }}" = "success" ]; then

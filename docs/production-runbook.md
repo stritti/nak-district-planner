@@ -98,3 +98,19 @@ Kritische Secrets (SECRET_KEY, OIDC_CLIENT_SECRET, IDP_PROVISIONING_API_KEY) unt
 
 - Commit- und Release-Prozess gemaess `docs/release-process.md`.
 - Produktive Deployments bevorzugt aus versionierten Releases.
+
+### 7.1 Erforderliche Branch-Protection-Checks
+
+Der Job `alembic-check` (`.github/workflows/alembic-check.yml`) muss als
+**erforderlicher Status-Check** auf dem `main`-Branch konfiguriert sein
+(GitHub → Settings → Branches → Branch protection rule für `main` →
+"Require status checks to pass" → `alembic-check` auswählen). Ohne diesen
+Zwang kann ein PR mit gebrochener Migration (mehrere Heads, kaputter
+Downgrade-Pfad, Seed-Inkonsistenz) gemerged werden, auch wenn der Check rot
+ist. Der informative Drift-Teilschritt (`alembic check`, siehe
+`docs/schema.md`) ist bewusst **nicht** blockierend und muss nicht als
+eigener Required Check gelistet werden — nur der Gesamtjob-Status zählt.
+
+Diese Einstellung kann nicht aus dem Repository-Code heraus gesetzt werden
+und muss von einem Repo-Admin manuell vorgenommen (oder per `gh api
+repos/{owner}/{repo}/branches/main/protection` gesetzt) werden.

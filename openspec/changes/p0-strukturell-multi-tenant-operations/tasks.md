@@ -36,15 +36,15 @@
 
 ## 3. CI-Migration-Check
 
-- [ ] 3.1 Neuer CI-Job `migration-check` in `.github/workflows/ci.yml`
-  - Startet PostgreSQL-Service-Container
-  - `alembic upgrade head` → Exit-Code prüfen
-  - `alembic downgrade -1` → Exit-Code prüfen
-  - `alembic upgrade head` → erneut (Roundtrip-Test)
-  - Optional: Seed-Daten via `make seed-dry-run` einspielen + Konsistenzprüfung
-- [ ] 3.2 Migration-Check als erforderlichen Check in Branch-Protection-Regeln dokumentieren
-- [ ] 3.3 Kritische Constraints dokumentieren (Fremdschlüssel, Unique Constraints)
-- [ ] 3.4 `alembic check` (schema checking against models) in CI aufnehmen
+- [x] 3.1 Migrations-Checks erweitert *(statt eines neuen Jobs in `ci.yml` — der bestehende `.github/workflows/alembic-check.yml` deckte Single-Head/FK-Namen/Offline-SQL/Apply bereits ab, um Redundanz zu vermeiden dort ergänzt statt dupliziert)*:
+  - PostgreSQL-Service-Container: bereits vorhanden
+  - `alembic upgrade head` → Exit-Code prüfen: bereits vorhanden
+  - `alembic downgrade -1` → Exit-Code prüfen: **neu ergänzt**
+  - `alembic upgrade head` → erneut (Roundtrip-Test): **neu ergänzt**
+  - Seed-Daten via `make seed-dry-run`-Äquivalent (`seed_testdata.py --dry-run`) + Konsistenzprüfung: **neu ergänzt**
+- [x] 3.2 Migration-Check als erforderlichen Check in Branch-Protection-Regeln dokumentiert (`docs/production-runbook.md` Abschnitt 7.1). Das tatsächliche Setzen der GitHub-Branch-Protection-Regel erfordert Repo-Admin-Zugriff und wurde **nicht** automatisch vorgenommen.
+- [x] 3.3 Kritische Constraints dokumentiert (`docs/schema.md`: FK-Namenskonvention, Unique Constraints, Tenant-Scoping-FKs, bekannte Schema-Drift)
+- [x] 3.4 `alembic check` in CI aufgenommen — **informativ, nicht blockierend** (`continue-on-error: true`). Ein blockierender Gate würde CI sofort für alle PRs rot machen: es besteht bereits substanzielle, vorbestehende Drift zwischen ORM-Modellen und migrierter DB (siehe `docs/schema.md`, Abschnitt "Bekannte Schema-Drift"). Eine dieser Ursachen (fehlender `notification.py`-Import in `orm_models/__init__.py`) wurde als Nebenfix behoben; der Rest bleibt bewusst offen für einen eigenen Reconciliation-Follow-up.
 
 ## 4. Backup/Restore-Automatisierung
 
