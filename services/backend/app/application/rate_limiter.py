@@ -1,7 +1,7 @@
-"""Rate Limiter — Redis-based rate limiting with sliding window algorithm.
+"""Rate Limiter — Valkey-based rate limiting with sliding window algorithm.
 
 Provides protection against DoS attacks by limiting request rates.
-Uses Redis sorted sets for efficient sliding window implementation.
+Uses Valkey sorted sets for efficient sliding window implementation.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import redis.asyncio as redis
+import valkey.asyncio as valkey
 
 from app.config import settings
 
@@ -85,23 +85,23 @@ class RateLimiter:
 
     def __init__(
         self,
-        redis_url: str | None = None,
+        valkey_url: str | None = None,
         config: RateLimitConfig | None = None,
     ):
         """Initialize the rate limiter.
         
         Args:
-            redis_url: Redis connection URL. If None, uses settings.redis_url.
+            valkey_url: Valkey connection URL. If None, uses settings.valkey_url.
             config: Rate limit configuration. If None, uses default config.
         """
-        self.redis_url = redis_url or settings.redis_url
+        self.valkey_url = valkey_url or settings.valkey_url
         self.config = config or RateLimitConfig()
-        self._redis: redis.Redis | None = None
+        self._redis: valkey.Valkey | None = None
 
     async def connect(self) -> None:
         """Connect to Redis."""
         if self._redis is None:
-            self._redis = redis.from_url(self.redis_url, decode_responses=True)
+            self._redis = valkey.from_url(self.valkey_url, decode_responses=True)
         
         # Test connection
         try:
@@ -112,11 +112,11 @@ class RateLimiter:
             raise
 
     async def close(self) -> None:
-        """Close Redis connection."""
+        """Close Valkey connection."""
         if self._redis:
-            await self._redis.close()
+            await self._redis.aclose()
             self._redis = None
-            logger.info("Disconnected from Redis")
+            logger.info("Disconnected from Valkey")
 
     async def __aenter__(self):
         """Async context manager entry."""

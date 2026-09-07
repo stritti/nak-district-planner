@@ -37,7 +37,7 @@ POSTGRES_DB=nak_planner
 # SQLAlchemy async connection string
 # Für lokale Entwicklung (uv run uvicorn) auf localhost zeigen
 DATABASE_URL=postgresql+asyncpg://nak:<passwort-hier-eintragen>@localhost:5433/nak_planner
-REDIS_URL=redis://localhost:6379/0
+VALKEY_URL=valkey://localhost:6379/0
 
 # Security - generieren Sie diese Werte mit:
 SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
@@ -55,7 +55,7 @@ VITE_OIDC_DISCOVERY_URL=https://oidc.example.com/.well-known/openid-configuratio
 VITE_OIDC_CLIENT_ID=your-client-id
 ```
 
-> **Wichtig**: Für die lokale Entwicklung müssen `DATABASE_URL` und `REDIS_URL` auf `localhost` zeigen, da die Docker Compose Overrides diese im Container auf die internen Hostnamen (`db`, `redis`) setzen.
+> **Wichtig**: Für die lokale Entwicklung müssen `DATABASE_URL` und `VALKEY_URL` auf `localhost` zeigen, da die Docker Compose Overrides diese im Container auf die internen Hostnamen (`db`, `valkey`) setzen.
 
 ## 2. Entwicklungsumgebung starten
 
@@ -81,7 +81,7 @@ nak-district-planner-backend-1   "uv run uvicorn app..."   backend             r
 nak-district-planner-frontend-1  "/docker-entrypoint.…"   frontend            running           
 nak-district-planner-worker-1    "uv run celery -A app..." worker              running           
 nak-district-planner-db-1        "docker-entrypoint.s…"   db                  running           
-nak-district-planner-redis-1     "docker-entrypoint.s…"   redis               running           
+nak-district-planner-valkey-1    "docker-entrypoint.s…"   valkey              running
 ```
 
 ### 2.3 Logs überwachen
@@ -120,11 +120,11 @@ make seed-dry-run  # Nur anzeigen, was eingefügt würde
 
 ## 4. Lokale Entwicklung (ohne Docker für bestimmte Services)
 
-Für schnellere Iterationszyklen können Backend oder Frontend lokal außerhalb Docker ausgeführt werden, während Datenbank und Redis weiterhin in Docker laufen.
+Für schnellere Iterationszyklen können Backend oder Frontend lokal außerhalb Docker ausgeführt werden, während Datenbank und Valkey weiterhin in Docker laufen.
 
-### 4.1 Nur Datenbank und Redis starten
+### 4.1 Nur Datenbank und Valkey starten
 ```bash
-docker compose up -d db redis
+docker compose up -d db valkey
 ```
 
 ### 4.2 Backend lokal entwickeln
@@ -276,10 +276,10 @@ credentials = decrypt_credentials(encrypted_credentials_from_db)
 
 ### 7.4 Netzwerk- und Container-Security
 
-- **Port-Exposition**: In der Entwicklung werden bestimmte Ports nach außen exponiert für Debugging-Zwecke (Backend: 8000, DB: `${POSTGRES_PORT:-5432}`, Redis: 6379)
+- **Port-Exposition**: In der Entwicklung werden bestimmte Ports nach außen exponiert für Debugging-Zwecke (Backend: 8000, DB: `${POSTGRES_PORT:-5432}`, Valkey: 6379)
   - In Produktion wird KEIN `docker-compose.override.yml` verwendet, wodurch diese Expositions entfernt werden
-  - Datenbank und Redis sind dann NICHT direkt vom Host erreichbar
-- **Interne Kommunikation**: Services kommunizieren über das Docker-Netzwerk mittels Service-Namen (`backend`, `db`, `redis`)
+  - Datenbank und Valkey sind dann NICHT direkt vom Host erreichbar
+- **Interne Kommunikation**: Services kommunizieren über das Docker-Netzwerk mittels Service-Namen (`backend`, `db`, `valkey`)
 - **CORS**: Sollte restriktiv konfiguriert sein - in Entwicklung oft locker für lokales Testen, in Produktion auf spezifische Domains beschränkt
 
 **Produktionskonfiguration:**
@@ -292,7 +292,7 @@ services:
   db:
     ports: []  # Nicht nach außen exponiert
     # ...
-  redis:
+  valkey:
     ports: []  # Nicht nach außen exponiert
 ```
 
@@ -521,7 +521,7 @@ def test_viewer_cannot_create_event():
 In der Produktion wird KEIN `docker-compose.override.yml` verwendet, was bedeutet:
 - Keine Volume-Mounts für den Quellcode (Code liegt im Image)
 - Kein `--reload` Flag; uvicorn läuft im stabilen Produktionsmodus
-- Keine exponierten Ports für Backend (8000), DB (5432) oder Redis (6379) nach außen
+- Keine exponierten Ports für Backend (8000), DB (5432) oder Valkey (6379) nach außen
 - Alle Services laufen ohne Entwickler-Debugging-Tools
 
 ### 8.2 Produktions-Build erstellen
@@ -532,7 +532,7 @@ docker compose -f docker-compose.yml build
 # Production-Env vorbereiten (niemals Entwicklungswerte übernehmen!)
 # .env für Produktion muss folgende Werte enthalten:
 #   - Echte sichere Passwörter
-#   - Korrekte interne Hostnamen (db, redis) in DATABASE_URL/REDIS_URL
+#   - Korrekte interne Hostnamen (db, valkey) in DATABASE_URL/VALKEY_URL
 #   - APP_ENV=production
 docker compose -f docker-compose.yml up -d
 ```
