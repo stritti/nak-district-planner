@@ -27,6 +27,7 @@ def _valid_prod_settings(**overrides: object) -> Settings:
             "https://auth.example.com/realms/nak-planner/.well-known/openid-configuration"
         ),
         "oidc_client_id": "nak-planner-backend",
+        "backup_encrypt_key": "backup@nak-district-planner.example",
     }
     kwargs.update(overrides)
     return Settings(**kwargs)
@@ -91,6 +92,26 @@ def test_production_guard_all_defaults_at_once() -> None:
     assert "SECRET_KEY" in msg
     assert "IDP_PROVISIONING_API_KEY" in msg
     assert "IDP_PROVISIONING_ENDPOINT" in msg
+
+
+# ── BACKUP_ENCRYPT_KEY ──────────────────────────────────────────────────────
+
+
+def test_production_guard_missing_backup_encrypt_key() -> None:
+    settings = _valid_prod_settings(backup_encrypt_key=None)
+    with pytest.raises(RuntimeError, match="BACKUP_ENCRYPT_KEY"):
+        production_guard(settings)
+
+
+def test_production_guard_empty_backup_encrypt_key() -> None:
+    settings = _valid_prod_settings(backup_encrypt_key="")
+    with pytest.raises(RuntimeError, match="BACKUP_ENCRYPT_KEY"):
+        production_guard(settings)
+
+
+def test_production_guard_with_backup_encrypt_key() -> None:
+    settings = _valid_prod_settings(backup_encrypt_key="backup@nak-district-planner.example")
+    production_guard(settings)  # should not raise
 
 
 # ── Valid config ────────────────────────────────────────────────────────────

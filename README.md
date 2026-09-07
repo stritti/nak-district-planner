@@ -307,6 +307,23 @@ docker compose -f docker-compose.yml up -d
 
 Die einzige persistente State-Quelle ist das PostgreSQL-Volume `postgres_data`.
 
+**Empfohlen:** `scripts/backup.sh` / `scripts/restore.sh` — verschlüsseln Dumps automatisch
+per GPG (`BACKUP_ENCRYPT_KEY`), prüfen die Archiv-Integrität vor dem Restore und erlauben
+einen `--dry-run`. Details siehe `docs/production-runbook.md` Abschnitt 4.
+
+```bash
+# Backup erstellen (verschlüsselt, wenn BACKUP_ENCRYPT_KEY gesetzt ist)
+BACKUP_ENCRYPT_KEY=<gpg-recipient> ./scripts/backup.sh
+
+# Restore prüfen, ohne etwas zu verändern
+./scripts/restore.sh backups/nak_planner_<timestamp>.dump.gpg --dry-run
+
+# Restore durchführen (fragt vor dem Überschreiben nach Bestätigung)
+./scripts/restore.sh backups/nak_planner_<timestamp>.dump.gpg
+```
+
+Manuelle Variante ohne die Skripte (z. B. für Ad-hoc-Debugging):
+
 ```bash
 # Backup erstellen
 docker exec nak-district-planner-db-1 \
