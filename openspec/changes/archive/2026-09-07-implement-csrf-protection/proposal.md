@@ -24,7 +24,7 @@ Aktuell gibt es **keinen CSRF-Schutz** (SEC-004) für state-changing Requests. D
 ### New Capabilities
 - **csrf_token_service**: Service zur Generierung und Validierung von CSRF-Tokens
 - **csrf_middleware**: FastAPI Middleware zur automatischen CSRF-Prüfung
-- **csrf_cookie**: CSRF-Token in HTTP-Only Cookie
+- **csrf_cookie**: CSRF-Token in Cookie (script-readable für Double-Submit Pattern)
 - **csrf_header**: CSRF-Token im Request Header
 - **csrf_exemption**: Ausnahmen für bestimmte Endpunkte (z.B. API-Key Auth)
 
@@ -55,7 +55,7 @@ Aktuell gibt es **keinen CSRF-Schutz** (SEC-004) für state-changing Requests. D
 - [ ] Alle state-changing Requests erfordern CSRF-Token
 - [ ] CSRF-Tokens sind kryptografisch sicher (HMAC-SHA256)
 - [ ] CSRF-Tokens haben begrenzte Lebensdauer (z.B. 24 Stunden)
-- [ ] CSRF-Tokens sind in HTTP-Only Cookies gespeichert
+- [ ] CSRF-Tokens sind in Cookies gespeichert (script-readable für Double-Submit Pattern)
 - [ ] CSRF-Tokens werden im Header gesendet (`X-CSRF-Token`)
 - [ ] API-Key Auth ist von CSRF-Schutz ausgenommen
 - [ ] OIDC Flow funktioniert mit CSRF-Schutz
@@ -71,7 +71,7 @@ Aktuell gibt es **keinen CSRF-Schutz** (SEC-004) für state-changing Requests. D
    - **Empfehlung:** Signiert (HMAC), nicht verschlüsselt
 
 3. Sollten CSRF-Tokens in Cookies oder Local Storage gespeichert werden?
-   - **Empfehlung:** HTTP-Only Cookies (sicherer)
+   - **Empfehlung:** Cookies (script-readable für Double-Submit Pattern; HttpOnly weggelassen, damit JavaScript das Token lesen kann)
 
 4. Sollten CSRF-Tokens für API-Endpunkte gelten?
    - **Empfehlung:** Ja, außer für API-Key Auth
