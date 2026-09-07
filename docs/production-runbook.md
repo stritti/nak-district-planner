@@ -63,15 +63,19 @@ BACKUP_ENCRYPT_KEY=<gpg-recipient> ./scripts/backup.sh
 ### 4.2 Restore durchführen
 
 ```bash
-./scripts/restore.sh <backup-datei>.dump.gpg --dry-run   # Integritätsprüfung ohne Änderung
-./scripts/restore.sh <backup-datei>.dump.gpg              # mit Bestätigungsabfrage
+./scripts/restore.sh <backup-datei>.dump.gpg --dry-run   # Vollständige Validierung (Disposable DB)
+./scripts/restore.sh <backup-datei>.dump.gpg              # Echter Restore (stoppt Backend/Worker, fragt ab)
 ```
 
 Schritt-für-Schritt:
 1. Backup-Datei bereitstellen (entschlüsselt automatisch, wenn `.gpg`).
-2. `--dry-run` ausführen — prüft Archiv-Integrität via `pg_restore --list`, ändert nichts.
-3. Ohne `--dry-run` ausführen — fragt vor dem Überschreiben explizit nach Bestätigung.
-4. Nach dem Restore: Anwendung neu starten, Health-Check + Smoke-Test (siehe Abschnitt 3) durchführen.
+2. `--dry-run` ausführen — **validiert das komplette Archiv** durch Restore in eine temporäre Datenbank (prüft TOC **und** alle Datenblöcke), ändert die Produktionsdatenbank **nicht**.
+3. Ohne `--dry-run` ausführen:
+   - Skript stoppt **automatisch** `backend` und `worker` Container (keine Schreibzugriffe während Restore).
+   - Fragt vor dem Überschreiben explizit nach Bestätigung (`--yes` zum Überspringen).
+   - Führt `pg_restore --clean --if-exists` in der Produktionsdatenbank aus.
+   - Startet `backend` und `worker` **automatisch** neu und wartet auf Health-Checks.
+4. Nach dem Restore: Health-Check + Smoke-Test (siehe Abschnitt 3) durchführen.
 5. Ergebnis (Datum, Dauer, Auffälligkeiten) im Incident-/Ops-Log dokumentieren.
 
 **Ohne dokumentierten Restore-Test in einer separaten Umgebung gilt die Backup-Strategie

@@ -65,22 +65,21 @@ fi
 mkdir -p "$BACKUP_DIR"
 
 timestamp="$(date -u +%Y%m%d_%H%M%S)"
-dump_file="$BACKUP_DIR/${POSTGRES_DB}_${timestamp}.dump"
-
-echo "==> Dumping database '$POSTGRES_DB' from container '$DB_CONTAINER'..."
-docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc >"$dump_file"
 
 if [[ -n "${BACKUP_ENCRYPT_KEY:-}" ]]; then
-  echo "==> Encrypting backup for recipient '$BACKUP_ENCRYPT_KEY'..."
-  gpg --batch --yes --trust-model always --encrypt --recipient "$BACKUP_ENCRYPT_KEY" \
-    --output "${dump_file}.gpg" "$dump_file"
-  rm -f "$dump_file"
-  final_file="${dump_file}.gpg"
+  final_file="$BACKUP_DIR/${POSTGRES_DB}_${timestamp}.dump.gpg"
+  echo "==> Dumping and encrypting database '$POSTGRES_DB' from container '$DB_CONTAINER'..."
+  # Stream pg_dump directly into GPG — plaintext never touches host disk
+  docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc \
+    | gpg --batch --yes --trust-model always --encrypt --recipient "$BACKUP_ENCRYPT_KEY" \
+      --output "$final_file"
 else
+  final_file="$BACKUP_DIR/${POSTGRES_DB}_${timestamp}.dump"
+  echo "==> Dumping database '$POSTGRES_DB' from container '$DB_CONTAINER' (UNENCRYPTED)..."
   echo "WARNING: BACKUP_ENCRYPT_KEY is not set — storing an UNENCRYPTED backup." >&2
   echo "         This is only acceptable for local development. Production startup" >&2
   echo "         is blocked by production_guard() until BACKUP_ENCRYPT_KEY is set." >&2
-  final_file="$dump_file"
+  docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc >"$final_file"
 fi
 
 if [[ "$BACKUP_RETENTION_DAYS" -gt 0 ]]; then
