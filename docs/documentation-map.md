@@ -15,6 +15,7 @@ Diese Dokumente gelten als operative Quelle fuer Entwicklung und Betrieb.
 - `docs/security-baseline.md`: Sicherheits-Baseline und Guardrails
 - `docs/security-analysis.md`: Umfassende Security-Analyse mit Threat Modeling und Massnahmen
 - `docs/production-runbook.md`: Betriebs- und Incident-Grundablaeufe
+- `docs/schema.md`: Kritische DB-Constraints (FKs, Unique Constraints), bekannte Schema-Drift
 - `docs/approval-workflow.md`: Benutzer-Onboarding, Freigabe-Workflow und IDP-Provisionierung
 - `openspec/architecture/overview.md`: Zielarchitektur (stabiler Rahmen)
 - `openspec/architecture/implementation-roadmap.md`: Priorisierte Umsetzungsreihenfolge
