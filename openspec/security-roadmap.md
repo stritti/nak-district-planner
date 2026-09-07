@@ -28,15 +28,15 @@ Diese Roadmap definiert die **priorisierten Sicherheitsmassnahmen** basierend au
 **Status:** ✅ Implementiert (siehe `docs/security/audit-logging.md`, PR 753a502)  
 **Risiko:** Hoch (OWASP A09, CIS 8.1)  
 **Aufwand:** ~4 Wochen  
-**OpenSpec:** [`_archive_implement-audit-logging`](changes/_archive_implement-audit-logging/) (archiviert — implementiert)  
+**OpenSpec:** [`archive/2026-09-07-implement-audit-logging`](changes/archive/2026-09-07-implement-audit-logging/) (archiviert — implementiert)  
 
 #### 📋 Spezifikation
 
 | Dokument | Beschreibung | Status |
 |----------|-------------|--------|
-| [proposal.md](changes/_archive_implement-audit-logging/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
-| [design.md](changes/_archive_implement-audit-logging/design.md) | Detaillierte Implementierung | ✅ Fertig |
-| [tasks.md](changes/_archive_implement-audit-logging/tasks.md) | Aufgabenliste | ✅ Fertig |
+| [proposal.md](changes/archive/2026-09-07-implement-audit-logging/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
+| [design.md](changes/archive/2026-09-07-implement-audit-logging/design.md) | Detaillierte Implementierung | ✅ Fertig |
+| [tasks.md](changes/archive/2026-09-07-implement-audit-logging/tasks.md) | Aufgabenliste | ⚠️ Teilweise (Decorator, API, Retention offen) |
 
 #### 🎯 Ziele
 - Alle schreibenden Operationen auditierbar machen
@@ -63,15 +63,15 @@ Diese Roadmap definiert die **priorisierten Sicherheitsmassnahmen** basierend au
 **Status:** ✅ Implementiert (siehe `docs/security/rate-limiting.md`, PR #172)  
 **Risiko:** Hoch (OWASP A05, CIS 4.1)  
 **Aufwand:** ~2 Wochen  
-**OpenSpec:** [`_archive_implement-rate-limiting`](changes/_archive_implement-rate-limiting/) (archiviert — implementiert)  
+**OpenSpec:** [`archive/2026-09-07-implement-rate-limiting`](changes/archive/2026-09-07-implement-rate-limiting/) (archiviert — implementiert)  
 
 #### 📋 Spezifikation
 
 | Dokument | Beschreibung | Status |
 |----------|-------------|--------|
-| [proposal.md](changes/_archive_implement-rate-limiting/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
-| [design.md](changes/_archive_implement-rate-limiting/design.md) | Detaillierte Implementierung | ✅ Fertig |
-| [tasks.md](changes/_archive_implement-rate-limiting/tasks.md) | Aufgabenliste | ✅ Fertig |
+| [proposal.md](changes/archive/2026-09-07-implement-rate-limiting/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
+| [design.md](changes/archive/2026-09-07-implement-rate-limiting/design.md) | Detaillierte Implementierung | ✅ Fertig |
+| [tasks.md](changes/archive/2026-09-07-implement-rate-limiting/tasks.md) | Aufgabenliste | ⚠️ Teilweise (Monitoring, Frontend 429 offen) |
 
 #### 🎯 Ziele
 - Alle öffentlichen Endpunkte vor DoS schützen
@@ -109,15 +109,15 @@ RATE_LIMIT_ENDPOINTS:
 **Status:** ✅ Implementiert (siehe `docs/security/csrf-protection.md`, PR #211)  
 **Risiko:** Hoch (OWASP A01)  
 **Aufwand:** ~2 Wochen  
-**OpenSpec:** [`_archive_implement-csrf-protection`](changes/_archive_implement-csrf-protection/) (archiviert — implementiert)  
+**OpenSpec:** [`archive/2026-09-07-implement-csrf-protection`](changes/archive/2026-09-07-implement-csrf-protection/) (archiviert — implementiert)  
 
 #### 📋 Spezifikation
 
 | Dokument | Beschreibung | Status |
 |----------|-------------|--------|
-| [proposal.md](changes/_archive_implement-csrf-protection/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
-| [design.md](changes/_archive_implement-csrf-protection/design.md) | Detaillierte Implementierung | ✅ Fertig |
-| [tasks.md](changes/_archive_implement-csrf-protection/tasks.md) | Aufgabenliste | ✅ Fertig |
+| [proposal.md](changes/archive/2026-09-07-implement-csrf-protection/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
+| [design.md](changes/archive/2026-09-07-implement-csrf-protection/design.md) | Detaillierte Implementierung | ✅ Fertig |
+| [tasks.md](changes/archive/2026-09-07-implement-csrf-protection/tasks.md) | Aufgabenliste | ✅ Fertig |
 
 #### 🎯 Ziele
 - Alle state-changing Requests vor CSRF schützen
@@ -352,9 +352,9 @@ RATE_LIMIT_ENDPOINTS:
 
 | Change | Priorität | Status | OpenSpec Pfad |
 |--------|-----------|--------|---------------|
-| implement-audit-logging | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/_archive_implement-audit-logging/` |
-| implement-rate-limiting | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/_archive_implement-rate-limiting/` |
-| implement-csrf-protection | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/_archive_implement-csrf-protection/` |
+| implement-audit-logging | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-09-07-implement-audit-logging/` |
+| implement-rate-limiting | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-09-07-implement-rate-limiting/` |
+| implement-csrf-protection | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-09-07-implement-csrf-protection/` |
 | improve-tenant-isolation | HIGH | ⚠️ Teilweise implementiert | `openspec/changes/improve-tenant-isolation/` |
 | introduce-non-functional-baseline | HIGH | ✅ Bestehend | `openspec/changes/introduce-non-functional-baseline/` |
 
