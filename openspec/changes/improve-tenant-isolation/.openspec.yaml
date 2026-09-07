@@ -1,5 +1,5 @@
 name: improve-tenant-isolation
-status: proposed
+status: partially-implemented
 priority: high
 risk: critical
 team: backend

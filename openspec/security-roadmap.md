@@ -25,18 +25,18 @@ Diese Roadmap definiert die **priorisierten Sicherheitsmassnahmen** basierend au
 
 ### 1. **Audit-Logging implementieren** (SEC-009)
 
-**Status:** ❌ Nicht implementiert  
+**Status:** ✅ Implementiert (siehe `docs/security/audit-logging.md`, PR 753a502)  
 **Risiko:** Hoch (OWASP A09, CIS 8.1)  
 **Aufwand:** ~4 Wochen  
-**OpenSpec:** [`implement-audit-logging`](changes/implement-audit-logging/)  
+**OpenSpec:** [`_archive_implement-audit-logging`](changes/_archive_implement-audit-logging/) (archiviert — implementiert)  
 
 #### 📋 Spezifikation
 
 | Dokument | Beschreibung | Status |
 |----------|-------------|--------|
-| [proposal.md](changes/implement-audit-logging/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
-| [design.md](changes/implement-audit-logging/design.md) | Detaillierte Implementierung | ✅ Fertig |
-| [tasks.md](changes/implement-audit-logging/tasks.md) | Aufgabenliste | ⏳ Geplant |
+| [proposal.md](changes/_archive_implement-audit-logging/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
+| [design.md](changes/_archive_implement-audit-logging/design.md) | Detaillierte Implementierung | ✅ Fertig |
+| [tasks.md](changes/_archive_implement-audit-logging/tasks.md) | Aufgabenliste | ✅ Fertig |
 
 #### 🎯 Ziele
 - Alle schreibenden Operationen auditierbar machen
@@ -60,18 +60,18 @@ Diese Roadmap definiert die **priorisierten Sicherheitsmassnahmen** basierend au
 
 ### 2. **Rate Limiting implementieren** (SEC-016)
 
-**Status:** ❌ Nicht implementiert  
+**Status:** ✅ Implementiert (siehe `docs/security/rate-limiting.md`, PR #172)  
 **Risiko:** Hoch (OWASP A05, CIS 4.1)  
 **Aufwand:** ~2 Wochen  
-**OpenSpec:** [`implement-rate-limiting`](changes/implement-rate-limiting/)  
+**OpenSpec:** [`_archive_implement-rate-limiting`](changes/_archive_implement-rate-limiting/) (archiviert — implementiert)  
 
 #### 📋 Spezifikation
 
 | Dokument | Beschreibung | Status |
 |----------|-------------|--------|
-| [proposal.md](changes/implement-rate-limiting/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
-| [design.md](changes/implement-rate-limiting/design.md) | Detaillierte Implementierung | ✅ Fertig |
-| [tasks.md](changes/implement-rate-limiting/tasks.md) | Aufgabenliste | ⏳ Geplant |
+| [proposal.md](changes/_archive_implement-rate-limiting/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
+| [design.md](changes/_archive_implement-rate-limiting/design.md) | Detaillierte Implementierung | ✅ Fertig |
+| [tasks.md](changes/_archive_implement-rate-limiting/tasks.md) | Aufgabenliste | ✅ Fertig |
 
 #### 🎯 Ziele
 - Alle öffentlichen Endpunkte vor DoS schützen
@@ -106,18 +106,18 @@ RATE_LIMIT_ENDPOINTS:
 
 ### 3. **CSRF-Schutz implementieren** (SEC-004)
 
-**Status:** ❌ Nicht implementiert  
+**Status:** ✅ Implementiert (siehe `docs/security/csrf-protection.md`, PR #211)  
 **Risiko:** Hoch (OWASP A01)  
 **Aufwand:** ~2 Wochen  
-**OpenSpec:** [`implement-csrf-protection`](changes/implement-csrf-protection/)  
+**OpenSpec:** [`_archive_implement-csrf-protection`](changes/_archive_implement-csrf-protection/) (archiviert — implementiert)  
 
 #### 📋 Spezifikation
 
 | Dokument | Beschreibung | Status |
 |----------|-------------|--------|
-| [proposal.md](changes/implement-csrf-protection/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
-| [design.md](changes/implement-csrf-protection/design.md) | Detaillierte Implementierung | ✅ Fertig |
-| [tasks.md](changes/implement-csrf-protection/tasks.md) | Aufgabenliste | ⏳ Geplant |
+| [proposal.md](changes/_archive_implement-csrf-protection/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
+| [design.md](changes/_archive_implement-csrf-protection/design.md) | Detaillierte Implementierung | ✅ Fertig |
+| [tasks.md](changes/_archive_implement-csrf-protection/tasks.md) | Aufgabenliste | ✅ Fertig |
 
 #### 🎯 Ziele
 - Alle state-changing Requests vor CSRF schützen
@@ -154,7 +154,7 @@ RATE_LIMIT_ENDPOINTS:
 |----------|-------------|--------|
 | [proposal.md](changes/improve-tenant-isolation/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
 | [design.md](changes/improve-tenant-isolation/design.md) | Detaillierte Implementierung | ✅ Fertig |
-| [tasks.md](changes/improve-tenant-isolation/tasks.md) | Aufgabenliste | ✅ Fertig |
+| [tasks.md](changes/improve-tenant-isolation/tasks.md) | Aufgabenliste | ⚠️ Teilweise (siehe Datei) |
 
 #### 🎯 Ziele
 - Vollständige Tenant-Isolation auf Application- und DB-Ebene
@@ -352,10 +352,10 @@ RATE_LIMIT_ENDPOINTS:
 
 | Change | Priorität | Status | OpenSpec Pfad |
 |--------|-----------|--------|---------------|
-| implement-audit-logging | HIGH | ✅ Spezifiziert | `openspec/changes/implement-audit-logging/` |
-| implement-rate-limiting | HIGH | ✅ Spezifiziert | `openspec/changes/implement-rate-limiting/` |
-| implement-csrf-protection | HIGH | ✅ Spezifiziert | `openspec/changes/implement-csrf-protection/` |
-| improve-tenant-isolation | HIGH | ✅ Spezifiziert | `openspec/changes/improve-tenant-isolation/` |
+| implement-audit-logging | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/_archive_implement-audit-logging/` |
+| implement-rate-limiting | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/_archive_implement-rate-limiting/` |
+| implement-csrf-protection | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/_archive_implement-csrf-protection/` |
+| improve-tenant-isolation | HIGH | ⚠️ Teilweise implementiert | `openspec/changes/improve-tenant-isolation/` |
 | introduce-non-functional-baseline | HIGH | ✅ Bestehend | `openspec/changes/introduce-non-functional-baseline/` |
 
 ### Verweise
