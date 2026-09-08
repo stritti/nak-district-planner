@@ -46,6 +46,30 @@ async def test_health_endpoint_degrades_when_redis_disconnected() -> None:
 
 
 @pytest.mark.asyncio
+async def test_health_endpoint_degrades_without_database_details() -> None:
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(side_effect=RuntimeError("database password leaked"))
+    mock_session.__aenter__.return_value = mock_session
+    mock_session.__aexit__.return_value = None
+
+    with patch("app.main.AsyncSessionLocal", return_value=mock_session):
+        from app.application.rate_limiter import rate_limiter
+
+        previous_redis = rate_limiter._redis
+        rate_limiter._redis = None
+        try:
+            out = await main.health()
+        finally:
+            rate_limiter._redis = previous_redis
+
+    assert hasattr(out, "status_code")
+    assert out.status_code == 503
+    assert b"database password leaked" not in out.body
+    assert b'"database":"unavailable"' in out.body
+    assert b'"redis":"disconnected"' in out.body
+
+
+@pytest.mark.asyncio
 async def test_unhandled_exception_handler() -> None:
     with patch("app.main.traceback.print_exc"), patch("app.main.sys.stderr.flush"):
         response = await main._unhandled(MagicMock(), RuntimeError("boom"))
