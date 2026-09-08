@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from alembic import op
-
 from app.adapters.db.migrations.rls_policies import get_all_rls_sql, get_drop_rls_sql
 
 # revision identifiers, used by Alembic.

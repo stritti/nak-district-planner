@@ -17,8 +17,8 @@
 - [x] Middleware in FastAPI registrieren (`TenantMiddleware` + `TenantValidationMiddleware` in `main.py`)
 
 #### PostgreSQL RLS Setup
-- [x] RLS für Events, ServiceAssignments, Leaders, CalendarIntegrations, CongregationInvitations, Memberships aktiviert (`app/adapters/db/migrations/rls_policies.py`, angewendet durch Alembic `0014_apply_rls_policies.py`)
-- [x] Policies für Events Tabelle erstellt
+- [x] RLS für PlanningSlots, EventInstances, ServiceAssignments, Leaders, CalendarIntegrations, CongregationInvitations und Memberships aktiviert (`app/adapters/db/migrations/rls_policies.py`, angewendet durch Alembic `0014_apply_rls_policies.py`)
+- [x] Policies für PlanningSlots und EventInstances erstellt
 - [x] Policies für ServiceAssignments Tabelle erstellt
 - [x] Policies für CalendarIntegrations Tabelle erstellt
 - [ ] ~Policies für Districts Tabelle~ *(entfällt — District ist die Root-Tenant-Grenze selbst, Zugriff wird über Membership-Checks in `TenantValidationService` statt RLS gesteuert)*
