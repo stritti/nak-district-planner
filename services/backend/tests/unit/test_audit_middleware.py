@@ -174,6 +174,18 @@ class TestGetResourceType:
         """Test empty path returns empty string."""
         assert middleware._get_resource_type("") == ""
 
+    @pytest.mark.parametrize(
+        ("path", "resource"),
+        [
+            ("/api/v1/users/approve", "users"),
+            ("/api/v1/registrations/reject", "registrations"),
+            ("/api/v1/export-tokens/revoke", "export-tokens"),
+        ],
+    )
+    def test_security_sensitive_mutations_resolve_resource_type(self, middleware, path, resource):
+        """Test representative security-sensitive mutations are auditable."""
+        assert middleware._get_resource_type(path) == resource
+
 
 class TestExtractResourceId:
     """Tests for _extract_resource_id method."""
