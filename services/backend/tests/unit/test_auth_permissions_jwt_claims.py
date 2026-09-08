@@ -111,3 +111,67 @@ def test_extract_memberships_from_claims_variants() -> None:
     }
     out2 = jwt_claims.extract_memberships_from_claims(mixed)
     assert len(out2) == 1
+
+
+def test_extract_memberships_normalizes_missing_subject_to_empty_string() -> None:
+    scope_id = uuid.uuid4()
+
+    memberships = jwt_claims.extract_memberships_from_claims(
+        {
+            "sub": None,
+            "memberships": [
+                {"role": "VIEWER", "scope_type": "DISTRICT", "scope_id": str(scope_id)}
+            ],
+        }
+    )
+
+    assert len(memberships) == 1
+    assert memberships[0].user_sub == ""
+
+
+def test_extract_memberships_skips_claim_with_missing_required_field() -> None:
+    memberships = jwt_claims.extract_memberships_from_claims(
+        {
+            "memberships": [
+                {"role": "VIEWER", "scope_type": "DISTRICT"},
+            ]
+        }
+    )
+
+    assert memberships == []
+
+
+def test_extract_memberships_skips_claim_when_membership_creation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingMembership:
+        def __init__(self, **_: object) -> None:
+            raise RuntimeError("invalid membership")
+
+    monkeypatch.setattr(jwt_claims, "Membership", FailingMembership)
+
+    memberships = jwt_claims.extract_memberships_from_claims(
+        {
+            "memberships": [
+                {
+                    "role": "VIEWER",
+                    "scope_type": "DISTRICT",
+                    "scope_id": str(uuid.uuid4()),
+                }
+            ]
+        }
+    )
+
+    assert memberships == []
+
+
+def test_extract_memberships_returns_empty_when_claim_container_fails() -> None:
+    class BrokenClaims(dict[str, object]):
+        def get(self, key: str, default: object = None) -> object:
+            if key == "memberships":
+                raise RuntimeError("broken claims")
+            return super().get(key, default)
+
+    memberships = jwt_claims.extract_memberships_from_claims(BrokenClaims(memberships=[]))
+
+    assert memberships == []
