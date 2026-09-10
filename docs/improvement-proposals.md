@@ -30,7 +30,7 @@ Weiterentwicklung.
 | Event-Verteilung (applicability) | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Virtuell, keine Duplizierung |
 | **PlanningSlot / PlanningSeries** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – konsolidierter Pfad ohne Feature-Flag/Migration |
 | **EventInstance (Soll/Ist)** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – Matrix liefert Plan/Ist-Daten |
-| **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
+| **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 2 (für unbekannte oder nicht vertrauenswürdige Quellen; v1-Entscheidung siehe `docs/decisions/2026-09-08-external-sync-review.md`) |
 | **RBAC-Durchsetzung** | ✅ | 🟡 | `introduce-rbac-permissions-model` | Modelle vorhanden, Guards unvollständig |
 | **Sync-Zustandsmaschine (Harden)** | ✅ | ❌ | `harden-calendar-sync-algorithm` | Phase 4 |
 | **ExternalEventLink** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 3 |
