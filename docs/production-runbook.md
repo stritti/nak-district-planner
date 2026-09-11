@@ -45,9 +45,47 @@ Der Production Guard verhindert den Start, wenn kritische Werte nicht gesetzt si
 
 ## 4. Backup und Restore
 
-- Backup via `pg_dump` regelmaessig erstellen.
-- Restore-Prozess mindestens periodisch in Staging testen.
-- Ohne Restore-Test gilt Backup-Strategie als unvollstaendig.
+**Ziele:** RPO ≤ 24h (max. 1 Tag Datenverlust), RTO ≤ 4h (max. 4h bis Wiederherstellung).
+
+### 4.1 Backup erstellen
+
+```bash
+BACKUP_ENCRYPT_KEY=<gpg-recipient> ./scripts/backup.sh
+```
+
+- Läuft täglich (Cron oder externer Scheduler — kein Kubernetes-CronJob in diesem Setup).
+- Nutzt `pg_dump -Fc` innerhalb des `db`-Containers, verschlüsselt das Ergebnis mit GPG
+  (`BACKUP_ENCRYPT_KEY`), bevor es den Container verlässt.
+- `production_guard()` verweigert den Start in Produktion, wenn `BACKUP_ENCRYPT_KEY` fehlt.
+- Aufbewahrung: 30 Tage Standard (`BACKUP_RETENTION_DAYS`), ältere Backups werden automatisch gelöscht.
+- Ablagepfad (`BACKUP_DIR`) muss selbst regelmäßig extern gesichert werden (Backup-Rotation).
+
+### 4.2 Restore durchführen
+
+```bash
+./scripts/restore.sh <backup-datei>.dump.gpg --dry-run   # Integritätsprüfung ohne Änderung
+./scripts/restore.sh <backup-datei>.dump.gpg              # mit Bestätigungsabfrage
+```
+
+Schritt-für-Schritt:
+1. Backup-Datei bereitstellen (entschlüsselt automatisch, wenn `.gpg`).
+2. `--dry-run` ausführen — prüft Archiv-Integrität via `pg_restore --list`, ändert nichts.
+3. Ohne `--dry-run` ausführen — fragt vor dem Überschreiben explizit nach Bestätigung.
+4. Nach dem Restore: Anwendung neu starten, Health-Check + Smoke-Test (siehe Abschnitt 3) durchführen.
+5. Ergebnis (Datum, Dauer, Auffälligkeiten) im Incident-/Ops-Log dokumentieren.
+
+**Ohne dokumentierten Restore-Test in einer separaten Umgebung gilt die Backup-Strategie
+als unvollständig** — ein Restore-Test ist mindestens vierteljährlich durchzuführen und
+hier zu protokollieren:
+
+| Datum | Umgebung | Ergebnis | Durchgeführt von |
+|-------|----------|----------|-------------------|
+| _(noch kein Eintrag)_ | | | |
+
+### 4.3 Verantwortlichkeit
+
+Backup/Restore-Verantwortung liegt beim Backend-Team (siehe `openspec/security-roadmap.md`,
+Abschnitt Verantwortlichkeiten).
 
 ## 5. Monitoring und Alarmierung (Minimum)
 

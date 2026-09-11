@@ -48,27 +48,25 @@
 
 ## 4. Backup/Restore-Automatisierung
 
-- [ ] 4.1 `scripts/backup.sh` erstellen:
-  - `pg_dump -Fc` (custom format, komprimiert)
+- [x] 4.1 `scripts/backup.sh` erstellen:
+  - `pg_dump -Fc` (custom format, komprimiert) — läuft via `docker exec` im `db`-Container,
+    kein `pg_dump`-Client auf dem Host nötig
   - GPG-Verschlüsselung mit konfigurierbarem Key
   - Timestamp-basierte Dateinamen
-  - Konfiguration via `BACKUP_DIR`, `BACKUP_ENCRYPT_KEY`, `DATABASE_URL`
+  - Konfiguration via `BACKUP_DIR`, `BACKUP_ENCRYPT_KEY`, `DB_CONTAINER` *(statt `DATABASE_URL` —
+    das Skript verbindet sich nicht direkt zur DB, sondern nutzt den laufenden Container, da der
+    DB-Port in Produktion nicht nach außen exponiert ist)*
   - Maximale Aufbewahrung konfigurierbar (`BACKUP_RETENTION_DAYS`)
-- [ ] 4.2 `scripts/restore.sh` erstellen:
-  - `pg_restore` mit Bestätigung vor Überschreiben
-  - Integritätsprüfung (`pg_restore --list` vorab)
-  - Dry-Run-Modus
-- [ ] 4.3 Production-Guard-Prüfung: `BACKUP_ENCRYPT_KEY` in Production gesetzt?
-- [ ] 4.4 Runbook in `docs/production-runbook.md` erweitern:
-  - RPO ≤ 24h, RTO ≤ 4h definieren
+- [x] 4.2 `scripts/restore.sh` erstellen:
+  - `pg_restore` mit Bestätigung vor Überschreiben (`--yes` zum Überspringen)
+  - Integritätsprüfung (`pg_restore --list` vorab, bricht bei korruptem Archiv ohne Änderung ab)
+  - Dry-Run-Modus (`--dry-run`)
+- [x] 4.3 Production-Guard-Prüfung: `BACKUP_ENCRYPT_KEY` in Production gesetzt? *(`app/config.py::production_guard`, Tests in `tests/unit/test_production_guard.py`)*
+- [x] 4.4 Runbook in `docs/production-runbook.md` erweitert:
+  - RPO ≤ 24h, RTO ≤ 4h definiert
   - Backup-Erstellungs-Rhythmus (täglich)
   - Restore-Protokoll (Schritt-für-Schritt)
   - Aufbewahrungsfrist (30 Tage)
   - Verantwortlichkeit
-- [ ] 4.5 Restore-Test auf separater Umgebung durchführen und protokollieren:
-  - Backup erstellen
-  - Auf Test-Umgebung einspielen
-  - Anwendung starten
-  - Datenintegrität prüfen
-  - Datum + Ergebnis dokumentieren
-- [ ] 4.6 Backup-Strategie in README.md aktualisieren
+- [ ] 4.5 Restore-Test auf separater Umgebung durchführen und protokollieren *(bewusst offen gelassen — erfordert eine echte Staging-Infrastruktur, die hier nicht verfügbar ist; die Skript-Logik selbst wurde per End-to-End-Test gegen einen Wegwerf-Container verifiziert: Backup → Datenänderung → Restore → Originaldaten wiederhergestellt, inkl. Fehlerfall "korruptes Archiv" und Klartext-Warnung ohne `BACKUP_ENCRYPT_KEY`. Protokoll-Tabelle für den echten Test steht bereit in `docs/production-runbook.md` Abschnitt 4.2.)*
+- [x] 4.6 Backup-Strategie in README.md aktualisiert
