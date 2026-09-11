@@ -250,6 +250,21 @@ def scoped_membership_admin_sql(alias: str = "memberships") -> str:
     )"""
 
 
+def self_approved_registration_insert_sql(alias: str = "memberships") -> str:
+    return f"""(
+        {alias}.user_sub = current_setting('app.current_user_sub', true)
+        AND EXISTS (
+            SELECT 1
+            FROM leader_registrations lr
+            WHERE lr.status = 'APPROVED'
+              AND lr.user_sub = {alias}.user_sub
+              AND lr.assigned_scope_type = {alias}.scope_type
+              AND lr.assigned_scope_id = {alias}.scope_id
+              AND lr.assigned_role = {alias}.role
+        )
+    )"""
+
+
 def external_event_link_sql(permission_sql_factory) -> str:
     return f"""(
         {SUPERADMIN_SQL}
@@ -442,7 +457,10 @@ RLS_POLICIES = {
             f"""
             CREATE POLICY memberships_insert_policy ON memberships
                 FOR INSERT
-                WITH CHECK {scoped_membership_admin_sql('memberships')};
+                WITH CHECK (
+                    {scoped_membership_admin_sql('memberships')}
+                    OR {self_approved_registration_insert_sql('memberships')}
+                );
             """,
             f"""
             CREATE POLICY memberships_update_policy ON memberships
@@ -478,7 +496,7 @@ RLS_POLICIES = {
     "leader_registrations": {
         "enable": "ALTER TABLE leader_registrations ENABLE ROW LEVEL SECURITY;",
         "policies": [
-            f"""CREATE POLICY leader_registrations_select_policy ON leader_registrations FOR SELECT USING {planning_slot_read_sql('leader_registrations')};""",
+            f"""CREATE POLICY leader_registrations_select_policy ON leader_registrations FOR SELECT USING ({planning_slot_read_sql('leader_registrations')} OR leader_registrations.user_sub = current_setting('app.current_user_sub', true));""",
             f"""CREATE POLICY leader_registrations_insert_policy ON leader_registrations FOR INSERT WITH CHECK {planning_slot_write_sql('leader_registrations')};""",
             f"""CREATE POLICY leader_registrations_update_policy ON leader_registrations FOR UPDATE USING {planning_slot_read_sql('leader_registrations')} WITH CHECK {planning_slot_write_sql('leader_registrations')};""",
             f"""CREATE POLICY leader_registrations_delete_policy ON leader_registrations FOR DELETE USING {planning_slot_admin_sql('leader_registrations')};""",
