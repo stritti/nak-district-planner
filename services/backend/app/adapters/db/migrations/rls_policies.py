@@ -13,17 +13,23 @@ from __future__ import annotations
 # These policies assume that the current user's tenant context is set via:
 # - current_setting('app.current_user_sub', true) for user subject
 #
+# Worker/maintenance Celery tasks set ``app.is_system_worker=true`` through
+# ``TenantContext`` so scheduled cross-tenant jobs can operate under RLS without
+# requiring the database role to own or BYPASSRLS-protect tenant tables.
 # The legacy ``events`` table was dropped by Alembic revision 0125. Current
 # tenant ownership is anchored on ``planning_slots``. Derived tables join
 # through ``planning_slots`` rather than referencing the removed table.
 
-SUPERADMIN_SQL = """
+SYSTEM_WORKER_SQL = """current_setting('app.is_system_worker', true) = 'true'"""
+
+SUPERADMIN_SQL = f"""
 EXISTS (
     SELECT 1
     FROM users
     WHERE sub = current_setting('app.current_user_sub', true)
       AND is_superadmin = true
 )
+OR {SYSTEM_WORKER_SQL}
 """
 
 
@@ -183,6 +189,84 @@ def congregation_row_read_sql(alias: str = "congregations") -> str:
     )"""
 
 
+def congregation_row_write_sql(alias: str = "congregations") -> str:
+    return f"""(
+        {SUPERADMIN_SQL}
+        OR EXISTS (
+            SELECT 1 FROM memberships m
+            WHERE m.user_sub = current_setting('app.current_user_sub', true)
+              AND m.scope_type = 'DISTRICT'
+              AND m.scope_id = {alias}.district_id
+              AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+        )
+        OR EXISTS (
+            SELECT 1 FROM memberships m
+            WHERE m.user_sub = current_setting('app.current_user_sub', true)
+              AND m.scope_type = 'CONGREGATION'
+              AND m.scope_id = {alias}.id
+              AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+        )
+    )"""
+
+
+def congregation_row_admin_sql(alias: str = "congregations") -> str:
+    return f"""(
+        {SUPERADMIN_SQL}
+        OR EXISTS (
+            SELECT 1 FROM memberships m
+            WHERE m.user_sub = current_setting('app.current_user_sub', true)
+              AND m.scope_type = 'DISTRICT'
+              AND m.scope_id = {alias}.district_id
+              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+        )
+        OR EXISTS (
+            SELECT 1 FROM memberships m
+            WHERE m.user_sub = current_setting('app.current_user_sub', true)
+              AND m.scope_type = 'CONGREGATION'
+              AND m.scope_id = {alias}.id
+              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+        )
+    )"""
+
+
+def scoped_membership_admin_sql(alias: str = "memberships") -> str:
+    return f"""(
+        {SUPERADMIN_SQL}
+        OR ({alias}.scope_type = 'DISTRICT' AND EXISTS (
+            SELECT 1 FROM memberships m
+            WHERE m.user_sub = current_setting('app.current_user_sub', true)
+              AND m.scope_type = 'DISTRICT'
+              AND m.scope_id = {alias}.scope_id
+              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+        ))
+        OR ({alias}.scope_type = 'CONGREGATION' AND EXISTS (
+            SELECT 1 FROM congregations c
+            JOIN memberships m ON m.user_sub = current_setting('app.current_user_sub', true)
+            WHERE c.id = {alias}.scope_id
+              AND ((m.scope_type = 'CONGREGATION' AND m.scope_id = c.id)
+                   OR (m.scope_type = 'DISTRICT' AND m.scope_id = c.district_id))
+              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+        ))
+    )"""
+
+
+def external_event_link_sql(permission_sql_factory) -> str:
+    return f"""(
+        {SUPERADMIN_SQL}
+        OR EXISTS (
+            SELECT 1 FROM event_instances ei
+            JOIN planning_slots ps ON ps.id = ei.planning_slot_id
+            WHERE ei.id = external_event_links.event_instance_id
+              AND {permission_sql_factory('ps')}
+        )
+        OR EXISTS (
+            SELECT 1 FROM calendar_integrations ci
+            WHERE ci.id = external_event_links.calendar_integration_id
+              AND {permission_sql_factory('ci')}
+        )
+    )"""
+
+
 RLS_POLICIES = {
     "planning_slots": {
         "enable": "ALTER TABLE planning_slots ENABLE ROW LEVEL SECURITY;",
@@ -258,7 +342,7 @@ RLS_POLICIES = {
             f"""
             CREATE POLICY service_assignments_delete_policy ON service_assignments
                 FOR DELETE
-                USING {related_planning_slot_sql('service_assignments', planning_slot_admin_sql)};
+                USING {related_planning_slot_sql('service_assignments', planning_slot_write_sql)};
             """,
         ],
     },
@@ -270,16 +354,25 @@ RLS_POLICIES = {
                 FOR SELECT
                 USING (
                     {SUPERADMIN_SQL}
-                    OR {congregation_membership_sql('leaders')}
-                    OR EXISTS (
-                        SELECT 1
-                        FROM memberships m
-                        JOIN congregations c ON c.id = leaders.congregation_id
-                        WHERE m.user_sub = current_setting('app.current_user_sub', true)
-                          AND m.scope_type = 'DISTRICT'
-                          AND m.scope_id = c.district_id
-                    )
+                    OR {district_membership_sql('leaders')}
+                    OR (leaders.congregation_id IS NOT NULL AND {congregation_membership_sql('leaders')})
                 );
+            """,
+            f"""
+            CREATE POLICY leaders_insert_policy ON leaders
+                FOR INSERT
+                WITH CHECK {planning_slot_write_sql('leaders')};
+            """,
+            f"""
+            CREATE POLICY leaders_update_policy ON leaders
+                FOR UPDATE
+                USING {planning_slot_read_sql('leaders')}
+                WITH CHECK {planning_slot_write_sql('leaders')};
+            """,
+            f"""
+            CREATE POLICY leaders_delete_policy ON leaders
+                FOR DELETE
+                USING {planning_slot_admin_sql('leaders')};
             """,
         ],
     },
@@ -291,6 +384,22 @@ RLS_POLICIES = {
                 FOR SELECT
                 USING {invitation_visibility_sql(congregation_row_read_sql, planning_slot_read_sql)};
             """,
+            f"""
+            CREATE POLICY invitations_insert_policy ON congregation_invitations
+                FOR INSERT
+                WITH CHECK {invitation_visibility_sql(congregation_row_write_sql, planning_slot_write_sql)};
+            """,
+            f"""
+            CREATE POLICY invitations_update_policy ON congregation_invitations
+                FOR UPDATE
+                USING {invitation_visibility_sql(congregation_row_read_sql, planning_slot_read_sql)}
+                WITH CHECK {invitation_visibility_sql(congregation_row_write_sql, planning_slot_write_sql)};
+            """,
+            f"""
+            CREATE POLICY invitations_delete_policy ON congregation_invitations
+                FOR DELETE
+                USING {invitation_visibility_sql(congregation_row_admin_sql, planning_slot_admin_sql)};
+            """,
         ],
     },
     "calendar_integrations": {
@@ -300,6 +409,22 @@ RLS_POLICIES = {
             CREATE POLICY calendar_integrations_tenant_isolation_policy ON calendar_integrations
                 FOR SELECT
                 USING {planning_slot_read_sql('calendar_integrations')};
+            """,
+            f"""
+            CREATE POLICY calendar_integrations_insert_policy ON calendar_integrations
+                FOR INSERT
+                WITH CHECK {planning_slot_write_sql('calendar_integrations')};
+            """,
+            f"""
+            CREATE POLICY calendar_integrations_update_policy ON calendar_integrations
+                FOR UPDATE
+                USING {planning_slot_read_sql('calendar_integrations')}
+                WITH CHECK {planning_slot_write_sql('calendar_integrations')};
+            """,
+            f"""
+            CREATE POLICY calendar_integrations_delete_policy ON calendar_integrations
+                FOR DELETE
+                USING {planning_slot_admin_sql('calendar_integrations')};
             """,
         ],
     },
@@ -314,6 +439,76 @@ RLS_POLICIES = {
                     OR memberships.user_sub = current_setting('app.current_user_sub', true)
                 );
             """,
+            f"""
+            CREATE POLICY memberships_insert_policy ON memberships
+                FOR INSERT
+                WITH CHECK {scoped_membership_admin_sql('memberships')};
+            """,
+            f"""
+            CREATE POLICY memberships_update_policy ON memberships
+                FOR UPDATE
+                USING {scoped_membership_admin_sql('memberships')}
+                WITH CHECK {scoped_membership_admin_sql('memberships')};
+            """,
+            f"""
+            CREATE POLICY memberships_delete_policy ON memberships
+                FOR DELETE
+                USING {scoped_membership_admin_sql('memberships')};
+            """,
+        ],
+    },
+    "planning_series": {
+        "enable": "ALTER TABLE planning_series ENABLE ROW LEVEL SECURITY;",
+        "policies": [
+            f"""CREATE POLICY planning_series_select_policy ON planning_series FOR SELECT USING {planning_slot_read_sql('planning_series')};""",
+            f"""CREATE POLICY planning_series_insert_policy ON planning_series FOR INSERT WITH CHECK {planning_slot_write_sql('planning_series')};""",
+            f"""CREATE POLICY planning_series_update_policy ON planning_series FOR UPDATE USING {planning_slot_read_sql('planning_series')} WITH CHECK {planning_slot_write_sql('planning_series')};""",
+            f"""CREATE POLICY planning_series_delete_policy ON planning_series FOR DELETE USING {planning_slot_admin_sql('planning_series')};""",
+        ],
+    },
+    "notifications": {
+        "enable": "ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;",
+        "policies": [
+            f"""CREATE POLICY notifications_select_policy ON notifications FOR SELECT USING {planning_slot_read_sql('notifications')};""",
+            f"""CREATE POLICY notifications_insert_policy ON notifications FOR INSERT WITH CHECK {planning_slot_write_sql('notifications')};""",
+            f"""CREATE POLICY notifications_update_policy ON notifications FOR UPDATE USING {planning_slot_read_sql('notifications')} WITH CHECK {planning_slot_write_sql('notifications')};""",
+            f"""CREATE POLICY notifications_delete_policy ON notifications FOR DELETE USING {planning_slot_admin_sql('notifications')};""",
+        ],
+    },
+    "leader_registrations": {
+        "enable": "ALTER TABLE leader_registrations ENABLE ROW LEVEL SECURITY;",
+        "policies": [
+            f"""CREATE POLICY leader_registrations_select_policy ON leader_registrations FOR SELECT USING {planning_slot_read_sql('leader_registrations')};""",
+            f"""CREATE POLICY leader_registrations_insert_policy ON leader_registrations FOR INSERT WITH CHECK {planning_slot_write_sql('leader_registrations')};""",
+            f"""CREATE POLICY leader_registrations_update_policy ON leader_registrations FOR UPDATE USING {planning_slot_read_sql('leader_registrations')} WITH CHECK {planning_slot_write_sql('leader_registrations')};""",
+            f"""CREATE POLICY leader_registrations_delete_policy ON leader_registrations FOR DELETE USING {planning_slot_admin_sql('leader_registrations')};""",
+        ],
+    },
+    "congregation_groups": {
+        "enable": "ALTER TABLE congregation_groups ENABLE ROW LEVEL SECURITY;",
+        "policies": [
+            f"""CREATE POLICY congregation_groups_select_policy ON congregation_groups FOR SELECT USING ({SUPERADMIN_SQL} OR {district_membership_sql('congregation_groups')});""",
+            f"""CREATE POLICY congregation_groups_insert_policy ON congregation_groups FOR INSERT WITH CHECK ({SUPERADMIN_SQL} OR {district_write_membership_sql('congregation_groups')});""",
+            f"""CREATE POLICY congregation_groups_update_policy ON congregation_groups FOR UPDATE USING ({SUPERADMIN_SQL} OR {district_membership_sql('congregation_groups')}) WITH CHECK ({SUPERADMIN_SQL} OR {district_write_membership_sql('congregation_groups')});""",
+            f"""CREATE POLICY congregation_groups_delete_policy ON congregation_groups FOR DELETE USING ({SUPERADMIN_SQL} OR {district_admin_membership_sql('congregation_groups')});""",
+        ],
+    },
+    "audit_logs": {
+        "enable": "ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;",
+        "policies": [
+            f"""CREATE POLICY audit_logs_select_policy ON audit_logs FOR SELECT USING ({SUPERADMIN_SQL} OR (audit_logs.district_id IS NOT NULL AND {district_membership_sql('audit_logs')}) OR (audit_logs.congregation_id IS NOT NULL AND {congregation_membership_sql('audit_logs')}));""",
+            f"""CREATE POLICY audit_logs_insert_policy ON audit_logs FOR INSERT WITH CHECK ({SUPERADMIN_SQL} OR (audit_logs.district_id IS NOT NULL AND {district_membership_sql('audit_logs')}) OR (audit_logs.congregation_id IS NOT NULL AND {congregation_membership_sql('audit_logs')}));""",
+            f"""CREATE POLICY audit_logs_update_policy ON audit_logs FOR UPDATE USING ({SUPERADMIN_SQL}) WITH CHECK ({SUPERADMIN_SQL});""",
+            f"""CREATE POLICY audit_logs_delete_policy ON audit_logs FOR DELETE USING ({SUPERADMIN_SQL});""",
+        ],
+    },
+    "external_event_links": {
+        "enable": "ALTER TABLE external_event_links ENABLE ROW LEVEL SECURITY;",
+        "policies": [
+            f"""CREATE POLICY external_event_links_select_policy ON external_event_links FOR SELECT USING {external_event_link_sql(planning_slot_read_sql)};""",
+            f"""CREATE POLICY external_event_links_insert_policy ON external_event_links FOR INSERT WITH CHECK {external_event_link_sql(planning_slot_write_sql)};""",
+            f"""CREATE POLICY external_event_links_update_policy ON external_event_links FOR UPDATE USING {external_event_link_sql(planning_slot_read_sql)} WITH CHECK {external_event_link_sql(planning_slot_write_sql)};""",
+            f"""CREATE POLICY external_event_links_delete_policy ON external_event_links FOR DELETE USING {external_event_link_sql(planning_slot_admin_sql)};""",
         ],
     },
 }

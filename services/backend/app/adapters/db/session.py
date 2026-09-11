@@ -27,6 +27,10 @@ def _set_tenant_gucs(connection, **kwargs):
             text("SELECT set_config('app.current_user_sub', :val, true)"),
             {"val": user_sub},
         )
+    if "SYSTEM_WORKER" in (TC.get_user_roles() or []):
+        connection.execute(
+            text("SELECT set_config('app.is_system_worker', 'true', true)"),
+        )
     district_id = TC.get_district()
     if district_id is not None:
         connection.execute(
