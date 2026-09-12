@@ -199,6 +199,13 @@ async def get_current_user_with_memberships(
                 user.email,
             )
 
+    # Populate TenantContext with authenticated roles for RLS GUC export
+    from app.tenant import TenantContext
+    user_roles = [m.role.value for m in memberships]
+    if user.is_superadmin:
+        user_roles.append("SUPERADMIN")
+    TenantContext.set_context(user_roles=user_roles)
+
     return CurrentUserContext(user=user, memberships=memberships)
 
 

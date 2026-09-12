@@ -139,6 +139,31 @@ def planning_slot_write_sql(alias: str = "planning_slots") -> str:
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
+def notifications_update_sql(alias: str = "notifications") -> str:
+    """Allow users with VIEWER role or higher to update notifications (e.g., mark as read)."""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR {district_membership_sql(alias)}
+    OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def leaders_self_update_sql(alias: str = "leaders") -> str:
+    """Allow users to update their own leader record (self-link/unlink via user_sub)."""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR {district_membership_sql(alias)}
+    OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
+    OR ({alias}.user_sub = current_setting('app.current_user_sub', true))
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def planning_slot_admin_sql(alias: str = "planning_slots") -> str:
     return f"""
 (
@@ -271,8 +296,26 @@ def scoped_membership_admin_sql(alias: str = "memberships") -> str:
         OR current_setting('app.current_user_roles', true) LIKE '%DISTRICT_ADMIN%'
     )
     AND (
-        ({alias}.scope_type = 'DISTRICT' AND {district_membership_sql(alias)})
-        OR ({alias}.scope_type = 'CONGREGATION' AND {congregation_membership_sql(alias)})
+        -- For DISTRICT scope: user must have admin membership in that district
+        ({alias}.scope_type = 'DISTRICT' AND EXISTS (
+            SELECT 1 FROM memberships m
+            WHERE m.user_sub = current_setting('app.current_user_sub', true)
+              AND m.scope_type = 'DISTRICT'
+              AND m.scope_id = {alias}.scope_id
+              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+        ))
+        -- For CONGREGATION scope: user must have admin membership in that congregation or its district
+        OR ({alias}.scope_type = 'CONGREGATION' AND EXISTS (
+            SELECT 1 FROM memberships m
+            WHERE m.user_sub = current_setting('app.current_user_sub', true)
+              AND (
+                  (m.scope_type = 'CONGREGATION' AND m.scope_id = {alias}.scope_id)
+                  OR (m.scope_type = 'DISTRICT' AND m.scope_id = (
+                      SELECT c.district_id FROM congregations c WHERE c.id = {alias}.scope_id
+                  ))
+              )
+              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+        ))
     )
 )
 """
@@ -317,14 +360,10 @@ def external_event_link_sql(permission_sql_factory) -> str:
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
-def invitation_overwrite_request_sql(permission_sql_factory) -> str:
+def invitation_overwrite_request_sql(invitation_visibility_factory) -> str:
     return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
         {SUPERADMIN_SQL}
-        OR EXISTS (
-            SELECT 1 FROM congregation_invitations ci
-            WHERE ci.id = invitation_overwrite_requests.invitation_id
-              AND {permission_sql_factory("ci")}
-        )
+        OR {invitation_visibility_factory("invitation_overwrite_requests")}
     )"""
 
 
@@ -455,7 +494,7 @@ RLS_POLICIES = {
             CREATE POLICY leaders_update_policy ON leaders
                 FOR UPDATE
                 USING {planning_slot_read_sql("leaders")}
-                WITH CHECK {planning_slot_write_sql("leaders")};
+                WITH CHECK {leaders_self_update_sql("leaders")};
             """,
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY leaders_delete_policy ON leaders
@@ -562,7 +601,7 @@ RLS_POLICIES = {
         "policies": [
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY notifications_select_policy ON notifications FOR SELECT USING {planning_slot_read_sql("notifications")};""",
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY notifications_insert_policy ON notifications FOR INSERT WITH CHECK {planning_slot_write_sql("notifications")};""",
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY notifications_update_policy ON notifications FOR UPDATE USING {planning_slot_read_sql("notifications")} WITH CHECK {planning_slot_write_sql("notifications")};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY notifications_update_policy ON notifications FOR UPDATE USING {notifications_update_sql("notifications")} WITH CHECK {notifications_update_sql("notifications")};""",
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY notifications_delete_policy ON notifications FOR DELETE USING {planning_slot_admin_sql("notifications")};""",
         ],
     },

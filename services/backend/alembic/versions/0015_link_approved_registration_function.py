@@ -32,7 +32,7 @@ def upgrade() -> None:
         )
         RETURNS TABLE(candidate_count INTEGER, granted_role TEXT, granted_scope_type TEXT, granted_scope_id UUID)
         LANGUAGE plpgsql
-        SECURITY DEFINER
+        SECURITY INVOKER
         SET search_path = public
         AS $$
         DECLARE
@@ -112,10 +112,9 @@ def upgrade() -> None:
         $$;
         """
     )
-    # No established runtime database role exists in the migrations/config. The
-    # function relies on SECURITY DEFINER ownership with default EXECUTE
-    # privileges; the RLS Option A self-gate remains as a second layer if direct
-    # INSERT rights are evaluated.
+    # SECURITY INVOKER ensures the function runs with the caller's privileges,
+    # respecting RLS policies. The caller must have appropriate permissions
+    # (granted via nak_app role or direct grants).
 
 
 def downgrade() -> None:

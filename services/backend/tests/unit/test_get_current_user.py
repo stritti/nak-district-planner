@@ -240,7 +240,12 @@ class TestGetCurrentUserWithMemberships:
             patch("app.adapters.api.deps.SqlMembershipRepository") as MemRepo,
         ):
             mem_repo = AsyncMock()
-            mem_repo.get_all_by_user.side_effect = [[], [object()]]
+            # First call returns empty list (no memberships initially)
+            # Second call returns a mock membership with role attribute
+            mock_membership = MagicMock()
+            mock_membership.role = MagicMock()
+            mock_membership.role.value = "PLANNER"
+            mem_repo.get_all_by_user.side_effect = [[], [mock_membership]]
             MemRepo.return_value = mem_repo
 
             ctx = await get_current_user_with_memberships(user=user, session=session)
