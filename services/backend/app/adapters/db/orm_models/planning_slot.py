@@ -41,9 +41,7 @@ class PlanningSlotORM(Base):
     )
     # List of congregation IDs (as strings) that this slot applies to (for district-wide holidays)
     # Supports "all" sentinel string for district-wide applicability
-    applicability: Mapped[list[str]] = mapped_column(
-        ARRAY(String), nullable=False, default=[]
-    )
+    applicability: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
     planning_date: Mapped[date] = mapped_column(Date, nullable=False)
     planning_time: Mapped[time] = mapped_column(Time(timezone=False), nullable=False)
     status: Mapped[PlanningSlotStatus] = mapped_column(

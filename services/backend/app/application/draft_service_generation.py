@@ -157,14 +157,11 @@ class GenerateDraftServicesUseCase:
                         slot.planning_time.isoformat(),
                     )
                     for slot in existing_slots
-                    if slot.congregation_id == congregation.id
-                    and slot.category == "Gottesdienst"
+                    if slot.congregation_id == congregation.id and slot.category == "Gottesdienst"
                 }
 
                 for slot in slots:
-                    planning_time = _planning_time_from_utc(
-                        slot.start_at_utc, self._timezone_name
-                    )
+                    planning_time = _planning_time_from_utc(slot.start_at_utc, self._timezone_name)
                     key = (slot.start_at_utc.date().isoformat(), planning_time.isoformat())
 
                     if key in existing_for_congregation:

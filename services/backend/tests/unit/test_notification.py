@@ -83,7 +83,7 @@ class TestNotificationService:
     async def test_create(self, service: NotificationService, repo: MagicMock):
         district_id = uuid.uuid4()
         repo.save = AsyncMock()
-        
+
         notification = await service.create_notification(
             district_id=district_id,
             type=NotificationType.SYSTEM,
@@ -93,10 +93,9 @@ class TestNotificationService:
         assert notification.title == "Test"
         assert notification.district_id == district_id
         repo.save.assert_awaited_once()
-        
+
         # Verify that the created_at timestamp is set
         assert notification.created_at is not None
-
 
     async def test_create_with_all_params(self, service: NotificationService, repo: MagicMock):
         district_id = uuid.uuid4()

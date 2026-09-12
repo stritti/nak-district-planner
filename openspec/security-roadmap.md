@@ -25,10 +25,10 @@ Diese Roadmap definiert die **priorisierten Sicherheitsmassnahmen** basierend au
 
 ### 1. **Audit-Logging implementieren** (SEC-009)
 
-**Status:** ✅ Implementiert (siehe `docs/security/audit-logging.md`, PR 753a502)  
+**Status:** ⚠️ Kernfunktionalität implementiert, Compliance-Erweiterungen offen (siehe `docs/security/audit-logging.md`, PR 753a502)  
 **Risiko:** Hoch (OWASP A09, CIS 8.1)  
-**Aufwand:** ~4 Wochen  
-**OpenSpec:** [`archive/2026-09-07-implement-audit-logging`](changes/archive/2026-09-07-implement-audit-logging/) (archiviert — implementiert)  
+**Aufwand:** ~4 Wochen (Kern) + Follow-up für Erweiterungen  
+**OpenSpec:** [`archive/2026-09-07-implement-audit-logging`](changes/archive/2026-09-07-implement-audit-logging/) (archiviert — Kern implementiert, Erweiterungen offen)  
 
 #### 📋 Spezifikation
 
@@ -36,7 +36,7 @@ Diese Roadmap definiert die **priorisierten Sicherheitsmassnahmen** basierend au
 |----------|-------------|--------|
 | [proposal.md](changes/archive/2026-09-07-implement-audit-logging/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
 | [design.md](changes/archive/2026-09-07-implement-audit-logging/design.md) | Detaillierte Implementierung | ✅ Fertig |
-| [tasks.md](changes/archive/2026-09-07-implement-audit-logging/tasks.md) | Aufgabenliste | ⚠️ Teilweise (Decorator, API, Retention offen) |
+| [tasks.md](changes/archive/2026-09-07-implement-audit-logging/tasks.md) | Aufgabenliste | ⚠️ Teilweise — **Decorator, Admin-API, Retention offen** |
 
 #### 🎯 Ziele
 - Alle schreibenden Operationen auditierbar machen
@@ -367,6 +367,19 @@ RATE_LIMIT_ENDPOINTS:
 
 ---
 
+## 📋 Offene Compliance-Lücken (Stand 2026-09-12)
+
+Die folgenden Punkte sind in den archivierten OpenSpec-Changes als **nicht umgesetzt** dokumentiert und sollten als Follow-up-Changes erfasst werden:
+
+| Change | Offene Lücken | Priorität |
+|--------|---------------|-----------|
+| implement-audit-logging | `@audit_action` Decorator, `AuditAPI` (Admin-Abfrage), `AuditRetentionService` (automatische Bereinigung) | MEDIUM |
+| implement-rate-limiting | Rate-Limit Monitoring/Metrics, Frontend 429-Handling | MEDIUM |
+| implement-csrf-protection | E2E-Verifizierung der Frontend-Integration (`useCSRF()` gegen echte Browser-Requests) | HIGH |
+| improve-tenant-isolation | RLS-Integrationstests (echte PostgreSQL), API-Key Tenant-Kontext, Monitoring/Alerting, Rollback-Plan | HIGH |
+
+---
+
 ## 👥 Verantwortlichkeiten
 
 | Rolle | Verantwortung | Team |
@@ -392,6 +405,7 @@ RATE_LIMIT_ENDPOINTS:
 | Version | Datum | Autor | Änderungen |
 |---------|-------|-------|-----------|
 | 1.0.0 | 2025-06-19 | Security Team | Initialversion |
+| 1.0.1 | 2026-09-12 | Security Team | Offene Compliance-Lücken dokumentiert, Audit-Status korrigiert |
 
 **Nächste Review:** 2025-09-30 (nach Q3 2025)
 **Klassifikation:** Intern - Nur für autorisiertes Personal

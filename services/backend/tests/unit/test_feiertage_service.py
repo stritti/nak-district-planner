@@ -215,7 +215,8 @@ class TestImportKirchlicheFesttage:
         slot_repo_mock.save.return_value = None
 
         with patch(
-            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+            "app.application.feiertage_service.SqlPlanningSlotRepository",
+            return_value=slot_repo_mock,
         ):
             result = await import_kirchliche_festtage(district_id, 2026, session)
 
@@ -238,7 +239,8 @@ class TestImportKirchlicheFesttage:
         slot_repo_mock.save.return_value = None
 
         with patch(
-            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+            "app.application.feiertage_service.SqlPlanningSlotRepository",
+            return_value=slot_repo_mock,
         ):
             result = await import_kirchliche_festtage(district_id, 2026, session)
 
@@ -274,7 +276,8 @@ class TestImportKirchlicheFesttage:
         slot_repo_mock.save.return_value = None
 
         with patch(
-            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+            "app.application.feiertage_service.SqlPlanningSlotRepository",
+            return_value=slot_repo_mock,
         ):
             result = await import_kirchliche_festtage(district_id, 2026, session)
 
@@ -318,8 +321,12 @@ class TestImportFeiertage:
         slot_repo_mock.list_for_date_range.return_value = []
         slot_repo_mock.save.return_value = None
 
-        with self._mock_nager_client(holidays), patch(
-            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        with (
+            self._mock_nager_client(holidays),
+            patch(
+                "app.application.feiertage_service.SqlPlanningSlotRepository",
+                return_value=slot_repo_mock,
+            ),
         ):
             result = await import_feiertage(district_id, 2026, None, session)
 
@@ -334,7 +341,11 @@ class TestImportFeiertage:
         session = AsyncMock()
         holidays = [
             {"date": "2026-01-01", "localName": "Neujahr", "counties": None},
-            {"date": "2026-01-06", "localName": "Heilige Drei Könige", "counties": ["DE-BW", "DE-BY"]},
+            {
+                "date": "2026-01-06",
+                "localName": "Heilige Drei Könige",
+                "counties": ["DE-BW", "DE-BY"],
+            },
             {"date": "2026-08-15", "localName": "Mariä Himmelfahrt", "counties": ["DE-BY"]},
             {"date": "2026-11-01", "localName": "Allerheiligen", "counties": ["DE-NW"]},
         ]
@@ -343,8 +354,12 @@ class TestImportFeiertage:
         slot_repo_mock.list_for_date_range.return_value = []
         slot_repo_mock.save.return_value = None
 
-        with self._mock_nager_client(holidays), patch(
-            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        with (
+            self._mock_nager_client(holidays),
+            patch(
+                "app.application.feiertage_service.SqlPlanningSlotRepository",
+                return_value=slot_repo_mock,
+            ),
         ):
             result = await import_feiertage(district_id, 2026, "BY", session)
 
@@ -372,8 +387,12 @@ class TestImportFeiertage:
         slot_repo_mock.list_for_date_range.return_value = [existing]
         slot_repo_mock.save.return_value = None
 
-        with self._mock_nager_client(holidays), patch(
-            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+        with (
+            self._mock_nager_client(holidays),
+            patch(
+                "app.application.feiertage_service.SqlPlanningSlotRepository",
+                return_value=slot_repo_mock,
+            ),
         ):
             result = await import_feiertage(district_id, 2026, None, session)
 
@@ -425,7 +444,8 @@ class TestReferenceFeiertageForCongregation:
         slot_repo_mock.save.return_value = None
 
         with patch(
-            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+            "app.application.feiertage_service.SqlPlanningSlotRepository",
+            return_value=slot_repo_mock,
         ):
             updated = await reference_feiertage_for_congregation(
                 district_id, congregation_id, session
@@ -455,7 +475,8 @@ class TestReferenceFeiertageForCongregation:
         slot_repo_mock.save.return_value = None
 
         with patch(
-            "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=slot_repo_mock
+            "app.application.feiertage_service.SqlPlanningSlotRepository",
+            return_value=slot_repo_mock,
         ):
             updated = await reference_feiertage_for_congregation(
                 district_id, congregation_id, session

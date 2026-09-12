@@ -13,4 +13,4 @@
 - [x] Bugfix: ASGI-Signatur-Crash behoben (PR #211, `775b63f`)
 
 ### Bewertung
-Vollständig umgesetzt gemäß Success Criteria im Proposal. Keine offenen Lücken gefunden.
+Kernfunktionalität implementiert und in Produktion (siehe `docs/security/csrf-protection.md`). **Offen:** Browser-seitige Integration (Frontend `useCSRF()` Composable sendet Token im `X-CSRF-Token` Header) muss in E2E-Tests gegen echte Browser-Requests verifiziert werden. Solange dies nicht geschehen ist, gilt der Change als **nicht vollständig abgeschlossen**.

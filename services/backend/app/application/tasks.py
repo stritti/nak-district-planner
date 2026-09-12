@@ -27,8 +27,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import Awaitable, TypeVar
+from typing import TypeVar
 
 from app.celery_app import celery
 
@@ -133,15 +134,16 @@ def cleanup_old_events() -> dict:
 
         async with AsyncSessionLocal() as session:
             from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+
             repo = SqlPlanningSlotRepository(session)
             # PlanningSlot uses planning_date (date), not end_at (datetime).
             # Delete slots with planning_date before cutoff date.
             cutoff_date = cutoff.date()
             from sqlalchemy import delete
+
             from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
-            stmt = delete(PlanningSlotORM).where(
-                PlanningSlotORM.planning_date < cutoff_date
-            )
+
+            stmt = delete(PlanningSlotORM).where(PlanningSlotORM.planning_date < cutoff_date)
             result = await session.execute(stmt)
             deleted = result.rowcount  # type: ignore[attr-defined]
             await session.commit()

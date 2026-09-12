@@ -14,7 +14,7 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 def _set_tenant_gucs(connection, **kwargs):
     """Set PostgreSQL tenant GUCs from Python TenantContext contextvars.
-    
+
     Called on each new transaction so that RLS policies can read
     ``current_setting('app.current_user_sub')`` etc.
     """

@@ -20,9 +20,7 @@ class CongregationInvitationORM(Base):
     __tablename__ = "congregation_invitations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    source_event_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False
-    )
+    source_event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     # New field for PlanningSlot-based invitations
     source_planning_slot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("planning_slots.id", ondelete="SET NULL"), nullable=True
@@ -38,8 +36,6 @@ class CongregationInvitationORM(Base):
         UUID(as_uuid=True), ForeignKey("congregations.id", ondelete="SET NULL"), nullable=True
     )
     external_target_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    linked_event_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    linked_event_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

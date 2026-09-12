@@ -55,12 +55,13 @@ Aktuell gibt es **keinen CSRF-Schutz** (SEC-004) für state-changing Requests. D
 - [ ] Alle state-changing Requests erfordern CSRF-Token
 - [ ] CSRF-Tokens sind kryptografisch sicher (HMAC-SHA256)
 - [ ] CSRF-Tokens haben begrenzte Lebensdauer (z.B. 24 Stunden)
-- [ ] CSRF-Tokens sind in Cookies gespeichert (script-readable für Double-Submit Pattern)
+- [ ] CSRF-Tokens sind in Cookies gespeichert (script-readable für Double-Submit Pattern; **HttpOnly bewusst weggelassen**, damit JavaScript das Token lesen und im `X-CSRF-Token` Header mitsenden kann)
 - [ ] CSRF-Tokens werden im Header gesendet (`X-CSRF-Token`)
 - [ ] API-Key Auth ist von CSRF-Schutz ausgenommen
 - [ ] OIDC Flow funktioniert mit CSRF-Schutz
 - [ ] Performance-Impact < 0.5ms pro Request
 - [ ] CSRF-Schutz ist in Staging getestet
+- [ ] **Browser-seitige Integration verifiziert** (Frontend sendet Token korrekt im Header bei state-changing Requests)
 
 ## Open Questions
 
@@ -71,11 +72,14 @@ Aktuell gibt es **keinen CSRF-Schutz** (SEC-004) für state-changing Requests. D
    - **Empfehlung:** Signiert (HMAC), nicht verschlüsselt
 
 3. Sollten CSRF-Tokens in Cookies oder Local Storage gespeichert werden?
-   - **Empfehlung:** Cookies (script-readable für Double-Submit Pattern; HttpOnly weggelassen, damit JavaScript das Token lesen kann)
+   - **Empfehlung:** Cookies (script-readable für Double-Submit Pattern; **HttpOnly weggelassen**, damit JavaScript das Token lesen kann)
 
 4. Sollten CSRF-Tokens für API-Endpunkte gelten?
    - **Empfehlung:** Ja, außer für API-Key Auth
 
 5. Wie mit CORS umgehen?
    - **Empfehlung:** CORS muss korrekt konfiguriert sein
+
+6. **Ist die Frontend-Integration (`useCSRF()` Composable) in E2E-Tests gegen echte Browser-Requests verifiziert?**
+   - **Status:** Offen — muss vor Abschluss des Changes verifiziert werden
 

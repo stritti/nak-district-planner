@@ -57,15 +57,16 @@ class TestSystemVersionEndpoint:
     """Tests for GET /api/v1/system/version."""
 
     def test_version_success(self, mock_oidc_adapter, valid_token):
-        with patch("importlib.metadata.version", return_value="0.4.5"), patch(
-            "app.adapters.version_check.ghcr.GhcrTagFetcher.fetch_tags", return_value=["0.4.6"]
-        ), patch(
-            "app.adapters.version_check.ghcr.latest_semver", return_value="0.4.6"
-        ), patch(
-            "app.adapters.api.deps.SqlUserRepository"
-        ) as MockUserRepo, patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo, patch(
-            "app.adapters.api.deps.SqlLeaderRegistrationRepository"
-        ) as MockRegRepo:
+        with (
+            patch("importlib.metadata.version", return_value="0.4.5"),
+            patch(
+                "app.adapters.version_check.ghcr.GhcrTagFetcher.fetch_tags", return_value=["0.4.6"]
+            ),
+            patch("app.adapters.version_check.ghcr.latest_semver", return_value="0.4.6"),
+            patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
+            patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
+            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
+        ):
             user_repo = AsyncMock()
             user_repo.get_by_sub.return_value = None
             user_repo.has_any_user.return_value = False
@@ -102,9 +103,11 @@ class TestSystemUpdateEndpoint:
     """Tests for POST /api/v1/system/update."""
 
     def test_update_manual_mode(self, mock_oidc_adapter, valid_token):
-        with patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo, patch(
-            "app.adapters.api.deps.SqlMembershipRepository"
-        ) as MockMembershipRepo, patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo:
+        with (
+            patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
+            patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
+            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
+        ):
             user_repo = AsyncMock()
             user_repo.get_by_sub.return_value = None
             user_repo.has_any_user.return_value = False

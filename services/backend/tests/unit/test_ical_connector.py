@@ -254,10 +254,7 @@ class TestFetchEvents:
     async def test_event_without_dtstart_is_skipped(self):
         """VEVENT without DTSTART is skipped."""
         vevent_no_dtstart = (
-            "BEGIN:VEVENT\r\n"
-            "UID:uid-nodtstart@test\r\n"
-            "SUMMARY:Kein Start\r\n"
-            "END:VEVENT"
+            "BEGIN:VEVENT\r\nUID:uid-nodtstart@test\r\nSUMMARY:Kein Start\r\nEND:VEVENT"
         )
         connector = ICalConnector(client=_mock_http(_ics(vevent_no_dtstart)))
         events = await connector.fetch_events(CREDS)

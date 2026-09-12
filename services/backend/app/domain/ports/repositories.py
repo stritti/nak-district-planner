@@ -211,9 +211,7 @@ class ExternalEventLinkRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_by_event_instance(
-        self, event_instance_id: uuid.UUID
-    ) -> list[ExternalEventLink]:
+    async def list_by_event_instance(self, event_instance_id: uuid.UUID) -> list[ExternalEventLink]:
         """List all links for a given EventInstance."""
         pass
 

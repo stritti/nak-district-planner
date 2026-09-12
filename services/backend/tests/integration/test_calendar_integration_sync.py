@@ -44,9 +44,11 @@ def _mock_auth_context(district_id: uuid.UUID):
 
     app.dependency_overrides[get_db_session] = _override_db_session
     try:
-        with patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo, patch(
-            "app.adapters.api.deps.SqlLeaderRegistrationRepository"
-        ) as MockRegRepo, patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo:
+        with (
+            patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
+            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
+            patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
+        ):
             user_repo = AsyncMock()
             user_repo.get_by_sub.return_value = None
             user_repo.has_any_user.return_value = True
@@ -102,27 +104,36 @@ def test_trigger_sync_success_persists_last_synced_and_clears_error():
     connector = AsyncMock()
     connector.fetch_events.return_value = [raw_event]
 
-    with _mock_auth_context(district_id) as (client, headers), patch(
-        "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
-    ) as MockRepoRouter, patch("app.application.sync_service.SqlCalendarIntegrationRepository") as MockRepoSync, patch(
-        "app.application.sync_service._get_connector"
-    ) as mock_get_connector, patch(
-        "app.application.sync_service.decrypt_credentials", return_value={}
-    ), patch(
-        "app.application.sync_service.SqlExternalEventLinkRepository"
-    ) as MockLinkRepo, patch(
-        "app.application.sync_service.SqlEventInstanceRepository"
-    ) as MockInstRepo, patch(
-        "app.application.sync_service.SqlPlanningSlotRepository"
-    ) as MockSlotRepo:
+    with (
+        _mock_auth_context(district_id) as (client, headers),
+        patch(
+            "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
+        ) as MockRepoRouter,
+        patch("app.application.sync_service.SqlCalendarIntegrationRepository") as MockRepoSync,
+        patch("app.application.sync_service._get_connector") as mock_get_connector,
+        patch("app.application.sync_service.decrypt_credentials", return_value={}),
+        patch("app.application.sync_service.SqlExternalEventLinkRepository") as MockLinkRepo,
+        patch("app.application.sync_service.SqlEventInstanceRepository") as MockInstRepo,
+        patch("app.application.sync_service.SqlPlanningSlotRepository") as MockSlotRepo,
+    ):
         MockRepoRouter.return_value = repo
         MockRepoSync.return_value = repo
         mock_get_connector.return_value = connector
-        MockLinkRepo.return_value = AsyncMock(get_by_external_event=AsyncMock(return_value=None), save=AsyncMock())
-        MockInstRepo.return_value = AsyncMock(save=AsyncMock(), get_by_planning_slot=AsyncMock(return_value=None), get=AsyncMock(return_value=None))
-        MockSlotRepo.return_value = AsyncMock(save=AsyncMock(), list_for_date_range=AsyncMock(return_value=[]))
+        MockLinkRepo.return_value = AsyncMock(
+            get_by_external_event=AsyncMock(return_value=None), save=AsyncMock()
+        )
+        MockInstRepo.return_value = AsyncMock(
+            save=AsyncMock(),
+            get_by_planning_slot=AsyncMock(return_value=None),
+            get=AsyncMock(return_value=None),
+        )
+        MockSlotRepo.return_value = AsyncMock(
+            save=AsyncMock(), list_for_date_range=AsyncMock(return_value=[])
+        )
 
-        response = client.post(f"/api/v1/calendar-integrations/{integration.id}/sync", headers=headers)
+        response = client.post(
+            f"/api/v1/calendar-integrations/{integration.id}/sync", headers=headers
+        )
 
     assert response.status_code == 200
     assert response.json()["integration_id"] == str(integration.id)
@@ -138,18 +149,22 @@ def test_trigger_sync_failure_persists_last_sync_error():
     connector = AsyncMock()
     connector.fetch_events.side_effect = RuntimeError("boom sync failed")
 
-    with _mock_auth_context(district_id) as (client, headers), patch(
-        "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
-    ) as MockRepoRouter, patch("app.application.sync_service.SqlCalendarIntegrationRepository") as MockRepoSync, patch(
-        "app.application.sync_service._get_connector"
-    ) as mock_get_connector, patch(
-        "app.application.sync_service.decrypt_credentials", return_value={}
+    with (
+        _mock_auth_context(district_id) as (client, headers),
+        patch(
+            "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
+        ) as MockRepoRouter,
+        patch("app.application.sync_service.SqlCalendarIntegrationRepository") as MockRepoSync,
+        patch("app.application.sync_service._get_connector") as mock_get_connector,
+        patch("app.application.sync_service.decrypt_credentials", return_value={}),
     ):
         MockRepoRouter.return_value = repo
         MockRepoSync.return_value = repo
         mock_get_connector.return_value = connector
 
-        response = client.post(f"/api/v1/calendar-integrations/{integration.id}/sync", headers=headers)
+        response = client.post(
+            f"/api/v1/calendar-integrations/{integration.id}/sync", headers=headers
+        )
 
     assert response.status_code == 500
     assert integration.last_sync_error == "boom sync failed"

@@ -48,7 +48,9 @@ class TestGetCurrentUserAutoCreation:
     """Test get_current_user with auto-creation of new users."""
 
     @pytest.mark.asyncio
-    async def test_auto_create_new_user(self, mock_oidc_adapter, mock_session, mock_credentials, mock_request):
+    async def test_auto_create_new_user(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
         """Test that new user is automatically created on first login."""
         # Mock OIDC token validation
         token_claims = {
@@ -91,7 +93,9 @@ class TestGetCurrentUserAutoCreation:
             mock_repo_instance.save.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_update_existing_user(self, mock_oidc_adapter, mock_session, mock_credentials, mock_request):
+    async def test_update_existing_user(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
         """Test that existing user is updated with latest token info."""
         token_claims = {
             "sub": "user-456",
@@ -147,7 +151,9 @@ class TestGetCurrentUserErrors:
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_invalid_token(self, mock_oidc_adapter, mock_session, mock_credentials, mock_request):
+    async def test_invalid_token(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
         """Test 401 error when token validation fails."""
         from app.adapters.auth.oidc import TokenValidationError
 
@@ -211,6 +217,7 @@ class TestGetCurrentUserWithMemberships:
     @pytest.mark.asyncio
     async def test_links_single_approved_unlinked_registration_by_email(self):
         from app.adapters.api.deps import get_current_user_with_memberships
+
         user = User(sub="oidc|u1", email="link@example.com", username="link")
 
         class _MappingResult:

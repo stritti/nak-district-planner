@@ -200,7 +200,7 @@ async def import_kirchliche_festtage(
     - Entschlafenen-Gottesdienste: erster Sonntag im März, Juli und November
 
     No external API call — purely computed.  Applies to all districts regardless of state_code.
-    
+
     NOTE: Creates PlanningSlots instead of Events for matrix rendering compatibility.
     """
     easter = _easter_sunday(year)
@@ -274,7 +274,7 @@ async def reference_feiertage_for_congregation(
     # For holidays, we typically look at a year's worth of data
     from_date = date(datetime.now(UTC).year - 1, 1, 1)
     to_date = date(datetime.now(UTC).year + 2, 12, 31)
-    
+
     slots = await slot_repo.list_for_date_range(
         district_id=district_id,
         from_date=from_date,

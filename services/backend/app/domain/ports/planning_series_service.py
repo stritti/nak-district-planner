@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 from datetime import date
-import uuid
 
 
 class PlanningSeriesSlotGenerator(ABC):
@@ -20,13 +20,13 @@ class PlanningSeriesSlotGenerator(ABC):
         horizon_months: int = 6,
     ) -> dict[str, int]:
         """Generate PlanningSlots for a specific series.
-        
+
         Args:
             series_id: The PlanningSeries ID
             from_date: Optional start date (defaults to today)
             to_date: Optional end date (defaults to from_date + horizon_months)
             horizon_months: Number of months to generate ahead
-            
+
         Returns:
             dict with keys: generated, skipped, updated
         """
@@ -42,13 +42,13 @@ class PlanningSeriesSlotGenerator(ABC):
         horizon_months: int = 6,
     ) -> dict[str, int]:
         """Generate PlanningSlots for all active series in a district.
-        
+
         Args:
             district_id: The district ID
             from_date: Optional start date (defaults to today)
             to_date: Optional end date (defaults to from_date + horizon_months)
             horizon_months: Number of months to generate ahead
-            
+
         Returns:
             dict with keys: generated, skipped, updated, series_processed
         """
@@ -63,12 +63,12 @@ class PlanningSeriesSlotGenerator(ABC):
         horizon_months: int = 6,
     ) -> dict[str, int]:
         """Generate PlanningSlots for all active series across all districts.
-        
+
         Args:
             from_date: Optional start date (defaults to today)
             to_date: Optional end date (defaults to from_date + horizon_months)
             horizon_months: Number of months to generate ahead
-            
+
         Returns:
             dict with keys: generated, skipped, updated, series_processed, districts_processed
         """

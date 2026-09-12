@@ -15,7 +15,7 @@ class TestCSRFTokenService:
         """Test that generated tokens are valid."""
         service = CSRFTokenService(secret_key="test-secret-key")
         token = service.generate_token()
-        
+
         assert isinstance(token, str)
         assert ":" in token  # Should contain separators
         assert len(token.split(":")) >= 3  # Should have at least 3 parts
@@ -24,11 +24,11 @@ class TestCSRFTokenService:
         """Test token generation with session binding."""
         service = CSRFTokenService(secret_key="test-secret-key")
         token = service.generate_token(session_id="user-123")
-        
+
         parts = token.split(":")
         assert len(parts) == 4  # random:timestamp:session_id:signature
         assert parts[2] == "user-123"
-        
+
         # Verify that the timestamp is set
         assert parts[1] is not None
 
@@ -36,21 +36,21 @@ class TestCSRFTokenService:
         """Test successful token validation."""
         service = CSRFTokenService(secret_key="test-secret-key")
         token = service.generate_token()
-        
+
         assert service.validate_token(token) is True
 
     def test_validate_token_with_session_id_success(self):
         """Test successful token validation with session binding."""
         service = CSRFTokenService(secret_key="test-secret-key")
         token = service.generate_token(session_id="user-123")
-        
+
         assert service.validate_token(token, session_id="user-123") is True
 
     def test_validate_token_session_mismatch(self):
         """Test token validation fails with wrong session ID."""
         service = CSRFTokenService(secret_key="test-secret-key")
         token = service.generate_token(session_id="user-123")
-        
+
         with pytest.raises(CSRFError, match="Token session mismatch"):
             service.validate_token(token, session_id="user-456")
 
@@ -58,18 +58,18 @@ class TestCSRFTokenService:
         """Test token validation fails with tampered token."""
         service = CSRFTokenService(secret_key="test-secret-key")
         token = service.generate_token()
-        
+
         # Tamper with the token
         parts = token.split(":")
         tampered_token = ":".join(parts[:-1]) + ":invalid-signature"
-        
+
         with pytest.raises(CSRFError, match="Invalid token signature"):
             service.validate_token(tampered_token)
 
     def test_validate_token_invalid_format(self):
         """Test token validation fails with invalid format."""
         service = CSRFTokenService(secret_key="test-secret-key")
-        
+
         with pytest.raises(CSRFError, match="Invalid token format"):
             service.validate_token("invalid-token")
 
@@ -80,10 +80,10 @@ class TestCSRFTokenService:
             token_lifetime_seconds=1,  # 1 second lifetime
         )
         token = service.generate_token()
-        
+
         # Wait for token to expire
         time.sleep(1.1)
-        
+
         with pytest.raises(CSRFError, match="Token expired"):
             service.validate_token(token)
 
@@ -91,7 +91,7 @@ class TestCSRFTokenService:
         """Test token age calculation."""
         service = CSRFTokenService(secret_key="test-secret-key")
         token = service.generate_token()
-        
+
         age = service.get_token_age(token)
         assert isinstance(age, timedelta)
         assert age.total_seconds() >= 0
@@ -100,7 +100,7 @@ class TestCSRFTokenService:
     def test_get_token_age_invalid_token(self):
         """Test token age returns 0 for invalid tokens."""
         service = CSRFTokenService(secret_key="test-secret-key")
-        
+
         age = service.get_token_age("invalid-token")
         assert age == timedelta(0)
 
@@ -108,9 +108,9 @@ class TestCSRFTokenService:
         """Test that different secrets produce incompatible tokens."""
         service1 = CSRFTokenService(secret_key="secret-1")
         service2 = CSRFTokenService(secret_key="secret-2")
-        
+
         token1 = service1.generate_token()
-        
+
         # Token from service1 should be invalid for service2
         with pytest.raises(CSRFError):
             service2.validate_token(token1)
@@ -118,7 +118,7 @@ class TestCSRFTokenService:
     def test_token_uniqueness(self):
         """Test that each generated token is unique."""
         service = CSRFTokenService(secret_key="test-secret-key")
-        
+
         tokens = [service.generate_token() for _ in range(100)]
         assert len(set(tokens)) == 100  # All tokens should be unique
 
@@ -126,10 +126,10 @@ class TestCSRFTokenService:
         """Test that tokens contain a valid timestamp."""
         service = CSRFTokenService(secret_key="test-secret-key")
         token = service.generate_token()
-        
+
         parts = token.split(":")
         timestamp_str = parts[1]
-        
+
         # Should be a valid integer timestamp
         timestamp = int(timestamp_str)
         assert timestamp > 0
@@ -196,7 +196,6 @@ class TestCSRFTokenService:
 
         age = service.get_token_age(bad_token)
         assert age == timedelta(0)
-
 
 
 class TestCSRFError:

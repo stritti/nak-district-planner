@@ -8,8 +8,9 @@ Create Date: 2026-04-06 00:00:00.000000
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0011_planning_model_foundation"
 down_revision: str | None = "e4b2a9d7f110"
@@ -111,8 +112,14 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("actual_start_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("actual_end_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("source", postgresql.ENUM(name="event_source", create_type=False), nullable=False),
-        sa.Column("visibility", postgresql.ENUM(name="event_visibility", create_type=False), nullable=False),
+        sa.Column(
+            "source", postgresql.ENUM(name="event_source", create_type=False), nullable=False
+        ),
+        sa.Column(
+            "visibility",
+            postgresql.ENUM(name="event_visibility", create_type=False),
+            nullable=False,
+        ),
         sa.Column("deviation_flag", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -148,6 +155,7 @@ def upgrade() -> None:
         ["id"],
         ondelete="CASCADE",
     )
+
 
 def downgrade() -> None:
     op.drop_constraint(

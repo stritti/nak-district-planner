@@ -80,9 +80,7 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
             # Use the weekday from the default time (assuming it's a typical service day)
             # For weekly series without explicit weekday, use the day of the week
             # when the series was created or activated
-            default_weekday = self._get_weekday_from_date(
-                series.active_from or from_date
-            )
+            default_weekday = self._get_weekday_from_date(series.active_from or from_date)
             rule = RecurrenceRule(
                 frequency=rule.frequency,
                 interval=rule.interval,
@@ -223,9 +221,7 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
 
         for date_obj in dates:
             # Check if slot already exists for this series and date
-            existing = await self._slot_repo.get_by_series_and_date(
-                series.id, date_obj
-            )
+            existing = await self._slot_repo.get_by_series_and_date(series.id, date_obj)
 
             if existing:
                 skipped += 1

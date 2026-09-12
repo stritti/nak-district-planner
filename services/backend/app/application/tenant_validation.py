@@ -33,7 +33,7 @@ class TenantValidationError(Exception):
 
 class TenantValidationService:
     """Service for validating tenant access and memberships.
-    
+
     Provides methods to:
     - Validate user membership in a tenant
     - Check role-based access
@@ -43,7 +43,7 @@ class TenantValidationService:
 
     def __init__(self, session: AsyncSession):
         """Initialize the service.
-        
+
         Args:
             session: Async SQLAlchemy session.
         """
@@ -56,15 +56,15 @@ class TenantValidationService:
         required_role: Role | None = None,
     ) -> bool:
         """Validate that a user has access to a district.
-        
+
         Args:
             user_sub: User subject (OIDC sub).
             district_id: District ID to check.
             required_role: Optional minimum role required.
-            
+
         Returns:
             True if user has access to the district.
-            
+
         Raises:
             TenantValidationError: If validation fails.
         """
@@ -73,14 +73,13 @@ class TenantValidationService:
             select(UserORM.is_superadmin).where(UserORM.sub == user_sub)
         )
         is_superadmin = result.scalar_one_or_none()
-        
+
         if is_superadmin:
             return True
-        
+
         # Check user's memberships in the district
         result = await self.session.execute(
-            select(MembershipORM)
-            .where(
+            select(MembershipORM).where(
                 and_(
                     MembershipORM.user_sub == user_sub,
                     MembershipORM.scope_type == ScopeType.DISTRICT.value,
@@ -89,13 +88,13 @@ class TenantValidationService:
             )
         )
         memberships = result.scalars().all()
-        
+
         if not memberships:
             raise TenantValidationError(
                 f"User {user_sub} has no membership in district {district_id}",
                 {"user_sub": user_sub, "district_id": str(district_id)},
             )
-        
+
         # Check required role
         if required_role:
             for membership in memberships:
@@ -112,7 +111,7 @@ class TenantValidationService:
                     "actual_roles": [m.role for m in memberships],
                 },
             )
-        
+
         return True
 
     async def validate_user_in_congregation(
@@ -122,15 +121,15 @@ class TenantValidationService:
         required_role: Role | None = None,
     ) -> bool:
         """Validate that a user has access to a congregation.
-        
+
         Args:
             user_sub: User subject (OIDC sub).
             congregation_id: Congregation ID to check.
             required_role: Optional minimum role required.
-            
+
         Returns:
             True if user has access to the congregation.
-            
+
         Raises:
             TenantValidationError: If validation fails.
         """
@@ -139,14 +138,13 @@ class TenantValidationService:
             select(UserORM.is_superadmin).where(UserORM.sub == user_sub)
         )
         is_superadmin = result.scalar_one_or_none()
-        
+
         if is_superadmin:
             return True
-        
+
         # Check user's memberships in the congregation
         result = await self.session.execute(
-            select(MembershipORM)
-            .where(
+            select(MembershipORM).where(
                 and_(
                     MembershipORM.user_sub == user_sub,
                     MembershipORM.scope_type == ScopeType.CONGREGATION.value,
@@ -155,13 +153,13 @@ class TenantValidationService:
             )
         )
         memberships = result.scalars().all()
-        
+
         if not memberships:
             raise TenantValidationError(
                 f"User {user_sub} has no membership in congregation {congregation_id}",
                 {"user_sub": user_sub, "congregation_id": str(congregation_id)},
             )
-        
+
         # Check required role
         if required_role:
             for membership in memberships:
@@ -178,7 +176,7 @@ class TenantValidationService:
                     "actual_roles": [m.role for m in memberships],
                 },
             )
-        
+
         return True
 
     async def validate_user_in_tenant(
@@ -189,27 +187,23 @@ class TenantValidationService:
         required_role: Role | None = None,
     ) -> bool:
         """Validate that a user has access to a tenant (district or congregation).
-        
+
         Args:
             user_sub: User subject (OIDC sub).
             tenant_id: Tenant ID to check.
             tenant_type: Type of tenant ("district" or "congregation").
             required_role: Optional minimum role required.
-            
+
         Returns:
             True if user has access to the tenant.
-            
+
         Raises:
             TenantValidationError: If validation fails.
         """
         if tenant_type == "district":
-            return await self.validate_user_in_district(
-                user_sub, tenant_id, required_role
-            )
+            return await self.validate_user_in_district(user_sub, tenant_id, required_role)
         elif tenant_type == "congregation":
-            return await self.validate_user_in_congregation(
-                user_sub, tenant_id, required_role
-            )
+            return await self.validate_user_in_congregation(user_sub, tenant_id, required_role)
         else:
             raise TenantValidationError(
                 f"Unknown tenant type: {tenant_type}",
@@ -221,10 +215,10 @@ class TenantValidationService:
         user_sub: str,
     ) -> list[uuid.UUID]:
         """Get all districts a user has access to.
-        
+
         Args:
             user_sub: User subject (OIDC sub).
-            
+
         Returns:
             List of district IDs.
         """
@@ -233,12 +227,12 @@ class TenantValidationService:
             select(UserORM.is_superadmin).where(UserORM.sub == user_sub)
         )
         is_superadmin = result.scalar_one_or_none()
-        
+
         if is_superadmin:
             # Superadmin has access to all districts
             result = await self.session.execute(select(DistrictORM.id))
             return [row[0] for row in result.all()]
-        
+
         # Get user's district memberships
         result = await self.session.execute(
             select(MembershipORM.scope_id)
@@ -258,11 +252,11 @@ class TenantValidationService:
         district_id: uuid.UUID | None = None,
     ) -> list[uuid.UUID]:
         """Get all congregations a user has access to.
-        
+
         Args:
             user_sub: User subject (OIDC sub).
             district_id: Optional district filter.
-            
+
         Returns:
             List of congregation IDs.
         """
@@ -271,7 +265,7 @@ class TenantValidationService:
             select(UserORM.is_superadmin).where(UserORM.sub == user_sub)
         )
         is_superadmin = result.scalar_one_or_none()
-        
+
         if is_superadmin:
             # Superadmin has access to all congregations
             query = select(CongregationORM.id)
@@ -279,10 +273,11 @@ class TenantValidationService:
                 query = query.where(CongregationORM.district_id == district_id)
             result = await self.session.execute(query)
             return [row[0] for row in result.all()]
-        
+
         # Get user's congregation memberships
         result = await self.session.execute(
-            select(MembershipORM.scope_id).where(
+            select(MembershipORM.scope_id)
+            .where(
                 and_(
                     MembershipORM.user_sub == user_sub,
                     MembershipORM.scope_type == ScopeType.CONGREGATION.value,
@@ -290,14 +285,13 @@ class TenantValidationService:
             )
             .distinct()
         )
-        
+
         congregation_ids = [row[0] for row in result.all()]
-        
+
         if district_id and congregation_ids:
             # Filter by district — join with congregation to check district_id
             result = await self.session.execute(
-                select(CongregationORM.id)
-                .where(
+                select(CongregationORM.id).where(
                     and_(
                         CongregationORM.id.in_(congregation_ids),
                         CongregationORM.district_id == district_id,
@@ -305,7 +299,7 @@ class TenantValidationService:
                 )
             )
             return [row[0] for row in result.all()]
-        
+
         return congregation_ids
 
     async def get_tenant_district(
@@ -314,23 +308,23 @@ class TenantValidationService:
         tenant_type: str,
     ) -> uuid.UUID | None:
         """Get the district ID for a tenant.
-        
+
         Args:
             tenant_id: Tenant ID (district or congregation).
             tenant_type: Type of tenant.
-            
+
         Returns:
             District ID, or None if not found.
         """
         if tenant_type == "district":
             return tenant_id
-        
+
         if tenant_type == "congregation":
             result = await self.session.execute(
                 select(CongregationORM.district_id).where(CongregationORM.id == tenant_id)
             )
             return result.scalar_one_or_none()
-        
+
         return None
 
     async def validate_cross_tenant_access(
@@ -342,20 +336,20 @@ class TenantValidationService:
         access_tenant_type: str | None = None,
     ) -> bool:
         """Validate that a user can access a resource across tenants.
-        
+
         This checks if the user has access to both the resource's tenant
         and the access tenant (if specified).
-        
+
         Args:
             user_sub: User subject (OIDC sub).
             resource_tenant_id: Tenant ID of the resource.
             resource_tenant_type: Type of the resource's tenant.
             access_tenant_id: Optional tenant ID to check access through.
             access_tenant_type: Optional type of the access tenant.
-            
+
         Returns:
             True if access is allowed.
-            
+
         Raises:
             TenantValidationError: If access is denied.
         """
@@ -363,30 +357,26 @@ class TenantValidationService:
         if access_tenant_id is None:
             access_tenant_id = resource_tenant_id
             access_tenant_type = resource_tenant_type
-        
+
         # Validate user has access to the access tenant
-        await self.validate_user_in_tenant(
-            user_sub, access_tenant_id, access_tenant_type
-        )
-        
+        await self.validate_user_in_tenant(user_sub, access_tenant_id, access_tenant_type)
+
         # If access tenant is the same as resource tenant, we're done
         if access_tenant_id == resource_tenant_id:
             return True
-        
+
         # Check if access tenant is a parent of resource tenant
         # (e.g., district can access congregation resources)
         if access_tenant_type == "district" and resource_tenant_type == "congregation":
             # Check if congregation belongs to district
             result = await self.session.execute(
-                select(CongregationORM.district_id).where(
-                    CongregationORM.id == resource_tenant_id
-                )
+                select(CongregationORM.district_id).where(CongregationORM.id == resource_tenant_id)
             )
             congregation_district_id = result.scalar_one_or_none()
-            
+
             if congregation_district_id == access_tenant_id:
                 return True
-        
+
         # Access denied
         raise TenantValidationError(
             f"User {user_sub} cannot access {resource_tenant_type} {resource_tenant_id} "
