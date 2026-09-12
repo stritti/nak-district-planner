@@ -76,7 +76,7 @@ class RateLimitResult:
 
 class RateLimiter:
     """Redis-based rate limiter with sliding window algorithm.
-    
+
     Uses Redis sorted sets to efficiently count requests in sliding windows.
     Each request is stored as a timestamp in a sorted set, and the count
     of requests in the window is obtained by counting elements within the
@@ -89,7 +89,7 @@ class RateLimiter:
         config: RateLimitConfig | None = None,
     ):
         """Initialize the rate limiter.
-        
+
         Args:
             valkey_url: Valkey connection URL. If None, uses settings.valkey_url.
             config: Rate limit configuration. If None, uses default config.
@@ -102,7 +102,7 @@ class RateLimiter:
         """Connect to Redis."""
         if self._redis is None:
             self._redis = valkey.from_url(self.valkey_url, decode_responses=True)
-        
+
         # Test connection
         try:
             await self._redis.ping()
@@ -129,18 +129,18 @@ class RateLimiter:
 
     def _get_key(self, identifier: str, endpoint: str, window: int) -> str:
         """Generate Redis key for rate limiting.
-        
+
         Args:
             identifier: User identifier or IP address.
             endpoint: API endpoint path.
             window: Window size in seconds.
-            
+
         Returns:
             Redis key string.
         """
         # Normalize endpoint (remove query parameters, etc.)
         clean_endpoint = endpoint.split("?")[0].split("#")[0]
-        
+
         # Create a hash of the identifier + endpoint to keep keys short
         key_data = f"rate_limit:{window}:{identifier}:{clean_endpoint}"
         return hashlib.sha256(key_data.encode()).hexdigest()
@@ -154,31 +154,31 @@ class RateLimiter:
         record_fail_open_metric: bool = True,
     ) -> RateLimitResult:
         """Check if a request should be rate limited.
-        
+
         Args:
             identifier: User identifier (sub) or IP address.
             endpoint: API endpoint path.
             is_authenticated: Whether the user is authenticated.
             config: Optional override config. If None, uses self.config.
             record_fail_open_metric: Whether to increment the fail-open metric in this call.
-            
+
         Returns:
             RateLimitResult with allowed status and rate limit information.
         """
         # Get configuration for this endpoint (use override config if provided)
         limit, window = self._get_endpoint_config(endpoint, is_authenticated, config)
-        
+
         # Generate Redis key
         key = self._get_key(identifier, endpoint, window)
-        
+
         # Get current timestamp
         now = datetime.now(UTC)
         window_start = now - timedelta(seconds=window)
-        
+
         # Use Redis sorted set to count requests in window
         # Each request is stored as a timestamp score
         timestamp_score = int(now.timestamp() * 1000)  # Milliseconds for precision
-        
+
         try:
             # Prune entries older than the window before adding the new one
             await self._redis.zremrangebyscore(
@@ -186,29 +186,29 @@ class RateLimiter:
                 0,
                 int(window_start.timestamp() * 1000),
             )
-            
+
             # Add current request — member includes a nonce so requests
             # arriving in the same millisecond each produce a unique member
             # (otherwise ZADD silently overwrites same-key entries).
             nonce = uuid.uuid4().hex[:8]
             await self._redis.zadd(key, {f"{timestamp_score}:{nonce}": timestamp_score})
-            
+
             # Count requests in window (includes the one we just added)
             count = await self._redis.zcount(
                 key,
                 int(window_start.timestamp() * 1000),
                 timestamp_score,
             )
-            
+
             # Set expiration on key
             await self._redis.expire(key, window)
-            
+
             # Check if allowed
             # count already includes the current request, so count == limit
             # represents the last request that should be allowed.
             remaining = max(0, limit - count)
             allowed = count <= limit
-            
+
             # Calculate reset time
             # Get the oldest request to determine when the window will slide
             oldest_timestamp = await self._redis.zrange(key, 0, 0, withscores=True)
@@ -218,7 +218,7 @@ class RateLimiter:
                 reset_in = oldest_time + timedelta(seconds=window) - now
             else:
                 reset_in = timedelta(seconds=window)
-            
+
             return RateLimitResult(
                 allowed=allowed,
                 remaining=remaining,
@@ -226,7 +226,7 @@ class RateLimiter:
                 reset_in=reset_in,
                 retry_after=int(reset_in.total_seconds()) if not allowed else None,
             )
-            
+
         except Exception as e:
             logger.error(f"Rate limit check failed: {e}")
             fail_open_reason = type(e).__name__
@@ -250,16 +250,16 @@ class RateLimiter:
         record_fail_open_metric: bool = True,
     ) -> RateLimitResult:
         """Check burst rate limit (short-window spike protection).
-        
+
         Uses ``burst_limit`` and ``burst_window_seconds`` from the config
         (defaults to 10 requests per 1 second).
-        
+
         Args:
             identifier: User identifier or IP address.
             endpoint: API endpoint path.
             config: Optional override config. Falls back to self.config.
             record_fail_open_metric: Whether to increment the fail-open metric in this call.
-            
+
         Returns:
             RateLimitResult for burst limit check.
         """
@@ -284,27 +284,27 @@ class RateLimiter:
         config: RateLimitConfig | None = None,
     ) -> tuple[int, int]:
         """Get rate limit configuration for an endpoint.
-        
+
         Args:
             endpoint: API endpoint path.
             is_authenticated: Whether the user is authenticated.
             config: Optional override config. Falls back to self.config.
-            
+
         Returns:
             Tuple of (limit, window_seconds).
         """
         # Use override config if provided, otherwise self.config
         cfg = config or self.config
-        
+
         # Clean endpoint
         clean_endpoint = endpoint.split("?")[0].split("#")[0]
-        
+
         # Check for exact match
         if clean_endpoint in cfg.endpoint_limits:
             ep_config = cfg.endpoint_limits[clean_endpoint]
             limit = ep_config.get("limit", cfg.default_limit)
             window = ep_config.get("window", cfg.default_window_seconds)
-        
+
         # Check for wildcard match
         else:
             for pattern, ep_config in cfg.endpoint_limits.items():
@@ -315,11 +315,11 @@ class RateLimiter:
             else:
                 limit = cfg.default_limit
                 window = cfg.default_window_seconds
-        
+
         # Apply authenticated multiplier
         if is_authenticated:
             limit = int(limit * cfg.authenticated_multiplier)
-        
+
         return limit, window
 
     async def get_rate_limit_headers(
@@ -327,10 +327,10 @@ class RateLimiter:
         result: RateLimitResult,
     ) -> dict[str, str]:
         """Get standard rate limit headers for response.
-        
+
         Args:
             result: Rate limit check result.
-            
+
         Returns:
             Dictionary of rate limit headers.
         """
@@ -339,10 +339,10 @@ class RateLimiter:
             "X-RateLimit-Remaining": str(result.remaining),
             "X-RateLimit-Reset": str(int(result.reset_in.total_seconds())),
         }
-        
+
         if result.retry_after is not None:
             headers["Retry-After"] = str(result.retry_after)
-        
+
         return headers
 
 

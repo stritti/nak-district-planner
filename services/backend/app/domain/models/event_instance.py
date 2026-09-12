@@ -8,18 +8,21 @@ from enum import StrEnum
 
 class EventSource(StrEnum):
     """Origin of an event instance."""
+
     INTERNAL = "INTERNAL"
     EXTERNAL = "EXTERNAL"
 
 
 class EventVisibility(StrEnum):
     """Visibility of an event instance."""
+
     INTERNAL = "INTERNAL"
     PUBLIC = "PUBLIC"
 
 
 class SyncState(StrEnum):
     """Sync state for calendar event instances."""
+
     CLEAN = "CLEAN"
     DIRTY_INTERNAL = "DIRTY_INTERNAL"
     DIRTY_EXTERNAL = "DIRTY_EXTERNAL"

@@ -46,14 +46,18 @@ class TestCSRFMiddleware:
         assert response.json()["status"] == "ok"
 
     def test_csrf_cookie_attributes(self):
-        """Test that CSRF cookie has secure attributes."""
+        """Test that CSRF cookie has secure attributes.
+
+        Note: HttpOnly is intentionally omitted to allow JavaScript to read
+        the cookie for the double-submit pattern (X-CSRF-Token header).
+        """
         response = self.client.get("/api/health")
 
         set_cookie_header = response.headers.get("set-cookie", "")
 
         # Check for secure attributes
         assert "csrf_token=" in set_cookie_header
-        assert "HttpOnly" in set_cookie_header
+        assert "HttpOnly" not in set_cookie_header  # Intentionally script-readable
         assert "Secure" in set_cookie_header
         assert "SameSite=strict" in set_cookie_header
         assert "Path=/" in set_cookie_header

@@ -49,13 +49,9 @@ async def create_invitations_for_event(
     if source_slot is None:
         raise ValueError("PlanningSlot not found")
     if source_slot.congregation_id is None:
-        raise ValueError(
-            "Invitations require a source planning slot assigned to a congregation"
-        )
+        raise ValueError("Invitations require a source planning slot assigned to a congregation")
 
-    source_event_instance = await event_instance_repo.get_by_planning_slot(
-        source_planning_slot_id
-    )
+    source_event_instance = await event_instance_repo.get_by_planning_slot(source_planning_slot_id)
 
     existing = await invitation_repo.list_by_source_planning_slot(source_planning_slot_id)
     existing_by_internal_target = {
@@ -186,9 +182,7 @@ async def delete_invitation(
 
     # Remove the target PlanningSlot + EventInstance that was created for this invitation
     if invitation.linked_event_id is not None:
-        target_instance = await event_instance_repo.get_by_planning_slot(
-            invitation.linked_event_id
-        )
+        target_instance = await event_instance_repo.get_by_planning_slot(invitation.linked_event_id)
         if target_instance is not None:
             await event_instance_repo.delete(target_instance.id)
         target_slot = await slot_repo.get(invitation.linked_event_id)

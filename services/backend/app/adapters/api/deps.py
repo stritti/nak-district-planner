@@ -1,16 +1,15 @@
 """app/adapters/api/deps.py: Module."""
 
 import logging
-from datetime import UTC, datetime
 from typing import Annotated, NamedTuple
 
 from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.jwt_claims import extract_memberships_from_claims
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
-from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.notification import SqlNotificationRepository
 from app.adapters.db.repositories.user import SqlUserRepository
@@ -181,30 +180,31 @@ async def get_current_user_with_memberships(
     # if there is exactly one approved+unlinked registration for this email,
     # link it to this user and materialize its assigned membership.
     if user.email:
-        reg_repo = SqlLeaderRegistrationRepository(session)
-        candidates = await reg_repo.list_approved_unlinked_by_email(user.email)
-        if len(candidates) == 1:
-            registration = candidates[0]
-            registration.user_sub = user.sub
-            registration.updated_at = datetime.now(UTC)
-            await reg_repo.save(registration)
-            if (
-                registration.assigned_role is not None
-                and registration.assigned_scope_type is not None
-                and registration.assigned_scope_id is not None
-            ):
-                await membership_repo.upsert_by_scope(
-                    user_sub=user.sub,
-                    role=registration.assigned_role,
-                    scope_type=registration.assigned_scope_type,
-                    scope_id=registration.assigned_scope_id,
-                )
+        result = await session.execute(
+            text(
+                """
+                SELECT candidate_count, granted_role, granted_scope_type, granted_scope_id
+                FROM link_approved_registration(:user_sub, :email)
+                """
+            ),
+            {"user_sub": user.sub, "email": user.email},
+        )
+        link_result = result.mappings().one_or_none()
+        candidate_count = int(link_result["candidate_count"]) if link_result else 0
+        if candidate_count == 1:
             memberships = await membership_repo.get_all_by_user(user.sub)
-        elif len(candidates) > 1:
+        elif candidate_count > 1:
             logger.warning(
                 "Multiple approved unlinked registrations for email=%s; skipping auto-link",
                 user.email,
             )
+
+    # Populate TenantContext with authenticated roles for RLS GUC export
+    from app.tenant import TenantContext
+    user_roles = [m.role.value for m in memberships]
+    if user.is_superadmin:
+        user_roles.append("SUPERADMIN")
+    TenantContext.set_context(user_roles=user_roles)
 
     return CurrentUserContext(user=user, memberships=memberships)
 

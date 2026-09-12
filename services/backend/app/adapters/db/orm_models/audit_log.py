@@ -41,7 +41,7 @@ class AuditStatus(str, Enum):
 
 class AuditLogORM(Base):
     """Audit Log ORM model.
-    
+
     This table stores an immutable record of all security-relevant operations.
     Once created, audit log entries cannot be modified or deleted.
     """
@@ -49,9 +49,7 @@ class AuditLogORM(Base):
     __tablename__ = "audit_logs"
 
     # Primary key
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Timestamp
     timestamp: Mapped[datetime] = mapped_column(
@@ -64,11 +62,11 @@ class AuditLogORM(Base):
     user_roles: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
     # What: Action details
-    action: Mapped[AuditAction] = mapped_column(
-        SQLEnum(AuditAction), nullable=False, index=True
-    )
+    action: Mapped[AuditAction] = mapped_column(SQLEnum(AuditAction), nullable=False, index=True)
     resource_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    resource_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    resource_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
 
     # Where: Tenant context
     district_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -98,6 +96,4 @@ class AuditLogORM(Base):
     extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now(UTC)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now(UTC))

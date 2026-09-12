@@ -16,6 +16,7 @@ from app.adapters.idp.base import IdpProvisioningError
 from app.adapters.idp.keycloak_provisioner import KeycloakProvisioningAdapter
 from app.adapters.idp.webhook_provisioner import HttpIdpProvisioningAdapter
 from app.application.init import seed_canonical_roles
+from app.celery_app import _make_sync_db_url
 from app.config import Settings
 from app.domain.models.invitation import (
     CongregationInvitation,
@@ -24,8 +25,6 @@ from app.domain.models.invitation import (
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
-from app.celery_app import _make_sync_db_url
-from app.config import Settings
 
 
 def test_validate_membership_claims_success_and_missing() -> None:
@@ -63,16 +62,26 @@ def test_validate_membership_claims_invalid_cases() -> None:
         validate_membership_claims({"memberships": [123]})
     # missing scope_type
     with pytest.raises(InvalidMembershipClaimError):
-        validate_membership_claims({"memberships": [{"role": "VIEWER", "scope_id": str(uuid.uuid4())}]})
+        validate_membership_claims(
+            {"memberships": [{"role": "VIEWER", "scope_id": str(uuid.uuid4())}]}
+        )
     # missing scope_id
     with pytest.raises(InvalidMembershipClaimError):
         validate_membership_claims({"memberships": [{"role": "VIEWER", "scope_type": "DISTRICT"}]})
     # invalid scope_type enum
     with pytest.raises(InvalidMembershipClaimError):
-        validate_membership_claims({"memberships": [{"role": "VIEWER", "scope_type": "GARBAGE", "scope_id": str(uuid.uuid4())}]})
+        validate_membership_claims(
+            {
+                "memberships": [
+                    {"role": "VIEWER", "scope_type": "GARBAGE", "scope_id": str(uuid.uuid4())}
+                ]
+            }
+        )
     # invalid scope_id UUID
     with pytest.raises(InvalidMembershipClaimError):
-        validate_membership_claims({"memberships": [{"role": "VIEWER", "scope_type": "DISTRICT", "scope_id": "kein-uuid"}]})
+        validate_membership_claims(
+            {"memberships": [{"role": "VIEWER", "scope_type": "DISTRICT", "scope_id": "kein-uuid"}]}
+        )
 
 
 def test_validate_token_claim_consistency() -> None:
@@ -316,10 +325,12 @@ def test_settings_production_oidc_client_secret_must_not_be_placeholder() -> Non
 
 def test_settings_app_version_package_not_found() -> None:
     """app_version falls back to '0.0.0' when package is not installed."""
-    from unittest.mock import patch
     import importlib.metadata
+    from unittest.mock import patch
 
-    with patch.object(importlib.metadata, "version", side_effect=importlib.metadata.PackageNotFoundError):
+    with patch.object(
+        importlib.metadata, "version", side_effect=importlib.metadata.PackageNotFoundError
+    ):
         s = Settings(app_env="development", oidc_scopes="openid profile")
         assert s.app_version == "0.0.0"
 
@@ -390,7 +401,10 @@ def test_invitation_target_create_rejects_congregation_id_for_external() -> None
 
 def test_overwrite_decision_request_rejects_pending() -> None:
     """OverwriteDecisionRequest rejects PENDING_OVERWRITE as a decision."""
-    from app.adapters.api.schemas.invitation import OverwriteDecisionRequest, OverwriteDecisionStatus
+    from app.adapters.api.schemas.invitation import (
+        OverwriteDecisionRequest,
+        OverwriteDecisionStatus,
+    )
 
     with pytest.raises(ValueError, match="ACCEPTED or REJECTED"):
         OverwriteDecisionRequest(
@@ -400,7 +414,10 @@ def test_overwrite_decision_request_rejects_pending() -> None:
 
 def test_overwrite_decision_request_accepted() -> None:
     """OverwriteDecisionRequest accepts ACCEPTED."""
-    from app.adapters.api.schemas.invitation import OverwriteDecisionRequest, OverwriteDecisionStatus
+    from app.adapters.api.schemas.invitation import (
+        OverwriteDecisionRequest,
+        OverwriteDecisionStatus,
+    )
 
     req = OverwriteDecisionRequest(decision=OverwriteDecisionStatus.ACCEPTED)
     assert req.decision == OverwriteDecisionStatus.ACCEPTED
@@ -425,8 +442,8 @@ def test_service_assignment_create_accepts_leader_name() -> None:
 
 def test_planning_series_response_from_orm() -> None:
     """PlanningSeriesResponse.from_orm converts domain model to response."""
-    from app.domain.models.planning_series import PlanningSeries
     from app.adapters.api.schemas.planning_series import PlanningSeriesResponse
+    from app.domain.models.planning_series import PlanningSeries
 
     district_id = uuid.uuid4()
     series = PlanningSeries.create(

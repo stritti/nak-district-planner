@@ -21,6 +21,7 @@ class PlanningSlotStatus(str, Enum):
     ACTIVE slots are usable for service assignments; CANCELLED slots
     are excluded from the planning matrix and assignment flow.
     """
+
     ACTIVE = "ACTIVE"
     CANCELLED = "CANCELLED"
 

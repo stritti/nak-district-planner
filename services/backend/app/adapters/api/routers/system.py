@@ -43,13 +43,9 @@ async def get_version(
     **RBAC:** Requires DISTRICT_ADMIN or CONGREGATION_ADMIN role in any district.
     """
     # RBAC Guard: User must have DISTRICT_ADMIN or CONGREGATION_ADMIN in any district
-    districts_with_admin = get_districts_where_user_has_role(
-        auth, Role.DISTRICT_ADMIN
-    )
-    congregations_with_admin = get_districts_where_user_has_role(
-        auth, Role.CONGREGATION_ADMIN
-    )
-    
+    districts_with_admin = get_districts_where_user_has_role(auth, Role.DISTRICT_ADMIN)
+    congregations_with_admin = get_districts_where_user_has_role(auth, Role.CONGREGATION_ADMIN)
+
     if not districts_with_admin and not congregations_with_admin and not auth.user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

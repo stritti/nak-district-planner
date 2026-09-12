@@ -157,7 +157,7 @@ async def get_current_user_info(user: AuthenticatedUser) -> UserOut:
 @router.get("/access", response_model=AccessContextOut)
 async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessContextOut:
     """Return effective memberships for access-aware frontend UX.
-    
+
     **Security:** Requires valid Bearer token.
     **RBAC:** Users with memberships require VIEWER role in at least one district.
     Users without memberships (PENDING_APPROVAL) can access to check their status.
@@ -173,9 +173,7 @@ async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessConte
 
     # RBAC Guard: If user has memberships, they must have VIEWER role in at least one district
     if memberships:
-        districts_with_viewer = get_districts_where_user_has_role(
-            auth, Role.VIEWER
-        )
+        districts_with_viewer = get_districts_where_user_has_role(auth, Role.VIEWER)
         if not districts_with_viewer and not auth.user.is_superadmin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

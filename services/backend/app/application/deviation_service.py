@@ -53,6 +53,7 @@ class DeviationService:
         Uses a default duration of 90 minutes if not specified otherwise.
         """
         from datetime import timedelta
+
         expected_start = self._calculate_expected_start(slot)
         return expected_start + timedelta(minutes=duration_minutes)
 

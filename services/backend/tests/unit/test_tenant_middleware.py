@@ -24,22 +24,20 @@ from app.adapters.api.middleware.tenant import (
     TenantValidationMiddleware,
 )
 
-
 # =========================================================================
 # TenantMiddleware._extract_sub_from_bearer
 # =========================================================================
+
 
 class TestExtractSubFromBearer:
     """Tests for the static JWT sub extraction method."""
 
     def _make_jwt(self, payload: dict) -> str:
         """Build an unsigned JWT string (valid enough for extraction)."""
-        header = base64.urlsafe_b64encode(
-            json.dumps({"alg": "HS256"}).encode()
-        ).rstrip(b"=").decode()
-        b64_payload = base64.urlsafe_b64encode(
-            json.dumps(payload).encode()
-        ).rstrip(b"=").decode()
+        header = (
+            base64.urlsafe_b64encode(json.dumps({"alg": "HS256"}).encode()).rstrip(b"=").decode()
+        )
+        b64_payload = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
         return f"{header}.{b64_payload}.fakesig"
 
     def _make_request(self, headers: dict | None = None) -> MagicMock:
@@ -83,9 +81,7 @@ class TestExtractSubFromBearer:
 
     def test_invalid_base64_payload(self):
         """Returns None when JWT payload is not valid base64."""
-        request = self._make_request({
-            "authorization": "Bearer header.invalid-base64!!.sig"
-        })
+        request = self._make_request({"authorization": "Bearer header.invalid-base64!!.sig"})
         result = TenantMiddleware._extract_sub_from_bearer(request)
         assert result is None
 
@@ -106,6 +102,7 @@ class TestExtractSubFromBearer:
 # =========================================================================
 # TenantMiddleware._extract_tenant_from_path
 # =========================================================================
+
 
 class TestExtractTenantFromPath:
     """Tests for the static path-based tenant extraction method."""
@@ -190,6 +187,7 @@ class TestExtractTenantFromPath:
 # TenantMiddleware._extract_tenant_context
 # =========================================================================
 
+
 class TestExtractTenantContext:
     """Tests for extracting tenant context from requests."""
 
@@ -216,12 +214,12 @@ class TestExtractTenantContext:
 
     def test_user_sub_fallback_from_bearer(self, middleware):
         """Falls back to JWT sub extraction when state.user is not set."""
-        header = base64.urlsafe_b64encode(
-            json.dumps({"alg": "HS256"}).encode()
-        ).rstrip(b"=").decode()
-        payload = base64.urlsafe_b64encode(
-            json.dumps({"sub": "jwt-user"}).encode()
-        ).rstrip(b"=").decode()
+        header = (
+            base64.urlsafe_b64encode(json.dumps({"alg": "HS256"}).encode()).rstrip(b"=").decode()
+        )
+        payload = (
+            base64.urlsafe_b64encode(json.dumps({"sub": "jwt-user"}).encode()).rstrip(b"=").decode()
+        )
         token = f"{header}.{payload}.sig"
 
         request = MagicMock(spec=Request)
@@ -300,6 +298,7 @@ class TestExtractTenantContext:
 # TenantMiddleware.dispatch  (integration-style with TestClient)
 # =========================================================================
 
+
 class TestTenantMiddlewareDispatch:
     """Integration tests for TenantMiddleware.dispatch via TestClient."""
 
@@ -366,6 +365,7 @@ class TestTenantMiddlewareDispatch:
 # TenantValidationMiddleware._is_authenticated
 # =========================================================================
 
+
 class TestIsAuthenticated:
     """Tests for TenantValidationMiddleware._is_authenticated."""
 
@@ -419,6 +419,7 @@ class TestIsAuthenticated:
 # =========================================================================
 # TenantValidationMiddleware.dispatch  (exempt paths only)
 # =========================================================================
+
 
 class TestTenantValidationMiddlewareDispatch:
     """Tests for TenantValidationMiddleware exempt paths."""

@@ -135,6 +135,23 @@ async def export_calendar_ics(
     if not export_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
 
+    # Set RLS context for token-based access
+    from sqlalchemy import text
+    await session.execute(
+        text("SELECT set_config('app.current_district_id', :val, true)"),
+        {"val": str(export_token.district_id)},
+    )
+    if export_token.congregation_id:
+        await session.execute(
+            text("SELECT set_config('app.current_congregation_id', :val, true)"),
+            {"val": str(export_token.congregation_id)},
+        )
+    if export_token.leader_id:
+        await session.execute(
+            text("SELECT set_config('app.current_user_sub', :val, true)"),
+            {"val": f"export:{export_token.leader_id}"},
+        )
+
     slot_repo = SqlPlanningSlotRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
 

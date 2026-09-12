@@ -14,7 +14,7 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 def _set_tenant_gucs(connection, **kwargs):
     """Set PostgreSQL tenant GUCs from Python TenantContext contextvars.
-    
+
     Called on each new transaction so that RLS policies can read
     ``current_setting('app.current_user_sub')`` etc.
     """
@@ -26,6 +26,16 @@ def _set_tenant_gucs(connection, **kwargs):
         connection.execute(
             text("SELECT set_config('app.current_user_sub', :val, true)"),
             {"val": user_sub},
+        )
+    user_roles = TC.get_user_roles()
+    if user_roles:
+        connection.execute(
+            text("SELECT set_config('app.current_user_roles', :val, true)"),
+            {"val": ",".join(user_roles)},
+        )
+    if "SYSTEM_WORKER" in (user_roles or []):
+        connection.execute(
+            text("SELECT set_config('app.is_system_worker', 'true', true)"),
         )
     district_id = TC.get_district()
     if district_id is not None:

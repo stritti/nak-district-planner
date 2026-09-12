@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Phase 1 — Monorepo scaffolding complete.** The directory structure and all Docker/config files are in place. Next: implement SQLAlchemy models and the first FastAPI endpoints.
+**v0.29.3 — production-facing application, all four MVP phases complete.** OIDC authentication, RBAC, tenant isolation (middleware + PostgreSQL RLS), audit logging, rate limiting, and CSRF protection are implemented and wired into `main.py` (see `docs/security/`). 30 Alembic migrations applied. Matrix planning view (UC-03), calendar sync (UC-01/UC-02), and event export (UC-04/05/06) are implemented. See `openspec/security-roadmap.md` and `openspec/changes/` for the current backlog — notably `p0-strukturell-multi-tenant-operations` (backup/restore, exclusion constraints) and `p1-domain-conflict-quality` (double-booking detection) are the highest-priority open gaps.
 
 The spec is written in German (NAK = Neuapostolische Kirche / New Apostolic Church).
 
@@ -141,10 +141,12 @@ app/
 
 ## Development Phases
 
-1. **Phase 1 (MVP):** ✅ Monorepo scaffold; Docker Compose + PostgreSQL + Redis; FastAPI stub; implement SQLAlchemy models + `POST /events`, `GET /events` with district/congregation filters
-2. **Phase 2:** `CalendarConnector` ABC; `iCalConnector` read-only adapter; Celery sync task
-3. **Phase 3:** Vue 3 + Tailwind + Pinia scaffolding; event list dashboard; matrix planning view
-4. **Phase 4:** JWT authentication; API key encryption in DB (service layer decorator)
+1. **Phase 1 (MVP):** ✅ Monorepo scaffold; Docker Compose + PostgreSQL + Redis; FastAPI stub; SQLAlchemy models + `POST /events`, `GET /events` with district/congregation filters
+2. **Phase 2:** ✅ `CalendarConnector` ABC with Google/Microsoft/CalDAV/iCal adapters; Celery sync task
+3. **Phase 3:** ✅ Vue 3 + Tailwind + Pinia scaffolding; event list dashboard; matrix planning view (`MatrixTable.vue`)
+4. **Phase 4:** ✅ OIDC authentication (`OIDCAdapter`); RBAC; API key encryption in DB (service layer decorator)
+
+Current work is tracked via OpenSpec (`openspec/changes/`) rather than these phases — see `openspec/security-roadmap.md` for the security backlog and the `p0-`/`p1-` prefixed changes for the production-readiness backlog.
 
 ---
 

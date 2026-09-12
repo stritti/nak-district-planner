@@ -144,6 +144,7 @@ class TestGhcrTagFetcher:
 
     def test_fetch_tags_httpx_error(self):
         import httpx
+
         from app.adapters.version_check.ghcr import GhcrTagFetcher
 
         fetcher = GhcrTagFetcher(owner="test", repo="test")
