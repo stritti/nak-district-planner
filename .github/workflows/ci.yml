@@ -280,7 +280,14 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
+          key: ${{ runner.os }}-playwright-${{
+            hashFiles(
+              'bun.lock',
+              'package.json',
+              'services/frontend/bun.lock',
+              'services/frontend/package.json'
+            )
+          }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
