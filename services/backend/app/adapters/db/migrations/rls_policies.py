@@ -367,28 +367,39 @@ def invitation_overwrite_request_sql(invitation_visibility_factory) -> str:
     )"""
 
 
-def invitation_visibility_sql_factory(
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def invitation_overwrite_request_visibility_factory(
     congregation_permission_sql_factory,
     planning_slot_permission_sql_factory,
 ):
-    """Return a callable that generates invitation visibility SQL for a given alias."""
+    """Return a callable that generates invitation overwrite request visibility SQL.
+    
+    Derives tenant access through invitation_id -> congregation_invitations relationship.
+    """
     def _factory(alias: str) -> str:
         return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
             {SUPERADMIN_SQL}
             OR EXISTS (
                 SELECT 1
-                FROM congregations c
-                WHERE c.id IN (
-                    {alias}.source_congregation_id,
-                    {alias}.target_congregation_id
-                )
-                  AND {congregation_permission_sql_factory("c")}
-            )
-            OR EXISTS (
-                SELECT 1
-                FROM planning_slots ps
-                WHERE ps.id = {alias}.source_planning_slot_id
-                  AND {planning_slot_permission_sql_factory("ps")}
+                FROM congregation_invitations ci
+                WHERE ci.id = {alias}.invitation_id
+                  AND (
+                      EXISTS (
+                          SELECT 1
+                          FROM congregations c
+                          WHERE c.id IN (
+                              ci.source_congregation_id,
+                              ci.target_congregation_id
+                          )
+                            AND {congregation_permission_sql_factory("c")}
+                      )
+                      OR EXISTS (
+                          SELECT 1
+                          FROM planning_slots ps
+                          WHERE ps.id = ci.source_planning_slot_id
+                            AND {planning_slot_permission_sql_factory("ps")}
+                      )
+                  )
             )
         )"""
     return _factory
@@ -653,10 +664,10 @@ RLS_POLICIES = {
     "invitation_overwrite_requests": {
         "enable": "ALTER TABLE invitation_overwrite_requests ENABLE ROW LEVEL SECURITY;",
         "policies": [
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_select_policy ON invitation_overwrite_requests FOR SELECT USING {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_read_sql, planning_slot_read_sql))};""",
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_insert_policy ON invitation_overwrite_requests FOR INSERT WITH CHECK {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_write_sql, planning_slot_write_sql))};""",
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_update_policy ON invitation_overwrite_requests FOR UPDATE USING {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_read_sql, planning_slot_read_sql))} WITH CHECK {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_write_sql, planning_slot_write_sql))};""",
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_delete_policy ON invitation_overwrite_requests FOR DELETE USING {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_admin_sql, planning_slot_admin_sql))};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_select_policy ON invitation_overwrite_requests FOR SELECT USING {invitation_overwrite_request_sql(invitation_overwrite_request_visibility_factory(congregation_row_read_sql, planning_slot_read_sql))};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_insert_policy ON invitation_overwrite_requests FOR INSERT WITH CHECK {invitation_overwrite_request_sql(invitation_overwrite_request_visibility_factory(congregation_row_write_sql, planning_slot_write_sql))};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_update_policy ON invitation_overwrite_requests FOR UPDATE USING {invitation_overwrite_request_sql(invitation_overwrite_request_visibility_factory(congregation_row_read_sql, planning_slot_read_sql))} WITH CHECK {invitation_overwrite_request_sql(invitation_overwrite_request_visibility_factory(congregation_row_write_sql, planning_slot_write_sql))};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_delete_policy ON invitation_overwrite_requests FOR DELETE USING {invitation_overwrite_request_sql(invitation_overwrite_request_visibility_factory(congregation_row_admin_sql, planning_slot_admin_sql))};""",
         ],
     },
 }
