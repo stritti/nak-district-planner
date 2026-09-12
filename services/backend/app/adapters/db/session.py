@@ -27,7 +27,13 @@ def _set_tenant_gucs(connection, **kwargs):
             text("SELECT set_config('app.current_user_sub', :val, true)"),
             {"val": user_sub},
         )
-    if "SYSTEM_WORKER" in (TC.get_user_roles() or []):
+    user_roles = TC.get_user_roles()
+    if user_roles:
+        connection.execute(
+            text("SELECT set_config('app.current_user_roles', :val, true)"),
+            {"val": ",".join(user_roles)},
+        )
+    if "SYSTEM_WORKER" in (user_roles or []):
         connection.execute(
             text("SELECT set_config('app.is_system_worker', 'true', true)"),
         )

@@ -95,6 +95,8 @@ class AuditService:
 
     async def _writer(self) -> None:
         """Background task that writes audit logs to the database."""
+        from sqlalchemy import text
+
         while self._running or not self._queue.empty():
             try:
                 # Get next audit log entry
@@ -104,6 +106,10 @@ class AuditService:
 
                 # Write to database
                 async with AsyncSessionLocal() as session:
+                    # Set SYSTEM_WORKER GUC for RLS bypass (audit writer is a system task)
+                    await session.execute(
+                        text("SELECT set_config('app.is_system_worker', 'true', true)")
+                    )
                     repo = SqlAuditLogRepository(session)
                     try:
                         await repo.create(audit_log_create)

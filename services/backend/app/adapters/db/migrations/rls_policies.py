@@ -265,22 +265,16 @@ def scoped_membership_admin_sql(alias: str = "memberships") -> str:
     return f"""
 (
     {SUPERADMIN_SQL}
-    OR ({alias}.scope_type = 'DISTRICT' AND EXISTS (
-        SELECT 1 FROM memberships m
-        WHERE m.user_sub = current_setting('app.current_user_sub', true)
-          AND m.scope_type = 'DISTRICT'
-          AND m.scope_id = {alias}.scope_id
-          AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
-    ))
-    OR ({alias}.scope_type = 'CONGREGATION' AND EXISTS (
-            SELECT 1 FROM congregations c
-            JOIN memberships m ON m.user_sub = current_setting('app.current_user_sub', true)
-            WHERE c.id = {alias}.scope_id
-              AND ((m.scope_type = 'CONGREGATION' AND m.scope_id = c.id)
-                   OR (m.scope_type = 'DISTRICT' AND m.scope_id = c.district_id))
-              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
-        ))
+    OR (
+        -- Check if current user has admin role via GUC (avoids recursive memberships lookup)
+        current_setting('app.current_user_roles', true) LIKE '%CONGREGATION_ADMIN%'
+        OR current_setting('app.current_user_roles', true) LIKE '%DISTRICT_ADMIN%'
     )
+    AND (
+        ({alias}.scope_type = 'DISTRICT' AND {district_membership_sql(alias)})
+        OR ({alias}.scope_type = 'CONGREGATION' AND {congregation_membership_sql(alias)})
+    )
+)
 """
 
 
@@ -323,17 +317,42 @@ def external_event_link_sql(permission_sql_factory) -> str:
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
-def invitation_overwrite_request_sql(invitation_permission_sql: str) -> str:
-    return f"""
-(
-    {SUPERADMIN_SQL}
-    OR EXISTS (
-        SELECT 1 FROM congregation_invitations ci
-        WHERE ci.id = invitation_overwrite_requests.invitation_id
-          AND {invitation_permission_sql}
-    )
-)
-"""
+def invitation_overwrite_request_sql(permission_sql_factory) -> str:
+    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
+        {SUPERADMIN_SQL}
+        OR EXISTS (
+            SELECT 1 FROM congregation_invitations ci
+            WHERE ci.id = invitation_overwrite_requests.invitation_id
+              AND {permission_sql_factory("ci")}
+        )
+    )"""
+
+
+def invitation_visibility_sql_factory(
+    congregation_permission_sql_factory,
+    planning_slot_permission_sql_factory,
+):
+    """Return a callable that generates invitation visibility SQL for a given alias."""
+    def _factory(alias: str) -> str:
+        return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
+            {SUPERADMIN_SQL}
+            OR EXISTS (
+                SELECT 1
+                FROM congregations c
+                WHERE c.id IN (
+                    {alias}.source_congregation_id,
+                    {alias}.target_congregation_id
+                )
+                  AND {congregation_permission_sql_factory("c")}
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM planning_slots ps
+                WHERE ps.id = {alias}.source_planning_slot_id
+                  AND {planning_slot_permission_sql_factory("ps")}
+            )
+        )"""
+    return _factory
 
 
 RLS_POLICIES = {
@@ -441,7 +460,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY leaders_delete_policy ON leaders
                 FOR DELETE
-                USING {planning_slot_admin_sql("leaders")};
+                USING {planning_slot_write_sql("leaders")};
             """,
         ],
     },
@@ -467,7 +486,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY invitations_delete_policy ON congregation_invitations
                 FOR DELETE
-                USING {invitation_visibility_sql(congregation_row_admin_sql, planning_slot_admin_sql)};
+                USING {invitation_visibility_sql(congregation_row_write_sql, planning_slot_write_sql)};
             """,
         ],
     },
@@ -551,7 +570,16 @@ RLS_POLICIES = {
         "enable": "ALTER TABLE leader_registrations ENABLE ROW LEVEL SECURITY;",
         "policies": [
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY leader_registrations_select_policy ON leader_registrations FOR SELECT USING ({planning_slot_read_sql("leader_registrations")} OR leader_registrations.user_sub = current_setting('app.current_user_sub', true));""",
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY leader_registrations_insert_policy ON leader_registrations FOR INSERT WITH CHECK {planning_slot_write_sql("leader_registrations")};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY leader_registrations_insert_policy ON leader_registrations FOR INSERT WITH CHECK (
+                {planning_slot_write_sql("leader_registrations")}
+                OR (
+                    -- Allow public registration: district_id must be valid and user_sub must be NULL
+                    leader_registrations.user_sub IS NULL
+                    AND EXISTS (
+                        SELECT 1 FROM districts d WHERE d.id = leader_registrations.district_id
+                    )
+                )
+            );""",
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY leader_registrations_update_policy ON leader_registrations FOR UPDATE USING {planning_slot_read_sql("leader_registrations")} WITH CHECK {planning_slot_write_sql("leader_registrations")};""",
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY leader_registrations_delete_policy ON leader_registrations FOR DELETE USING {planning_slot_admin_sql("leader_registrations")};""",
         ],
@@ -586,10 +614,10 @@ RLS_POLICIES = {
     "invitation_overwrite_requests": {
         "enable": "ALTER TABLE invitation_overwrite_requests ENABLE ROW LEVEL SECURITY;",
         "policies": [
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_select_policy ON invitation_overwrite_requests FOR SELECT USING {invitation_overwrite_request_sql(invitation_visibility_sql(congregation_row_read_sql, planning_slot_read_sql))};""",
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_insert_policy ON invitation_overwrite_requests FOR INSERT WITH CHECK {invitation_overwrite_request_sql(invitation_visibility_sql(congregation_row_write_sql, planning_slot_write_sql))};""",
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_update_policy ON invitation_overwrite_requests FOR UPDATE USING {invitation_overwrite_request_sql(invitation_visibility_sql(congregation_row_read_sql, planning_slot_read_sql))} WITH CHECK {invitation_overwrite_request_sql(invitation_visibility_sql(congregation_row_write_sql, planning_slot_write_sql))};""",
-            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_delete_policy ON invitation_overwrite_requests FOR DELETE USING {invitation_overwrite_request_sql(invitation_visibility_sql(congregation_row_admin_sql, planning_slot_admin_sql))};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_select_policy ON invitation_overwrite_requests FOR SELECT USING {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_read_sql, planning_slot_read_sql))};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_insert_policy ON invitation_overwrite_requests FOR INSERT WITH CHECK {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_write_sql, planning_slot_write_sql))};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_update_policy ON invitation_overwrite_requests FOR UPDATE USING {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_read_sql, planning_slot_read_sql))} WITH CHECK {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_write_sql, planning_slot_write_sql))};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_delete_policy ON invitation_overwrite_requests FOR DELETE USING {invitation_overwrite_request_sql(invitation_visibility_sql_factory(congregation_row_admin_sql, planning_slot_admin_sql))};""",
         ],
     },
 }

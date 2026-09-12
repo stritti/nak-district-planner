@@ -22,7 +22,8 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Create application role without BYPASSRLS and grant necessary permissions."""
     # Create the application role without BYPASSRLS (cannot bypass RLS)
-    op.execute("CREATE ROLE nak_app WITH LOGIN NOBYPASSRLS;")
+    # Password is set via environment variable in production
+    op.execute("CREATE ROLE nak_app WITH LOGIN NOBYPASSRLS PASSWORD 'changeme';")
 
     # Grant usage on schema
     op.execute("GRANT USAGE ON SCHEMA public TO nak_app;")
