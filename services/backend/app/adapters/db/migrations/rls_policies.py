@@ -22,7 +22,8 @@ from __future__ import annotations
 
 SYSTEM_WORKER_SQL = """current_setting('app.is_system_worker', true) = 'true'"""
 
-SUPERADMIN_SQL = f"""/* # nosec B608 — interpolated aliases are internal code constants, never user input */
+# nosec B608 — interpolated aliases are internal code constants, never user input
+SUPERADMIN_SQL = f"""
 EXISTS (
     SELECT 1
     FROM users
@@ -33,8 +34,9 @@ OR {SYSTEM_WORKER_SQL}
 """
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def district_membership_sql(table_alias: str) -> str:
-    return f"""/* # nosec B608 — interpolated aliases are internal code constants, never user input */
+    return f"""
 EXISTS (
     SELECT 1
     FROM memberships m
@@ -45,8 +47,9 @@ EXISTS (
 """
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def congregation_membership_sql(table_alias: str) -> str:
-    return f"""/* # nosec B608 — interpolated aliases are internal code constants, never user input */
+    return f"""
 EXISTS (
     SELECT 1
     FROM memberships m
@@ -57,8 +60,9 @@ EXISTS (
 """
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def district_write_membership_sql(table_alias: str) -> str:
-    return f"""/* # nosec B608 — interpolated aliases are internal code constants, never user input */
+    return f"""
 EXISTS (
     SELECT 1
     FROM memberships m
@@ -70,8 +74,9 @@ EXISTS (
 """
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def congregation_write_membership_sql(table_alias: str) -> str:
-    return f"""/* # nosec B608 — interpolated aliases are internal code constants, never user input */
+    return f"""
 EXISTS (
     SELECT 1
     FROM memberships m
@@ -83,8 +88,9 @@ EXISTS (
 """
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def district_admin_membership_sql(table_alias: str) -> str:
-    return f"""/* # nosec B608 — interpolated aliases are internal code constants, never user input */
+    return f"""
 EXISTS (
     SELECT 1
     FROM memberships m
@@ -96,8 +102,9 @@ EXISTS (
 """
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def congregation_admin_membership_sql(table_alias: str) -> str:
-    return f"""/* # nosec B608 — interpolated aliases are internal code constants, never user input */
+    return f"""
 EXISTS (
     SELECT 1
     FROM memberships m
@@ -109,137 +116,163 @@ EXISTS (
 """
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def planning_slot_read_sql(alias: str = "planning_slots") -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR {district_membership_sql(alias)}
-        OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
-    )"""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR {district_membership_sql(alias)}
+    OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
+)
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def planning_slot_write_sql(alias: str = "planning_slots") -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR {district_write_membership_sql(alias)}
-        OR ({alias}.congregation_id IS NOT NULL AND {congregation_write_membership_sql(alias)})
-    )"""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR {district_write_membership_sql(alias)}
+    OR ({alias}.congregation_id IS NOT NULL AND {congregation_write_membership_sql(alias)})
+)
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def planning_slot_admin_sql(alias: str = "planning_slots") -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR {district_admin_membership_sql(alias)}
-        OR ({alias}.congregation_id IS NOT NULL AND {congregation_admin_membership_sql(alias)})
-    )"""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR {district_admin_membership_sql(alias)}
+    OR ({alias}.congregation_id IS NOT NULL AND {congregation_admin_membership_sql(alias)})
+)
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def related_planning_slot_sql(table_name: str, permission_sql_factory) -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR EXISTS (
-            SELECT 1
-            FROM planning_slots ps
-            WHERE ps.id = {table_name}.planning_slot_id
-              AND {permission_sql_factory("ps")}
-        )
-    )"""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR EXISTS (
+        SELECT 1
+        FROM planning_slots ps
+        WHERE ps.id = {table_name}.planning_slot_id
+          AND {permission_sql_factory("ps")}
+    )
+)
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def invitation_visibility_sql(
     congregation_permission_sql_factory,
     planning_slot_permission_sql_factory,
 ) -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR EXISTS (
-            SELECT 1
-            FROM congregations c
-            WHERE c.id IN (
-                congregation_invitations.source_congregation_id,
-                congregation_invitations.target_congregation_id
-            )
-              AND {congregation_permission_sql_factory("c")}
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR EXISTS (
+        SELECT 1
+        FROM congregations c
+        WHERE c.id IN (
+            congregation_invitations.source_congregation_id,
+            congregation_invitations.target_congregation_id
         )
-        OR EXISTS (
-            SELECT 1
-            FROM planning_slots ps
-            WHERE ps.id = congregation_invitations.source_planning_slot_id
-              AND {planning_slot_permission_sql_factory("ps")}
-        )
-    )"""
+          AND {congregation_permission_sql_factory("c")}
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM planning_slots ps
+        WHERE ps.id = congregation_invitations.source_planning_slot_id
+          AND {planning_slot_permission_sql_factory("ps")}
+    )
+)
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def congregation_row_read_sql(alias: str = "congregations") -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR EXISTS (
-            SELECT 1
-            FROM memberships m
-            WHERE m.user_sub = current_setting('app.current_user_sub', true)
-              AND m.scope_type = 'DISTRICT'
-              AND m.scope_id = {alias}.district_id
-        )
-        OR EXISTS (
-            SELECT 1
-            FROM memberships m
-            WHERE m.user_sub = current_setting('app.current_user_sub', true)
-              AND m.scope_type = 'CONGREGATION'
-              AND m.scope_id = {alias}.id
-        )
-    )"""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR EXISTS (
+        SELECT 1
+        FROM memberships m
+        WHERE m.user_sub = current_setting('app.current_user_sub', true)
+          AND m.scope_type = 'DISTRICT'
+          AND m.scope_id = {alias}.district_id
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM memberships m
+        WHERE m.user_sub = current_setting('app.current_user_sub', true)
+          AND m.scope_type = 'CONGREGATION'
+          AND m.scope_id = {alias}.id
+    )
+)
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def congregation_row_write_sql(alias: str = "congregations") -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR EXISTS (
-            SELECT 1 FROM memberships m
-            WHERE m.user_sub = current_setting('app.current_user_sub', true)
-              AND m.scope_type = 'DISTRICT'
-              AND m.scope_id = {alias}.district_id
-              AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
-        )
-        OR EXISTS (
-            SELECT 1 FROM memberships m
-            WHERE m.user_sub = current_setting('app.current_user_sub', true)
-              AND m.scope_type = 'CONGREGATION'
-              AND m.scope_id = {alias}.id
-              AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
-        )
-    )"""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR EXISTS (
+        SELECT 1 FROM memberships m
+        WHERE m.user_sub = current_setting('app.current_user_sub', true)
+          AND m.scope_type = 'DISTRICT'
+          AND m.scope_id = {alias}.district_id
+          AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+    )
+    OR EXISTS (
+        SELECT 1 FROM memberships m
+        WHERE m.user_sub = current_setting('app.current_user_sub', true)
+          AND m.scope_type = 'CONGREGATION'
+          AND m.scope_id = {alias}.id
+          AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+    )
+)
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def congregation_row_admin_sql(alias: str = "congregations") -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR EXISTS (
-            SELECT 1 FROM memberships m
-            WHERE m.user_sub = current_setting('app.current_user_sub', true)
-              AND m.scope_type = 'DISTRICT'
-              AND m.scope_id = {alias}.district_id
-              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
-        )
-        OR EXISTS (
-            SELECT 1 FROM memberships m
-            WHERE m.user_sub = current_setting('app.current_user_sub', true)
-              AND m.scope_type = 'CONGREGATION'
-              AND m.scope_id = {alias}.id
-              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
-        )
-    )"""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR EXISTS (
+        SELECT 1 FROM memberships m
+        WHERE m.user_sub = current_setting('app.current_user_sub', true)
+          AND m.scope_type = 'DISTRICT'
+          AND m.scope_id = {alias}.district_id
+          AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+    )
+    OR EXISTS (
+        SELECT 1 FROM memberships m
+        WHERE m.user_sub = current_setting('app.current_user_sub', true)
+          AND m.scope_type = 'CONGREGATION'
+          AND m.scope_id = {alias}.id
+          AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+    )
+)
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def scoped_membership_admin_sql(alias: str = "memberships") -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR ({alias}.scope_type = 'DISTRICT' AND EXISTS (
-            SELECT 1 FROM memberships m
-            WHERE m.user_sub = current_setting('app.current_user_sub', true)
-              AND m.scope_type = 'DISTRICT'
-              AND m.scope_id = {alias}.scope_id
-              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
-        ))
-        OR ({alias}.scope_type = 'CONGREGATION' AND EXISTS (
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR ({alias}.scope_type = 'DISTRICT' AND EXISTS (
+        SELECT 1 FROM memberships m
+        WHERE m.user_sub = current_setting('app.current_user_sub', true)
+          AND m.scope_type = 'DISTRICT'
+          AND m.scope_id = {alias}.scope_id
+          AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+    ))
+    OR ({alias}.scope_type = 'CONGREGATION' AND EXISTS (
             SELECT 1 FROM congregations c
             JOIN memberships m ON m.user_sub = current_setting('app.current_user_sub', true)
             WHERE c.id = {alias}.scope_id
@@ -247,50 +280,60 @@ def scoped_membership_admin_sql(alias: str = "memberships") -> str:
                    OR (m.scope_type = 'DISTRICT' AND m.scope_id = c.district_id))
               AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
         ))
-    )"""
+    )
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def self_approved_registration_insert_sql(alias: str = "memberships") -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {alias}.user_sub = current_setting('app.current_user_sub', true)
-        AND EXISTS (
-            SELECT 1
-            FROM leader_registrations lr
-            WHERE lr.status = 'APPROVED'
-              AND lr.user_sub = {alias}.user_sub
-              AND lr.assigned_scope_type = {alias}.scope_type
-              AND lr.assigned_scope_id = {alias}.scope_id
-              AND lr.assigned_role = {alias}.role
-        )
-    )"""
+    return f"""
+(
+    {alias}.user_sub = current_setting('app.current_user_sub', true)
+    AND EXISTS (
+        SELECT 1
+        FROM leader_registrations lr
+        WHERE lr.status = 'APPROVED'
+          AND lr.user_sub = {alias}.user_sub
+          AND lr.assigned_scope_type = {alias}.scope_type
+          AND lr.assigned_scope_id = {alias}.scope_id
+          AND lr.assigned_role = {alias}.role
+    )
+)
+"""
 
 
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def external_event_link_sql(permission_sql_factory) -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR EXISTS (
-            SELECT 1 FROM event_instances ei
-            JOIN planning_slots ps ON ps.id = ei.planning_slot_id
-            WHERE ei.id = external_event_links.event_instance_id
-              AND {permission_sql_factory("ps")}
-        )
-        OR EXISTS (
-            SELECT 1 FROM calendar_integrations ci
-            WHERE ci.id = external_event_links.calendar_integration_id
-              AND {permission_sql_factory("ci")}
-        )
-    )"""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR EXISTS (
+        SELECT 1 FROM event_instances ei
+        JOIN planning_slots ps ON ps.id = ei.planning_slot_id
+        WHERE ei.id = external_event_links.event_instance_id
+          AND {permission_sql_factory("ps")}
+    )
+    OR EXISTS (
+        SELECT 1 FROM calendar_integrations ci
+        WHERE ci.id = external_event_links.calendar_integration_id
+          AND {permission_sql_factory("ci")}
+    )
+)
+"""
 
 
-def invitation_overwrite_request_sql(permission_sql_factory) -> str:
-    return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
-        {SUPERADMIN_SQL}
-        OR EXISTS (
-            SELECT 1 FROM congregation_invitations ci
-            WHERE ci.id = invitation_overwrite_requests.invitation_id
-              AND {permission_sql_factory("ci")}
-        )
-    )"""
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def invitation_overwrite_request_sql(invitation_permission_sql: str) -> str:
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR EXISTS (
+        SELECT 1 FROM congregation_invitations ci
+        WHERE ci.id = invitation_overwrite_requests.invitation_id
+          AND {invitation_permission_sql}
+    )
+)
+"""
 
 
 RLS_POLICIES = {
