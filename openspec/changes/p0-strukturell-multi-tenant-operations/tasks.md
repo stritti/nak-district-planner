@@ -25,14 +25,25 @@
 
 ## 2. Exclusion Constraints
 
-- [ ] 2.1 Migration erstellen: Exclusion Constraint `no_overlapping_events` auf `events`-Tabelle
-  - `congregation_id WITH =, daterange(start_date, end_date, '[]') WITH &&`
-  - GIST-Index erforderlich
-- [ ] 2.2 Migration erstellen: Exclusion Constraint `no_overlapping_planning_slots` auf `planning_slots`
-  - `congregation_id WITH =, daterange(planning_date, planning_date, '[]') WITH &&`
-- [ ] 2.3 Migration testen: Einfügen überlappender Events → DB-Constraint-Verletzung
-- [ ] 2.4 `alembic downgrade`-Test: Constraints werden sauber entfernt
-- [ ] 2.5 Dokumentation: Constraints in `docs/schema.md` festhalten
+> **Hinweis (2026-09-07):** Diese Spezifikation ist gegen ein Schema geschrieben, das es
+> nicht mehr gibt — die `events`-Tabelle wurde im M3-Umbau durch `event_instances` +
+> `planning_slots` ersetzt (siehe Migration `0125`). `event_instances` hat keine eigene
+> `congregation_id`-Spalte (nur indirekt über `planning_slot_id`), und `planning_slots`
+> hat `planning_date`/`planning_time` als Zeitpunkt statt als Zeitspanne — ein
+> GIST-Exclusion-Constraint mit `daterange`/`&&` passt auf keine der beiden Tabellen mehr
+> wie ursprünglich beschrieben. Nutzerentscheidung: einfachere, schema-korrekte Variante
+> statt Schema-Redesign — siehe unten.
+
+- [x] ~2.1 Exclusion Constraint `no_overlapping_events` auf `events`~ *(entfällt — Tabelle existiert nicht mehr, siehe Hinweis oben)*
+- [x] 2.2 Migration erstellt: partieller Unique-Index `no_overlapping_planning_slots` auf
+  `planning_slots (congregation_id, planning_date, planning_time)`, `WHERE congregation_id
+  IS NOT NULL AND status = 'ACTIVE'` *(kein GIST/daterange-EXCLUDE — `planning_slots` hat
+  keine Zeitspanne, sondern nur einen Zeitpunkt; ein exaktes Unique reicht für die
+  gewünschte "keine Doppelbuchung zur exakt gleichen Zeit"-Regel. Echtes
+  Zeitspannen-Overlap bleibt Aufgabe von `p1-domain-conflict-quality`, siehe `docs/schema.md`.)*
+- [x] 2.3 Migration getestet: Duplikat (gleiche Gemeinde/Datum/Zeit, beide ACTIVE) → Constraint-Verletzung bestätigt; Cancelled-Duplikat, NULL-congregation-Duplikat und abweichende Zeit → erfolgreich (siehe `docs/schema.md`)
+- [x] 2.4 `alembic downgrade`-Test: Index wird sauber entfernt und beim erneuten Upgrade wiederhergestellt (Roundtrip verifiziert)
+- [x] 2.5 Dokumentation in `docs/schema.md` festgehalten (Abschnitt "Überlappungsschutz")
 
 ## 3. CI-Migration-Check
 
