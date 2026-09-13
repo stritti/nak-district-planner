@@ -27,6 +27,15 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 _oidc_adapter: OIDCAdapter | None = None
 
 
+async def _grant_trusted_superadmin_bootstrap(session: AsyncSession, user_sub: str) -> bool:
+    """Use DB-side trusted bootstrap checks; never write is_superadmin directly."""
+    result = await session.execute(
+        text("SELECT grant_trusted_superadmin_bootstrap(:user_sub)"),
+        {"user_sub": user_sub},
+    )
+    return bool(result.scalar())
+
+
 def set_oidc_adapter(adapter: OIDCAdapter | None) -> None:
     """Set the global OIDC adapter instance (called from main.py)."""
     global _oidc_adapter
@@ -94,11 +103,12 @@ async def get_current_user(
         # Get or create user in database
         user_repo = SqlUserRepository(session)
         existing_user = await user_repo.get_by_sub(user_info["sub"])
-        if settings.superadmin_sub is not None:
-            is_superadmin = user_info["sub"] == settings.superadmin_sub
-        else:
-            has_any_user = await user_repo.has_any_user()
-            is_superadmin = existing_user.is_superadmin if existing_user else (not has_any_user)
+        has_any_user = await user_repo.has_any_user() if existing_user is None else True
+        # Runtime app-role code never writes users.is_superadmin directly.
+        # Trusted bootstrap is delegated to a SECURITY DEFINER function that
+        # promotes only DB-verified sole users or owner-allowlisted subjects.
+        is_first_user_bootstrap = existing_user is None and not has_any_user
+        is_configured_bootstrap = user_info["sub"] == settings.superadmin_sub
 
         if existing_user:
             # Update existing user with latest info from token
@@ -108,6 +118,10 @@ async def get_current_user(
             existing_user.given_name = user_info["given_name"]
             existing_user.family_name = user_info["family_name"]
             await user_repo.save(existing_user)
+            if is_configured_bootstrap and not existing_user.is_superadmin:
+                existing_user.is_superadmin = await _grant_trusted_superadmin_bootstrap(
+                    session, existing_user.sub
+                )
             request.state.user = existing_user
             return existing_user
         else:
@@ -119,9 +133,13 @@ async def get_current_user(
                 name=user_info["name"],
                 given_name=user_info["given_name"],
                 family_name=user_info["family_name"],
-                is_superadmin=is_superadmin,
+                is_superadmin=False,
             )
             await user_repo.save(new_user)
+            if is_first_user_bootstrap or is_configured_bootstrap:
+                new_user.is_superadmin = await _grant_trusted_superadmin_bootstrap(
+                    session, new_user.sub
+                )
             logger.info(f"Auto-created user: {new_user.sub} ({new_user.email})")
             request.state.user = new_user
             return new_user

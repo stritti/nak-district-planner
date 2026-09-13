@@ -186,6 +186,16 @@ def self_leader_visibility_sql(alias: str = "leaders") -> str:
     OR {district_membership_sql(alias)}
     OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
     OR ({alias}.user_sub = current_setting('app.current_user_sub', true))
+    OR EXISTS (
+        SELECT 1
+        FROM service_assignments sa
+        JOIN planning_slots ps ON ps.id = sa.planning_slot_id
+        JOIN export_tokens et ON et.token = current_setting('app.current_export_token', true)
+        WHERE sa.leader_id = {alias}.id
+          AND et.token_type = 'INTERNAL'
+          AND et.district_id = ps.district_id
+          AND (et.congregation_id IS NULL OR et.congregation_id = ps.congregation_id)
+    )
 )
 """
 
@@ -381,7 +391,7 @@ def invitation_overwrite_request_visibility_factory(
     planning_slot_permission_sql_factory,
 ):
     """Return a callable that generates invitation overwrite request visibility SQL.
-    
+
     Derives tenant access through invitation_id -> congregation_invitations relationship.
     """
     def _factory(alias: str) -> str:
@@ -498,11 +508,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY leaders_tenant_isolation_policy ON leaders
                 FOR SELECT
-                USING (
-                    {SUPERADMIN_SQL}
-                    OR {district_membership_sql("leaders")}
-                    OR (leaders.congregation_id IS NOT NULL AND {congregation_membership_sql("leaders")})
-                );
+                USING {self_leader_visibility_sql("leaders")};
             """,
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY leaders_insert_policy ON leaders

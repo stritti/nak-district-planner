@@ -4,6 +4,7 @@ Tests cover JWT validation, user creation, and dependency injection.
 """
 
 from datetime import UTC, datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.api.deps import get_current_user, set_oidc_adapter
 from app.adapters.auth.oidc import OIDCAdapter
+from app.adapters.db.orm_models.user import UserORM
 from app.domain.models.user import User
 
 
@@ -92,6 +94,30 @@ class TestGetCurrentUserAutoCreation:
             # Verify save was called
             mock_repo_instance.save.assert_called_once()
 
+    def test_user_orm_superadmin_uses_server_default_not_python_default(self):
+        column = UserORM.__table__.c.is_superadmin
+
+        assert column.default is None
+        assert column.server_default is not None
+
+    def test_trusted_function_uses_owner_allowlist_and_db_conditions_not_gucs(self):
+        migration_sql = Path("alembic/versions/0017_first_user_superadmin_function.py").read_text()
+        function_sql = migration_sql[
+            migration_sql.index("CREATE OR REPLACE FUNCTION grant_trusted_superadmin_bootstrap") :
+            migration_sql.index("DROP POLICY IF EXISTS leaders_tenant_isolation_policy")
+        ]
+
+        assert "superadmin_bootstrap_subjects" in migration_sql
+        assert "SUPERADMIN_SUB" in migration_sql
+        assert "grant_trusted_superadmin_bootstrap" in migration_sql
+        assert "LOCK TABLE users" in migration_sql
+        assert "(SELECT COUNT(*) FROM users) = 1" in migration_sql
+        assert "u.sub <> p_user_sub" in migration_sql
+        assert "sbs.subject = p_user_sub" in migration_sql
+        assert "GRANT EXECUTE ON FUNCTION grant_trusted_superadmin_bootstrap" in migration_sql
+        assert "GRANT SELECT" not in migration_sql
+        assert "current_setting('app.current_user_sub'" not in function_sql
+
     @pytest.mark.asyncio
     async def test_update_existing_user(
         self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
@@ -137,6 +163,118 @@ class TestGetCurrentUserAutoCreation:
 
             # Verify save was called
             mock_repo_instance.save.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_first_user_bootstrap_uses_trusted_reconciliation_function(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
+        token_claims = {"sub": "bootstrap-sub", "email": "root@example.com"}
+        mock_oidc_adapter.validate_token.return_value = token_claims
+        mock_oidc_adapter.extract_user_info.return_value = {
+            "sub": "bootstrap-sub",
+            "email": "root@example.com",
+            "username": "root",
+            "name": None,
+            "given_name": None,
+            "family_name": None,
+        }
+
+        with (
+            patch("app.adapters.api.deps.settings") as mock_settings,
+            patch("app.adapters.api.deps.SqlUserRepository") as MockRepo,
+        ):
+            mock_settings.superadmin_sub = None
+            mock_repo_instance = AsyncMock()
+            mock_repo_instance.get_by_sub.return_value = None
+            mock_repo_instance.has_any_user.return_value = False
+            async def save_unprivileged_user(user: User) -> None:
+                assert user.is_superadmin is False
+
+            mock_repo_instance.save = AsyncMock(side_effect=save_unprivileged_user)
+            MockRepo.return_value = mock_repo_instance
+            mock_session.execute.return_value = MagicMock(scalar=MagicMock(return_value=True))
+
+            user = await get_current_user(mock_request, mock_credentials, mock_session)
+
+            assert user.is_superadmin is True
+            superadmin_calls = [
+                call for call in mock_session.execute.call_args_list
+                if "grant_trusted_superadmin_bootstrap" in str(call.args[0])
+            ]
+            assert len(superadmin_calls) == 1
+            assert superadmin_calls[0].args[1] == {"user_sub": "bootstrap-sub"}
+
+    @pytest.mark.asyncio
+    async def test_superadmin_sub_calls_trusted_function_after_unprivileged_save(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
+        mock_oidc_adapter.validate_token.return_value = {"sub": "configured-sub", "email": "root@example.com"}
+        mock_oidc_adapter.extract_user_info.return_value = {
+            "sub": "configured-sub",
+            "email": "root@example.com",
+            "username": "root",
+            "name": None,
+            "given_name": None,
+            "family_name": None,
+        }
+
+        with (
+            patch("app.adapters.api.deps.settings") as mock_settings,
+            patch("app.adapters.api.deps.SqlUserRepository") as MockRepo,
+        ):
+            mock_settings.superadmin_sub = "configured-sub"
+            mock_repo_instance = AsyncMock()
+            mock_repo_instance.get_by_sub.return_value = None
+            mock_repo_instance.has_any_user.return_value = True
+            async def save_unprivileged_user(user: User) -> None:
+                assert user.is_superadmin is False
+
+            mock_repo_instance.save = AsyncMock(side_effect=save_unprivileged_user)
+            MockRepo.return_value = mock_repo_instance
+            mock_session.execute.return_value = MagicMock(scalar=MagicMock(return_value=True))
+
+            user = await get_current_user(mock_request, mock_credentials, mock_session)
+
+            assert user.is_superadmin is True
+            superadmin_calls = [
+                call for call in mock_session.execute.call_args_list
+                if "grant_trusted_superadmin_bootstrap" in str(call.args[0])
+            ]
+            assert len(superadmin_calls) == 1
+            assert superadmin_calls[0].args[1] == {"user_sub": "configured-sub"}
+
+    @pytest.mark.asyncio
+    async def test_arbitrary_non_configured_non_first_user_does_not_call_trusted_function(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
+        mock_oidc_adapter.validate_token.return_value = {"sub": "ordinary-sub", "email": "u@example.com"}
+        mock_oidc_adapter.extract_user_info.return_value = {
+            "sub": "ordinary-sub",
+            "email": "u@example.com",
+            "username": "ordinary",
+            "name": None,
+            "given_name": None,
+            "family_name": None,
+        }
+
+        with (
+            patch("app.adapters.api.deps.settings") as mock_settings,
+            patch("app.adapters.api.deps.SqlUserRepository") as MockRepo,
+        ):
+            mock_settings.superadmin_sub = "configured-sub"
+            mock_repo_instance = AsyncMock()
+            mock_repo_instance.get_by_sub.return_value = None
+            mock_repo_instance.has_any_user.return_value = True
+            mock_repo_instance.save = AsyncMock()
+            MockRepo.return_value = mock_repo_instance
+
+            user = await get_current_user(mock_request, mock_credentials, mock_session)
+
+            assert user.is_superadmin is False
+            assert all(
+                "grant_trusted_superadmin_bootstrap" not in str(call.args[0])
+                for call in mock_session.execute.call_args_list
+            )
 
 
 class TestGetCurrentUserErrors:

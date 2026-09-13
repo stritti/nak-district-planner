@@ -39,3 +39,14 @@ def test_export_token_and_registration_policy_branches_exist() -> None:
     assert "CREATE POLICY export_tokens_update_policy" in sql
     assert "CREATE POLICY export_tokens_delete_policy" in sql
     assert "leader_registrations.user_sub = current_setting('app.current_user_sub', true)" in sql
+
+
+def test_leader_select_policy_allows_only_internal_export_token_visible_assignments() -> None:
+    sql = "\n".join(get_rls_sql("leaders"))
+
+    assert "CREATE POLICY leaders_tenant_isolation_policy" in sql
+    assert "app.current_export_token" in sql
+    assert "FROM service_assignments sa" in sql
+    assert "FROM export_tokens et" in sql
+    assert "et.token_type = 'INTERNAL'" in sql
+    assert "sa.leader_id = leaders.id" in sql
