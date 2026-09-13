@@ -8,6 +8,7 @@ Create Date: 2026-09-11 00:00:00.000000
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 
 from alembic import op
@@ -22,6 +23,14 @@ depends_on: str | Sequence[str] | None = None
 FUNCTION_SIGNATURE = "link_approved_registration(TEXT, TEXT)"
 
 
+def _quote_ident(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _quote_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
 def upgrade() -> None:
     """Create bounded registration auto-link helper for post-login membership grants."""
     op.execute(
@@ -32,7 +41,7 @@ def upgrade() -> None:
         )
         RETURNS TABLE(candidate_count INTEGER, granted_role TEXT, granted_scope_type TEXT, granted_scope_id UUID)
         LANGUAGE plpgsql
-        SECURITY INVOKER
+        SECURITY DEFINER
         SET search_path = public
         AS $$
         DECLARE
@@ -43,6 +52,10 @@ def upgrade() -> None:
             v_assigned_scope_id UUID;
             v_now TIMESTAMPTZ;
         BEGIN
+            IF p_user_sub IS NULL OR p_user_sub <> current_setting('app.current_user_sub', true) THEN
+                RAISE EXCEPTION 'user_sub does not match authenticated subject' USING ERRCODE = '42501';
+            END IF;
+
             SELECT count(*)::INTEGER, array_agg(candidate.id)
               INTO candidate_count, v_registration_ids
               FROM (
@@ -112,11 +125,31 @@ def upgrade() -> None:
         $$;
         """
     )
-    # SECURITY INVOKER ensures the function runs with the caller's privileges,
-    # respecting RLS policies. The caller must have appropriate permissions
-    # (granted via nak_app role or direct grants).
+    app_role = os.getenv("APP_DB_USER", "nak_app")
+    op.execute(f"REVOKE ALL ON FUNCTION {FUNCTION_SIGNATURE} FROM PUBLIC")
+    op.execute(
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = {_quote_literal(app_role)}) THEN
+                GRANT EXECUTE ON FUNCTION {FUNCTION_SIGNATURE} TO {_quote_ident(app_role)};
+            END IF;
+        END $$;
+        """
+    )
 
 
 def downgrade() -> None:
     """Drop registration auto-link helper."""
+    app_role = os.getenv("APP_DB_USER", "nak_app")
+    op.execute(
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = {_quote_literal(app_role)}) THEN
+                REVOKE ALL ON FUNCTION {FUNCTION_SIGNATURE} FROM {_quote_ident(app_role)};
+            END IF;
+        END $$;
+        """
+    )
     op.execute(f"DROP FUNCTION IF EXISTS {FUNCTION_SIGNATURE}")

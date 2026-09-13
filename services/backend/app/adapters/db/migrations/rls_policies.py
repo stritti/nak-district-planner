@@ -123,6 +123,13 @@ def planning_slot_read_sql(alias: str = "planning_slots") -> str:
     {SUPERADMIN_SQL}
     OR {district_membership_sql(alias)}
     OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
+    OR EXISTS (
+        SELECT 1
+        FROM export_tokens et
+        WHERE et.token = current_setting('app.current_export_token', true)
+          AND et.district_id = {alias}.district_id
+          AND (et.congregation_id IS NULL OR et.congregation_id = {alias}.congregation_id)
+    )
 )
 """
 
@@ -140,19 +147,39 @@ def planning_slot_write_sql(alias: str = "planning_slots") -> str:
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
 def notifications_update_sql(alias: str = "notifications") -> str:
-    """Allow users with VIEWER role or higher to update notifications (e.g., mark as read)."""
+    """Restrict notification writes to planner/admin paths until column-level RLS exists."""
+    return planning_slot_write_sql(alias)
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def export_token_admin_sql(alias: str = "export_tokens") -> str:
     return f"""
 (
     {SUPERADMIN_SQL}
-    OR {district_membership_sql(alias)}
-    OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
+    OR {district_admin_membership_sql(alias)}
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def export_token_lookup_sql(alias: str = "export_tokens") -> str:
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR {district_admin_membership_sql(alias)}
+    OR {alias}.token = current_setting('app.current_export_token', true)
 )
 """
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
 def leaders_self_update_sql(alias: str = "leaders") -> str:
-    """Allow users to update their own leader record (self-link/unlink via user_sub)."""
+    """Keep leader updates planner-scoped; avoid broad viewer/self-link writes in RLS."""
+    return planning_slot_write_sql(alias)
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def self_leader_visibility_sql(alias: str = "leaders") -> str:
     return f"""
 (
     {SUPERADMIN_SQL}
@@ -193,6 +220,7 @@ def related_planning_slot_sql(table_name: str, permission_sql_factory) -> str:
 def invitation_visibility_sql(
     congregation_permission_sql_factory,
     planning_slot_permission_sql_factory,
+    table_alias: str = "congregation_invitations",
 ) -> str:
     return f"""
 (
@@ -201,15 +229,15 @@ def invitation_visibility_sql(
         SELECT 1
         FROM congregations c
         WHERE c.id IN (
-            congregation_invitations.source_congregation_id,
-            congregation_invitations.target_congregation_id
+            {table_alias}.source_congregation_id,
+            {table_alias}.target_congregation_id
         )
           AND {congregation_permission_sql_factory("c")}
     )
     OR EXISTS (
         SELECT 1
         FROM planning_slots ps
-        WHERE ps.id = congregation_invitations.source_planning_slot_id
+        WHERE ps.id = {table_alias}.source_planning_slot_id
           AND {planning_slot_permission_sql_factory("ps")}
     )
 )
@@ -287,36 +315,16 @@ def congregation_row_admin_sql(alias: str = "congregations") -> str:
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
 def scoped_membership_admin_sql(alias: str = "memberships") -> str:
+    """Check if the current user is an admin for the target scope.
+
+    Uses the bounded SECURITY DEFINER helper ``can_admin_membership(scope_type, scope_id)``
+    (created by Alembic 0016) so memberships INSERT/UPDATE/DELETE policies do not query
+    ``memberships`` recursively from inside memberships RLS.
+    """
     return f"""
 (
     {SUPERADMIN_SQL}
-    OR (
-        -- Check if current user has admin role via GUC (avoids recursive memberships lookup)
-        current_setting('app.current_user_roles', true) LIKE '%CONGREGATION_ADMIN%'
-        OR current_setting('app.current_user_roles', true) LIKE '%DISTRICT_ADMIN%'
-    )
-    AND (
-        -- For DISTRICT scope: user must have admin membership in that district
-        ({alias}.scope_type = 'DISTRICT' AND EXISTS (
-            SELECT 1 FROM memberships m
-            WHERE m.user_sub = current_setting('app.current_user_sub', true)
-              AND m.scope_type = 'DISTRICT'
-              AND m.scope_id = {alias}.scope_id
-              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
-        ))
-        -- For CONGREGATION scope: user must have admin membership in that congregation or its district
-        OR ({alias}.scope_type = 'CONGREGATION' AND EXISTS (
-            SELECT 1 FROM memberships m
-            WHERE m.user_sub = current_setting('app.current_user_sub', true)
-              AND (
-                  (m.scope_type = 'CONGREGATION' AND m.scope_id = {alias}.scope_id)
-                  OR (m.scope_type = 'DISTRICT' AND m.scope_id = (
-                      SELECT c.district_id FROM congregations c WHERE c.id = {alias}.scope_id
-                  ))
-              )
-              AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
-        ))
-    )
+    OR can_admin_membership({alias}.scope_type, {alias}.scope_id)
 )
 """
 
@@ -428,7 +436,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY planning_slots_delete_policy ON planning_slots
                 FOR DELETE
-                USING {planning_slot_admin_sql()};
+                USING {planning_slot_write_sql()};
             """,
         ],
     },
@@ -454,7 +462,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY event_instances_delete_policy ON event_instances
                 FOR DELETE
-                USING {related_planning_slot_sql("event_instances", planning_slot_admin_sql)};
+                USING {related_planning_slot_sql("event_instances", planning_slot_write_sql)};
             """,
         ],
     },
@@ -629,6 +637,14 @@ RLS_POLICIES = {
                         SELECT 1 FROM districts d WHERE d.id = leader_registrations.district_id
                     )
                 )
+                OR (
+                    -- Authenticated first-time registration for the current OIDC subject only.
+                    leader_registrations.user_sub = current_setting('app.current_user_sub', true)
+                    AND current_setting('app.current_user_sub', true) <> ''
+                    AND EXISTS (
+                        SELECT 1 FROM districts d WHERE d.id = leader_registrations.district_id
+                    )
+                )
             );""",
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY leader_registrations_update_policy ON leader_registrations FOR UPDATE USING {planning_slot_read_sql("leader_registrations")} WITH CHECK {planning_slot_write_sql("leader_registrations")};""",
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY leader_registrations_delete_policy ON leader_registrations FOR DELETE USING {planning_slot_admin_sql("leader_registrations")};""",
@@ -668,6 +684,15 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_insert_policy ON invitation_overwrite_requests FOR INSERT WITH CHECK {invitation_overwrite_request_sql(invitation_overwrite_request_visibility_factory(congregation_row_write_sql, planning_slot_write_sql))};""",
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_update_policy ON invitation_overwrite_requests FOR UPDATE USING {invitation_overwrite_request_sql(invitation_overwrite_request_visibility_factory(congregation_row_read_sql, planning_slot_read_sql))} WITH CHECK {invitation_overwrite_request_sql(invitation_overwrite_request_visibility_factory(congregation_row_write_sql, planning_slot_write_sql))};""",
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY invitation_overwrite_requests_delete_policy ON invitation_overwrite_requests FOR DELETE USING {invitation_overwrite_request_sql(invitation_overwrite_request_visibility_factory(congregation_row_admin_sql, planning_slot_admin_sql))};""",
+        ],
+    },
+    "export_tokens": {
+        "enable": "ALTER TABLE export_tokens ENABLE ROW LEVEL SECURITY;",
+        "policies": [
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY export_tokens_select_policy ON export_tokens FOR SELECT USING {export_token_lookup_sql("export_tokens")};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY export_tokens_insert_policy ON export_tokens FOR INSERT WITH CHECK {export_token_admin_sql("export_tokens")};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY export_tokens_update_policy ON export_tokens FOR UPDATE USING {export_token_admin_sql("export_tokens")} WITH CHECK {export_token_admin_sql("export_tokens")};""",
+            f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */ CREATE POLICY export_tokens_delete_policy ON export_tokens FOR DELETE USING {export_token_admin_sql("export_tokens")};""",
         ],
     },
 }

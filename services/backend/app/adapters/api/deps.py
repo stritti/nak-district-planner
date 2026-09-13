@@ -108,7 +108,6 @@ async def get_current_user(
             existing_user.name = user_info["name"]
             existing_user.given_name = user_info["given_name"]
             existing_user.family_name = user_info["family_name"]
-            existing_user.is_superadmin = is_superadmin
             await user_repo.save(existing_user)
             request.state.user = existing_user
             return existing_user
@@ -204,7 +203,21 @@ async def get_current_user_with_memberships(
     user_roles = [m.role.value for m in memberships]
     if user.is_superadmin:
         user_roles.append("SUPERADMIN")
-    TenantContext.set_context(user_roles=user_roles)
+    TenantContext.set_context(
+        tenant_id=TenantContext.get_tenant(),
+        district_id=TenantContext.get_district(),
+        congregation_id=TenantContext.get_congregation(),
+        user_sub=user.sub,
+        user_roles=user_roles,
+    )
+    await session.execute(
+        text("SELECT set_config('app.current_user_sub', :user_sub, true)"),
+        {"user_sub": user.sub},
+    )
+    await session.execute(
+        text("SELECT set_config('app.current_user_roles', :roles, true)"),
+        {"roles": ",".join(user_roles)},
+    )
 
     return CurrentUserContext(user=user, memberships=memberships)
 
