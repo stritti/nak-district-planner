@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +21,7 @@ class SqlAuditLogRepository:
 
     def __init__(self, session: AsyncSession):
         """Initialize the repository.
-        
+
         Args:
             session: Async SQLAlchemy session.
         """
@@ -28,10 +29,10 @@ class SqlAuditLogRepository:
 
     async def create(self, audit_log: AuditLogCreate) -> AuditLog:
         """Create a new audit log entry.
-        
+
         Args:
             audit_log: Audit log data to create.
-            
+
         Returns:
             Created audit log with ID.
         """
@@ -57,10 +58,10 @@ class SqlAuditLogRepository:
             extra_metadata=audit_log.extra_metadata,
             created_at=datetime.now(UTC),
         )
-        
+
         self.session.add(orm_audit_log)
         await self.session.flush()
-        
+
         return AuditLog(
             id=orm_audit_log.id,
             timestamp=orm_audit_log.timestamp,
@@ -86,10 +87,10 @@ class SqlAuditLogRepository:
 
     async def get_by_id(self, audit_log_id: uuid.UUID) -> AuditLog | None:
         """Get an audit log entry by ID.
-        
+
         Args:
             audit_log_id: ID of the audit log to retrieve.
-            
+
         Returns:
             Audit log entry, or None if not found.
         """
@@ -97,10 +98,10 @@ class SqlAuditLogRepository:
             select(AuditLogORM).where(AuditLogORM.id == audit_log_id)
         )
         orm_audit_log = result.scalar_one_or_none()
-        
+
         if orm_audit_log is None:
             return None
-        
+
         return AuditLog(
             id=orm_audit_log.id,
             timestamp=orm_audit_log.timestamp,
@@ -131,12 +132,12 @@ class SqlAuditLogRepository:
         offset: int = 0,
     ) -> list[AuditLog]:
         """List audit logs for a specific user.
-        
+
         Args:
             user_sub: User subject (OIDC sub claim).
             limit: Maximum number of results.
             offset: Number of results to skip.
-            
+
         Returns:
             List of audit log entries.
         """
@@ -148,7 +149,7 @@ class SqlAuditLogRepository:
             .offset(offset)
         )
         orm_audit_logs = result.scalars().all()
-        
+
         return [
             AuditLog(
                 id=orm.id,
@@ -183,13 +184,13 @@ class SqlAuditLogRepository:
         offset: int = 0,
     ) -> list[AuditLog]:
         """List audit logs for a specific resource.
-        
+
         Args:
             resource_type: Type of resource (e.g., 'event', 'user').
             resource_id: ID of the resource.
             limit: Maximum number of results.
             offset: Number of results to skip.
-            
+
         Returns:
             List of audit log entries.
         """
@@ -206,7 +207,7 @@ class SqlAuditLogRepository:
             .offset(offset)
         )
         orm_audit_logs = result.scalars().all()
-        
+
         return [
             AuditLog(
                 id=orm.id,
@@ -241,13 +242,13 @@ class SqlAuditLogRepository:
         offset: int = 0,
     ) -> list[AuditLog]:
         """List audit logs within a time range.
-        
+
         Args:
             start_time: Start of time range.
             end_time: End of time range.
             limit: Maximum number of results.
             offset: Number of results to skip.
-            
+
         Returns:
             List of audit log entries.
         """
@@ -264,7 +265,7 @@ class SqlAuditLogRepository:
             .offset(offset)
         )
         orm_audit_logs = result.scalars().all()
-        
+
         return [
             AuditLog(
                 id=orm.id,
@@ -298,12 +299,12 @@ class SqlAuditLogRepository:
         offset: int = 0,
     ) -> list[AuditLog]:
         """List audit logs by action type.
-        
+
         Args:
             action: Type of action to filter by.
             limit: Maximum number of results.
             offset: Number of results to skip.
-            
+
         Returns:
             List of audit log entries.
         """
@@ -315,7 +316,7 @@ class SqlAuditLogRepository:
             .offset(offset)
         )
         orm_audit_logs = result.scalars().all()
-        
+
         return [
             AuditLog(
                 id=orm.id,

@@ -345,4 +345,4 @@ logging.getLogger('app.adapters.api.middleware.rate_limit').setLevel(logging.DEB
 - [Redis Sorted Sets](https://redis.io/topics/data-types#sorted-sets)
 - [RFC 6585: Additional HTTP Status Codes](https://tools.ietf.org/html/rfc6585)
 - [Security Analysis: SEC-016](../../security-analysis.md#sec-016-missing-rate-limiting)
-- [OpenSpec Design](../../openspec/changes/implement-rate-limiting/design.md)
+- [OpenSpec Design](../../openspec/changes/archive/2026-09-07-implement-rate-limiting/design.md)

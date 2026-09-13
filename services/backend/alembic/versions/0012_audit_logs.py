@@ -36,8 +36,14 @@ def upgrade() -> None:
         sa.Column(
             "action",
             sa.Enum(
-                "CREATE", "UPDATE", "DELETE", "LOGIN", "LOGOUT",
-                "EXPORT", "IMPORT", "BULK_OPERATION",
+                "CREATE",
+                "UPDATE",
+                "DELETE",
+                "LOGIN",
+                "LOGOUT",
+                "EXPORT",
+                "IMPORT",
+                "BULK_OPERATION",
                 name="auditaction",
             ),
             nullable=False,
@@ -56,7 +62,8 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "SUCCESS", "FAILED",
+                "SUCCESS",
+                "FAILED",
                 name="auditstatus",
             ),
             nullable=False,

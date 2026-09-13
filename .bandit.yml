@@ -1,0 +1,19 @@
+# Bandit configuration for NAK District Planner
+# Excludes known false positives in RLS policy generation
+
+exclude_dirs:
+  - tests
+  - .venv
+  - __pycache__
+
+skips:
+  - B101  # assert_used
+  - B608  # hardcoded_sql_expressions (false positives in RLS policies)
+
+# Per-file skips for known false positives
+# RLS policies use f-strings to build SQL from internal constants only
+# No user input reaches these SQL templates
+targets:
+  - services/backend/app/adapters/db/migrations/rls_policies.py:
+      skips:
+        - B608

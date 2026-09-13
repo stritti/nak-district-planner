@@ -9,13 +9,14 @@ import uuid
 from contextvars import ContextVar
 from typing import Optional
 
-
 # Context variables for tenant information
-current_tenant: ContextVar[Optional[uuid.UUID]] = ContextVar("current_tenant", default=None)
-current_district: ContextVar[Optional[uuid.UUID]] = ContextVar("current_district", default=None)
-current_congregation: ContextVar[Optional[uuid.UUID]] = ContextVar("current_congregation", default=None)
-current_user_sub: ContextVar[Optional[str]] = ContextVar("current_user_sub", default=None)
-current_user_roles: ContextVar[Optional[list[str]]] = ContextVar("current_user_roles", default=None)
+current_tenant: ContextVar[uuid.UUID | None] = ContextVar("current_tenant", default=None)
+current_district: ContextVar[uuid.UUID | None] = ContextVar("current_district", default=None)
+current_congregation: ContextVar[uuid.UUID | None] = ContextVar(
+    "current_congregation", default=None
+)
+current_user_sub: ContextVar[str | None] = ContextVar("current_user_sub", default=None)
+current_user_roles: ContextVar[list[str] | None] = ContextVar("current_user_roles", default=None)
 
 
 class TenantContext:
@@ -55,7 +56,7 @@ class TenantContext:
         user_roles: list[str] | None = None,
     ) -> None:
         """Set tenant context for current request.
-        
+
         Args:
             tenant_id: Current tenant ID (congregation or district).
             district_id: Current district ID.

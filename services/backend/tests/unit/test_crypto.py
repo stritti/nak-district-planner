@@ -57,4 +57,3 @@ class TestCrypto:
         """Test decrypting malformed data raises CryptoError."""
         with pytest.raises(CryptoError):
             decrypt_credentials("malformed-data")
-
