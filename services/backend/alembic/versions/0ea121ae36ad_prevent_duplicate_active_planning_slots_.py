@@ -61,16 +61,25 @@ WITH duplicate_groups AS (
     WHERE ps.status = 'ACTIVE'
 ), rewired_service_assignments AS (
     UPDATE service_assignments sa
-    SET planning_slot_id = ranked.keep_id
+    SET event_id = ranked.keep_id,
+        planning_slot_id = ranked.keep_id
     FROM ranked
-    WHERE sa.planning_slot_id = ranked.id
+    WHERE COALESCE(sa.planning_slot_id, sa.event_id) = ranked.id
       AND ranked.id <> ranked.keep_id
     RETURNING sa.id
 ), rewired_congregation_invitations AS (
     UPDATE congregation_invitations ci
-    SET source_planning_slot_id = ranked.keep_id
+    SET source_event_id = ranked.keep_id,
+        source_planning_slot_id = ranked.keep_id
     FROM ranked
-    WHERE ci.source_planning_slot_id = ranked.id
+    WHERE COALESCE(ci.source_planning_slot_id, ci.source_event_id) = ranked.id
+      AND ranked.id <> ranked.keep_id
+    RETURNING ci.id
+), rewired_linked_invitations AS (
+    UPDATE congregation_invitations ci
+    SET linked_event_id = ranked.keep_id
+    FROM ranked
+    WHERE ci.linked_event_id = ranked.id
       AND ranked.id <> ranked.keep_id
     RETURNING ci.id
 )

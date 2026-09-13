@@ -43,4 +43,11 @@ def test_upgrade_reconciles_duplicate_active_slots_before_creating_unique_index(
     assert "planning_date" in cleanup_sql
     assert "planning_time" in cleanup_sql
     assert "status = 'ACTIVE'" in cleanup_sql
+    assert "SET event_id = ranked.keep_id" in cleanup_sql
+    assert "planning_slot_id = ranked.keep_id" in cleanup_sql
+    assert "COALESCE(sa.planning_slot_id, sa.event_id) = ranked.id" in cleanup_sql
+    assert "SET source_event_id = ranked.keep_id" in cleanup_sql
+    assert "source_planning_slot_id = ranked.keep_id" in cleanup_sql
+    assert "COALESCE(ci.source_planning_slot_id, ci.source_event_id) = ranked.id" in cleanup_sql
+    assert "SET linked_event_id = ranked.keep_id" in cleanup_sql
     assert calls[1][0] == "create_index"
