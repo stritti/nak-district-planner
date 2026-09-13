@@ -8,7 +8,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.auth.jwt_claims import extract_memberships_from_claims
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.notification import SqlNotificationRepository
@@ -162,18 +161,13 @@ async def get_current_user_with_memberships(
 
     Used for endpoints that require role-based authorization.
 
-    Memberships are loaded from:
-    1. JWT claims (if OIDC provider includes custom membership claim)
-    2. Database lookup (fallback)
+    Memberships are loaded from the local database so application RBAC and
+    PostgreSQL RLS use the same authorization source. JWT claim memberships are
+    intentionally not trusted directly unless a provisioning flow has
+    materialized them into ``memberships``.
     """
-    # Try to extract memberships from JWT claims first
-    token_claims = get_token_claims()
-    memberships = extract_memberships_from_claims(token_claims)
-
-    # If no memberships in JWT claims, fetch from database
     membership_repo = SqlMembershipRepository(session)
-    if not memberships:
-        memberships = await membership_repo.get_all_by_user(user.sub)
+    memberships = await membership_repo.get_all_by_user(user.sub)
 
     # Secure post-login linking strategy for approved registrations without user_sub:
     # if there is exactly one approved+unlinked registration for this email,
