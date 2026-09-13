@@ -14,7 +14,7 @@ follow-up needed for real overlap detection once event_instances carries
 its own congregation_id.
 
 Revision ID: 0ea121ae36ad
-Revises: change_applicability_to_text
+Revises: 0016
 Create Date: 2026-09-07 09:54:32.896002
 
 """
@@ -26,7 +26,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "0ea121ae36ad"
-down_revision: str | None = "change_applicability_to_text"
+down_revision: str | None = "0016"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
