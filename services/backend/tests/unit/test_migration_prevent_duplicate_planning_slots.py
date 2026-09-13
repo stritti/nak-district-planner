@@ -37,17 +37,23 @@ def test_upgrade_reconciles_duplicate_active_slots_before_creating_unique_index(
 
     assert calls[0][0] == "execute"
     cleanup_sql = str(calls[0][1])
-    assert "UPDATE planning_slots duplicate" in cleanup_sql
-    assert "SET status = 'CANCELLED'" in cleanup_sql
-    assert "congregation_id" in cleanup_sql
-    assert "planning_date" in cleanup_sql
-    assert "planning_time" in cleanup_sql
-    assert "status = 'ACTIVE'" in cleanup_sql
+    # Loser slots are deleted, not just cancelled
+    assert "DELETE FROM planning_slots duplicate" in cleanup_sql
+    assert "USING ranked" in cleanup_sql
+    assert "WHERE duplicate.id = ranked.id" in cleanup_sql
+    assert "ranked.id <> ranked.keep_id" in cleanup_sql
+    # Service assignments: both event_id and planning_slot_id rewired
     assert "SET event_id = ranked.keep_id" in cleanup_sql
     assert "planning_slot_id = ranked.keep_id" in cleanup_sql
     assert "COALESCE(sa.planning_slot_id, sa.event_id) = ranked.id" in cleanup_sql
+    # Congregation invitations: all three fields in single update
     assert "SET source_event_id = ranked.keep_id" in cleanup_sql
     assert "source_planning_slot_id = ranked.keep_id" in cleanup_sql
+    assert "linked_event_id = ranked.keep_id" in cleanup_sql
     assert "COALESCE(ci.source_planning_slot_id, ci.source_event_id) = ranked.id" in cleanup_sql
-    assert "SET linked_event_id = ranked.keep_id" in cleanup_sql
+    assert "ci.linked_event_id = ranked.id" in cleanup_sql
+    # Invitation copies: invitation_source_event_id rewired
+    assert "UPDATE planning_slots ps" in cleanup_sql
+    assert "SET invitation_source_event_id = ranked.keep_id" in cleanup_sql
+    assert "ps.invitation_source_event_id = ranked.id" in cleanup_sql
     assert calls[1][0] == "create_index"

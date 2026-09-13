@@ -70,25 +70,28 @@ WITH duplicate_groups AS (
 ), rewired_congregation_invitations AS (
     UPDATE congregation_invitations ci
     SET source_event_id = ranked.keep_id,
-        source_planning_slot_id = ranked.keep_id
+        source_planning_slot_id = ranked.keep_id,
+        linked_event_id = ranked.keep_id
     FROM ranked
     WHERE COALESCE(ci.source_planning_slot_id, ci.source_event_id) = ranked.id
+       OR ci.linked_event_id = ranked.id
       AND ranked.id <> ranked.keep_id
     RETURNING ci.id
-), rewired_linked_invitations AS (
-    UPDATE congregation_invitations ci
-    SET linked_event_id = ranked.keep_id
+), rewired_invitation_copies AS (
+    UPDATE planning_slots ps
+    SET invitation_source_event_id = ranked.keep_id
     FROM ranked
-    WHERE ci.linked_event_id = ranked.id
+    WHERE ps.invitation_source_event_id = ranked.id
       AND ranked.id <> ranked.keep_id
-    RETURNING ci.id
+    RETURNING ps.id
+), deleted_losers AS (
+    DELETE FROM planning_slots duplicate
+    USING ranked
+    WHERE duplicate.id = ranked.id
+      AND ranked.id <> ranked.keep_id
+    RETURNING duplicate.id
 )
-UPDATE planning_slots duplicate
-SET status = 'CANCELLED',
-    updated_at = now() AT TIME ZONE 'utc'
-FROM ranked
-WHERE duplicate.id = ranked.id
-  AND ranked.id <> ranked.keep_id;
+SELECT 1;
 """
 
 
