@@ -32,8 +32,59 @@ depends_on: str | Sequence[str] | None = None
 
 INDEX_NAME = "no_overlapping_planning_slots"
 
+RECONCILE_DUPLICATE_ACTIVE_SLOTS_SQL = """
+WITH duplicate_groups AS (
+    SELECT congregation_id, planning_date, planning_time
+    FROM planning_slots
+    WHERE congregation_id IS NOT NULL
+      AND status = 'ACTIVE'
+    GROUP BY congregation_id, planning_date, planning_time
+    HAVING COUNT(*) > 1
+), ranked AS (
+    SELECT
+        ps.id,
+        FIRST_VALUE(ps.id) OVER (
+            PARTITION BY ps.congregation_id, ps.planning_date, ps.planning_time
+            ORDER BY
+                (ei.id IS NOT NULL) DESC,
+                (ps.invitation_source_event_id IS NOT NULL) DESC,
+                ps.updated_at DESC,
+                ps.created_at DESC,
+                ps.id::text ASC
+        ) AS keep_id
+    FROM planning_slots ps
+    JOIN duplicate_groups dg
+      ON dg.congregation_id = ps.congregation_id
+     AND dg.planning_date = ps.planning_date
+     AND dg.planning_time = ps.planning_time
+    LEFT JOIN event_instances ei ON ei.planning_slot_id = ps.id
+    WHERE ps.status = 'ACTIVE'
+), rewired_service_assignments AS (
+    UPDATE service_assignments sa
+    SET planning_slot_id = ranked.keep_id
+    FROM ranked
+    WHERE sa.planning_slot_id = ranked.id
+      AND ranked.id <> ranked.keep_id
+    RETURNING sa.id
+), rewired_congregation_invitations AS (
+    UPDATE congregation_invitations ci
+    SET source_planning_slot_id = ranked.keep_id
+    FROM ranked
+    WHERE ci.source_planning_slot_id = ranked.id
+      AND ranked.id <> ranked.keep_id
+    RETURNING ci.id
+)
+UPDATE planning_slots duplicate
+SET status = 'CANCELLED',
+    updated_at = now() AT TIME ZONE 'utc'
+FROM ranked
+WHERE duplicate.id = ranked.id
+  AND ranked.id <> ranked.keep_id;
+"""
+
 
 def upgrade() -> None:
+    op.execute(RECONCILE_DUPLICATE_ACTIVE_SLOTS_SQL)
     op.create_index(
         INDEX_NAME,
         "planning_slots",
