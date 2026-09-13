@@ -116,7 +116,6 @@ def downgrade() -> None:
     """Drop application role and revoke permissions."""
     app_role = _app_role()
     app_role_ident = _quote_ident(app_role)
-    op.execute("DROP FUNCTION IF EXISTS can_admin_membership(TEXT, UUID);")
     # Revoke default privileges
     op.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM {app_role_ident};")
     op.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM {app_role_ident};")
