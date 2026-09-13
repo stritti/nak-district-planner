@@ -230,12 +230,8 @@ def test_viewer_state_change_in_own_district_returns_200(auth_client):
 def test_viewer_get_events_in_own_district_returns_200(auth_client):
     client, auth_headers, district1 = auth_client
     with (
-        patch(
-            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository"
-        ) as MockSlotRepo,
-        patch(
-            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository"
-        ) as MockInstRepo,
+        patch("app.adapters.api.routers.events_compat.SqlPlanningSlotRepository") as MockSlotRepo,
+        patch("app.adapters.api.routers.events_compat.SqlEventInstanceRepository") as MockInstRepo,
     ):
         slot_repo = AsyncMock()
         slot_repo.list_for_date_range.return_value = []
@@ -282,7 +278,12 @@ def test_feiertage_states_returns_403_without_membership(auth_client_no_membersh
     [
         # Role-based: VIEWER is member of district1 but route needs DISTRICT_ADMIN
         ("patch", "/api/v1/districts/{district_id}", Role.VIEWER, True),
-        ("patch", "/api/v1/districts/{district_id}/congregations/{congregation_id}", Role.VIEWER, True),
+        (
+            "patch",
+            "/api/v1/districts/{district_id}/congregations/{congregation_id}",
+            Role.VIEWER,
+            True,
+        ),
         ("post", "/api/v1/districts/{district_id}/congregations", Role.VIEWER, True),
         ("post", "/api/v1/districts/{district_id}/groups", Role.VIEWER, True),
         ("patch", "/api/v1/districts/{district_id}/groups/{group_id}", Role.VIEWER, True),
@@ -338,11 +339,15 @@ def test_district_routes_return_403(auth_client, method, path_template, role, me
         MockDistrictRepo.return_value = district_repo
 
         cong_repo = AsyncMock()
-        cong_repo.get.return_value = SimpleNamespace(id=congregation_id, district_id=district_id, group_id=None, name="C")
+        cong_repo.get.return_value = SimpleNamespace(
+            id=congregation_id, district_id=district_id, group_id=None, name="C"
+        )
         MockCongRepo.return_value = cong_repo
 
         group_repo = AsyncMock()
-        group_repo.get.return_value = SimpleNamespace(id=group_id, district_id=district_id, name="G")
+        group_repo.get.return_value = SimpleNamespace(
+            id=group_id, district_id=district_id, name="G"
+        )
         MockGroupRepo.return_value = group_repo
 
         response = getattr(client, method)(path, **kwargs)
@@ -355,15 +360,29 @@ def test_district_routes_return_403(auth_client, method, path_template, role, me
 @pytest.mark.parametrize(
     ("method", "path_template", "body", "query"),
     [
-        ("post", "/api/v1/calendar-integrations",
-         {"district_id": "{district_id}", "name": "I", "type": "GOOGLE",
-          "credentials": {}, "sync_interval": 15, "capabilities": ["READ"]}, None),
+        (
+            "post",
+            "/api/v1/calendar-integrations",
+            {
+                "district_id": "{district_id}",
+                "name": "I",
+                "type": "GOOGLE",
+                "credentials": {},
+                "sync_interval": 15,
+                "capabilities": ["READ"],
+            },
+            None,
+        ),
         ("get", "/api/v1/calendar-integrations", None, {"district_id": "{district_id}"}),
         ("post", "/api/v1/calendar-integrations/{resource_id}/sync", None, None),
         ("patch", "/api/v1/calendar-integrations/{resource_id}", {"name": "X"}, None),
         ("delete", "/api/v1/calendar-integrations/{resource_id}", None, None),
-        ("post", "/api/v1/export-tokens",
-         {"district_id": "{district_id}", "label": "L", "token_type": "PUBLIC"}, None),
+        (
+            "post",
+            "/api/v1/export-tokens",
+            {"district_id": "{district_id}", "label": "L", "token_type": "PUBLIC"},
+            None,
+        ),
         ("get", "/api/v1/export-tokens", None, {"district_id": "{district_id}"}),
         ("delete", "/api/v1/export-tokens/{resource_id}", None, None),
     ],
@@ -406,27 +425,54 @@ def test_calendar_and_export_routes_return_403(auth_client, method, path_templat
     [
         # PLANNER-required routes -> role-based 403 (resource in district1)
         ("patch", "/api/v1/events/{resource_id}", {}, None, "planner"),
-        ("post", "/api/v1/events/bulk-approval-status",
-         {"year": 2026, "month": 1, "approval_status": "PLANNED"},
-         {"district_id": "{district_id}"}, "planner"),
-        ("post", "/api/v1/events/{resource_id}/assignments",
-         {"leader_name": "X"}, None, "planner"),
-        ("put", "/api/v1/events/{resource_id}/assignments/{assignment_id}",
-         {"leader_name": "X"}, None, "planner"),
-        ("delete", "/api/v1/events/{resource_id}/assignments/{assignment_id}",
-         None, None, "planner"),
-        ("post", "/api/v1/events/{resource_id}/invitations",
-         {"targets": [{"target_type": "EXTERNAL_NOTE", "external_target_note": "note"}]},
-         None, "planner"),
+        (
+            "post",
+            "/api/v1/events/bulk-approval-status",
+            {"year": 2026, "month": 1, "approval_status": "PLANNED"},
+            {"district_id": "{district_id}"},
+            "planner",
+        ),
+        ("post", "/api/v1/events/{resource_id}/assignments", {"leader_name": "X"}, None, "planner"),
+        (
+            "put",
+            "/api/v1/events/{resource_id}/assignments/{assignment_id}",
+            {"leader_name": "X"},
+            None,
+            "planner",
+        ),
+        (
+            "delete",
+            "/api/v1/events/{resource_id}/assignments/{assignment_id}",
+            None,
+            None,
+            "planner",
+        ),
+        (
+            "post",
+            "/api/v1/events/{resource_id}/invitations",
+            {"targets": [{"target_type": "EXTERNAL_NOTE", "external_target_note": "note"}]},
+            None,
+            "planner",
+        ),
         ("delete", "/api/v1/invitations/{assignment_id}", None, None, "planner"),
-        ("post", "/api/v1/invitations/overwrite-requests/{assignment_id}/decision",
-         {"decision": "ACCEPTED"}, None, "planner"),
+        (
+            "post",
+            "/api/v1/invitations/overwrite-requests/{assignment_id}/decision",
+            {"decision": "ACCEPTED"},
+            None,
+            "planner",
+        ),
         # VIEWER-required routes -> membership-based 403 (no membership)
         ("get", "/api/v1/events", None, {"district_id": "{district_id}"}, "viewer"),
         ("get", "/api/v1/events/{resource_id}/assignments", None, None, "viewer"),
         ("get", "/api/v1/events/{resource_id}/invitations", None, None, "viewer"),
-        ("get", "/api/v1/invitations/overwrite-requests",
-         None, {"district_id": "{district_id}"}, "viewer"),
+        (
+            "get",
+            "/api/v1/invitations/overwrite-requests",
+            None,
+            {"district_id": "{district_id}"},
+            "viewer",
+        ),
     ],
 )
 def test_events_and_related_routes_return_403(
@@ -452,9 +498,7 @@ def test_events_and_related_routes_return_403(
     )
 
     overwrite_repo = AsyncMock()
-    overwrite_repo.get.return_value = SimpleNamespace(
-        id=assignment_id, target_event_id=resource_id
-    )
+    overwrite_repo.get.return_value = SimpleNamespace(id=assignment_id, target_event_id=resource_id)
 
     with (
         patch("app.adapters.api.routers.events_compat.SqlPlanningSlotRepository") as MockCompatSlot,
@@ -477,9 +521,7 @@ def test_events_and_related_routes_return_403(
         MockInvRepo.return_value = invitation_repo
         MockOverwriteRepo.return_value = overwrite_repo
 
-        path = path_template.format(
-            resource_id=resource_id, assignment_id=assignment_id
-        )
+        path = path_template.format(resource_id=resource_id, assignment_id=assignment_id)
         kwargs = {}
         if body is not None:
             kwargs["json"] = body
@@ -498,21 +540,28 @@ def test_events_and_related_routes_return_403(
     [
         # PLANNER-required routes -> role-based 403
         ("post", "/api/v1/districts/{district_id}/leaders", {"name": "X"}, True, "planner"),
-        ("patch", "/api/v1/districts/{district_id}/leaders/{leader_id}",
-         {"name": "Y"}, True, "planner"),
-        ("delete", "/api/v1/districts/{district_id}/leaders/{leader_id}",
-         None, True, "planner"),
+        (
+            "patch",
+            "/api/v1/districts/{district_id}/leaders/{leader_id}",
+            {"name": "Y"},
+            True,
+            "planner",
+        ),
+        ("delete", "/api/v1/districts/{district_id}/leaders/{leader_id}", None, True, "planner"),
         # VIEWER-required routes -> membership-based 403
         ("get", "/api/v1/districts/{district_id}/leaders", None, False, "viewer"),
         ("get", "/api/v1/districts/{district_id}/leaders/link-self", None, False, "viewer"),
         ("delete", "/api/v1/districts/{district_id}/leaders/link-self", None, False, "viewer"),
-        ("post", "/api/v1/districts/{district_id}/leaders/link-self",
-          {"leader_id": "{leader_id}"}, False, "viewer"),
+        (
+            "post",
+            "/api/v1/districts/{district_id}/leaders/link-self",
+            {"leader_id": "{leader_id}"},
+            False,
+            "viewer",
+        ),
     ],
 )
-def test_leader_routes_return_403(
-    auth_client, method, path_template, body, membership, role_kind
-):
+def test_leader_routes_return_403(auth_client, method, path_template, body, membership, role_kind):
     client, auth_headers, district1 = auth_client
     district_id = district1 if membership else uuid.uuid4()
     leader_id = uuid.uuid4()
@@ -603,8 +652,6 @@ def test_auth_access_returns_403_for_non_viewer_membership(auth_client_non_viewe
     assert response.status_code == 403
 
 
-
-
 # ── Notifications (VIEWER-required) ─────────────────────────────────────
 
 
@@ -625,9 +672,7 @@ def test_notification_routes_return_403(auth_client, method, path_template):
     service = AsyncMock()
     service.get.return_value = _notification_obj(district_id)
     with _notification_service_override(service):
-        path = path_template.format(
-            district_id=district_id, notification_id=notification_id
-        )
+        path = path_template.format(district_id=district_id, notification_id=notification_id)
         response = getattr(client, method)(path, headers=auth_headers())
         assert response.status_code == 403
 
@@ -639,13 +684,22 @@ def test_notification_routes_return_403(auth_client, method, path_template):
     ("method", "path_template", "body", "membership", "role_kind"),
     [
         # DISTRICT_ADMIN-required routes -> role-based 403
-        ("post", "/api/v1/planning-series",
-         {"district_id": "{district_id}", "default_planning_time": "09:30:00"},
-         True, "admin"),
+        (
+            "post",
+            "/api/v1/planning-series",
+            {"district_id": "{district_id}", "default_planning_time": "09:30:00"},
+            True,
+            "admin",
+        ),
         ("patch", "/api/v1/planning-series/{series_id}", {}, True, "admin"),
         ("post", "/api/v1/planning-series/{series_id}/generate-slots", {}, True, "admin"),
-        ("post", "/api/v1/planning-series/districts/{district_id}/generate-slots",
-         {}, True, "admin"),
+        (
+            "post",
+            "/api/v1/planning-series/districts/{district_id}/generate-slots",
+            {},
+            True,
+            "admin",
+        ),
         # VIEWER-required route -> membership-based 403
         ("get", "/api/v1/planning-series/{series_id}", None, False, "viewer"),
         # Superadmin-only route
@@ -671,8 +725,7 @@ def test_planning_series_routes_return_403(
         kwargs = {}
         if body is not None:
             kwargs["json"] = {
-                k: (str(district_id) if v == "{district_id}" else v)
-                for k, v in body.items()
+                k: (str(district_id) if v == "{district_id}" else v) for k, v in body.items()
             }
         kwargs["headers"] = auth_headers()
         response = getattr(client, method)(path, **kwargs)
@@ -686,11 +739,16 @@ def test_planning_series_routes_return_403(
     ("method", "path_template", "body"),
     [
         ("get", "/api/v1/districts/{district_id}/registrations", None),
-        ("post", "/api/v1/districts/{district_id}/registrations/{registration_id}/approve",
-         {"role": "DISTRICT_ADMIN", "scope_type": "DISTRICT",
-          "scope_id": "{district_id}"}),
-        ("post", "/api/v1/districts/{district_id}/registrations/{registration_id}/reject",
-         {"reason": "x"}),
+        (
+            "post",
+            "/api/v1/districts/{district_id}/registrations/{registration_id}/approve",
+            {"role": "DISTRICT_ADMIN", "scope_type": "DISTRICT", "scope_id": "{district_id}"},
+        ),
+        (
+            "post",
+            "/api/v1/districts/{district_id}/registrations/{registration_id}/reject",
+            {"reason": "x"},
+        ),
         ("delete", "/api/v1/districts/{district_id}/registrations/{registration_id}", None),
     ],
 )
@@ -713,7 +771,9 @@ def test_pending_overview_returns_empty_for_non_admin(auth_client):
 
     with (
         patch("app.adapters.api.routers.registrations.SqlDistrictRepository") as MockDistrictRepo,
-        patch("app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository") as MockRegRepo,
+        patch(
+            "app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository"
+        ) as MockRegRepo,
     ):
         district_repo = AsyncMock()
         district_repo.list_all.return_value = []

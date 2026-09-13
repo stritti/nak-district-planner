@@ -13,6 +13,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    environment:
+      # Use nak_app role for RLS enforcement in production
+      DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
 
   worker:
     build: ./services/backend
@@ -23,6 +26,9 @@ services:
         condition: service_healthy
       valkey:
         condition: service_started
+    environment:
+      # Use nak_app role for RLS enforcement in production
+      DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
 
   frontend:
     build: ./services/frontend

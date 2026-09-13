@@ -12,6 +12,7 @@ from app.domain.models.planning_slot import PlanningSlot
 @dataclass(frozen=True)
 class _ExpectedTimes:
     """Expected start and end datetimes derived from a PlanningSlot."""
+
     expected_start: datetime
     expected_end: datetime
 

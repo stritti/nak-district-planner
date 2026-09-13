@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AuditContext:
     """Context for audit logging.
-    
+
     Contains information that is common across multiple audit log entries
     within the same request or operation.
     """
@@ -57,7 +57,7 @@ class AuditEvent:
 
 class AuditService:
     """Service for creating audit log entries.
-    
+
     This service provides a high-level interface for audit logging with:
     - Async writing to minimize performance impact
     - Batch processing for multiple audit events
@@ -74,7 +74,7 @@ class AuditService:
         """Start the async audit log writer."""
         if self._running:
             return
-        
+
         self._running = True
         self._writer_task = asyncio.create_task(self._writer())
         logger.info("Audit service started")
@@ -83,28 +83,33 @@ class AuditService:
         """Stop the async audit log writer and flush remaining entries."""
         if not self._running:
             return
-        
+
         self._running = False
-        
+
         # Wait for the writer to finish processing
         if self._writer_task:
             await self._writer_task
             self._writer_task = None
-        
+
         logger.info("Audit service stopped")
 
     async def _writer(self) -> None:
         """Background task that writes audit logs to the database."""
+        from sqlalchemy import text
+
         while self._running or not self._queue.empty():
             try:
                 # Get next audit log entry
                 audit_log_create = await asyncio.wait_for(
-                    self._queue.get(),
-                    timeout=1.0 if self._running else 0.1
+                    self._queue.get(), timeout=1.0 if self._running else 0.1
                 )
-                
+
                 # Write to database
                 async with AsyncSessionLocal() as session:
+                    # Set SYSTEM_WORKER GUC for RLS bypass (audit writer is a system task)
+                    await session.execute(
+                        text("SELECT set_config('app.is_system_worker', 'true', true)")
+                    )
                     repo = SqlAuditLogRepository(session)
                     try:
                         await repo.create(audit_log_create)
@@ -112,10 +117,10 @@ class AuditService:
                     except Exception as e:
                         await session.rollback()
                         logger.error(f"Failed to write audit log: {e}")
-                
+
                 self._queue.task_done()
-                
-            except asyncio.TimeoutError:
+
+            except TimeoutError:
                 # No entries in queue, continue
                 continue
             except asyncio.CancelledError:
@@ -137,7 +142,7 @@ class AuditService:
         extra_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Log an audit event.
-        
+
         Args:
             action: Type of action being performed.
             resource_type: Type of resource being affected.
@@ -170,7 +175,7 @@ class AuditService:
             error_message=error_message,
             extra_metadata=extra_metadata,
         )
-        
+
         # Queue the audit log for async writing
         await self._queue.put(audit_log)
 
@@ -180,7 +185,7 @@ class AuditService:
         context: AuditContext | None = None,
     ) -> None:
         """Log an audit event using an AuditEvent object.
-        
+
         Args:
             event: The audit event to log.
             context: Request context for the audit log.
@@ -204,7 +209,7 @@ class AuditService:
         context: AuditContext | None = None,
     ) -> None:
         """Log multiple audit events in a batch.
-        
+
         Args:
             events: List of audit events to log.
             context: Request context for all audit logs.
@@ -225,7 +230,7 @@ class AuditService:
         request_id: str | None = None,
     ):
         """Context manager for request-scoped audit context.
-        
+
         Args:
             user_sub: User subject (OIDC sub claim).
             user_email: User email address.
@@ -235,7 +240,7 @@ class AuditService:
             ip_address: Client IP address.
             user_agent: Client user agent.
             request_id: Unique request ID.
-            
+
         Yields:
             AuditContext object for use in audit logging.
         """

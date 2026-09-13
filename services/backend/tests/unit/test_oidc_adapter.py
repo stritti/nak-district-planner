@@ -666,7 +666,9 @@ class TestJWTValidationInternal:
         oidc_adapter._jwks_cache_time = datetime.now(UTC)
 
         with pytest.raises(TokenValidationError, match="No keys"):
-            await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+            await oidc_adapter._validate_jwt_token(
+                self.FAKE_TOKEN, audience="test", algorithms=["RS256"]
+            )
 
     @pytest.mark.asyncio
     async def test_jwt_validation_decode_error(self, _setup_jwks):
@@ -677,7 +679,9 @@ class TestJWTValidationInternal:
             side_effect=self._mock_decode_ok_first(exc_type=jwt.DecodeError, exc_msg="bad token"),
         ):
             with pytest.raises(TokenValidationError, match="decode"):
-                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+                await oidc_adapter._validate_jwt_token(
+                    self.FAKE_TOKEN, audience="test", algorithms=["RS256"]
+                )
 
     @pytest.mark.asyncio
     async def test_jwt_validation_expired_signature(self, _setup_jwks):
@@ -685,10 +689,14 @@ class TestJWTValidationInternal:
         oidc_adapter = _setup_jwks
         with patch(
             "app.adapters.auth.oidc.jwt.decode",
-            side_effect=self._mock_decode_ok_first(exc_type=jwt.ExpiredSignatureError, exc_msg="expired"),
+            side_effect=self._mock_decode_ok_first(
+                exc_type=jwt.ExpiredSignatureError, exc_msg="expired"
+            ),
         ):
             with pytest.raises(TokenValidationError, match="expired"):
-                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+                await oidc_adapter._validate_jwt_token(
+                    self.FAKE_TOKEN, audience="test", algorithms=["RS256"]
+                )
 
     @pytest.mark.asyncio
     async def test_jwt_validation_invalid_token(self, _setup_jwks):
@@ -696,10 +704,14 @@ class TestJWTValidationInternal:
         oidc_adapter = _setup_jwks
         with patch(
             "app.adapters.auth.oidc.jwt.decode",
-            side_effect=self._mock_decode_ok_first(exc_type=jwt.InvalidTokenError, exc_msg="invalid"),
+            side_effect=self._mock_decode_ok_first(
+                exc_type=jwt.InvalidTokenError, exc_msg="invalid"
+            ),
         ):
             with pytest.raises(TokenValidationError, match="Invalid"):
-                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+                await oidc_adapter._validate_jwt_token(
+                    self.FAKE_TOKEN, audience="test", algorithms=["RS256"]
+                )
 
     @pytest.mark.asyncio
     async def test_jwt_validation_generic_exception(self, _setup_jwks):
@@ -710,11 +722,13 @@ class TestJWTValidationInternal:
             side_effect=self._mock_decode_ok_first(exc_type=ValueError, exc_msg="unexpected"),
         ):
             with pytest.raises(TokenValidationError, match="unexpected"):
-                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+                await oidc_adapter._validate_jwt_token(
+                    self.FAKE_TOKEN, audience="test", algorithms=["RS256"]
+                )
 
     @pytest.mark.asyncio
     async def test_jwt_validation_kid_not_found_refresh(self, oidc_adapter, mock_httpx_client):
-        """kid not in JWKS → triggers force refresh, still not found → TokenValidationError."""
+        """Kid not in JWKS → triggers force refresh, still not found → TokenValidationError."""
         oidc_adapter.issuer = "https://oidc.example.com"
         oidc_adapter._discovery_cache = MOCK_DISCOVERY
         oidc_adapter._discovery_cache_time = datetime.now(UTC)
@@ -730,7 +744,9 @@ class TestJWTValidationInternal:
             return_value={"kid": "unknown-kid"},
         ):
             with pytest.raises(TokenValidationError, match="Signing key not found"):
-                await oidc_adapter._validate_jwt_token(self.FAKE_TOKEN, audience="test", algorithms=["RS256"])
+                await oidc_adapter._validate_jwt_token(
+                    self.FAKE_TOKEN, audience="test", algorithms=["RS256"]
+                )
 
 
 class TestUserInfoEndpointErrors:

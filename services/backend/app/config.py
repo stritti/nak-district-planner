@@ -12,9 +12,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = "postgresql+asyncpg://nak:changeme@db:5432/nak_planner"
+    migration_database_url: str | None = None
     valkey_url: str = "valkey://valkey:6379/0"
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
+
+    # Backup/Restore (scripts/backup.sh, scripts/restore.sh)
+    backup_encrypt_key: str | None = None
 
     # OpenTelemetry
     otel_enabled: bool = False
@@ -108,6 +112,13 @@ def production_guard(settings: Settings) -> None:
         "",
     ):
         errors.append("OIDC_CLIENT_SECRET must be changed from the default value")
+
+    # Backups must be encrypted in production (scripts/backup.sh refuses without this too)
+    if not settings.backup_encrypt_key:
+        errors.append(
+            "BACKUP_ENCRYPT_KEY must be configured in production "
+            "(GPG recipient/key ID used by scripts/backup.sh to encrypt dumps)"
+        )
 
     # OIDC discovery URL
     if settings.oidc_discovery_url in (

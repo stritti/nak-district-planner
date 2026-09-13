@@ -50,9 +50,7 @@ class SqlExternalEventLinkRepository(ExternalEventLinkRepository):
         row = result.scalar_one_or_none()
         return _orm_to_domain(row) if row else None
 
-    async def list_by_event_instance(
-        self, event_instance_id: uuid.UUID
-    ) -> list[ExternalEventLink]:
+    async def list_by_event_instance(self, event_instance_id: uuid.UUID) -> list[ExternalEventLink]:
         result = await self._session.execute(
             select(ExternalEventLinkORM).where(
                 ExternalEventLinkORM.event_instance_id == event_instance_id,

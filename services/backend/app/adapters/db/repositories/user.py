@@ -39,7 +39,8 @@ def _domain_to_orm(user: User) -> UserORM:
     orm.name = user.name
     orm.given_name = user.given_name
     orm.family_name = user.family_name
-    orm.is_superadmin = user.is_superadmin
+    # Superadmin status is owner-controlled. Runtime connections must not write
+    # users.is_superadmin because RLS policies trust it for global access.
     orm.created_at = user.created_at or datetime.now(UTC)
     orm.updated_at = datetime.now(UTC)
     return orm
@@ -86,7 +87,8 @@ class SqlUserRepository(UserRepository):
             orm.name = user.name
             orm.given_name = user.given_name
             orm.family_name = user.family_name
-            orm.is_superadmin = user.is_superadmin
+            # Superadmin status is owner-controlled; do not update it from
+            # runtime OIDC profile refreshes.
             orm.updated_at = datetime.now(UTC)
 
         await self._session.flush()
