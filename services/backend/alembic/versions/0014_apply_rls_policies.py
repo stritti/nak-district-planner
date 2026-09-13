@@ -27,6 +27,37 @@ def _normalize_sql(statement: str) -> str:
 
 def upgrade() -> None:
     """Enable RLS and create tenant-isolation policies."""
+    op.execute(
+        _normalize_sql(
+            """
+            CREATE OR REPLACE FUNCTION can_admin_membership(p_scope_type TEXT, p_scope_id UUID)
+            RETURNS BOOLEAN
+            LANGUAGE sql
+            SECURITY DEFINER
+            STABLE
+            SET search_path = public
+            AS $$
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM memberships m
+                    WHERE m.user_sub = current_setting('app.current_user_sub', true)
+                      AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+                      AND (
+                        (p_scope_type = 'DISTRICT' AND m.scope_type = 'DISTRICT' AND m.scope_id = p_scope_id)
+                        OR (p_scope_type = 'CONGREGATION' AND (
+                            (m.scope_type = 'CONGREGATION' AND m.scope_id = p_scope_id)
+                            OR (m.scope_type = 'DISTRICT' AND EXISTS (
+                                SELECT 1 FROM congregations c
+                                WHERE c.id = p_scope_id AND c.district_id = m.scope_id
+                            ))
+                        ))
+                      )
+                )
+            $$;
+            """
+        )
+    )
+    op.execute("REVOKE ALL ON FUNCTION can_admin_membership(TEXT, UUID) FROM PUBLIC")
     for statement in get_all_rls_sql():
         op.execute(_normalize_sql(statement))
 
@@ -35,3 +66,4 @@ def downgrade() -> None:
     """Drop tenant-isolation policies and disable RLS."""
     for statement in get_drop_rls_sql():
         op.execute(_normalize_sql(statement))
+    op.execute("DROP FUNCTION IF EXISTS can_admin_membership(TEXT, UUID)")
