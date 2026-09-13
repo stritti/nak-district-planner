@@ -250,5 +250,8 @@ class TestGetCurrentUserWithMemberships:
 
             ctx = await get_current_user_with_memberships(user=user, session=session)
 
-            session.execute.assert_called_once()
+            assert session.execute.call_count == 3
+            linker_call = session.execute.call_args_list[0]
+            assert "link_approved_registration" in str(linker_call.args[0])
+            assert linker_call.args[1] == {"user_sub": "oidc|u1", "email": "link@example.com"}
             assert len(ctx.memberships) == 1
