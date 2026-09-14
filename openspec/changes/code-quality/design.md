@@ -66,8 +66,11 @@ MatrixView.vue  →  MatrixFilters.vue + MatrixTable.vue  (AssignmentModal exist
 
 ### 5. SyncResult
 
-**Entscheidung:** Pydantic-Dataclass `SyncResult(created, updated, cancelled, errors)` im
-`application/`-Layer. Celery-Task und API-Response nutzen dasselbe Objekt.
+**Ist-Stand:** `SyncResult(created, updated, cancelled, auto_matched)` ist als Standard-
+Dataclass in `application/sync_service.py` umgesetzt. Der Service gibt dieses Objekt zurück;
+Celery serialisiert die Felder für seine JSON-kompatible Task-Antwort. Ein separates
+`application/sync/results.py` und ein `errors`-Feld existieren nicht und werden in diesem
+Clean-Code-Refactor nicht ohne konkrete Fehlersemantik ergänzt.
 
 ### 6. Health-Check
 
