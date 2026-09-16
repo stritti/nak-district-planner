@@ -25,6 +25,7 @@ from app.adapters.api.schemas.invitation import (
     InvitationTargetCreate,
     OverwriteDecisionRequest,
 )
+from app.application.sync_service import SyncResult as SyncServiceResult
 from app.domain.models.calendar_integration import (
     CalendarCapability,
     CalendarIntegration,
@@ -40,10 +41,10 @@ from app.domain.models.invitation import (
 )
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 
-
 # ---------------------------------------------------------------------------
 # Helper factories
 # ---------------------------------------------------------------------------
+
 
 def _auth_context(user_sub: str = "user1", is_superadmin: bool = False):
     """Build a minimal auth context duck-type for the routers."""
@@ -80,12 +81,8 @@ def _event_instance(planning_slot_id: uuid.UUID, **overrides) -> EventInstance:
     return EventInstance.create(
         planning_slot_id=planning_slot_id,
         title=overrides.get("title", "Gottesdienst"),
-        actual_start_at=overrides.get(
-            "actual_start_at", datetime(2026, 6, 15, 10, 0, tzinfo=UTC)
-        ),
-        actual_end_at=overrides.get(
-            "actual_end_at", datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
-        ),
+        actual_start_at=overrides.get("actual_start_at", datetime(2026, 6, 15, 10, 0, tzinfo=UTC)),
+        actual_end_at=overrides.get("actual_end_at", datetime(2026, 6, 15, 12, 0, tzinfo=UTC)),
         source=overrides.get("source", EventSource.INTERNAL),
         visibility=overrides.get("visibility", EventVisibility.PUBLIC),
         description=overrides.get("description"),
@@ -97,6 +94,7 @@ def _event_instance(planning_slot_id: uuid.UUID, **overrides) -> EventInstance:
 # Calendar Integration tests  (unchanged logic, only import changes)
 # ===================================================================
 
+
 @pytest.mark.asyncio
 async def test_calendar_integration_routes_success_and_errors() -> None:
     district_id = uuid.uuid4()
@@ -105,7 +103,7 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
     auth = _auth_context()
 
     with (
-        patch("app.adapters.api.routers.calendar_integrations.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.calendar_integrations.require_role_in_district"),
         patch(
             "app.adapters.api.routers.calendar_integrations.encrypt_credentials",
             return_value="enc",
@@ -115,7 +113,13 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
         ) as repo_cls,
         patch(
             "app.adapters.api.routers.calendar_integrations.run_sync",
-            new=AsyncMock(return_value={"created": 1, "updated": 2, "cancelled": 3}),
+            new=AsyncMock(
+                return_value=SyncServiceResult(
+                    created=1,
+                    updated=2,
+                    cancelled=3,
+                )
+            ),
         ),
     ):
         repo = AsyncMock()
@@ -264,6 +268,7 @@ async def test_list_calendar_integrations_congregation_scoped_forbidden() -> Non
 # Export token tests  (adapted for PlanningSlot + EventInstance)
 # ===================================================================
 
+
 @pytest.mark.asyncio
 async def test_export_token_crud() -> None:
     """Create, list, and delete export tokens."""
@@ -353,9 +358,7 @@ async def test_export_calendar_ics_with_planning_slots() -> None:
         session_result.scalars.return_value = []
         db.execute.return_value = session_result
 
-        response = await export_router.export_calendar_ics(
-            token.token, db, approval_status=None
-        )
+        response = await export_router.export_calendar_ics(token.token, db, approval_status=None)
 
     assert b"BEGIN:VCALENDAR" in response.body
     assert b"BEGIN:VEVENT" in response.body
@@ -474,13 +477,17 @@ async def test_export_calendar_ics_leader_token_shows_assignments() -> None:
 
         sa_repo = AsyncMock()
         sa_repo.list_by_planning_slots.return_value = [
-            type("SA", (), {
-                "event_id": slot.id,
-                "planning_slot_id": slot.id,
-                "leader_id": leader_id,
-                "leader_name": "Bezirksvorsteher Müller",
-                "status": "ASSIGNED",
-            })()
+            type(
+                "SA",
+                (),
+                {
+                    "event_id": slot.id,
+                    "planning_slot_id": slot.id,
+                    "leader_id": leader_id,
+                    "leader_name": "Bezirksvorsteher Müller",
+                    "status": "ASSIGNED",
+                },
+            )()
         ]
         sa_repo_cls.return_value = sa_repo
 
@@ -492,9 +499,7 @@ async def test_export_calendar_ics_leader_token_shows_assignments() -> None:
         session_result.scalars.return_value = []
         db.execute.return_value = session_result
 
-        response = await export_router.export_calendar_ics(
-            token.token, db, approval_status=None
-        )
+        response = await export_router.export_calendar_ics(token.token, db, approval_status=None)
 
     assert b"Dienstleiter: Bezirksvorsteher M" in response.body
 
@@ -543,9 +548,7 @@ async def test_export_calendar_ics_empty() -> None:
         session_result.scalars.return_value = []
         db.execute.return_value = session_result
 
-        response = await export_router.export_calendar_ics(
-            token.token, db, approval_status=None
-        )
+        response = await export_router.export_calendar_ics(token.token, db, approval_status=None)
 
     assert b"BEGIN:VCALENDAR" in response.body
     assert b"BEGIN:VEVENT" not in response.body
@@ -561,9 +564,7 @@ async def test_export_token_not_found_paths() -> None:
         with pytest.raises(HTTPException):
             await export_router.export_calendar_ics("missing", AsyncMock())
         with pytest.raises(HTTPException):
-            await export_router.delete_export_token(
-                _auth_context(), uuid.uuid4(), AsyncMock()
-            )
+            await export_router.delete_export_token(_auth_context(), uuid.uuid4(), AsyncMock())
 
 
 @pytest.mark.asyncio
@@ -622,6 +623,7 @@ async def test_list_routes_require_district_id_for_non_superadmin() -> None:
 # Invitation tests  (adapted for PlanningSlot)
 # ===================================================================
 
+
 @pytest.mark.asyncio
 async def test_invitation_routes_success_and_error_paths() -> None:
     district_id = uuid.uuid4()
@@ -649,7 +651,7 @@ async def test_invitation_routes_success_and_error_paths() -> None:
     db = AsyncMock()
 
     with (
-        patch("app.adapters.api.routers.invitations.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.invitations.require_role_in_district"),
         patch("app.adapters.api.routers.invitations.SqlPlanningSlotRepository") as slot_repo_cls,
         patch("app.adapters.api.routers.invitations.SqlEventInstanceRepository") as inst_repo_cls,
         patch("app.adapters.api.routers.invitations.SqlInvitationRepository") as inv_repo_cls,
@@ -786,13 +788,11 @@ async def test_invitation_create_for_district_congregation() -> None:
     db = AsyncMock()
 
     with (
-        patch("app.adapters.api.routers.invitations.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.invitations.require_role_in_district"),
         patch("app.adapters.api.routers.invitations.SqlPlanningSlotRepository") as slot_repo_cls,
         patch("app.adapters.api.routers.invitations.SqlEventInstanceRepository") as inst_repo_cls,
         patch("app.adapters.api.routers.invitations.SqlInvitationRepository") as inv_repo_cls,
-        patch(
-            "app.adapters.api.routers.invitations.SqlInvitationOverwriteRequestRepository"
-        ),
+        patch("app.adapters.api.routers.invitations.SqlInvitationOverwriteRequestRepository"),
         patch(
             "app.adapters.api.routers.invitations.create_invitations_for_event",
             new=AsyncMock(return_value=[invitation]),
@@ -900,7 +900,7 @@ async def test_invitation_list_overwrite_requests() -> None:
     db = AsyncMock()
 
     with (
-        patch("app.adapters.api.routers.invitations.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.invitations.require_role_in_district"),
         patch("app.adapters.api.routers.invitations.SqlPlanningSlotRepository") as slot_repo_cls,
         patch("app.adapters.api.routers.invitations.SqlEventInstanceRepository") as inst_repo_cls,
         patch(
@@ -948,9 +948,7 @@ async def test_invitation_list_event_invitations_no_slot() -> None:
     db = AsyncMock()
     missing_id = uuid.uuid4()
 
-    with patch(
-        "app.adapters.api.routers.invitations.SqlPlanningSlotRepository"
-    ) as slot_repo_cls:
+    with patch("app.adapters.api.routers.invitations.SqlPlanningSlotRepository") as slot_repo_cls:
         slot_repo = AsyncMock()
         slot_repo.get.return_value = None
         slot_repo_cls.return_value = slot_repo
@@ -959,3 +957,211 @@ async def test_invitation_list_event_invitations_no_slot() -> None:
             await inv_router.list_event_invitations(missing_id, auth, db)
 
     assert exc.value.status_code == 404
+
+
+# ===================================================================
+# ICS export: UID stability, token validation, anonymization (UC-05)
+# ===================================================================
+
+
+@pytest.mark.asyncio
+async def test_export_calendar_ics_uid_stable_across_exports() -> None:
+    """The UID line for the same slot must be identical across repeated exports."""
+    district_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    instance = _event_instance(planning_slot_id=slot.id)
+
+    token = ExportToken.create(
+        label="Export",
+        token_type=TokenType.INTERNAL,
+        district_id=district_id,
+        congregation_id=None,
+    )
+    db = AsyncMock()
+
+    async def _do_export():
+        with (
+            patch("app.adapters.api.routers.export.SqlExportTokenRepository") as token_repo_cls,
+            patch("app.adapters.api.routers.export.SqlPlanningSlotRepository") as slot_repo_cls,
+            patch("app.adapters.api.routers.export.SqlEventInstanceRepository") as inst_repo_cls,
+            patch("app.adapters.api.routers.export.SqlServiceAssignmentRepository") as sa_repo_cls,
+            patch("app.adapters.api.routers.export.SqlLeaderRepository") as leader_repo_cls,
+            patch("app.adapters.api.routers.export.select"),
+        ):
+            token_repo = AsyncMock()
+            token_repo.get_by_token.return_value = token
+            token_repo_cls.return_value = token_repo
+
+            slot_repo = AsyncMock()
+            slot_repo.list_for_date_range.return_value = [slot]
+            slot_repo_cls.return_value = slot_repo
+
+            inst_repo = AsyncMock()
+            inst_repo.list_by_planning_slots.return_value = [instance]
+            inst_repo_cls.return_value = inst_repo
+
+            sa_repo = AsyncMock()
+            sa_repo.list_by_planning_slots.return_value = []
+            sa_repo_cls.return_value = sa_repo
+
+            leader_repo = AsyncMock()
+            leader_repo.list_by_district.return_value = []
+            leader_repo_cls.return_value = leader_repo
+
+            session_result = MagicMock()
+            session_result.scalars.return_value = []
+            db.execute.return_value = session_result
+
+            return await export_router.export_calendar_ics(token.token, db, approval_status=None)
+
+    response1 = await _do_export()
+    response2 = await _do_export()
+
+    uid_line = f"UID:{slot.id}@nak-bezirksplaner".encode()
+    assert uid_line in response1.body
+    assert uid_line in response2.body
+    # Both exports contain exactly the same UID
+    assert response1.body == response2.body
+
+
+@pytest.mark.asyncio
+async def test_export_calendar_ics_unknown_token_returns_404() -> None:
+    """An unknown export token must yield HTTP 404 without leaking token existence."""
+    with patch("app.adapters.api.routers.export.SqlExportTokenRepository") as token_repo_cls:
+        token_repo = AsyncMock()
+        token_repo.get_by_token.return_value = None
+        token_repo_cls.return_value = token_repo
+
+        with pytest.raises(HTTPException) as exc:
+            await export_router.export_calendar_ics("unknown-token", AsyncMock())
+
+    assert exc.value.status_code == 404
+    assert "Token ungültig" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_export_calendar_ics_public_token_anonymizes_leader() -> None:
+    """PUBLIC tokens must anonymize ServiceAssignment names."""
+    district_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    instance = _event_instance(planning_slot_id=slot.id)
+
+    token = ExportToken.create(
+        label="Public",
+        token_type=TokenType.PUBLIC,
+        district_id=district_id,
+        congregation_id=None,
+    )
+    db = AsyncMock()
+    assignment = type(
+        "SA",
+        (),
+        {
+            "event_id": slot.id,
+            "planning_slot_id": slot.id,
+            "leader_id": None,
+            "leader_name": "Bezirksvorsteher Müller",
+            "status": "ASSIGNED",
+        },
+    )()
+
+    with (
+        patch("app.adapters.api.routers.export.SqlExportTokenRepository") as token_repo_cls,
+        patch("app.adapters.api.routers.export.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.adapters.api.routers.export.SqlEventInstanceRepository") as inst_repo_cls,
+        patch("app.adapters.api.routers.export.SqlServiceAssignmentRepository") as sa_repo_cls,
+        patch("app.adapters.api.routers.export.SqlLeaderRepository") as leader_repo_cls,
+        patch("app.adapters.api.routers.export.select"),
+    ):
+        token_repo = AsyncMock()
+        token_repo.get_by_token.return_value = token
+        token_repo_cls.return_value = token_repo
+
+        slot_repo = AsyncMock()
+        slot_repo.list_for_date_range.return_value = [slot]
+        slot_repo_cls.return_value = slot_repo
+
+        inst_repo = AsyncMock()
+        inst_repo.list_by_planning_slots.return_value = [instance]
+        inst_repo_cls.return_value = inst_repo
+
+        sa_repo = AsyncMock()
+        sa_repo.list_by_planning_slots.return_value = [assignment]
+        sa_repo_cls.return_value = sa_repo
+
+        leader_repo = AsyncMock()
+        leader_repo.list_by_district.return_value = []
+        leader_repo_cls.return_value = leader_repo
+
+        session_result = MagicMock()
+        session_result.scalars.return_value = []
+        db.execute.return_value = session_result
+
+        response = await export_router.export_calendar_ics(token.token, db, approval_status=None)
+
+    assert b"Dienstleiter: [Name anonymisiert]" in response.body
+    assert b"Bezirksvorsteher M" not in response.body
+
+
+@pytest.mark.asyncio
+async def test_export_calendar_ics_internal_token_shows_full_leader_name() -> None:
+    """INTERNAL tokens must show the full ServiceAssignment name."""
+    district_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    instance = _event_instance(planning_slot_id=slot.id)
+
+    token = ExportToken.create(
+        label="Internal",
+        token_type=TokenType.INTERNAL,
+        district_id=district_id,
+        congregation_id=None,
+    )
+    db = AsyncMock()
+    assignment = type(
+        "SA",
+        (),
+        {
+            "event_id": slot.id,
+            "planning_slot_id": slot.id,
+            "leader_id": None,
+            "leader_name": "Bezirksvorsteher Müller",
+            "status": "ASSIGNED",
+        },
+    )()
+
+    with (
+        patch("app.adapters.api.routers.export.SqlExportTokenRepository") as token_repo_cls,
+        patch("app.adapters.api.routers.export.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.adapters.api.routers.export.SqlEventInstanceRepository") as inst_repo_cls,
+        patch("app.adapters.api.routers.export.SqlServiceAssignmentRepository") as sa_repo_cls,
+        patch("app.adapters.api.routers.export.SqlLeaderRepository") as leader_repo_cls,
+        patch("app.adapters.api.routers.export.select"),
+    ):
+        token_repo = AsyncMock()
+        token_repo.get_by_token.return_value = token
+        token_repo_cls.return_value = token_repo
+
+        slot_repo = AsyncMock()
+        slot_repo.list_for_date_range.return_value = [slot]
+        slot_repo_cls.return_value = slot_repo
+
+        inst_repo = AsyncMock()
+        inst_repo.list_by_planning_slots.return_value = [instance]
+        inst_repo_cls.return_value = inst_repo
+
+        sa_repo = AsyncMock()
+        sa_repo.list_by_planning_slots.return_value = [assignment]
+        sa_repo_cls.return_value = sa_repo
+
+        leader_repo = AsyncMock()
+        leader_repo.list_by_district.return_value = []
+        leader_repo_cls.return_value = leader_repo
+
+        session_result = MagicMock()
+        session_result.scalars.return_value = []
+        db.execute.return_value = session_result
+
+        response = await export_router.export_calendar_ics(token.token, db, approval_status=None)
+
+    assert b"Dienstleiter: Bezirksvorsteher M" in response.body
+    assert b"[Name anonymisiert]" not in response.body

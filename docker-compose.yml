@@ -5,8 +5,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      valkey:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      # Use nak_app role for RLS enforcement in production
+      DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
 
   worker:
     build: ./services/backend
@@ -15,8 +24,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      valkey:
         condition: service_started
+    environment:
+      # Use nak_app role for RLS enforcement in production
+      DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
 
   frontend:
     build: ./services/frontend
@@ -52,7 +64,7 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
+  valkey:
+    image: valkey/valkey:8-alpine
     volumes:
-      - ./redis_data:/data
+      - ./valkey_data:/data

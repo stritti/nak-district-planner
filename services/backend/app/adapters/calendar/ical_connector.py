@@ -15,7 +15,7 @@ import httpx
 from icalendar import Calendar as ICalendar  # type: ignore[import-untyped]
 
 from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.ports.calendar import CalendarConnector
+from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
 
 def _to_utc(dt: datetime | date) -> datetime:
@@ -50,21 +50,21 @@ class ICalConnector(CalendarConnector):
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise ValueError(
+            raise CalendarConnectorError(
                 f"HTTP {exc.response.status_code} beim Laden des Kalenders: {url}"
             ) from exc
 
         content_type = response.headers.get("content-type", "")
         if "text/html" in content_type:
-            raise ValueError(
+            raise CalendarConnectorError(
                 f"URL liefert HTML statt eines Kalenders (Content-Type: {content_type}). "
                 "Bitte die direkte .ics-URL verwenden."
             )
 
         try:
-            cal = ICalendar.from_ical(response.content)
+            cal = ICalendar.from_ical(response.content.decode("utf-8"))
         except Exception as exc:
-            raise ValueError(f"Ungültiges iCal-Format: {exc}") from exc
+            raise CalendarConnectorError(f"Ungültiges iCal-Format: {exc}") from exc
         events: list[RawCalendarEvent] = []
 
         for component in cal.walk():

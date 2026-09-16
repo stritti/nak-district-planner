@@ -13,10 +13,7 @@ from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentResponse,
     ServiceAssignmentUpdate,
 )
-from app.adapters.auth.permissions import (
-    PermissionError,
-    assert_has_role_in_district,
-)
+from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.repositories import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.role import Role
@@ -49,13 +46,12 @@ async def create_assignment(
 ) -> ServiceAssignmentResponse:
     planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
     if not planning_slot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
 
     # Check if user has PLANNER role (or higher) in the district
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     assignment = ServiceAssignment.create(
         event_id=event_id,
@@ -75,13 +71,12 @@ async def list_assignments(
 ) -> list[ServiceAssignmentResponse]:
     planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
     if not planning_slot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
 
     # Check if user has VIEWER role (or higher) in the district
-    try:
-        assert_has_role_in_district(auth, Role.VIEWER, planning_slot.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.VIEWER, planning_slot.district_id)
 
     assignments = await SqlServiceAssignmentRepository(db).list_by_planning_slot(event_id)
     return [_assignment_response(a) for a in assignments]
@@ -110,10 +105,7 @@ async def update_assignment(
         )
 
     # Check if user has PLANNER role (or higher) in the district
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     fields = body.model_fields_set
     if "leader_id" in fields:
@@ -147,9 +139,6 @@ async def delete_assignment(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
         )
 
-    try:
-        assert_has_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     await repo.delete(assignment_id)

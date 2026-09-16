@@ -14,17 +14,19 @@ Create Date: 2026-06-25 20:00:00.000000
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0125"
 down_revision: str | tuple[str, ...] | None = ("0124", "e5a2b3c4d5f0")
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -283,7 +285,9 @@ def downgrade() -> None:
     )
 
     # ── Reverse 2: Drop external_event_links table ──
-    op.drop_index("ix_external_event_links_provider_integration_event", table_name="external_event_links")
+    op.drop_index(
+        "ix_external_event_links_provider_integration_event", table_name="external_event_links"
+    )
     op.drop_table("external_event_links")
 
     # ── Reverse 1: Remove M3 sync fields from event_instances ──

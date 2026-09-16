@@ -18,7 +18,12 @@ class CalendarType(StrEnum):
 
 
 class CalendarCapability(StrEnum):
-    """CalendarCapability domain model."""
+    """Capabilities supported for a calendar integration.
+
+    ``READ`` — events can be fetched from the external source (minimal).
+    ``WRITE`` — events can be created/updated on the external source.
+    ``WEBHOOK`` — the external source supports push-based change notifications.
+    """
 
     READ = "READ"
     WRITE = "WRITE"
@@ -40,6 +45,7 @@ class CalendarIntegration:
     updated_at: datetime
     congregation_id: uuid.UUID | None = None
     default_category: str | None = None
+    last_sync_error: str | None = None
 
     @classmethod
     def create(
@@ -66,6 +72,7 @@ class CalendarIntegration:
             capabilities=capabilities or [CalendarCapability.READ],
             is_active=True,
             last_synced_at=None,
+            last_sync_error=None,
             created_at=now,
             updated_at=now,
             default_category=default_category,

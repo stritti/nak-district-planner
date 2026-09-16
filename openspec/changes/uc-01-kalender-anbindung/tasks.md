@@ -10,8 +10,8 @@
 - [x] 2.1 `EncryptionService` implementieren → `application/crypto.py` (Fernet, Key via SHA-256 aus `settings.secret_key`)
       ⚠️ **Abweichung:** Env-Var heißt `SECRET_KEY` (nicht `ENCRYPTION_KEY` wie im Design). Key-Ableitung via SHA-256, nicht direktes Fernet-Key-Format.
 - [x] 2.2 Encryption im Service-Layer → Ver-/Entschlüsselung wird direkt im Router und in `sync_service.py` aufgerufen. Kein Decorator-Pattern, sondern explizite Aufrufe.
-- [ ] 2.3 Unit-Tests für `crypto.py` / Encryption-Logik schreiben
-- [ ] 2.4 `.env.example` mit Hinweis auf `SECRET_KEY` (für Credential-Encryption) ergänzen
+- [x] 2.3 Unit-Tests für `crypto.py` / Encryption-Logik schreiben
+- [x] 2.4 `.env.example` mit Hinweis auf `SECRET_KEY` (für Credential-Encryption) ergänzen
 
 ## 3. ICalConnector
 
@@ -35,5 +35,5 @@
 ## 6. Frontend
 
 - [x] 6.1 `CalendarIntegrationsView.vue` mit Formular (Typ-Auswahl, URL-Feld, Sync-Interval, Default Category)
-- [ ] 6.2 Pinia-Store `useCalendarIntegrationsStore` fehlt — View nutzt direkt API-Client (`api/calendarIntegrations.ts`)
+- [x] 6.2 Pinia-Store `useCalendarIntegrationsStore` fehlt — View nutzt direkt API-Client (`api/calendarIntegrations.ts`)
 - [x] 6.3 Route `/admin/calendars` in Vue Router eingebunden

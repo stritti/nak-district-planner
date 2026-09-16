@@ -13,7 +13,6 @@ from app.domain.models.event_instance import EventInstance, EventSource, EventVi
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.repositories import EventInstanceRepository, PlanningSlotRepository
 
-
 # ── In-memory fakes ──────────────────────────────────────────────────────
 
 
@@ -76,8 +75,7 @@ class InMemoryPlanningSlotRepo(PlanningSlotRepository):
         return [
             slot
             for slot in self._slots.values()
-            if slot.district_id == district_id
-            and from_date <= slot.planning_date <= to_date
+            if slot.district_id == district_id and from_date <= slot.planning_date <= to_date
         ]
 
     async def delete(self, slot_id: uuid.UUID) -> None:
@@ -96,9 +94,7 @@ class InMemoryEventInstanceRepo(EventInstanceRepository):
 
     async def list_by_planning_slot(self, planning_slot_id: uuid.UUID) -> list[EventInstance]:
         return [
-            inst
-            for inst in self._instances.values()
-            if inst.planning_slot_id == planning_slot_id
+            inst for inst in self._instances.values() if inst.planning_slot_id == planning_slot_id
         ]
 
     async def get_by_planning_slot(self, planning_slot_id: uuid.UUID) -> EventInstance | None:
@@ -268,10 +264,12 @@ async def test_respects_district_ids_filter() -> None:
 
     use_case = GenerateDraftServicesUseCase(
         district_repo=InMemoryDistrictRepo([district_a, district_b]),
-        congregation_repo=InMemoryCongregationRepo({
-            district_a.id: [cong_a],
-            district_b.id: [cong_b],
-        }),
+        congregation_repo=InMemoryCongregationRepo(
+            {
+                district_a.id: [cong_a],
+                district_b.id: [cong_b],
+            }
+        ),
         slot_repo=slot_repo,
         instance_repo=instance_repo,
     )

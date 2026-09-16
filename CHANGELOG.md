@@ -1,3 +1,535 @@
+## [v0.29.3] - 2026-08-11
+
+### Features
+* feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+
+### Bug Fixes
+* fix: upgrade click to 8.4.2 to resolve PYSEC-2026-2132 command injection vulnerability (16ef998)
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+
+### Other Changes
+* chore: release v0.29.2 (4e273b0)
+* refactor(uc-01): extract CalendarIntegrationService and raise CalendarConnectorError (#264) (8166064)
+* chore: release v0.29.1 (63e30eb)
+* docs: mark uc-02 last_sync_error tasks complete (9a8c222)
+* chore: release v0.29.0 (4a450bb)
+* docs: mark verified-complete tasks in planning-slot, uc-01, rbac changes (fbe37c6)
+* ci: optimize actions caching and redundant jobs (#263) (b8efe7c)
+* build(deps-dev): Bump vue-tsc to 3.3.9 and typescript-eslint to 8.66.0 in /services/frontend (#262) (b500979)
+* build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
+* build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
+
+## [v0.29.2] - 2026-08-11
+
+### Features
+* feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* refactor(uc-01): extract CalendarIntegrationService and raise CalendarConnectorError (#264) (8166064)
+* chore: release v0.29.1 (63e30eb)
+* docs: mark uc-02 last_sync_error tasks complete (9a8c222)
+* chore: release v0.29.0 (4a450bb)
+* docs: mark verified-complete tasks in planning-slot, uc-01, rbac changes (fbe37c6)
+* ci: optimize actions caching and redundant jobs (#263) (b8efe7c)
+* build(deps-dev): Bump vue-tsc to 3.3.9 and typescript-eslint to 8.66.0 in /services/frontend (#262) (b500979)
+* build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
+* build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
+* build(deps): Bump starlette from 1.3.1 to 1.4.1 in /services/backend (#259) (779ce1c)
+
+## [v0.29.1] - 2026-08-10
+
+### Features
+* feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* docs: mark uc-02 last_sync_error tasks complete (9a8c222)
+* chore: release v0.29.0 (4a450bb)
+* docs: mark verified-complete tasks in planning-slot, uc-01, rbac changes (fbe37c6)
+* ci: optimize actions caching and redundant jobs (#263) (b8efe7c)
+* build(deps-dev): Bump vue-tsc to 3.3.9 and typescript-eslint to 8.66.0 in /services/frontend (#262) (b500979)
+* build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
+* build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
+* build(deps): Bump starlette from 1.3.1 to 1.4.1 in /services/backend (#259) (779ce1c)
+* test: Negative-Tests für geschützte Routen (403 bei falscher Rolle) (PR-A) (#251) (d2cdf11)
+* build(deps): Bump mako from 1.3.12 to 1.4.1 in /services/backend (#260) (814322f)
+
+## [v0.29.0] - 2026-08-10
+
+### Features
+* feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* docs: mark verified-complete tasks in planning-slot, uc-01, rbac changes (fbe37c6)
+* ci: optimize actions caching and redundant jobs (#263) (b8efe7c)
+* build(deps-dev): Bump vue-tsc to 3.3.9 and typescript-eslint to 8.66.0 in /services/frontend (#262) (b500979)
+* build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
+* build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
+* build(deps): Bump starlette from 1.3.1 to 1.4.1 in /services/backend (#259) (779ce1c)
+* test: Negative-Tests für geschützte Routen (403 bei falscher Rolle) (PR-A) (#251) (d2cdf11)
+* build(deps): Bump mako from 1.3.12 to 1.4.1 in /services/backend (#260) (814322f)
+* build(deps): Bump github/codeql-action from 4.37.3 to 4.37.6 (#261) (93bdf83)
+* build(deps-dev): Bump @playwright/test in /services/frontend (#257) (f66e57d)
+
+## [v0.28.7] - 2026-07-20
+
+### Features
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* build(deps): Bump opentelemetry-instrumentation-celery (#233) (b6a207c)
+* chore: release v0.28.6 (b9b2f6c)
+* build(deps-dev): Bump ruff from 0.15.21 to 0.15.22 in /services/backend (#228) (8a31e1c)
+* chore: release v0.28.5 (a7f1a4c)
+* build(deps-dev): Bump @pinia/testing in /services/frontend (#229) (edd0b89)
+* chore: release v0.28.4 (7d869f3)
+* build(deps): Bump alembic from 1.18.4 to 1.18.5 in /services/backend (#230) (02c3c5d)
+* chore: release v0.28.3 (92006de)
+* build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
+* chore: release v0.28.2 (c4da7eb)
+
+## [v0.28.6] - 2026-07-20
+
+### Features
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* build(deps-dev): Bump ruff from 0.15.21 to 0.15.22 in /services/backend (#228) (8a31e1c)
+* chore: release v0.28.5 (a7f1a4c)
+* build(deps-dev): Bump @pinia/testing in /services/frontend (#229) (edd0b89)
+* chore: release v0.28.4 (7d869f3)
+* build(deps): Bump alembic from 1.18.4 to 1.18.5 in /services/backend (#230) (02c3c5d)
+* chore: release v0.28.3 (92006de)
+* build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
+* chore: release v0.28.2 (c4da7eb)
+* test: coverage oidc 92%, claims_validation 96%, jwt_claims 89% (6fd4a68)
+* chore: release v0.28.1 (bf6ef39)
+
+## [v0.28.5] - 2026-07-20
+
+### Features
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* build(deps-dev): Bump @pinia/testing in /services/frontend (#229) (edd0b89)
+* chore: release v0.28.4 (7d869f3)
+* build(deps): Bump alembic from 1.18.4 to 1.18.5 in /services/backend (#230) (02c3c5d)
+* chore: release v0.28.3 (92006de)
+* build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
+* chore: release v0.28.2 (c4da7eb)
+* test: coverage oidc 92%, claims_validation 96%, jwt_claims 89% (6fd4a68)
+* chore: release v0.28.1 (bf6ef39)
+* refactor: RBAC-Guard-Konsolidierung auf require_role_in_district() (PR-4) (5d6c43e)
+* chore: release v0.28.0 (2e72c48)
+
+## [v0.28.4] - 2026-07-20
+
+### Features
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* build(deps): Bump alembic from 1.18.4 to 1.18.5 in /services/backend (#230) (02c3c5d)
+* chore: release v0.28.3 (92006de)
+* build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
+* chore: release v0.28.2 (c4da7eb)
+* test: coverage oidc 92%, claims_validation 96%, jwt_claims 89% (6fd4a68)
+* chore: release v0.28.1 (bf6ef39)
+* refactor: RBAC-Guard-Konsolidierung auf require_role_in_district() (PR-4) (5d6c43e)
+* chore: release v0.28.0 (2e72c48)
+* Merge pull request #212 from stritti/test/coverage-verification-auth-rbac-sync (5e65fbf)
+* Merge pull request #222 from stritti/dependabot/uv/services/backend/uvicorn-standard--gte-0.51.0 (e2e006a)
+
+## [v0.28.3] - 2026-07-20
+
+### Features
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* build(deps): Bump actions/setup-node from 6 to 7 (#224) (116579e)
+* chore: release v0.28.2 (c4da7eb)
+* test: coverage oidc 92%, claims_validation 96%, jwt_claims 89% (6fd4a68)
+* chore: release v0.28.1 (bf6ef39)
+* refactor: RBAC-Guard-Konsolidierung auf require_role_in_district() (PR-4) (5d6c43e)
+* chore: release v0.28.0 (2e72c48)
+* Merge pull request #212 from stritti/test/coverage-verification-auth-rbac-sync (5e65fbf)
+* Merge pull request #222 from stritti/dependabot/uv/services/backend/uvicorn-standard--gte-0.51.0 (e2e006a)
+* build(deps): Update uvicorn[standard] requirement in /services/backend (19bb03b)
+* Merge pull request #220 from stritti/dependabot/bun/services/frontend/tailwindcss/vite-4.3.2 (f40c01c)
+
+## [v0.28.2] - 2026-07-18
+
+### Features
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* test: coverage oidc 92%, claims_validation 96%, jwt_claims 89% (6fd4a68)
+* chore: release v0.28.1 (bf6ef39)
+* refactor: RBAC-Guard-Konsolidierung auf require_role_in_district() (PR-4) (5d6c43e)
+* chore: release v0.28.0 (2e72c48)
+* Merge pull request #212 from stritti/test/coverage-verification-auth-rbac-sync (5e65fbf)
+* Merge pull request #222 from stritti/dependabot/uv/services/backend/uvicorn-standard--gte-0.51.0 (e2e006a)
+* build(deps): Update uvicorn[standard] requirement in /services/backend (19bb03b)
+* Merge pull request #220 from stritti/dependabot/bun/services/frontend/tailwindcss/vite-4.3.2 (f40c01c)
+* build(deps-dev): Bump @tailwindcss/vite in /services/frontend (778532e)
+* Merge pull request #221 from stritti/dependabot/uv/services/backend/icalendar-7.2.0 (2a14ff5)
+
+## [v0.28.1] - 2026-07-18
+
+### Features
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* refactor: RBAC-Guard-Konsolidierung auf require_role_in_district() (PR-4) (5d6c43e)
+* chore: release v0.28.0 (2e72c48)
+* Merge pull request #212 from stritti/test/coverage-verification-auth-rbac-sync (5e65fbf)
+* Merge pull request #222 from stritti/dependabot/uv/services/backend/uvicorn-standard--gte-0.51.0 (e2e006a)
+* build(deps): Update uvicorn[standard] requirement in /services/backend (19bb03b)
+* Merge pull request #220 from stritti/dependabot/bun/services/frontend/tailwindcss/vite-4.3.2 (f40c01c)
+* build(deps-dev): Bump @tailwindcss/vite in /services/frontend (778532e)
+* Merge pull request #221 from stritti/dependabot/uv/services/backend/icalendar-7.2.0 (2a14ff5)
+* Merge pull request #219 from stritti/dependabot/uv/services/backend/setuptools-gte-83.0.0 (b402534)
+* Merge pull request #217 from stritti/dependabot/bun/services/frontend/vitest-4.1.10 (10701ce)
+
+## [v0.28.0] - 2026-07-16
+
+### Features
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+
+### Bug Fixes
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+
+### Other Changes
+* Merge pull request #212 from stritti/test/coverage-verification-auth-rbac-sync (5e65fbf)
+* Merge pull request #222 from stritti/dependabot/uv/services/backend/uvicorn-standard--gte-0.51.0 (e2e006a)
+* build(deps): Update uvicorn[standard] requirement in /services/backend (19bb03b)
+* Merge pull request #220 from stritti/dependabot/bun/services/frontend/tailwindcss/vite-4.3.2 (f40c01c)
+* build(deps-dev): Bump @tailwindcss/vite in /services/frontend (778532e)
+* Merge pull request #221 from stritti/dependabot/uv/services/backend/icalendar-7.2.0 (2a14ff5)
+* Merge pull request #219 from stritti/dependabot/uv/services/backend/setuptools-gte-83.0.0 (b402534)
+* Merge pull request #217 from stritti/dependabot/bun/services/frontend/vitest-4.1.10 (10701ce)
+* Merge pull request #216 from stritti/dependabot/uv/services/backend/ruff-0.15.21 (28c886b)
+* Merge pull request #215 from stritti/dependabot/bun/services/frontend/tailwindcss-4.3.2 (ed64484)
+
+## [v0.27.4] - 2026-07-09
+
+### Features
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+* Merge pull request #184 from stritti/feat/health-check-endpoint (9a5df96)
+* Merge pull request #174 from stritti/feature/matrix-rendering-migration-1-1 (55355e8)
+
+### Bug Fixes
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+* fix: 0125 als e5a2-Parent statt depends_on — schließt Multiple-Head-Lücke (c6dc17a)
+* fix: remove e5a2 from merge parents (already consumed by 0125 depends_on) (6d20f11)
+* fix: make 0125 depend on e5a2 approval-status migration (d3555fd)
+
+### Other Changes
+* chore: release v0.27.3 (1d10135)
+* chore: release v0.27.2 (8d7df18)
+* Clean Code: Refactoring und DRY-Verbesserungen (#206) (aa695f9)
+* Clean Code Skill hinzugefügt (9f14d85)
+* Clean Code: Refactoring und DRY-Verbesserungen (d039cb9)
+* chore: release v0.27.1 (e810d6e)
+* test: coverage >80% mit Tests für Pydantic-Validatoren, Writer-Loop, MS-Connector, ServiceAssignment u.a. (3f030d9)
+* docs: add ENUM type handling pattern to alembic skill doc (0fcb965)
+* docs: add dependency ordering section to alembic skill (dd1f128)
+* chore: release v0.27.0 (fad556f)
+
+## [v0.27.3] - 2026-07-09
+
+### Features
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+* Merge pull request #185 from stritti/feat/toast-confirm-dialogs (8a50676)
+* Merge pull request #184 from stritti/feat/health-check-endpoint (9a5df96)
+* Merge pull request #174 from stritti/feature/matrix-rendering-migration-1-1 (55355e8)
+
+### Bug Fixes
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+* fix: resolve alembic multi-head and FK name length issues (#202) (4619e48)
+* fix: 0125 als e5a2-Parent statt depends_on — schließt Multiple-Head-Lücke (c6dc17a)
+* fix: remove e5a2 from merge parents (already consumed by 0125 depends_on) (6d20f11)
+* fix: make 0125 depend on e5a2 approval-status migration (d3555fd)
+* fix: use Python AST for FK name length check (c5d090b)
+* fix: resolve 5 pre-existing unit test failures (b467acc)
+* fix: remove Depends() from auth params in notifications router (334f407)
+
+### Other Changes
+* chore: release v0.27.2 (8d7df18)
+* Clean Code: Refactoring und DRY-Verbesserungen (#206) (aa695f9)
+* Clean Code Skill hinzugefügt (9f14d85)
+* Clean Code: Refactoring und DRY-Verbesserungen (d039cb9)
+* chore: release v0.27.1 (e810d6e)
+* test: coverage >80% mit Tests für Pydantic-Validatoren, Writer-Loop, MS-Connector, ServiceAssignment u.a. (3f030d9)
+* docs: add ENUM type handling pattern to alembic skill doc (0fcb965)
+* docs: add dependency ordering section to alembic skill (dd1f128)
+* chore: release v0.27.0 (fad556f)
+* chore: release v0.26.2 (3d4804f)
+
 ## [v0.27.2] - 2026-07-04
 
 ### Features

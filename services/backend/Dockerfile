@@ -14,12 +14,17 @@ COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
 
+# Install curl for container healthchecks
+# Note: python:3.11-slim is a rolling tag, pinned apt versions would break rebuilds
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # Add .venv/bin to PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Run as non-root user
-RUN useradd --create-home appuser && chown -R appuser:appuser /app
-USER appuser
+RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+USER 1000
 
 # Standard command for backend
 CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -375,6 +375,30 @@
       </div>
     </div>
 
+    <!-- Delete registration confirm dialog -->
+    <ConfirmDialog
+      :open="pendingDeleteReg !== null"
+      variant="danger"
+      title="Registrierung löschen?"
+      :message="pendingDeleteReg ? `Die Registrierung von „${pendingDeleteReg.name}“ wird unwiderruflich gelöscht.` : ''"
+      confirm-text="Löschen"
+      :loading="saving"
+      @confirm="executeDeleteReg"
+      @cancel="pendingDeleteReg = null"
+    />
+
+    <!-- Delete leader confirm dialog -->
+    <ConfirmDialog
+      :open="pendingDeleteLeader !== null"
+      variant="danger"
+      title="Amtsträger:in löschen?"
+      :message="pendingDeleteLeader ? `„${pendingDeleteLeader.rank ? pendingDeleteLeader.rank + ' ' : ''}${pendingDeleteLeader.name}“ wird unwiderruflich gelöscht.` : ''"
+      confirm-text="Löschen"
+      :loading="saving"
+      @confirm="executeDeleteLeader"
+      @cancel="pendingDeleteLeader = null"
+    />
+
     <div
       v-if="addModal.open"
       class="modal-backdrop"
@@ -647,6 +671,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import {
   BuildingOffice2Icon,
   CheckIcon,
@@ -681,8 +706,10 @@ import {
   type RegistrationResponse,
 } from '../api/registrations'
 import { useDistrictsStore } from '../stores/districts'
+import { useToastStore } from '../stores/toast'
 
 const districtsStore = useDistrictsStore()
+const toastStore = useToastStore()
 const congregations = ref<CongregationResponse[]>([])
 const leaders = ref<LeaderResponse[]>([])
 const selectedDistrictId = computed({
@@ -820,6 +847,7 @@ async function doReject() {
     const idx = registrations.value.findIndex((r) => r.id === rejectModal.registrationId)
     if (idx !== -1) registrations.value[idx] = updated
     rejectModal.open = false
+    toastStore.success('Registrierung abgelehnt', rejectModal.name)
   } catch (e) {
     rejectModal.error = e instanceof Error ? e.message : 'Fehler beim Ablehnen'
   } finally {
@@ -827,12 +855,23 @@ async function doReject() {
   }
 }
 
-async function confirmDeleteReg(reg: RegistrationResponse) {
-  if (!confirm(`Registrierung von "${reg.name}" wirklich löschen?`)) return
+const pendingDeleteReg = ref<RegistrationResponse | null>(null)
+
+function confirmDeleteReg(reg: RegistrationResponse) {
+  pendingDeleteReg.value = reg
+}
+
+async function executeDeleteReg() {
+  if (!pendingDeleteReg.value) return
+  const reg = pendingDeleteReg.value
   saving.value = true
   try {
     await deleteRegistration(selectedDistrictId.value, reg.id)
     registrations.value = registrations.value.filter((r) => r.id !== reg.id)
+    pendingDeleteReg.value = null
+    toastStore.success('Registrierung gelöscht', reg.name)
+  } catch (e) {
+    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
   } finally {
     saving.value = false
   }
@@ -994,6 +1033,7 @@ async function saveAdd() {
     })
     leaders.value = [...leaders.value, created]
     addModal.open = false
+    toastStore.success('Amtsträger:in erstellt', created.name)
   } catch (e) {
     addModal.error = e instanceof Error ? e.message : 'Fehler'
   } finally {
@@ -1049,6 +1089,7 @@ async function saveEdit() {
     const idx = leaders.value.findIndex((l) => l.id === editModal.leaderId)
     if (idx !== -1) leaders.value[idx] = updated
     editModal.open = false
+    toastStore.success('Amtsträger:in gespeichert', updated.name)
   } catch (e) {
     editModal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
   } finally {
@@ -1058,12 +1099,23 @@ async function saveEdit() {
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 
-async function confirmDelete(leader: LeaderResponse) {
-  if (!confirm(`Amtstragende:n "${leader.rank ? leader.rank + ' ' : ''}${leader.name}" wirklich löschen?`)) return
+const pendingDeleteLeader = ref<LeaderResponse | null>(null)
+
+function confirmDelete(leader: LeaderResponse) {
+  pendingDeleteLeader.value = leader
+}
+
+async function executeDeleteLeader() {
+  if (!pendingDeleteLeader.value) return
+  const leader = pendingDeleteLeader.value
   saving.value = true
   try {
     await deleteLeader(selectedDistrictId.value, leader.id)
     leaders.value = leaders.value.filter((l) => l.id !== leader.id)
+    pendingDeleteLeader.value = null
+    toastStore.success('Amtsträger:in gelöscht', leader.name)
+  } catch (e) {
+    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
   } finally {
     saving.value = false
   }

@@ -416,12 +416,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete group confirm dialog -->
+    <ConfirmDialog
+      :open="pendingDeleteGroup !== null"
+      variant="danger"
+      title="Gruppe löschen?"
+      :message="pendingDeleteGroup ? `Die Gruppe „${pendingDeleteGroup.group.name}“ wird unwiderruflich gelöscht.` : ''"
+      confirm-text="Löschen"
+      :loading="saving"
+      @confirm="executeDeleteGroup"
+      @cancel="pendingDeleteGroup = null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { nextTick, onMounted, reactive, ref } from 'vue'
 import { CheckIcon, PencilSquareIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import {
   createCongregation,
   createDistrict,
@@ -440,8 +453,10 @@ import {
 } from '../api/districts'
 import { buildCongregationSections } from '../utils/congregationGrouping'
 import { useDistrictsStore } from '../stores/districts'
+import { useToastStore } from '../stores/toast'
 
 const districtsStore = useDistrictsStore()
+const toastStore = useToastStore()
 
 const DE_STATES: Record<string, string> = {
   BB: 'Brandenburg', BE: 'Berlin', BW: 'Baden-Württemberg', BY: 'Bayern',
@@ -754,8 +769,17 @@ async function saveEditGroup(districtId: string, group: CongregationGroupRespons
   }
 }
 
-async function confirmDeleteGroup(districtId: string, group: CongregationGroupResponse) {
-  if (!confirm(`Gruppe "${group.name}" wirklich löschen?`)) return
+const pendingDeleteGroup = ref<{ districtId: string; group: CongregationGroupResponse } | null>(
+  null,
+)
+
+function confirmDeleteGroup(districtId: string, group: CongregationGroupResponse) {
+  pendingDeleteGroup.value = { districtId, group }
+}
+
+async function executeDeleteGroup() {
+  if (!pendingDeleteGroup.value) return
+  const { districtId, group } = pendingDeleteGroup.value
   saving.value = true
   try {
     await deleteGroup(districtId, group.id)
@@ -764,6 +788,10 @@ async function confirmDeleteGroup(districtId: string, group: CongregationGroupRe
     congregationsByDistrict[districtId]?.forEach((c) => {
       if (c.group_id === group.id) c.group_id = null
     })
+    pendingDeleteGroup.value = null
+    toastStore.success('Gruppe gelöscht', group.name)
+  } catch (e) {
+    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
   } finally {
     saving.value = false
   }

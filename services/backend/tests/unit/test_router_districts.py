@@ -141,7 +141,11 @@ async def test_list_and_update_district_success() -> None:
         repo_cls.return_value = repo
 
         listed = await r.list_districts(_superadmin_auth(), AsyncMock())
-        with patch("app.adapters.api.routers.districts.assert_has_role_in_district"):
+        with (
+            patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+            patch("app.adapters.api.routers.districts.require_role_in_district"),
+            patch("app.adapters.api.routers.districts.require_role_in_district"),
+        ):
             updated = await r.update_district(
                 district_id,
                 DistrictUpdate(name="Neu", state_code="BW"),
@@ -195,6 +199,7 @@ async def test_create_and_list_congregations_success() -> None:
     cong = Congregation.create(name="Gemeinde A", district_id=district_id)
     with (
         patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.require_role_in_district"),
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
         patch(
@@ -234,6 +239,7 @@ async def test_create_congregation_sets_group_name_when_group_matches_district()
     db = AsyncMock()
     with (
         patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.require_role_in_district"),
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
         patch(
@@ -275,6 +281,7 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
 
     with (
         patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.require_role_in_district"),
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
@@ -374,6 +381,7 @@ async def test_group_crud_success_paths() -> None:
     db = AsyncMock()
     with (
         patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.require_role_in_district"),
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch(
             "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
@@ -450,7 +458,7 @@ async def test_get_matrix_success() -> None:
     congregation = Congregation.create(name="G", district_id=district_id)
     now = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
     # Create PlanningSlot instead of Event
-    
+
     slot = PlanningSlot.create(
         district_id=district_id,
         congregation_id=congregation.id,
@@ -594,7 +602,7 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
     source_congregation_id = uuid.uuid4()
     start = datetime(2030, 4, 10, 10, 0, tzinfo=UTC)
     start_date = start.date()
-    
+
     # Create source PlanningSlot
     source_slot = PlanningSlot.create(
         title="Gottesdienst Quelle",
@@ -605,7 +613,7 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
         category="Gottesdienst",
         status=PlanningSlotStatus.ACTIVE,
     )
-    
+
     # Create invitation copy PlanningSlot (with source reference)
     invite_copy_slot = PlanningSlot.create(
         title="Gottesdienst Ziel",
@@ -618,7 +626,7 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
         invitation_source_congregation_id=source_congregation_id,
         invitation_source_event_id=source_slot.id,  # Legacy field for compatibility
     )
-    
+
     # Create Feiertag PlanningSlot
     feiertag_date = start_date + timedelta(days=1)
     feiertag_slot = PlanningSlot.create(
@@ -630,7 +638,7 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
         category="Feiertag",
         status=PlanningSlotStatus.ACTIVE,
     )
-    
+
     leader = Leader.create(name="Muster", district_id=district_id, rank=LeaderRank.PRIESTER)
     assignment = ServiceAssignment.create(
         event_id=source_slot.id,  # event_id is required but we use planning_slot_id
@@ -706,7 +714,7 @@ async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() 
 
     # Verify holidays are loaded from Feiertag PlanningSlots
     assert result.holidays[feiertag_date.isoformat()] == ["Karfreitag"]
-    
+
     # Verify invitation copy cell has correct assignment reference
     cell = result.rows[0].cells[start_date.isoformat()]
     # The assignment_event_id should be the source slot ID for invitation copies
@@ -734,8 +742,8 @@ async def test_generate_matrix_drafts_error_paths() -> None:
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch(
-            "app.adapters.api.routers.districts.assert_has_role_in_district",
-            side_effect=r.PermissionError("verboten"),
+            "app.adapters.api.routers.districts.require_role_in_district",
+            side_effect=HTTPException(status_code=403),
         ),
     ):
         district_repo = AsyncMock()
@@ -748,6 +756,7 @@ async def test_generate_matrix_drafts_error_paths() -> None:
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.require_role_in_district"),
     ):
         district_repo = AsyncMock()
         district_repo.get.return_value = District.create(name="D")
@@ -1043,6 +1052,7 @@ async def test_generate_matrix_drafts_success() -> None:
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.require_role_in_district"),
         patch("app.adapters.api.routers.districts.GenerateDraftServicesUseCase") as use_case_cls,
         patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
     ):
@@ -1089,6 +1099,7 @@ async def test_import_feiertage_endpoint_paths() -> None:
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.require_role_in_district"),
         patch(
             "app.adapters.api.routers.districts.import_feiertage",
             new=AsyncMock(return_value={"created": 1, "updated": 0, "skipped": 0}),
@@ -1118,7 +1129,11 @@ async def test_import_feiertage_endpoint_invalid_state() -> None:
         district_repo = AsyncMock()
         district_repo.get.return_value = District.create(name="D")
         district_repo_cls.return_value = district_repo
-        with patch("app.adapters.api.routers.districts.assert_has_role_in_district"):
+        with (
+            patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+            patch("app.adapters.api.routers.districts.require_role_in_district"),
+            patch("app.adapters.api.routers.districts.require_role_in_district"),
+        ):
             with pytest.raises(HTTPException) as exc:
                 await r.import_feiertage_endpoint(
                     uuid.uuid4(),
@@ -1151,6 +1166,7 @@ async def test_import_feiertage_endpoint_not_found_and_http_error() -> None:
     with (
         patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
         patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+        patch("app.adapters.api.routers.districts.require_role_in_district"),
         patch(
             "app.adapters.api.routers.districts.import_feiertage",
             new=AsyncMock(side_effect=httpx.HTTPError("boom")),

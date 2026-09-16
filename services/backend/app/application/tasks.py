@@ -1,8 +1,25 @@
 """Celery tasks for calendar synchronisation (UC-02) and system maintenance.
 
-Tasks intentionally run synchronous Celery workers; asyncio.run() bridges
-to the async database/HTTP layer.  This is the standard pattern for Celery
-+ SQLAlchemy async without a dedicated async worker library.
+IMPORTANT — async bridge pattern
+=================================
+Celery workers execute synchronous task functions.  To call async database/HTTP
+code from a sync task, we use ``asyncio.run()`` inside each task function.
+This is the standard, documented pattern for Celery + SQLAlchemy async without
+a dedicated async Celery worker library.
+
+Each task follows the same structure::
+
+    @celery.task(...)
+    def my_task(...) -> dict:
+        async def _run() -> dict:
+            async with AsyncSessionLocal() as session:
+                ...  # async work here
+                return result
+
+        return asyncio.run(_run())
+
+The ``_run()`` inner coroutine keeps the async logic isolated and testable
+independently of Celery.
 """
 
 from __future__ import annotations
@@ -10,18 +27,33 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Awaitable
 from datetime import UTC, datetime
+from typing import TypeVar
 
 from app.celery_app import celery
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+async def _run_as_system_worker(coro: Awaitable[T]) -> T:
+    """Run DB work with a bounded system-worker tenant context for RLS GUCs."""
+    from app.tenant import TenantContext
+
+    TenantContext.set_context(user_sub="system:celery-worker", user_roles=["SYSTEM_WORKER"])
+    try:
+        return await coro
+    finally:
+        TenantContext.clear_context()
 
 
 @celery.task(name="sync_calendar_integration", bind=True, max_retries=3, default_retry_delay=60)
 def sync_calendar_integration(self, integration_id: str) -> dict:
     """Sync a single CalendarIntegration by ID.
 
-    Returns a summary dict: {"created": int, "updated": int, "cancelled": int}
+    Returns a dict with ``created``, ``updated``, ``cancelled``, ``auto_matched`` counts.
     """
     from app.adapters.db.session import AsyncSessionLocal
     from app.application.sync_service import run_sync
@@ -30,10 +62,15 @@ def sync_calendar_integration(self, integration_id: str) -> dict:
         async with AsyncSessionLocal() as session:
             result = await run_sync(uuid.UUID(integration_id), session)
             await session.commit()
-            return result
+            return {
+                "created": result.created,
+                "updated": result.updated,
+                "cancelled": result.cancelled,
+                "auto_matched": result.auto_matched,
+            }
 
     try:
-        summary = asyncio.run(_run())
+        summary = asyncio.run(_run_as_system_worker(_run()))
         logger.info("Sync %s completed: %s", integration_id, summary)
         return summary
     except Exception as exc:
@@ -69,7 +106,7 @@ def sync_all_active_integrations() -> dict:
                     ids_to_sync.append(integration_id)
             return ids_to_sync
 
-    ids = asyncio.run(_run())
+    ids = asyncio.run(_run_as_system_worker(_run()))
     for integration_id in ids:
         sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
     logger.info("Dispatched sync for %d integration(s)", len(ids))
@@ -97,22 +134,23 @@ def cleanup_old_events() -> dict:
 
         async with AsyncSessionLocal() as session:
             from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+
             repo = SqlPlanningSlotRepository(session)
             # PlanningSlot uses planning_date (date), not end_at (datetime).
             # Delete slots with planning_date before cutoff date.
             cutoff_date = cutoff.date()
             from sqlalchemy import delete
+
             from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
-            stmt = delete(PlanningSlotORM).where(
-                PlanningSlotORM.planning_date < cutoff_date
-            )
+
+            stmt = delete(PlanningSlotORM).where(PlanningSlotORM.planning_date < cutoff_date)
             result = await session.execute(stmt)
             deleted = result.rowcount  # type: ignore[attr-defined]
             await session.commit()
 
         return {"deleted": deleted, "cutoff": cutoff.isoformat()}
 
-    result = asyncio.run(_run())
+    result = asyncio.run(_run_as_system_worker(_run()))
     logger.info(
         "cleanup_old_events: deleted %d event(s) older than %s",
         result["deleted"],
@@ -196,7 +234,7 @@ def auto_import_feiertage() -> dict:
             "skipped": total_skipped,
         }
 
-    return asyncio.run(_run())
+    return asyncio.run(_run_as_system_worker(_run()))
 
 
 @celery.task(name="import_feiertage_task")
@@ -225,7 +263,7 @@ def import_feiertage_task(district_id: str, year: int, state_code: str | None = 
             await session.commit()
             return result
 
-    result = asyncio.run(_run())
+    result = asyncio.run(_run_as_system_worker(_run()))
     logger.info("import_feiertage_task: district=%s year=%d %s", district_id, year, result)
     return result
 
@@ -255,7 +293,7 @@ def import_kirchliche_festtage_task(district_id: str, year: int) -> dict:
             await session.commit()
             return result
 
-    result = asyncio.run(_run())
+    result = asyncio.run(_run_as_system_worker(_run()))
     logger.info(
         "import_kirchliche_festtage_task: district=%s year=%d %s", district_id, year, result
     )
@@ -288,7 +326,7 @@ def generate_draft_services_window() -> dict:
             await session.commit()
             return result
 
-    result = asyncio.run(_run())
+    result = asyncio.run(_run_as_system_worker(_run()))
     logger.info(
         "generate_draft_services_window: districts=%d congregations=%d created=%d skipped=%d",
         result["districts"],
@@ -332,7 +370,7 @@ def generate_planning_series_slots() -> dict:
             await session.commit()
             return result
 
-    result = asyncio.run(_run())
+    result = asyncio.run(_run_as_system_worker(_run()))
     logger.info(
         "generate_planning_series_slots: series=%d created=%d skipped=%d",
         result["series_processed"],
@@ -375,7 +413,7 @@ def generate_planning_series_slots() -> dict:
             await session.commit()
             return result
 
-    result = asyncio.run(_run())
+    result = asyncio.run(_run_as_system_worker(_run()))
     logger.info(
         "generate_planning_series_slots: series=%d created=%d skipped=%d",
         result["series_processed"],
@@ -511,7 +549,7 @@ def generate_planning_slots() -> dict:
 
             return result
 
-    result = asyncio.run(_run())
+    result = asyncio.run(_run_as_system_worker(_run()))
     logger.info(
         "generate_planning_slots: generated=%d, skipped=%d, series_processed=%d, districts_processed=%d",
         result.get("generated", 0),

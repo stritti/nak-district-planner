@@ -15,10 +15,7 @@ from app.adapters.api.schemas.planning_series import (
     PlanningSeriesResponse,
     PlanningSeriesUpdate,
 )
-from app.adapters.auth.permissions import (
-    PermissionError,
-    assert_has_role_in_district,
-)
+from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.planning_series_service import PlanningSeriesSlotGenerationService
@@ -82,10 +79,7 @@ async def create_planning_series(
 
     **RBAC:** Requires DISTRICT_ADMIN role in the district.
     """
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
 
     series = PlanningSeries.create(
         district_id=body.district_id,
@@ -124,10 +118,7 @@ async def get_planning_series(
             detail="PlanningSeries nicht gefunden",
         )
 
-    try:
-        assert_has_role_in_district(auth, Role.VIEWER, series.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.VIEWER, series.district_id)
 
     return PlanningSeriesResponse.from_orm(series)
 
@@ -152,10 +143,7 @@ async def update_planning_series(
             detail="PlanningSeries nicht gefunden",
         )
 
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, series.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, series.district_id)
 
     # Apply updates
     fields = body.model_fields_set
@@ -205,10 +193,7 @@ async def generate_slots_for_series(
             detail="PlanningSeries nicht gefunden",
         )
 
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, series.district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, series.district_id)
 
     service = PlanningSeriesSlotGenerationService(
         series_repo=SqlPlanningSeriesRepository(db),
@@ -242,10 +227,7 @@ async def generate_slots_for_district(
 
     **RBAC:** Requires DISTRICT_ADMIN role in the district.
     """
-    try:
-        assert_has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
     service = PlanningSeriesSlotGenerationService(
         series_repo=SqlPlanningSeriesRepository(db),

@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 
 from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.ports.calendar import CalendarConnector
+from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
 
 def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:
@@ -52,7 +52,7 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise ValueError(
+            raise CalendarConnectorError(
                 f"HTTP {exc.response.status_code} beim Laden des Microsoft Kalenders: {exc}"
             ) from exc
 

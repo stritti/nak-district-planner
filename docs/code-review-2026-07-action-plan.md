@@ -4,7 +4,7 @@
 > PRs gruppiert — jede Gruppe kann unabhängig geplant, gebrancht und gemerged werden.
 > Reihenfolge der Gruppen = Umsetzungsreihenfolge.
 
-**Letztes Update:** 20.07.2026 — PR-1 bis PR-8, PR-10 ✅ erledigt, siehe Abschnitt [Erledigte PRs](#-erledigte-prs).
+**Letztes Update:** 20.07.2026 — PR-1, PR-2, PR-4, PR-6 und PR-10 ✅ erledigt; PR-3 teilweise erledigt. PR-5, PR-7 und PR-8 bleiben als Folge-PRs offen, siehe Abschnitt [Erledigte PRs](#-erledigte-prs).
 
 ---
 

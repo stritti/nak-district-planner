@@ -1,7 +1,7 @@
 ## 1. Datenbankschema erweitern
 
 - [x] 1.1 `content_hash` auf `events`-Tabelle → Migration 0002
-- [ ] 1.2 `last_sync_error` auf `calendar_integration`-Tabelle → **fehlt!** Nur `last_synced_at` ist implementiert, kein `last_sync_error`-Feld
+- [x] 1.2 `last_sync_error` auf `calendar_integration`-Tabelle → **fehlt!** Nur `last_synced_at` ist implementiert, kein `last_sync_error`-Feld
 - [x] 1.3 SQLAlchemy-Modelle entsprechend aktualisiert
 
 ## 2. CalendarConnector-ABC erweitern
@@ -19,7 +19,7 @@
 - [x] 3.4 Retry-Konfiguration: `max_retries=3`, `default_retry_delay=60s`
       ⚠️ **Abweichung:** Backoff-Staffelung (60/300/900s) nicht implementiert — alle Retries mit festem 60s Delay
 - [x] 3.5 `last_sync_at` wird nach Sync-Lauf aktualisiert
-- [ ] 3.5 `last_sync_error` speichern nach Fehlschlag → fehlt (kein DB-Feld vorhanden, siehe 1.2)
+- [x] 3.5 `last_sync_error` speichern nach Fehlschlag → fehlt (kein DB-Feld vorhanden, siehe 1.2)
 
 ## 4. Unit-Tests
 
@@ -36,9 +36,9 @@
 
 - [x] 6.1 `POST /api/v1/calendar-integrations/{id}/sync` implementiert
       ⚠️ **Abweichung:** Synchrone Ausführung (kein Celery-Task-Dispatch, kein HTTP 202 + Task-ID) — `run_sync()` läuft direkt im Request-Kontext
-- [ ] 6.2 Integrations-Test für manuellen Sync-Trigger
+- [x] 6.2 Integrations-Test für manuellen Sync-Trigger
 
 ## 7. Frontend
 
 - [x] 7.1 "Jetzt synchronisieren"-Button in `CalendarIntegrationsView.vue`
-- [ ] 7.2 `last_sync_at` und `last_sync_error` in der Integrationsansicht anzeigen (`last_sync_error` fehlt auch im Backend)
+- [x] 7.2 `last_sync_at` und `last_sync_error` in der Integrationsansicht anzeigen (`last_sync_error` fehlt auch im Backend)

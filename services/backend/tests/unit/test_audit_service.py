@@ -10,8 +10,8 @@ from app.application.audit_service import (
     AuditAction,
     AuditContext,
     AuditEvent,
-    AuditStatus,
     AuditService,
+    AuditStatus,
 )
 
 
@@ -21,7 +21,7 @@ class TestAuditContext:
     def test_default_values(self):
         """Test that AuditContext has default None values."""
         ctx = AuditContext()
-        
+
         assert ctx.user_sub is None
         assert ctx.user_email is None
         assert ctx.user_roles is None
@@ -34,7 +34,7 @@ class TestAuditContext:
     def test_with_values(self):
         """Test AuditContext with values."""
         import uuid
-        
+
         ctx = AuditContext(
             user_sub="user-123",
             user_email="user@example.com",
@@ -45,7 +45,7 @@ class TestAuditContext:
             user_agent="Mozilla/5.0",
             request_id="req-123",
         )
-        
+
         assert ctx.user_sub == "user-123"
         assert ctx.user_email == "user@example.com"
         assert ctx.user_roles == ["admin", "user"]
@@ -65,7 +65,7 @@ class TestAuditEvent:
             action=AuditAction.CREATE,
             resource_type="user",
         )
-        
+
         assert event.action == AuditAction.CREATE
         assert event.resource_type == "user"
         assert event.resource_id is None
@@ -80,7 +80,7 @@ class TestAuditEvent:
     def test_with_all_values(self):
         """Test AuditEvent with all values."""
         import uuid
-        
+
         timestamp = datetime.now(UTC)
         event = AuditEvent(
             action=AuditAction.DELETE,
@@ -94,7 +94,7 @@ class TestAuditEvent:
             extra_metadata={"key": "value"},
             timestamp=timestamp,
         )
-        
+
         assert event.action == AuditAction.DELETE
         assert event.resource_type == "event"
         assert event.resource_id is not None
@@ -113,7 +113,7 @@ class TestAuditService:
     def test_init(self):
         """Test AuditService initialization."""
         service = AuditService()
-        
+
         assert service._running is False
         assert service._writer_task is None
         assert service._queue is not None
@@ -123,7 +123,7 @@ class TestAuditService:
         """Test starting the audit service."""
         service = AuditService()
         await service.start()
-        
+
         assert service._running is True
         assert service._writer_task is not None
 
@@ -133,7 +133,7 @@ class TestAuditService:
         service = AuditService()
         await service.start()
         await service.stop()
-        
+
         assert service._running is False
         assert service._writer_task is None
 
@@ -142,54 +142,54 @@ class TestAuditService:
         """Test that log method queues entries."""
         service = AuditService()
         await service.start()
-        
+
         # Mock the queue put method
         original_put = service._queue.put
         put_calls = []
-        
+
         async def mock_put(item):
             put_calls.append(item)
             await original_put(item)
-        
+
         service._queue.put = mock_put
-        
+
         # Log an event
         await service.log(
             action=AuditAction.CREATE,
             resource_type="user",
         )
-        
+
         # Check that entry was queued
         assert len(put_calls) == 1
         entry = put_calls[0]
         assert entry.action == AuditAction.CREATE
         assert entry.resource_type == "user"
-        
+
         await service.stop()
 
     @pytest.mark.asyncio
     async def test_log_with_context(self):
         """Test logging with context."""
         import uuid
-        
+
         service = AuditService()
         await service.start()
-        
+
         context = AuditContext(
             user_sub="user-123",
             user_email="user@example.com",
             district_id=uuid.uuid4(),
         )
-        
+
         put_calls = []
         original_put = service._queue.put
-        
+
         async def mock_put(item):
             put_calls.append(item)
             await original_put(item)
-        
+
         service._queue.put = mock_put
-        
+
         await service.log(
             action=AuditAction.UPDATE,
             resource_type="event",
@@ -197,17 +197,17 @@ class TestAuditService:
             context=context,
             changes={"title": "new title"},
         )
-        
+
         assert len(put_calls) == 1
         entry = put_calls[0]
         assert entry.user_sub == "user-123"
         assert entry.user_email == "user@example.com"
         assert entry.district_id == context.district_id
         assert entry.changes == {"title": "new title"}
-        
+
         # Verify that the timestamp is set
         assert entry.timestamp is not None
-        
+
         await service.stop()
 
     @pytest.mark.asyncio
@@ -215,7 +215,7 @@ class TestAuditService:
         """Test logging with AuditEvent object."""
         service = AuditService()
         await service.start()
-        
+
         event = AuditEvent(
             action=AuditAction.DELETE,
             resource_type="user",
@@ -223,31 +223,31 @@ class TestAuditService:
             status=AuditStatus.FAILED,
             error_message="Test error",
         )
-        
+
         put_calls = []
         original_put = service._queue.put
-        
+
         async def mock_put(item):
             put_calls.append(item)
             await original_put(item)
-        
+
         service._queue.put = mock_put
-        
+
         await service.log_event(event)
-        
+
         assert len(put_calls) == 1
         entry = put_calls[0]
         assert entry.action == AuditAction.DELETE
         assert entry.status == AuditStatus.FAILED
         assert entry.error_message == "Test error"
-        
+
         await service.stop()
 
     @pytest.mark.asyncio
     async def test_context_manager(self):
         """Test audit context manager."""
         service = AuditService()
-        
+
         async with service.context(
             user_sub="user-123",
             user_email="user@example.com",
@@ -261,9 +261,9 @@ class TestAuditService:
         service = AuditService()
         await service.start()
         await service.start()  # Should not raise
-        
+
         assert service._running is True
-        
+
         await service.stop()
 
     @pytest.mark.asyncio
@@ -273,6 +273,7 @@ class TestAuditService:
         await service.start()
 
         import uuid
+
         event = AuditEvent(
             action=AuditAction.CREATE,
             resource_type="user",
@@ -340,7 +341,7 @@ class TestAuditService:
         """Test that stopping without starting doesn't cause issues."""
         service = AuditService()
         await service.stop()  # Should not raise
-        
+
         assert service._running is False
 
     @pytest.mark.asyncio
