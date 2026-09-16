@@ -51,12 +51,14 @@ async def test_health_endpoint_degrades_without_database_details() -> None:
     mock_session.execute = AsyncMock(side_effect=RuntimeError("database password leaked"))
     mock_session.__aenter__.return_value = mock_session
     mock_session.__aexit__.return_value = None
+    mock_redis = AsyncMock()
+    mock_redis.ping = AsyncMock()
 
     with patch("app.main.AsyncSessionLocal", return_value=mock_session):
         from app.application.rate_limiter import rate_limiter
 
         previous_redis = rate_limiter._redis
-        rate_limiter._redis = None
+        rate_limiter._redis = mock_redis
         try:
             out = await main.health()
         finally:
@@ -66,7 +68,8 @@ async def test_health_endpoint_degrades_without_database_details() -> None:
     assert out.status_code == 503
     assert b"database password leaked" not in out.body
     assert b'"database":"unavailable"' in out.body
-    assert b'"redis":"disconnected"' in out.body
+    assert b'"redis":"ok"' in out.body
+    mock_redis.ping.assert_awaited_once()
 
 
 @pytest.mark.asyncio

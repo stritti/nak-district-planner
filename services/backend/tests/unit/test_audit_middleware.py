@@ -175,16 +175,34 @@ class TestGetResourceType:
         assert middleware._get_resource_type("") == ""
 
     @pytest.mark.parametrize(
-        ("path", "resource"),
+        ("method", "path", "resource", "action"),
         [
-            ("/api/v1/users/approve", "users"),
-            ("/api/v1/registrations/reject", "registrations"),
-            ("/api/v1/export-tokens/revoke", "export-tokens"),
+            (
+                "POST",
+                f"/api/v1/districts/{uuid.uuid4()}/registrations/{uuid.uuid4()}/approve",
+                "registrations",
+                AuditAction.UPDATE,
+            ),
+            (
+                "POST",
+                f"/api/v1/districts/{uuid.uuid4()}/registrations/{uuid.uuid4()}/reject",
+                "registrations",
+                AuditAction.UPDATE,
+            ),
+            (
+                "DELETE",
+                f"/api/v1/export-tokens/{uuid.uuid4()}",
+                "export-tokens",
+                AuditAction.DELETE,
+            ),
         ],
     )
-    def test_security_sensitive_mutations_resolve_resource_type(self, middleware, path, resource):
+    def test_security_sensitive_mutations_resolve_resource_type(
+        self, middleware, method, path, resource, action
+    ):
         """Test representative security-sensitive mutations are auditable."""
         assert middleware._get_resource_type(path) == resource
+        assert middleware._get_action_from_method(method, path) == action
 
 
 class TestExtractResourceId:
