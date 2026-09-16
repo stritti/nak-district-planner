@@ -92,6 +92,26 @@ Abschnitt Verantwortlichkeiten).
 - Container-Status und Restart-Raten beobachten.
 - Fehlerlogs fuer Backend/Worker aktiv monitoren.
 - OIDC/IDP Erreichbarkeit und Token-Fehlerquote ueberwachen.
+- Rate-Limiter-Fail-Open-Metrik `rate_limiter.fail_open` ueberwachen.
+
+### 5.1 Rate-Limiter-Fail-Open
+
+Der Counter wird erhöht, wenn Redis bei einer Rate-Limit-Prüfung nicht erreichbar
+ist oder einen Fehler liefert. Das System lässt den Request in diesem Fall bewusst
+zu, damit ein Redis-Ausfall nicht den gesamten Dienst blockiert.
+
+- **Voraussetzung:** `OTEL_ENABLED=true` setzen und `OTEL_ENDPOINT` auf einen
+  erreichbaren OTLP-Collector mit Metrics-Export konfigurieren. Die Metriken des
+  Backends im Monitoring-Backend verfügbar machen und den Alert dort einrichten.
+- **Alarm:** auslösen, sobald innerhalb von 5 Minuten mindestens ein Fail-Open-
+  Ereignis auftritt; bei wiederholten Ereignissen als Incident behandeln.
+- **Prüfung:** Das `reason`-Attribut der Metrik im Monitoring-Backend prüfen und
+  mit dem Backend-Log korrelieren. Anschließend Redis-Erreichbarkeit, DNS,
+  Credentials sowie Verbindungsgrenzen prüfen.
+- **Recovery:** Redis wiederherstellen, anschließend einen kontrollierten Request
+  ausführen und bestätigen, dass keine weiteren Fail-Open-Ereignisse auftreten.
+- **Nachbereitung:** Ereignisdauer, Ursache und Gegenmaßnahme im Betriebstagebuch
+  dokumentieren.
 
 ## 6. Security Operations
 
