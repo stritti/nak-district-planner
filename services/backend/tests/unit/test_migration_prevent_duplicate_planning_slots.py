@@ -59,18 +59,28 @@ def test_upgrade_reconciles_duplicate_active_slots_before_creating_unique_index(
     assert "planning_slot_id = ranked.keep_id" in service_assignments_sql
     assert "COALESCE(sa.planning_slot_id, sa.event_id) = ranked.id" in service_assignments_sql
 
-    assert "CASE WHEN ci.source_event_id = ranked.id THEN ranked.keep_id" in invitations_sql
-    assert "WHEN ci.source_planning_slot_id = ranked.id THEN ranked.keep_id" in invitations_sql
-    assert "CASE WHEN ci.linked_event_id = ranked.id THEN ranked.keep_id" in invitations_sql
-    assert "WHERE ranked.id <> ranked.keep_id" in invitations_sql
+    assert "SELECT ranked.keep_id FROM ranked WHERE ranked.id = ci.source_event_id" in invitations_sql
+    assert (
+        "SELECT ranked.keep_id FROM ranked WHERE ranked.id = ci.source_planning_slot_id"
+        in invitations_sql
+    )
+    assert "SELECT ranked.keep_id FROM ranked WHERE ranked.id = ci.linked_event_id" in invitations_sql
+    assert "FROM ranked\nWHERE ranked.id <> ranked.keep_id" not in invitations_sql
 
     assert "UPDATE planning_slots ps" in invitation_copies_sql
     assert "SET invitation_source_event_id = ranked.keep_id" in invitation_copies_sql
     assert "ps.invitation_source_event_id = ranked.id" in invitation_copies_sql
 
     assert "UPDATE invitation_overwrite_requests ior" in overwrite_requests_sql
-    assert "CASE WHEN ior.source_event_id = ranked.id THEN ranked.keep_id" in overwrite_requests_sql
-    assert "CASE WHEN ior.target_event_id = ranked.id THEN ranked.keep_id" in overwrite_requests_sql
+    assert (
+        "SELECT ranked.keep_id FROM ranked WHERE ranked.id = ior.source_event_id"
+        in overwrite_requests_sql
+    )
+    assert (
+        "SELECT ranked.keep_id FROM ranked WHERE ranked.id = ior.target_event_id"
+        in overwrite_requests_sql
+    )
+    assert "FROM ranked\nWHERE ranked.id <> ranked.keep_id" not in overwrite_requests_sql
 
     assert "DELETE FROM planning_slots duplicate" in delete_losers_sql
     assert "NOT EXISTS" in delete_losers_sql

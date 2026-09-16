@@ -90,19 +90,28 @@ WHERE COALESCE(sa.planning_slot_id, sa.event_id) = ranked.id
 
 REWIRE_CONGREGATION_INVITATIONS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
 UPDATE congregation_invitations ci
-SET source_event_id = CASE WHEN ci.source_event_id = ranked.id THEN ranked.keep_id ELSE ci.source_event_id END,
-        source_planning_slot_id = CASE
-                WHEN ci.source_planning_slot_id = ranked.id THEN ranked.keep_id
-                ELSE ci.source_planning_slot_id
-        END,
-        linked_event_id = CASE WHEN ci.linked_event_id = ranked.id THEN ranked.keep_id ELSE ci.linked_event_id END
-FROM ranked
-WHERE ranked.id <> ranked.keep_id
-    AND (
-            ci.source_event_id = ranked.id
-            OR ci.source_planning_slot_id = ranked.id
-            OR ci.linked_event_id = ranked.id
-    );
+SET source_event_id = COALESCE(
+        (SELECT ranked.keep_id FROM ranked WHERE ranked.id = ci.source_event_id),
+        ci.source_event_id
+    ),
+    source_planning_slot_id = COALESCE(
+        (SELECT ranked.keep_id FROM ranked WHERE ranked.id = ci.source_planning_slot_id),
+        ci.source_planning_slot_id
+    ),
+    linked_event_id = COALESCE(
+        (SELECT ranked.keep_id FROM ranked WHERE ranked.id = ci.linked_event_id),
+        ci.linked_event_id
+    )
+WHERE EXISTS (
+    SELECT 1
+    FROM ranked
+    WHERE ranked.id <> ranked.keep_id
+      AND (
+          ranked.id = ci.source_event_id
+          OR ranked.id = ci.source_planning_slot_id
+          OR ranked.id = ci.linked_event_id
+      )
+);
 """
 
 REWIRE_INVITATION_COPIES_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
@@ -115,11 +124,20 @@ WHERE ps.invitation_source_event_id = ranked.id
 
 REWIRE_OVERWRITE_REQUESTS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
 UPDATE invitation_overwrite_requests ior
-SET source_event_id = CASE WHEN ior.source_event_id = ranked.id THEN ranked.keep_id ELSE ior.source_event_id END,
-        target_event_id = CASE WHEN ior.target_event_id = ranked.id THEN ranked.keep_id ELSE ior.target_event_id END
-FROM ranked
-WHERE ranked.id <> ranked.keep_id
-    AND (ior.source_event_id = ranked.id OR ior.target_event_id = ranked.id);
+SET source_event_id = COALESCE(
+        (SELECT ranked.keep_id FROM ranked WHERE ranked.id = ior.source_event_id),
+        ior.source_event_id
+    ),
+    target_event_id = COALESCE(
+        (SELECT ranked.keep_id FROM ranked WHERE ranked.id = ior.target_event_id),
+        ior.target_event_id
+    )
+WHERE EXISTS (
+    SELECT 1
+    FROM ranked
+    WHERE ranked.id <> ranked.keep_id
+      AND (ranked.id = ior.source_event_id OR ranked.id = ior.target_event_id)
+);
 """
 
 DELETE_DUPLICATE_LOSERS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
