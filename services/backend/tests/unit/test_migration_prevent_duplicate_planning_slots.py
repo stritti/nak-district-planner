@@ -42,17 +42,20 @@ def test_upgrade_reconciles_duplicate_active_slots_before_creating_unique_index(
         "execute",
         "execute",
         "execute",
+        "execute",
         "create_index",
     ]
 
-    ambiguous_duplicates_sql = str(calls[0][1])
-    service_assignments_sql = str(calls[1][1])
-    invitations_sql = str(calls[2][1])
-    invitation_copies_sql = str(calls[3][1])
-    overwrite_requests_sql = str(calls[4][1])
-    delete_losers_sql = str(calls[5][1])
+    lock_slots_sql = str(calls[0][1])
+    ambiguous_duplicates_sql = str(calls[1][1])
+    service_assignments_sql = str(calls[2][1])
+    invitations_sql = str(calls[3][1])
+    invitation_copies_sql = str(calls[4][1])
+    overwrite_requests_sql = str(calls[5][1])
+    delete_losers_sql = str(calls[6][1])
 
-    assert "COUNT(ei.id) > 1" in ambiguous_duplicates_sql
+    assert lock_slots_sql.strip() == "LOCK TABLE planning_slots IN SHARE ROW EXCLUSIVE MODE;"
+    assert "COUNT(ei.id) <> 1" in ambiguous_duplicates_sql
     assert "RAISE EXCEPTION" in ambiguous_duplicates_sql
 
     assert "SET event_id = ranked.keep_id" in service_assignments_sql
@@ -85,4 +88,4 @@ def test_upgrade_reconciles_duplicate_active_slots_before_creating_unique_index(
     assert "DELETE FROM planning_slots duplicate" in delete_losers_sql
     assert "NOT EXISTS" in delete_losers_sql
     assert "event_instances ei" in delete_losers_sql
-    assert calls[6][0] == "create_index"
+    assert calls[7][0] == "create_index"

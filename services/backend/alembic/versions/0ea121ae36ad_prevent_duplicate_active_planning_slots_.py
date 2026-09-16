@@ -62,6 +62,8 @@ WITH duplicate_groups AS (
 )
 """
 
+LOCK_PLANNING_SLOTS_SQL = "LOCK TABLE planning_slots IN SHARE ROW EXCLUSIVE MODE;"
+
 REJECT_AMBIGUOUS_DUPLICATES_SQL = """
 DO $$
 BEGIN
@@ -72,7 +74,7 @@ BEGIN
                 WHERE ps.congregation_id IS NOT NULL
                     AND ps.status = 'ACTIVE'
                 GROUP BY ps.congregation_id, ps.planning_date, ps.planning_time
-                HAVING COUNT(*) > 1 AND COUNT(ei.id) > 1
+                HAVING COUNT(*) > 1 AND COUNT(ei.id) <> 1
         ) THEN
                 RAISE EXCEPTION 'Cannot reconcile duplicate active planning slots with multiple event instances';
         END IF;
@@ -154,6 +156,7 @@ DELETE_DUPLICATE_LOSERS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
 
 
 def upgrade() -> None:
+    op.execute(LOCK_PLANNING_SLOTS_SQL)
     op.execute(REJECT_AMBIGUOUS_DUPLICATES_SQL)
     op.execute(REWIRE_SERVICE_ASSIGNMENTS_SQL)
     op.execute(REWIRE_CONGREGATION_INVITATIONS_SQL)
