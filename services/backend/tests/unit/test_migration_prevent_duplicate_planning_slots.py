@@ -54,8 +54,11 @@ def test_upgrade_reconciles_duplicate_active_slots_before_creating_unique_index(
     overwrite_requests_sql = str(calls[5][1])
     delete_losers_sql = str(calls[6][1])
 
-    assert lock_slots_sql.strip() == "LOCK TABLE planning_slots IN SHARE ROW EXCLUSIVE MODE;"
+    assert "LOCK TABLE planning_slots, service_assignments, congregation_invitations," in lock_slots_sql
+    assert "invitation_overwrite_requests, event_instances IN SHARE ROW EXCLUSIVE MODE;" in lock_slots_sql
+    assert "COUNT(*) <> 2" in ambiguous_duplicates_sql
     assert "COUNT(ei.id) <> 1" in ambiguous_duplicates_sql
+    assert "instance_slot.invitation_source_event_id = legacy_slot.id" in ambiguous_duplicates_sql
     assert "RAISE EXCEPTION" in ambiguous_duplicates_sql
 
     assert "SET event_id = ranked.keep_id" in service_assignments_sql
@@ -86,6 +89,7 @@ def test_upgrade_reconciles_duplicate_active_slots_before_creating_unique_index(
     assert "FROM ranked\nWHERE ranked.id <> ranked.keep_id" not in overwrite_requests_sql
 
     assert "DELETE FROM planning_slots duplicate" in delete_losers_sql
+    assert "instance_slot.invitation_source_event_id = legacy_slot.id" in delete_losers_sql
     assert "NOT EXISTS" in delete_losers_sql
     assert "event_instances ei" in delete_losers_sql
     assert calls[7][0] == "create_index"

@@ -62,7 +62,10 @@ WITH duplicate_groups AS (
 )
 """
 
-LOCK_PLANNING_SLOTS_SQL = "LOCK TABLE planning_slots IN SHARE ROW EXCLUSIVE MODE;"
+LOCK_RECONCILIATION_TABLES_SQL = """
+LOCK TABLE planning_slots, service_assignments, congregation_invitations,
+    invitation_overwrite_requests, event_instances IN SHARE ROW EXCLUSIVE MODE;
+"""
 
 REJECT_AMBIGUOUS_DUPLICATES_SQL = """
 DO $$
@@ -74,7 +77,26 @@ BEGIN
                 WHERE ps.congregation_id IS NOT NULL
                     AND ps.status = 'ACTIVE'
                 GROUP BY ps.congregation_id, ps.planning_date, ps.planning_time
-                HAVING COUNT(*) > 1 AND COUNT(ei.id) <> 1
+                                HAVING COUNT(*) > 1
+                                     AND (
+                                             COUNT(*) <> 2
+                                             OR COUNT(ei.id) <> 1
+                                             OR NOT EXISTS (
+                                                     SELECT 1
+                                                     FROM planning_slots instance_slot
+                                                     JOIN event_instances instance
+                                                         ON instance.planning_slot_id = instance_slot.id
+                                                     JOIN planning_slots legacy_slot
+                                                         ON legacy_slot.id <> instance_slot.id
+                                                     WHERE instance_slot.congregation_id = ps.congregation_id
+                                                         AND instance_slot.planning_date = ps.planning_date
+                                                         AND instance_slot.planning_time = ps.planning_time
+                                                         AND legacy_slot.congregation_id = ps.congregation_id
+                                                         AND legacy_slot.planning_date = ps.planning_date
+                                                         AND legacy_slot.planning_time = ps.planning_time
+                                                         AND instance_slot.invitation_source_event_id = legacy_slot.id
+                                             )
+                                     )
         ) THEN
                 RAISE EXCEPTION 'Cannot reconcile duplicate active planning slots with multiple event instances';
         END IF;
@@ -147,6 +169,14 @@ DELETE_DUPLICATE_LOSERS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
     USING ranked
     WHERE duplicate.id = ranked.id
       AND ranked.id <> ranked.keep_id
+    AND EXISTS (
+        SELECT 1
+        FROM planning_slots instance_slot
+        JOIN event_instances instance ON instance.planning_slot_id = instance_slot.id
+        JOIN planning_slots legacy_slot ON legacy_slot.id = duplicate.id
+        WHERE instance_slot.id = ranked.keep_id
+        AND instance_slot.invitation_source_event_id = legacy_slot.id
+    )
             AND NOT EXISTS (
                     SELECT 1
                     FROM event_instances ei
@@ -156,7 +186,7 @@ DELETE_DUPLICATE_LOSERS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
 
 
 def upgrade() -> None:
-    op.execute(LOCK_PLANNING_SLOTS_SQL)
+    op.execute(LOCK_RECONCILIATION_TABLES_SQL)
     op.execute(REJECT_AMBIGUOUS_DUPLICATES_SQL)
     op.execute(REWIRE_SERVICE_ASSIGNMENTS_SQL)
     op.execute(REWIRE_CONGREGATION_INVITATIONS_SQL)
