@@ -62,10 +62,14 @@ Der Counter wird erhöht, wenn Redis bei einer Rate-Limit-Prüfung nicht erreich
 ist oder einen Fehler liefert. Das System lässt den Request in diesem Fall bewusst
 zu, damit ein Redis-Ausfall nicht den gesamten Dienst blockiert.
 
+- **Voraussetzung:** `OTEL_ENABLED=true` setzen und `OTEL_ENDPOINT` auf einen
+  erreichbaren OTLP-Collector mit Metrics-Export konfigurieren. Die Metriken des
+  Backends im Monitoring-Backend verfügbar machen und den Alert dort einrichten.
 - **Alarm:** auslösen, sobald innerhalb von 5 Minuten mindestens ein Fail-Open-
   Ereignis auftritt; bei wiederholten Ereignissen als Incident behandeln.
-- **Prüfung:** Ursache im Backend-Log anhand des `reason`-Attributs ermitteln und
-  Redis-Erreichbarkeit, DNS, Credentials sowie Verbindungsgrenzen prüfen.
+- **Prüfung:** Das `reason`-Attribut der Metrik im Monitoring-Backend prüfen und
+  mit dem Backend-Log korrelieren. Anschließend Redis-Erreichbarkeit, DNS,
+  Credentials sowie Verbindungsgrenzen prüfen.
 - **Recovery:** Redis wiederherstellen, anschließend einen kontrollierten Request
   ausführen und bestätigen, dass keine weiteren Fail-Open-Ereignisse auftreten.
 - **Nachbereitung:** Ereignisdauer, Ursache und Gegenmaßnahme im Betriebstagebuch
