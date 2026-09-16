@@ -32,7 +32,7 @@ depends_on: str | Sequence[str] | None = None
 
 INDEX_NAME = "no_overlapping_planning_slots"
 
-RECONCILE_DUPLICATE_ACTIVE_SLOTS_SQL = """
+RANKED_DUPLICATE_ACTIVE_SLOTS_CTE = """
 WITH duplicate_groups AS (
     SELECT congregation_id, planning_date, planning_time
     FROM planning_slots
@@ -59,44 +59,89 @@ WITH duplicate_groups AS (
      AND dg.planning_time = ps.planning_time
     LEFT JOIN event_instances ei ON ei.planning_slot_id = ps.id
     WHERE ps.status = 'ACTIVE'
-), rewired_service_assignments AS (
-    UPDATE service_assignments sa
-    SET event_id = ranked.keep_id,
+)
+"""
+
+REJECT_AMBIGUOUS_DUPLICATES_SQL = """
+DO $$
+BEGIN
+        IF EXISTS (
+                SELECT 1
+                FROM planning_slots ps
+                LEFT JOIN event_instances ei ON ei.planning_slot_id = ps.id
+                WHERE ps.congregation_id IS NOT NULL
+                    AND ps.status = 'ACTIVE'
+                GROUP BY ps.congregation_id, ps.planning_date, ps.planning_time
+                HAVING COUNT(*) > 1 AND COUNT(ei.id) > 1
+        ) THEN
+                RAISE EXCEPTION 'Cannot reconcile duplicate active planning slots with multiple event instances';
+        END IF;
+END $$;
+"""
+
+REWIRE_SERVICE_ASSIGNMENTS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
+UPDATE service_assignments sa
+SET event_id = ranked.keep_id,
         planning_slot_id = ranked.keep_id
-    FROM ranked
-    WHERE COALESCE(sa.planning_slot_id, sa.event_id) = ranked.id
-      AND ranked.id <> ranked.keep_id
-    RETURNING sa.id
-), rewired_congregation_invitations AS (
-    UPDATE congregation_invitations ci
-    SET source_event_id = ranked.keep_id,
-        source_planning_slot_id = ranked.keep_id,
-        linked_event_id = ranked.keep_id
-    FROM ranked
-    WHERE COALESCE(ci.source_planning_slot_id, ci.source_event_id) = ranked.id
-       OR ci.linked_event_id = ranked.id
-      AND ranked.id <> ranked.keep_id
-    RETURNING ci.id
-), rewired_invitation_copies AS (
-    UPDATE planning_slots ps
-    SET invitation_source_event_id = ranked.keep_id
-    FROM ranked
-    WHERE ps.invitation_source_event_id = ranked.id
-      AND ranked.id <> ranked.keep_id
-    RETURNING ps.id
-), deleted_losers AS (
+FROM ranked
+WHERE COALESCE(sa.planning_slot_id, sa.event_id) = ranked.id
+    AND ranked.id <> ranked.keep_id;
+"""
+
+REWIRE_CONGREGATION_INVITATIONS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
+UPDATE congregation_invitations ci
+SET source_event_id = CASE WHEN ci.source_event_id = ranked.id THEN ranked.keep_id ELSE ci.source_event_id END,
+        source_planning_slot_id = CASE
+                WHEN ci.source_planning_slot_id = ranked.id THEN ranked.keep_id
+                ELSE ci.source_planning_slot_id
+        END,
+        linked_event_id = CASE WHEN ci.linked_event_id = ranked.id THEN ranked.keep_id ELSE ci.linked_event_id END
+FROM ranked
+WHERE ranked.id <> ranked.keep_id
+    AND (
+            ci.source_event_id = ranked.id
+            OR ci.source_planning_slot_id = ranked.id
+            OR ci.linked_event_id = ranked.id
+    );
+"""
+
+REWIRE_INVITATION_COPIES_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
+UPDATE planning_slots ps
+SET invitation_source_event_id = ranked.keep_id
+FROM ranked
+WHERE ps.invitation_source_event_id = ranked.id
+    AND ranked.id <> ranked.keep_id;
+"""
+
+REWIRE_OVERWRITE_REQUESTS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
+UPDATE invitation_overwrite_requests ior
+SET source_event_id = CASE WHEN ior.source_event_id = ranked.id THEN ranked.keep_id ELSE ior.source_event_id END,
+        target_event_id = CASE WHEN ior.target_event_id = ranked.id THEN ranked.keep_id ELSE ior.target_event_id END
+FROM ranked
+WHERE ranked.id <> ranked.keep_id
+    AND (ior.source_event_id = ranked.id OR ior.target_event_id = ranked.id);
+"""
+
+DELETE_DUPLICATE_LOSERS_SQL = RANKED_DUPLICATE_ACTIVE_SLOTS_CTE + """
     DELETE FROM planning_slots duplicate
     USING ranked
     WHERE duplicate.id = ranked.id
       AND ranked.id <> ranked.keep_id
-    RETURNING duplicate.id
-)
-SELECT 1;
+            AND NOT EXISTS (
+                    SELECT 1
+                    FROM event_instances ei
+                    WHERE ei.planning_slot_id = duplicate.id
+            );
 """
 
 
 def upgrade() -> None:
-    op.execute(RECONCILE_DUPLICATE_ACTIVE_SLOTS_SQL)
+    op.execute(REJECT_AMBIGUOUS_DUPLICATES_SQL)
+    op.execute(REWIRE_SERVICE_ASSIGNMENTS_SQL)
+    op.execute(REWIRE_CONGREGATION_INVITATIONS_SQL)
+    op.execute(REWIRE_INVITATION_COPIES_SQL)
+    op.execute(REWIRE_OVERWRITE_REQUESTS_SQL)
+    op.execute(DELETE_DUPLICATE_LOSERS_SQL)
     op.create_index(
         INDEX_NAME,
         "planning_slots",

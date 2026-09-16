@@ -31,29 +31,48 @@ def test_upgrade_reconciles_duplicate_active_slots_before_creating_unique_index(
         def create_index(self, *args: object, **kwargs: object) -> None:
             calls.append(("create_index", {"args": args, "kwargs": kwargs}))
 
-    setattr(migration, "op", FakeOp())
+    migration.op = FakeOp()
 
     migration.upgrade()
 
-    assert calls[0][0] == "execute"
-    cleanup_sql = str(calls[0][1])
-    # Loser slots are deleted, not just cancelled
-    assert "DELETE FROM planning_slots duplicate" in cleanup_sql
-    assert "USING ranked" in cleanup_sql
-    assert "WHERE duplicate.id = ranked.id" in cleanup_sql
-    assert "ranked.id <> ranked.keep_id" in cleanup_sql
-    # Service assignments: both event_id and planning_slot_id rewired
-    assert "SET event_id = ranked.keep_id" in cleanup_sql
-    assert "planning_slot_id = ranked.keep_id" in cleanup_sql
-    assert "COALESCE(sa.planning_slot_id, sa.event_id) = ranked.id" in cleanup_sql
-    # Congregation invitations: all three fields in single update
-    assert "SET source_event_id = ranked.keep_id" in cleanup_sql
-    assert "source_planning_slot_id = ranked.keep_id" in cleanup_sql
-    assert "linked_event_id = ranked.keep_id" in cleanup_sql
-    assert "COALESCE(ci.source_planning_slot_id, ci.source_event_id) = ranked.id" in cleanup_sql
-    assert "ci.linked_event_id = ranked.id" in cleanup_sql
-    # Invitation copies: invitation_source_event_id rewired
-    assert "UPDATE planning_slots ps" in cleanup_sql
-    assert "SET invitation_source_event_id = ranked.keep_id" in cleanup_sql
-    assert "ps.invitation_source_event_id = ranked.id" in cleanup_sql
-    assert calls[1][0] == "create_index"
+    assert [call[0] for call in calls] == [
+        "execute",
+        "execute",
+        "execute",
+        "execute",
+        "execute",
+        "execute",
+        "create_index",
+    ]
+
+    ambiguous_duplicates_sql = str(calls[0][1])
+    service_assignments_sql = str(calls[1][1])
+    invitations_sql = str(calls[2][1])
+    invitation_copies_sql = str(calls[3][1])
+    overwrite_requests_sql = str(calls[4][1])
+    delete_losers_sql = str(calls[5][1])
+
+    assert "COUNT(ei.id) > 1" in ambiguous_duplicates_sql
+    assert "RAISE EXCEPTION" in ambiguous_duplicates_sql
+
+    assert "SET event_id = ranked.keep_id" in service_assignments_sql
+    assert "planning_slot_id = ranked.keep_id" in service_assignments_sql
+    assert "COALESCE(sa.planning_slot_id, sa.event_id) = ranked.id" in service_assignments_sql
+
+    assert "CASE WHEN ci.source_event_id = ranked.id THEN ranked.keep_id" in invitations_sql
+    assert "WHEN ci.source_planning_slot_id = ranked.id THEN ranked.keep_id" in invitations_sql
+    assert "CASE WHEN ci.linked_event_id = ranked.id THEN ranked.keep_id" in invitations_sql
+    assert "WHERE ranked.id <> ranked.keep_id" in invitations_sql
+
+    assert "UPDATE planning_slots ps" in invitation_copies_sql
+    assert "SET invitation_source_event_id = ranked.keep_id" in invitation_copies_sql
+    assert "ps.invitation_source_event_id = ranked.id" in invitation_copies_sql
+
+    assert "UPDATE invitation_overwrite_requests ior" in overwrite_requests_sql
+    assert "CASE WHEN ior.source_event_id = ranked.id THEN ranked.keep_id" in overwrite_requests_sql
+    assert "CASE WHEN ior.target_event_id = ranked.id THEN ranked.keep_id" in overwrite_requests_sql
+
+    assert "DELETE FROM planning_slots duplicate" in delete_losers_sql
+    assert "NOT EXISTS" in delete_losers_sql
+    assert "event_instances ei" in delete_losers_sql
+    assert calls[6][0] == "create_index"
