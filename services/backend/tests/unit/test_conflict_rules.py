@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from app.domain.planning.conflict_rules import no_double_booking
 from app.domain.planning.conflict_result import ConflictContext, ExistingAssignment, Severity
+from app.domain.planning.conflict_rules import no_double_booking
 
 
 def test_no_double_booking_blocks_overlapping_assignment() -> None:
