@@ -201,6 +201,7 @@ await audit_service.log(
     extra_metadata={"source": "api"},
 )
 ```
+```text
 ```
 
 ## Usage Examples
@@ -425,4 +426,4 @@ logging.getLogger('app.adapters.api.middleware.audit').setLevel(logging.DEBUG)
 - [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
 - [CIS Controls v8: Control 8 - Audit Log Management](https://www.cisecurity.org/controls/cis-controls-list)
 - [Security Analysis: SEC-009](../../security-analysis.md#sec-009-missing-audit-logging)
-- [OpenSpec Design](../../openspec/changes/implement-audit-logging/design.md)
+- [OpenSpec Design](../../openspec/changes/archive/2026-09-07-implement-audit-logging/design.md)

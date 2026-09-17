@@ -130,10 +130,18 @@ async def export_calendar_ics(
     session: DbSession,
     approval_status: Literal["confirmed_only", "include_planned"] | None = Query(None),
 ) -> Response:
+    from sqlalchemy import text
+
+    await session.execute(
+        text("SELECT set_config('app.current_export_token', :val, true)"),
+        {"val": token_str},
+    )
     token_repo = SqlExportTokenRepository(session)
     export_token = await token_repo.get_by_token(token_str)
     if not export_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
+
+    # RLS public export policies use app.current_export_token for scoped reads.
 
     slot_repo = SqlPlanningSlotRepository(session)
     instance_repo = SqlEventInstanceRepository(session)

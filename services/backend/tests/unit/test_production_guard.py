@@ -18,6 +18,12 @@ from app.config import Settings, production_guard
 def _valid_prod_settings(**overrides: object) -> Settings:
     """Helper: return a Settings object with all OIDC fields set to valid
     production values.  Individual fields can be overridden for testing.
+
+    Passes ``_env_file=None`` so these tests are deterministic regardless of
+    whatever ``.env`` a developer happens to have checked out locally (e.g. a
+    dev ``.env`` with ``IDP_PROVISIONING_PROVIDER=keycloak`` would otherwise
+    silently override fields this helper doesn't set explicitly, since
+    ``Settings.model_config`` loads ``env_file=".env"` by default).
     """
     kwargs: dict = {
         "app_env": "production",
@@ -27,9 +33,10 @@ def _valid_prod_settings(**overrides: object) -> Settings:
             "https://auth.example.com/realms/nak-planner/.well-known/openid-configuration"
         ),
         "oidc_client_id": "nak-planner-backend",
+        "backup_encrypt_key": "backup@nak-district-planner.example",
     }
     kwargs.update(overrides)
-    return Settings(**kwargs)
+    return Settings(_env_file=None, **kwargs)
 
 
 # ── SECRET_KEY ──────────────────────────────────────────────────────────────
@@ -91,6 +98,26 @@ def test_production_guard_all_defaults_at_once() -> None:
     assert "SECRET_KEY" in msg
     assert "IDP_PROVISIONING_API_KEY" in msg
     assert "IDP_PROVISIONING_ENDPOINT" in msg
+
+
+# ── BACKUP_ENCRYPT_KEY ──────────────────────────────────────────────────────
+
+
+def test_production_guard_missing_backup_encrypt_key() -> None:
+    settings = _valid_prod_settings(backup_encrypt_key=None)
+    with pytest.raises(RuntimeError, match="BACKUP_ENCRYPT_KEY"):
+        production_guard(settings)
+
+
+def test_production_guard_empty_backup_encrypt_key() -> None:
+    settings = _valid_prod_settings(backup_encrypt_key="")
+    with pytest.raises(RuntimeError, match="BACKUP_ENCRYPT_KEY"):
+        production_guard(settings)
+
+
+def test_production_guard_with_backup_encrypt_key() -> None:
+    settings = _valid_prod_settings(backup_encrypt_key="backup@nak-district-planner.example")
+    production_guard(settings)  # should not raise
 
 
 # ── Valid config ────────────────────────────────────────────────────────────
@@ -181,6 +208,7 @@ def test_production_guard_idp_keycloak_valid() -> None:
 def test_production_guard_oidc_client_secret_default() -> None:
     """production_guard catches default OIDC_CLIENT_SECRET when constructed in dev mode."""
     settings = Settings(
+        _env_file=None,
         app_env="development",
         oidc_client_secret="replace-with-oidc-client-secret",
     )
@@ -192,6 +220,7 @@ def test_production_guard_oidc_client_secret_default() -> None:
 def test_production_guard_oidc_discovery_url_default() -> None:
     """production_guard catches default OIDC_DISCOVERY_URL when constructed in dev mode."""
     settings = Settings(
+        _env_file=None,
         app_env="development",
         oidc_discovery_url="https://oidc.example.com/.well-known/openid-configuration",
     )
@@ -203,6 +232,7 @@ def test_production_guard_oidc_discovery_url_default() -> None:
 def test_production_guard_oidc_client_id_default() -> None:
     """production_guard catches default OIDC_CLIENT_ID when constructed in dev mode."""
     settings = Settings(
+        _env_file=None,
         app_env="development",
         oidc_client_id="replace-with-oidc-client-id",
     )

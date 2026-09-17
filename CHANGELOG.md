@@ -36,6 +36,30 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
+## [0.31.0](https://github.com/stritti/nak-district-planner/compare/v0.30.0...v0.31.0) (2026-09-16)
+
+
+### Features
+
+* **ci:** build docker images in release run as GHCR release artifacts ([c6127c2](https://github.com/stritti/nak-district-planner/commit/c6127c25454d1838006ad7502ed51a0c1cb5a3a1))
+
+## [0.30.0](https://github.com/stritti/nak-district-planner/compare/v0.29.2...v0.30.0) (2026-09-16)
+
+
+### Features
+
+* Code-Review Findings PR-5 bis PR-8, PR-10 umgesetzt ([#234](https://github.com/stritti/nak-district-planner/issues/234)) ([c02f65e](https://github.com/stritti/nak-district-planner/commit/c02f65eafb1b454e7a9b9d9795252395b0500f53))
+* **db:** prevent duplicate active planning slots per congregation/time ([#311](https://github.com/stritti/nak-district-planner/issues/311)) ([117a428](https://github.com/stritti/nak-district-planner/commit/117a42856603e7f516d8871d03404d2c24a137ff))
+* **ops:** add backup/restore automation with production guard ([#308](https://github.com/stritti/nak-district-planner/issues/308)) ([f68cf66](https://github.com/stritti/nak-district-planner/commit/f68cf664918384b43e57dcaa696ea50a07a1ef48))
+* replace Redis with Valkey — drop-in replacement with full rename ([#296](https://github.com/stritti/nak-district-planner/issues/296)) ([bcb1c23](https://github.com/stritti/nak-district-planner/commit/bcb1c23dbcdf95a021147e696948e158d35ef789))
+
+
+### Bug Fixes
+
+* **ci:** fallback to GITHUB_TOKEN when RELEASE_PLEASE_TOKEN missing ([92c112b](https://github.com/stritti/nak-district-planner/commit/92c112ba4e4bcc6c956e82c07e1e932f5a74e588))
+* **tests:** isolate production_guard tests from local .env leakage ([#309](https://github.com/stritti/nak-district-planner/issues/309)) ([4852c79](https://github.com/stritti/nak-district-planner/commit/4852c790cd0b5cea27bbd9288bba8395063d8752))
+* upgrade click to 8.4.2 to resolve PYSEC-2026-2132 command injection vulnerability ([16ef998](https://github.com/stritti/nak-district-planner/commit/16ef998423216b7570588e4c27d28f333c385daf))
+
 ## [v0.29.2] - 2026-08-11
 
 ### Features

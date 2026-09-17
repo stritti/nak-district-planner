@@ -165,10 +165,11 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         csrf_token = self.csrf_service.generate_token(session_id)
 
         # Set cookie with security attributes
+        # httponly=False allows JavaScript to read the cookie for double-submit pattern
         response.set_cookie(
             key=self.cookie_name,
             value=csrf_token,
-            httponly=True,
+            httponly=False,
             secure=True,  # Only send over HTTPS
             samesite="strict",  # Protection against CSRF
             max_age=int(self.csrf_service.token_lifetime.total_seconds()),

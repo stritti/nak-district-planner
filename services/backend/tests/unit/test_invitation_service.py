@@ -25,10 +25,10 @@ from app.domain.models.invitation import (
 )
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _planning_slot(**overrides):
     return PlanningSlot.create(
@@ -46,12 +46,8 @@ def _event_instance(planning_slot_id: uuid.UUID, **overrides):
     return EventInstance.create(
         planning_slot_id=planning_slot_id,
         title=overrides.get("title", "Gottesdienst"),
-        actual_start_at=overrides.get(
-            "actual_start_at", datetime(2026, 4, 10, 9, 30, tzinfo=UTC)
-        ),
-        actual_end_at=overrides.get(
-            "actual_end_at", datetime(2026, 4, 10, 11, 30, tzinfo=UTC)
-        ),
+        actual_start_at=overrides.get("actual_start_at", datetime(2026, 4, 10, 9, 30, tzinfo=UTC)),
+        actual_end_at=overrides.get("actual_end_at", datetime(2026, 4, 10, 11, 30, tzinfo=UTC)),
         source=overrides.get("source", EventSource.INTERNAL),
         visibility=overrides.get("visibility", EventVisibility.INTERNAL),
     )
@@ -68,106 +64,95 @@ def _fake_congregation(congregation_id: uuid.UUID, district_id: uuid.UUID):
 
 @pytest.mark.asyncio
 async def test_create_invitations_creates_invitations_for_internal_targets():
-        """Creates PlanningSlot + EventInstance + Invitation per internal target."""
-        session = MagicMock()
-        district_id = uuid.uuid4()
-        source_congregation_id = uuid.uuid4()
-        target_id_1 = uuid.uuid4()
-        target_id_2 = uuid.uuid4()
-        
-        source_slot = _planning_slot(
-            congregation_id=source_congregation_id, district_id=district_id
-        )
-        source_instance = _event_instance(source_slot.id)
-        
-        with (
-            patch(
-                "app.application.invitation_service.SqlPlanningSlotRepository"
-            ) as slot_repo_cls,
-            patch(
-                "app.application.invitation_service.SqlEventInstanceRepository"
-            ) as instance_repo_cls,
-            patch(
-                "app.application.invitation_service.SqlCongregationRepository"
-            ) as cong_repo_cls,
-            patch(
-                "app.application.invitation_service.SqlInvitationRepository"
-            ) as inv_repo_cls,
-        ):
-            slot_repo = MagicMock()
-            slot_repo.get = AsyncMock(return_value=source_slot)
-            slot_repo.save = AsyncMock()
-            slot_repo_cls.return_value = slot_repo
-            
-            instance_repo = MagicMock()
-            instance_repo.get_by_planning_slot = AsyncMock(return_value=source_instance)
-            instance_repo.save = AsyncMock()
-            instance_repo_cls.return_value = instance_repo
-            
-            cong_repo = MagicMock()
-            cong_repo.get = AsyncMock(
-                side_effect=[
-                    _fake_congregation(target_id_1, district_id),
-                    _fake_congregation(target_id_2, district_id),
-                ]
-            )
-            cong_repo_cls.return_value = cong_repo
-            
-            inv_repo = MagicMock()
-            inv_repo.list_by_source_planning_slot = AsyncMock(return_value=[])
-            inv_repo.save = AsyncMock()
-            inv_repo_cls.return_value = inv_repo
-            
-            targets = [
-                InvitationTargetCreate(
-                    target_type=InvitationTargetType.DISTRICT_CONGREGATION,
-                    target_congregation_id=target_id_1,
-                ),
-                InvitationTargetCreate(
-                    target_type=InvitationTargetType.DISTRICT_CONGREGATION,
-                    target_congregation_id=target_id_2,
-                ),
+    """Creates PlanningSlot + EventInstance + Invitation per internal target."""
+    session = MagicMock()
+    district_id = uuid.uuid4()
+    source_congregation_id = uuid.uuid4()
+    target_id_1 = uuid.uuid4()
+    target_id_2 = uuid.uuid4()
+
+    source_slot = _planning_slot(congregation_id=source_congregation_id, district_id=district_id)
+    source_instance = _event_instance(source_slot.id)
+
+    with (
+        patch("app.application.invitation_service.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.application.invitation_service.SqlEventInstanceRepository") as instance_repo_cls,
+        patch("app.application.invitation_service.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls,
+    ):
+        slot_repo = MagicMock()
+        slot_repo.get = AsyncMock(return_value=source_slot)
+        slot_repo.save = AsyncMock()
+        slot_repo_cls.return_value = slot_repo
+
+        instance_repo = MagicMock()
+        instance_repo.get_by_planning_slot = AsyncMock(return_value=source_instance)
+        instance_repo.save = AsyncMock()
+        instance_repo_cls.return_value = instance_repo
+
+        cong_repo = MagicMock()
+        cong_repo.get = AsyncMock(
+            side_effect=[
+                _fake_congregation(target_id_1, district_id),
+                _fake_congregation(target_id_2, district_id),
             ]
-            
-            created = await create_invitations_for_event(
-                session,
-                source_planning_slot_id=source_slot.id,
-                targets=targets,
-            )
-        
-        assert len(created) == 2
-        assert created[0].target_congregation_id == target_id_1
-        assert created[1].target_congregation_id == target_id_2
-        # linked_event_id points to the target PlanningSlot
-        assert created[0].linked_event_id is not None
-        assert created[1].linked_event_id is not None
-        assert created[0].linked_event_id != created[1].linked_event_id
-        
-        # Each target gets a PlanningSlot + EventInstance + Invitation created
-        assert slot_repo.save.call_count == 2
-        assert instance_repo.save.call_count == 2
-        assert inv_repo.save.call_count == 2
-        
-        # Verify target PlanningSlots have invitation source fields set
-        for call_args in slot_repo.save.call_args_list:
-            saved_slot: PlanningSlot = call_args[0][0]
-            assert saved_slot.invitation_source_congregation_id == source_congregation_id
-            assert saved_slot.invitation_source_event_id == source_slot.id
-            assert saved_slot.district_id == district_id
-        
-        # Verify target EventInstances used source data
-        for call_args in instance_repo.save.call_args_list:
-            saved_instance: EventInstance = call_args[0][0]
-            assert saved_instance.title == source_instance.title
-            assert saved_instance.actual_start_at == source_instance.actual_start_at
-            assert saved_instance.actual_end_at == source_instance.actual_end_at
-            assert saved_instance.source == source_instance.source
-        
-        # Verify target EventInstances have the correct visibility
-        for call_args in instance_repo.save.call_args_list:
-            saved_instance: EventInstance = call_args[0][0]
-            assert saved_instance.visibility == EventVisibility.INTERNAL
-        
+        )
+        cong_repo_cls.return_value = cong_repo
+
+        inv_repo = MagicMock()
+        inv_repo.list_by_source_planning_slot = AsyncMock(return_value=[])
+        inv_repo.save = AsyncMock()
+        inv_repo_cls.return_value = inv_repo
+
+        targets = [
+            InvitationTargetCreate(
+                target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+                target_congregation_id=target_id_1,
+            ),
+            InvitationTargetCreate(
+                target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+                target_congregation_id=target_id_2,
+            ),
+        ]
+
+        created = await create_invitations_for_event(
+            session,
+            source_planning_slot_id=source_slot.id,
+            targets=targets,
+        )
+
+    assert len(created) == 2
+    assert created[0].target_congregation_id == target_id_1
+    assert created[1].target_congregation_id == target_id_2
+    # linked_event_id points to the target PlanningSlot
+    assert created[0].linked_event_id is not None
+    assert created[1].linked_event_id is not None
+    assert created[0].linked_event_id != created[1].linked_event_id
+
+    # Each target gets a PlanningSlot + EventInstance + Invitation created
+    assert slot_repo.save.call_count == 2
+    assert instance_repo.save.call_count == 2
+    assert inv_repo.save.call_count == 2
+
+    # Verify target PlanningSlots have invitation source fields set
+    for call_args in slot_repo.save.call_args_list:
+        saved_slot: PlanningSlot = call_args[0][0]
+        assert saved_slot.invitation_source_congregation_id == source_congregation_id
+        assert saved_slot.invitation_source_event_id == source_slot.id
+        assert saved_slot.district_id == district_id
+
+    # Verify target EventInstances used source data
+    for call_args in instance_repo.save.call_args_list:
+        saved_instance: EventInstance = call_args[0][0]
+        assert saved_instance.title == source_instance.title
+        assert saved_instance.actual_start_at == source_instance.actual_start_at
+        assert saved_instance.actual_end_at == source_instance.actual_end_at
+        assert saved_instance.source == source_instance.source
+
+    # Verify target EventInstances have the correct visibility
+    for call_args in instance_repo.save.call_args_list:
+        saved_instance: EventInstance = call_args[0][0]
+        assert saved_instance.visibility == EventVisibility.INTERNAL
 
 
 @pytest.mark.asyncio
@@ -178,9 +163,7 @@ async def test_create_invitations_dedup_updates_existing_invitation():
     source_congregation_id = uuid.uuid4()
     target_congregation_id = uuid.uuid4()
 
-    source_slot = _planning_slot(
-        congregation_id=source_congregation_id, district_id=district_id
-    )
+    source_slot = _planning_slot(congregation_id=source_congregation_id, district_id=district_id)
     source_instance = _event_instance(source_slot.id)
 
     existing_inv = CongregationInvitation.create(
@@ -192,18 +175,10 @@ async def test_create_invitations_dedup_updates_existing_invitation():
     )
 
     with (
-        patch(
-            "app.application.invitation_service.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlEventInstanceRepository"
-        ) as instance_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlCongregationRepository"
-        ) as cong_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlInvitationRepository"
-        ) as inv_repo_cls,
+        patch("app.application.invitation_service.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.application.invitation_service.SqlEventInstanceRepository") as instance_repo_cls,
+        patch("app.application.invitation_service.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls,
     ):
         slot_repo = MagicMock()
         slot_repo.get = AsyncMock(return_value=source_slot)
@@ -222,9 +197,7 @@ async def test_create_invitations_dedup_updates_existing_invitation():
         cong_repo_cls.return_value = cong_repo
 
         inv_repo = MagicMock()
-        inv_repo.list_by_source_planning_slot = AsyncMock(
-            return_value=[existing_inv]
-        )
+        inv_repo.list_by_source_planning_slot = AsyncMock(return_value=[existing_inv])
         inv_repo.save = AsyncMock()
         inv_repo_cls.return_value = inv_repo
 
@@ -256,9 +229,7 @@ async def test_create_invitations_requires_source_congregation():
     session = MagicMock()
     source_slot = _planning_slot(congregation_id=None)
 
-    with patch(
-        "app.application.invitation_service.SqlPlanningSlotRepository"
-    ) as slot_repo_cls:
+    with patch("app.application.invitation_service.SqlPlanningSlotRepository") as slot_repo_cls:
         slot_repo = MagicMock()
         slot_repo.get = AsyncMock(return_value=source_slot)
         slot_repo_cls.return_value = slot_repo
@@ -279,24 +250,14 @@ async def test_create_invitations_requires_same_district():
     source_congregation_id = uuid.uuid4()
     target_congregation_id = uuid.uuid4()
 
-    source_slot = _planning_slot(
-        congregation_id=source_congregation_id, district_id=district_id
-    )
+    source_slot = _planning_slot(congregation_id=source_congregation_id, district_id=district_id)
     source_instance = _event_instance(source_slot.id)
 
     with (
-        patch(
-            "app.application.invitation_service.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlEventInstanceRepository"
-        ) as instance_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlCongregationRepository"
-        ) as cong_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlInvitationRepository"
-        ) as inv_repo_cls,
+        patch("app.application.invitation_service.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.application.invitation_service.SqlEventInstanceRepository") as instance_repo_cls,
+        patch("app.application.invitation_service.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls,
     ):
         slot_repo = MagicMock()
         slot_repo.get = AsyncMock(return_value=source_slot)
@@ -347,18 +308,10 @@ async def test_create_invitations_fallback_no_event_instance():
     )
 
     with (
-        patch(
-            "app.application.invitation_service.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlEventInstanceRepository"
-        ) as instance_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlCongregationRepository"
-        ) as cong_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlInvitationRepository"
-        ) as inv_repo_cls,
+        patch("app.application.invitation_service.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.application.invitation_service.SqlEventInstanceRepository") as instance_repo_cls,
+        patch("app.application.invitation_service.SqlCongregationRepository") as cong_repo_cls,
+        patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls,
     ):
         slot_repo = MagicMock()
         slot_repo.get = AsyncMock(return_value=source_slot)
@@ -419,16 +372,12 @@ async def test_propagate_source_event_update_no_invitations():
     session = MagicMock()
     source_slot = _planning_slot()
 
-    with patch(
-        "app.application.invitation_service.SqlInvitationRepository"
-    ) as inv_repo_cls:
+    with patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls:
         inv_repo = MagicMock()
         inv_repo.list_by_source_planning_slot = AsyncMock(return_value=[])
         inv_repo_cls.return_value = inv_repo
 
-        result = await propagate_source_event_update(
-            session, source_slot=source_slot
-        )
+        result = await propagate_source_event_update(session, source_slot=source_slot)
 
     assert result == []
 
@@ -448,9 +397,7 @@ async def test_propagate_source_event_update_with_invitations():
     )
 
     with (
-        patch(
-            "app.application.invitation_service.SqlInvitationRepository"
-        ) as inv_repo_cls,
+        patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls,
         patch(
             "app.application.invitation_service.SqlInvitationOverwriteRequestRepository"
         ) as ow_repo_cls,
@@ -463,9 +410,7 @@ async def test_propagate_source_event_update_with_invitations():
         ow_repo.list_open_by_source_event = AsyncMock(return_value=[])
         ow_repo_cls.return_value = ow_repo
 
-        result = await propagate_source_event_update(
-            session, source_slot=source_slot
-        )
+        result = await propagate_source_event_update(session, source_slot=source_slot)
 
     # Currently returns [] (placeholder — actual logic is TODO)
     assert result == []
@@ -662,15 +607,9 @@ async def test_delete_invitation_removes_linked_slot_and_instance():
     target_instance.id = target_instance_id
 
     with (
-        patch(
-            "app.application.invitation_service.SqlInvitationRepository"
-        ) as inv_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.application.invitation_service.SqlEventInstanceRepository"
-        ) as instance_repo_cls,
+        patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls,
+        patch("app.application.invitation_service.SqlPlanningSlotRepository") as slot_repo_cls,
+        patch("app.application.invitation_service.SqlEventInstanceRepository") as instance_repo_cls,
     ):
         inv_repo = MagicMock()
         inv_repo.get = AsyncMock(return_value=invitation)
@@ -708,9 +647,7 @@ async def test_delete_invitation_no_linked_event():
         linked_event_id=None,
     )
 
-    with patch(
-        "app.application.invitation_service.SqlInvitationRepository"
-    ) as inv_repo_cls:
+    with patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls:
         inv_repo = MagicMock()
         inv_repo.get = AsyncMock(return_value=invitation)
         inv_repo.delete = AsyncMock()
@@ -727,9 +664,7 @@ async def test_delete_invitation_not_found():
     """Returns False when the invitation does not exist."""
     session = MagicMock()
 
-    with patch(
-        "app.application.invitation_service.SqlInvitationRepository"
-    ) as inv_repo_cls:
+    with patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls:
         inv_repo = MagicMock()
         inv_repo.get = AsyncMock(return_value=None)
         inv_repo_cls.return_value = inv_repo
@@ -771,9 +706,7 @@ async def test_create_invitations_target_congregation_not_found():
     source_congregation_id = uuid.uuid4()
     target_id = uuid.uuid4()
 
-    source_slot = _planning_slot(
-        congregation_id=source_congregation_id, district_id=district_id
-    )
+    source_slot = _planning_slot(congregation_id=source_congregation_id, district_id=district_id)
     source_instance = _event_instance(source_slot.id)
 
     with (
@@ -822,9 +755,7 @@ async def test_create_invitations_external_note_update_existing():
     district_id = uuid.uuid4()
     source_congregation_id = uuid.uuid4()
 
-    source_slot = _planning_slot(
-        congregation_id=source_congregation_id, district_id=district_id
-    )
+    source_slot = _planning_slot(congregation_id=source_congregation_id, district_id=district_id)
     source_instance = _event_instance(source_slot.id)
 
     existing_inv = CongregationInvitation.create(
@@ -884,9 +815,7 @@ async def test_create_invitations_external_note_create_new():
     district_id = uuid.uuid4()
     source_congregation_id = uuid.uuid4()
 
-    source_slot = _planning_slot(
-        congregation_id=source_congregation_id, district_id=district_id
-    )
+    source_slot = _planning_slot(congregation_id=source_congregation_id, district_id=district_id)
     source_instance = _event_instance(source_slot.id)
 
     with (
@@ -938,8 +867,6 @@ async def test_sync_linked_invitation_event_schedule_returns_zero():
     session = MagicMock()
     source_slot = _planning_slot()
 
-    result = await sync_linked_invitation_event_schedule(
-        session, source_slot=source_slot
-    )
+    result = await sync_linked_invitation_event_schedule(session, source_slot=source_slot)
 
     assert result == 0

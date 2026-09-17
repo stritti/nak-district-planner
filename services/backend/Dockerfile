@@ -23,8 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Run as non-root user
-RUN useradd --create-home appuser && chown -R appuser:appuser /app
-USER appuser
+RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+USER 1000
 
 # Standard command for backend
 CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

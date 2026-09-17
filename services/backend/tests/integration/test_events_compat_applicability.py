@@ -47,10 +47,16 @@ def _auth_client(district_id: uuid.UUID):
 
     app.dependency_overrides[get_db_session] = _override_db_session
     try:
-        with patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo, patch(
-            "app.adapters.api.deps.SqlLeaderRegistrationRepository"
-        ) as MockRegRepo, patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo:
-            user_repo = AsyncMock(get_by_sub=AsyncMock(return_value=None), has_any_user=AsyncMock(return_value=True), save=AsyncMock())
+        with (
+            patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
+            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
+            patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
+        ):
+            user_repo = AsyncMock(
+                get_by_sub=AsyncMock(return_value=None),
+                has_any_user=AsyncMock(return_value=True),
+                save=AsyncMock(),
+            )
             MockUserRepo.return_value = user_repo
             reg_repo = AsyncMock(list_approved_unlinked_by_email=AsyncMock(return_value=[]))
             MockRegRepo.return_value = reg_repo
@@ -110,10 +116,16 @@ def test_district_slot_with_matching_applicability_appears_in_congregation_view(
     own_slot = _slot(district_id, congregation_id=congregation_id)
     slot_repo, inst_repo = _mock_repos([district_slot, own_slot])
 
-    with _auth_client(district_id) as (client, headers), patch(
-        "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository", return_value=slot_repo
-    ), patch(
-        "app.adapters.api.routers.events_compat.SqlEventInstanceRepository", return_value=inst_repo
+    with (
+        _auth_client(district_id) as (client, headers),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            return_value=slot_repo,
+        ),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            return_value=inst_repo,
+        ),
     ):
         response = _list_events(client, headers, district_id, congregation_id)
 
@@ -129,13 +141,21 @@ def test_district_slot_with_other_congregation_applicability_excluded():
     district_id = uuid.uuid4()
     congregation_id = uuid.uuid4()
     other_congregation = uuid.uuid4()
-    district_slot = _slot(district_id, congregation_id=None, applicability=[str(other_congregation)])
+    district_slot = _slot(
+        district_id, congregation_id=None, applicability=[str(other_congregation)]
+    )
     slot_repo, inst_repo = _mock_repos([district_slot])
 
-    with _auth_client(district_id) as (client, headers), patch(
-        "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository", return_value=slot_repo
-    ), patch(
-        "app.adapters.api.routers.events_compat.SqlEventInstanceRepository", return_value=inst_repo
+    with (
+        _auth_client(district_id) as (client, headers),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            return_value=slot_repo,
+        ),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            return_value=inst_repo,
+        ),
     ):
         response = _list_events(client, headers, district_id, congregation_id)
 
@@ -149,10 +169,16 @@ def test_district_slot_with_empty_applicability_excluded():
     district_slot = _slot(district_id, congregation_id=None, applicability=[])
     slot_repo, inst_repo = _mock_repos([district_slot])
 
-    with _auth_client(district_id) as (client, headers), patch(
-        "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository", return_value=slot_repo
-    ), patch(
-        "app.adapters.api.routers.events_compat.SqlEventInstanceRepository", return_value=inst_repo
+    with (
+        _auth_client(district_id) as (client, headers),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            return_value=slot_repo,
+        ),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            return_value=inst_repo,
+        ),
     ):
         response = _list_events(client, headers, district_id, congregation_id)
 
@@ -171,10 +197,16 @@ def test_cancelled_district_slot_excluded_even_with_matching_applicability():
     )
     slot_repo, inst_repo = _mock_repos([district_slot])
 
-    with _auth_client(district_id) as (client, headers), patch(
-        "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository", return_value=slot_repo
-    ), patch(
-        "app.adapters.api.routers.events_compat.SqlEventInstanceRepository", return_value=inst_repo
+    with (
+        _auth_client(district_id) as (client, headers),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            return_value=slot_repo,
+        ),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            return_value=inst_repo,
+        ),
     ):
         response = _list_events(client, headers, district_id, congregation_id)
 
@@ -188,10 +220,16 @@ def test_district_view_still_returns_district_slots():
     district_slot = _slot(district_id, congregation_id=None, applicability=[])
     slot_repo, inst_repo = _mock_repos([district_slot])
 
-    with _auth_client(district_id) as (client, headers), patch(
-        "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository", return_value=slot_repo
-    ), patch(
-        "app.adapters.api.routers.events_compat.SqlEventInstanceRepository", return_value=inst_repo
+    with (
+        _auth_client(district_id) as (client, headers),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            return_value=slot_repo,
+        ),
+        patch(
+            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            return_value=inst_repo,
+        ),
     ):
         response = client.get(
             "/api/v1/events",
