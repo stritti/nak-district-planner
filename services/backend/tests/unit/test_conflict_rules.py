@@ -82,6 +82,29 @@ def test_conflict_service_collects_results_from_rules() -> None:
     assert service.check(context) == [expected]
 
 
+def test_conflict_service_uses_default_rules() -> None:
+    leader_id = uuid.uuid4()
+    start_time = datetime(2026, 1, 11, 9, 0, tzinfo=UTC)
+    context = ConflictContext(
+        leader_id=leader_id,
+        start_time=start_time,
+        end_time=start_time + timedelta(hours=1),
+        congregation_id=uuid.uuid4(),
+        existing_assignments=(
+            ExistingAssignment(
+                leader_id=leader_id,
+                start_time=start_time + timedelta(minutes=15),
+                end_time=start_time + timedelta(hours=1, minutes=15),
+                congregation_id=uuid.uuid4(),
+            ),
+        ),
+    )
+
+    results = ConflictService().check(context)
+
+    assert [result.rule_id for result in results] == ["no_double_booking"]
+
+
 def test_travel_time_check_warns_when_congregations_are_too_close() -> None:
     leader_id = uuid.uuid4()
     first_congregation_id = uuid.uuid4()
