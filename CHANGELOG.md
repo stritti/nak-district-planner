@@ -36,6 +36,25 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
+## [0.32.0](https://github.com/stritti/nak-district-planner/compare/v0.31.2...v0.32.0) (2026-09-17)
+
+
+### Features
+
+* **api:** add leader unavailability routes ([ce03434](https://github.com/stritti/nak-district-planner/commit/ce03434ed8fe398ebb2952f0e88d8bf38f5fdbfd))
+* **api:** type conflict error responses ([7e72e84](https://github.com/stritti/nak-district-planner/commit/7e72e84de83458b38b5223bdb25c30f42c3eae30))
+* **db:** add leader unavailability repository ([27c2011](https://github.com/stritti/nak-district-planner/commit/27c201166f810b200372eddc5c2bad74bcac0ba8))
+* **db:** persist leader unavailability ([06016e4](https://github.com/stritti/nak-district-planner/commit/06016e406bd73ab912d950007846c155f229548e))
+* **domain:** add conflict service orchestrator ([942b607](https://github.com/stritti/nak-district-planner/commit/942b6075d382b70a3a277b24e433d33f06a0f3c9))
+* **domain:** add initial planning conflict context ([1c0f742](https://github.com/stritti/nak-district-planner/commit/1c0f7429a1a6becae877c06b90dad8f77dc71070))
+* **domain:** add leader unavailability model ([317ec00](https://github.com/stritti/nak-district-planner/commit/317ec00cdcbe9859164bbebc6b76f85f24d87da4))
+* **domain:** add planning conflict rules ([ea7037a](https://github.com/stritti/nak-district-planner/commit/ea7037a30f054bf22c7f89974c4aa15e4c6b4e47))
+* **domain:** configure default conflict rules ([d563558](https://github.com/stritti/nak-district-planner/commit/d563558060cdf088e1ed5ac4148ead7c05dff7fe))
+* **planning:** add domain conflict checks ([ffcd12b](https://github.com/stritti/nak-district-planner/commit/ffcd12b9870f642735c212bb88ebd2ade3ab8cd1))
+* **planning:** complete conflict check API integration ([169840a](https://github.com/stritti/nak-district-planner/commit/169840a9e33f2ae73fba19d453edf3ca3326c336))
+* **planning:** configure conflict checks ([d10a253](https://github.com/stritti/nak-district-planner/commit/d10a253c812739590eee6f74036d570de9f00bc9))
+* **planning:** enforce assignment conflicts ([b965235](https://github.com/stritti/nak-district-planner/commit/b9652359821a5426fba59581b91d3bcb819a9cd8))
+
 ## [0.31.2](https://github.com/stritti/nak-district-planner/compare/v0.31.1...v0.31.2) (2026-09-17)
 
 
