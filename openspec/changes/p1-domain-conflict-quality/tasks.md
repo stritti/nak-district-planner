@@ -39,10 +39,12 @@
   - Bei WARN → explizite Bestätigung über `confirm_warnings`, danach Assignment speichern
   - Die bestehende Codebasis hat keinen separaten `service_assignment_service.py`; die
     Integration erfolgt deshalb im Router mit einem getesteten Application-Adapter.
-- [ ] 3.2 `event_service.py`: Bei Event-Erstellung mit leader_id `conflict_service.check()` aufrufen
-- [ ] 3.3 API-Schema für Conflict-Response (409 Body mit Konfliktliste)
-- [ ] 3.4 Feature-Flag `CONFLICT_CHECK_ENABLED` (default: true)
-- [ ] 3.5 Migration: Fehlende Konfiguration für `MIN_TRAVEL_MINUTES` in Settings ergänzen
+- [x] 3.2 Nicht anwendbar: Der Event-Erstellungspfad erzeugt nur PlanningSlot/EventInstance
+  und akzeptiert keine `leader_id`. Leader-Zuweisungen entstehen ausschließlich über den
+  Assignment-Router und werden dort durch Task 3.1 geprüft.
+- [x] 3.3 API-Schema für Conflict-Response (409 Body mit Konfliktliste)
+- [x] 3.4 Feature-Flag `CONFLICT_CHECK_ENABLED` (default: true)
+- [x] 3.5 Konfiguration für `MIN_TRAVEL_MINUTES` in Settings ergänzen
 
 ## 4. Frontend: Konfliktanzeige
 

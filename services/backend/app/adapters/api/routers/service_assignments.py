@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, status
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.schemas.conflict import ConflictItem, ConflictResponse
 from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentCreate,
     ServiceAssignmentResponse,
@@ -26,16 +27,18 @@ router = APIRouter(
 )
 
 
-def _conflict_detail(conflicts: list) -> list[dict[str, object]]:
-    return [
-        {
-            "rule_id": conflict.rule_id,
-            "severity": conflict.severity,
-            "message": conflict.message,
-            "details": conflict.details,
-        }
-        for conflict in conflicts
-    ]
+def _conflict_detail(conflicts: list) -> ConflictResponse:
+    return ConflictResponse(
+        conflicts=[
+            ConflictItem(
+                rule_id=conflict.rule_id,
+                severity=conflict.severity,
+                message=conflict.message,
+                details=conflict.details,
+            )
+            for conflict in conflicts
+        ]
+    )
 
 
 def _raise_blocking_conflicts(conflicts: list, *, confirm_warnings: bool) -> None:
@@ -44,7 +47,7 @@ def _raise_blocking_conflicts(conflicts: list, *, confirm_warnings: bool) -> Non
     if blocking or (warnings and not confirm_warnings):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"conflicts": _conflict_detail(blocking + warnings)},
+            detail=_conflict_detail(blocking + warnings).model_dump(mode="json"),
         )
 
 

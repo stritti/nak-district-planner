@@ -2,7 +2,7 @@
 
 import importlib.metadata
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     idp_provisioning_keycloak_invite_on_approval: bool = True
     startup_generate_draft_services: bool = False
     use_series_generation: bool = True
+    conflict_check_enabled: bool = True
+    min_travel_minutes: int = Field(default=30, ge=0)
 
     # Version check & self-update
     ghcr_owner: str = "stritti"
