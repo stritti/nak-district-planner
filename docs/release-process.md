@@ -87,10 +87,11 @@ googleapis/release-please-action
                │         → Release-PR wird erstellt / aktualisiert
                │           (CHANGELOG.md + Versions-Bump in Dateien)
                │
-                └─── Release-PR wird gemergt
-                          → GitHub Release + Git-Tag (z. B. v1.2.3)
-                          → Tag-Push startet Docker-Build
-                          → Docker-Images mit Versions-Tag veröffentlicht
+                 └─── Release-PR wird gemergt
+                           → GitHub Release + Git-Tag (z. B. v1.2.3)
+                           → docker-build im selben Workflow-Run
+                             (needs: release-please, releases_created == 'true')
+                           → Docker-Images mit Versions-Tag veröffentlicht
 ```
 
 ### 2. `build.yml` – Kontinuierlicher Docker-Build
@@ -113,7 +114,11 @@ Dieser Workflow wird bei jedem Push auf `main` oder `develop` sowie bei Pull Req
 6. release-please erstellt automatisch:
     - Einen Git-Tag (z. B. `v1.2.0`)
     - Einen GitHub Release mit dem CHANGELOG als Beschreibung
-7. Der `docker-build`-Job baut und veröffentlicht Docker-Images mit Versions-Tags.
+7. Der `docker-build`-Job im selben Workflow-Run (`needs: release-please`,
+   nur bei `releases_created == 'true'`) checkt den Release-Tag aus und baut
+   und veröffentlicht Docker-Images mit Versions-Tags. So funktioniert das
+   auch mit `GITHUB_TOKEN` — ein separater tag-getriggerter Run würde von
+   GitHub unterdrückt.
 
 ---
 
@@ -164,7 +169,7 @@ Die Release-Pipeline wird durch folgende Dateien konfiguriert:
 
 | Datei | Zweck |
 |-------|-------|
-| `release-please-config.json` | Pakete, linked-versions-Plugin, gemeinsame Tag-Konfiguration |
+| `release-please-config.json` | Ein Paket (Root, `simple`), Versionsdateien aller Services via `extra-files`, gemeinsame Tag-Konfiguration |
 | `.release-please-manifest.json` | Aktuelle Versions-Stände (nicht manuell bearbeiten) |
 | `.github/workflows/release.yml` | GitHub Actions Workflow |
 

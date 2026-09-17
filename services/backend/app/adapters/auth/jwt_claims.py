@@ -76,7 +76,7 @@ def extract_memberships_from_claims(claims: dict[str, Any]) -> list[Membership]:
 
                 membership = Membership(
                     id=uuid.uuid4(),
-                    user_sub=claims.get("sub", ""),
+                    user_sub=str(claims.get("sub") or ""),
                     role=role,
                     scope_type=scope_type,
                     scope_id=scope_id,

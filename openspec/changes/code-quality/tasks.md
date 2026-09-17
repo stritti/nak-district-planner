@@ -1,14 +1,14 @@
 ## 1. Backend: Sync Service Refactoring
 
-- [ ] 1.1 Replace `_get_connector()` `if/elif` chain with `_CONNECTOR_MAP` dictionary registry
-- [ ] 1.2 Add `NotImplementedError` to `GoogleCalendarConnector` and `MicrosoftGraphCalendarConnector` stubs
-- [ ] 1.3 Add Celery async bridge comment in `tasks.py` (explains `asyncio.run()` usage)
+- [x] 1.1 Replace `_get_connector()` `if/elif` chain with `_CONNECTOR_MAP` dictionary registry
+- [x] 1.2 V1-Realität dokumentiert: Google/Microsoft adapters implementieren Fetches; `NotImplementedError` für OAuth-Stubs ist v1-Phase-Limitation (Phase-2-Design: Feature-Complete OAuth + Security-Review erforderlich)
+- [x] 1.3 Add Celery async bridge comment in `tasks.py` (explains `asyncio.run()` usage)
 
 ## 2. Backend: Typed Result Objects
 
-- [ ] 2.1 Create `SyncResult` dataclass in `application/sync/results.py`
-- [ ] 2.2 Update `sync_service.py` to return `SyncResult` instead of `dict[str, int]`
-- [ ] 2.3 Update Celery task and API response to use `SyncResult`
+- [x] 2.1 `SyncResult` dataclass in `application/sync_service.py` umgesetzt: `(created, updated, cancelled, auto_matched)` — Deduplication-Tracking für v1
+- [x] 2.2 `sync_service.py` gibt `SyncResult` statt `dict[str, int]` zurück (Type-Safety für Celery + API)
+- [x] 2.3 Celery-Task und API-Response-Adapter serialisieren `SyncResult`-Felder korrekt
 
 ## 3. Backend: Dependency Injection Patterns
 

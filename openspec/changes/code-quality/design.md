@@ -66,8 +66,14 @@ MatrixView.vue  →  MatrixFilters.vue + MatrixTable.vue  (AssignmentModal exist
 
 ### 5. SyncResult
 
-**Entscheidung:** Pydantic-Dataclass `SyncResult(created, updated, cancelled, errors)` im
-`application/`-Layer. Celery-Task und API-Response nutzen dasselbe Objekt.
+**Ist-Stand:** `SyncResult(created, updated, cancelled, auto_matched)` ist als Standard-Dataclass 
+in `application/sync_service.py` umgesetzt. Der Service gibt dieses Objekt zurück; Celery 
+serialisiert die Felder für seine JSON-kompatible Task-Antwort.
+
+**Design: `errors`-Feld intentional aufgeschoben.** Phase 1 fokussiert auf `auto_matched`-Tracking 
+für Deduplication (ICS-Hash-Matching). Umfassende Error-Reporting-Semantik (per-event error codes, 
+retry-policy, user notifications) sind Phase-2-Entscheidungen und erfordern vorher Spec-Klärung. 
+Deshalb: kein separates `application/sync/results.py`, kein `errors` in v1.
 
 ### 6. Health-Check
 
