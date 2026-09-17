@@ -169,7 +169,7 @@ Die Release-Pipeline wird durch folgende Dateien konfiguriert:
 
 | Datei | Zweck |
 |-------|-------|
-| `release-please-config.json` | Pakete, linked-versions-Plugin, gemeinsame Tag-Konfiguration |
+| `release-please-config.json` | Ein Paket (Root, `simple`), Versionsdateien aller Services via `extra-files`, gemeinsame Tag-Konfiguration |
 | `.release-please-manifest.json` | Aktuelle Versions-Stände (nicht manuell bearbeiten) |
 | `.github/workflows/release.yml` | GitHub Actions Workflow |
 
