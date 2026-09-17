@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.adapters.api.routers.service_assignments import _raise_blocking_conflicts
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
+from app.config import Settings
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.leader import Leader
 from app.domain.models.planning_slot import PlanningSlot
@@ -63,6 +64,31 @@ async def test_conflict_adapter_returns_no_conflicts_for_missing_event_data() ->
         )
 
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_conflict_adapter_skips_checks_when_disabled() -> None:
+    session = AsyncMock()
+    with patch(
+        "app.application.service_assignment_conflict.settings.conflict_check_enabled", False
+    ):
+        result = await check_service_assignment_conflicts(
+            session,
+            event_id=uuid.uuid4(),
+            leader_id=uuid.uuid4(),
+        )
+
+    assert result == []
+    session.execute.assert_not_awaited()
+
+
+def test_conflict_settings_have_safe_defaults_and_validate_travel_minutes() -> None:
+    settings = Settings()
+
+    assert settings.conflict_check_enabled is True
+    assert settings.min_travel_minutes == 30
+    with pytest.raises(ValueError):
+        Settings(min_travel_minutes=-1)
 
 
 @pytest.mark.asyncio
