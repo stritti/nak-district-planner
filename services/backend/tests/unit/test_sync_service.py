@@ -502,6 +502,10 @@ class TestRunSync:
         assert saved_link.event_instance_id == instance.id
         assert saved_link.last_synced_hash == raw.content_hash
 
+    def test_get_connector_rejects_unsupported_calendar_type(self):
+        with pytest.raises(NotImplementedError, match="No connector implemented"):
+            _get_connector("UNSUPPORTED")  # type: ignore[arg-type]
+
     async def test_auto_match_flags_significant_deviation(self, mocks):
         """Auto-matched event starting >5 min from the planned time sets
         deviation_flag=True (but still matches within the 120 min tolerance).
