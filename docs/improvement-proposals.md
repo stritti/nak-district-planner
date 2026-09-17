@@ -5,10 +5,13 @@ OpenSpec-Spezifikationen. Es identifiziert Vereinfachungspotenziale, architekton
 Refactoring-Möglichkeiten sowie UX-Verbesserungen und dient als Planungsgrundlage für die
 Weiterentwicklung.
 
-> **Status:** Entwurf – Stand April 2026
+> **Status:** Entwurf – Stand April 2026  
 > **Basis:** OpenSpec-Änderungen `uc-01` bis `uc-06`, `planning-slot-hybrid-sync`,
 > `introduce-rbac-permissions-model`, `harden-calendar-sync-algorithm`,
-> `introduce-non-functional-baseline`, `phase4b-oidc-auth-idp-agnostic`
+> `introduce-non-functional-baseline`, `phase4b-oidc-auth-idp-agnostic`  
+> **Hinweis:** Die Implementierungstabelle (Abschnitt 1) wurde mit dem aktuellen Code abgeglichen. 
+> Große Teile des Dokuments (Architektonische Lücken, Refactoring-Empfehlungen) sind älter und müssen 
+> ggf. separat aktualisiert werden.
 
 ---
 
@@ -32,7 +35,7 @@ Weiterentwicklung.
 | **EventInstance (Soll/Ist)** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – Matrix liefert Plan/Ist-Daten |
 | **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
 | **RBAC-Durchsetzung** | ✅ | 🟡 | `introduce-rbac-permissions-model` | Modelle vorhanden, Guards unvollständig |
-| **Sync-Zustandsmaschine (Harden)** | ✅ | ❌ | `harden-calendar-sync-algorithm` | Phase 4 |
+| **Sync-Zustandsmaschine (Harden)** | ✅ | ❌ | `harden-calendar-sync-algorithm` | Phase 4 – nur `CLEAN`/`DIRTY_EXTERNAL`, `DIRTY_INTERNAL`/`CONFLICT` fehlen |
 | **ExternalEventLink** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 3 |
 | **In-App-Benachrichtigungen** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
 | **Rate-Limiting (public Endpoints)** | ✅ | ❌ | `introduce-non-functional-baseline` | Phase 5 |
@@ -289,22 +292,6 @@ durchgeführt. Die geplante Sync-Zustandsmaschine benötigt jedoch ein explizite
 Link-Objekt mit Revision-Markierungen.
 
 **Priorität:** 🟡 Niedrig (Phase 3 der Roadmap).
-
----
-
-### 3.7 🟡 NIEDRIG: Kein Health-Check-Endpoint
-
-**Status:** → OpenSpec-Change [`code-quality`](/openspec/changes/code-quality/proposal)
-
-**Beschreibung:** Es gibt keinen standardisierten Health-Check-Endpoint (z.B. `GET /health`),
-der DB- und Redis-Verbindungsstatus zurückgibt.
-
-**Maßnahmen:**
-
-- Einfachen `GET /health`-Endpoint hinzufügen, der DB-Ping und Redis-Ping prüft
-- In Docker Compose als `healthcheck` referenzieren
-
-**Priorität:** 🟡 Niedrig.
 
 ---
 
