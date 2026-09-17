@@ -29,8 +29,8 @@
 - [x] 2.2 ORM-Modell `LeaderUnavailabilityModel` in `adapters/db/orm_models/`
 - [x] 2.3 Alembic-Migration für `leader_unavailabilities`-Tabelle
 - [x] 2.4 Repository `SqlLeaderUnavailabilityRepository` mit CRUD + Überschneidungsabfrage
-- [ ] 2.5 API-Router `routers/leader_unavailabilities.py` (CRUD, geschützt mit PLANNER+)
-- [ ] 2.6 Router in `main.py` registrieren
+- [x] 2.5 API-Router `routers/leader_unavailabilities.py` (CRUD, geschützt mit PLANNER+)
+- [x] 2.6 Router in `main.py` registrieren
 
 ## 3. Integration in bestehende Services
 
