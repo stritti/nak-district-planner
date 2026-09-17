@@ -13,6 +13,7 @@ from app.adapters.db.orm_models.invitation_overwrite_request import (
 )
 from app.adapters.db.orm_models.leader import LeaderORM
 from app.adapters.db.orm_models.leader_registration import LeaderRegistrationORM
+from app.adapters.db.orm_models.leader_unavailability import LeaderUnavailabilityORM
 from app.adapters.db.orm_models.membership import MembershipORM
 from app.adapters.db.orm_models.notification import NotificationORM
 from app.adapters.db.orm_models.planning_series import PlanningSeriesORM

@@ -58,7 +58,10 @@ Regeln sind unabhängige Funktionen in `conflict_rules.py`:
 | `travel_time_check` | Zwei Zuweisungen in verschiedenen Gemeinden haben < `min_travel_minutes` Abstand | WARN |
 | `role_requirement_check` | Der zugewiesene Dienst erfordert eine bestimmte Amtsstufe | BLOCK |
 | `leader_available` | Amtsträger hat im Zeitraum eine `leader_unavailability` | BLOCK |
-| `congregation_distance_check` | Zuweisungen in verschiedenen Gemeinden erfordern expliziten Vermerk | WARN |
+
+`congregation_distance_check` wird nicht als separate Regel implementiert. Ein
+Gemeindewechsel wird ausschließlich durch `travel_time_check` bewertet, damit für
+denselben Sachverhalt keine doppelten Warnungen entstehen.
 
 ### Decision 3: Integration via Application Service
 

@@ -1,42 +1,44 @@
 ## 1. Domain Conflict Engine
 
-- [ ] 1.1 `domain/planning/conflict_result.py`:
+- [x] 1.1 `domain/planning/conflict_result.py`:
   - `Severity`-Enum: `PASS`, `WARN`, `BLOCK`
   - `ConflictResult`-Dataclass: `rule_id`, `severity`, `message` (DE+EN), `details` (dict)
-- [ ] 1.2 `domain/planning/conflict_rules.py`:
+- [x] 1.2 `domain/planning/conflict_rules.py`:
   - `no_double_booking`: Prüft auf zeitgleiche Zuweisungen → BLOCK
   - `travel_time_check`: Prüft Mindestabstand bei verschiedenen Gemeinden → WARN (konfigurierbar: `MIN_TRAVEL_MINUTES=30`)
   - `role_requirement_check`: Prüft Amtsstufe gegen Dienstanforderung → BLOCK
   - `leader_available`: Prüft Abwesenheiten im Zeitraum → BLOCK
-  - `congregation_distance_check`: Verschiedene Gemeinden direkt nacheinander → WARN
-- [ ] 1.3 `domain/planning/conflict_service.py`:
+  - `congregation_distance_check`: entfällt; Gemeindewechsel werden durch `travel_time_check` bewertet
+- [x] 1.3 `domain/planning/conflict_service.py`:
   - `check(leader_id, start_time, end_time, congregation_id, required_role, existing_assignments, unavailability_periods) → list[ConflictResult]`
   - Orchestriert alle Regeln, sammelt Ergebnisse
-- [ ] 1.4 `ConflictContext`-Dataclass als Parameterobjekt
-- [ ] 1.5 Unit-Tests für jede Regel:
+- [x] 1.4 `ConflictContext`-Dataclass als Parameterobjekt
+- [x] 1.5 Unit-Tests für jede Regel:
   - Double-Booking mit überlappenden Events
   - Double-Booking mit angrenzenden Events (kein Konflikt)
   - Travel-Time-Verletzung (30min < 45min → OK)
   - Travel-Time-Verletzung (15min < 30min → WARN)
   - Role-Requirement erfüllt/nicht erfüllt
   - Leader-Unavailability im Zeitraum/außerhalb
-- [ ] 1.6 Integrationstest: Conflict Service orchestriert korrekt
+- [x] 1.6 Integrationstest: Conflict Service orchestriert korrekt
 
 ## 2. Leader Unavailability
 
-- [ ] 2.1 Domain-Modell `LeaderUnavailability` in `domain/models/leader_unavailability.py`
+- [x] 2.1 Domain-Modell `LeaderUnavailability` in `domain/models/leader_unavailability.py`
   - `id`, `leader_id`, `start_date`, `end_date`, `reason` (Enum: URLAUB, SPERRZEIT, FORTBILDUNG, SONSTIGES), `note`
-- [ ] 2.2 ORM-Modell `LeaderUnavailabilityModel` in `adapters/db/orm_models/`
-- [ ] 2.3 Alembic-Migration für `leader_unavailabilities`-Tabelle
-- [ ] 2.4 Repository `SqlLeaderUnavailabilityRepository` mit CRUD + Überschneidungsabfrage
-- [ ] 2.5 API-Router `routers/leader_unavailabilities.py` (CRUD, geschützt mit PLANNER+)
-- [ ] 2.6 Router in `main.py` registrieren
+- [x] 2.2 ORM-Modell `LeaderUnavailabilityModel` in `adapters/db/orm_models/`
+- [x] 2.3 Alembic-Migration für `leader_unavailabilities`-Tabelle
+- [x] 2.4 Repository `SqlLeaderUnavailabilityRepository` mit CRUD + Überschneidungsabfrage
+- [x] 2.5 API-Router `routers/leader_unavailabilities.py` (CRUD, geschützt mit PLANNER+)
+- [x] 2.6 Router in `main.py` registrieren
 
 ## 3. Integration in bestehende Services
 
-- [ ] 3.1 `service_assignment_service.py`: Vor Zuweisung `conflict_service.check()` aufrufen
+- [x] 3.1 Assignment-Router: Vor Zuweisung `conflict_service.check()` aufrufen
   - Bei BLOCK → `ConflictError` → API 409 Conflict
-  - Bei WARN → Assignment speichern mit `warnings`-Attribut
+  - Bei WARN → explizite Bestätigung über `confirm_warnings`, danach Assignment speichern
+  - Die bestehende Codebasis hat keinen separaten `service_assignment_service.py`; die
+    Integration erfolgt deshalb im Router mit einem getesteten Application-Adapter.
 - [ ] 3.2 `event_service.py`: Bei Event-Erstellung mit leader_id `conflict_service.check()` aufrufen
 - [ ] 3.3 API-Schema für Conflict-Response (409 Body mit Konfliktliste)
 - [ ] 3.4 Feature-Flag `CONFLICT_CHECK_ENABLED` (default: true)

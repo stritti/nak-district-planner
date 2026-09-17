@@ -14,6 +14,7 @@ class ServiceAssignmentCreate(BaseModel):
     leader_id: uuid.UUID | None = None
     leader_name: str | None = Field(default=None, min_length=1, max_length=255)
     status: AssignmentStatus = AssignmentStatus.ASSIGNED
+    confirm_warnings: bool = False
 
     @model_validator(mode="after")
     def check_leader(self) -> "ServiceAssignmentCreate":
@@ -28,6 +29,7 @@ class ServiceAssignmentUpdate(BaseModel):
     leader_id: uuid.UUID | None = None
     leader_name: str | None = Field(default=None, min_length=1, max_length=255)
     status: AssignmentStatus | None = None
+    confirm_warnings: bool = False
 
 
 class ServiceAssignmentResponse(BaseModel):
