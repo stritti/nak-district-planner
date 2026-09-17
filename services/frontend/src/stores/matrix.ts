@@ -38,15 +38,16 @@ export const useMatrixStore = defineStore('matrix', () => {
     assignmentId: string | null,
     options: { leaderId?: string | null; leaderName?: string | null },
     assignmentStatus?: 'OPEN' | 'ASSIGNED' | 'CONFIRMED',
+    confirmWarnings = false,
   ) {
     if (assignmentId) {
       if (assignmentStatus) {
-        await updateAssignment(eventId, assignmentId, options, assignmentStatus)
+        await updateAssignment(eventId, assignmentId, options, assignmentStatus, confirmWarnings)
       } else {
-        await updateAssignment(eventId, assignmentId, options)
+        await updateAssignment(eventId, assignmentId, options, undefined, confirmWarnings)
       }
     } else {
-      await createAssignment(eventId, options, assignmentStatus ?? 'ASSIGNED')
+      await createAssignment(eventId, options, assignmentStatus ?? 'ASSIGNED', confirmWarnings)
     }
     await fetch() // refresh matrix
   }

@@ -124,6 +124,30 @@
         class="mb-3"
       />
 
+      <div
+        v-if="modal.conflicts.length > 0"
+        class="mb-4 rounded border p-3"
+        :class="hasBlockingConflict
+          ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/30'
+          : 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30'"
+        role="alert"
+      >
+        <p
+          class="text-sm font-semibold"
+          :class="hasBlockingConflict ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'"
+        >
+          {{ hasBlockingConflict ? 'Zuweisung blockiert' : 'Konflikt erkannt' }}
+        </p>
+        <ul class="mt-2 space-y-1 text-sm text-gray-700 dark:text-gray-300">
+          <li v-for="conflict in modal.conflicts" :key="`${conflict.rule_id}-${conflict.message}`">
+            {{ conflict.message }}
+          </li>
+        </ul>
+        <p v-if="!hasBlockingConflict" class="mt-2 text-xs text-amber-800 dark:text-amber-200">
+          Bitte bestätige die Zuweisung trotz dieses Hinweises.
+        </p>
+      </div>
+
       <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modal.error }}</p>
 
       <div class="flex justify-end gap-3 mt-5">
@@ -148,10 +172,10 @@
         </button>
         <button
           class="btn-primary px-4 py-2"
-          :disabled="!canSubmit || modal.saving"
+          :disabled="!canSubmit || modal.saving || hasBlockingConflict"
           @click="submitAssignment"
         >
-          {{ modal.saving ? 'Speichern…' : (modal.isGap ? 'Zuweisen' : 'Speichern') }}
+          {{ modal.saving ? 'Speichern…' : (hasWarnings ? 'Trotz Warnung speichern' : (modal.isGap ? 'Zuweisen' : 'Speichern')) }}
         </button>
       </div>
     </div>
@@ -164,6 +188,8 @@ import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
 import { useLeadersStore } from '../stores/leaders'
+import { ApiError } from '../api/client'
+import type { ConflictItem } from '../api/serviceAssignments'
 import {
   createInvitations,
   deleteInvitation,
@@ -199,6 +225,7 @@ const modal = reactive({
   moveDurationMinutes: 90,
   moveSaving: false,
   moveError: '',
+  conflicts: [] as ConflictItem[],
 })
 
 const canSubmit = computed(() => {
@@ -211,6 +238,9 @@ const canSubmit = computed(() => {
 const hasLeaderSelection = computed(() => {
   return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
 })
+
+const hasBlockingConflict = computed(() => modal.conflicts.some((conflict) => conflict.severity === 'BLOCK'))
+const hasWarnings = computed(() => modal.conflicts.some((conflict) => conflict.severity === 'WARN'))
 
 const invitation = reactive({
   targetType: '' as '' | 'DISTRICT_CONGREGATION' | 'EXTERNAL_NOTE',
@@ -261,6 +291,7 @@ function openModal(cell: MatrixCell, date: string, congregationName: string, con
   }
   modal.saving = false
   modal.error = ''
+  modal.conflicts = []
   modal.moveSaving = false
   modal.moveError = ''
   modal.moveDate = date
@@ -389,13 +420,25 @@ async function submitAssignment() {
     if (!hasLeader) {
       await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
     } else if (modal.leaderInput.id !== null) {
-      await matrixStore.assign(modal.eventId, modal.assignmentId, { leaderId: modal.leaderInput.id })
+      await matrixStore.assign(
+        modal.eventId,
+        modal.assignmentId,
+        { leaderId: modal.leaderInput.id },
+        undefined,
+        hasWarnings.value,
+      )
     } else {
-      await matrixStore.assign(modal.eventId, modal.assignmentId, { leaderName: leaderText })
+      await matrixStore.assign(
+        modal.eventId,
+        modal.assignmentId,
+        { leaderName: leaderText },
+        undefined,
+        hasWarnings.value,
+      )
     }
     closeModal()
   } catch (e) {
-    modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+    applyAssignmentError(e)
   } finally {
     modal.saving = false
   }
@@ -416,6 +459,7 @@ async function confirmAssignment() {
         modal.assignmentId,
         { leaderId: modal.leaderInput.id },
         'CONFIRMED',
+        hasWarnings.value,
       )
     } else {
       await matrixStore.assign(
@@ -423,14 +467,25 @@ async function confirmAssignment() {
         modal.assignmentId,
         { leaderName: leaderText },
         'CONFIRMED',
+        hasWarnings.value,
       )
     }
     closeModal()
   } catch (e) {
-    modal.error = e instanceof Error ? e.message : 'Fehler beim Bestaetigen'
+    applyAssignmentError(e)
   } finally {
     modal.saving = false
   }
+}
+
+function applyAssignmentError(error: unknown) {
+  if (error instanceof ApiError && error.status === 409) {
+    const payload = error.payload as { detail?: { conflicts?: ConflictItem[] } } | undefined
+    modal.conflicts = payload?.detail?.conflicts ?? []
+    modal.error = modal.conflicts.length === 0 ? 'Die Zuweisung konnte wegen eines Konflikts nicht gespeichert werden.' : ''
+    return
+  }
+  modal.error = error instanceof Error ? error.message : 'Fehler beim Speichern'
 }
 
 async function removeAssignmentFromModal() {

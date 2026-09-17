@@ -10,10 +10,22 @@ export interface ServiceAssignmentResponse {
   updated_at: string
 }
 
+export interface ConflictItem {
+  rule_id: string
+  severity: 'PASS' | 'WARN' | 'BLOCK'
+  message: string
+  details: Record<string, unknown>
+}
+
+export interface ConflictResponse {
+  conflicts: ConflictItem[]
+}
+
 export function createAssignment(
   eventId: string,
   options: { leaderId?: string | null; leaderName?: string | null },
   assignmentStatus: 'OPEN' | 'ASSIGNED' | 'CONFIRMED' = 'ASSIGNED',
+  confirmWarnings = false,
 ): Promise<ServiceAssignmentResponse> {
   return apiFetch<ServiceAssignmentResponse>(`/api/v1/events/${eventId}/assignments`, {
     method: 'POST',
@@ -21,6 +33,7 @@ export function createAssignment(
       leader_id: options.leaderId ?? null,
       leader_name: options.leaderName ?? null,
       status: assignmentStatus,
+      confirm_warnings: confirmWarnings,
     }),
   })
 }
@@ -30,6 +43,7 @@ export function updateAssignment(
   assignmentId: string,
   options: { leaderId?: string | null; leaderName?: string | null },
   assignmentStatus?: 'OPEN' | 'ASSIGNED' | 'CONFIRMED',
+  confirmWarnings = false,
 ): Promise<ServiceAssignmentResponse> {
   return apiFetch<ServiceAssignmentResponse>(
     `/api/v1/events/${eventId}/assignments/${assignmentId}`,
@@ -39,6 +53,7 @@ export function updateAssignment(
         leader_id: options.leaderId ?? null,
         leader_name: options.leaderName ?? null,
         ...(assignmentStatus ? { status: assignmentStatus } : {}),
+        confirm_warnings: confirmWarnings,
       }),
     },
   )
