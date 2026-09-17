@@ -9,7 +9,7 @@
   - `role_requirement_check`: Prüft Amtsstufe gegen Dienstanforderung → BLOCK
   - `leader_available`: Prüft Abwesenheiten im Zeitraum → BLOCK
   - `congregation_distance_check`: Verschiedene Gemeinden direkt nacheinander → WARN
-- [ ] 1.3 `domain/planning/conflict_service.py`:
+- [x] 1.3 `domain/planning/conflict_service.py`:
   - `check(leader_id, start_time, end_time, congregation_id, required_role, existing_assignments, unavailability_periods) → list[ConflictResult]`
   - Orchestriert alle Regeln, sammelt Ergebnisse
 - [x] 1.4 `ConflictContext`-Dataclass als Parameterobjekt
