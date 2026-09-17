@@ -1,6 +1,6 @@
 ## 1. Domain Conflict Engine
 
-- [ ] 1.1 `domain/planning/conflict_result.py`:
+- [x] 1.1 `domain/planning/conflict_result.py`:
   - `Severity`-Enum: `PASS`, `WARN`, `BLOCK`
   - `ConflictResult`-Dataclass: `rule_id`, `severity`, `message` (DE+EN), `details` (dict)
 - [ ] 1.2 `domain/planning/conflict_rules.py`:
@@ -12,7 +12,7 @@
 - [ ] 1.3 `domain/planning/conflict_service.py`:
   - `check(leader_id, start_time, end_time, congregation_id, required_role, existing_assignments, unavailability_periods) → list[ConflictResult]`
   - Orchestriert alle Regeln, sammelt Ergebnisse
-- [ ] 1.4 `ConflictContext`-Dataclass als Parameterobjekt
+- [x] 1.4 `ConflictContext`-Dataclass als Parameterobjekt
 - [ ] 1.5 Unit-Tests für jede Regel:
   - Double-Booking mit überlappenden Events
   - Double-Booking mit angrenzenden Events (kein Konflikt)
