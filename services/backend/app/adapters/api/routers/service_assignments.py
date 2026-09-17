@@ -16,6 +16,7 @@ from app.adapters.api.schemas.service_assignment import (
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.repositories import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
+from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
 
@@ -23,6 +24,28 @@ router = APIRouter(
     prefix="/api/v1/events/{event_id}/assignments",
     tags=["service-assignments"],
 )
+
+
+def _conflict_detail(conflicts: list) -> list[dict[str, object]]:
+    return [
+        {
+            "rule_id": conflict.rule_id,
+            "severity": conflict.severity,
+            "message": conflict.message,
+            "details": conflict.details,
+        }
+        for conflict in conflicts
+    ]
+
+
+def _raise_blocking_conflicts(conflicts: list, *, confirm_warnings: bool) -> None:
+    blocking = [conflict for conflict in conflicts if conflict.severity.value == "BLOCK"]
+    warnings = [conflict for conflict in conflicts if conflict.severity.value == "WARN"]
+    if blocking or (warnings and not confirm_warnings):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"conflicts": _conflict_detail(blocking + warnings)},
+        )
 
 
 def _assignment_response(assignment: ServiceAssignment) -> ServiceAssignmentResponse:
@@ -52,6 +75,14 @@ async def create_assignment(
 
     # Check if user has PLANNER role (or higher) in the district
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
+
+    if body.leader_id is not None:
+        conflicts = await check_service_assignment_conflicts(
+            db,
+            event_id=event_id,
+            leader_id=body.leader_id,
+        )
+        _raise_blocking_conflicts(conflicts, confirm_warnings=body.confirm_warnings)
 
     assignment = ServiceAssignment.create(
         event_id=event_id,
@@ -109,6 +140,14 @@ async def update_assignment(
 
     fields = body.model_fields_set
     if "leader_id" in fields:
+        if body.leader_id is not None:
+            conflicts = await check_service_assignment_conflicts(
+                db,
+                event_id=event_id,
+                leader_id=body.leader_id,
+                exclude_assignment_id=assignment.id,
+            )
+            _raise_blocking_conflicts(conflicts, confirm_warnings=body.confirm_warnings)
         assignment.leader_id = body.leader_id
     if "leader_name" in fields:
         assignment.leader_name = body.leader_name

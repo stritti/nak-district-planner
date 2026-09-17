@@ -34,9 +34,11 @@
 
 ## 3. Integration in bestehende Services
 
-- [ ] 3.1 `service_assignment_service.py`: Vor Zuweisung `conflict_service.check()` aufrufen
+- [x] 3.1 Assignment-Router: Vor Zuweisung `conflict_service.check()` aufrufen
   - Bei BLOCK → `ConflictError` → API 409 Conflict
-  - Bei WARN → Assignment speichern mit `warnings`-Attribut
+  - Bei WARN → explizite Bestätigung über `confirm_warnings`, danach Assignment speichern
+  - Die bestehende Codebasis hat keinen separaten `service_assignment_service.py`; die
+    Integration erfolgt deshalb im Router mit einem getesteten Application-Adapter.
 - [ ] 3.2 `event_service.py`: Bei Event-Erstellung mit leader_id `conflict_service.check()` aufrufen
 - [ ] 3.3 API-Schema für Conflict-Response (409 Body mit Konfliktliste)
 - [ ] 3.4 Feature-Flag `CONFLICT_CHECK_ENABLED` (default: true)

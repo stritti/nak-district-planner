@@ -241,6 +241,10 @@ class ServiceAssignmentRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_by_leader(self, leader_id: uuid.UUID) -> list[ServiceAssignment]:
+        pass
+
+    @abstractmethod
     async def save(self, assignment: ServiceAssignment) -> None:
         pass
 
