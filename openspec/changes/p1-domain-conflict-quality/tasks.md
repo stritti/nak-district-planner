@@ -57,10 +57,10 @@
 
 ## 5. Frontend: Abwesenheitsverwaltung
 
-- [ ] 5.1 `LeaderUnavailabilityForm.vue`: Formular für neue Abwesenheit (Leader-Auswahl, Datum, Grund)
-- [ ] 5.2 `LeaderUnavailabilityList.vue`: Liste bestehender Abwesenheiten mit Filter
-- [ ] 5.3 API-Integration in Pinia-Store
-- [ ] 5.4 Navigation: Abwesenheiten in Leader-Detailansicht integrieren
+- [x] 5.1 `LeaderUnavailabilityPanel.vue`: Formular für neue Abwesenheit (Leader-Auswahl, Datum, Grund)
+- [x] 5.2 `LeaderUnavailabilityPanel.vue`: Liste bestehender Abwesenheiten mit Bezirksscope
+- [x] 5.3 API-Integration über `api/leaderUnavailabilities.ts`
+- [x] 5.4 Abwesenheiten in der Leader-Verwaltungsansicht integrieren
 
 ## 6. Frontend: Formular-Validierung und Fehlerzustände
 
