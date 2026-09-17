@@ -252,4 +252,109 @@ test.describe('Matrix assignment flow', () => {
     await expect(page.getByRole('button', { name: /LÜCKE/i })).toBeHidden({ timeout: 10000 })
     await expect(page.getByText('Pr. Tester')).toBeVisible({ timeout: 10000 })
   })
+
+  test('blocking conflict is shown and prevents assignment', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('auth', JSON.stringify({
+        token: { accessToken: 'fake-access-token', idToken: 'fake-id-token', expiresAt: Math.floor(Date.now() / 1000) + 3600 },
+        user: { sub: 'planner-user', email: 'planner@example.com', name: 'Planner User' },
+        isSuperadmin: false,
+        accessStatus: 'ACTIVE',
+        memberships: [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'district-1' }],
+      }))
+      localStorage.setItem('matrix', JSON.stringify({ districtId: 'district-1', groupId: '', fromDt: '2026-04-01', toDt: '2026-04-30' }))
+      localStorage.setItem('districts', JSON.stringify({ selectedDistrictId: 'district-1' }))
+    })
+
+    await page.route('**/api/v1/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        sub: 'planner-user', email: 'planner@example.com', username: 'planner', name: 'Planner User',
+        given_name: 'Planner', family_name: 'User', is_superadmin: false,
+      }) })
+    })
+    await page.route('**/api/v1/auth/access', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ACTIVE', memberships: [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'district-1' }],
+      }) })
+    })
+    await page.route('**/api/v1/districts', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'district-1', name: 'Bezirk 1' }]) })
+    })
+    await page.route('**/api/v1/districts/district-1/groups', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await page.route('**/api/v1/districts/district-1/congregations**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+        id: 'cong-1', name: 'Gemeinde A', district_id: 'district-1', group_id: null, group_name: null,
+        invitation_target_type: null, invitation_target_congregation_id: null, invitation_external_note: null,
+        service_times: [], created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z',
+      }]) })
+    })
+    await page.route('**/api/v1/districts/district-1/leaders', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+        id: 'leader-1', name: 'Konflikt Leader', district_id: 'district-1', rank: 'Pr.', congregation_id: 'cong-1',
+        special_role: null, user_sub: null, email: null, phone: null, notes: null, is_active: true,
+        created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z',
+      }]) })
+    })
+    await page.route(/\/api\/v1\/events\/event-block\/invitations(?:\?.*)?$/, async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await page.route(/\/api\/v1\/events\/event-block\/assignments(?:\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: { conflicts: [{
+          rule_id: 'no_double_booking', severity: 'BLOCK', message: 'Der Amtsträger ist bereits eingeplant.', details: {},
+        }] } }),
+      })
+    })
+    await page.route(/\/api\/v1\/districts\/district-1\/matrix(?:\?.*)?$/, async (route) => {
+      const body = {
+        dates: ['2026-04-08'],
+        holidays: {},
+        rows: [{
+          congregation_id: 'cong-1',
+          congregation_name: 'Gemeinde A',
+          group_id: null,
+          group_name: null,
+          cells: {
+            '2026-04-08': {
+              event_id: 'event-block',
+              assignment_event_id: 'event-block',
+              invitation_count: 0,
+              event_title: 'Gottesdienst',
+              category: 'Gottesdienst',
+              is_gap: true,
+              is_assignment_editable: true,
+              assignment_id: null,
+              assignment_status: null,
+              leader_id: null,
+              leader_name: null,
+              has_deviation: false,
+              planned_time: null,
+              actual_start_at: null,
+              deviation_start_diff_minutes: null,
+              deviation_end_diff_minutes: null,
+            },
+          },
+        }],
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+    })
+
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    await page.getByRole('button', { name: /LÜCKE/i }).click()
+    const input = page.getByPlaceholder(/Name eingeben/i)
+    await input.fill('Konflikt Leader')
+    await page.getByRole('option', { name: /Konflikt Leader/i }).click()
+    await page.getByRole('button', { name: 'Zuweisen' }).click()
+
+    await expect(page.getByRole('alert')).toContainText('Zuweisung blockiert')
+    await expect(page.getByRole('alert')).toContainText('bereits eingeplant')
+    await expect(page.getByRole('heading', { name: /Amtstragende:n zuweisen/i })).toBeVisible()
+  })
 })
