@@ -46,7 +46,7 @@
 - [x] 3.4 Feature-Flag `CONFLICT_CHECK_ENABLED` (default: true)
 - [x] 3.5 Konfiguration für `MIN_TRAVEL_MINUTES` in Settings ergänzen
 
-## 4. Frontend: Konfliktanzeige
+## 4. Integration im Frontend
 
 - [ ] 4.1 `ConflictBanner.vue`-Komponente: Zeigt Konflikte nach Severity (rot/gelb) mit Nachricht
 - [ ] 4.2 Integration in Matrix-View: Zellen mit Konflikten markieren (Warnsymbol/Hintergrundfarbe)
@@ -87,6 +87,6 @@
 
 ## 8. Dokumentation
 
-- [ ] 8.1 Konfliktregeln in `docs/conflict-rules.md` dokumentieren
-- [ ] 8.2 Feature-Flag `CONFLICT_CHECK_ENABLED` in Betriebsdokumentation aufnehmen
-- [ ] 8.3 E2E-Test-Setup in `tests/e2e/README.md` dokumentieren
+- [x] 8.1 Konfliktregeln in `docs/conflict-rules.md` dokumentieren
+- [x] 8.2 Feature-Flag `CONFLICT_CHECK_ENABLED` in `docs/conflict-rules.md` dokumentieren
+- [x] 8.3 E2E-Test-Setup in `tests/e2e/README.md` dokumentieren
