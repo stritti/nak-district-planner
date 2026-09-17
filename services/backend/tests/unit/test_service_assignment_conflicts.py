@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.adapters.api.routers.service_assignments import _raise_blocking_conflicts
+from app.adapters.api.schemas.conflict import ConflictResponse
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.config import Settings
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
@@ -41,6 +42,30 @@ def test_warning_requires_explicit_confirmation() -> None:
 
 def test_confirmed_warning_is_allowed() -> None:
     _raise_blocking_conflicts([_conflict(Severity.WARN)], confirm_warnings=True)
+
+
+def test_conflict_response_schema_serializes_stable_error_shape() -> None:
+    response = ConflictResponse(
+        conflicts=[
+            {
+                "rule_id": "test_rule",
+                "severity": Severity.BLOCK,
+                "message": "Konflikt",
+                "details": {},
+            }
+        ]
+    )
+
+    assert response.model_dump(mode="json") == {
+        "conflicts": [
+            {
+                "rule_id": "test_rule",
+                "severity": "BLOCK",
+                "message": "Konflikt",
+                "details": {},
+            }
+        ]
+    }
 
 
 @pytest.mark.asyncio
