@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { apiFetch } from './client'
+import { ApiError, apiFetch } from './client'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
 
@@ -88,6 +88,23 @@ describe('apiFetch', () => {
     )
 
     await expect(apiFetch('/api/v1/fail')).rejects.toThrow('400')
+  })
+
+  it('preserves structured conflict payloads on API errors', async () => {
+    const payload = {
+      detail: {
+        conflicts: [{ rule_id: 'no_double_booking', severity: 'BLOCK' }],
+      },
+    }
+    vi.mocked(fetch).mockResolvedValue(
+      makeResponse(payload, { status: 409, ok: false }) as unknown as Response,
+    )
+
+    const error = await apiFetch('/api/v1/assignments').catch((value: unknown) => value)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.status).toBe(409)
+    expect(error.payload).toEqual(payload)
   })
 
   it('returns undefined for 204 No Content', async () => {
