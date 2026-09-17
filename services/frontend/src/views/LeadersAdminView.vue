@@ -157,6 +157,11 @@
           </div>
         </div>
       </div>
+
+      <LeaderUnavailabilityPanel
+        :district-id="selectedDistrictId"
+        :leaders="leaders"
+      />
     </template>
     <!-- /Leaders tab -->
 
@@ -672,6 +677,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import LeaderUnavailabilityPanel from '../components/LeaderUnavailabilityPanel.vue'
 import {
   BuildingOffice2Icon,
   CheckIcon,

@@ -46,36 +46,36 @@
 - [x] 3.4 Feature-Flag `CONFLICT_CHECK_ENABLED` (default: true)
 - [x] 3.5 Konfiguration für `MIN_TRAVEL_MINUTES` in Settings ergänzen
 
-## 4. Frontend: Konfliktanzeige
+## 4. Integration im Frontend
 
 - [ ] 4.1 `ConflictBanner.vue`-Komponente: Zeigt Konflikte nach Severity (rot/gelb) mit Nachricht
 - [ ] 4.2 Integration in Matrix-View: Zellen mit Konflikten markieren (Warnsymbol/Hintergrundfarbe)
-- [ ] 4.3 Integration in ServiceAssignment-Dialog: Conflict-Banner vor Bestätigung
-- [ ] 4.4 BLOCK-Konflikte: Submit-Button deaktiviert + Tooltip
-- [ ] 4.5 WARN-Konflikte: Bestätigungsmodal "Trotz Konflikt zuweisen?"
-- [ ] 4.6 Pinia-Store für Konfliktstatus (z. B. `conflictStore`)
+- [x] 4.3 Integration in ServiceAssignment-Dialog: Conflict-Banner vor Bestätigung
+- [x] 4.4 BLOCK-Konflikte: Submit-Button deaktiviert + Tooltip
+- [x] 4.5 WARN-Konflikte: Bestätigungsmodal "Trotz Konflikt zuweisen?"
+- [ ] 4.6 Pinia-Store für Konfliktstatus (z. B. `conflictStore`)
 
-## 5. Frontend: Abwesenheitsverwaltung
+## 5. Leader Unavailability
 
-- [ ] 5.1 `LeaderUnavailabilityForm.vue`: Formular für neue Abwesenheit (Leader-Auswahl, Datum, Grund)
-- [ ] 5.2 `LeaderUnavailabilityList.vue`: Liste bestehender Abwesenheiten mit Filter
-- [ ] 5.3 API-Integration in Pinia-Store
-- [ ] 5.4 Navigation: Abwesenheiten in Leader-Detailansicht integrieren
+- [x] 5.1 `LeaderUnavailabilityPanel.vue`: Formular für neue Abwesenheit (Leader-Auswahl, Datum, Grund)
+- [x] 5.2 `LeaderUnavailabilityPanel.vue`: Liste bestehender Abwesenheiten mit Bezirksscope
+- [x] 5.3 API-Integration über `api/leaderUnavailabilities.ts`
+- [x] 5.4 Abwesenheiten in der Leader-Verwaltungsansicht integrieren
 
-## 6. Frontend: Formular-Validierung und Fehlerzustände
+## 6. Formular-Validierung und Fehlerzustände
 
 - [ ] 6.1 Event-Formular: Validierung von Pflichtfeldern, Datumslogik (Ende > Start)
-- [ ] 6.2 ServiceAssignment-Formular: Leader-Auswahl validieren, 409-Konflikte anzeigen
+- [x] 6.2 ServiceAssignment-Formular: Leader-Auswahl validieren, 409-Konflikte anzeigen
 - [ ] 6.3 District-Congregation-Formulare: Eindeutigkeit prüfen (Name innerhalb Bezirk)
 - [ ] 6.4 Einheitliche Fehleranzeige: `ErrorAlert.vue` für API-Fehler (400, 401, 403, 409, 500)
 - [ ] 6.5 Onboarding-Erstnutzer: Leere-Zustände mit Handlungsaufforderung ("Noch keine Gemeinden")
 
 ## 7. E2E-Tests für Planungsflows
 
-- [ ] 7.1 Playwright-Test: Gottesdienst planen → Amtsträger zuweisen → Bestätigung
+- [x] 7.1 Playwright-Test: Gottesdienst planen → Amtsträger zuweisen → Bestätigung
   - Vorbereitung: Seed-Daten mit District + Congregation + Leader
   - Ausführung: Login → Matrix → Event anlegen → Leader zuweisen → Confirm
-- [ ] 7.2 Playwright-Test: Double-Booking provozieren → BLOCK-Konflikt
+- [x] 7.2 Playwright-Test: Double-Booking provozieren → BLOCK-Konflikt
   - Vorbereitung: Leader in zwei Events zur gleichen Zeit
   - Ausführung: Zweite Zuweisung → 409 → Konflikt-Banner sichtbar
 - [ ] 7.3 Playwright-Test: Wechselzeit-Konflikt → WARN + Bestätigung
@@ -87,6 +87,6 @@
 
 ## 8. Dokumentation
 
-- [ ] 8.1 Konfliktregeln in `docs/conflict-rules.md` dokumentieren
-- [ ] 8.2 Feature-Flag `CONFLICT_CHECK_ENABLED` in Betriebsdokumentation aufnehmen
-- [ ] 8.3 E2E-Test-Setup in `tests/e2e/README.md` dokumentieren
+- [x] 8.1 Konfliktregeln in `docs/conflict-rules.md` dokumentieren
+- [x] 8.2 Feature-Flag `CONFLICT_CHECK_ENABLED` in `docs/conflict-rules.md` dokumentieren
+- [x] 8.3 E2E-Test-Setup in `tests/e2e/README.md` dokumentieren
