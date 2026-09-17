@@ -24,7 +24,7 @@
 
 ## 2. Leader Unavailability
 
-- [ ] 2.1 Domain-Modell `LeaderUnavailability` in `domain/models/leader_unavailability.py`
+- [x] 2.1 Domain-Modell `LeaderUnavailability` in `domain/models/leader_unavailability.py`
   - `id`, `leader_id`, `start_date`, `end_date`, `reason` (Enum: URLAUB, SPERRZEIT, FORTBILDUNG, SONSTIGES), `note`
 - [ ] 2.2 ORM-Modell `LeaderUnavailabilityModel` in `adapters/db/orm_models/`
 - [ ] 2.3 Alembic-Migration für `leader_unavailabilities`-Tabelle

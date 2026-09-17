@@ -14,6 +14,7 @@ from app.domain.models.invitation import (
     OverwriteDecisionStatus,
 )
 from app.domain.models.leader import Leader, LeaderRank, SpecialRole
+from app.domain.models.leader_unavailability import LeaderUnavailability, UnavailabilityReason
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
@@ -37,6 +38,7 @@ __all__ = [
     "InvitationTargetType",
     "Leader",
     "LeaderRank",
+    "LeaderUnavailability",
     "OverwriteDecisionStatus",
     "PlanningSeries",
     "PlanningSlot",
@@ -44,4 +46,5 @@ __all__ = [
     "RawCalendarEvent",
     "ServiceAssignment",
     "SpecialRole",
+    "UnavailabilityReason",
 ]
