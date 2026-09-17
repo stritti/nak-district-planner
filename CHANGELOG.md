@@ -36,6 +36,13 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
+## [0.31.0](https://github.com/stritti/nak-district-planner/compare/v0.30.0...v0.31.0) (2026-09-16)
+
+
+### Features
+
+* **ci:** build docker images in release run as GHCR release artifacts ([c6127c2](https://github.com/stritti/nak-district-planner/commit/c6127c25454d1838006ad7502ed51a0c1cb5a3a1))
+
 ## [0.30.0](https://github.com/stritti/nak-district-planner/compare/v0.29.2...v0.30.0) (2026-09-16)
 
 
