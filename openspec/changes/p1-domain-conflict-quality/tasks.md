@@ -3,24 +3,24 @@
 - [x] 1.1 `domain/planning/conflict_result.py`:
   - `Severity`-Enum: `PASS`, `WARN`, `BLOCK`
   - `ConflictResult`-Dataclass: `rule_id`, `severity`, `message` (DE+EN), `details` (dict)
-- [ ] 1.2 `domain/planning/conflict_rules.py`:
+- [x] 1.2 `domain/planning/conflict_rules.py`:
   - `no_double_booking`: Prüft auf zeitgleiche Zuweisungen → BLOCK
   - `travel_time_check`: Prüft Mindestabstand bei verschiedenen Gemeinden → WARN (konfigurierbar: `MIN_TRAVEL_MINUTES=30`)
   - `role_requirement_check`: Prüft Amtsstufe gegen Dienstanforderung → BLOCK
   - `leader_available`: Prüft Abwesenheiten im Zeitraum → BLOCK
-  - `congregation_distance_check`: Verschiedene Gemeinden direkt nacheinander → WARN
+  - `congregation_distance_check`: entfällt; Gemeindewechsel werden durch `travel_time_check` bewertet
 - [x] 1.3 `domain/planning/conflict_service.py`:
   - `check(leader_id, start_time, end_time, congregation_id, required_role, existing_assignments, unavailability_periods) → list[ConflictResult]`
   - Orchestriert alle Regeln, sammelt Ergebnisse
 - [x] 1.4 `ConflictContext`-Dataclass als Parameterobjekt
-- [ ] 1.5 Unit-Tests für jede Regel:
+- [x] 1.5 Unit-Tests für jede Regel:
   - Double-Booking mit überlappenden Events
   - Double-Booking mit angrenzenden Events (kein Konflikt)
   - Travel-Time-Verletzung (30min < 45min → OK)
   - Travel-Time-Verletzung (15min < 30min → WARN)
   - Role-Requirement erfüllt/nicht erfüllt
   - Leader-Unavailability im Zeitraum/außerhalb
-- [ ] 1.6 Integrationstest: Conflict Service orchestriert korrekt
+- [x] 1.6 Integrationstest: Conflict Service orchestriert korrekt
 
 ## 2. Leader Unavailability
 
