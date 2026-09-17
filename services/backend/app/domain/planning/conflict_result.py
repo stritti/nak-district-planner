@@ -29,6 +29,8 @@ class ConflictContext:
     existing_assignments: tuple[ExistingAssignment, ...] = ()
     required_role: str | None = None
     unavailability_periods: tuple[tuple[datetime, datetime], ...] = ()
+    min_travel_minutes: int = 30
+    leader_rank: str | None = None
 
 
 @dataclass(frozen=True)
