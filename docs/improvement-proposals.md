@@ -5,7 +5,7 @@ OpenSpec-Spezifikationen. Es identifiziert Vereinfachungspotenziale, architekton
 Refactoring-Möglichkeiten sowie UX-Verbesserungen und dient als Planungsgrundlage für die
 Weiterentwicklung.
 
-> **Status:** Entwurf – Stand April 2026
+> **Status:** Historische Analyse – technische Stati zuletzt gegen den aktuellen Codebestand geprüft am 08.09.2026
 > **Basis:** OpenSpec-Änderungen `uc-01` bis `uc-06`, `planning-slot-hybrid-sync`,
 > `introduce-rbac-permissions-model`, `harden-calendar-sync-algorithm`,
 > `introduce-non-functional-baseline`, `phase4b-oidc-auth-idp-agnostic`
@@ -30,17 +30,17 @@ Weiterentwicklung.
 | Event-Verteilung (applicability) | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Virtuell, keine Duplizierung |
 | **PlanningSlot / PlanningSeries** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – konsolidierter Pfad ohne Feature-Flag/Migration |
 | **EventInstance (Soll/Ist)** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – Matrix liefert Plan/Ist-Daten |
-| **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
-| **RBAC-Durchsetzung** | ✅ | 🟡 | `introduce-rbac-permissions-model` | Modelle vorhanden, Guards unvollständig |
-| **Sync-Zustandsmaschine (Harden)** | ✅ | ❌ | `harden-calendar-sync-algorithm` | Phase 4 |
-| **ExternalEventLink** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 3 |
+| **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Für v1 als Phase 2 akzeptiert, siehe B-3-Entscheidung |
+| **RBAC-Durchsetzung** | ✅ | ✅ | `introduce-rbac-permissions-model` | Guards konsolidiert; Coverage-Doku vorhanden |
+| **Sync-Zustandsmaschine (Harden)** | ✅ | ✅ | `harden-calendar-sync-algorithm` | SyncState und Hash-Verfolgung vorhanden |
+| **ExternalEventLink** | ✅ | ✅ | `planning-slot-hybrid-sync` | Modell, Repository und Sync-Verwendung vorhanden |
 | **In-App-Benachrichtigungen** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
-| **Rate-Limiting (public Endpoints)** | ✅ | ❌ | `introduce-non-functional-baseline` | Phase 5 |
-| **Audit-Logging (vollständig)** | ✅ | 🟡 | `introduce-non-functional-baseline` | Infrastruktur vorhanden |
+| **Rate-Limiting (public Endpoints)** | ✅ | ✅ | `introduce-non-functional-baseline` | Öffentliche Export-Endpunkte geschützt; Fail-Open observierbar |
+| **Audit-Logging (vollständig)** | ✅ | ✅ | `introduce-non-functional-baseline` | Middleware und Queue-Writer aktiv; Stichproben verifizieren |
 | **Performance-Monitoring / SLOs** | ✅ | ❌ | `introduce-non-functional-baseline` | Phase 5 |
-| **UX-Feedback-System (Toast)** | – | ❌ | **`ux-improvements`** | Neu spezifiziert |
+| **UX-Feedback-System (Toast)** | – | ✅ | **`ux-improvements`** | In kritischen Views verdrahtet, siehe PR #210 |
 | **Sync-Status sichtbar** | – | ❌ | **`ux-improvements`** | Neu spezifiziert |
-| **Bestätigungsdialoge** | – | ❌ | **`ux-improvements`** | Neu spezifiziert |
+| **Bestätigungsdialoge** | – | 🟡 | **`ux-improvements`** | Kritische Flows teilweise abgesichert; Event-Storno offen |
 | **Matrix UX (Skeleton, Sticky, Filter)** | – | ❌ | **`ux-improvements`** | Neu spezifiziert |
 | **Connector-Registry + Code-Qualität** | – | ❌ | **`code-quality`** | Neu spezifiziert |
 | **Frontend HTTP-Client + View-Split** | – | ❌ | **`code-quality`** | Neu spezifiziert |
@@ -257,36 +257,36 @@ ausstehende Reviews) sollen als persistente In-App-Benachrichtigungen angezeigt 
 
 ---
 
-### 3.5 🟠 MITTEL: Rate-Limiting auf öffentlichen Endpoints fehlt
+### 3.5 🟠 MITTEL: Rate-Limiting-Fail-Open benötigt Monitoring
 
-**Status:** → OpenSpec-Change
+**Status:** 🟡 Teilweise umgesetzt — Rate-Limiting aktiv, Fail-Open-Monitoring wird in PR #313 dokumentiert
 [`introduce-non-functional-baseline`](/openspec/changes/introduce-non-functional-baseline/proposal)
 
-**Beschreibung:** Der Endpoint `GET /api/v1/export/{token}/calendar.ics` ist öffentlich
-zugänglich. Ohne Rate-Limiting ist er anfällig für Missbrauch.
+**Beschreibung:** Der öffentliche Endpoint `GET /api/v1/export/{token}/calendar.ics` ist
+rate-limitiert. Bei Redis-Ausfall greift bewusst Fail-Open; dieses Ereignis muss operativ
+über `rate_limiter.fail_open` überwacht werden.
 
 **Maßnahmen:**
 
-- SlowAPI oder ein nginx-basiertes Rate-Limit einführen
-- Mindestens: 60 Anfragen/Minute pro IP auf `/api/v1/export/*`
-- Ggf. auch auf `POST /api/v1/public/districts/{id}/registrations`
+- Fail-Open-Counter und `reason`-Attribut überwachen
+- Bei jedem Ereignis innerhalb von fünf Minuten alarmieren und Redis prüfen
+- Recovery und Incident im Production Runbook dokumentieren
 
 **Referenz:** `openspec/changes/introduce-non-functional-baseline/`
 **Priorität:** 🟠 Mittel.
 
 ---
 
-### 3.6 🟡 NIEDRIG: ExternalEventLink fehlt
+### 3.6 🟡 NIEDRIG: ExternalEventCandidate-Review fehlt für v1 bewusst
 
-**Status:** → OpenSpec-Change
+**Status:** 🟡 Für v1 akzeptierte Einschränkung — Phase 2
 [`planning-slot-hybrid-sync`](/openspec/changes/planning-slot-hybrid-sync/proposal)
 
-**Beschreibung:** Der `ExternalEventLink` (Mapping zwischen externem Provider-Event
-und internem PlanningSlot) ist spezifiziert, aber noch nicht implementiert.
+**Beschreibung:** `ExternalEventLink` ist implementiert. Nicht implementiert ist nur
+der optionale manuelle Review-Schritt für unbekannte externe Events (`ExternalEventCandidate`).
 
-**Auswirkung:** Hash-Vergleiche werden aktuell direkt am `Event.content_hash`-Feld
-durchgeführt. Die geplante Sync-Zustandsmaschine benötigt jedoch ein explizites
-Link-Objekt mit Revision-Markierungen.
+**Auswirkung:** Konfigurierte, vertrauenswürdige ICS-/CalDAV-Quellen werden in v1 direkt
+übernommen. Unbekannte Quellen haben keinen zusätzlichen Governance-Review.
 
 **Priorität:** 🟡 Niedrig (Phase 3 der Roadmap).
 
