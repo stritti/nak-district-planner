@@ -65,7 +65,11 @@ denselben Sachverhalt keine doppelten Warnungen entstehen.
 
 ### Decision 3: Integration via Application Service
 
-**Entscheidung:** Die Application Services (`event_service.py`, `service_assignment_service.py`) rufen `conflict_service.check()` vor dem Speichern auf:
+**Entscheidung:** Der Assignment-Use-Case ruft `conflict_service.check()` vor dem Speichern auf.
+Die aktuelle Codebasis besitzt keinen separaten `event_service.py`; der Event-Erstellungspfad
+erzeugt nur `PlanningSlot`/`EventInstance` und akzeptiert keine Leader-Zuweisung. Eine zweite
+Prüfung beim Erzeugen des Events wäre daher redundant. Die fachliche Konfliktprüfung sitzt am
+Assignment-Einstiegspunkt:
 
 ```python
 conflicts = conflict_service.check(
