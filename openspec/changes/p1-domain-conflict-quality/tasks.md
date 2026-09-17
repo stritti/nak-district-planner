@@ -28,7 +28,7 @@
   - `id`, `leader_id`, `start_date`, `end_date`, `reason` (Enum: URLAUB, SPERRZEIT, FORTBILDUNG, SONSTIGES), `note`
 - [x] 2.2 ORM-Modell `LeaderUnavailabilityModel` in `adapters/db/orm_models/`
 - [x] 2.3 Alembic-Migration für `leader_unavailabilities`-Tabelle
-- [ ] 2.4 Repository `SqlLeaderUnavailabilityRepository` mit CRUD + Überschneidungsabfrage
+- [x] 2.4 Repository `SqlLeaderUnavailabilityRepository` mit CRUD + Überschneidungsabfrage
 - [ ] 2.5 API-Router `routers/leader_unavailabilities.py` (CRUD, geschützt mit PLANNER+)
 - [ ] 2.6 Router in `main.py` registrieren
 

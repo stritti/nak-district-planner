@@ -11,6 +11,7 @@ from app.adapters.db.repositories.invitation_overwrite_request import (
 )
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
+from app.adapters.db.repositories.leader_unavailability import SqlLeaderUnavailabilityRepository
 from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
@@ -30,4 +31,5 @@ __all__ = [
     "SqlPlanningSlotRepository",
     "SqlPlanningSeriesRepository",
     "SqlServiceAssignmentRepository",
+    "SqlLeaderUnavailabilityRepository",
 ]

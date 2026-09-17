@@ -19,6 +19,7 @@ from app.domain.models.invitation import (
 )
 from app.domain.models.leader import Leader
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
+from app.domain.models.leader_unavailability import LeaderUnavailability
 from app.domain.models.notification import Notification, NotificationType
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
@@ -336,6 +337,34 @@ class LeaderRepository(ABC):
 
     @abstractmethod
     async def delete(self, leader_id: uuid.UUID) -> None:
+        pass
+
+
+class LeaderUnavailabilityRepository(ABC):
+    @abstractmethod
+    async def get(self, unavailability_id: uuid.UUID) -> LeaderUnavailability | None:
+        pass
+
+    @abstractmethod
+    async def list_by_leader(self, leader_id: uuid.UUID) -> list[LeaderUnavailability]:
+        pass
+
+    @abstractmethod
+    async def list_overlapping(
+        self,
+        *,
+        leader_id: uuid.UUID,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> list[LeaderUnavailability]:
+        pass
+
+    @abstractmethod
+    async def save(self, unavailability: LeaderUnavailability) -> None:
+        pass
+
+    @abstractmethod
+    async def delete(self, unavailability_id: uuid.UUID) -> None:
         pass
 
 
