@@ -36,6 +36,13 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
+## [0.31.1](https://github.com/stritti/nak-district-planner/compare/v0.31.0...v0.31.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* **ci:** unify release-please to single root package so single-path releases tag correctly ([cee289d](https://github.com/stritti/nak-district-planner/commit/cee289d9ebece66718760093418ac6e4ad673006))
+
 ## [0.31.0](https://github.com/stritti/nak-district-planner/compare/v0.30.0...v0.31.0) (2026-09-16)
 
 
