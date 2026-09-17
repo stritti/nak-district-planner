@@ -30,10 +30,10 @@ Weiterentwicklung.
 | Event-Verteilung (applicability) | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Virtuell, keine Duplizierung |
 | **PlanningSlot / PlanningSeries** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – konsolidierter Pfad ohne Feature-Flag/Migration |
 | **EventInstance (Soll/Ist)** | ✅ | ✅ | `planning-slot-hybrid-sync` | Phase 1 – Matrix liefert Plan/Ist-Daten |
-| **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Für v1 als Phase 2 akzeptiert, siehe B-3-Entscheidung |
 | **RBAC-Durchsetzung** | ✅ | ✅ | `introduce-rbac-permissions-model` | Guards konsolidiert; Coverage-Doku vorhanden |
 | **Sync-Zustandsmaschine (Harden)** | ✅ | ✅ | `harden-calendar-sync-algorithm` | SyncState und Hash-Verfolgung vorhanden |
 | **ExternalEventLink** | ✅ | ✅ | `planning-slot-hybrid-sync` | Modell, Repository und Sync-Verwendung vorhanden |
+| **ExternalEventCandidate & Review** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 2 für unbekannte oder nicht vertrauenswürdige Quellen; v1 übernimmt konfigurierte vertrauenswürdige Quellen direkt |
 | **In-App-Benachrichtigungen** | ✅ | ❌ | `planning-slot-hybrid-sync` | Phase 1 |
 | **Rate-Limiting (public Endpoints)** | ✅ | ✅ | `introduce-non-functional-baseline` | Öffentliche Export-Endpunkte geschützt; Fail-Open observierbar |
 | **Audit-Logging (vollständig)** | ✅ | ✅ | `introduce-non-functional-baseline` | Middleware und Queue-Writer aktiv; Stichproben verifizieren |
