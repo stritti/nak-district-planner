@@ -36,6 +36,13 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
+## [0.31.2](https://github.com/stritti/nak-district-planner/compare/v0.31.1...v0.31.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* **db:** harden duplicate planning slot reconciliation ([c4ae73a](https://github.com/stritti/nak-district-planner/commit/c4ae73a00f936c1a2944b2a6f4cd033b1770aed4))
+
 ## [0.31.1](https://github.com/stritti/nak-district-planner/compare/v0.31.0...v0.31.1) (2026-09-17)
 
 
