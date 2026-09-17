@@ -13,6 +13,7 @@ from app.adapters.db.repositories.leader_unavailability import (
 )
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
+from app.config import settings
 from app.domain.planning.conflict_result import ConflictContext, ExistingAssignment
 from app.domain.planning.conflict_service import ConflictService
 
@@ -25,6 +26,9 @@ async def check_service_assignment_conflicts(
     exclude_assignment_id: uuid.UUID | None = None,
 ) -> list:
     """Evaluate conflicts for assigning a leader to a planning slot."""
+    if not settings.conflict_check_enabled:
+        return []
+
     slot_repo = SqlPlanningSlotRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
     assignment_repo = SqlServiceAssignmentRepository(session)
@@ -68,6 +72,7 @@ async def check_service_assignment_conflicts(
         congregation_id=slot.congregation_id,
         existing_assignments=tuple(existing),
         leader_rank=leader.rank.value if leader.rank else None,
+        min_travel_minutes=settings.min_travel_minutes,
         unavailability_periods=tuple((item.start_at, item.end_at) for item in unavailability),
     )
     return ConflictService().check(context)
