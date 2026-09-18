@@ -35,6 +35,19 @@ export interface OIDCConfig {
 const SESSION_CODE_VERIFIER_KEY = 'oidc_code_verifier'
 const SESSION_STATE_KEY = 'oidc_state'
 
+// Refresh eagerly if user activity is detected while the token is within this
+// many seconds of expiry. Catches cases where the scheduled setTimeout-based
+// refresh was throttled or paused (backgrounded tab, device sleep) so the
+// session gets extended as soon as the user resumes working.
+const ACTIVITY_REFRESH_LEAD_SECONDS = 120
+// Don't re-check on every single event — throttle to avoid excessive work.
+const ACTIVITY_CHECK_THROTTLE_MS = 15_000
+
+// Module-level guards: listeners must only be attached once per page load,
+// regardless of how many times useOIDC() is instantiated across the app.
+let activityListenersAttached = false
+let lastActivityCheckAt = 0
+
 const envConfig: OIDCConfig = {
   redirectUri: `${window.location.origin}/auth/callback`,
   scope: import.meta.env.VITE_OIDC_SCOPE || 'openid profile email',
@@ -397,7 +410,40 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     if (nextToken) setupRefreshTimer()
   }
 
+  function handleUserActivity(): void {
+    const now = Date.now()
+    if (now - lastActivityCheckAt < ACTIVITY_CHECK_THROTTLE_MS) return
+    lastActivityCheckAt = now
+
+    const current = authStore.token
+    if (!current || refreshInFlight.value) return
+
+    const secondsUntilExpiry = current.expiresAt - now / 1000
+    if (secondsUntilExpiry < ACTIVITY_REFRESH_LEAD_SECONDS) {
+      void refreshToken()
+    }
+  }
+
+  // Attach once, app-wide: browsers throttle/suspend setTimeout in background
+  // tabs, so user interaction is used as a second trigger to keep the
+  // session alive whenever the token is close to (or past) expiry.
+  function setupActivityRefresh(): void {
+    if (activityListenersAttached) return
+    activityListenersAttached = true
+
+    const activityEvents = ['mousemove', 'keydown', 'click', 'touchstart', 'scroll']
+    activityEvents.forEach((eventName) => {
+      document.addEventListener(eventName, handleUserActivity, { passive: true })
+    })
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') handleUserActivity()
+    })
+    window.addEventListener('focus', handleUserActivity)
+  }
+
   function initialize(): void {
+    setupActivityRefresh()
+
     if (!authStore.token) return
 
     if (Date.now() / 1000 >= authStore.token.expiresAt) {
