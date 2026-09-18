@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
-from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.notification import SqlNotificationRepository
 from app.adapters.db.repositories.user import SqlUserRepository
