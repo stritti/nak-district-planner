@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from alembic.config import Config
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from alembic import command
