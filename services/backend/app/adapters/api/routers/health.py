@@ -29,7 +29,7 @@ async def health(request: Request) -> JSONResponse:
     if request.url.path == "/api/health":
         payload = json.loads(response.body)
         payload["database"] = "ok" if payload["db"] == "ok" else "unavailable"
-        payload["redis"] = payload.pop("_legacy_redis", "unavailable")
+        payload["redis"] = payload.pop("_legacy_redis", payload["redis"])
         payload.pop("db")
         return JSONResponse(status_code=response.status_code, content=payload)
     payload = json.loads(response.body)
