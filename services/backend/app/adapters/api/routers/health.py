@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -17,6 +20,11 @@ router = APIRouter(tags=["health"])
 @router.get("/api/health", include_in_schema=False)
 async def health() -> JSONResponse:
     """Return service health and dependency connectivity."""
+    return await _build_health_response(AsyncSessionLocal)
+
+
+async def _build_health_response(session_factory: Callable[[], Any]) -> JSONResponse:
+    """Build a health response with an injectable database session factory."""
     result: dict[str, str] = {
         "status": "ok",
         "db": "ok",

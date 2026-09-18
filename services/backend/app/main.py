@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from alembic.config import Config
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from alembic import command
@@ -22,7 +22,6 @@ from app.adapters.api.routers import (
     districts,
     events_compat,
     export,
-    health,
     invitations,
     leaders,
     notifications,
@@ -31,10 +30,14 @@ from app.adapters.api.routers import (
     service_assignments,
     system,
 )
+from app.adapters.api.routers import (
+    health as health_router,
+)
+from app.adapters.api.routers.health import _build_health_response
 from app.adapters.auth.oidc import OIDCAdapter
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
-from app.adapters.db.session import engine
+from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
@@ -200,8 +203,26 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": detail})
 
 
+async def health() -> JSONResponse:
+    """Backward-compatible health helper retained for existing callers."""
+    response = await _build_health_response(AsyncSessionLocal)
+    payload = response.body.decode()
+    if response.status_code == status.HTTP_200_OK:
+        return response
+
+    import json
+
+    legacy_payload = json.loads(payload)
+    legacy_payload["database"] = "ok" if legacy_payload["db"] == "ok" else "unavailable"
+    legacy_payload["redis"] = (
+        "ok" if legacy_payload["redis"] == "ok" else "disconnected"
+    )
+    legacy_payload.pop("db")
+    return JSONResponse(status_code=response.status_code, content=legacy_payload)
+
+
 # Register routers
-app.include_router(health.router)
+app.include_router(health_router.router)
 app.include_router(auth.router)
 app.include_router(events_compat.router)
 app.include_router(invitations.router)
