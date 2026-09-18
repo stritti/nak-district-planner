@@ -6,7 +6,14 @@ import { router } from '../router'
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const authStore = useAuthStore()
   const { getCSRFHeaders } = useCSRF()
-  
+
+  // If the access token already expired (e.g. the scheduled refresh timer
+  // was throttled while the tab was backgrounded), refresh it up front
+  // instead of firing an unauthenticated request that is bound to 401.
+  if (authStore.token && authStore.isTokenExpired) {
+    await useOIDC(router).refreshToken()
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
