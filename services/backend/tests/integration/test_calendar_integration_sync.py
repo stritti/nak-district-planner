@@ -12,12 +12,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
-from app.adapters.api.deps import get_db_session
+from app.adapters.api.deps import get_calendar_integration_repository, get_db_session
 from app.main import app
 
 
 @contextmanager
-def _mock_auth_context(district_id: uuid.UUID):
+def _mock_auth_context(district_id: uuid.UUID, calendar_repo: AsyncMock):
     adapter = AsyncMock(spec=deps.OIDCAdapter)
     deps.set_oidc_adapter(adapter)
     claims = {
@@ -43,6 +43,7 @@ def _mock_auth_context(district_id: uuid.UUID):
         return AsyncMock()
 
     app.dependency_overrides[get_db_session] = _override_db_session
+    app.dependency_overrides[get_calendar_integration_repository] = lambda: calendar_repo
     try:
         with patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo, patch(
             "app.adapters.api.deps.SqlLeaderRegistrationRepository"
@@ -67,6 +68,7 @@ def _mock_auth_context(district_id: uuid.UUID):
             yield client, {"Authorization": "Bearer t", "X-CSRF-Token": csrf}
     finally:
         app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_calendar_integration_repository, None)
         deps.set_oidc_adapter(None)
         deps._token_claims_context.clear()
 
@@ -102,9 +104,9 @@ def test_trigger_sync_success_persists_last_synced_and_clears_error():
     connector = AsyncMock()
     connector.fetch_events.return_value = [raw_event]
 
-    with _mock_auth_context(district_id) as (client, headers), patch(
-        "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
-    ) as MockRepoRouter, patch("app.application.sync_service.SqlCalendarIntegrationRepository") as MockRepoSync, patch(
+    with _mock_auth_context(district_id, repo) as (client, headers), patch(
+        "app.application.sync_service.SqlCalendarIntegrationRepository"
+    ) as MockRepoSync, patch(
         "app.application.sync_service._get_connector"
     ) as mock_get_connector, patch(
         "app.application.sync_service.decrypt_credentials", return_value={}
@@ -115,7 +117,6 @@ def test_trigger_sync_success_persists_last_synced_and_clears_error():
     ) as MockInstRepo, patch(
         "app.application.sync_service.SqlPlanningSlotRepository"
     ) as MockSlotRepo:
-        MockRepoRouter.return_value = repo
         MockRepoSync.return_value = repo
         mock_get_connector.return_value = connector
         MockLinkRepo.return_value = AsyncMock(get_by_external_event=AsyncMock(return_value=None), save=AsyncMock())
@@ -138,14 +139,13 @@ def test_trigger_sync_failure_persists_last_sync_error():
     connector = AsyncMock()
     connector.fetch_events.side_effect = RuntimeError("boom sync failed")
 
-    with _mock_auth_context(district_id) as (client, headers), patch(
-        "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
-    ) as MockRepoRouter, patch("app.application.sync_service.SqlCalendarIntegrationRepository") as MockRepoSync, patch(
+    with _mock_auth_context(district_id, repo) as (client, headers), patch(
+        "app.application.sync_service.SqlCalendarIntegrationRepository"
+    ) as MockRepoSync, patch(
         "app.application.sync_service._get_connector"
     ) as mock_get_connector, patch(
         "app.application.sync_service.decrypt_credentials", return_value={}
     ):
-        MockRepoRouter.return_value = repo
         MockRepoSync.return_value = repo
         mock_get_connector.return_value = connector
 
