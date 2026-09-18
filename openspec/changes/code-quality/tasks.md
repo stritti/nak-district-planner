@@ -12,7 +12,7 @@
 
 ## 3. Backend: Dependency Injection Patterns
 
-- [ ] 3.1 Audit all FastAPI routers for inconsistent session/service injection
+- [x] 3.1 Audit all FastAPI routers for inconsistent session/service injection
 - [ ] 3.2 Standardize all routers to use `Depends(get_<service>)` pattern
 - [ ] 3.3 Add type annotations to all `Depends()` parameters
 
