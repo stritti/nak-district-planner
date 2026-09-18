@@ -29,6 +29,18 @@ Nutzung des Strategy-Patterns für verschiedene Provider.
 - **Geändert (Hash-Check):** Update Event.
 - **Gelöscht:** Markiere intern als "cancelled" oder lösche (konfigurierbar).
 
+### V1-Entscheidung: Direkte Übernahme externer Events
+
+Für Version 1 werden Events aus konfigurierten, vertrauenswürdigen
+ICS-/CalDAV-Quellen nach erfolgreicher Hash-Prüfung direkt übernommen. Ein
+manueller Review-Schritt für unbekannte externe Events (`ExternalEventCandidate`)
+ist nicht Bestandteil von v1. `SyncState` und `ExternalEventLink` dienen weiterhin
+der Änderungs- und Zuordnungsverfolgung.
+
+Diese Entscheidung setzt voraus, dass nur fachlich freigegebene Kalenderquellen
+konfiguriert werden. Ein Review-Workflow für neue oder nicht vertrauenswürdige
+Quellen bleibt als Phase 2 geplant.
+
 ## UC-03: Dienstplanung & Lücken-Visualisierung
 
 **Ziel:** Bezirksebene sieht alle Gottesdienste und deren Besetzung.

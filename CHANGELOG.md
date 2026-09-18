@@ -36,6 +36,63 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
+## [0.32.0](https://github.com/stritti/nak-district-planner/compare/v0.31.2...v0.32.0) (2026-09-17)
+
+
+### Features
+
+* **api:** add leader unavailability routes ([ce03434](https://github.com/stritti/nak-district-planner/commit/ce03434ed8fe398ebb2952f0e88d8bf38f5fdbfd))
+* **api:** type conflict error responses ([7e72e84](https://github.com/stritti/nak-district-planner/commit/7e72e84de83458b38b5223bdb25c30f42c3eae30))
+* **db:** add leader unavailability repository ([27c2011](https://github.com/stritti/nak-district-planner/commit/27c201166f810b200372eddc5c2bad74bcac0ba8))
+* **db:** persist leader unavailability ([06016e4](https://github.com/stritti/nak-district-planner/commit/06016e406bd73ab912d950007846c155f229548e))
+* **domain:** add conflict service orchestrator ([942b607](https://github.com/stritti/nak-district-planner/commit/942b6075d382b70a3a277b24e433d33f06a0f3c9))
+* **domain:** add initial planning conflict context ([1c0f742](https://github.com/stritti/nak-district-planner/commit/1c0f7429a1a6becae877c06b90dad8f77dc71070))
+* **domain:** add leader unavailability model ([317ec00](https://github.com/stritti/nak-district-planner/commit/317ec00cdcbe9859164bbebc6b76f85f24d87da4))
+* **domain:** add planning conflict rules ([ea7037a](https://github.com/stritti/nak-district-planner/commit/ea7037a30f054bf22c7f89974c4aa15e4c6b4e47))
+* **domain:** configure default conflict rules ([d563558](https://github.com/stritti/nak-district-planner/commit/d563558060cdf088e1ed5ac4148ead7c05dff7fe))
+* **planning:** add domain conflict checks ([ffcd12b](https://github.com/stritti/nak-district-planner/commit/ffcd12b9870f642735c212bb88ebd2ade3ab8cd1))
+* **planning:** complete conflict check API integration ([169840a](https://github.com/stritti/nak-district-planner/commit/169840a9e33f2ae73fba19d453edf3ca3326c336))
+* **planning:** configure conflict checks ([d10a253](https://github.com/stritti/nak-district-planner/commit/d10a253c812739590eee6f74036d570de9f00bc9))
+* **planning:** enforce assignment conflicts ([b965235](https://github.com/stritti/nak-district-planner/commit/b9652359821a5426fba59581b91d3bcb819a9cd8))
+
+## [0.31.2](https://github.com/stritti/nak-district-planner/compare/v0.31.1...v0.31.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* **db:** harden duplicate planning slot reconciliation ([c4ae73a](https://github.com/stritti/nak-district-planner/commit/c4ae73a00f936c1a2944b2a6f4cd033b1770aed4))
+
+## [0.31.1](https://github.com/stritti/nak-district-planner/compare/v0.31.0...v0.31.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* **ci:** unify release-please to single root package so single-path releases tag correctly ([cee289d](https://github.com/stritti/nak-district-planner/commit/cee289d9ebece66718760093418ac6e4ad673006))
+
+## [0.31.0](https://github.com/stritti/nak-district-planner/compare/v0.30.0...v0.31.0) (2026-09-16)
+
+
+### Features
+
+* **ci:** build docker images in release run as GHCR release artifacts ([c6127c2](https://github.com/stritti/nak-district-planner/commit/c6127c25454d1838006ad7502ed51a0c1cb5a3a1))
+
+## [0.30.0](https://github.com/stritti/nak-district-planner/compare/v0.29.2...v0.30.0) (2026-09-16)
+
+
+### Features
+
+* Code-Review Findings PR-5 bis PR-8, PR-10 umgesetzt ([#234](https://github.com/stritti/nak-district-planner/issues/234)) ([c02f65e](https://github.com/stritti/nak-district-planner/commit/c02f65eafb1b454e7a9b9d9795252395b0500f53))
+* **db:** prevent duplicate active planning slots per congregation/time ([#311](https://github.com/stritti/nak-district-planner/issues/311)) ([117a428](https://github.com/stritti/nak-district-planner/commit/117a42856603e7f516d8871d03404d2c24a137ff))
+* **ops:** add backup/restore automation with production guard ([#308](https://github.com/stritti/nak-district-planner/issues/308)) ([f68cf66](https://github.com/stritti/nak-district-planner/commit/f68cf664918384b43e57dcaa696ea50a07a1ef48))
+* replace Redis with Valkey — drop-in replacement with full rename ([#296](https://github.com/stritti/nak-district-planner/issues/296)) ([bcb1c23](https://github.com/stritti/nak-district-planner/commit/bcb1c23dbcdf95a021147e696948e158d35ef789))
+
+
+### Bug Fixes
+
+* **ci:** fallback to GITHUB_TOKEN when RELEASE_PLEASE_TOKEN missing ([92c112b](https://github.com/stritti/nak-district-planner/commit/92c112ba4e4bcc6c956e82c07e1e932f5a74e588))
+* **tests:** isolate production_guard tests from local .env leakage ([#309](https://github.com/stritti/nak-district-planner/issues/309)) ([4852c79](https://github.com/stritti/nak-district-planner/commit/4852c790cd0b5cea27bbd9288bba8395063d8752))
+* upgrade click to 8.4.2 to resolve PYSEC-2026-2132 command injection vulnerability ([16ef998](https://github.com/stritti/nak-district-planner/commit/16ef998423216b7570588e4c27d28f333c385daf))
+
 ## [v0.29.2] - 2026-08-11
 
 ### Features

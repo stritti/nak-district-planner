@@ -27,6 +27,7 @@ from app.domain.models.membership import ScopeType
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
+from app.domain.planning.conflict_result import ConflictResult, Severity
 
 # ---------------------------------------------------------------------------
 # Factory helpers
@@ -670,6 +671,69 @@ async def test_service_assignment_crud_paths() -> None:
     assert updated.status == AssignmentStatus.CONFIRMED
     assert deleted is None
     assert sa_repo.delete.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_service_assignment_create_blocks_conflict() -> None:
+    slot = _planning_slot()
+    db = AsyncMock()
+    leader_id = uuid.uuid4()
+    with (
+        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
+        patch("app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository") as slot_cls,
+        patch(
+            "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
+        ) as repo_cls,
+        patch(
+            "app.adapters.api.routers.service_assignments.check_service_assignment_conflicts",
+            new=AsyncMock(
+                return_value=[ConflictResult("no_double_booking", Severity.BLOCK, "Konflikt")]
+            ),
+        ),
+    ):
+        slot_cls.return_value.get = AsyncMock(return_value=slot)
+        repo_cls.return_value.save = AsyncMock()
+        with pytest.raises(HTTPException) as exc:
+            await sa_router.create_assignment(
+                slot.id,
+                ServiceAssignmentCreate(leader_id=leader_id),
+                _auth_context(),
+                db,
+            )
+
+    assert exc.value.status_code == 409
+    repo_cls.return_value.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_service_assignment_create_allows_confirmed_warning() -> None:
+    slot = _planning_slot()
+    db = AsyncMock()
+    leader_id = uuid.uuid4()
+    with (
+        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
+        patch("app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository") as slot_cls,
+        patch(
+            "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
+        ) as repo_cls,
+        patch(
+            "app.adapters.api.routers.service_assignments.check_service_assignment_conflicts",
+            new=AsyncMock(
+                return_value=[ConflictResult("travel_time_check", Severity.WARN, "Hinweis")]
+            ),
+        ),
+    ):
+        slot_cls.return_value.get = AsyncMock(return_value=slot)
+        repo_cls.return_value.save = AsyncMock()
+        result = await sa_router.create_assignment(
+            slot.id,
+            ServiceAssignmentCreate(leader_id=leader_id, confirm_warnings=True),
+            _auth_context(),
+            db,
+        )
+
+    assert result.leader_id == leader_id
+    repo_cls.return_value.save.assert_awaited_once()
 
 
 @pytest.mark.asyncio

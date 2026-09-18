@@ -20,7 +20,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("calendar_integrations", sa.Column("last_sync_error", sa.String(500), nullable=True))
+    op.add_column(
+        "calendar_integrations", sa.Column("last_sync_error", sa.String(500), nullable=True)
+    )
 
 
 def downgrade() -> None:

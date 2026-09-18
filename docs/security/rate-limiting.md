@@ -294,6 +294,16 @@ These logs can be monitored for:
 - Unusual traffic patterns
 - Misconfigured clients
 
+Fail-open events are counted by the OpenTelemetry counter
+`rate_limiter.fail_open`. The `reason` attribute contains only a bounded exception
+type or startup reason; it must not contain user identifiers, tokens, or raw
+request data.
+
+Operations should alert on any non-zero increase over a five-minute window. During
+an alert, verify Redis connectivity and credentials, check backend logs, and keep
+the incident open until a controlled request confirms that rate limiting is active
+again.
+
 ## Compliance
 
 This implementation addresses the following security requirements:
@@ -345,4 +355,4 @@ logging.getLogger('app.adapters.api.middleware.rate_limit').setLevel(logging.DEB
 - [Redis Sorted Sets](https://redis.io/topics/data-types#sorted-sets)
 - [RFC 6585: Additional HTTP Status Codes](https://tools.ietf.org/html/rfc6585)
 - [Security Analysis: SEC-016](../../security-analysis.md#sec-016-missing-rate-limiting)
-- [OpenSpec Design](../../openspec/changes/implement-rate-limiting/design.md)
+- [OpenSpec Design](../../openspec/changes/archive/2026-09-07-implement-rate-limiting/design.md)

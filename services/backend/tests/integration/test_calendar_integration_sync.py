@@ -6,13 +6,15 @@ import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
 from app.adapters.api.deps import get_calendar_integration_repository, get_db_session
+from app.domain.models.membership import Membership, ScopeType
+from app.domain.models.role import Role
 from app.main import app
 
 
@@ -40,7 +42,11 @@ def _mock_auth_context(district_id: uuid.UUID, calendar_repo: AsyncMock):
     }
 
     async def _override_db_session():
-        return AsyncMock()
+        session = AsyncMock()
+        result = MagicMock()
+        result.mappings.return_value.one_or_none.return_value = None
+        session.execute.return_value = result
+        return session
 
     app.dependency_overrides[get_db_session] = _override_db_session
     app.dependency_overrides[get_calendar_integration_repository] = lambda: calendar_repo
@@ -59,7 +65,14 @@ def _mock_auth_context(district_id: uuid.UUID, calendar_repo: AsyncMock):
             MockRegRepo.return_value = reg_repo
 
             membership_repo = AsyncMock()
-            membership_repo.get_all_by_user.return_value = []
+            membership_repo.get_all_by_user.return_value = [
+                Membership.create(
+                    user_sub="sync-admin",
+                    role=Role.DISTRICT_ADMIN,
+                    scope_type=ScopeType.DISTRICT,
+                    scope_id=district_id,
+                )
+            ]
             MockMembershipRepo.return_value = membership_repo
 
             client = TestClient(app, raise_server_exceptions=False)
