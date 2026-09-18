@@ -29,10 +29,12 @@ async def health(request: Request) -> JSONResponse:
     if request.url.path == "/api/health":
         payload = json.loads(response.body)
         payload["database"] = "ok" if payload["db"] == "ok" else "unavailable"
-        payload["redis"] = "ok" if payload["redis"] == "ok" else "disconnected"
+        payload["redis"] = payload.pop("_legacy_redis", "unavailable")
         payload.pop("db")
         return JSONResponse(status_code=response.status_code, content=payload)
-    return response
+    payload = json.loads(response.body)
+    payload.pop("_legacy_redis", None)
+    return JSONResponse(status_code=response.status_code, content=payload)
 
 
 async def _build_health_response(session_factory: Callable[[], Any]) -> JSONResponse:
@@ -52,9 +54,11 @@ async def _build_health_response(session_factory: Callable[[], Any]) -> JSONResp
 
     try:
         if rate_limiter._redis is None:
+            result["_legacy_redis"] = "disconnected"
             raise RuntimeError("Redis is not connected")
         await rate_limiter._redis.ping()
     except Exception:
+        result.setdefault("_legacy_redis", "unavailable")
         result["redis"] = "error"
 
     if result["db"] != "ok" or result["redis"] != "ok":

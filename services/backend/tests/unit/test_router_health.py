@@ -82,3 +82,36 @@ async def test_health_returns_503_when_redis_is_unavailable() -> None:
     assert payload["redis"] == "error"
     session.execute.assert_awaited_once()
     redis_client.ping.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_legacy_health_preserves_redis_ping_failure_status() -> None:
+    session = AsyncMock()
+    redis_client = AsyncMock()
+    redis_client.ping.side_effect = RuntimeError("redis unavailable")
+
+    with (
+        patch("app.adapters.api.routers.health.AsyncSessionLocal", return_value=_SessionContext(session)),
+        patch("app.adapters.api.routers.health.rate_limiter._redis", redis_client),
+    ):
+        response = await health(_request("/api/health"))
+
+    payload = json.loads(response.body)
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert payload["redis"] == "unavailable"
+    assert "db" not in payload
+
+
+@pytest.mark.asyncio
+async def test_legacy_health_reports_disconnected_when_redis_is_not_connected() -> None:
+    session = AsyncMock()
+
+    with (
+        patch("app.adapters.api.routers.health.AsyncSessionLocal", return_value=_SessionContext(session)),
+        patch("app.adapters.api.routers.health.rate_limiter._redis", None),
+    ):
+        response = await health(_request("/api/health"))
+
+    payload = json.loads(response.body)
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert payload["redis"] == "disconnected"
