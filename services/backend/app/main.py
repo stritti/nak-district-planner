@@ -205,18 +205,12 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
 
 async def health() -> JSONResponse:
     """Backward-compatible health helper retained for existing callers."""
-    response = await _build_health_response(AsyncSessionLocal)
-    payload = response.body.decode()
-    if response.status_code == status.HTTP_200_OK:
-        return response
-
     import json
 
-    legacy_payload = json.loads(payload)
+    response = await _build_health_response(AsyncSessionLocal)
+    legacy_payload = json.loads(response.body)
     legacy_payload["database"] = "ok" if legacy_payload["db"] == "ok" else "unavailable"
-    legacy_payload["redis"] = (
-        "ok" if legacy_payload["redis"] == "ok" else "disconnected"
-    )
+    legacy_payload["redis"] = legacy_payload.pop("_legacy_redis", legacy_payload["redis"])
     legacy_payload.pop("db")
     return JSONResponse(status_code=response.status_code, content=legacy_payload)
 
