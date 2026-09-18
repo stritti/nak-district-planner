@@ -118,6 +118,7 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
                     created=1,
                     updated=2,
                     cancelled=3,
+                    auto_matched=4,
                 )
             ),
         ),
@@ -151,6 +152,7 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
     assert created.name == "Name"
     assert listed.total == 1
     assert sync.created == 1
+    assert sync.auto_matched == 4
     assert updated.name == "Neu"
 
 

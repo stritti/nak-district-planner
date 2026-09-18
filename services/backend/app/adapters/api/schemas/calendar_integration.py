@@ -70,3 +70,4 @@ class SyncResult(BaseModel):
     created: int
     updated: int
     cancelled: int
+    auto_matched: int
