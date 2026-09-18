@@ -36,7 +36,6 @@ from app.adapters.api.routers import (
 from app.adapters.api.routers.health import _build_health_response
 from app.adapters.auth.oidc import OIDCAdapter
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
-from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService

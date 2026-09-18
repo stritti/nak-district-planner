@@ -29,6 +29,7 @@ export interface SyncResult {
   created: number
   updated: number
   cancelled: number
+  auto_matched: number
 }
 
 export function listIntegrations(districtId?: string): Promise<CalendarIntegrationListResponse> {

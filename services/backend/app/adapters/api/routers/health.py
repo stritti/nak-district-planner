@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -16,11 +17,22 @@ from app.config import settings
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health", include_in_schema=False)
-@router.get("/api/health", include_in_schema=False)
-async def health() -> JSONResponse:
+@router.api_route(
+    "/health", methods=["GET", "HEAD", "OPTIONS"], include_in_schema=False
+)
+@router.api_route(
+    "/api/health", methods=["GET", "HEAD", "OPTIONS"], include_in_schema=False
+)
+async def health(request: Request) -> JSONResponse:
     """Return service health and dependency connectivity."""
-    return await _build_health_response(AsyncSessionLocal)
+    response = await _build_health_response(AsyncSessionLocal)
+    if request.url.path == "/api/health":
+        payload = json.loads(response.body)
+        payload["database"] = "ok" if payload["db"] == "ok" else "unavailable"
+        payload["redis"] = "ok" if payload["redis"] == "ok" else "disconnected"
+        payload.pop("db")
+        return JSONResponse(status_code=response.status_code, content=payload)
+    return response
 
 
 async def _build_health_response(session_factory: Callable[[], Any]) -> JSONResponse:
@@ -33,7 +45,7 @@ async def _build_health_response(session_factory: Callable[[], Any]) -> JSONResp
     }
 
     try:
-        async with AsyncSessionLocal() as session:
+        async with session_factory() as session:
             await session.execute(text("SELECT 1"))
     except Exception:
         result["db"] = "error"

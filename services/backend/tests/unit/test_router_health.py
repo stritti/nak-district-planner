@@ -5,8 +5,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import status
+from starlette.requests import Request
 
 from app.adapters.api.routers.health import health
+
+
+def _request(path: str) -> Request:
+    return Request({"type": "http", "path": path, "headers": [], "query_string": b""})
 
 
 class _SessionContext:
@@ -29,7 +34,7 @@ async def test_health_returns_ok_when_database_and_redis_are_available() -> None
         patch("app.adapters.api.routers.health.AsyncSessionLocal", return_value=_SessionContext(session)),
         patch("app.adapters.api.routers.health.rate_limiter._redis", redis_client),
     ):
-        response = await health()
+        response = await health(_request("/health"))
 
     payload = json.loads(response.body)
     assert response.status_code == status.HTTP_200_OK
@@ -49,7 +54,7 @@ async def test_health_returns_503_when_database_is_unavailable() -> None:
         patch("app.adapters.api.routers.health.AsyncSessionLocal", return_value=_SessionContext(session)),
         patch("app.adapters.api.routers.health.rate_limiter._redis", redis_client),
     ):
-        response = await health()
+        response = await health(_request("/health"))
 
     payload = json.loads(response.body)
     assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
@@ -68,7 +73,7 @@ async def test_health_returns_503_when_redis_is_unavailable() -> None:
         patch("app.adapters.api.routers.health.AsyncSessionLocal", return_value=_SessionContext(session)),
         patch("app.adapters.api.routers.health.rate_limiter._redis", redis_client),
     ):
-        response = await health()
+        response = await health(_request("/health"))
 
     payload = json.loads(response.body)
     assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE

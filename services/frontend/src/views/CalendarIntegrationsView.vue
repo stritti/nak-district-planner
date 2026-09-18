@@ -104,7 +104,8 @@
             <div v-if="syncResults[item.id]" class="text-xs text-gray-600 dark:text-gray-400 text-right">
               +{{ syncResults[item.id].created }} neu &nbsp;
               ~{{ syncResults[item.id].updated }} aktual. &nbsp;
-              ✕{{ syncResults[item.id].cancelled }} abgesagt
+              ✕{{ syncResults[item.id].cancelled }} abgesagt &nbsp;
+              ↔{{ syncResults[item.id].auto_matched }} zugeordnet
             </div>
             <div v-if="syncErrors[item.id]" class="text-xs text-red-600 dark:text-red-400 text-right max-w-[180px]">
               {{ syncErrors[item.id] }}
