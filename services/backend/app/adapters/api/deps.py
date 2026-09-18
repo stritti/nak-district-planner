@@ -1,7 +1,8 @@
 """app/adapters/api/deps.py: Module."""
 
 import logging
-from typing import Annotated, NamedTuple
+from collections.abc import Callable, Coroutine
+from typing import Annotated, Any, NamedTuple, TypeVar
 
 from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -9,16 +10,19 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
+from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.notification import SqlNotificationRepository
 from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
 from app.application.notification_service import NotificationService
+from app.application.services.calendar_integration_service import CalendarIntegrationService
 from app.config import settings
 from app.domain.models.membership import Membership
 from app.domain.models.user import User
 
 logger = logging.getLogger(__name__)
+RepositoryT = TypeVar("RepositoryT")
 
 # OIDC Bearer token security scheme
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -243,6 +247,31 @@ async def get_notification_service(
     """Dependency that provides the notification service."""
     repo = SqlNotificationRepository(session)
     return NotificationService(notification_repo=repo)
+
+
+def make_repository_dependency(
+    repository_type: type[RepositoryT],
+) -> Callable[..., Coroutine[Any, Any, RepositoryT]]:
+    """Create a typed FastAPI dependency for a SQLAlchemy repository adapter."""
+
+    async def get_repository(
+        session: AsyncSession = Depends(get_db_session),
+    ) -> RepositoryT:
+        return repository_type(session)
+
+    return get_repository
+
+
+get_calendar_integration_repository = make_repository_dependency(
+    SqlCalendarIntegrationRepository
+)
+
+
+async def get_calendar_integration_service(
+    repository: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
+) -> CalendarIntegrationService:
+    """Provide the calendar integration service with its repository adapter."""
+    return CalendarIntegrationService(repository)
 
 
 # Type aliases for dependency injection

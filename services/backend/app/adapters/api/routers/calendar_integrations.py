@@ -5,9 +5,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_calendar_integration_repository,
+    get_calendar_integration_service,
+)
 from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationCreate,
     CalendarIntegrationListResponse,
@@ -55,6 +60,7 @@ async def create_calendar_integration(
     body: CalendarIntegrationCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    service: CalendarIntegrationService = Depends(get_calendar_integration_service),
 ) -> CalendarIntegrationResponse:
     # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     if body.congregation_id is not None:
@@ -73,7 +79,6 @@ async def create_calendar_integration(
     else:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
 
-    service = CalendarIntegrationService(db)
     integration = await service.create_integration(body)
     return _to_response(integration)
 
@@ -82,11 +87,10 @@ async def create_calendar_integration(
 async def list_calendar_integrations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
     district_id: uuid.UUID | None = None,
     congregation_id: uuid.UUID | None = None,
 ) -> CalendarIntegrationListResponse:
-    repo = SqlCalendarIntegrationRepository(db)
-
     if congregation_id is not None:
         # Congregation-scoped listing: require CONGREGATION_ADMIN for that congregation
         try:
@@ -124,6 +128,7 @@ async def trigger_sync(
     integration_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
 ) -> SyncResult:
     """Trigger an immediate synchronisation for one integration (UC-02).
 
@@ -131,7 +136,6 @@ async def trigger_sync(
     result directly.  For large feeds prefer dispatching via Celery:
     `sync_calendar_integration.delay(str(integration_id))`.
     """
-    repo = SqlCalendarIntegrationRepository(db)
     integration = await repo.get(integration_id)
     if integration is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Integration not found")
@@ -148,6 +152,7 @@ async def trigger_sync(
         created=summary.created,
         updated=summary.updated,
         cancelled=summary.cancelled,
+        auto_matched=summary.auto_matched,
     )
 
 
@@ -157,8 +162,9 @@ async def update_calendar_integration(
     body: CalendarIntegrationUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
+    service: CalendarIntegrationService = Depends(get_calendar_integration_service),
 ) -> CalendarIntegrationResponse:
-    repo = SqlCalendarIntegrationRepository(db)
     integration = await repo.get(integration_id)
     if integration is None:
         raise HTTPException(
@@ -176,7 +182,6 @@ async def update_calendar_integration(
     else:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
 
-    service = CalendarIntegrationService(db)
     integration = await service.update_integration(integration, body)
     return _to_response(integration)
 
@@ -186,8 +191,8 @@ async def delete_calendar_integration(
     integration_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
 ) -> None:
-    repo = SqlCalendarIntegrationRepository(db)
     integration = await repo.get(integration_id)
     if not integration:
         raise HTTPException(

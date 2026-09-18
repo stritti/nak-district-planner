@@ -101,6 +101,9 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
     integration = _integration(district_id=district_id)
     db = AsyncMock()
     auth = _auth_context()
+    service = AsyncMock()
+    service.create_integration.return_value = _integration(name="Name")
+    service.update_integration.return_value = _integration(name="Neu")
 
     with (
         patch("app.adapters.api.routers.calendar_integrations.require_role_in_district"),
@@ -118,6 +121,7 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
                     created=1,
                     updated=2,
                     cancelled=3,
+                    auto_matched=4,
                 )
             ),
         ),
@@ -137,20 +141,26 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
             ),
             auth,
             db,
+            service=service,
         )
-        listed = await ci_router.list_calendar_integrations(auth, db, district_id=district_id)
-        sync = await ci_router.trigger_sync(integration.id, auth, db)
+        listed = await ci_router.list_calendar_integrations(
+            auth, db, repo=repo, district_id=district_id
+        )
+        sync = await ci_router.trigger_sync(integration.id, auth, db, repo=repo)
         updated = await ci_router.update_calendar_integration(
             integration.id,
             CalendarIntegrationUpdate(name="Neu"),
             auth,
             db,
+            repo=repo,
+            service=service,
         )
-        await ci_router.delete_calendar_integration(integration.id, auth, db)
+        await ci_router.delete_calendar_integration(integration.id, auth, db, repo=repo)
 
     assert created.name == "Name"
     assert listed.total == 1
     assert sync.created == 1
+    assert sync.auto_matched == 4
     assert updated.name == "Neu"
 
 
@@ -164,16 +174,17 @@ async def test_calendar_integration_not_found_and_bad_sync() -> None:
         repo.get.return_value = None
         repo_cls.return_value = repo
         with pytest.raises(HTTPException):
-            await ci_router.trigger_sync(uuid.uuid4(), auth, AsyncMock())
+            await ci_router.trigger_sync(uuid.uuid4(), auth, AsyncMock(), repo=repo)
         with pytest.raises(HTTPException):
             await ci_router.update_calendar_integration(
                 uuid.uuid4(),
                 CalendarIntegrationUpdate(name="X"),
                 auth,
                 AsyncMock(),
+                repo=repo,
             )
         with pytest.raises(HTTPException):
-            await ci_router.delete_calendar_integration(uuid.uuid4(), auth, AsyncMock())
+            await ci_router.delete_calendar_integration(uuid.uuid4(), auth, AsyncMock(), repo=repo)
 
 
 @pytest.mark.asyncio
@@ -199,7 +210,7 @@ async def test_list_calendar_integrations_congregation_scoped() -> None:
         repo_cls.return_value = repo
 
         listed = await ci_router.list_calendar_integrations(
-            auth, db, congregation_id=congregation_id
+            auth, db, repo=repo, congregation_id=congregation_id
         )
 
     assert listed.total == 1
@@ -233,6 +244,7 @@ async def test_list_calendar_integrations_congregation_scoped_validates_district
             await ci_router.list_calendar_integrations(
                 auth,
                 db,
+                repo=repo,
                 district_id=other_district_id,
                 congregation_id=congregation_id,
             )
@@ -259,7 +271,9 @@ async def test_list_calendar_integrations_congregation_scoped_forbidden() -> Non
         repo_cls.return_value = repo
 
         with pytest.raises(HTTPException) as exc:
-            await ci_router.list_calendar_integrations(auth, db, congregation_id=congregation_id)
+            await ci_router.list_calendar_integrations(
+                auth, db, repo=repo, congregation_id=congregation_id
+            )
 
     assert exc.value.status_code == 403
 
@@ -611,7 +625,9 @@ async def test_list_routes_require_district_id_for_non_superadmin() -> None:
     auth = _auth_context(is_superadmin=False)
 
     with pytest.raises(HTTPException) as ci_exc:
-        await ci_router.list_calendar_integrations(auth, AsyncMock(), district_id=None)
+        await ci_router.list_calendar_integrations(
+            auth, AsyncMock(), repo=AsyncMock(), district_id=None
+        )
     with pytest.raises(HTTPException) as export_exc:
         await export_router.list_export_tokens(auth, AsyncMock(), district_id=None)
 

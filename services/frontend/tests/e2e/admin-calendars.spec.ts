@@ -28,6 +28,38 @@ test.describe('Calendar integrations admin view', () => {
     await page.route('**/api/v1/**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sub: 'admin-1',
+          email: 'admin@example.com',
+          username: 'admin',
+          name: 'Admin',
+          is_superadmin: true,
+        }),
+      })
+    })
+    await page.route('**/api/v1/auth/access', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ACTIVE',
+          memberships: [
+            { role: 'DISTRICT_ADMIN', scope_type: 'DISTRICT', scope_id: 'district-1' },
+          ],
+        }),
+      })
+    })
+    await page.route('**/api/v1/registrations/pending/overview', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ total_pending: 0 }),
+      })
+    })
     await page.route('**/api/v1/calendar-integrations', async (route) => {
       await route.fulfill({
         status: 200,

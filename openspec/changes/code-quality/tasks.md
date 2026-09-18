@@ -12,17 +12,17 @@
 
 ## 3. Backend: Dependency Injection Patterns
 
-- [ ] 3.1 Audit all FastAPI routers for inconsistent session/service injection
+- [x] 3.1 Audit all FastAPI routers for inconsistent session/service injection
 - [ ] 3.2 Standardize all routers to use `Depends(get_<service>)` pattern
 - [ ] 3.3 Add type annotations to all `Depends()` parameters
 
 ## 4. Backend: Health Check Endpoint
 
-- [ ] 4.1 Implement `GET /health` endpoint in a dedicated router
-- [ ] 4.2 Add DB ping (SQLAlchemy `text("SELECT 1")`) and Redis ping checks
-- [ ] 4.3 Return HTTP 200 when healthy, HTTP 503 when degraded
-- [ ] 4.4 Register `/health` router in `main.py`
-- [ ] 4.5 Update `docker-compose.yml` `backend` service to use `GET /health` as healthcheck
+- [x] 4.1 Implement `GET /health` endpoint in a dedicated router
+- [x] 4.2 Add DB ping (SQLAlchemy `text("SELECT 1")`) and Redis ping checks
+- [x] 4.3 Return HTTP 200 when healthy, HTTP 503 when degraded
+- [x] 4.4 Register `/health` router in `main.py`
+- [x] 4.5 Update `docker-compose.yml` `backend` service to use `GET /health` as healthcheck
 
 ## 5. Frontend: HTTP Client
 

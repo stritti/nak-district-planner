@@ -51,7 +51,7 @@
           class="mt-2 text-xs text-gray-600 dark:text-gray-400"
         >
           Letzter Sync: +{{ syncResult.created }} neu · ~{{ syncResult.updated }} aktualisiert ·
-          ✕{{ syncResult.cancelled }} abgesagt
+          ✕{{ syncResult.cancelled }} abgesagt · ↔{{ syncResult.auto_matched }} zugeordnet
         </div>
       </div>
 

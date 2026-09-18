@@ -4,20 +4,18 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationCreate,
     CalendarIntegrationUpdate,
 )
-from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.application.crypto import encrypt_credentials
 from app.domain.models.calendar_integration import CalendarIntegration
+from app.domain.ports.repositories import CalendarIntegrationRepository
 
 
 class CalendarIntegrationService:
-    def __init__(self, db: AsyncSession) -> None:
-        self._repo = SqlCalendarIntegrationRepository(db)
+    def __init__(self, repository: CalendarIntegrationRepository) -> None:
+        self._repo = repository
 
     async def create_integration(self, body: CalendarIntegrationCreate) -> CalendarIntegration:
         integration = CalendarIntegration.create(

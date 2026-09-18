@@ -31,9 +31,12 @@ from app.adapters.api.routers import (
     service_assignments,
     system,
 )
+from app.adapters.api.routers import (
+    health as health_router,
+)
+from app.adapters.api.routers.health import _build_health_response
 from app.adapters.auth.oidc import OIDCAdapter
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
-from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
@@ -135,6 +138,7 @@ rate_limit_config = RateLimitConfig(
     burst_limit=10,
     burst_window_seconds=1,
     endpoint_limits={
+        "/health": {"limit": 60, "window": 60},
         "/api/health": {"limit": 60, "window": 60},
         "/api/v1/auth/oidc/discovery": {"limit": 100, "window": 60},
         "/api/v1/auth/oidc/token": {"limit": 100, "window": 60},
@@ -146,7 +150,7 @@ app.add_middleware(
     RateLimitMiddleware,
     rate_limiter=rate_limiter,
     config=rate_limit_config,
-    exempt_paths={"/api/health"},
+    exempt_paths={"/health", "/api/health"},
     exempt_methods={"OPTIONS"},
 )
 
@@ -156,12 +160,12 @@ app.add_middleware(
 # so that tenant context (incl. user_sub) is already extracted when validation runs.
 app.add_middleware(
     TenantValidationMiddleware,
-    exempt_paths={"/api/health", "/api/v1/auth"},
+    exempt_paths={"/health", "/api/health", "/api/v1/auth"},
     exempt_methods={"OPTIONS"},
 )
 app.add_middleware(
     TenantMiddleware,
-    exempt_paths={"/api/health", "/api/v1/auth"},
+    exempt_paths={"/health", "/api/health", "/api/v1/auth"},
     exempt_methods={"OPTIONS"},
 )
 
@@ -173,6 +177,7 @@ app.add_middleware(
     cookie_name="csrf_token",
     header_name="X-CSRF-Token",
     exempt_paths={
+        "/health",
         "/api/health",
         "/api/v1/auth/oidc/discovery",
         "/api/v1/auth/oidc/token",
@@ -185,7 +190,7 @@ app.add_middleware(
 app.add_middleware(
     AuditMiddleware,
     audit_service=audit_service,
-    exempt_paths={"/api/health"},
+    exempt_paths={"/health", "/api/health"},
     exempt_methods={"GET", "HEAD", "OPTIONS"},
 )
 
@@ -198,50 +203,20 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": detail})
 
 
-@app.api_route("/api/health", methods=["GET", "HEAD", "OPTIONS"])
-async def health() -> dict:
-    """Health check endpoint.
+async def health() -> JSONResponse:
+    """Backward-compatible health helper retained for existing callers."""
+    import json
 
-    Returns basic health status including database and Redis connectivity.
-    Returns HTTP 503 with ``status: degraded`` when a dependency check fails
-    so Docker Compose can detect degraded service health.
-    """
-    result: dict = {"status": "ok", "version": settings.app_version}
-    degraded = False
-
-    # Check database connectivity (degraded when unavailable)
-    try:
-        from sqlalchemy import text as sa_text
-
-        async with AsyncSessionLocal() as session:
-            await session.execute(sa_text("SELECT 1"))
-        result["database"] = "ok"
-    except Exception:
-        result["database"] = "unavailable"
-        degraded = True
-
-    # Check Redis connectivity (degraded when unavailable)
-    try:
-        from app.application.rate_limiter import rate_limiter
-
-        if rate_limiter._redis is not None:
-            await rate_limiter._redis.ping()
-            result["redis"] = "ok"
-        else:
-            result["redis"] = "disconnected"
-            degraded = True
-    except Exception:
-        result["redis"] = "unavailable"
-        degraded = True
-
-    if degraded:
-        result["status"] = "degraded"
-        return JSONResponse(status_code=503, content=result)
-
-    return result
+    response = await _build_health_response(AsyncSessionLocal)
+    legacy_payload = json.loads(response.body)
+    legacy_payload["database"] = "ok" if legacy_payload["db"] == "ok" else "unavailable"
+    legacy_payload["redis"] = legacy_payload.pop("_legacy_redis", legacy_payload["redis"])
+    legacy_payload.pop("db")
+    return JSONResponse(status_code=response.status_code, content=legacy_payload)
 
 
 # Register routers
+app.include_router(health_router.router)
 app.include_router(auth.router)
 app.include_router(events_compat.router)
 app.include_router(invitations.router)
