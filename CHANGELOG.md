@@ -36,6 +36,25 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
+## [0.33.0](https://github.com/stritti/nak-district-planner/compare/v0.32.0...v0.33.0) (2026-09-18)
+
+
+### Features
+
+* add dedicated health check endpoint ([cc77bd4](https://github.com/stritti/nak-district-planner/commit/cc77bd48e14a1cc41b7f703fa5ec76612a0c1d71))
+
+
+### Bug Fixes
+
+* address PR review feedback ([3765866](https://github.com/stritti/nak-district-planner/commit/37658663c3d47c316ca15a0f44ff8d8e7b0117ad))
+* expose auto-matched sync count in API ([eafd8c7](https://github.com/stritti/nak-district-planner/commit/eafd8c761102c9da7327102f86ae27d1513682bd))
+* expose auto-matched sync count in API ([d99a374](https://github.com/stritti/nak-district-planner/commit/d99a374b576875a33d44d655f41629913488f1c7))
+* **frontend:** extend session automatically during active use ([55ae0ec](https://github.com/stritti/nak-district-planner/commit/55ae0ecf1405e7bd4aa8bacf7da8b6790be889e8))
+* **frontend:** extend session automatically during active use ([c670051](https://github.com/stritti/nak-district-planner/commit/c6700511267d2fbe2b4931b1cb300c2b47ed8897))
+* normalize legacy health helper response ([7c4d231](https://github.com/stritti/nak-district-planner/commit/7c4d2317dfb7ec8389b4788521bdb938ca22e88d))
+* preserve legacy redis health status ([59dd257](https://github.com/stritti/nak-district-planner/commit/59dd25796d2bcce6c2f9bb50580af94073e8bc51))
+* remove obsolete registration test patch ([2b34c4a](https://github.com/stritti/nak-district-planner/commit/2b34c4a8853820845a96c4507bcdaa04ed1cd770))
+
 ## [0.32.0](https://github.com/stritti/nak-district-planner/compare/v0.31.2...v0.32.0) (2026-09-17)
 
 
