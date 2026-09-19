@@ -33,14 +33,19 @@ ExternalEventCandidate
   event_time: time | null
   title: str
   category: str | null
+  content_hash: str
   status: PENDING | ACCEPTED | DISMISSED
   matched_slot_id: UUID | null (auto-mapped)
   created_at: datetime
+  updated_at: datetime
   reviewed_at: datetime | null
   reviewed_by: UUID | null (User ID)
 ```
 
-**Decision:** Keep candidate as a simple entity with status. When accepted, either link to an existing `PlanningSlot` (via `matched_slot_id`) or create a new one.
+**Decision:** Keep candidate as a simple entity with status. While status is
+PENDING, a new source version updates the candidate's event data, `content_hash`,
+and `updated_at` in place. When accepted, either link to an existing
+`PlanningSlot` (via `matched_slot_id`) or create a new one.
 
 ### 2. Auto-Mapping Logic
 
@@ -83,5 +88,5 @@ External event detected
 | Risk | Mitigation |
 |---|---|
 | **False positives** — auto-mapping matches wrong slot | Exact-match criteria minimize this. Manual review can correct. |
-| **Duplicate candidates** — same external event detected in consecutive syncs | Check existing candidates before creating new ones (by external_event_id + source) |
+| **Duplicate candidates** — same external event detected in consecutive syncs | Check existing candidates before creating new ones (by external_event_id + source); refresh PENDING candidate data and content hash in place |
 | **Orphaned candidates** — accepted but slot later deleted | Accept writes into PlanningSlot; slot lifecycle is independent after mapping |
