@@ -3,7 +3,7 @@
     <Transition name="dialog">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="`confirm-title-${uid}`"
@@ -17,7 +17,7 @@
         <!-- Dialog panel -->
         <div
           ref="panelRef"
-          class="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900"
+          class="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900 my-8"
           @keydown.escape="onCancel"
         >
           <!-- Title -->
@@ -53,13 +53,13 @@
           <div class="mt-6 flex justify-end gap-3">
             <button
               ref="cancelBtnRef"
-              class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              class="min-h-11 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
               @click="onCancel"
             >
               {{ cancelText }}
             </button>
             <button
-              class="rounded-md px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50"
+              class="min-h-11 rounded-md px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50"
               :class="confirmButtonClass"
               :disabled="loading || (dangerous ? typedWord !== confirmWord : false)"
               @click="onConfirm"

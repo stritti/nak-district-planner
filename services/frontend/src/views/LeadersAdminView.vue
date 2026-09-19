@@ -75,8 +75,60 @@
           Keine Amtstragende angelegt.
         </div>
 
-        <!-- Leaders table -->
-        <div v-else class="card overflow-hidden">
+        <!-- Leaders: mobile card list (no horizontal scroll needed) -->
+        <div v-else class="md:hidden space-y-2">
+          <div
+            v-for="leader in leadersForSection(section.congregationId)"
+            :key="leader.id"
+            class="card p-3"
+            :class="!leader.is_active ? 'opacity-50' : ''"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
+                    {{ leader.rank ?? '—' }}
+                  </span>
+                  <p class="font-medium text-gray-800 dark:text-gray-200 truncate">{{ leader.name }}</p>
+                </div>
+                <p v-if="section.congregationId === null" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {{ congregationName(leader.congregation_id) || '—' }}
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {{ leader.email || '—' }} · {{ leader.phone || '—' }}
+                </p>
+              </div>
+              <span
+                class="badge shrink-0"
+                :class="leader.is_active ? 'bg-green-100 dark:bg-green-900/20 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'"
+              >
+                {{ leader.is_active ? 'Aktiv' : 'Inaktiv' }}
+              </span>
+            </div>
+            <div class="mt-2 flex items-center justify-end gap-1">
+              <button class="btn-icon" title="Bearbeiten" @click="openEditModal(leader)">
+                <PencilSquareIcon class="h-4 w-4" />
+              </button>
+              <button
+                class="btn-icon hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400"
+                title="ICS-Export-Token erstellen"
+                @click="openExportModal(leader)"
+              >
+                <LinkIcon class="h-4 w-4" />
+              </button>
+              <button
+                class="btn-icon hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                title="Löschen"
+                @click="confirmDelete(leader)"
+              >
+                <TrashIcon class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Leaders: desktop table -->
+        <div v-if="leadersForSection(section.congregationId).length > 0" class="card overflow-hidden hidden md:block">
           <div class="table-scroll">
           <table class="table-min-w w-full text-sm">
             <thead class="table-thead">
@@ -421,8 +473,8 @@
           </span>
         </div>
 
-        <div class="grid grid-cols-2 gap-4 mb-4">
-          <div class="col-span-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div class="col-span-1 sm:col-span-2">
             <label class="form-label">Name *</label>
             <input
               v-model="addModal.name"
@@ -511,8 +563,8 @@
           </button>
         </div>
 
-        <div class="grid grid-cols-2 gap-4 mb-4">
-          <div class="col-span-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div class="col-span-1 sm:col-span-2">
             <label class="form-label">Name *</label>
             <input
               v-model="editModal.name"

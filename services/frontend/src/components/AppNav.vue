@@ -6,7 +6,7 @@
         <div class="flex items-center gap-1 min-w-0">
           <!-- Hamburger button for mobile -->
           <button
-            class="sm:hidden p-2 -ml-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+            class="sm:hidden -ml-2 min-h-11 min-w-11 inline-flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
             aria-label="Navigation öffnen"
             @click.stop="mobileNavOpen = !mobileNavOpen; menuOpen = false"
           >
@@ -59,7 +59,7 @@
 
           <!-- Dark mode toggle -->
           <button
-            class="btn-icon p-2 rounded-md hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+            class="btn-icon rounded-md hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
             :title="isDark ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'"
             :aria-label="isDark ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'"
             :aria-pressed="isDark"
@@ -84,7 +84,7 @@
             <div class="relative">
               <button
                 @click="menuOpen = !menuOpen"
-                class="flex items-center gap-2 px-2 sm:px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                class="flex items-center gap-2 min-h-11 px-2 sm:px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <!-- Mobile: user icon only -->
                 <div class="sm:hidden">
@@ -228,7 +228,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDownTrayIcon,
   Bars3Icon,
@@ -250,6 +250,7 @@ import { useOIDC } from '../composables/useOIDC'
 import NotificationBell from './NotificationBell.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const districtStore = useDistrictsStore()
 const notificationStore = useNotificationStore()
@@ -258,6 +259,11 @@ const { isDark, toggle } = useDarkMode()
 
 const menuOpen = ref(false)
 const mobileNavOpen = ref(false)
+
+// Close mobile menu whenever the route changes (e.g. after tapping a link)
+watch(() => route.fullPath, () => {
+  mobileNavOpen.value = false
+})
 
 // Start/stop notification polling based on auth state
 watch(() => authStore.isAuthenticated, (authenticated) => {

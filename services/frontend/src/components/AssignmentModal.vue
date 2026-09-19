@@ -93,15 +93,15 @@
 
       <div class="mb-4 rounded border border-gray-200 dark:border-gray-700 p-3">
         <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Gottesdienst verschieben</p>
-        <div class="grid grid-cols-3 gap-2">
-          <input v-model="modal.moveDate" type="date" class="form-input col-span-2" />
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <input v-model="modal.moveDate" type="date" class="form-input sm:col-span-2" />
           <input v-model="modal.moveTime" type="time" class="form-input" />
           <input
             v-model.number="modal.moveDurationMinutes"
             type="number"
             min="15"
             step="15"
-            class="form-input col-span-2"
+            class="form-input sm:col-span-2"
             placeholder="Dauer in Minuten"
           />
           <button

@@ -2,7 +2,7 @@
   <!-- Matrix Table -->
   <div
     v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length > 0"
-    class="overflow-x-auto"
+    class="overflow-x-auto overscroll-x-contain touch-pan-x"
   >
     <table :class="tableClass">
       <thead>
@@ -246,7 +246,7 @@ const vOverflowTitle: Directive<OverflowTitleEl, string> = {
 
 const tableClass = computed(() => {
   return [
-    'w-full table-fixed border-collapse',
+    'w-max min-w-full border-collapse',
     props.compactMode ? 'text-[11px] matrix-table--compact' : 'text-xs matrix-table--normal',
   ]
 })
