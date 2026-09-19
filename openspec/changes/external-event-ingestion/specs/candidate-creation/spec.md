@@ -1,11 +1,13 @@
 ## ADDED Requirements
 
 ### Requirement: ExternalEventCandidate entity
-The system SHALL define an `ExternalEventCandidate` entity for review-based ingestion.
+The system SHALL define an `ExternalEventCandidate` entity for review-based
+ingestion from Google Calendar, Microsoft 365/Outlook, ICS, and CalDAV.
 
 #### Scenario: Candidate created for unmatched external event
-- **WHEN** an external event is detected with no existing `PlanningSlot` mapping and no exact match
+- **WHEN** an external event from any supported connector is detected with no existing `PlanningSlot` mapping and no exact match
 - **THEN** the system SHALL create an `ExternalEventCandidate` with status=PENDING
+- **AND** the system SHALL NOT create a new `PlanningSlot` before review
 
 #### Scenario: Deduplication check
 - **WHEN** the same external event is detected in consecutive syncs

@@ -6,28 +6,41 @@ Diese Seite dokumentiert die detaillierten Anwendungsfälle (Use-Cases) des NAK 
 
 **Ziel:** Einbindung externer Kalenderquellen.
 
+**Unterstützte Provider:**
+- **Google Calendar** (OAuth 2.0)
+- **Microsoft 365 / Outlook** (OAuth 2.0)
+- **iCalendar (ICS)** (URL-basiert, direkt oder über CalDAV)
+- **CalDAV** (WebDAV-basiert)
+
 **Ablauf:**
-1. User wählt Typ (z.B. Google).
-2. OAuth-Handshake.
-3. Auswahl des Kalenders.
+1. User wählt Provider-Typ.
+2. Authentifizierung (OAuth für Google/Microsoft, URL/Credentials für ICS/CalDAV).
+3. Kalender-Auswahl (ggf.).
 4. Speicherung der verschlüsselten Credentials.
 
+**Vertrauens-Entscheidung (Trust Policy):**
+- Alle vier Provider durchlaufen die **gleiche direkte Ingestion** (UC-02).
+- Unabgestimmte externe Events werden als `ExternalEventCandidate` erstellt und erfordern manuelles Matching oder Genehmigung.
+- Keine automatische Erstellung von `PlanningSlot` direkt aus externen Events.
+
 ::: info Technik
-Nutzung des Strategy-Patterns für verschiedene Provider.
+Nutzung des Strategy-Patterns für verschiedene Provider mit einheitlichem Sync-Mechanismus.
 :::
 
 ## UC-02: Zyklischer Sync (Hintergrund)
 
-**Ziel:** Automatisches Update der Termine.
+**Ziel:** Automatisches Update der Termine von allen verbundenen Kalenderquellen.
 
 **Ablauf:**
-1. Celery-Job prüft `last_sync_at`.
-2. Ruft Provider-API auf.
+1. Celery-Job prüft `last_sync_at` für alle aktiven `CalendarIntegration`-Einträge.
+2. Ruft Provider-API auf (Google, Microsoft, ICS, CalDAV).
+3. Vergleicht externe Events mit bestehenden internen Slots (Hash-basiert).
 
-**Logik:**
-- **Neu:** Erstelle Event.
-- **Geändert (Hash-Check):** Update Event.
-- **Gelöscht:** Markiere intern als "cancelled" oder lösche (konfigurierbar).
+**Sync-Logik (für alle Provider identisch):**
+- **Neu:** Erstelle `ExternalEventCandidate` für Matching/Review.
+- **Geändert (Hash-Check):** Update `Event` mit neuen Daten.
+- **Gelöscht:** Markiere `Event` als `status="cancelled"` oder lösche (konfigurierbar).
+- **Idempotenz:** Duplikate werden durch UID + Source-Vergleich verhindert.
 
 ### V1-Entscheidung: Direkte Übernahme externer Events
 
