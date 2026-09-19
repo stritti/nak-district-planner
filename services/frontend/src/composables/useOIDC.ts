@@ -47,6 +47,7 @@ const ACTIVITY_CHECK_THROTTLE_MS = 15_000
 // regardless of how many times useOIDC() is instantiated across the app.
 let activityListenersAttached = false
 let lastActivityCheckAt = 0
+let refreshInFlight: Promise<void> | null = null
 
 const envConfig: OIDCConfig = {
   redirectUri: `${window.location.origin}/auth/callback`,
@@ -99,7 +100,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const refreshTimer = ref<ReturnType<typeof setTimeout> | null>(null)
-  const refreshInFlight = ref<Promise<void> | null>(null)
 
   const token = computed(() => authStore.token)
   const user = computed(() => authStore.user)
@@ -280,7 +280,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   }
 
   async function refreshToken(): Promise<void> {
-    if (refreshInFlight.value) return refreshInFlight.value
+    if (refreshInFlight) return refreshInFlight
 
     const operation = (async () => {
       const current = authStore.token
@@ -344,11 +344,11 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       }
     })()
 
-    refreshInFlight.value = operation
+    refreshInFlight = operation
     try {
       await operation
     } finally {
-      refreshInFlight.value = null
+      refreshInFlight = null
     }
   }
 
@@ -416,7 +416,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     lastActivityCheckAt = now
 
     const current = authStore.token
-    if (!current || refreshInFlight.value) return
+    if (!current || refreshInFlight) return
 
     const secondsUntilExpiry = current.expiresAt - now / 1000
     if (secondsUntilExpiry < ACTIVITY_REFRESH_LEAD_SECONDS) {

@@ -14,7 +14,7 @@ RBAC Notes:
 
 import httpx
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.adapters.api.deps import (
     AuthenticatedUser,
@@ -39,9 +39,22 @@ class OIDCTokenExchangeRequest(BaseModel):
     """
 
     grant_type: str = "authorization_code"
-    code: str
-    redirect_uri: str
-    code_verifier: str
+    code: str | None = None
+    redirect_uri: str | None = None
+    code_verifier: str | None = None
+    refresh_token: str | None = None
+
+    @model_validator(mode="after")
+    def validate_grant_parameters(self) -> "OIDCTokenExchangeRequest":
+        if self.grant_type == "authorization_code":
+            if not self.code or not self.redirect_uri or not self.code_verifier:
+                raise ValueError("Authorization-code grant requires code, redirect_uri, and code_verifier")
+        elif self.grant_type == "refresh_token":
+            if not self.refresh_token:
+                raise ValueError("Refresh-token grant requires refresh_token")
+        else:
+            raise ValueError(f"Unsupported grant type: {self.grant_type}")
+        return self
 
 
 @router.get("/oidc/discovery")
@@ -108,12 +121,17 @@ async def exchange_oidc_token(body: OIDCTokenExchangeRequest) -> dict:
     client = await adapter.get_httpx_client()
     data: dict[str, str] = {
         "grant_type": body.grant_type,
-        "code": body.code,
-        "redirect_uri": body.redirect_uri,
-        "code_verifier": body.code_verifier,
         "client_id": adapter.client_id,
         "client_secret": adapter.client_secret,
     }
+    if body.grant_type == "authorization_code":
+        data.update(
+            code=body.code,
+            redirect_uri=body.redirect_uri,
+            code_verifier=body.code_verifier,
+        )
+    else:
+        data["refresh_token"] = body.refresh_token
 
     try:
         response = await client.post(token_endpoint, data=data, timeout=15)
