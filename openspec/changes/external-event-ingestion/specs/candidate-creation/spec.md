@@ -14,9 +14,19 @@ ingestion from Google Calendar, Microsoft 365/Outlook, ICS, and CalDAV in Phase 
 - **THEN** the system SHALL NOT create a duplicate candidate (check by external_event_id + source)
 
 #### Scenario: Pending candidate source change
-- **WHEN** a pending candidate's external event changes before review
+- **WHEN** a pending candidate's external event changes before review without being cancelled or matching a `PlanningSlot` exactly
 - **THEN** the system SHALL update the candidate's event data and content_hash
 - **AND** the system SHALL retain the existing candidate rather than create a duplicate
+
+#### Scenario: Pending candidate becomes an exact match
+- **WHEN** a pending candidate's updated external event matches a `PlanningSlot` exactly
+- **THEN** the system SHALL create the `ExternalEventLink` to that slot before refreshing the candidate
+- **AND** the system SHALL set the candidate status to ACCEPTED with its matched_slot_id
+
+#### Scenario: Pending candidate source cancellation
+- **WHEN** a pending candidate's external event is cancelled before review
+- **THEN** the system SHALL set the candidate status to DISMISSED
+- **AND** the system SHALL prevent the candidate from being accepted
 
 ### Requirement: ExternalEventCandidate fields
 The `ExternalEventCandidate` SHALL include fields: id, district_id, external_event_id, source, congregation_id, event_date, event_time, title, category, content_hash, status, matched_slot_id, created_at, updated_at, reviewed_at, reviewed_by.
