@@ -8,20 +8,21 @@ Diese Seite dokumentiert die detaillierten Anwendungsfälle (Use-Cases) des NAK 
 
 **Unterstützte Provider:**
 - **Google Calendar** (manuell verwaltete OAuth-Token)
-- **Microsoft 365 / Outlook** (manuell verwaltete OAuth-Token)
+- **Microsoft 365 / Outlook** (Konfiguration vorhanden, Synchronisierung derzeit nicht verfügbar)
 - **iCalendar (ICS)** (URL-basiert, direkt oder über CalDAV)
 - **CalDAV** (WebDAV-basiert)
 
 **Ablauf:**
 1. User wählt Provider-Typ.
-2. Für Google/Microsoft hinterlegt ein Administrator die verwalteten Token als JSON; für ICS/CalDAV werden URL und Credentials hinterlegt.
-3. Google/Microsoft synchronisieren derzeit nur den primären Kalender; eine interaktive OAuth-Anmeldung und Kalender-Auswahl sind Phase 2.
-4. Speicherung der verschlüsselten Credentials.
+2. Für Google hinterlegt ein Administrator die verwalteten Token als JSON; für ICS/CalDAV werden URL und Credentials hinterlegt.
+3. Google synchronisiert derzeit nur den primären Kalender; eine interaktive OAuth-Anmeldung und Kalender-Auswahl sind Phase 2.
+4. Microsoft-Graph-Integrationen können bis zur vollständigen Zeitbereichsabfrage nicht synchronisiert werden.
+5. Speicherung der verschlüsselten Credentials.
 
 **Vertrauens-Entscheidung (Trust Policy):**
-- In v1 werden Events aus konfigurierten, vertrauenswürdigen Quellen direkt durch UC-02 übernommen.
+- In v1 werden Events aus konfigurierten, vertrauenswürdigen ICS-/CalDAV-Quellen direkt durch UC-02 übernommen.
 - Die reviewbasierte Ingestion mit `ExternalEventCandidate` ist als Phase 2 geplant.
-- Bis dahin dürfen nur fachlich freigegebene Quellen konfiguriert werden.
+- Google- und Microsoft-Integrationen erweitern diese akzeptierte V1-Ausnahme nicht.
 
 ::: info Technik
 Nutzung des Strategy-Patterns für verschiedene Provider mit einheitlichem Sync-Mechanismus.
@@ -33,13 +34,13 @@ Nutzung des Strategy-Patterns für verschiedene Provider mit einheitlichem Sync-
 
 **Ablauf:**
 1. Celery-Job prüft `last_sync_at` für alle aktiven `CalendarIntegration`-Einträge.
-2. Ruft Provider-API auf (Google, Microsoft, ICS, CalDAV).
+2. Ruft die APIs verfügbarer Provider auf (Google, ICS, CalDAV); Microsoft Graph ist bis zur vollständigen Zeitbereichsabfrage ausgesetzt.
 3. Ordnet externe Events vorhandenen Slots über Gemeinde, Datum, Uhrzeit und Kategorie zu; für bereits verknüpfte Events erkennt ein Content-Hash Änderungen.
 
-**Sync-Logik (für alle Provider identisch):**
+**Sync-Logik (für die in v1 freigegebenen ICS-/CalDAV-Quellen):**
 - **Neu (v1):** Erstelle oder aktualisiere den direkt übernommenen Slot/Event aus einer vertrauenswürdigen Quelle.
 - **Geändert:** Aktualisiere ein bereits verknüpftes Event, wenn sein Content-Hash abweicht.
-- **Gelöscht:** Markiere `Event` als `status="cancelled"` oder lösche (konfigurierbar).
+- **Gelöscht:** Markiere den zugehörigen `PlanningSlot` mit `status=CANCELLED`.
 - **Idempotenz:** Duplikate werden durch UID + Source-Vergleich verhindert.
 
 **Phase 2: Review-basierte Ingestion:**
