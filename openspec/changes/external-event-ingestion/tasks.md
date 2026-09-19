@@ -1,6 +1,6 @@
 ## 1. Domain Model
 
-- [ ] 1.1 Implement `ExternalEventCandidate` entity with status enum (PENDING, ACCEPTED, DISMISSED)
+- [ ] 1.1 Implement `ExternalEventCandidate` entity with status enum (PENDING, ACCEPTED, DISMISSED), content hash, and timestamps
 
 ## 2. Persistence Layer
 
@@ -12,8 +12,9 @@
 
 - [ ] 3.1 Implement detection logic in sync pipeline: unmatched external event → create candidate
 - [ ] 3.2 Implement deduplication check (by external_event_id + source)
-- [ ] 3.3 Implement auto-mapping logic (exact match on congregation, date, time, category)
-- [ ] 3.4 Create notification when candidate is created (integrate with in-app-notifications)
+- [ ] 3.3 Refresh event data, content hash, and timestamp on an existing PENDING candidate
+- [ ] 3.4 Implement auto-mapping logic (exact match on congregation, date, time, category)
+- [ ] 3.5 Create notification when candidate is created (integrate with in-app-notifications)
 
 ## 4. API Layer
 
