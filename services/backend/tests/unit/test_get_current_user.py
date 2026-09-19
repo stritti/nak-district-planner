@@ -219,39 +219,34 @@ class TestGetCurrentUserWithMemberships:
         from app.adapters.api.deps import get_current_user_with_memberships
 
         user = User(sub="oidc|u1", email="link@example.com", username="link")
-
-        class _MappingResult:
-            def one_or_none(self):
-                return {
-                    "candidate_count": 1,
-                    "granted_role": "PLANNER",
-                    "granted_scope_type": "DISTRICT",
-                    "granted_scope_id": __import__("uuid").uuid4(),
-                }
-
-        class _FunctionResult:
-            def mappings(self):
-                return _MappingResult()
-
         session = AsyncMock()
-        session.execute.return_value = _FunctionResult()
 
         with (
             patch("app.adapters.api.deps.SqlMembershipRepository") as MemRepo,
+            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as RegistrationRepo,
         ):
             mem_repo = AsyncMock()
-            # First call returns empty list (no memberships initially)
-            # Second call returns a mock membership with role attribute
             mock_membership = MagicMock()
             mock_membership.role = MagicMock()
             mock_membership.role.value = "PLANNER"
             mem_repo.get_all_by_user.side_effect = [[], [mock_membership]]
             MemRepo.return_value = mem_repo
+            registration = MagicMock(
+                user_sub=None,
+                assigned_role=MagicMock(),
+                assigned_scope_type=MagicMock(),
+                assigned_scope_id=__import__("uuid").uuid4(),
+            )
+            registration_repo = AsyncMock()
+            registration_repo.list_approved_unlinked_by_email.return_value = [registration]
+            RegistrationRepo.return_value = registration_repo
 
             ctx = await get_current_user_with_memberships(user=user, session=session)
 
-            assert session.execute.call_count == 3
-            linker_call = session.execute.call_args_list[0]
-            assert "link_approved_registration" in str(linker_call.args[0])
-            assert linker_call.args[1] == {"user_sub": "oidc|u1", "email": "link@example.com"}
+            registration_repo.list_approved_unlinked_by_email.assert_awaited_once_with(
+                "link@example.com"
+            )
+            assert registration.user_sub == "oidc|u1"
+            registration_repo.save.assert_awaited_once_with(registration)
+            mem_repo.upsert_by_scope.assert_awaited_once()
             assert len(ctx.memberships) == 1

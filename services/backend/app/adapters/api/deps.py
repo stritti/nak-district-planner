@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
 from typing import Annotated, Any, NamedTuple, TypeVar
 
 from fastapi import Depends, HTTPException, Request, Security, status
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.notification import SqlNotificationRepository
 from app.adapters.db.repositories.user import SqlUserRepository
@@ -22,6 +24,7 @@ from app.domain.models.membership import Membership
 from app.domain.models.user import User
 
 logger = logging.getLogger(__name__)
+
 RepositoryT = TypeVar("RepositoryT")
 
 # OIDC Bearer token security scheme
@@ -40,20 +43,6 @@ def set_oidc_adapter(adapter: OIDCAdapter | None) -> None:
 def get_oidc_adapter() -> OIDCAdapter | None:
     """Get the currently configured global OIDC adapter instance."""
     return _oidc_adapter
-
-
-# Context for passing token claims through dependency chain
-_token_claims_context: dict = {}
-
-
-def set_token_claims(claims: dict) -> None:
-    """Store token claims in context for use in dependent functions."""
-    _token_claims_context.update(claims)
-
-
-def get_token_claims() -> dict:
-    """Get current token claims from context."""
-    return _token_claims_context.copy()
 
 
 async def get_current_user(
@@ -90,9 +79,6 @@ async def get_current_user(
     try:
         # Validate token and extract claims
         token_claims = await _oidc_adapter.validate_token(token)
-        # Store claims in context for dependent functions
-        set_token_claims(token_claims)
-
         user_info = _oidc_adapter.extract_user_info(token_claims)
 
         # Get or create user in database
@@ -111,6 +97,7 @@ async def get_current_user(
             existing_user.name = user_info["name"]
             existing_user.given_name = user_info["given_name"]
             existing_user.family_name = user_info["family_name"]
+            existing_user.is_superadmin = is_superadmin
             await user_repo.save(existing_user)
             request.state.user = existing_user
             return existing_user
@@ -166,9 +153,7 @@ async def get_current_user_with_memberships(
     Used for endpoints that require role-based authorization.
 
     Memberships are loaded from the local database so application RBAC and
-    PostgreSQL RLS use the same authorization source. JWT claim memberships are
-    intentionally not trusted directly unless a provisioning flow has
-    materialized them into ``memberships``.
+    PostgreSQL RLS use the same authorization source.
     """
     membership_repo = SqlMembershipRepository(session)
     memberships = await membership_repo.get_all_by_user(user.sub)
@@ -177,28 +162,36 @@ async def get_current_user_with_memberships(
     # if there is exactly one approved+unlinked registration for this email,
     # link it to this user and materialize its assigned membership.
     if user.email:
-        result = await session.execute(
-            text(
-                """
-                SELECT candidate_count, granted_role, granted_scope_type, granted_scope_id
-                FROM link_approved_registration(:user_sub, :email)
-                """
-            ),
-            {"user_sub": user.sub, "email": user.email},
-        )
-        link_result = result.mappings().one_or_none()
-        candidate_count = int(link_result["candidate_count"]) if link_result else 0
-        if candidate_count == 1:
+        reg_repo = SqlLeaderRegistrationRepository(session)
+        candidates = await reg_repo.list_approved_unlinked_by_email(user.email)
+        if len(candidates) == 1:
+            registration = candidates[0]
+            registration.user_sub = user.sub
+            registration.updated_at = datetime.now(UTC)
+            await reg_repo.save(registration)
+            if (
+                registration.assigned_role is not None
+                and registration.assigned_scope_type is not None
+                and registration.assigned_scope_id is not None
+            ):
+                await membership_repo.upsert_by_scope(
+                    user_sub=user.sub,
+                    role=registration.assigned_role,
+                    scope_type=registration.assigned_scope_type,
+                    scope_id=registration.assigned_scope_id,
+                )
             memberships = await membership_repo.get_all_by_user(user.sub)
-        elif candidate_count > 1:
+        elif len(candidates) > 1:
             logger.warning(
                 "Multiple approved unlinked registrations for email=%s; skipping auto-link",
                 user.email,
             )
 
-    # Populate TenantContext with authenticated roles for RLS GUC export
+    # Update the active transaction after membership lookup/linking so RLS sees
+    # the verified application roles rather than unverified token payload data.
     from app.tenant import TenantContext
-    user_roles = [m.role.value for m in memberships]
+
+    user_roles = [membership.role.value for membership in memberships]
     if user.is_superadmin:
         user_roles.append("SUPERADMIN")
     TenantContext.set_context(
