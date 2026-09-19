@@ -7,21 +7,21 @@ Diese Seite dokumentiert die detaillierten Anwendungsfälle (Use-Cases) des NAK 
 **Ziel:** Einbindung externer Kalenderquellen.
 
 **Unterstützte Provider:**
-- **Google Calendar** (OAuth 2.0)
-- **Microsoft 365 / Outlook** (OAuth 2.0)
+- **Google Calendar** (manuell verwaltete OAuth-Token)
+- **Microsoft 365 / Outlook** (manuell verwaltete OAuth-Token)
 - **iCalendar (ICS)** (URL-basiert, direkt oder über CalDAV)
 - **CalDAV** (WebDAV-basiert)
 
 **Ablauf:**
 1. User wählt Provider-Typ.
-2. Authentifizierung (OAuth für Google/Microsoft, URL/Credentials für ICS/CalDAV).
-3. Kalender-Auswahl (ggf.).
+2. Für Google/Microsoft hinterlegt ein Administrator die verwalteten Token als JSON; für ICS/CalDAV werden URL und Credentials hinterlegt.
+3. Google/Microsoft synchronisieren derzeit nur den primären Kalender; eine interaktive OAuth-Anmeldung und Kalender-Auswahl sind Phase 2.
 4. Speicherung der verschlüsselten Credentials.
 
 **Vertrauens-Entscheidung (Trust Policy):**
-- Alle vier Provider durchlaufen die **gleiche direkte Ingestion** (UC-02).
-- Unabgestimmte externe Events werden als `ExternalEventCandidate` erstellt und erfordern manuelles Matching oder Genehmigung.
-- Keine automatische Erstellung von `PlanningSlot` direkt aus externen Events.
+- In v1 werden Events aus konfigurierten, vertrauenswürdigen Quellen direkt durch UC-02 übernommen.
+- Die reviewbasierte Ingestion mit `ExternalEventCandidate` ist als Phase 2 geplant.
+- Bis dahin dürfen nur fachlich freigegebene Quellen konfiguriert werden.
 
 ::: info Technik
 Nutzung des Strategy-Patterns für verschiedene Provider mit einheitlichem Sync-Mechanismus.
@@ -34,18 +34,23 @@ Nutzung des Strategy-Patterns für verschiedene Provider mit einheitlichem Sync-
 **Ablauf:**
 1. Celery-Job prüft `last_sync_at` für alle aktiven `CalendarIntegration`-Einträge.
 2. Ruft Provider-API auf (Google, Microsoft, ICS, CalDAV).
-3. Vergleicht externe Events mit bestehenden internen Slots (Hash-basiert).
+3. Ordnet externe Events vorhandenen Slots über Gemeinde, Datum, Uhrzeit und Kategorie zu; für bereits verknüpfte Events erkennt ein Content-Hash Änderungen.
 
 **Sync-Logik (für alle Provider identisch):**
-- **Neu:** Erstelle `ExternalEventCandidate` für Matching/Review.
-- **Geändert (Hash-Check):** Update `Event` mit neuen Daten.
+- **Neu (v1):** Erstelle oder aktualisiere den direkt übernommenen Slot/Event aus einer vertrauenswürdigen Quelle.
+- **Geändert:** Aktualisiere ein bereits verknüpftes Event, wenn sein Content-Hash abweicht.
 - **Gelöscht:** Markiere `Event` als `status="cancelled"` oder lösche (konfigurierbar).
 - **Idempotenz:** Duplikate werden durch UID + Source-Vergleich verhindert.
+
+**Phase 2: Review-basierte Ingestion:**
+- Ein externer Event ohne exakte Slot-Zuordnung wird als `ExternalEventCandidate` angelegt und erfordert manuelles Matching oder Genehmigung.
+- Eine exakte Zuordnung erstellt direkt ein `ExternalEventLink` ohne Candidate.
+- Für einen noch ausstehenden Candidate aktualisiert ein erneuter Sync die Candidate-Daten und den Content-Hash, statt einen zweiten Candidate anzulegen.
 
 ### V1-Entscheidung: Direkte Übernahme externer Events
 
 Für Version 1 werden Events aus konfigurierten, vertrauenswürdigen
-ICS-/CalDAV-Quellen nach erfolgreicher Hash-Prüfung direkt übernommen. Ein
+Quellen nach erfolgreicher Hash-Prüfung direkt übernommen. Ein
 manueller Review-Schritt für unbekannte externe Events (`ExternalEventCandidate`)
 ist nicht Bestandteil von v1. `SyncState` und `ExternalEventLink` dienen weiterhin
 der Änderungs- und Zuordnungsverfolgung.

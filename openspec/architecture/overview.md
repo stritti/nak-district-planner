@@ -79,10 +79,11 @@ EventInstance contains:
 - CONFLICT
 
 External mapping uses `ExternalEventLink`.
-External events from Google Calendar, Microsoft 365/Outlook, ICS, and CalDAV
-use the same ingestion and governance path. New external events become
-`ExternalEventCandidate` until reviewed; no connector may create a new
-`PlanningSlot` directly.
+In the Phase 2 governance target, external events from Google Calendar,
+Microsoft 365/Outlook, ICS, and CalDAV use the same ingestion path. An unmatched
+external event becomes an `ExternalEventCandidate` until reviewed; an exact slot
+match may create an `ExternalEventLink` without a candidate. No connector may
+create a new `PlanningSlot` for an unmatched event.
 
 ---
 
