@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://nak:changeme@db:5432/nak_planner"
     migration_database_url: str | None = None
-    valkey_url: str = "valkey://valkey:6379/0"
+    valkey_url: str = "valkey://redis:6379/0"
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
 
