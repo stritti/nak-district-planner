@@ -48,6 +48,7 @@ const ACTIVITY_CHECK_THROTTLE_MS = 15_000
 let activityListenersAttached = false
 let lastActivityCheckAt = 0
 let refreshInFlight: Promise<void> | null = null
+let refreshInFlightId = 0
 let sessionGeneration = 0
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -289,6 +290,17 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       }
       const refreshGeneration = sessionGeneration
       const refreshTokenUsed = current.refreshToken
+      const isRefreshStillCurrent = (): boolean => {
+        const latest = authStore.token
+        return (
+          refreshGeneration === sessionGeneration &&
+          Boolean(latest) &&
+          latest?.refreshToken === refreshTokenUsed
+        )
+      }
+      const logoutIfRefreshStillCurrent = async (): Promise<void> => {
+        if (isRefreshStillCurrent()) await logout()
+      }
 
       try {
         const response = await fetch('/api/v1/auth/oidc/token', {
@@ -301,13 +313,13 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         })
 
         if (!response.ok) {
-          await logout()
+          await logoutIfRefreshStillCurrent()
           return
         }
 
         const data = await response.json()
         if (!data.access_token) {
-          await logout()
+          await logoutIfRefreshStillCurrent()
           return
         }
 
@@ -326,18 +338,11 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
 
         if (!nextUser?.sub) {
-          await logout()
+          await logoutIfRefreshStillCurrent()
           return
         }
 
-        const latest = authStore.token
-        if (
-          refreshGeneration !== sessionGeneration ||
-          !latest ||
-          latest.refreshToken !== refreshTokenUsed
-        ) {
-          return
-        }
+        if (!isRefreshStillCurrent()) return
 
         const nextToken: OIDCToken = {
           accessToken: data.access_token,
@@ -350,15 +355,17 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         setupRefreshTimer()
       } catch (err) {
         console.error('OIDC refresh failed', err)
-        await logout()
+        await logoutIfRefreshStillCurrent()
       }
     })()
 
+    const operationId = refreshInFlightId + 1
+    refreshInFlightId = operationId
     refreshInFlight = operation
     try {
       await operation
     } finally {
-      if (refreshInFlight === operation) refreshInFlight = null
+      if (refreshInFlightId === operationId) refreshInFlight = null
     }
   }
 
@@ -382,6 +389,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
   function invalidateSession(): void {
     sessionGeneration += 1
+    refreshInFlightId += 1
     refreshInFlight = null
     if (refreshTimer) clearTimeout(refreshTimer)
     refreshTimer = null

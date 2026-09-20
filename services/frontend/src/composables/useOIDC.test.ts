@@ -208,6 +208,84 @@ describe('useOIDC', () => {
     expect(authStore.token).toBeNull()
   })
 
+  it('should not clear a newer session when a stale refresh response is rejected', async () => {
+    let resolveFetch!: (response: Response) => void
+    global.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve
+        })
+    )
+
+    const oidc = createOidc()
+    const authStore = useAuthStore()
+    oidc.setToken(
+      {
+        accessToken: 'old-access-token',
+        idToken: '',
+        refreshToken: 'old-refresh-token',
+        expiresAt: Math.floor(Date.now() / 1000) - 1,
+      },
+      { sub: 'old-user-sub' }
+    )
+
+    const refresh = oidc.refreshToken()
+    oidc.setToken(
+      {
+        accessToken: 'new-access-token',
+        idToken: '',
+        refreshToken: 'new-refresh-token',
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      },
+      { sub: 'new-user-sub' }
+    )
+
+    resolveFetch(new Response('', { status: 401 }))
+    await refresh
+
+    expect(authStore.token?.accessToken).toBe('new-access-token')
+    expect(authStore.user?.sub).toBe('new-user-sub')
+  })
+
+  it('should not clear a newer session when a stale refresh request throws', async () => {
+    let rejectFetch!: (error: Error) => void
+    global.fetch = vi.fn(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          rejectFetch = reject
+        })
+    )
+
+    const oidc = createOidc()
+    const authStore = useAuthStore()
+    oidc.setToken(
+      {
+        accessToken: 'old-access-token',
+        idToken: '',
+        refreshToken: 'old-refresh-token',
+        expiresAt: Math.floor(Date.now() / 1000) - 1,
+      },
+      { sub: 'old-user-sub' }
+    )
+
+    const refresh = oidc.refreshToken()
+    oidc.setToken(
+      {
+        accessToken: 'new-access-token',
+        idToken: '',
+        refreshToken: 'new-refresh-token',
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      },
+      { sub: 'new-user-sub' }
+    )
+
+    rejectFetch(new Error('network failed'))
+    await refresh
+
+    expect(authStore.token?.accessToken).toBe('new-access-token')
+    expect(authStore.user?.sub).toBe('new-user-sub')
+  })
+
   it('should keep one shared refresh timer across composable instances', () => {
     vi.useFakeTimers()
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
