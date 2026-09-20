@@ -47,7 +47,7 @@ const ACTIVITY_CHECK_THROTTLE_MS = 15_000
 // regardless of how many times useOIDC() is instantiated across the app.
 let activityListenersAttached = false
 let lastActivityCheckAt = 0
-let refreshInFlight: Promise<void> | null = null
+let refreshInFlight: Promise<boolean> | null = null
 let refreshInFlightId = 0
 let sessionGeneration = 0
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -279,14 +279,14 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     }
   }
 
-  async function refreshToken(): Promise<void> {
+  async function refreshToken(): Promise<boolean> {
     if (refreshInFlight) return refreshInFlight
 
-    const operation = (async () => {
+    const operation: Promise<boolean> = (async () => {
       const current = authStore.token
       if (!current?.refreshToken) {
         await logout()
-        return
+        return false
       }
       const refreshGeneration = sessionGeneration
       const refreshTokenUsed = current.refreshToken
@@ -314,13 +314,13 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
         if (!response.ok) {
           await logoutIfRefreshStillCurrent()
-          return
+          return false
         }
 
         const data = await response.json()
         if (!data.access_token) {
           await logoutIfRefreshStillCurrent()
-          return
+          return false
         }
 
         const claims = parseJwt((data.id_token as string) || (data.access_token as string))
@@ -339,10 +339,10 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
         if (!nextUser?.sub) {
           await logoutIfRefreshStillCurrent()
-          return
+          return false
         }
 
-        if (!isRefreshStillCurrent()) return
+        if (!isRefreshStillCurrent()) return false
 
         const nextToken: OIDCToken = {
           accessToken: data.access_token,
@@ -353,9 +353,11 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
         authStore.setToken(nextToken, nextUser)
         setupRefreshTimer()
+        return true
       } catch (err) {
         console.error('OIDC refresh failed', err)
         await logoutIfRefreshStillCurrent()
+        return false
       }
     })()
 
@@ -363,7 +365,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     refreshInFlightId = operationId
     refreshInFlight = operation
     try {
-      await operation
+      return await operation
     } finally {
       if (refreshInFlightId === operationId) refreshInFlight = null
     }

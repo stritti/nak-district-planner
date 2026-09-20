@@ -11,7 +11,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   // was throttled while the tab was backgrounded), refresh it up front
   // instead of firing an unauthenticated request that is bound to 401.
   if (authStore.token && authStore.isTokenExpired) {
-    await useOIDC(router).refreshToken()
+    const refreshed = await useOIDC(router).refreshToken()
+    if (!refreshed) {
+      throw new Error('Unauthorized - please log in again')
+    }
   }
 
   const headers: Record<string, string> = {
@@ -39,7 +42,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       const oidc = useOIDC(router)
 
       // Try to refresh token
-      await oidc.refreshToken()
+      const refreshed = await oidc.refreshToken()
+      if (!refreshed) {
+        throw new Error('Refresh discarded or failed')
+      }
 
       // Update store
       if (oidc.token.value) {
@@ -62,7 +68,6 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
         headers,
       })
     } catch {
-      authStore.clearAuth()
       throw new Error('Unauthorized - please log in again')
     }
   }
