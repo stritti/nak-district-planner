@@ -48,6 +48,8 @@ const ACTIVITY_CHECK_THROTTLE_MS = 15_000
 let activityListenersAttached = false
 let lastActivityCheckAt = 0
 let refreshInFlight: Promise<void> | null = null
+let sessionGeneration = 0
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
 const envConfig: OIDCConfig = {
   redirectUri: `${window.location.origin}/auth/callback`,
@@ -99,8 +101,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   const discoveryPromise = ref<Promise<void> | null>(null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
-  const refreshTimer = ref<ReturnType<typeof setTimeout> | null>(null)
-
   const token = computed(() => authStore.token)
   const user = computed(() => authStore.user)
   const isAuthenticated = computed(() => authStore.isAuthenticated)
@@ -268,9 +268,8 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         throw new Error('OIDC identity missing: no sub in id_token/access_token or userinfo response')
       }
 
-      authStore.setToken(nextToken, nextUser)
+      setToken(nextToken, nextUser)
       clearLocalArtifacts()
-      setupRefreshTimer()
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Token exchange failed'
       throw err
@@ -288,6 +287,8 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         await logout()
         return
       }
+      const refreshGeneration = sessionGeneration
+      const refreshTokenUsed = current.refreshToken
 
       try {
         const response = await fetch('/api/v1/auth/oidc/token', {
@@ -329,6 +330,15 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           return
         }
 
+        const latest = authStore.token
+        if (
+          refreshGeneration !== sessionGeneration ||
+          !latest ||
+          latest.refreshToken !== refreshTokenUsed
+        ) {
+          return
+        }
+
         const nextToken: OIDCToken = {
           accessToken: data.access_token,
           idToken: data.id_token || current.idToken,
@@ -348,12 +358,13 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     try {
       await operation
     } finally {
-      refreshInFlight = null
+      if (refreshInFlight === operation) refreshInFlight = null
     }
   }
 
   function setupRefreshTimer(): void {
-    if (refreshTimer.value) clearTimeout(refreshTimer.value)
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = null
     if (!authStore.token) return
 
     const nowSeconds = Date.now() / 1000
@@ -364,13 +375,21 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     const refreshLeadSeconds = Math.min(300, Math.max(5, Math.floor(ttlSeconds * 0.2)))
     const delay = Math.max((ttlSeconds - refreshLeadSeconds) * 1000, 1000)
 
-    refreshTimer.value = setTimeout(() => {
+    refreshTimer = setTimeout(() => {
       void refreshToken()
     }, delay)
   }
 
+  function invalidateSession(): void {
+    sessionGeneration += 1
+    refreshInFlight = null
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = null
+  }
+
   async function logout(): Promise<void> {
     const current = authStore.token
+    invalidateSession()
 
     try {
       await loadDiscovery().catch(() => {
@@ -393,7 +412,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         })
       }
     } finally {
-      if (refreshTimer.value) clearTimeout(refreshTimer.value)
       clearLocalArtifacts()
       authStore.clearAuth()
 
@@ -406,8 +424,12 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   }
 
   function setToken(nextToken: OIDCToken | null, nextUser: OIDCUser | null = null): void {
+    invalidateSession()
     authStore.setToken(nextToken, nextUser)
-    if (nextToken) setupRefreshTimer()
+    if (nextToken) {
+      sessionGeneration += 1
+      setupRefreshTimer()
+    }
   }
 
   function handleUserActivity(): void {
