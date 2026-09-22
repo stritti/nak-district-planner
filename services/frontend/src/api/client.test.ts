@@ -168,4 +168,45 @@ describe('apiFetch', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(authStore.token?.accessToken).toBe('new-access-token')
   })
+
+  it('aborts a 401 retry when the initiating session was replaced while pending', async () => {
+    const authStore = useAuthStore()
+    authStore.setToken(
+      {
+        accessToken: 'old-access-token',
+        idToken: '',
+        refreshToken: 'old-refresh-token',
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      },
+      { sub: 'old-user-sub' },
+    )
+
+    let resolveOriginal!: (response: Response) => void
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/state-changing') {
+        return new Promise<Response>((resolve) => {
+          resolveOriginal = resolve
+        })
+      }
+
+      return Promise.resolve(makeResponse({ ok: true }) as unknown as Response)
+    })
+
+    const request = apiFetch('/api/v1/state-changing', { method: 'POST' })
+
+    authStore.setToken(
+      {
+        accessToken: 'new-access-token',
+        idToken: '',
+        refreshToken: 'new-refresh-token',
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      },
+      { sub: 'new-user-sub' },
+    )
+    resolveOriginal(makeResponse('Unauthorized', { status: 401, ok: false }) as unknown as Response)
+
+    await expect(request).rejects.toThrow('Unauthorized')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(authStore.token?.accessToken).toBe('new-access-token')
+  })
 })

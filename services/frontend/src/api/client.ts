@@ -17,6 +17,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     }
   }
 
+  const initiatingSession = authStore.token
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -39,6 +41,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (res.status === 401 && path !== '/api/v1/auth/me') {
     // Token might be expired or invalid
     try {
+      if (authStore.token !== initiatingSession) throw new Error('Unauthorized')
+
       const oidc = useOIDC(router)
 
       // Try to refresh token
