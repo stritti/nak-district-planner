@@ -42,6 +42,10 @@ const SESSION_STATE_KEY = 'oidc_state'
 const ACTIVITY_REFRESH_LEAD_SECONDS = 120
 // Don't re-check on every single event — throttle to avoid excessive work.
 const ACTIVITY_CHECK_THROTTLE_MS = 15_000
+const REFRESH_TIMEOUT_MS = 20_000
+const REFRESH_CHANNEL = 'oidc-refresh'
+const CROSS_TAB_WAIT_TIMEOUT_MS = 30_000
+const ROTATED_TOKEN_TTL_MS = 60_000
 
 // Module-level guards: listeners must only be attached once per page load,
 // regardless of how many times useOIDC() is instantiated across the app.
@@ -51,6 +55,20 @@ let refreshInFlight: Promise<boolean> | null = null
 let refreshInFlightId = 0
 let sessionGeneration = 0
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
+let transientRetryTimer: ReturnType<typeof setTimeout> | null = null
+let refreshChannel: BroadcastChannel | null = null
+let refreshChannelListenerAttached = false
+let crossTabWaiter:
+  | { refreshToken: string; resolve: (ok: boolean) => void; timeoutId: ReturnType<typeof setTimeout> }
+  | null = null
+const rotatedTokens = new Map<
+  string,
+  { token: OIDCToken; user: OIDCUser | null; recordedAt: number }
+>()
+
+type RefreshChannelMessage =
+  | { type: 'refresh-started'; refreshToken: string }
+  | { type: 'refresh-complete'; ok: boolean; refreshToken: string; token?: OIDCToken; user?: OIDCUser | null }
 
 const envConfig: OIDCConfig = {
   redirectUri: `${window.location.origin}/auth/callback`,
@@ -92,10 +110,35 @@ function parseJwt(token: string): Record<string, unknown> {
   }
 }
 
+function getRefreshChannel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === 'undefined') return null
+  if (!refreshChannel) refreshChannel = new BroadcastChannel(REFRESH_CHANNEL)
+  return refreshChannel
+}
+
+function clearCrossTabWaiter(resolveWith = false): void {
+  if (!crossTabWaiter) return
+  clearTimeout(crossTabWaiter.timeoutId)
+  const resolve = crossTabWaiter.resolve
+  crossTabWaiter = null
+  resolve(resolveWith)
+}
+
+function pruneRotatedTokens(now = Date.now()): void {
+  for (const [refreshToken, entry] of rotatedTokens.entries()) {
+    if (now - entry.recordedAt > ROTATED_TOKEN_TTL_MS) rotatedTokens.delete(refreshToken)
+  }
+}
+
+function postRefreshMessage(message: RefreshChannelMessage): void {
+  getRefreshChannel()?.postMessage(message)
+}
+
 export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   let injectedRouter: Router | null = router || null
   const authStore = useAuthStore()
   const oidcConfig: OIDCConfig = { ...envConfig, ...(config || {}) }
+  setupRefreshChannelListener()
 
   const discovery = ref<OIDCDiscovery | null>(null)
   const clientId = ref<string>('')
@@ -138,6 +181,73 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       email: data.email,
       name: data.name,
       picture: data.picture,
+    }
+  }
+
+  function scheduleTransientRefreshRetry(): void {
+    const current = authStore.token
+    if (!current) return
+    if (transientRetryTimer) clearTimeout(transientRetryTimer)
+    transientRetryTimer = null
+
+    if (Date.now() / 1000 < current.expiresAt) {
+      setupRefreshTimer()
+      return
+    }
+
+    transientRetryTimer = setTimeout(() => {
+      transientRetryTimer = null
+      void refreshToken()
+    }, 30_000)
+  }
+
+  function adoptRotatedToken(token: OIDCToken, nextUser: OIDCUser | null): void {
+    if (transientRetryTimer) clearTimeout(transientRetryTimer)
+    transientRetryTimer = null
+    authStore.setToken(token, nextUser ?? authStore.user)
+    setupRefreshTimer()
+  }
+
+  function setupRefreshChannelListener(): void {
+    if (refreshChannelListenerAttached) return
+    const channel = getRefreshChannel()
+    if (!channel) return
+    refreshChannelListenerAttached = true
+
+    channel.onmessage = (event: MessageEvent<RefreshChannelMessage>) => {
+      const message = event.data
+      const currentRefreshToken = authStore.token?.refreshToken
+      if (!currentRefreshToken || message.refreshToken !== currentRefreshToken) return
+
+      if (message.type === 'refresh-started') {
+        if (refreshInFlight) return
+        const waiter = new Promise<boolean>((resolve) => {
+          const timeoutId = setTimeout(() => {
+            if (crossTabWaiter?.refreshToken === message.refreshToken) {
+              crossTabWaiter = null
+              refreshInFlight = null
+              resolve(false)
+            }
+          }, CROSS_TAB_WAIT_TIMEOUT_MS)
+          crossTabWaiter = { refreshToken: message.refreshToken, resolve, timeoutId }
+        })
+        refreshInFlight = waiter
+        return
+      }
+
+      if (message.ok && message.token) {
+        rotatedTokens.set(message.refreshToken, {
+          token: message.token,
+          user: message.user ?? authStore.user,
+          recordedAt: Date.now(),
+        })
+        pruneRotatedTokens()
+        adoptRotatedToken(message.token, message.user ?? authStore.user)
+        clearCrossTabWaiter(true)
+      } else {
+        clearCrossTabWaiter(false)
+      }
+      refreshInFlight = null
     }
   }
 
@@ -299,13 +409,26 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         )
       }
       const logoutIfRefreshStillCurrent = async (): Promise<void> => {
+        pruneRotatedTokens()
+        const rotated = rotatedTokens.get(refreshTokenUsed)
+        if (rotated && isRefreshStillCurrent()) {
+          adoptRotatedToken(rotated.token, rotated.user)
+          return
+        }
         if (isRefreshStillCurrent()) await logout()
       }
+      let completedOk = false
+      let completedToken: OIDCToken | undefined
+      let completedUser: OIDCUser | null | undefined
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS)
 
       try {
+        postRefreshMessage({ type: 'refresh-started', refreshToken: refreshTokenUsed })
         const response = await fetch('/api/v1/auth/oidc/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             grant_type: 'refresh_token',
             refresh_token: current.refreshToken,
@@ -313,13 +436,22 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         })
 
         if (!response.ok) {
-          await logoutIfRefreshStillCurrent()
+          const body = await response.json().catch(() => null)
+          if (
+            body &&
+            typeof body === 'object' &&
+            (body as Record<string, unknown>).error === 'invalid_grant'
+          ) {
+            await logoutIfRefreshStillCurrent()
+            return false
+          }
+          scheduleTransientRefreshRetry()
           return false
         }
 
         const data = await response.json()
         if (!data.access_token) {
-          await logoutIfRefreshStillCurrent()
+          scheduleTransientRefreshRetry()
           return false
         }
 
@@ -352,12 +484,28 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
 
         authStore.setToken(nextToken, nextUser)
+        if (transientRetryTimer) clearTimeout(transientRetryTimer)
+        transientRetryTimer = null
+        rotatedTokens.set(refreshTokenUsed, { token: nextToken, user: nextUser, recordedAt: Date.now() })
+        pruneRotatedTokens()
+        completedOk = true
+        completedToken = nextToken
+        completedUser = nextUser
         setupRefreshTimer()
         return true
       } catch (err) {
         console.error('OIDC refresh failed', err)
-        await logoutIfRefreshStillCurrent()
+        scheduleTransientRefreshRetry()
         return false
+      } finally {
+        clearTimeout(timeoutId)
+        postRefreshMessage({
+          type: 'refresh-complete',
+          ok: completedOk,
+          refreshToken: refreshTokenUsed,
+          token: completedToken,
+          user: completedUser,
+        })
       }
     })()
 
@@ -393,8 +541,11 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     sessionGeneration += 1
     refreshInFlightId += 1
     refreshInFlight = null
+    clearCrossTabWaiter(false)
     if (refreshTimer) clearTimeout(refreshTimer)
     refreshTimer = null
+    if (transientRetryTimer) clearTimeout(transientRetryTimer)
+    transientRetryTimer = null
   }
 
   async function logout(): Promise<void> {

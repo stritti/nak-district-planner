@@ -24,6 +24,13 @@ describe('useOIDC', () => {
     })
   }
 
+  const expiredToken = (refreshToken = 'refresh-token') => ({
+    accessToken: 'old-access-token',
+    idToken: '',
+    refreshToken,
+    expiresAt: Math.floor(Date.now() / 1000) - 1,
+  })
+
   beforeEach(() => {
     setActivePinia(createPinia())
     sessionStorage.clear()
@@ -319,5 +326,137 @@ describe('useOIDC', () => {
 
     vi.advanceTimersByTime(3_400_000)
     expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the session on transient refresh failure', async () => {
+    global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 500 })))
+    const oidc = createOidc()
+    const authStore = useAuthStore()
+    oidc.setToken(expiredToken(), { sub: 'user-sub' })
+
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+
+    expect(authStore.token?.accessToken).toBe('old-access-token')
+    expect(authStore.user?.sub).toBe('user-sub')
+  })
+
+  it('logs out on invalid_grant refresh failure', async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/auth/oidc/token') {
+        return Promise.resolve(new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ client_id: 'client' }), { status: 200 }))
+    })
+    const oidc = createOidc()
+    const authStore = useAuthStore()
+    oidc.setToken(expiredToken(), { sub: 'user-sub' })
+
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+
+    expect(authStore.token).toBeNull()
+  })
+
+  it('aborts stalled refreshes after the timeout and allows a subsequent refresh', async () => {
+    vi.useFakeTimers()
+    global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/v1/auth/oidc/token') {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+        })
+      }
+      return Promise.resolve(new Response('', { status: 200 }))
+    })
+    const oidc = createOidc()
+    oidc.setToken(expiredToken(), { sub: 'user-sub' })
+
+    const first = oidc.refreshToken()
+    await vi.advanceTimersByTimeAsync(20_000)
+    await expect(first).resolves.toBe(false)
+
+    const second = oidc.refreshToken()
+    expect(fetch).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(20_000)
+    await expect(second).resolves.toBe(false)
+  })
+
+  it('adopts a cross-tab rotated token and coalesces while another tab refreshes', async () => {
+    const posted: unknown[] = []
+    class MockBroadcastChannel {
+      static instances: MockBroadcastChannel[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+      constructor(public name: string) {
+        MockBroadcastChannel.instances.push(this)
+      }
+      postMessage(message: unknown) {
+        posted.push(message)
+      }
+      close() {}
+    }
+    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel)
+    global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 500 })))
+
+    const oidc = createOidc()
+    const authStore = useAuthStore()
+    oidc.setToken(expiredToken('shared-refresh-token'), { sub: 'user-sub' })
+    const channel = MockBroadcastChannel.instances[0]
+
+    channel.onmessage?.({ data: { type: 'refresh-started', refreshToken: 'shared-refresh-token' } } as MessageEvent)
+    const coalesced = oidc.refreshToken()
+    expect(fetch).not.toHaveBeenCalled()
+
+    const rotated = {
+      accessToken: 'rotated-access-token',
+      idToken: '',
+      refreshToken: 'rotated-refresh-token',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }
+    channel.onmessage?.({
+      data: {
+        type: 'refresh-complete',
+        ok: true,
+        refreshToken: 'shared-refresh-token',
+        token: rotated,
+        user: { sub: 'user-sub' },
+      },
+    } as MessageEvent)
+
+    await expect(coalesced).resolves.toBe(true)
+    expect(authStore.token?.accessToken).toBe('rotated-access-token')
+    expect(posted).toEqual([])
+  })
+
+  it('adopts a rotated token instead of logging out after invalid_grant', async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/auth/oidc/token') {
+        return Promise.resolve(new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ client_id: 'client' }), { status: 200 }))
+    })
+
+    const oidc = createOidc()
+    const authStore = useAuthStore()
+    oidc.setToken(expiredToken('racing-refresh-token'), { sub: 'user-sub' })
+    const channel = (globalThis.BroadcastChannel as unknown as { instances: { onmessage: ((event: MessageEvent) => void) | null }[] })
+      .instances[0]
+    const rotated = {
+      accessToken: 'rotated-access-token',
+      idToken: '',
+      refreshToken: 'rotated-refresh-token',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }
+    channel.onmessage?.({
+      data: {
+        type: 'refresh-complete',
+        ok: true,
+        refreshToken: 'racing-refresh-token',
+        token: rotated,
+        user: { sub: 'user-sub' },
+      },
+    } as MessageEvent)
+    oidc.setToken(expiredToken('racing-refresh-token'), { sub: 'user-sub' })
+
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+
+    expect(authStore.token?.accessToken).toBe('rotated-access-token')
   })
 })
