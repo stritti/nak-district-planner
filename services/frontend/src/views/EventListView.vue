@@ -199,7 +199,7 @@
         >
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <p class="font-medium text-gray-900 dark:text-gray-100 truncate">{{ event.title }}</p>
+              <p class="font-medium text-gray-900 dark:text-gray-100 break-words">{{ event.title }}</p>
               <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDt(event.start_at) }} · {{ event.category ?? '—' }}</p>
             </div>
             <button
@@ -375,7 +375,7 @@
                   :class="eventPillClass(event)"
                   @click="openEdit(event)"
                 >
-                  <div class="font-medium truncate">{{ event.title }}</div>
+                  <div class="font-medium break-words">{{ event.title }}</div>
                   <div class="text-[10px] opacity-70">{{ formatTime(event.start_at) }}</div>
                 </div>
               </template>
@@ -468,7 +468,7 @@
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 truncate">{{ editTarget.title }}</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 break-words">{{ editTarget.title }}</p>
         <p
           v-if="editTarget.invitation_source_congregation_name"
           class="text-xs text-amber-700 dark:text-amber-300 mb-4"

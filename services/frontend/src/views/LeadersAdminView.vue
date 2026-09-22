@@ -97,6 +97,7 @@
                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   {{ leader.email || '—' }} · {{ leader.phone || '—' }}
                 </p>
+                <p v-if="leader.special_role" class="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">Beauftragung: {{ leader.special_role }}</p>
               </div>
               <span
                 class="badge shrink-0"
@@ -624,7 +625,7 @@
             />
           </div>
 
-          <div class="col-span-2">
+          <div class="col-span-1 sm:col-span-2">
             <label class="form-label">Notizen</label>
             <textarea
               v-model="editModal.notes"

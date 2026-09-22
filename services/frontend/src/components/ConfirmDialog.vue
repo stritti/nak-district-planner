@@ -3,7 +3,7 @@
     <Transition name="dialog">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+        class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="`confirm-title-${uid}`"
@@ -17,7 +17,7 @@
         <!-- Dialog panel -->
         <div
           ref="panelRef"
-          class="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900 my-8"
+          class="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900 my-auto"
           @keydown.escape="onCancel"
         >
           <!-- Title -->

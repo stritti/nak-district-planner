@@ -2,7 +2,7 @@
   <!-- Matrix Table -->
   <div
     v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length > 0"
-    class="overflow-x-auto overscroll-x-contain touch-pan-x"
+    class="overflow-x-auto overscroll-x-contain touch-pan-x touch-pan-y"
   >
     <table :class="tableClass">
       <thead>
