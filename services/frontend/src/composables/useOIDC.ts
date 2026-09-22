@@ -677,6 +677,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     refreshToken,
     logout,
     setToken,
+    getSessionGeneration: () => sessionGeneration,
     initialize,
   }
 }

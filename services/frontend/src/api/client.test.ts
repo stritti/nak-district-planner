@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { apiFetch } from './client'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
+import { __resetOIDCModuleState, useOIDC } from '../composables/useOIDC'
 
 // Mock useCSRF composable
 vi.mock('../composables/useCSRF', () => ({
@@ -32,6 +33,7 @@ function makeResponse(
 
 describe('apiFetch', () => {
   beforeEach(() => {
+    __resetOIDCModuleState()
     vi.stubGlobal('fetch', vi.fn())
     setActivePinia(createPinia())
   })
@@ -144,7 +146,7 @@ describe('apiFetch', () => {
 
     const request = apiFetch('/api/v1/state-changing', { method: 'POST' })
 
-    authStore.setToken(
+    useOIDC().setToken(
       {
         accessToken: 'new-access-token',
         idToken: '',
@@ -208,5 +210,60 @@ describe('apiFetch', () => {
     await expect(request).rejects.toThrow('Unauthorized')
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(authStore.token?.accessToken).toBe('new-access-token')
+  })
+
+  it('retries a 401 when the token rotated while the original request was pending', async () => {
+    const authStore = useAuthStore()
+    authStore.setToken(
+      {
+        accessToken: 'old-access-token',
+        idToken: '',
+        refreshToken: 'old-refresh-token',
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      },
+      { sub: 'user-sub' },
+    )
+
+    let resolveOriginal!: (response: Response) => void
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/v1/state-changing' && vi.mocked(fetch).mock.calls.length === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveOriginal = resolve
+        })
+      }
+      if (String(input) === '/api/v1/auth/oidc/token') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              access_token: 'refreshed-access-token',
+              id_token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLXN1YiJ9.signature',
+              refresh_token: 'refreshed-refresh-token',
+              expires_in: 3600,
+            }),
+            { status: 200 },
+          ),
+        )
+      }
+
+      const headers = init?.headers as Record<string, string>
+      expect(headers.Authorization).toBe('Bearer refreshed-access-token')
+      return Promise.resolve(makeResponse({ ok: true }) as unknown as Response)
+    })
+
+    const request = apiFetch('/api/v1/state-changing', { method: 'POST' })
+
+    authStore.setToken(
+      {
+        accessToken: 'rotated-access-token',
+        idToken: '',
+        refreshToken: 'rotated-refresh-token',
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      },
+      { sub: 'user-sub' },
+    )
+    resolveOriginal(makeResponse('Unauthorized', { status: 401, ok: false }) as unknown as Response)
+
+    await expect(request).resolves.toEqual({ ok: true })
+    expect(fetch).toHaveBeenCalledTimes(3)
   })
 })

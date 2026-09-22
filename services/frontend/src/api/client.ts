@@ -6,18 +6,19 @@ import { router } from '../router'
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const authStore = useAuthStore()
   const { getCSRFHeaders } = useCSRF()
+  const oidc = useOIDC(router)
 
   // If the access token already expired (e.g. the scheduled refresh timer
   // was throttled while the tab was backgrounded), refresh it up front
   // instead of firing an unauthenticated request that is bound to 401.
   if (authStore.token && authStore.isTokenExpired) {
-    const refreshed = await useOIDC(router).refreshToken()
+    const refreshed = await oidc.refreshToken()
     if (!refreshed) {
       throw new Error('Unauthorized - please log in again')
     }
   }
 
-  const initiatingSession = authStore.token
+  const initiatingGeneration = oidc.getSessionGeneration()
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -41,9 +42,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (res.status === 401 && path !== '/api/v1/auth/me') {
     // Token might be expired or invalid
     try {
-      if (authStore.token !== initiatingSession) throw new Error('Unauthorized')
-
-      const oidc = useOIDC(router)
+      if (oidc.getSessionGeneration() !== initiatingGeneration) throw new Error('Unauthorized')
 
       // Try to refresh token
       const refreshed = await oidc.refreshToken()
