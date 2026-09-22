@@ -577,7 +577,9 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           scheduleTransientRefreshRetry()
           return false
         }
-        await new Promise<void>((resolve) => setTimeout(resolve, 50))
+        // Yield one microtask so ownership can be checked without changing the
+        // existing refresh timing in a single-tab browser.
+        await Promise.resolve()
         if (readLease()?.owner !== owner) return waitForCrossTabRefresh(refreshTokenUsed)
         try {
           return await runRefreshBody()
