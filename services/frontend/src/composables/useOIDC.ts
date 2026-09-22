@@ -461,10 +461,12 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
         if (!response.ok) {
           const body = await response.json().catch(() => null)
+          const bodyRecord = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
+          const detail = bodyRecord?.detail
+          const detailRecord = detail && typeof detail === 'object' ? (detail as Record<string, unknown>) : null
+          const errorCode = bodyRecord?.error ?? detailRecord?.error
           if (
-            body &&
-            typeof body === 'object' &&
-            (body as Record<string, unknown>).error === 'invalid_grant'
+            errorCode === 'invalid_grant'
           ) {
             await logoutIfRefreshStillCurrent()
             return false

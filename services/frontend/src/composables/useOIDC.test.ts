@@ -378,6 +378,22 @@ describe('useOIDC', () => {
     expect(authStore.token).toBeNull()
   })
 
+  it('logs out on nested invalid_grant refresh failure from proxy', async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/auth/oidc/token') {
+        return Promise.resolve(new Response(JSON.stringify({ detail: { error: 'invalid_grant' } }), { status: 400 }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ client_id: 'client' }), { status: 200 }))
+    })
+    const oidc = createOidc()
+    const authStore = useAuthStore()
+    oidc.setToken(expiredToken(), { sub: 'user-sub' })
+
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+
+    expect(authStore.token).toBeNull()
+  })
+
   it('aborts stalled refreshes after the timeout and allows a subsequent refresh', async () => {
     vi.useFakeTimers()
     global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
