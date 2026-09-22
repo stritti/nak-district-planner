@@ -97,7 +97,6 @@ async def get_current_user(
             existing_user.family_name = user_info["family_name"]
             # RLS trusts the stored owner-controlled flag; do not grant
             # superadmin in memory when configuration and database disagree.
-            is_superadmin = existing_user.is_superadmin
             await user_repo.save(existing_user)
             request.state.user = existing_user
             return existing_user
