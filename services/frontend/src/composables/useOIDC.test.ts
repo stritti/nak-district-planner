@@ -450,6 +450,61 @@ describe('useOIDC', () => {
     expect(postedBroadcastMessages).toEqual([])
   })
 
+  it('serializes simultaneous cross-tab refreshes with web locks', async () => {
+    const activeLocks = new Set<string>()
+    const locksRequest = vi.fn(
+      async (
+        name: string,
+        _options: { ifAvailable: boolean },
+        callback: (lock: Lock | null) => Promise<boolean>,
+      ) => {
+        if (activeLocks.has(name)) return callback(null)
+        activeLocks.add(name)
+        try {
+          return await callback({ name, mode: 'exclusive' } as Lock)
+        } finally {
+          activeLocks.delete(name)
+        }
+      },
+    )
+    vi.stubGlobal('navigator', { ...navigator, locks: { request: locksRequest } })
+
+    let resolveFetch!: (response: Response) => void
+    global.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve
+        }),
+    )
+
+    const first = createOidc()
+    const second = createOidc()
+    const authStore = useAuthStore()
+    first.setToken(expiredToken('locked-refresh-token'), { sub: 'user-sub' })
+
+    const firstRefresh = first.refreshToken()
+    const secondRefresh = second.refreshToken()
+
+    expect(locksRequest).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledTimes(1)
+
+    resolveFetch(
+      new Response(
+        JSON.stringify({
+          access_token: 'locked-rotated-access-token',
+          id_token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLXN1YiJ9.signature',
+          refresh_token: 'locked-rotated-refresh-token',
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      ),
+    )
+
+    await expect(Promise.all([firstRefresh, secondRefresh])).resolves.toEqual([true, true])
+    expect(authStore.token?.accessToken).toBe('locked-rotated-access-token')
+    expect(second.token.value?.accessToken).toBe('locked-rotated-access-token')
+  })
+
   it('adopts a rotated token instead of logging out after invalid_grant', async () => {
     global.fetch = vi.fn((input: RequestInfo | URL) => {
       if (String(input) === '/api/v1/auth/oidc/token') {

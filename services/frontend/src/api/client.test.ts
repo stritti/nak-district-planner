@@ -196,7 +196,7 @@ describe('apiFetch', () => {
 
     const request = apiFetch('/api/v1/state-changing', { method: 'POST' })
 
-    authStore.setToken(
+    useOIDC().setToken(
       {
         accessToken: 'new-access-token',
         idToken: '',

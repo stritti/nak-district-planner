@@ -124,6 +124,19 @@ function clearCrossTabWaiter(resolveWith = false): void {
   resolve(resolveWith)
 }
 
+function waitForCrossTabRefresh(refreshToken: string): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const timeoutId = setTimeout(() => {
+      if (crossTabWaiter?.refreshToken === refreshToken) {
+        crossTabWaiter = null
+        refreshInFlight = null
+        resolve(false)
+      }
+    }, CROSS_TAB_WAIT_TIMEOUT_MS)
+    crossTabWaiter = { refreshToken, resolve, timeoutId }
+  })
+}
+
 function pruneRotatedTokens(now = Date.now()): void {
   for (const [refreshToken, entry] of rotatedTokens.entries()) {
     if (now - entry.recordedAt > ROTATED_TOKEN_TTL_MS) rotatedTokens.delete(refreshToken)
@@ -244,17 +257,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
       if (message.type === 'refresh-started') {
         if (refreshInFlight) return
-        const waiter = new Promise<boolean>((resolve) => {
-          const timeoutId = setTimeout(() => {
-            if (crossTabWaiter?.refreshToken === message.refreshToken) {
-              crossTabWaiter = null
-              refreshInFlight = null
-              resolve(false)
-            }
-          }, CROSS_TAB_WAIT_TIMEOUT_MS)
-          crossTabWaiter = { refreshToken: message.refreshToken, resolve, timeoutId }
-        })
-        refreshInFlight = waiter
+        refreshInFlight = waitForCrossTabRefresh(message.refreshToken)
         return
       }
 
@@ -440,100 +443,107 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
         if (isRefreshStillCurrent()) await logout()
       }
-      let completedOk = false
-      let completedToken: OIDCToken | undefined
-      let completedUser: OIDCUser | null | undefined
-      const controller = new AbortController()
-      // Bound stalled browser-to-backend refresh requests so callers do not share a stuck promise forever.
-      const timeoutId = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS)
+      const runRefreshBody = async (): Promise<boolean> => {
+        let completedOk = false
+        let completedToken: OIDCToken | undefined
+        let completedUser: OIDCUser | null | undefined
+        const controller = new AbortController()
+        // Bound stalled browser-to-backend refresh requests so callers do not share a stuck promise forever.
+        const timeoutId = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS)
 
-      try {
-        postRefreshMessage({ type: 'refresh-started', refreshToken: refreshTokenUsed })
-        const response = await fetch('/api/v1/auth/oidc/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            grant_type: 'refresh_token',
-            refresh_token: current.refreshToken,
-          }),
-        })
+        try {
+          postRefreshMessage({ type: 'refresh-started', refreshToken: refreshTokenUsed })
+          const response = await fetch('/api/v1/auth/oidc/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              grant_type: 'refresh_token',
+              refresh_token: current.refreshToken,
+            }),
+          })
 
-        if (!response.ok) {
-          const body = await response.json().catch(() => null)
-          const bodyRecord = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
-          const detail = bodyRecord?.detail
-          const detailRecord = detail && typeof detail === 'object' ? (detail as Record<string, unknown>) : null
-          const errorCode = bodyRecord?.error ?? detailRecord?.error
-          if (
-            errorCode === 'invalid_grant'
-          ) {
+          if (!response.ok) {
+            const body = await response.json().catch(() => null)
+            const bodyRecord = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
+            const detail = bodyRecord?.detail
+            const detailRecord = detail && typeof detail === 'object' ? (detail as Record<string, unknown>) : null
+            const errorCode = bodyRecord?.error ?? detailRecord?.error
+            if (errorCode === 'invalid_grant') {
+              await logoutIfRefreshStillCurrent()
+              return false
+            }
+            // Non-invalid_grant responses are treated as transient provider/backend failures.
+            scheduleTransientRefreshRetry()
+            return false
+          }
+
+          const data = await response.json()
+          if (!data.access_token) {
+            scheduleTransientRefreshRetry()
+            return false
+          }
+
+          const claims = parseJwt((data.id_token as string) || (data.access_token as string))
+          let nextUser: OIDCUser | null = authStore.user
+
+          if (claims.sub) {
+            nextUser = {
+              sub: claims.sub as string,
+              email: (claims.email as string) || authStore.user?.email,
+              name: (claims.name as string) || authStore.user?.name,
+              picture: (claims.picture as string) || authStore.user?.picture,
+            }
+          } else if (!authStore.user?.sub) {
+            nextUser = await fetchUserInfo(data.access_token)
+          }
+
+          if (!nextUser?.sub) {
             await logoutIfRefreshStillCurrent()
             return false
           }
-          // Non-invalid_grant responses are treated as transient provider/backend failures.
-          scheduleTransientRefreshRetry()
-          return false
-        }
 
-        const data = await response.json()
-        if (!data.access_token) {
-          scheduleTransientRefreshRetry()
-          return false
-        }
+          if (!isRefreshStillCurrent()) return false
 
-        const claims = parseJwt((data.id_token as string) || (data.access_token as string))
-        let nextUser: OIDCUser | null = authStore.user
-
-        if (claims.sub) {
-          nextUser = {
-            sub: claims.sub as string,
-            email: (claims.email as string) || authStore.user?.email,
-            name: (claims.name as string) || authStore.user?.name,
-            picture: (claims.picture as string) || authStore.user?.picture,
+          const nextToken: OIDCToken = {
+            accessToken: data.access_token,
+            idToken: data.id_token || current.idToken,
+            refreshToken: data.refresh_token || current.refreshToken,
+            expiresAt: Math.floor(Date.now() / 1000) + Number(data.expires_in || 3600),
           }
-        } else if (!authStore.user?.sub) {
-          nextUser = await fetchUserInfo(data.access_token)
-        }
 
-        if (!nextUser?.sub) {
-          await logoutIfRefreshStillCurrent()
+          authStore.setToken(nextToken, nextUser)
+          if (transientRetryTimer) clearTimeout(transientRetryTimer)
+          transientRetryTimer = null
+          rotatedTokens.set(refreshTokenUsed, { token: nextToken, user: nextUser, recordedAt: Date.now() })
+          pruneRotatedTokens()
+          completedOk = true
+          completedToken = nextToken
+          completedUser = nextUser
+          setupRefreshTimer()
+          return true
+        } catch (err) {
+          console.error('OIDC refresh failed', err)
+          scheduleTransientRefreshRetry()
           return false
+        } finally {
+          clearTimeout(timeoutId)
+          postRefreshMessage({
+            type: 'refresh-complete',
+            ok: completedOk,
+            refreshToken: refreshTokenUsed,
+            token: completedToken,
+            user: completedUser,
+          })
         }
-
-        if (!isRefreshStillCurrent()) return false
-
-        const nextToken: OIDCToken = {
-          accessToken: data.access_token,
-          idToken: data.id_token || current.idToken,
-          refreshToken: data.refresh_token || current.refreshToken,
-          expiresAt: Math.floor(Date.now() / 1000) + Number(data.expires_in || 3600),
-        }
-
-        authStore.setToken(nextToken, nextUser)
-        if (transientRetryTimer) clearTimeout(transientRetryTimer)
-        transientRetryTimer = null
-        rotatedTokens.set(refreshTokenUsed, { token: nextToken, user: nextUser, recordedAt: Date.now() })
-        pruneRotatedTokens()
-        completedOk = true
-        completedToken = nextToken
-        completedUser = nextUser
-        setupRefreshTimer()
-        return true
-      } catch (err) {
-        console.error('OIDC refresh failed', err)
-        scheduleTransientRefreshRetry()
-        return false
-      } finally {
-        clearTimeout(timeoutId)
-        postRefreshMessage({
-          type: 'refresh-complete',
-          ok: completedOk,
-          refreshToken: refreshTokenUsed,
-          token: completedToken,
-          user: completedUser,
-        })
       }
+
+      if (typeof navigator === 'undefined' || !navigator.locks) return runRefreshBody()
+
+      return navigator.locks.request(`oidc-refresh:${refreshTokenUsed}`, { ifAvailable: true }, async (lock) => {
+        if (!lock) return waitForCrossTabRefresh(refreshTokenUsed)
+        return runRefreshBody()
+      })
     })()
 
     const operationId = refreshInFlightId + 1
