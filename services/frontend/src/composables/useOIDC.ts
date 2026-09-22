@@ -445,6 +445,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             await logoutIfRefreshStillCurrent()
             return false
           }
+          // Non-invalid_grant responses are treated as transient provider/backend failures.
           scheduleTransientRefreshRetry()
           return false
         }
