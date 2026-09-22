@@ -61,6 +61,7 @@ let refreshChannelListenerAttached = false
 let crossTabWaiter:
   | { refreshToken: string; resolve: (ok: boolean) => void; timeoutId: ReturnType<typeof setTimeout> }
   | null = null
+const ownedRefreshLeases = new Map<string, string>()
 const rotatedTokens = new Map<
   string,
   { token: OIDCToken; user: OIDCUser | null; recordedAt: number }
@@ -163,6 +164,13 @@ export function __resetOIDCModuleState(): void {
   if (crossTabWaiter) clearTimeout(crossTabWaiter.timeoutId)
   crossTabWaiter = null
   rotatedTokens.clear()
+  for (const [key, owner] of ownedRefreshLeases) {
+    try {
+      const lease = JSON.parse(localStorage.getItem(key) || 'null') as { owner?: string } | null
+      if (lease?.owner === owner) localStorage.removeItem(key)
+    } catch { /* storage may be unavailable */ }
+  }
+  ownedRefreshLeases.clear()
   refreshChannel?.close()
   refreshChannel = null
   refreshChannelListenerAttached = false
@@ -577,15 +585,19 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           scheduleTransientRefreshRetry()
           return false
         }
-        // Yield one microtask so ownership can be checked without changing the
-        // existing refresh timing in a single-tab browser.
-        await Promise.resolve()
-        if (readLease()?.owner !== owner) return waitForCrossTabRefresh(refreshTokenUsed)
+        // Start the request synchronously for the owning tab. Other tabs
+        // observing the lease wait for its broadcast result.
+        ownedRefreshLeases.set(leaseKey, owner)
+        if (readLease()?.owner !== owner) {
+          ownedRefreshLeases.delete(leaseKey)
+          return waitForCrossTabRefresh(refreshTokenUsed)
+        }
         try {
           return await runRefreshBody()
         } finally {
           try {
             if (readLease()?.owner === owner) localStorage.removeItem(leaseKey)
+            ownedRefreshLeases.delete(leaseKey)
           } catch {
             // Expiry makes abandoned leases recoverable.
           }
