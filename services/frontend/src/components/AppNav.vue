@@ -13,7 +13,7 @@
             <Bars3Icon class="h-5 w-5" />
           </button>
 
-          <span class="font-semibold text-gray-900 dark:text-gray-100 text-sm tracking-tight mr-4 shrink-0">NAK Bezirksplaner</span>
+          <span class="font-semibold text-gray-900 dark:text-gray-100 text-sm tracking-tight mr-4 shrink-0 hidden min-[400px]:inline">NAK Bezirksplaner</span>
 
           <!-- Desktop nav links (hidden on mobile) -->
           <template v-if="authStore.isAuthenticated">

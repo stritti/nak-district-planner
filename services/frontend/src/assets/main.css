@@ -45,7 +45,7 @@
 
   /** Small icon-only action button (edit, copy, delete…) — 44px touch target on mobile */
   .btn-icon {
-    @apply p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center;
+    @apply p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 min-h-11 min-w-11 md:min-h-0 md:min-w-0 inline-flex items-center justify-center;
   }
 
   /** Modal close button (top-right corner) — 44px touch target on mobile */
