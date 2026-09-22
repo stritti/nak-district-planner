@@ -131,7 +131,30 @@ function pruneRotatedTokens(now = Date.now()): void {
 }
 
 function postRefreshMessage(message: RefreshChannelMessage): void {
-  getRefreshChannel()?.postMessage(message)
+  try {
+    getRefreshChannel()?.postMessage(message)
+  } catch {
+    // BroadcastChannel failures must never break local refresh/session flow.
+  }
+}
+
+/** @internal — resets module-level state; used by tests */
+export function __resetOIDCModuleState(): void {
+  refreshInFlight = null
+  refreshInFlightId = 0
+  sessionGeneration = 0
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = null
+  if (transientRetryTimer) clearTimeout(transientRetryTimer)
+  transientRetryTimer = null
+  if (crossTabWaiter) clearTimeout(crossTabWaiter.timeoutId)
+  crossTabWaiter = null
+  rotatedTokens.clear()
+  refreshChannel?.close()
+  refreshChannel = null
+  refreshChannelListenerAttached = false
+  activityListenersAttached = false
+  lastActivityCheckAt = 0
 }
 
 export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {

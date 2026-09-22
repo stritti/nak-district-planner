@@ -4,8 +4,25 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useOIDC } from './useOIDC'
+import { __resetOIDCModuleState, useOIDC } from './useOIDC'
 import { useAuthStore } from '../stores/auth'
+
+const postedBroadcastMessages: unknown[] = []
+
+class MockBroadcastChannel {
+  static instances: MockBroadcastChannel[] = []
+  onmessage: ((event: MessageEvent) => void) | null = null
+
+  constructor(public name: string) {
+    MockBroadcastChannel.instances.push(this)
+  }
+
+  postMessage(message: unknown) {
+    postedBroadcastMessages.push(message)
+  }
+
+  close() {}
+}
 
 // Mock Vue Router
 vi.mock('vue-router', () => ({
@@ -32,6 +49,10 @@ describe('useOIDC', () => {
   })
 
   beforeEach(() => {
+    __resetOIDCModuleState()
+    MockBroadcastChannel.instances = []
+    postedBroadcastMessages.length = 0
+    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel)
     setActivePinia(createPinia())
     sessionStorage.clear()
     vi.clearAllMocks()
@@ -42,6 +63,7 @@ describe('useOIDC', () => {
     createOidc().setToken(null)
     vi.useRealTimers()
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('should generate valid PKCE code verifier and challenge', async () => {
@@ -380,19 +402,6 @@ describe('useOIDC', () => {
   })
 
   it('adopts a cross-tab rotated token and coalesces while another tab refreshes', async () => {
-    const posted: unknown[] = []
-    class MockBroadcastChannel {
-      static instances: MockBroadcastChannel[] = []
-      onmessage: ((event: MessageEvent) => void) | null = null
-      constructor(public name: string) {
-        MockBroadcastChannel.instances.push(this)
-      }
-      postMessage(message: unknown) {
-        posted.push(message)
-      }
-      close() {}
-    }
-    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel)
     global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 500 })))
 
     const oidc = createOidc()
@@ -422,7 +431,7 @@ describe('useOIDC', () => {
 
     await expect(coalesced).resolves.toBe(true)
     expect(authStore.token?.accessToken).toBe('rotated-access-token')
-    expect(posted).toEqual([])
+    expect(postedBroadcastMessages).toEqual([])
   })
 
   it('adopts a rotated token instead of logging out after invalid_grant', async () => {
