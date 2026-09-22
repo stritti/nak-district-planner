@@ -53,6 +53,13 @@ describe('useOIDC', () => {
     MockBroadcastChannel.instances = []
     postedBroadcastMessages.length = 0
     vi.stubGlobal('BroadcastChannel', MockBroadcastChannel)
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      locks: {
+        request: async (name: string, _options: { ifAvailable: boolean }, callback: (lock: Lock | null) => Promise<boolean>) =>
+          callback({ name, mode: 'exclusive' } as Lock),
+      },
+    })
     setActivePinia(createPinia())
     sessionStorage.clear()
     vi.clearAllMocks()
@@ -448,6 +455,19 @@ describe('useOIDC', () => {
     await expect(coalesced).resolves.toBe(true)
     expect(authStore.token?.accessToken).toBe('rotated-access-token')
     expect(postedBroadcastMessages).toEqual([])
+  })
+
+  it('does not send a rotating refresh token without Web Locks', async () => {
+    vi.stubGlobal('navigator', { ...navigator, locks: undefined })
+    global.fetch = vi.fn()
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('unsafe-fallback-token'), { sub: 'user-sub' })
+
+    const result = await oidc.refreshToken()
+
+    expect(result).toBe(false)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(useAuthStore().token?.refreshToken).toBe('unsafe-fallback-token')
   })
 
   it('serializes simultaneous cross-tab refreshes with web locks', async () => {

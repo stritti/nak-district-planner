@@ -61,7 +61,6 @@ let refreshChannelListenerAttached = false
 let crossTabWaiter:
   | { refreshToken: string; resolve: (ok: boolean) => void; timeoutId: ReturnType<typeof setTimeout> }
   | null = null
-const ownedRefreshLeases = new Map<string, string>()
 const rotatedTokens = new Map<
   string,
   { token: OIDCToken; user: OIDCUser | null; recordedAt: number }
@@ -164,13 +163,6 @@ export function __resetOIDCModuleState(): void {
   if (crossTabWaiter) clearTimeout(crossTabWaiter.timeoutId)
   crossTabWaiter = null
   rotatedTokens.clear()
-  for (const [key, owner] of ownedRefreshLeases) {
-    try {
-      const lease = JSON.parse(localStorage.getItem(key) || 'null') as { owner?: string } | null
-      if (lease?.owner === owner) localStorage.removeItem(key)
-    } catch { /* storage may be unavailable */ }
-  }
-  ownedRefreshLeases.clear()
   refreshChannel?.close()
   refreshChannel = null
   refreshChannelListenerAttached = false
@@ -551,57 +543,12 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       // provide an atomic compare-and-set, so competing tabs yield once and
       // verify ownership before requesting a token.
       if (typeof navigator === 'undefined' || !navigator.locks) {
-        const leaseKey = `oidc-refresh-lease:${refreshTokenUsed}`
-        const owner = `${Date.now()}:${Math.random()}`
-        const leaseDuration = REFRESH_TIMEOUT_MS + 5_000
-        const readLease = (): { owner: string; expiresAt: number } | null => {
-          try {
-            const raw = localStorage.getItem(leaseKey)
-            if (!raw) return null
-            const value = JSON.parse(raw) as { owner?: unknown; expiresAt?: unknown }
-            return typeof value.owner === 'string' && typeof value.expiresAt === 'number'
-              ? { owner: value.owner, expiresAt: value.expiresAt }
-              : null
-          } catch {
-            return null
-          }
-        }
-        let hasStorage = true
-        try {
-          const existing = readLease()
-          if (existing && existing.expiresAt > Date.now()) {
-            return waitForCrossTabRefresh(refreshTokenUsed)
-          }
-          localStorage.setItem(
-            leaseKey,
-            JSON.stringify({ owner, expiresAt: Date.now() + leaseDuration }),
-          )
-        } catch {
-          hasStorage = false
-        }
-        if (!hasStorage) {
-          // A missing shared storage facility cannot provide safe fallback
-          // serialization. Fail closed rather than risk refresh-token reuse.
-          scheduleTransientRefreshRetry()
-          return false
-        }
-        // Start the request synchronously for the owning tab. Other tabs
-        // observing the lease wait for its broadcast result.
-        ownedRefreshLeases.set(leaseKey, owner)
-        if (readLease()?.owner !== owner) {
-          ownedRefreshLeases.delete(leaseKey)
-          return waitForCrossTabRefresh(refreshTokenUsed)
-        }
-        try {
-          return await runRefreshBody()
-        } finally {
-          try {
-            if (readLease()?.owner === owner) localStorage.removeItem(leaseKey)
-            ownedRefreshLeases.delete(leaseKey)
-          } catch {
-            // Expiry makes abandoned leases recoverable.
-          }
-        }
+        // localStorage read/write is not atomic across tabs. A delay or
+        // ownership recheck cannot safely serialize rotating refresh tokens.
+        // Fail closed when Web Locks is unavailable rather than risk token
+        // reuse (and possible revocation of the entire token family).
+        // Do not retry automatically: this browser cannot acquire a safe lock.
+        return false
       }
 
       return navigator.locks.request(`oidc-refresh:${refreshTokenUsed}`, { ifAvailable: true }, async (lock) => {

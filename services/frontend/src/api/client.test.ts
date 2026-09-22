@@ -35,6 +35,13 @@ describe('apiFetch', () => {
   beforeEach(() => {
     __resetOIDCModuleState()
     vi.stubGlobal('fetch', vi.fn())
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      locks: {
+        request: async (name: string, _options: { ifAvailable: boolean }, callback: (lock: Lock | null) => Promise<boolean>) =>
+          callback({ name, mode: 'exclusive' } as Lock),
+      },
+    })
     setActivePinia(createPinia())
   })
 
