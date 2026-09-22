@@ -421,6 +421,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       let completedToken: OIDCToken | undefined
       let completedUser: OIDCUser | null | undefined
       const controller = new AbortController()
+      // Bound stalled browser-to-backend refresh requests so callers do not share a stuck promise forever.
       const timeoutId = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS)
 
       try {
