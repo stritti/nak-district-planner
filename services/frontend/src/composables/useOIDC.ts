@@ -538,7 +538,57 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
       }
 
-      if (typeof navigator === 'undefined' || !navigator.locks) return runRefreshBody()
+      // Without Web Locks, an expiring storage lease prevents tabs from
+      // refreshing the same rotating token simultaneously. Storage does not
+      // provide an atomic compare-and-set, so competing tabs yield once and
+      // verify ownership before requesting a token.
+      if (typeof navigator === 'undefined' || !navigator.locks) {
+        const leaseKey = `oidc-refresh-lease:${refreshTokenUsed}`
+        const owner = `${Date.now()}:${Math.random()}`
+        const leaseDuration = REFRESH_TIMEOUT_MS + 5_000
+        const readLease = (): { owner: string; expiresAt: number } | null => {
+          try {
+            const raw = localStorage.getItem(leaseKey)
+            if (!raw) return null
+            const value = JSON.parse(raw) as { owner?: unknown; expiresAt?: unknown }
+            return typeof value.owner === 'string' && typeof value.expiresAt === 'number'
+              ? { owner: value.owner, expiresAt: value.expiresAt }
+              : null
+          } catch {
+            return null
+          }
+        }
+        let hasStorage = true
+        try {
+          const existing = readLease()
+          if (existing && existing.expiresAt > Date.now()) {
+            return waitForCrossTabRefresh(refreshTokenUsed)
+          }
+          localStorage.setItem(
+            leaseKey,
+            JSON.stringify({ owner, expiresAt: Date.now() + leaseDuration }),
+          )
+        } catch {
+          hasStorage = false
+        }
+        if (!hasStorage) {
+          // A missing shared storage facility cannot provide safe fallback
+          // serialization. Fail closed rather than risk refresh-token reuse.
+          scheduleTransientRefreshRetry()
+          return false
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 50))
+        if (readLease()?.owner !== owner) return waitForCrossTabRefresh(refreshTokenUsed)
+        try {
+          return await runRefreshBody()
+        } finally {
+          try {
+            if (readLease()?.owner === owner) localStorage.removeItem(leaseKey)
+          } catch {
+            // Expiry makes abandoned leases recoverable.
+          }
+        }
+      }
 
       return navigator.locks.request(`oidc-refresh:${refreshTokenUsed}`, { ifAvailable: true }, async (lock) => {
         if (!lock) return waitForCrossTabRefresh(refreshTokenUsed)
