@@ -70,7 +70,6 @@ def _auth_client(district_id: uuid.UUID):
     finally:
         app.dependency_overrides.pop(get_db_session, None)
         deps.set_oidc_adapter(None)
-        deps._token_claims_context.clear()
 
 
 def _slot(

@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import Callable, Coroutine
-from datetime import UTC, datetime
 from typing import Annotated, Any, NamedTuple, TypeVar
 
 from fastapi import Depends, HTTPException, Request, Security, status
@@ -12,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
-from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.notification import SqlNotificationRepository
 from app.adapters.db.repositories.user import SqlUserRepository
@@ -97,7 +95,9 @@ async def get_current_user(
             existing_user.name = user_info["name"]
             existing_user.given_name = user_info["given_name"]
             existing_user.family_name = user_info["family_name"]
-            existing_user.is_superadmin = is_superadmin
+            # RLS trusts the stored owner-controlled flag; do not grant
+            # superadmin in memory when configuration and database disagree.
+            is_superadmin = existing_user.is_superadmin
             await user_repo.save(existing_user)
             request.state.user = existing_user
             return existing_user
@@ -114,6 +114,8 @@ async def get_current_user(
             )
             await user_repo.save(new_user)
             logger.info(f"Auto-created user: {new_user.sub} ({new_user.email})")
+            # Runtime user creation does not grant the database-controlled flag.
+            new_user.is_superadmin = False
             request.state.user = new_user
             return new_user
 
@@ -158,30 +160,24 @@ async def get_current_user_with_memberships(
     membership_repo = SqlMembershipRepository(session)
     memberships = await membership_repo.get_all_by_user(user.sub)
 
-    # Secure post-login linking strategy for approved registrations without user_sub:
-    # if there is exactly one approved+unlinked registration for this email,
-    # link it to this user and materialize its assigned membership.
+    # The SECURITY DEFINER function provides an RLS-safe, row-locked,
+    # single-candidate claim. A plain repository lookup cannot see first-time
+    # registrations under the production RLS policy and is race-prone.
     if user.email:
-        reg_repo = SqlLeaderRegistrationRepository(session)
-        candidates = await reg_repo.list_approved_unlinked_by_email(user.email)
-        if len(candidates) == 1:
-            registration = candidates[0]
-            registration.user_sub = user.sub
-            registration.updated_at = datetime.now(UTC)
-            await reg_repo.save(registration)
-            if (
-                registration.assigned_role is not None
-                and registration.assigned_scope_type is not None
-                and registration.assigned_scope_id is not None
-            ):
-                await membership_repo.upsert_by_scope(
-                    user_sub=user.sub,
-                    role=registration.assigned_role,
-                    scope_type=registration.assigned_scope_type,
-                    scope_id=registration.assigned_scope_id,
-                )
+        result = await session.execute(
+            text(
+                """
+                SELECT candidate_count, granted_role, granted_scope_type, granted_scope_id
+                FROM link_approved_registration(:user_sub, :email)
+                """
+            ),
+            {"user_sub": user.sub, "email": user.email},
+        )
+        link_result = result.mappings().one_or_none()
+        candidate_count = int(link_result["candidate_count"]) if link_result else 0
+        if candidate_count == 1:
             memberships = await membership_repo.get_all_by_user(user.sub)
-        elif len(candidates) > 1:
+        elif candidate_count > 1:
             logger.warning(
                 "Multiple approved unlinked registrations for email=%s; skipping auto-link",
                 user.email,

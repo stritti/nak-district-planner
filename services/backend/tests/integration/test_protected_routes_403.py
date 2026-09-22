@@ -109,10 +109,8 @@ def auth_client(mock_oidc_adapter):
 
         yield client, _auth_headers, district1
 
-        # The requests above populated deps._token_claims_context (module-level,
         # never auto-cleared). Reset it so unit tests that call
         # get_current_user_with_memberships directly don't inherit stale claims.
-        deps._token_claims_context.clear()
 
 
 @pytest.fixture
