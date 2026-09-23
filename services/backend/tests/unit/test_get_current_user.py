@@ -26,8 +26,12 @@ def mock_oidc_adapter():
 
 @pytest.fixture
 def mock_session():
-    """Create a mock AsyncSession."""
-    return AsyncMock(spec=AsyncSession)
+    """Create a mock AsyncSession with a deterministic no-grant result."""
+    session = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = False
+    session.execute = AsyncMock(return_value=result)
+    return session
 
 
 @pytest.fixture
@@ -122,32 +126,27 @@ class TestGetCurrentUserAutoCreation:
         with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
             mock_repo_instance = AsyncMock()
             mock_repo_instance.get_by_sub.return_value = None
-            mock_repo_instance.has_any_user.return_value = False
             mock_repo_instance.save = AsyncMock()
             MockRepo.return_value = mock_repo_instance
 
-            with patch("app.adapters.api.deps.settings") as mock_settings:
-                mock_settings.superadmin_sub = None
-
-                user = await get_current_user(
-                    mock_request, mock_credentials, mock_session
-                )
+            user = await get_current_user(
+                mock_request, mock_credentials, mock_session
+            )
 
         assert user.is_superadmin is True
         grant_call = mock_session.execute.await_args_list[-1]
         assert "grant_bootstrap_superadmin" in str(grant_call.args[0])
-        assert grant_call.args[1] == {
-            "user_sub": "first-user",
-            "configured_sub": None,
-            "is_first_login": True,
-        }
+        # Authorization facts are derived from owner-controlled database
+        # state; the app must not pass configured subjects or login hints.
+        assert grant_call.args[1] == {"user_sub": "first-user"}
 
     @pytest.mark.asyncio
-    async def test_configured_superadmin_sub_persists_flag(
+    async def test_existing_user_with_grant_keeps_flag(
         self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
     ):
-        """A login matching SUPERADMIN_SUB is granted the persisted flag even
-        when other users already exist.
+        """An existing user the database grants the flag keeps it, and the
+        reconciliation function is invoked on every login so rotations of
+        the configured subject also revoke stale persisted grants.
         """
         token_claims = {
             "sub": "configured-admin",
@@ -164,6 +163,12 @@ class TestGetCurrentUserAutoCreation:
             "given_name": None,
             "family_name": None,
         }
+        existing_user = User(
+            sub="configured-admin",
+            email="admin@example.com",
+            username="admin",
+            is_superadmin=False,
+        )
 
         grant_result = MagicMock()
         grant_result.scalar_one_or_none.return_value = True
@@ -171,25 +176,18 @@ class TestGetCurrentUserAutoCreation:
 
         with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
             mock_repo_instance = AsyncMock()
-            mock_repo_instance.get_by_sub.return_value = None
-            mock_repo_instance.has_any_user.return_value = True
+            mock_repo_instance.get_by_sub.return_value = existing_user
             mock_repo_instance.save = AsyncMock()
             MockRepo.return_value = mock_repo_instance
 
-            with patch("app.adapters.api.deps.settings") as mock_settings:
-                mock_settings.superadmin_sub = "configured-admin"
-
-                user = await get_current_user(
-                    mock_request, mock_credentials, mock_session
-                )
+            user = await get_current_user(
+                mock_request, mock_credentials, mock_session
+            )
 
         assert user.is_superadmin is True
         grant_call = mock_session.execute.await_args_list[-1]
-        assert grant_call.args[1] == {
-            "user_sub": "configured-admin",
-            "configured_sub": "configured-admin",
-            "is_first_login": False,
-        }
+        assert "grant_bootstrap_superadmin" in str(grant_call.args[0])
+        assert grant_call.args[1] == {"user_sub": "configured-admin"}
 
     @pytest.mark.asyncio
     async def test_later_login_without_grant_keeps_flag_false(
@@ -219,16 +217,12 @@ class TestGetCurrentUserAutoCreation:
         with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
             mock_repo_instance = AsyncMock()
             mock_repo_instance.get_by_sub.return_value = None
-            mock_repo_instance.has_any_user.return_value = True
             mock_repo_instance.save = AsyncMock()
             MockRepo.return_value = mock_repo_instance
 
-            with patch("app.adapters.api.deps.settings") as mock_settings:
-                mock_settings.superadmin_sub = None
-
-                user = await get_current_user(
-                    mock_request, mock_credentials, mock_session
-                )
+            user = await get_current_user(
+                mock_request, mock_credentials, mock_session
+            )
 
         assert user.is_superadmin is False
 
@@ -260,6 +254,10 @@ class TestGetCurrentUserAutoCreation:
             is_superadmin=True,
         )
 
+        grant_result = MagicMock()
+        grant_result.scalar_one_or_none.return_value = True
+        mock_session.execute = AsyncMock(return_value=grant_result)
+
         with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
             mock_repo_instance = AsyncMock()
             mock_repo_instance.get_by_sub.return_value = existing_user
@@ -271,7 +269,9 @@ class TestGetCurrentUserAutoCreation:
             )
 
         assert user.is_superadmin is True
-        mock_session.execute.assert_not_awaited()
+        grant_call = mock_session.execute.await_args_list[-1]
+        assert "grant_bootstrap_superadmin" in str(grant_call.args[0])
+        assert grant_call.args[1] == {"user_sub": "user-456"}
 
     @pytest.mark.asyncio
     async def test_update_existing_user(

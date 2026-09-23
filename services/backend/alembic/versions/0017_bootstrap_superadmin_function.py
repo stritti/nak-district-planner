@@ -1,4 +1,4 @@
-"""add security-definer bootstrap superadmin function
+"""add owner-controlled bootstrap superadmin state
 
 Revision ID: 0017
 Revises: 1a2b3c4d5e6f
@@ -11,6 +11,7 @@ import os
 from collections.abc import Sequence
 
 from alembic import op
+from app.config import settings
 
 # revision identifiers, used by Alembic.
 revision: str = "0017"
@@ -18,7 +19,7 @@ down_revision: str | None = "1a2b3c4d5e6f"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-FUNCTION_SIGNATURE = "grant_bootstrap_superadmin(TEXT, TEXT, BOOLEAN)"
+FUNCTION_SIGNATURE = "grant_bootstrap_superadmin(TEXT)"
 
 
 def _quote_ident(value: str) -> str:
@@ -30,27 +31,63 @@ def _quote_literal(value: str) -> str:
 
 
 def upgrade() -> None:
-    """Create bounded helper to persist the bootstrap superadmin flag.
+    """Create owner-controlled superadmin configuration and bounded grant helper.
 
     The application role cannot write ``users.is_superadmin`` (see revision
     0016), so a fresh installation has no path to bootstrap the initial
-    superadmin. This SECURITY DEFINER function exposes a bounded grant: it
-    binds the target subject to the session's authenticated subject GUC and
-    only persists the flag for the subject configured via ``SUPERADMIN_SUB``
-    (owner-controlled deployment configuration, compared exactly because OIDC
-    subjects are opaque case-sensitive identifiers) or for the very first user
-    of an empty installation when no subject is configured. The first-user
-    grant is serialized with a transaction-scoped advisory lock taken before
-    any caller-side row insert and re-checked against existing superadmins so
-    concurrent first logins cannot both become superadmin and cannot deadlock
-    with their own users-row locks.
+    superadmin. This revision stores the deployment's configured superadmin
+    subject (``SUPERADMIN_SUB``, seeded once when the migration runs) in
+    ``app_superadmin_config`` — a table writable only by the database owner —
+    and exposes a bounded SECURITY DEFINER function that derives all
+    authorization facts from that owner-controlled state:
+
+    - With a configured subject, only that exact subject is granted the flag
+      (OIDC subjects are opaque case-sensitive identifiers, compared exactly)
+      and every previously persisted flag for another subject is revoked, so
+      rotations enforce that exactly the configured subject is superadmin.
+    - Without a configured subject, the first login on an installation that
+      has no superadmin yet receives the bootstrap grant, serialized with a
+      transaction-scoped advisory lock taken before any caller-side row
+      insert and re-checked against existing superadmins so concurrent first
+      logins cannot both become superadmin.
+
+    The function takes only the caller's subject (bound to the session's
+    authenticated subject GUC) and never trusts caller-supplied authorization
+    facts: an application-role session cannot forge eligibility because the
+    configuration table is not writable or readable by the application role.
     """
     op.execute(
         """
+        CREATE TABLE app_superadmin_config (
+            id SMALLINT PRIMARY KEY CHECK (id = 1),
+            superadmin_sub TEXT,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """
+    )
+
+    configured_sub = settings.superadmin_sub
+    configured_literal = (
+        _quote_literal(configured_sub) if configured_sub is not None else "NULL"
+    )
+    op.execute(
+        f"""
+        INSERT INTO app_superadmin_config (id, superadmin_sub)
+        VALUES (1, {configured_literal})
+        """
+    )
+
+    app_role = os.getenv("APP_DB_USER", "nak_app")
+    # The configuration is owner-controlled state: the application role must
+    # not read or modify it (default privileges from revision 0016 would
+    # otherwise grant full access to newly created tables).
+    op.execute(f"REVOKE ALL ON app_superadmin_config FROM {_quote_ident(app_role)}")
+    op.execute("REVOKE ALL ON app_superadmin_config FROM PUBLIC")
+
+    op.execute(
+        """
         CREATE OR REPLACE FUNCTION grant_bootstrap_superadmin(
-            p_user_sub TEXT,
-            p_configured_sub TEXT,
-            p_is_first_login BOOLEAN
+            p_user_sub TEXT
         )
         RETURNS BOOLEAN
         LANGUAGE plpgsql
@@ -58,18 +95,51 @@ def upgrade() -> None:
         SET search_path = public
         AS $$
         DECLARE
+            v_configured_sub TEXT;
             v_granted BOOLEAN;
         BEGIN
             IF p_user_sub IS NULL OR p_user_sub <> current_setting('app.current_user_sub', true) THEN
                 RAISE EXCEPTION 'user_sub does not match authenticated subject' USING ERRCODE = '42501';
             END IF;
 
-            IF COALESCE(p_is_first_login, false) AND p_configured_sub IS NULL THEN
-                PERFORM pg_advisory_xact_lock(hashtext('nak:grant_bootstrap_superadmin'));
-                IF EXISTS (SELECT 1 FROM users WHERE is_superadmin = true) THEN
+            SELECT c.superadmin_sub
+              INTO v_configured_sub
+              FROM app_superadmin_config c
+             WHERE c.id = 1;
+
+            IF v_configured_sub IS NOT NULL THEN
+                IF p_user_sub <> v_configured_sub THEN
                     RETURN false;
                 END IF;
-            ELSIF p_configured_sub IS NULL OR p_configured_sub <> p_user_sub THEN
+
+                -- Reconcile persisted grants with the owner-controlled
+                -- configuration so exactly the configured subject keeps the
+                -- flag, including after rotations of SUPERADMIN_SUB.
+                UPDATE users
+                   SET is_superadmin = false,
+                       updated_at = now()
+                 WHERE is_superadmin = true
+                   AND sub <> v_configured_sub;
+
+                UPDATE users
+                   SET is_superadmin = true,
+                       updated_at = now()
+                 WHERE sub = v_configured_sub
+                   AND is_superadmin = false;
+
+                RETURN true;
+            END IF;
+
+            IF EXISTS (
+                SELECT 1 FROM users
+                 WHERE sub = p_user_sub
+                   AND is_superadmin = true
+            ) THEN
+                RETURN true;
+            END IF;
+
+            PERFORM pg_advisory_xact_lock(hashtext('nak:grant_bootstrap_superadmin'));
+            IF EXISTS (SELECT 1 FROM users WHERE is_superadmin = true) THEN
                 RETURN false;
             END IF;
 
@@ -87,7 +157,6 @@ def upgrade() -> None:
         """
     )
 
-    app_role = os.getenv("APP_DB_USER", "nak_app")
     op.execute(f"REVOKE ALL ON FUNCTION {FUNCTION_SIGNATURE} FROM PUBLIC")
     op.execute(
         f"""
@@ -102,7 +171,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop bootstrap superadmin helper."""
+    """Drop bootstrap superadmin helper and owner-controlled configuration."""
     app_role = os.getenv("APP_DB_USER", "nak_app")
     op.execute(
         f"""
@@ -115,3 +184,4 @@ def downgrade() -> None:
         """
     )
     op.execute(f"DROP FUNCTION IF EXISTS {FUNCTION_SIGNATURE}")
+    op.execute("DROP TABLE IF EXISTS app_superadmin_config")

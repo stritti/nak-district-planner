@@ -17,7 +17,6 @@ from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
 from app.application.notification_service import NotificationService
 from app.application.services.calendar_integration_service import CalendarIntegrationService
-from app.config import settings
 from app.domain.models.membership import Membership
 from app.domain.models.user import User
 
@@ -82,8 +81,15 @@ async def get_current_user(
         # Get or create user in database
         user_repo = SqlUserRepository(session)
         existing_user = await user_repo.get_by_sub(user_info["sub"])
-        is_first_login = existing_user is None and not await user_repo.has_any_user()
 
+        # The superadmin flag is owner-controlled at the database level (the
+        # app role cannot write users.is_superadmin). A bounded SECURITY
+        # DEFINER function derives all eligibility facts from owner-controlled
+        # database state: the configured subject stored in app_superadmin_config
+        # (seeded from SUPERADMIN_SUB by the database owner) or the first login
+        # on an installation without any superadmin. It is called on every login
+        # so rotating the configured subject also revokes stale persisted
+        # grants. The session subject GUC is the authenticated identity.
         if existing_user:
             # Update existing user with latest info from token
             existing_user.email = user_info["email"]
@@ -91,14 +97,11 @@ async def get_current_user(
             existing_user.name = user_info["name"]
             existing_user.given_name = user_info["given_name"]
             existing_user.family_name = user_info["family_name"]
-            # RLS trusts the stored owner-controlled flag; do not grant
-            # superadmin in memory when configuration and database disagree.
             await user_repo.save(existing_user)
-            request.state.user = existing_user
-            return existing_user
         else:
-            # Auto-create user on first login
-            new_user = User(
+            # Auto-create user on first login; the row must be flushed before
+            # the reconciliation function can update it.
+            existing_user = User(
                 sub=user_info["sub"],
                 email=user_info["email"],
                 username=user_info["username"],
@@ -106,31 +109,24 @@ async def get_current_user(
                 given_name=user_info["given_name"],
                 family_name=user_info["family_name"],
             )
-            await user_repo.save(new_user)
-            logger.info(f"Auto-created user: {new_user.sub} ({new_user.email})")
+            await user_repo.save(existing_user)
+            logger.info(f"Auto-created user: {existing_user.sub} ({existing_user.email})")
 
-            # The superadmin flag is owner-controlled at the database level (the
-            # app role cannot write users.is_superadmin). A bounded SECURITY
-            # DEFINER function persists the bootstrap grant for the subject
-            # configured via SUPERADMIN_SUB or for the first login on an empty
-            # installation so a fresh deployment can perform initial setup.
-            try:
-                result = await session.execute(
-                    text(
-                        "SELECT grant_bootstrap_superadmin(:user_sub, :configured_sub, :is_first_login)"
-                    ),
-                    {
-                        "user_sub": user_info["sub"],
-                        "configured_sub": settings.superadmin_sub,
-                        "is_first_login": is_first_login,
-                    },
-                )
-                new_user.is_superadmin = bool(result.scalar_one_or_none())
-            except Exception:
-                logger.exception("Bootstrap superadmin grant failed")
-                raise
-            request.state.user = new_user
-            return new_user
+        try:
+            result = await session.execute(
+                text("SELECT grant_bootstrap_superadmin(:user_sub)"),
+                {"user_sub": user_info["sub"]},
+            )
+            granted = bool(result.scalar_one_or_none())
+        except Exception:
+            logger.exception("Bootstrap superadmin reconciliation failed")
+            raise
+
+        # RLS trusts the stored owner-controlled flag; keep the in-memory
+        # view in sync with the database-reconciled state.
+        existing_user.is_superadmin = granted
+        request.state.user = existing_user
+        return existing_user
 
     except TokenValidationError as e:
         logger.warning(f"Token validation failed: {e}")
