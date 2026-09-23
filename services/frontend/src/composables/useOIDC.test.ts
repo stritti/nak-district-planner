@@ -305,6 +305,9 @@ describe('useOIDC', () => {
     )
 
     const refresh = oidc.refreshToken()
+    // Web Locks dispatch the callback asynchronously; wait for the fetch
+    // to start before resolving the simulated network failure.
+    await vi.waitFor(() => expect(rejectFetch).toBeTypeOf('function'))
     oidc.setToken(
       {
         accessToken: 'new-access-token',
@@ -315,9 +318,6 @@ describe('useOIDC', () => {
       { sub: 'new-user-sub' }
     )
 
-    // Web Locks dispatch the callback asynchronously; wait for the fetch
-    // to start before resolving the simulated network failure.
-    await vi.waitFor(() => expect(rejectFetch).toBeTypeOf('function'))
     rejectFetch(new Error('network failed'))
     await refresh
 
