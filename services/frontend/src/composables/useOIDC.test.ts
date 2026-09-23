@@ -424,7 +424,7 @@ describe('useOIDC', () => {
     oidc.setToken(expiredToken(), { sub: 'user-sub' })
 
     const first = oidc.refreshToken()
-    await vi.advanceTimersByTimeAsync(20_000)
+    await vi.advanceTimersByTimeAsync(35_000)
     await expect(first).resolves.toBe(false)
 
     expect(localStorage.getItem(await receiptKey('refresh-token'))).toBe('')
@@ -560,6 +560,16 @@ describe('useOIDC', () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('unsupported-browser'), { sub: 'user-sub' })
     global.fetch = vi.fn().mockResolvedValue(new Response('', { status: 200 }))
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(useAuthStore().token).toBeNull()
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
+  })
+
+  it('fails closed for a compacted receipt rather than replaying a consumed token', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('old-consumed-token'), { sub: 'user-sub' })
+    localStorage.setItem(await receiptKey('old-consumed-token'), 'consumed')
+    global.fetch = vi.fn()
     await expect(oidc.refreshToken()).resolves.toBe(false)
     expect(useAuthStore().token).toBeNull()
     expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
