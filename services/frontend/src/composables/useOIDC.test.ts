@@ -529,7 +529,7 @@ describe('useOIDC', () => {
     await vi.advanceTimersByTimeAsync(1)
     const latest = { ...expiredToken('next-token'), accessToken: 'next-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
     localStorage.setItem(await receiptKey('missed-token'), JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(40_000)
     await expect(pending).resolves.toBe(true)
     expect(useAuthStore().token?.refreshToken).toBe('next-token')
   })

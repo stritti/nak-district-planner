@@ -44,7 +44,7 @@ const ACTIVITY_REFRESH_LEAD_SECONDS = 120
 const ACTIVITY_CHECK_THROTTLE_MS = 15_000
 const REFRESH_TIMEOUT_MS = 35_000
 const REFRESH_CHANNEL = 'oidc-refresh'
-const CROSS_TAB_WAIT_TIMEOUT_MS = 30_000
+const CROSS_TAB_WAIT_TIMEOUT_MS = 40_000
 const ROTATED_TOKEN_TTL_MS = 60_000
 const PERSISTED_RECEIPT_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_PERSISTED_RECEIPTS = 32
@@ -625,12 +625,12 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             seen.add(next)
             const raw = localStorage.getItem(await rotationReceiptKey(next))
             if (!raw) break
-            const receipt = JSON.parse(raw) as { token: OIDCToken; user: OIDCUser | null }
             if (raw === 'consumed') throw new Error('Refresh token was already consumed; receipt compacted')
+            const receipt = JSON.parse(raw) as { token: OIDCToken; user: OIDCUser | null }
             if (!validReceiptToken(receipt.token)) throw new Error('Invalid persisted rotation receipt')
             latest = receipt
             if (receipt.token.refreshToken === next) break // Non-rotating provider.
-            next = receipt.token.refreshToken
+            next = receipt.token.refreshToken!
           }
         } catch {
           failClosed()

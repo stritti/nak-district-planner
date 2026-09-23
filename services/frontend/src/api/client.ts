@@ -45,37 +45,28 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     try {
       if (oidc.getSessionGeneration() !== initiatingGeneration) throw new Error('Unauthorized')
 
-      // A concurrent refresh may have replaced the bearer token while the
-      // original request was in flight. Retry with it before rotating again.
+      // Another tab may already have replaced the bearer used by the first
+      // request. Retry once before triggering another token rotation.
       const alreadyRotated = authStore.getToken()
       if (alreadyRotated && alreadyRotated !== token) {
         headers['Authorization'] = `Bearer ${alreadyRotated}`
         if (oidc.getSessionGeneration() !== initiatingGeneration) throw new Error('Unauthorized')
         res = await fetch(path, { ...options, headers })
         if (oidc.getSessionGeneration() !== initiatingGeneration) throw new Error('Unauthorized')
-        if (res.status !== 401) {
-          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-          if (res.status === 204 || res.headers.get('content-length') === '0') return undefined as T
-          return res.json() as Promise<T>
+      }
+
+      if (res.status === 401) {
+        const refreshed = await oidc.refreshToken()
+        if (!refreshed || oidc.getSessionGeneration() !== initiatingGeneration) {
+          throw new Error('Refresh discarded or session replaced')
         }
-      }
-
-      // Try to refresh token
-      const refreshed = await oidc.refreshToken()
-      if (!refreshed || oidc.getSessionGeneration() !== initiatingGeneration) {
-        throw new Error('Refresh discarded or session replaced')
-      }
-
-      // Update store
-      if (oidc.token.value) {
-        authStore.setToken(oidc.token.value, oidc.user.value)
-      } else {
-        // Refresh failed, logout
-        authStore.clearAuth()
-        router.push('/login')
-        throw new Error('Unauthorized')
-      }
-
+        if (oidc.token.value) {
+          authStore.setToken(oidc.token.value, oidc.user.value)
+        } else {
+          authStore.clearAuth()
+          router.push('/login')
+          throw new Error('Unauthorized')
+        }
       // Session replacement must never redirect the initiating request to a new identity.
       if (oidc.getSessionGeneration() !== initiatingGeneration) throw new Error('Unauthorized')
 
@@ -89,6 +80,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
         ...options,
         headers,
       })
+      }
     } catch {
       throw new Error('Unauthorized - please log in again')
     }
