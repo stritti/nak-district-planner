@@ -470,6 +470,22 @@ describe('useOIDC', () => {
     expect(useAuthStore().token?.refreshToken).toBe('unsafe-fallback-token')
   })
 
+  it('adopts a completed rotation under the Web Lock before fetching', async () => {
+    const old = expiredToken('already-rotated-refresh')
+    const rotated = { ...old, accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+    localStorage.setItem('oidc-refresh-result:already-rotated-refresh', JSON.stringify({
+      token: rotated, user: { sub: 'user-sub' }, recordedAt: Date.now(),
+    }))
+    global.fetch = vi.fn()
+    const oidc = createOidc()
+    oidc.setToken(old, { sub: 'user-sub' })
+
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(useAuthStore().token?.refreshToken).toBe('new-refresh')
+    localStorage.removeItem('oidc-refresh-result:already-rotated-refresh')
+  })
+
   it('serializes simultaneous cross-tab refreshes with web locks', async () => {
     const activeLocks = new Set<string>()
     const locksRequest = vi.fn(
