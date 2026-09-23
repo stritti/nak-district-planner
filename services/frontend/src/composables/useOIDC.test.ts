@@ -469,8 +469,8 @@ describe('useOIDC', () => {
     const result = await oidc.refreshToken()
 
     expect(result).toBe(false)
-    expect(global.fetch).not.toHaveBeenCalled()
-    expect(useAuthStore().token?.refreshToken).toBe('unsafe-fallback-token')
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
+    expect(useAuthStore().token).toBeNull()
   })
 
   it('adopts a completed rotation under the Web Lock before fetching', async () => {
@@ -555,6 +555,27 @@ describe('useOIDC', () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('unsupported-browser'), { sub: 'user-sub' })
     global.fetch = vi.fn().mockResolvedValue(new Response('', { status: 200 }))
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(useAuthStore().token).toBeNull()
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
+  })
+
+  it('refreshes again after consuming a same-token receipt', async () => {
+    const oidc = createOidc()
+    const current = { ...expiredToken('stable-token'), accessToken: 'previous-access' }
+    oidc.setToken(current, { sub: 'user-sub' })
+    localStorage.setItem('oidc-refresh-result:stable-token', JSON.stringify({ token: current, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ access_token: 'fresh-access', expires_in: 3600 }), { status: 200 }))
+    await expect(oidc.refreshToken()).resolves.toBe(true)
+    expect(useAuthStore().token?.accessToken).toBe('fresh-access')
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the session if the stored receipt is malformed', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('malformed-token'), { sub: 'user-sub' })
+    localStorage.setItem('oidc-refresh-result:malformed-token', '{broken')
+    global.fetch = vi.fn()
     await expect(oidc.refreshToken()).resolves.toBe(false)
     expect(useAuthStore().token).toBeNull()
     expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())

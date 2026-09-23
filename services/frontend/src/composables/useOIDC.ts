@@ -655,7 +655,11 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             } catch {
               // The provider may have rotated: preserve the pending marker,
               // and do not leave an apparently authenticated stale session.
-              failClosed()
+              if (authStore.token?.refreshToken === rotated.token.refreshToken && authStore.token?.accessToken === rotated.token.accessToken) {
+                invalidateSession()
+                authStore.clearAuth()
+                try { void Promise.resolve(getRouter().push('/login')).catch(() => {}) } catch { /* Router unavailable. */ }
+              }
               return false
             }
           }
