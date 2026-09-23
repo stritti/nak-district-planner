@@ -566,8 +566,9 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
               token: OIDCToken; user: OIDCUser | null; recordedAt: number
             }
             if (receipt.token?.refreshToken !== refreshTokenUsed) {
-              if (isRefreshStillCurrent()) adoptRotatedToken(receipt.token, receipt.user)
-              return false
+              if (!isRefreshStillCurrent()) return false
+              adoptRotatedToken(receipt.token, receipt.user)
+              return true
             }
           }
           // Shared storage is required to communicate rotation to the next
@@ -587,6 +588,13 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
               // Leave the pending marker: later lock owners fail closed.
             }
           }
+        } else {
+          // The request did not rotate the token. Clear the pending marker
+          // so transient errors can be retried under the same Web Lock.
+          // Never remove a receipt that another operation has replaced.
+          try {
+            if (localStorage.getItem(receiptKey) === '') localStorage.removeItem(receiptKey)
+          } catch { /* A missing storage facility fails closed on the next attempt. */ }
         }
         return ok
       })
@@ -631,9 +639,21 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     transientRetryTimer = null
   }
 
+  function clearRotationReceipts(): void {
+    try {
+      const keys: string[] = []
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i)
+        if (key?.startsWith('oidc-refresh-result:')) keys.push(key)
+      }
+      keys.forEach((key) => localStorage.removeItem(key))
+    } catch { /* Storage may be unavailable. */ }
+  }
+
   async function logout(): Promise<void> {
     const current = authStore.token
     invalidateSession()
+    clearRotationReceipts()
 
     try {
       await loadDiscovery().catch(() => {
@@ -669,6 +689,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
   function setToken(nextToken: OIDCToken | null, nextUser: OIDCUser | null = null): void {
     invalidateSession()
+    clearRotationReceipts()
     authStore.setToken(nextToken, nextUser)
     if (nextToken) {
       sessionGeneration += 1

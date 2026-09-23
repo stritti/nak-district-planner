@@ -315,6 +315,9 @@ describe('useOIDC', () => {
       { sub: 'new-user-sub' }
     )
 
+    // Web Locks dispatch the callback asynchronously; wait for the fetch
+    // to start before resolving the simulated network failure.
+    await vi.waitFor(() => expect(rejectFetch).toBeTypeOf('function'))
     rejectFetch(new Error('network failed'))
     await refresh
 
@@ -484,6 +487,19 @@ describe('useOIDC', () => {
     expect(global.fetch).not.toHaveBeenCalled()
     expect(useAuthStore().token?.refreshToken).toBe('new-refresh')
     localStorage.removeItem('oidc-refresh-result:already-rotated-refresh')
+  })
+
+  it('retries a transient failure after removing its pending receipt', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('retry-receipt-token'), { sub: 'user-sub' })
+    global.fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        access_token: 'retry-access', refresh_token: 'retry-rotated', expires_in: 3600,
+      }), { status: 200 }))
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(localStorage.getItem('oidc-refresh-result:retry-receipt-token')).toBeNull()
+    await expect(oidc.refreshToken()).resolves.toBe(true)
+    expect(global.fetch).toHaveBeenCalledTimes(2)
   })
 
   it('serializes simultaneous cross-tab refreshes with web locks', async () => {

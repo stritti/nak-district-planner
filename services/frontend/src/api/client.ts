@@ -12,8 +12,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   // was throttled while the tab was backgrounded), refresh it up front
   // instead of firing an unauthenticated request that is bound to 401.
   if (authStore.token && authStore.isTokenExpired) {
+    const preflightGeneration = oidc.getSessionGeneration()
     const refreshed = await oidc.refreshToken()
-    if (!refreshed) {
+    if (!refreshed || oidc.getSessionGeneration() !== preflightGeneration) {
       throw new Error('Unauthorized - please log in again')
     }
   }
@@ -46,8 +47,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
       // Try to refresh token
       const refreshed = await oidc.refreshToken()
-      if (!refreshed) {
-        throw new Error('Refresh discarded or failed')
+      if (!refreshed || oidc.getSessionGeneration() !== initiatingGeneration) {
+        throw new Error('Refresh discarded or session replaced')
       }
 
       // Update store
@@ -59,6 +60,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
         router.push('/login')
         throw new Error('Unauthorized')
       }
+
+      // Session replacement must never redirect the initiating request to a new identity.
+      if (oidc.getSessionGeneration() !== initiatingGeneration) throw new Error('Unauthorized')
 
       // Retry request with new token
       const newToken = authStore.getToken()
