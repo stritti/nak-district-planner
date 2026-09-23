@@ -443,8 +443,11 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
         if (isRefreshStillCurrent()) void logout()
       }
+      let safeToRetry = false
       const runRefreshBody = async (): Promise<boolean> => {
         let completedOk = false
+        // Only a definitive pre-provider rejection permits reusing the token.
+        // Transport errors, timeouts and malformed responses are ambiguous.
         let completedToken: OIDCToken | undefined
         let completedUser: OIDCUser | null | undefined
         const controller = new AbortController()
@@ -473,14 +476,15 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
               logoutIfRefreshStillCurrent()
               return false
             }
-            // Non-invalid_grant responses are treated as transient provider/backend failures.
-            scheduleTransientRefreshRetry()
+            // A rate limit rejects the request before token processing.
+            // Other errors (including generic 503) might follow rotation.
+            safeToRetry = response.status === 429
+            if (safeToRetry) scheduleTransientRefreshRetry()
             return false
           }
 
           const data = await response.json()
           if (!data.access_token) {
-            scheduleTransientRefreshRetry()
             return false
           }
 
@@ -524,7 +528,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           return true
         } catch (err) {
           console.error('OIDC refresh failed', err)
-          scheduleTransientRefreshRetry()
+          // The provider might have rotated before the response was lost.
           return false
         } finally {
           clearTimeout(timeoutId)
@@ -548,6 +552,14 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         // Fail closed when Web Locks is unavailable rather than risk token
         // reuse (and possible revocation of the entire token family).
         // Do not retry automatically: this browser cannot acquire a safe lock.
+        // Keep a still-valid access token until expiry, then clear auth.
+        if (current.expiresAt <= Date.now() / 1000 && isRefreshStillCurrent()) {
+          void logout()
+        } else if (isRefreshStillCurrent()) {
+          setTimeout(() => {
+            if (isRefreshStillCurrent() && current.expiresAt <= Date.now() / 1000) void logout()
+          }, Math.max(0, current.expiresAt * 1000 - Date.now()))
+        }
         return false
       }
 
@@ -567,8 +579,9 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             const raw = localStorage.getItem(`oidc-refresh-result:${next}`)
             if (!raw) break
             const receipt = JSON.parse(raw) as { token: OIDCToken; user: OIDCUser | null }
-            if (!receipt.token?.refreshToken || receipt.token.refreshToken === next) break
+            if (!receipt.token?.refreshToken) break
             latest = receipt
+            if (receipt.token.refreshToken === next) break // Non-rotating provider.
             next = receipt.token.refreshToken
           }
         } catch { return false }
@@ -591,7 +604,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           const raw = localStorage.getItem(receiptKey)
           if (raw === '') {
             // The previous owner may have crashed after submitting a rotating
-            // token. Never retry that ambiguous token or leave a phantom login.
+            // token. Preserve the marker across local logout.
             if (isRefreshStillCurrent()) void logout()
             return false
           }
@@ -599,7 +612,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             const receipt = JSON.parse(raw) as {
               token: OIDCToken; user: OIDCUser | null; recordedAt: number
             }
-            if (receipt.token?.refreshToken !== refreshTokenUsed) {
+            if (receipt.token?.refreshToken) {
               return adoptLatestReceipt()
             }
           }
@@ -623,13 +636,22 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
               // Leave the pending marker: later lock owners fail closed.
             }
           }
-        } else {
-          // The request did not rotate the token. Clear the pending marker
-          // so transient errors can be retried under the same Web Lock.
+        } else if (safeToRetry) {
+          // Only definitive pre-provider failures permit reuse.
+          // An ambiguous response must retain the pending marker.
           // Never remove a receipt that another operation has replaced.
           try {
             if (localStorage.getItem(receiptKey) === '') localStorage.removeItem(receiptKey)
           } catch { /* A missing storage facility fails closed on the next attempt. */ }
+        } else {
+          // Unknown outcome: the provider may already have rotated. Keep the
+          // pending marker so no tab can replay this token, and end this
+          // local session without clearing the shared safety marker.
+          if (isRefreshStillCurrent()) {
+            invalidateSession()
+            authStore.clearAuth()
+            void getRouter().push('/login').catch(() => {})
+          }
         }
         return ok
       })
@@ -679,7 +701,9 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       const keys: string[] = []
       for (let i = 0; i < localStorage.length; i += 1) {
         const key = localStorage.key(i)
-        if (key?.startsWith('oidc-refresh-result:')) keys.push(key)
+        // Empty markers represent possibly consumed tokens and must survive
+        // logout and account replacement to protect other suspended tabs.
+        if (key?.startsWith('oidc-refresh-result:') && localStorage.getItem(key) !== '') keys.push(key)
       }
       keys.forEach((key) => localStorage.removeItem(key))
     } catch { /* Storage may be unavailable. */ }
