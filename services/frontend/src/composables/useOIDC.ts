@@ -434,14 +434,14 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           latest?.refreshToken === refreshTokenUsed
         )
       }
-      const logoutIfRefreshStillCurrent = async (): Promise<void> => {
+      const logoutIfRefreshStillCurrent = (): void => {
         pruneRotatedTokens()
         const rotated = rotatedTokens.get(refreshTokenUsed)
         if (rotated && isRefreshStillCurrent()) {
           adoptRotatedToken(rotated.token, rotated.user)
           return
         }
-        if (isRefreshStillCurrent()) await logout()
+        if (isRefreshStillCurrent()) void logout()
       }
       const runRefreshBody = async (): Promise<boolean> => {
         let completedOk = false
@@ -470,7 +470,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             const detailRecord = detail && typeof detail === 'object' ? (detail as Record<string, unknown>) : null
             const errorCode = bodyRecord?.error ?? detailRecord?.error
             if (errorCode === 'invalid_grant') {
-              await logoutIfRefreshStillCurrent()
+              logoutIfRefreshStillCurrent()
               return false
             }
             // Non-invalid_grant responses are treated as transient provider/backend failures.
@@ -499,7 +499,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           }
 
           if (!nextUser?.sub) {
-            await logoutIfRefreshStillCurrent()
+            logoutIfRefreshStillCurrent()
             return false
           }
 
@@ -556,19 +556,51 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       // Persist the rotation receipt while still holding the lock; the next
       // owner must consult it before submitting the captured refresh token.
       const receiptKey = `oidc-refresh-result:${refreshTokenUsed}`
+      const adoptLatestReceipt = (): boolean => {
+        if (!isRefreshStillCurrent()) return false
+        let next = refreshTokenUsed
+        const seen = new Set<string>()
+        let latest: { token: OIDCToken; user: OIDCUser | null } | null = null
+        try {
+          while (!seen.has(next) && seen.size < 64) {
+            seen.add(next)
+            const raw = localStorage.getItem(`oidc-refresh-result:${next}`)
+            if (!raw) break
+            const receipt = JSON.parse(raw) as { token: OIDCToken; user: OIDCUser | null }
+            if (!receipt.token?.refreshToken || receipt.token.refreshToken === next) break
+            latest = receipt
+            next = receipt.token.refreshToken
+          }
+        } catch { return false }
+        if (!latest || !isRefreshStillCurrent()) return false
+        adoptRotatedToken(latest.token, latest.user)
+        // Never report success with an expired bearer token.
+        if (latest.token.expiresAt <= Date.now() / 1000) {
+          scheduleTransientRefreshRetry()
+          return false
+        }
+        return true
+      }
       return navigator.locks.request(`oidc-refresh:${refreshTokenUsed}`, { ifAvailable: true }, async (lock) => {
-        if (!lock) return waitForCrossTabRefresh(refreshTokenUsed)
+        if (!lock) {
+          const received = await waitForCrossTabRefresh(refreshTokenUsed)
+          if (received && authStore.token && authStore.token.expiresAt > Date.now() / 1000) return true
+          return adoptLatestReceipt()
+        }
         try {
           const raw = localStorage.getItem(receiptKey)
-          if (raw === '') return false // Previous owner may have rotated but failed to persist the receipt.
+          if (raw === '') {
+            // The previous owner may have crashed after submitting a rotating
+            // token. Never retry that ambiguous token or leave a phantom login.
+            if (isRefreshStillCurrent()) void logout()
+            return false
+          }
           if (raw) {
             const receipt = JSON.parse(raw) as {
               token: OIDCToken; user: OIDCUser | null; recordedAt: number
             }
             if (receipt.token?.refreshToken !== refreshTokenUsed) {
-              if (!isRefreshStillCurrent()) return false
-              adoptRotatedToken(receipt.token, receipt.user)
-              return true
+              return adoptLatestReceipt()
             }
           }
           // Shared storage is required to communicate rotation to the next
@@ -577,7 +609,10 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         } catch {
           return false
         }
-        if (!isRefreshStillCurrent()) return false
+        if (!isRefreshStillCurrent()) {
+          try { if (localStorage.getItem(receiptKey) === '') localStorage.removeItem(receiptKey) } catch { /* fail closed */ }
+          return false
+        }
         const ok = await runRefreshBody()
         if (ok) {
           const rotated = rotatedTokens.get(refreshTokenUsed)
@@ -654,9 +689,13 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     const current = authStore.token
     invalidateSession()
     clearRotationReceipts()
+    clearLocalArtifacts()
+    authStore.clearAuth()
+    // Local logout is immediate. Discovery/revocation are best effort and
+    // must never hold the shared refresh promise hostage.
 
     try {
-      await loadDiscovery().catch(() => {
+      await Promise.race([loadDiscovery(), new Promise<void>((resolve) => setTimeout(resolve, 2_000))]).catch(() => {
         // best effort
       })
 
@@ -669,6 +708,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
         await fetch(revocationEndpoint, {
           method: 'POST',
+          signal: AbortSignal.timeout(2_000),
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: body.toString(),
         }).catch(() => {
@@ -676,9 +716,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         })
       }
     } finally {
-      clearLocalArtifacts()
-      authStore.clearAuth()
-
       try {
         await getRouter().push('/login')
       } catch {
