@@ -24,6 +24,7 @@ services:
   # long-running backend container.
   migrate:
     volumes:
+      - ./services/backend/app:/app/app
       - ./services/backend/alembic:/app/alembic
 
   worker:

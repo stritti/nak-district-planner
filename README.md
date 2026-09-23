@@ -76,7 +76,7 @@ docker compose up -d
 Beim ersten Start und nach jeder neuen Migrationsdatei:
 
 ```bash
-docker compose run --no-deps --rm migrate alembic upgrade head
+docker compose run --no-deps --rm --build migrate alembic upgrade head
 ```
 
 Neue Migration erstellen (nach ORM-Änderungen):
@@ -237,7 +237,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 #### 3. Datenbank migrieren
 
 ```bash
-docker compose -f docker-compose.yml run --no-deps --rm migrate alembic upgrade head
+docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head
 ```
 
 #### 4. Stack starten
@@ -295,7 +295,7 @@ git pull
 docker compose -f docker-compose.yml build
 
 # 3. Migrationen anwenden (falls neue Dateien vorhanden)
-docker compose -f docker-compose.yml run --no-deps --rm migrate alembic upgrade head
+docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head
 
 # 4. Stack neu starten (rollendes Neustarten ohne Downtime nicht ohne Orchestrator)
 docker compose -f docker-compose.yml up -d

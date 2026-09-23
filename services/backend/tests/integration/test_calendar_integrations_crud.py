@@ -49,6 +49,9 @@ def _auth_client(
         session = AsyncMock()
         result = MagicMock()
         result.mappings.return_value.one_or_none.return_value = None
+        # Keep the fixture user non-superadmin: the bootstrap grant read
+        # must return false so district-admin authorization is exercised.
+        result.scalar_one_or_none.return_value = False
         session.execute.return_value = result
         return session
 
