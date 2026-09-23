@@ -45,11 +45,17 @@ def upgrade() -> None:
       (OIDC subjects are opaque case-sensitive identifiers, compared exactly)
       and every previously persisted flag for another subject is revoked, so
       rotations enforce that exactly the configured subject is superadmin.
-    - Without a configured subject, the first login on an installation that
-      has no superadmin yet receives the bootstrap grant, serialized with a
-      transaction-scoped advisory lock taken before any caller-side row
-      insert and re-checked against existing superadmins so concurrent first
-      logins cannot both become superadmin.
+    - Without a configured subject, the migration pins the earliest
+      registered account (deterministic original first user) as the fallback
+      subject on existing installations, preserving the documented guarantee
+      for upgrades where all users may carry is_superadmin = false. When the
+      migration runs on a still empty installation, the fallback remains
+      open for the first login, serialized with a transaction-scoped advisory
+      lock taken before any caller-side row insert and re-checked against
+      existing superadmins so concurrent first logins cannot both become
+      superadmin. Because every non-empty installation has a pinned subject,
+      no account created after the seed can become superadmin just by logging
+      in first.
 
     The function takes only the caller's subject (bound to the session's
     authenticated subject GUC) and never trusts caller-supplied authorization
@@ -70,10 +76,22 @@ def upgrade() -> None:
     configured_literal = (
         _quote_literal(configured_sub) if configured_sub is not None else "NULL"
     )
+    # Without a configured subject, the first-ever registered user keeps the
+    # documented bootstrap guarantee. On an upgrade of an existing
+    # installation all users may carry is_superadmin = false, so the fallback
+    # subject is pinned deterministically during migration (an existing
+    # superadmin, else the earliest created account) instead of whichever
+    # account happens to log in first after the upgrade.
     op.execute(
         f"""
         INSERT INTO app_superadmin_config (id, superadmin_sub)
-        VALUES (1, {configured_literal})
+        SELECT 1,
+               COALESCE(
+                   {configured_literal},
+                   (SELECT u.sub FROM users u WHERE u.is_superadmin = true
+                     ORDER BY u.created_at, u.id LIMIT 1),
+                   (SELECT u.sub FROM users u ORDER BY u.created_at, u.id LIMIT 1)
+               )
         """
     )
 
@@ -123,21 +141,19 @@ def upgrade() -> None:
 
                 UPDATE users
                    SET is_superadmin = true,
-                       updated_at = now()
+                   updated_at = now()
                  WHERE sub = v_configured_sub
                    AND is_superadmin = false;
 
                 RETURN true;
             END IF;
 
-            IF EXISTS (
-                SELECT 1 FROM users
-                 WHERE sub = p_user_sub
-                   AND is_superadmin = true
-            ) THEN
-                RETURN true;
-            END IF;
-
+            -- No configured subject and no pinned fallback: the installation
+            -- had no users when the configuration was seeded, so the seed
+            -- pinned nothing and the first login receives the bootstrap grant.
+            -- A non-empty installation always has a pinned subject, so no
+            -- account created after the seed can become superadmin just by
+            -- logging in first.
             PERFORM pg_advisory_xact_lock(hashtext('nak:grant_bootstrap_superadmin'));
             IF EXISTS (SELECT 1 FROM users WHERE is_superadmin = true) THEN
                 RETURN false;

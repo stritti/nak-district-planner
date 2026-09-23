@@ -16,6 +16,10 @@ services:
     environment:
       # Use nak_app role for RLS enforcement in production
       DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
+      # Alembic migrations need the database owner for DDL
+      # (roles, tables, SECURITY DEFINER functions — see revisions 0016/0017);
+      # the runtime itself only uses the restricted DATABASE_URL above.
+      MIGRATION_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
 
   worker:
     build: ./services/backend
