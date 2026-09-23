@@ -17,9 +17,14 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
-      # Migrations run with superuser credentials (POSTGRES_USER) to allow DDL operations
-      MIGRATION_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
       VALKEY_URL: "valkey://valkey:6379/0"
+
+  # Migrations run with owner credentials (POSTGRES_USER) for DDL operations
+  # via `docker compose run --no-deps --rm migrate` — never inside the
+  # long-running backend container.
+  migrate:
+    volumes:
+      - ./services/backend/alembic:/app/alembic
 
   worker:
     command: uv run celery -A app.celery_app worker --loglevel=debug

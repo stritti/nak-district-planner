@@ -113,6 +113,13 @@ async def get_current_user(
             logger.info(f"Auto-created user: {existing_user.sub} ({existing_user.email})")
 
         try:
+            # Install the verified subject as the session GUC right before the
+            # reconciliation call: the function fails closed unless the
+            # authenticated-subject GUC matches the bound parameter.
+            await session.execute(
+                text("SELECT set_config('app.current_user_sub', :user_sub, true)"),
+                {"user_sub": user_info["sub"]},
+            )
             result = await session.execute(
                 text("SELECT grant_bootstrap_superadmin(:user_sub)"),
                 {"user_sub": user_info["sub"]},

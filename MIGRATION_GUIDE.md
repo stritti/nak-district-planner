@@ -240,7 +240,7 @@ SECRET_KEY=<strong_random_key>
 
 **3. Run migrations:**
 ```bash
-docker compose run --no-deps --rm backend alembic upgrade head
+docker compose run --no-deps --rm migrate alembic upgrade head
 ```
 
 **4. Restart:**

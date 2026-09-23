@@ -110,19 +110,22 @@ def upgrade() -> None:
         RETURNS BOOLEAN
         LANGUAGE plpgsql
         SECURITY DEFINER
-        SET search_path = public
+        SET search_path = public, pg_temp
         AS $$
         DECLARE
             v_configured_sub TEXT;
             v_granted BOOLEAN;
         BEGIN
-            IF p_user_sub IS NULL OR p_user_sub <> current_setting('app.current_user_sub', true) THEN
+            -- Fail closed when the authenticated-subject GUC is absent: a
+            -- NULL GUC must never satisfy the identity binding.
+            IF p_user_sub IS NULL
+               OR p_user_sub IS DISTINCT FROM current_setting('app.current_user_sub', true) THEN
                 RAISE EXCEPTION 'user_sub does not match authenticated subject' USING ERRCODE = '42501';
             END IF;
 
             SELECT c.superadmin_sub
               INTO v_configured_sub
-              FROM app_superadmin_config c
+              FROM public.app_superadmin_config c
              WHERE c.id = 1;
 
             IF v_configured_sub IS NOT NULL THEN
@@ -133,13 +136,13 @@ def upgrade() -> None:
                 -- Reconcile persisted grants with the owner-controlled
                 -- configuration so exactly the configured subject keeps the
                 -- flag, including after rotations of SUPERADMIN_SUB.
-                UPDATE users
+                UPDATE public.users
                    SET is_superadmin = false,
                        updated_at = now()
                  WHERE is_superadmin = true
                    AND sub <> v_configured_sub;
 
-                UPDATE users
+                UPDATE public.users
                    SET is_superadmin = true,
                    updated_at = now()
                  WHERE sub = v_configured_sub
@@ -148,31 +151,48 @@ def upgrade() -> None:
                 RETURN true;
             END IF;
 
-            -- No configured subject and no pinned fallback: the installation
-            -- had no users when the configuration was seeded, so the seed
-            -- pinned nothing and the first login receives the bootstrap grant.
-            -- A non-empty installation always has a pinned subject, so no
-            -- account created after the seed can become superadmin just by
-            -- logging in first. Once a bootstrap superadmin exists, report
-            -- whether the caller is that persisted superadmin instead of
-            -- returning false unconditionally: the already-bootstrapped first
-            -- user must keep the flag on subsequent requests.
-            PERFORM pg_advisory_xact_lock(hashtext('nak:grant_bootstrap_superadmin'));
-            IF EXISTS (SELECT 1 FROM users WHERE is_superadmin = true) THEN
+            -- No configured subject yet: an unlocked fast path reports
+            -- whether the caller is the already-bootstrapped superadmin so
+            -- post-bootstrap requests do not contend on the advisory lock.
+            IF EXISTS (SELECT 1 FROM public.users WHERE is_superadmin = true) THEN
                 RETURN EXISTS (
-                    SELECT 1 FROM users
+                    SELECT 1 FROM public.users
                      WHERE sub = p_user_sub
                        AND is_superadmin = true
                 );
             END IF;
 
-            UPDATE users
+            -- Empty installation with no superadmin yet: the first login
+            -- receives the bootstrap grant, serialized with a
+            -- transaction-scoped advisory lock taken before any caller-side
+            -- row insert and re-checked against existing superadmins so
+            -- concurrent first logins cannot both become superadmin. The
+            -- granted subject is pinned as the fallback subject so later
+            -- requests take the unlocked path.
+            PERFORM pg_advisory_xact_lock(hashtext('nak:grant_bootstrap_superadmin'));
+            IF EXISTS (SELECT 1 FROM public.users WHERE is_superadmin = true) THEN
+                RETURN EXISTS (
+                    SELECT 1 FROM public.users
+                     WHERE sub = p_user_sub
+                       AND is_superadmin = true
+                );
+            END IF;
+
+            UPDATE public.users
                SET is_superadmin = true,
                    updated_at = now()
              WHERE sub = p_user_sub
                AND is_superadmin = false
             RETURNING true
             INTO v_granted;
+
+            IF v_granted THEN
+                UPDATE public.app_superadmin_config
+                   SET superadmin_sub = p_user_sub,
+                       updated_at = now()
+                 WHERE id = 1
+                   AND superadmin_sub IS NULL;
+            END IF;
 
             RETURN COALESCE(v_granted, false);
         END;
