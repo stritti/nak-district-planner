@@ -11,13 +11,15 @@ import uuid
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
 from app.adapters.api.deps import get_db_session
+from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.role import Role
 from app.main import app
 
 
@@ -43,13 +45,17 @@ def _auth_client(district_id: uuid.UUID):
     }
 
     async def _override_db_session():
-        return AsyncMock()
+        session = AsyncMock()
+        result = MagicMock()
+        result.mappings.return_value.one_or_none.return_value = None
+        result.scalar_one_or_none.return_value = False
+        session.execute.return_value = result
+        return session
 
     app.dependency_overrides[get_db_session] = _override_db_session
     try:
         with (
             patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
-            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
             patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
         ):
             user_repo = AsyncMock(
@@ -58,9 +64,18 @@ def _auth_client(district_id: uuid.UUID):
                 save=AsyncMock(),
             )
             MockUserRepo.return_value = user_repo
-            reg_repo = AsyncMock(list_approved_unlinked_by_email=AsyncMock(return_value=[]))
-            MockRegRepo.return_value = reg_repo
-            membership_repo = AsyncMock(get_all_by_user=AsyncMock(return_value=[]))
+            membership_repo = AsyncMock(
+                get_all_by_user=AsyncMock(
+                    return_value=[
+                        Membership.create(
+                            user_sub="viewer",
+                            role=Role.VIEWER,
+                            scope_type=ScopeType.DISTRICT,
+                            scope_id=district_id,
+                        )
+                    ]
+                )
+            )
             MockMembershipRepo.return_value = membership_repo
 
             client = TestClient(app, raise_server_exceptions=False)

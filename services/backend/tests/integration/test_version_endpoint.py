@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
+from app.adapters.api.deps import get_db_session
 from app.main import app
 
 
@@ -48,6 +49,23 @@ def mock_oidc_adapter():
 
 
 @pytest.fixture
+def mock_db_session():
+    """Session override: link lookup finds nothing, bootstrap grant succeeds."""
+
+    async def _override_db_session():
+        session = AsyncMock()
+        result = MagicMock()
+        result.mappings.return_value.one_or_none.return_value = None
+        result.scalar_one_or_none.return_value = True
+        session.execute.return_value = result
+        return session
+
+    app.dependency_overrides[get_db_session] = _override_db_session
+    yield
+    app.dependency_overrides.pop(get_db_session, None)
+
+
+@pytest.fixture
 def valid_token():
     """Sample valid JWT token."""
     return "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.valid-token"
@@ -56,7 +74,7 @@ def valid_token():
 class TestSystemVersionEndpoint:
     """Tests for GET /api/v1/system/version."""
 
-    def test_version_success(self, mock_oidc_adapter, valid_token):
+    def test_version_success(self, mock_oidc_adapter, mock_db_session, valid_token):
         with (
             patch("importlib.metadata.version", return_value="0.4.5"),
             patch(
@@ -65,7 +83,6 @@ class TestSystemVersionEndpoint:
             patch("app.adapters.version_check.ghcr.latest_semver", return_value="0.4.6"),
             patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
             patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
-            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
         ):
             user_repo = AsyncMock()
             user_repo.get_by_sub.return_value = None
@@ -77,9 +94,6 @@ class TestSystemVersionEndpoint:
             membership_repo.get_all_by_user.return_value = []
             MockMembershipRepo.return_value = membership_repo
 
-            reg_repo = AsyncMock()
-            reg_repo.list_approved_unlinked_by_email.return_value = []
-            MockRegRepo.return_value = reg_repo
 
             client = TestClient(app)
             resp = client.get(
@@ -102,11 +116,10 @@ class TestSystemVersionEndpoint:
 class TestSystemUpdateEndpoint:
     """Tests for POST /api/v1/system/update."""
 
-    def test_update_manual_mode(self, mock_oidc_adapter, valid_token):
+    def test_update_manual_mode(self, mock_oidc_adapter, mock_db_session, valid_token):
         with (
             patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
             patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
-            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
         ):
             user_repo = AsyncMock()
             user_repo.get_by_sub.return_value = None
@@ -118,9 +131,6 @@ class TestSystemUpdateEndpoint:
             membership_repo.get_all_by_user.return_value = []
             MockMembershipRepo.return_value = membership_repo
 
-            reg_repo = AsyncMock()
-            reg_repo.list_approved_unlinked_by_email.return_value = []
-            MockRegRepo.return_value = reg_repo
 
             client = TestClient(app)
             csrf = _csrf_token(client, valid_token)

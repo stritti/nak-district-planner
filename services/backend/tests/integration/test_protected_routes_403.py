@@ -17,13 +17,14 @@ from __future__ import annotations
 import uuid
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
 from app.adapters.api.deps import get_notification_service
+from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
 from app.main import app
 
@@ -51,7 +52,12 @@ def mock_oidc_adapter():
 @pytest.fixture(autouse=True)
 def override_db_session():
     async def _override_db_session():
-        return AsyncMock()
+        session = AsyncMock()
+        result = MagicMock()
+        result.mappings.return_value.one_or_none.return_value = None
+        result.scalar_one_or_none.return_value = False
+        session.execute.return_value = result
+        return session
 
     app.dependency_overrides[deps.get_db_session] = _override_db_session
     yield
@@ -83,7 +89,6 @@ def auth_client(mock_oidc_adapter):
 
     with (
         patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
-        patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
         patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
     ):
         user_repo = AsyncMock()
@@ -92,12 +97,16 @@ def auth_client(mock_oidc_adapter):
         user_repo.save = AsyncMock()
         MockUserRepo.return_value = user_repo
 
-        reg_repo = AsyncMock()
-        reg_repo.list_approved_unlinked_by_email.return_value = []
-        MockRegRepo.return_value = reg_repo
 
         membership_repo = AsyncMock()
-        membership_repo.get_all_by_user.return_value = []
+        membership_repo.get_all_by_user.return_value = [
+            Membership.create(
+                user_sub="user-403",
+                role=Role.VIEWER,
+                scope_type=ScopeType.DISTRICT,
+                scope_id=district1,
+            )
+        ]
         MockMembershipRepo.return_value = membership_repo
 
         client = TestClient(app)
@@ -135,7 +144,6 @@ def auth_client_no_membership(mock_oidc_adapter):
 
     with (
         patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
-        patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
         patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
     ):
         user_repo = AsyncMock()
@@ -144,9 +152,6 @@ def auth_client_no_membership(mock_oidc_adapter):
         user_repo.save = AsyncMock()
         MockUserRepo.return_value = user_repo
 
-        reg_repo = AsyncMock()
-        reg_repo.list_approved_unlinked_by_email.return_value = []
-        MockRegRepo.return_value = reg_repo
 
         membership_repo = AsyncMock()
         membership_repo.get_all_by_user.return_value = []
@@ -618,7 +623,6 @@ def auth_client_non_viewer(mock_oidc_adapter):
 
     with (
         patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
-        patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
         patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
     ):
         user_repo = AsyncMock()
@@ -627,12 +631,16 @@ def auth_client_non_viewer(mock_oidc_adapter):
         user_repo.save = AsyncMock()
         MockUserRepo.return_value = user_repo
 
-        reg_repo = AsyncMock()
-        reg_repo.list_approved_unlinked_by_email.return_value = []
-        MockRegRepo.return_value = reg_repo
 
         membership_repo = AsyncMock()
-        membership_repo.get_all_by_user.return_value = []
+        membership_repo.get_all_by_user.return_value = [
+            Membership.create(
+                user_sub="user-403-non-viewer",
+                role=Role.CONGREGATION_ADMIN,
+                scope_type=ScopeType.CONGREGATION,
+                scope_id=congregation_id,
+            )
+        ]
         MockMembershipRepo.return_value = membership_repo
 
         client = TestClient(app)

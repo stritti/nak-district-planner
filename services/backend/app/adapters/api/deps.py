@@ -82,11 +82,7 @@ async def get_current_user(
         # Get or create user in database
         user_repo = SqlUserRepository(session)
         existing_user = await user_repo.get_by_sub(user_info["sub"])
-        if settings.superadmin_sub is not None:
-            is_superadmin = user_info["sub"] == settings.superadmin_sub
-        else:
-            has_any_user = await user_repo.has_any_user()
-            is_superadmin = existing_user.is_superadmin if existing_user else (not has_any_user)
+        is_first_login = existing_user is None and not await user_repo.has_any_user()
 
         if existing_user:
             # Update existing user with latest info from token
@@ -109,12 +105,30 @@ async def get_current_user(
                 name=user_info["name"],
                 given_name=user_info["given_name"],
                 family_name=user_info["family_name"],
-                is_superadmin=is_superadmin,
             )
             await user_repo.save(new_user)
             logger.info(f"Auto-created user: {new_user.sub} ({new_user.email})")
-            # Runtime user creation does not grant the database-controlled flag.
-            new_user.is_superadmin = False
+
+            # The superadmin flag is owner-controlled at the database level (the
+            # app role cannot write users.is_superadmin). A bounded SECURITY
+            # DEFINER function persists the bootstrap grant for the subject
+            # configured via SUPERADMIN_SUB or for the first login on an empty
+            # installation so a fresh deployment can perform initial setup.
+            try:
+                result = await session.execute(
+                    text(
+                        "SELECT grant_bootstrap_superadmin(:user_sub, :configured_sub, :is_first_login)"
+                    ),
+                    {
+                        "user_sub": user_info["sub"],
+                        "configured_sub": settings.superadmin_sub,
+                        "is_first_login": is_first_login,
+                    },
+                )
+                new_user.is_superadmin = bool(result.scalar_one_or_none())
+            except Exception:
+                logger.exception("Bootstrap superadmin grant failed")
+                raise
             request.state.user = new_user
             return new_user
 

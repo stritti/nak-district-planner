@@ -93,6 +93,187 @@ class TestGetCurrentUserAutoCreation:
             mock_repo_instance.save.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_first_login_persists_bootstrap_superadmin(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
+        """First login on an empty installation is granted superadmin via the
+        bounded database function and keeps the persisted flag in memory.
+        """
+        token_claims = {
+            "sub": "first-user",
+            "email": "first@example.com",
+            "preferred_username": "first",
+            "name": "First User",
+        }
+        mock_oidc_adapter.validate_token.return_value = token_claims
+        mock_oidc_adapter.extract_user_info.return_value = {
+            "sub": "first-user",
+            "email": "first@example.com",
+            "username": "first",
+            "name": "First User",
+            "given_name": None,
+            "family_name": None,
+        }
+
+        grant_result = MagicMock()
+        grant_result.scalar_one_or_none.return_value = True
+        mock_session.execute = AsyncMock(return_value=grant_result)
+
+        with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
+            mock_repo_instance = AsyncMock()
+            mock_repo_instance.get_by_sub.return_value = None
+            mock_repo_instance.has_any_user.return_value = False
+            mock_repo_instance.save = AsyncMock()
+            MockRepo.return_value = mock_repo_instance
+
+            with patch("app.adapters.api.deps.settings") as mock_settings:
+                mock_settings.superadmin_sub = None
+
+                user = await get_current_user(
+                    mock_request, mock_credentials, mock_session
+                )
+
+        assert user.is_superadmin is True
+        grant_call = mock_session.execute.await_args_list[-1]
+        assert "grant_bootstrap_superadmin" in str(grant_call.args[0])
+        assert grant_call.args[1] == {
+            "user_sub": "first-user",
+            "configured_sub": None,
+            "is_first_login": True,
+        }
+
+    @pytest.mark.asyncio
+    async def test_configured_superadmin_sub_persists_flag(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
+        """A login matching SUPERADMIN_SUB is granted the persisted flag even
+        when other users already exist.
+        """
+        token_claims = {
+            "sub": "configured-admin",
+            "email": "admin@example.com",
+            "preferred_username": "admin",
+            "name": "Admin",
+        }
+        mock_oidc_adapter.validate_token.return_value = token_claims
+        mock_oidc_adapter.extract_user_info.return_value = {
+            "sub": "configured-admin",
+            "email": "admin@example.com",
+            "username": "admin",
+            "name": "Admin",
+            "given_name": None,
+            "family_name": None,
+        }
+
+        grant_result = MagicMock()
+        grant_result.scalar_one_or_none.return_value = True
+        mock_session.execute = AsyncMock(return_value=grant_result)
+
+        with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
+            mock_repo_instance = AsyncMock()
+            mock_repo_instance.get_by_sub.return_value = None
+            mock_repo_instance.has_any_user.return_value = True
+            mock_repo_instance.save = AsyncMock()
+            MockRepo.return_value = mock_repo_instance
+
+            with patch("app.adapters.api.deps.settings") as mock_settings:
+                mock_settings.superadmin_sub = "configured-admin"
+
+                user = await get_current_user(
+                    mock_request, mock_credentials, mock_session
+                )
+
+        assert user.is_superadmin is True
+        grant_call = mock_session.execute.await_args_list[-1]
+        assert grant_call.args[1] == {
+            "user_sub": "configured-admin",
+            "configured_sub": "configured-admin",
+            "is_first_login": False,
+        }
+
+    @pytest.mark.asyncio
+    async def test_later_login_without_grant_keeps_flag_false(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
+        """A later first-time login without configuration receives no grant."""
+        token_claims = {
+            "sub": "later-user",
+            "email": "later@example.com",
+            "preferred_username": "later",
+            "name": "Later User",
+        }
+        mock_oidc_adapter.validate_token.return_value = token_claims
+        mock_oidc_adapter.extract_user_info.return_value = {
+            "sub": "later-user",
+            "email": "later@example.com",
+            "username": "later",
+            "name": "Later User",
+            "given_name": None,
+            "family_name": None,
+        }
+
+        grant_result = MagicMock()
+        grant_result.scalar_one_or_none.return_value = False
+        mock_session.execute = AsyncMock(return_value=grant_result)
+
+        with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
+            mock_repo_instance = AsyncMock()
+            mock_repo_instance.get_by_sub.return_value = None
+            mock_repo_instance.has_any_user.return_value = True
+            mock_repo_instance.save = AsyncMock()
+            MockRepo.return_value = mock_repo_instance
+
+            with patch("app.adapters.api.deps.settings") as mock_settings:
+                mock_settings.superadmin_sub = None
+
+                user = await get_current_user(
+                    mock_request, mock_credentials, mock_session
+                )
+
+        assert user.is_superadmin is False
+
+    @pytest.mark.asyncio
+    async def test_existing_user_keeps_stored_flag(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
+    ):
+        """Existing users keep the stored owner-controlled flag untouched."""
+        token_claims = {
+            "sub": "user-456",
+            "email": "newemail@example.com",
+            "preferred_username": "jane.doe",
+            "name": "Jane Doe",
+        }
+        mock_oidc_adapter.validate_token.return_value = token_claims
+        mock_oidc_adapter.extract_user_info.return_value = {
+            "sub": "user-456",
+            "email": "newemail@example.com",
+            "username": "jane.doe",
+            "name": "Jane Doe",
+            "given_name": None,
+            "family_name": None,
+        }
+
+        existing_user = User(
+            sub="user-456",
+            email="oldemail@example.com",
+            username="jane.smith",
+            is_superadmin=True,
+        )
+
+        with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
+            mock_repo_instance = AsyncMock()
+            mock_repo_instance.get_by_sub.return_value = existing_user
+            mock_repo_instance.save = AsyncMock()
+            MockRepo.return_value = mock_repo_instance
+
+            user = await get_current_user(
+                mock_request, mock_credentials, mock_session
+            )
+
+        assert user.is_superadmin is True
+        mock_session.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_update_existing_user(
         self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
     ):
@@ -220,6 +401,14 @@ class TestGetCurrentUserWithMemberships:
 
         user = User(sub="oidc|u1", email="link@example.com", username="link")
         session = AsyncMock()
+        link_result = MagicMock()
+        link_result.mappings.return_value.one_or_none.return_value = {
+            "candidate_count": 1,
+            "granted_role": "PLANNER",
+            "granted_scope_type": "DISTRICT",
+            "granted_scope_id": __import__("uuid").uuid4(),
+        }
+        session.execute = AsyncMock(return_value=link_result)
 
         with patch("app.adapters.api.deps.SqlMembershipRepository") as MemRepo:
             mem_repo = AsyncMock()
@@ -228,12 +417,6 @@ class TestGetCurrentUserWithMemberships:
             mock_membership.role.value = "PLANNER"
             mem_repo.get_all_by_user.side_effect = [[], [mock_membership]]
             MemRepo.return_value = mem_repo
-            session.execute.return_value.mappings.return_value.one_or_none.return_value = {
-                "candidate_count": 1,
-                "granted_role": "PLANNER",
-                "granted_scope_type": "DISTRICT",
-                "granted_scope_id": __import__("uuid").uuid4(),
-            }
 
             ctx = await get_current_user_with_memberships(user=user, session=session)
 

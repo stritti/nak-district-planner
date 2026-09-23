@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -119,7 +119,12 @@ def test_matrix_endpoint_returns_gap_assigned_and_empty_cells(mock_oidc_adapter)
     )
 
     async def override_db_session() -> AsyncMock:
-        return AsyncMock()
+        session = AsyncMock()
+        result = MagicMock()
+        result.mappings.return_value.one_or_none.return_value = None
+        result.scalar_one_or_none.return_value = False
+        session.execute.return_value = result
+        return session
 
     app.dependency_overrides[deps.get_db_session] = override_db_session
 
