@@ -62,6 +62,7 @@ describe('useOIDC', () => {
     })
     setActivePinia(createPinia())
     sessionStorage.clear()
+    localStorage.clear()
     vi.clearAllMocks()
     createOidc().setToken(null)
   })
