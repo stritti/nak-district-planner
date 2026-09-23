@@ -45,6 +45,21 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     try {
       if (oidc.getSessionGeneration() !== initiatingGeneration) throw new Error('Unauthorized')
 
+      // A concurrent refresh may have replaced the bearer token while the
+      // original request was in flight. Retry with it before rotating again.
+      const alreadyRotated = authStore.getToken()
+      if (alreadyRotated && alreadyRotated !== token) {
+        headers['Authorization'] = `Bearer ${alreadyRotated}`
+        if (oidc.getSessionGeneration() !== initiatingGeneration) throw new Error('Unauthorized')
+        res = await fetch(path, { ...options, headers })
+        if (oidc.getSessionGeneration() !== initiatingGeneration) throw new Error('Unauthorized')
+        if (res.status !== 401) {
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+          if (res.status === 204 || res.headers.get('content-length') === '0') return undefined as T
+          return res.json() as Promise<T>
+        }
+      }
+
       // Try to refresh token
       const refreshed = await oidc.refreshToken()
       if (!refreshed || oidc.getSessionGeneration() !== initiatingGeneration) {
