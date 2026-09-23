@@ -360,8 +360,8 @@ describe('useOIDC', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps the session on transient refresh failure', async () => {
-    global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 500 })))
+  it('keeps the session on a definitive pre-provider rate limit', async () => {
+    global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 429 })))
     const oidc = createOidc()
     const authStore = useAuthStore()
     oidc.setToken(expiredToken(), { sub: 'user-sub' })
@@ -404,7 +404,7 @@ describe('useOIDC', () => {
     expect(authStore.token).toBeNull()
   })
 
-  it('aborts stalled refreshes after the timeout and allows a subsequent refresh', async () => {
+  it('fails closed after an ambiguous refresh timeout without replaying the token', async () => {
     vi.useFakeTimers()
     global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === '/api/v1/auth/oidc/token') {
@@ -421,10 +421,9 @@ describe('useOIDC', () => {
     await vi.advanceTimersByTimeAsync(20_000)
     await expect(first).resolves.toBe(false)
 
-    const second = oidc.refreshToken()
-    expect(fetch).toHaveBeenCalledTimes(2)
-    await vi.advanceTimersByTimeAsync(20_000)
-    await expect(second).resolves.toBe(false)
+    expect(localStorage.getItem('oidc-refresh-result:refresh-token')).toBe('')
+    expect(useAuthStore().token).toBeNull()
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 
   it('adopts a cross-tab rotated token and coalesces while another tab refreshes', async () => {
@@ -529,10 +528,41 @@ describe('useOIDC', () => {
     expect(useAuthStore().token?.refreshToken).toBe('next-token')
   })
 
+  it('preserves a pending marker after a transport failure to prevent token replay', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('ambiguous-token'), { sub: 'user-sub' })
+    global.fetch = vi.fn().mockRejectedValueOnce(new Error('connection lost'))
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(localStorage.getItem('oidc-refresh-result:ambiguous-token')).toBe('')
+    expect(useAuthStore().token).toBeNull()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('adopts a same-refresh-token receipt from a non-rotating provider', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('stable-refresh'), { sub: 'user-sub' })
+    const latest = { ...expiredToken('stable-refresh'), accessToken: 'new-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+    localStorage.setItem('oidc-refresh-result:stable-refresh', JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    global.fetch = vi.fn()
+    await expect(oidc.refreshToken()).resolves.toBe(true)
+    expect(useAuthStore().token?.accessToken).toBe('new-access')
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('clears an expired session when Web Locks are unavailable', async () => {
+    vi.stubGlobal('navigator', { ...navigator, locks: undefined })
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('unsupported-browser'), { sub: 'user-sub' })
+    global.fetch = vi.fn().mockResolvedValue(new Response('', { status: 200 }))
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(useAuthStore().token).toBeNull()
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
+  })
+
   it('retries a transient failure after removing its pending receipt', async () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('retry-receipt-token'), { sub: 'user-sub' })
-    global.fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 503 }))
+    global.fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 429 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         access_token: 'retry-access', refresh_token: 'retry-rotated', expires_in: 3600,
       }), { status: 200 }))
