@@ -568,6 +568,12 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       // Persist the rotation receipt while still holding the lock; the next
       // owner must consult it before submitting the captured refresh token.
       const receiptKey = `oidc-refresh-result:${refreshTokenUsed}`
+      const failClosed = (): void => {
+        if (!isRefreshStillCurrent()) return
+        invalidateSession()
+        authStore.clearAuth()
+        try { void Promise.resolve(getRouter().push('/login')).catch(() => {}) } catch { /* Router unavailable during startup. */ }
+      }
       const adoptLatestReceipt = (): boolean => {
         if (!isRefreshStillCurrent()) return false
         let next = refreshTokenUsed
@@ -584,7 +590,10 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             if (receipt.token.refreshToken === next) break // Non-rotating provider.
             next = receipt.token.refreshToken
           }
-        } catch { return false }
+        } catch {
+          failClosed()
+          return false
+        }
         if (!latest || !isRefreshStillCurrent()) return false
         adoptRotatedToken(latest.token, latest.user)
         // Never report success with an expired bearer token.
@@ -612,7 +621,17 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             const receipt = JSON.parse(raw) as {
               token: OIDCToken; user: OIDCUser | null; recordedAt: number
             }
-            if (receipt.token?.refreshToken) {
+            if (!receipt.token?.refreshToken || !receipt.token.accessToken || !Number.isFinite(receipt.token.expiresAt)) {
+              failClosed()
+              return false
+            }
+            if (receipt.token.refreshToken === refreshTokenUsed &&
+                (receipt.token.accessToken === current.accessToken || receipt.token.expiresAt <= Date.now() / 1000)) {
+              // A stable refresh token may be reused after the previous
+              // completed receipt has been consumed. This check and removal
+              // happen exclusively under the Web Lock.
+              localStorage.removeItem(receiptKey)
+            } else {
               return adoptLatestReceipt()
             }
           }
@@ -620,6 +639,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           // lock owner; without it we cannot safely refresh across tabs.
           if (raw === null) localStorage.setItem(receiptKey, '')
         } catch {
+          failClosed()
           return false
         }
         if (!isRefreshStillCurrent()) {
@@ -633,7 +653,10 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             try {
               localStorage.setItem(receiptKey, JSON.stringify(rotated))
             } catch {
-              // Leave the pending marker: later lock owners fail closed.
+              // The provider may have rotated: preserve the pending marker,
+              // and do not leave an apparently authenticated stale session.
+              failClosed()
+              return false
             }
           }
         } else if (safeToRetry) {
@@ -648,9 +671,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           // pending marker so no tab can replay this token, and end this
           // local session without clearing the shared safety marker.
           if (isRefreshStillCurrent()) {
-            invalidateSession()
-            authStore.clearAuth()
-            void getRouter().push('/login').catch(() => {})
+            failClosed()
           }
         }
         return ok
