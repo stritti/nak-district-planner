@@ -565,8 +565,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             const receipt = JSON.parse(raw) as {
               token: OIDCToken; user: OIDCUser | null; recordedAt: number
             }
-            if (Date.now() - receipt.recordedAt < ROTATED_TOKEN_TTL_MS &&
-                receipt.token?.refreshToken !== refreshTokenUsed) {
+            if (receipt.token?.refreshToken !== refreshTokenUsed) {
               if (isRefreshStillCurrent()) adoptRotatedToken(receipt.token, receipt.user)
               return false
             }
