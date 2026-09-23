@@ -37,10 +37,13 @@ def upgrade() -> None:
     superadmin. This SECURITY DEFINER function exposes a bounded grant: it
     binds the target subject to the session's authenticated subject GUC and
     only persists the flag for the subject configured via ``SUPERADMIN_SUB``
-    (owner-controlled deployment configuration) or for the very first user of
-    an empty installation. The first-user grant is serialized with a table lock
-    and re-checked against existing superadmins so concurrent first logins
-    cannot both become superadmin.
+    (owner-controlled deployment configuration, compared exactly because OIDC
+    subjects are opaque case-sensitive identifiers) or for the very first user
+    of an empty installation when no subject is configured. The first-user
+    grant is serialized with a transaction-scoped advisory lock taken before
+    any caller-side row insert and re-checked against existing superadmins so
+    concurrent first logins cannot both become superadmin and cannot deadlock
+    with their own users-row locks.
     """
     op.execute(
         """
@@ -61,21 +64,13 @@ def upgrade() -> None:
                 RAISE EXCEPTION 'user_sub does not match authenticated subject' USING ERRCODE = '42501';
             END IF;
 
-            IF NOT (
-                (p_configured_sub IS NOT NULL AND lower(trim(p_configured_sub)) = lower(p_user_sub))
-                OR (
-                    COALESCE(p_is_first_login, false)
-                    AND NOT EXISTS (SELECT 1 FROM users WHERE is_superadmin = true)
-                )
-            ) THEN
-                RETURN false;
-            END IF;
-
             IF COALESCE(p_is_first_login, false) AND p_configured_sub IS NULL THEN
-                LOCK TABLE users IN EXCLUSIVE MODE;
+                PERFORM pg_advisory_xact_lock(hashtext('nak:grant_bootstrap_superadmin'));
                 IF EXISTS (SELECT 1 FROM users WHERE is_superadmin = true) THEN
                     RETURN false;
                 END IF;
+            ELSIF p_configured_sub IS NULL OR p_configured_sub <> p_user_sub THEN
+                RETURN false;
             END IF;
 
             UPDATE users
