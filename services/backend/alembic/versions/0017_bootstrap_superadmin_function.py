@@ -153,10 +153,17 @@ def upgrade() -> None:
             -- pinned nothing and the first login receives the bootstrap grant.
             -- A non-empty installation always has a pinned subject, so no
             -- account created after the seed can become superadmin just by
-            -- logging in first.
+            -- logging in first. Once a bootstrap superadmin exists, report
+            -- whether the caller is that persisted superadmin instead of
+            -- returning false unconditionally: the already-bootstrapped first
+            -- user must keep the flag on subsequent requests.
             PERFORM pg_advisory_xact_lock(hashtext('nak:grant_bootstrap_superadmin'));
             IF EXISTS (SELECT 1 FROM users WHERE is_superadmin = true) THEN
-                RETURN false;
+                RETURN EXISTS (
+                    SELECT 1 FROM users
+                     WHERE sub = p_user_sub
+                       AND is_superadmin = true
+                );
             END IF;
 
             UPDATE users
