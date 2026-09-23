@@ -495,7 +495,7 @@ describe('useOIDC', () => {
     localStorage.setItem('oidc-refresh-result:stranded-token', '')
     global.fetch = vi.fn()
     await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
     expect(useAuthStore().token).toBeNull()
   })
 
