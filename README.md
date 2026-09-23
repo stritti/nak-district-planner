@@ -488,5 +488,5 @@ bash idp-deploy/authentik/deploy_authentik.sh \
 ### Erster Benutzer / Superadmin
 
 - Wenn `SUPERADMIN_SUB` **gesetzt** ist, bekommt genau dieser OIDC-`sub` globale Superadmin-Rechte. Der Wert wird beim Datenbank-Migration als owner-kontrollierte Konfiguration hinterlegt (`app_superadmin_config`); bei Rotation (Login des neuen Subjekts) werden alte Superadmin-Flags automatisch entzogen.
-- Wenn `SUPERADMIN_SUB` **nicht gesetzt** ist, wird automatisch der **erste jemals angemeldete Benutzer** Superadmin. Bei Upgrades bestehender Installationen wird dazu der früheste vorhandene Benutzer (bzw. ein bestehender Superadmin) deterministisch bei der Migration hinterlegt — nicht der erste Login nach dem Upgrade.
+- Wenn `SUPERADMIN_SUB` **nicht gesetzt** ist: Bei Upgrades bestehender Installationen wird der früheste vorhandene Benutzer (bzw. ein bestehender Superadmin) deterministisch bei der Migration hinterlegt. Auf frischen Installationen wird **kein** Superadmin automatisch ernannt — der Datenbank-Owner bestätigt den ersten Benutzer nach dessen Login mit einem einzigen SQL-Statement (siehe unten).
 - Superadmin darf alle Bezirks-/Gemeinde-Operationen ohne explizite Memberships ausführen.

@@ -49,18 +49,19 @@ def upgrade() -> None:
       registered account (deterministic original first user) as the fallback
       subject on existing installations, preserving the documented guarantee
       for upgrades where all users may carry is_superadmin = false. When the
-      migration runs on a still empty installation, the fallback remains
-      open for the first login, serialized with a transaction-scoped advisory
-      lock taken before any caller-side row insert and re-checked against
-      existing superadmins so concurrent first logins cannot both become
-      superadmin. Because every non-empty installation has a pinned subject,
-      no account created after the seed can become superadmin just by logging
-      in first.
+      migration runs on a still empty installation, no fallback is pinned and
+      the grant is not exposed at all: the session's authenticated-subject
+      GUC is an ordinary caller-settable custom GUC and therefore not identity
+      proof, so the database owner must provision the initial superadmin
+      subject (SUPERADMIN_SUB before migrating, or an UPDATE of
+      app_superadmin_config afterwards). Until then the function only reports
+      the persisted owner-controlled state and grants nothing.
 
     The function takes only the caller's subject (bound to the session's
     authenticated subject GUC) and never trusts caller-supplied authorization
     facts: an application-role session cannot forge eligibility because the
-    configuration table is not writable or readable by the application role.
+    configuration table is not writable or readable by the application role
+    and no grant path exists without an owner-provisioned subject.
     """
     op.execute(
         """
@@ -114,7 +115,6 @@ def upgrade() -> None:
         AS $$
         DECLARE
             v_configured_sub TEXT;
-            v_granted BOOLEAN;
         BEGIN
             -- Fail closed when the authenticated-subject GUC is absent: a
             -- NULL GUC must never satisfy the identity binding.
@@ -151,50 +151,19 @@ def upgrade() -> None:
                 RETURN true;
             END IF;
 
-            -- No configured subject yet: an unlocked fast path reports
-            -- whether the caller is the already-bootstrapped superadmin so
-            -- post-bootstrap requests do not contend on the advisory lock.
-            IF EXISTS (SELECT 1 FROM public.users WHERE is_superadmin = true) THEN
-                RETURN EXISTS (
-                    SELECT 1 FROM public.users
-                     WHERE sub = p_user_sub
-                       AND is_superadmin = true
-                );
-            END IF;
-
-            -- Empty installation with no superadmin yet: the first login
-            -- receives the bootstrap grant, serialized with a
-            -- transaction-scoped advisory lock taken before any caller-side
-            -- row insert and re-checked against existing superadmins so
-            -- concurrent first logins cannot both become superadmin. The
-            -- granted subject is pinned as the fallback subject so later
-            -- requests take the unlocked path.
-            PERFORM pg_advisory_xact_lock(hashtext('nak:grant_bootstrap_superadmin'));
-            IF EXISTS (SELECT 1 FROM public.users WHERE is_superadmin = true) THEN
-                RETURN EXISTS (
-                    SELECT 1 FROM public.users
-                     WHERE sub = p_user_sub
-                       AND is_superadmin = true
-                );
-            END IF;
-
-            UPDATE public.users
-               SET is_superadmin = true,
-                   updated_at = now()
-             WHERE sub = p_user_sub
-               AND is_superadmin = false
-            RETURNING true
-            INTO v_granted;
-
-            IF v_granted THEN
-                UPDATE public.app_superadmin_config
-                   SET superadmin_sub = p_user_sub,
-                       updated_at = now()
-                 WHERE id = 1
-                   AND superadmin_sub IS NULL;
-            END IF;
-
-            RETURN COALESCE(v_granted, false);
+            -- No owner-provisioned subject: the bootstrap grant is not
+            -- exposed at all. The app.current_user_sub GUC is an ordinary
+            -- caller-settable custom GUC and therefore not identity proof,
+            -- so an application-role session must never be able to mint a
+            -- superadmin on an unconfigured installation. The function only
+            -- reports the persisted owner-controlled state; the database
+            -- owner provisions the superadmin subject by setting
+            -- app_superadmin_config.superadmin_sub.
+            RETURN EXISTS (
+                SELECT 1 FROM public.users
+                 WHERE sub = p_user_sub
+                   AND is_superadmin = true
+            );
         END;
         $$
         """

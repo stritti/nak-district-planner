@@ -100,8 +100,9 @@ class TestGetCurrentUserAutoCreation:
     async def test_first_login_persists_bootstrap_superadmin(
         self, mock_oidc_adapter, mock_session, mock_credentials, mock_request
     ):
-        """First login on an empty installation is granted superadmin via the
-        bounded database function and keeps the persisted flag in memory.
+        """The database grant result (owner-provisioned subject) is kept in
+        memory for the in-session user object; the app passes only the
+        authenticated subject and no authorization facts.
         """
         token_claims = {
             "sub": "first-user",
