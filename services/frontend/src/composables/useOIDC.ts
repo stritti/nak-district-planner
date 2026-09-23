@@ -556,9 +556,11 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       // Persist the rotation receipt while still holding the lock; the next
       // owner must consult it before submitting the captured refresh token.
       const receiptKey = `oidc-refresh-result:${refreshTokenUsed}`
-      return navigator.locks.request(`oidc-refresh:${refreshTokenUsed}`, async () => {
+      return navigator.locks.request(`oidc-refresh:${refreshTokenUsed}`, { ifAvailable: true }, async (lock) => {
+        if (!lock) return waitForCrossTabRefresh(refreshTokenUsed)
         try {
           const raw = localStorage.getItem(receiptKey)
+          if (raw === '') return false // Previous owner may have rotated but failed to persist the receipt.
           if (raw) {
             const receipt = JSON.parse(raw) as {
               token: OIDCToken; user: OIDCUser | null; recordedAt: number
@@ -571,7 +573,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           }
           // Shared storage is required to communicate rotation to the next
           // lock owner; without it we cannot safely refresh across tabs.
-          localStorage.setItem(receiptKey, '')
+          if (raw === null) localStorage.setItem(receiptKey, '')
         } catch {
           return false
         }
@@ -583,10 +585,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             try {
               localStorage.setItem(receiptKey, JSON.stringify(rotated))
             } catch {
-              // The current token is already rotated; keep the lock until
-              // expiry of this page's session rather than risk token reuse.
-              // A failed storage write cannot safely release coordination.
-              await new Promise<void>(() => {})
+              // Leave the pending marker: later lock owners fail closed.
             }
           }
         }
