@@ -489,6 +489,46 @@ describe('useOIDC', () => {
     localStorage.removeItem('oidc-refresh-result:already-rotated-refresh')
   })
 
+  it('fails closed and clears the local session on a stranded pending receipt', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('stranded-token'), { sub: 'user-sub' })
+    localStorage.setItem('oidc-refresh-result:stranded-token', '')
+    global.fetch = vi.fn()
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(useAuthStore().token).toBeNull()
+  })
+
+  it('follows multiple rotation receipts before reporting success', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('first-token'), { sub: 'user-sub' })
+    const middle = { ...expiredToken('second-token'), accessToken: 'expired-middle' }
+    const latest = { ...middle, refreshToken: 'third-token', accessToken: 'latest-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+    localStorage.setItem('oidc-refresh-result:first-token', JSON.stringify({ token: middle, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    localStorage.setItem('oidc-refresh-result:second-token', JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    global.fetch = vi.fn()
+    await expect(oidc.refreshToken()).resolves.toBe(true)
+    expect(useAuthStore().token?.refreshToken).toBe('third-token')
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('recovers a missed cross-tab completion from the persisted receipt', async () => {
+    vi.useFakeTimers()
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('missed-token'), { sub: 'user-sub' })
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      locks: { request: async (_name: string, _opts: unknown, callback: (lock: Lock | null) => Promise<boolean>) => callback(null) },
+    })
+    const pending = oidc.refreshToken()
+    await vi.advanceTimersByTimeAsync(1)
+    const latest = { ...expiredToken('next-token'), accessToken: 'next-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+    localStorage.setItem('oidc-refresh-result:missed-token', JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    await vi.advanceTimersByTimeAsync(30_000)
+    await expect(pending).resolves.toBe(true)
+    expect(useAuthStore().token?.refreshToken).toBe('next-token')
+  })
+
   it('retries a transient failure after removing its pending receipt', async () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('retry-receipt-token'), { sub: 'user-sub' })
