@@ -37,7 +37,7 @@ describe('useOIDC', () => {
   async function receiptKey(token: string): Promise<string> {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
     const binary = Array.from(new Uint8Array(digest), (byte) => String.fromCharCode(byte)).join('')
-    return 'oidc-refresh-result:' + btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '')
+    return 'oidc-refresh-result:' + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
   }
   function createOidc() {
     return useOIDC(undefined, {
