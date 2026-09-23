@@ -476,14 +476,14 @@ describe('useOIDC', () => {
   it('adopts a completed rotation under the Web Lock before fetching', async () => {
     const old = expiredToken('already-rotated-refresh')
     const rotated = { ...old, accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem('oidc-refresh-result:already-rotated-refresh', JSON.stringify({
-      token: rotated, user: { sub: 'user-sub' }, recordedAt: Date.now(),
-    }))
     global.fetch = vi.fn()
     const oidc = createOidc()
     oidc.setToken(old, { sub: 'user-sub' })
+    localStorage.setItem('oidc-refresh-result:already-rotated-refresh', JSON.stringify({
+      token: rotated, user: { sub: 'user-sub' }, recordedAt: Date.now(),
+    }))
 
-    await expect(oidc.refreshToken()).resolves.toBe(false)
+    await expect(oidc.refreshToken()).resolves.toBe(true)
     expect(global.fetch).not.toHaveBeenCalled()
     expect(useAuthStore().token?.refreshToken).toBe('new-refresh')
     localStorage.removeItem('oidc-refresh-result:already-rotated-refresh')
