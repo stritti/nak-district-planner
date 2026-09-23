@@ -34,6 +34,11 @@ vi.mock('vue-router', () => ({
 }))
 
 describe('useOIDC', () => {
+  async function receiptKey(token: string): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
+    const binary = Array.from(new Uint8Array(digest), (byte) => String.fromCharCode(byte)).join('')
+    return 'oidc-refresh-result:' + btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '')
+  }
   function createOidc() {
     return useOIDC(undefined, {
       redirectUri: 'http://localhost:5173/auth/callback',
@@ -422,7 +427,7 @@ describe('useOIDC', () => {
     await vi.advanceTimersByTimeAsync(20_000)
     await expect(first).resolves.toBe(false)
 
-    expect(localStorage.getItem('oidc-refresh-result:refresh-token')).toBe('')
+    expect(localStorage.getItem(await receiptKey('refresh-token'))).toBe('')
     expect(useAuthStore().token).toBeNull()
     expect(fetch).toHaveBeenCalledTimes(1)
   })
@@ -479,20 +484,20 @@ describe('useOIDC', () => {
     global.fetch = vi.fn()
     const oidc = createOidc()
     oidc.setToken(old, { sub: 'user-sub' })
-    localStorage.setItem('oidc-refresh-result:already-rotated-refresh', JSON.stringify({
+    localStorage.setItem(await receiptKey('already-rotated-refresh'), JSON.stringify({
       token: rotated, user: { sub: 'user-sub' }, recordedAt: Date.now(),
     }))
 
     await expect(oidc.refreshToken()).resolves.toBe(true)
     expect(global.fetch).not.toHaveBeenCalled()
     expect(useAuthStore().token?.refreshToken).toBe('new-refresh')
-    localStorage.removeItem('oidc-refresh-result:already-rotated-refresh')
+    localStorage.removeItem(await receiptKey('already-rotated-refresh'))
   })
 
   it('fails closed and clears the local session on a stranded pending receipt', async () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('stranded-token'), { sub: 'user-sub' })
-    localStorage.setItem('oidc-refresh-result:stranded-token', '')
+    localStorage.setItem(await receiptKey('stranded-token'), '')
     global.fetch = vi.fn()
     await expect(oidc.refreshToken()).resolves.toBe(false)
     expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
@@ -504,8 +509,8 @@ describe('useOIDC', () => {
     oidc.setToken(expiredToken('first-token'), { sub: 'user-sub' })
     const middle = { ...expiredToken('second-token'), accessToken: 'expired-middle' }
     const latest = { ...middle, refreshToken: 'third-token', accessToken: 'latest-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem('oidc-refresh-result:first-token', JSON.stringify({ token: middle, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
-    localStorage.setItem('oidc-refresh-result:second-token', JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    localStorage.setItem(await receiptKey('first-token'), JSON.stringify({ token: middle, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    localStorage.setItem(await receiptKey('second-token'), JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
     global.fetch = vi.fn()
     await expect(oidc.refreshToken()).resolves.toBe(true)
     expect(useAuthStore().token?.refreshToken).toBe('third-token')
@@ -523,7 +528,7 @@ describe('useOIDC', () => {
     const pending = oidc.refreshToken()
     await vi.advanceTimersByTimeAsync(1)
     const latest = { ...expiredToken('next-token'), accessToken: 'next-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem('oidc-refresh-result:missed-token', JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    localStorage.setItem(await receiptKey('missed-token'), JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
     await vi.advanceTimersByTimeAsync(30_000)
     await expect(pending).resolves.toBe(true)
     expect(useAuthStore().token?.refreshToken).toBe('next-token')
@@ -534,7 +539,7 @@ describe('useOIDC', () => {
     oidc.setToken(expiredToken('ambiguous-token'), { sub: 'user-sub' })
     global.fetch = vi.fn().mockRejectedValueOnce(new Error('connection lost'))
     await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(localStorage.getItem('oidc-refresh-result:ambiguous-token')).toBe('')
+    expect(localStorage.getItem(await receiptKey('ambiguous-token'))).toBe('')
     expect(useAuthStore().token).toBeNull()
     expect(global.fetch).toHaveBeenCalledTimes(1)
   })
@@ -543,7 +548,7 @@ describe('useOIDC', () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('stable-refresh'), { sub: 'user-sub' })
     const latest = { ...expiredToken('stable-refresh'), accessToken: 'new-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem('oidc-refresh-result:stable-refresh', JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    localStorage.setItem(await receiptKey('stable-refresh'), JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
     global.fetch = vi.fn()
     await expect(oidc.refreshToken()).resolves.toBe(true)
     expect(useAuthStore().token?.accessToken).toBe('new-access')
@@ -564,7 +569,7 @@ describe('useOIDC', () => {
     const oidc = createOidc()
     const current = { ...expiredToken('stable-token'), accessToken: 'previous-access' }
     oidc.setToken(current, { sub: 'user-sub' })
-    localStorage.setItem('oidc-refresh-result:stable-token', JSON.stringify({ token: current, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    localStorage.setItem(await receiptKey('stable-token'), JSON.stringify({ token: current, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
     global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ access_token: 'fresh-access', expires_in: 3600 }), { status: 200 }))
     await expect(oidc.refreshToken()).resolves.toBe(true)
     expect(useAuthStore().token?.accessToken).toBe('fresh-access')
@@ -574,7 +579,7 @@ describe('useOIDC', () => {
   it('clears the session if the stored receipt is malformed', async () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('malformed-token'), { sub: 'user-sub' })
-    localStorage.setItem('oidc-refresh-result:malformed-token', '{broken')
+    localStorage.setItem(await receiptKey('malformed-token'), '{broken')
     global.fetch = vi.fn()
     await expect(oidc.refreshToken()).resolves.toBe(false)
     expect(useAuthStore().token).toBeNull()
@@ -589,7 +594,7 @@ describe('useOIDC', () => {
         access_token: 'retry-access', refresh_token: 'retry-rotated', expires_in: 3600,
       }), { status: 200 }))
     await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(localStorage.getItem('oidc-refresh-result:retry-receipt-token')).toBeNull()
+    expect(localStorage.getItem(await receiptKey('retry-receipt-token'))).toBeNull()
     await expect(oidc.refreshToken()).resolves.toBe(true)
     expect(global.fetch).toHaveBeenCalledTimes(2)
   })

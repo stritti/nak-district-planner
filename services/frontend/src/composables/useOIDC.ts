@@ -46,6 +46,8 @@ const REFRESH_TIMEOUT_MS = 20_000
 const REFRESH_CHANNEL = 'oidc-refresh'
 const CROSS_TAB_WAIT_TIMEOUT_MS = 30_000
 const ROTATED_TOKEN_TTL_MS = 60_000
+const PERSISTED_RECEIPT_TTL_MS = 24 * 60 * 60 * 1000
+const MAX_PERSISTED_RECEIPTS = 32
 
 // Module-level guards: listeners must only be attached once per page load,
 // regardless of how many times useOIDC() is instantiated across the app.
@@ -96,6 +98,44 @@ function generateState(): string {
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
   return toBase64Url(bytes)
+}
+
+async function rotationReceiptKey(refreshToken: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(refreshToken))
+  return 'oidc-refresh-result:' + toBase64Url(new Uint8Array(digest))
+}
+
+function validReceiptToken(value: unknown): value is OIDCToken {
+  if (!value || typeof value !== 'object') return false
+  const token = value as Partial<OIDCToken>
+  return typeof token.accessToken === 'string' && token.accessToken.length > 0 &&
+    typeof token.refreshToken === 'string' && token.refreshToken.length > 0 &&
+    typeof token.idToken === 'string' &&
+    typeof token.expiresAt === 'number' && Number.isFinite(token.expiresAt)
+}
+
+function prunePersistedReceipts(): void {
+  const now = Date.now()
+  const completed: { key: string; recordedAt: number }[] = []
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i)
+    if (!key?.startsWith('oidc-refresh-result:')) continue
+    const raw = localStorage.getItem(key)
+    if (!raw) continue // Never discard an ambiguous pending marker.
+    try {
+      const receipt = JSON.parse(raw) as { recordedAt?: number }
+      const recordedAt = receipt.recordedAt
+      if (typeof recordedAt !== 'number' || !Number.isFinite(recordedAt) ||
+          recordedAt > now || now - recordedAt > PERSISTED_RECEIPT_TTL_MS) {
+        localStorage.removeItem(key)
+        i -= 1
+      } else completed.push({ key, recordedAt })
+    } catch {
+      // Malformed receipts are handled by fail-closed adoption, not pruning.
+    }
+  }
+  completed.sort((a, b) => b.recordedAt - a.recordedAt)
+  for (const entry of completed.slice(MAX_PERSISTED_RECEIPTS)) localStorage.removeItem(entry.key)
 }
 
 function parseJwt(token: string): Record<string, unknown> {
@@ -567,14 +607,14 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       // before its BroadcastChannel receives the preceding tab's rotation.
       // Persist the rotation receipt while still holding the lock; the next
       // owner must consult it before submitting the captured refresh token.
-      const receiptKey = `oidc-refresh-result:${refreshTokenUsed}`
+      const receiptKey = await rotationReceiptKey(refreshTokenUsed)
       const failClosed = (): void => {
         if (!isRefreshStillCurrent()) return
         invalidateSession()
         authStore.clearAuth()
         try { void Promise.resolve(getRouter().push('/login')).catch(() => {}) } catch { /* Router unavailable during startup. */ }
       }
-      const adoptLatestReceipt = (): boolean => {
+      const adoptLatestReceipt = async (): Promise<boolean> => {
         if (!isRefreshStillCurrent()) return false
         let next = refreshTokenUsed
         const seen = new Set<string>()
@@ -582,10 +622,10 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         try {
           while (!seen.has(next) && seen.size < 64) {
             seen.add(next)
-            const raw = localStorage.getItem(`oidc-refresh-result:${next}`)
+            const raw = localStorage.getItem(await rotationReceiptKey(next))
             if (!raw) break
             const receipt = JSON.parse(raw) as { token: OIDCToken; user: OIDCUser | null }
-            if (!receipt.token?.refreshToken) break
+            if (!validReceiptToken(receipt.token)) throw new Error('Invalid persisted rotation receipt')
             latest = receipt
             if (receipt.token.refreshToken === next) break // Non-rotating provider.
             next = receipt.token.refreshToken
@@ -607,7 +647,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         if (!lock) {
           const received = await waitForCrossTabRefresh(refreshTokenUsed)
           if (received && authStore.token && authStore.token.expiresAt > Date.now() / 1000) return true
-          return adoptLatestReceipt()
+          return await adoptLatestReceipt()
         }
         try {
           const raw = localStorage.getItem(receiptKey)
@@ -621,7 +661,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             const receipt = JSON.parse(raw) as {
               token: OIDCToken; user: OIDCUser | null; recordedAt: number
             }
-            if (!receipt.token?.refreshToken || !receipt.token.accessToken || !Number.isFinite(receipt.token.expiresAt)) {
+            if (!validReceiptToken(receipt.token)) {
               failClosed()
               return false
             }
@@ -632,12 +672,15 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
               // happen exclusively under the Web Lock.
               localStorage.removeItem(receiptKey)
             } else {
-              return adoptLatestReceipt()
+              return await adoptLatestReceipt()
             }
           }
           // Shared storage is required to communicate rotation to the next
           // lock owner; without it we cannot safely refresh across tabs.
-          if (raw === null) localStorage.setItem(receiptKey, '')
+          if (raw === null) {
+            prunePersistedReceipts()
+            localStorage.setItem(receiptKey, '')
+          }
         } catch {
           failClosed()
           return false
@@ -652,6 +695,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           if (rotated) {
             try {
               localStorage.setItem(receiptKey, JSON.stringify(rotated))
+              prunePersistedReceipts()
             } catch {
               // The provider may have rotated: preserve the pending marker,
               // and do not leave an apparently authenticated stale session.
