@@ -206,7 +206,9 @@ describe('useOIDC', () => {
 
     const firstRefresh = first.refreshToken()
     const secondRefresh = second.refreshToken()
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    // Web Lock dispatch the callback asynchronously; wait for the coalesced
+    // fetch to start before resolving it.
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
 
     resolveFetch()
     await Promise.all([firstRefresh, secondRefresh])
@@ -234,6 +236,9 @@ describe('useOIDC', () => {
     )
 
     const refresh = oidc.refreshToken()
+    // Web Lock dispatch is asynchronous; wait for the request to start
+    // before simulating the logout.
+    await vi.waitFor(() => expect(resolveFetch).toBeTypeOf('function'))
     oidc.setToken(null)
     resolveFetch(
       new Response(
@@ -272,6 +277,9 @@ describe('useOIDC', () => {
     )
 
     const refresh = oidc.refreshToken()
+    // Web Lock dispatch is asynchronous; wait for the request to start
+    // before installing the newer session.
+    await vi.waitFor(() => expect(resolveFetch).toBeTypeOf('function'))
     oidc.setToken(
       {
         accessToken: 'new-access-token',
@@ -331,7 +339,7 @@ describe('useOIDC', () => {
     expect(authStore.user?.sub).toBe('new-user-sub')
   })
 
-  it('should keep one shared refresh timer across composable instances', () => {
+  it('should keep one shared refresh timer across composable instances', async () => {
     vi.useFakeTimers()
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
     const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
@@ -362,8 +370,10 @@ describe('useOIDC', () => {
     expect(setTimeoutSpy).toHaveBeenCalledTimes(2)
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(1)
 
-    vi.advanceTimersByTime(3_400_000)
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    // The shared timer triggers refreshToken(), which acquires the Web Lock
+    // and hashes the receipt key asynchronously before fetching.
+    await vi.advanceTimersByTimeAsync(3_400_000)
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
   })
 
   it('keeps the session on a definitive pre-provider rate limit', async () => {
@@ -424,7 +434,9 @@ describe('useOIDC', () => {
     oidc.setToken(expiredToken(), { sub: 'user-sub' })
 
     const first = oidc.refreshToken()
-    await vi.advanceTimersByTimeAsync(35_000)
+    // The abort timer fires at the 35s deadline; advancing beyond it lets the
+    // rejection propagate through the async refresh pipeline.
+    await vi.advanceTimersByTimeAsync(36_000)
     await expect(first).resolves.toBe(false)
 
     expect(localStorage.getItem(await receiptKey('refresh-token'))).toBe('')
@@ -463,6 +475,50 @@ describe('useOIDC', () => {
     await expect(coalesced).resolves.toBe(true)
     expect(authStore.token?.accessToken).toBe('rotated-access-token')
     expect(postedBroadcastMessages).toEqual([])
+  })
+
+  it('rejects a stale same-token refresh broadcast that predates the newest completion', async () => {
+    global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 500 })))
+    const oidc = createOidc()
+    const authStore = useAuthStore()
+    oidc.setToken(expiredToken('stable-refresh-token'), { sub: 'user-sub' })
+    const channel = MockBroadcastChannel.instances[0]
+    const newest = {
+      accessToken: 'newest-access-token',
+      idToken: '',
+      refreshToken: 'stable-refresh-token',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }
+    channel.onmessage?.({
+      data: {
+        type: 'refresh-complete',
+        ok: true,
+        refreshToken: 'stable-refresh-token',
+        token: newest,
+        user: { sub: 'user-sub' },
+        completedAt: Date.now(),
+      },
+    } as MessageEvent)
+    expect(authStore.token?.accessToken).toBe('newest-access-token')
+
+    const stale = {
+      accessToken: 'stale-access-token',
+      idToken: '',
+      refreshToken: 'stable-refresh-token',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }
+    channel.onmessage?.({
+      data: {
+        type: 'refresh-complete',
+        ok: true,
+        refreshToken: 'stable-refresh-token',
+        token: stale,
+        user: { sub: 'user-sub' },
+        completedAt: Date.now() - 5_000,
+      },
+    } as MessageEvent)
+
+    expect(authStore.token?.accessToken).toBe('newest-access-token')
   })
 
   it('does not send a rotating refresh token without Web Locks', async () => {
@@ -596,6 +652,24 @@ describe('useOIDC', () => {
     expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
   })
 
+  it('scrubs credential receipts when an ambiguous refresh fails closed', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('scrub-token'), { sub: 'user-sub' })
+    const rotated = { ...expiredToken('scrub-token'), accessToken: 'scrub-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+    localStorage.setItem(
+      await receiptKey('predecessor-token'),
+      JSON.stringify({ token: rotated, user: { sub: 'user-sub' }, recordedAt: Date.now() }),
+    )
+    global.fetch = vi.fn(() => Promise.reject(new Error('connection lost')))
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(useAuthStore().token).toBeNull()
+    // The raw refresh token persisted in the predecessor receipt must not
+    // outlive the forced logout; the pending marker is retained for replay
+    // protection.
+    expect(localStorage.getItem(await receiptKey('predecessor-token'))).toBeNull()
+    expect(localStorage.getItem(await receiptKey('scrub-token'))).toBe('')
+  })
+
   it('retries a transient failure after removing its pending receipt', async () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('retry-receipt-token'), { sub: 'user-sub' })
@@ -644,8 +718,10 @@ describe('useOIDC', () => {
     const firstRefresh = first.refreshToken()
     const secondRefresh = second.refreshToken()
 
+    // Lock acquisition dispatches asynchronously; wait for the owner's
+    // request to start before resolving it.
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
     expect(locksRequest).toHaveBeenCalledTimes(1)
-    expect(fetch).toHaveBeenCalledTimes(1)
 
     resolveFetch(
       new Response(

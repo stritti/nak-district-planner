@@ -60,6 +60,7 @@ let refreshTimer: ReturnType<typeof setTimeout> | null = null
 let transientRetryTimer: ReturnType<typeof setTimeout> | null = null
 let refreshChannel: BroadcastChannel | null = null
 let refreshChannelListenerAttached = false
+let lastAdoptedBroadcastAt = 0
 let crossTabWaiter:
   | { refreshToken: string; resolve: (ok: boolean) => void; timeoutId: ReturnType<typeof setTimeout> }
   | null = null
@@ -70,7 +71,7 @@ const rotatedTokens = new Map<
 
 type RefreshChannelMessage =
   | { type: 'refresh-started'; refreshToken: string }
-  | { type: 'refresh-complete'; ok: boolean; refreshToken: string; token?: OIDCToken; user?: OIDCUser | null }
+  | { type: 'refresh-complete'; ok: boolean; refreshToken: string; token?: OIDCToken; user?: OIDCUser | null; completedAt?: number }
 
 const envConfig: OIDCConfig = {
   redirectUri: `${window.location.origin}/auth/callback`,
@@ -207,6 +208,7 @@ export function __resetOIDCModuleState(): void {
   refreshChannel?.close()
   refreshChannel = null
   refreshChannelListenerAttached = false
+  lastAdoptedBroadcastAt = 0
   activityListenersAttached = false
   lastActivityCheckAt = 0
 }
@@ -303,10 +305,17 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       }
 
       if (message.ok && message.token) {
+        // BroadcastChannel does not totally order messages across senders.
+        // With a non-rotating refresh token every completion carries the same
+        // refreshToken, so a delayed older completion must not roll the
+        // session back to an expired or revoked bearer.
+        const completedAt = typeof message.completedAt === 'number' ? message.completedAt : Date.now()
+        if (completedAt < lastAdoptedBroadcastAt) return
+        lastAdoptedBroadcastAt = completedAt
         rotatedTokens.set(message.refreshToken, {
           token: message.token,
           user: message.user ?? authStore.user,
-          recordedAt: Date.now(),
+          recordedAt: completedAt,
         })
         pruneRotatedTokens()
         adoptRotatedToken(message.token, message.user ?? authStore.user)
@@ -579,6 +588,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             refreshToken: refreshTokenUsed,
             token: completedToken,
             user: completedUser,
+            completedAt: Date.now(),
           })
         }
       }
@@ -612,6 +622,10 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       const failClosed = (): void => {
         if (!isRefreshStillCurrent()) return
         invalidateSession()
+        // Completed receipts still hold the raw refresh token that was just
+        // submitted; a failure before reaching the provider leaves it usable.
+        // Keep only the non-secret replay markers required by suspended tabs.
+        clearRotationReceipts()
         authStore.clearAuth()
         try { void Promise.resolve(getRouter().push('/login')).catch(() => {}) } catch { /* Router unavailable during startup. */ }
       }

@@ -153,6 +153,9 @@ describe('apiFetch', () => {
 
     const request = apiFetch('/api/v1/state-changing', { method: 'POST' })
 
+    // Web Lock dispatch is asynchronous; wait for the refresh request to
+    // start before replacing the session.
+    await vi.waitFor(() => expect(resolveRefresh).toBeTypeOf('function'))
     useOIDC().setToken(
       {
         accessToken: 'new-access-token',
@@ -238,22 +241,8 @@ describe('apiFetch', () => {
           resolveOriginal = resolve
         })
       }
-      if (String(input) === '/api/v1/auth/oidc/token') {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              access_token: 'refreshed-access-token',
-              id_token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLXN1YiJ9.signature',
-              refresh_token: 'refreshed-refresh-token',
-              expires_in: 3600,
-            }),
-            { status: 200 },
-          ),
-        )
-      }
-
       const headers = init?.headers as Record<string, string>
-      expect(headers.Authorization).toBe('Bearer refreshed-access-token')
+      expect(headers.Authorization).toBe('Bearer rotated-access-token')
       return Promise.resolve(makeResponse({ ok: true }) as unknown as Response)
     })
 
@@ -271,6 +260,7 @@ describe('apiFetch', () => {
     resolveOriginal(makeResponse('Unauthorized', { status: 401, ok: false }) as unknown as Response)
 
     await expect(request).resolves.toEqual({ ok: true })
-    expect(fetch).toHaveBeenCalledTimes(3)
+    // The rotated bearer is reused directly; no second refresh is submitted.
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
 })
