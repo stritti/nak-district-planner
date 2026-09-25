@@ -45,21 +45,22 @@ def _mock_auth_context(district_id: uuid.UUID, calendar_repo: AsyncMock):
         session = AsyncMock()
         result = MagicMock()
         result.mappings.return_value.one_or_none.return_value = None
+        # Keep the fixture user non-superadmin: the bootstrap grant read
+        # must return false so district-admin authorization is exercised.
+        result.scalar_one_or_none.return_value = False
         session.execute.return_value = result
         return session
 
     app.dependency_overrides[get_db_session] = _override_db_session
     app.dependency_overrides[get_calendar_integration_repository] = lambda: calendar_repo
     try:
-        with (
-            patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
-            patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
-        ):
+        with patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo, patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo:
             user_repo = AsyncMock()
             user_repo.get_by_sub.return_value = None
             user_repo.has_any_user.return_value = True
             user_repo.save = AsyncMock()
             MockUserRepo.return_value = user_repo
+
             membership_repo = AsyncMock()
             membership_repo.get_all_by_user.return_value = [
                 Membership.create(
@@ -79,7 +80,6 @@ def _mock_auth_context(district_id: uuid.UUID, calendar_repo: AsyncMock):
         app.dependency_overrides.pop(get_db_session, None)
         app.dependency_overrides.pop(get_calendar_integration_repository, None)
         deps.set_oidc_adapter(None)
-        deps._token_claims_context.clear()
 
 
 def _integration(district_id: uuid.UUID):

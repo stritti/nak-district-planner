@@ -1,18 +1,52 @@
 """Integration tests for CSRF middleware."""
 
+from unittest.mock import AsyncMock, patch
+
 from fastapi.testclient import TestClient
 
 from app.application.csrf import CSRFTokenService
 from app.main import app
 
 
+class _SessionContext:
+    def __init__(self, session: AsyncMock) -> None:
+        self.session = session
+
+    async def __aenter__(self) -> AsyncMock:
+        return self.session
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        return None
+
+
 class TestCSRFMiddleware:
     """Integration tests for CSRF middleware."""
 
     def setup_method(self):
-        """Set up test client."""
+        """Set up test client with stubbed health dependencies.
+
+        The health endpoint answers 503 without a live database/Redis, which
+        would mask the CSRF behaviour under test, so both dependencies are
+        stubbed for every request against ``/api/health``.
+        """
+        self._patches = [
+            patch(
+                "app.adapters.api.routers.health.AsyncSessionLocal",
+                return_value=_SessionContext(AsyncMock()),
+            ),
+            patch(
+                "app.adapters.api.routers.health.rate_limiter._redis",
+                AsyncMock(),
+            ),
+        ]
+        for p in self._patches:
+            p.start()
         self.client = TestClient(app)
         self.csrf_service = CSRFTokenService(secret_key="test-secret-key")
+
+    def teardown_method(self):
+        for p in self._patches:
+            p.stop()
 
     def test_get_request_sets_csrf_cookie(self):
         """Test that GET requests receive a CSRF cookie."""

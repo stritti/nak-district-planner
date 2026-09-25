@@ -76,13 +76,13 @@ docker compose up -d
 Beim ersten Start und nach jeder neuen Migrationsdatei:
 
 ```bash
-docker compose run --no-deps --rm backend alembic upgrade head
+docker compose run --no-deps --rm --build migrate alembic upgrade head
 ```
 
 Neue Migration erstellen (nach ORM-Änderungen):
 
 ```bash
-docker compose run --no-deps --rm backend alembic revision --autogenerate -m "kurze beschreibung"
+docker compose run --no-deps --rm migrate alembic revision --autogenerate -m "kurze beschreibung"
 ```
 
 > Die Migrationsdatei wird unter `services/backend/alembic/versions/` erzeugt.
@@ -237,7 +237,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 #### 3. Datenbank migrieren
 
 ```bash
-docker compose -f docker-compose.yml run --no-deps --rm backend alembic upgrade head
+docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head
 ```
 
 #### 4. Stack starten
@@ -295,7 +295,7 @@ git pull
 docker compose -f docker-compose.yml build
 
 # 3. Migrationen anwenden (falls neue Dateien vorhanden)
-docker compose -f docker-compose.yml run --no-deps --rm backend alembic upgrade head
+docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head
 
 # 4. Stack neu starten (rollendes Neustarten ohne Downtime nicht ohne Orchestrator)
 docker compose -f docker-compose.yml up -d
@@ -487,6 +487,6 @@ bash idp-deploy/authentik/deploy_authentik.sh \
 
 ### Erster Benutzer / Superadmin
 
-- Wenn `SUPERADMIN_SUB` **gesetzt** ist, bekommt genau dieser OIDC-`sub` globale Superadmin-Rechte.
-- Wenn `SUPERADMIN_SUB` **nicht gesetzt** ist, wird automatisch der **erste jemals angemeldete Benutzer** Superadmin.
+- Wenn `SUPERADMIN_SUB` **gesetzt** ist, bekommt genau dieser OIDC-`sub` globale Superadmin-Rechte. Der Wert wird beim Datenbank-Migration als owner-kontrollierte Konfiguration hinterlegt (`app_superadmin_config`); bei Rotation (Login des neuen Subjekts) werden alte Superadmin-Flags automatisch entzogen.
+- Wenn `SUPERADMIN_SUB` **nicht gesetzt** ist: Bei Upgrades bestehender Installationen wird der früheste vorhandene Benutzer (bzw. ein bestehender Superadmin) deterministisch bei der Migration hinterlegt. Auf frischen Installationen wird **kein** Superadmin automatisch ernannt — der Datenbank-Owner bestätigt den ersten Benutzer nach dessen Login mit einem einzigen SQL-Statement (siehe unten).
 - Superadmin darf alle Bezirks-/Gemeinde-Operationen ohne explizite Memberships ausführen.

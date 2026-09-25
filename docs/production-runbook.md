@@ -32,7 +32,7 @@ Der Production Guard verhindert den Start, wenn kritische Werte nicht gesetzt si
 
 1. Aktuellen Code bereitstellen (`main`/Release-Tag)
 2. Images bauen: `docker compose -f docker-compose.yml build`
-3. Migrationen ausfuehren: `docker compose -f docker-compose.yml run --no-deps --rm backend alembic upgrade head`
+3. Migrationen ausfuehren: `docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head`
 4. Stack starten/aktualisieren: `docker compose -f docker-compose.yml up -d`
 5. Health pruefen: `curl http://localhost/api/health`
 

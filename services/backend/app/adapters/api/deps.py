@@ -17,11 +17,11 @@ from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
 from app.application.notification_service import NotificationService
 from app.application.services.calendar_integration_service import CalendarIntegrationService
-from app.config import settings
 from app.domain.models.membership import Membership
 from app.domain.models.user import User
 
 logger = logging.getLogger(__name__)
+
 RepositoryT = TypeVar("RepositoryT")
 
 # OIDC Bearer token security scheme
@@ -40,20 +40,6 @@ def set_oidc_adapter(adapter: OIDCAdapter | None) -> None:
 def get_oidc_adapter() -> OIDCAdapter | None:
     """Get the currently configured global OIDC adapter instance."""
     return _oidc_adapter
-
-
-# Context for passing token claims through dependency chain
-_token_claims_context: dict = {}
-
-
-def set_token_claims(claims: dict) -> None:
-    """Store token claims in context for use in dependent functions."""
-    _token_claims_context.update(claims)
-
-
-def get_token_claims() -> dict:
-    """Get current token claims from context."""
-    return _token_claims_context.copy()
 
 
 async def get_current_user(
@@ -90,20 +76,20 @@ async def get_current_user(
     try:
         # Validate token and extract claims
         token_claims = await _oidc_adapter.validate_token(token)
-        # Store claims in context for dependent functions
-        set_token_claims(token_claims)
-
         user_info = _oidc_adapter.extract_user_info(token_claims)
 
         # Get or create user in database
         user_repo = SqlUserRepository(session)
         existing_user = await user_repo.get_by_sub(user_info["sub"])
-        if settings.superadmin_sub is not None:
-            is_superadmin = user_info["sub"] == settings.superadmin_sub
-        else:
-            has_any_user = await user_repo.has_any_user()
-            is_superadmin = existing_user.is_superadmin if existing_user else (not has_any_user)
 
+        # The superadmin flag is owner-controlled at the database level (the
+        # app role cannot write users.is_superadmin). A bounded SECURITY
+        # DEFINER function derives all eligibility facts from owner-controlled
+        # database state: the configured subject stored in app_superadmin_config
+        # (seeded from SUPERADMIN_SUB by the database owner) or the first login
+        # on an installation without any superadmin. It is called on every login
+        # so rotating the configured subject also revokes stale persisted
+        # grants. The session subject GUC is the authenticated identity.
         if existing_user:
             # Update existing user with latest info from token
             existing_user.email = user_info["email"]
@@ -112,23 +98,42 @@ async def get_current_user(
             existing_user.given_name = user_info["given_name"]
             existing_user.family_name = user_info["family_name"]
             await user_repo.save(existing_user)
-            request.state.user = existing_user
-            return existing_user
         else:
-            # Auto-create user on first login
-            new_user = User(
+            # Auto-create user on first login; the row must be flushed before
+            # the reconciliation function can update it.
+            existing_user = User(
                 sub=user_info["sub"],
                 email=user_info["email"],
                 username=user_info["username"],
                 name=user_info["name"],
                 given_name=user_info["given_name"],
                 family_name=user_info["family_name"],
-                is_superadmin=is_superadmin,
             )
-            await user_repo.save(new_user)
-            logger.info(f"Auto-created user: {new_user.sub} ({new_user.email})")
-            request.state.user = new_user
-            return new_user
+            await user_repo.save(existing_user)
+            logger.info(f"Auto-created user: {existing_user.sub} ({existing_user.email})")
+
+        try:
+            # Install the verified subject as the session GUC right before the
+            # reconciliation call: the function fails closed unless the
+            # authenticated-subject GUC matches the bound parameter.
+            await session.execute(
+                text("SELECT set_config('app.current_user_sub', :user_sub, true)"),
+                {"user_sub": user_info["sub"]},
+            )
+            result = await session.execute(
+                text("SELECT grant_bootstrap_superadmin(:user_sub)"),
+                {"user_sub": user_info["sub"]},
+            )
+            granted = bool(result.scalar_one_or_none())
+        except Exception:
+            logger.exception("Bootstrap superadmin reconciliation failed")
+            raise
+
+        # RLS trusts the stored owner-controlled flag; keep the in-memory
+        # view in sync with the database-reconciled state.
+        existing_user.is_superadmin = granted
+        request.state.user = existing_user
+        return existing_user
 
     except TokenValidationError as e:
         logger.warning(f"Token validation failed: {e}")
@@ -166,16 +171,14 @@ async def get_current_user_with_memberships(
     Used for endpoints that require role-based authorization.
 
     Memberships are loaded from the local database so application RBAC and
-    PostgreSQL RLS use the same authorization source. JWT claim memberships are
-    intentionally not trusted directly unless a provisioning flow has
-    materialized them into ``memberships``.
+    PostgreSQL RLS use the same authorization source.
     """
     membership_repo = SqlMembershipRepository(session)
     memberships = await membership_repo.get_all_by_user(user.sub)
 
-    # Secure post-login linking strategy for approved registrations without user_sub:
-    # if there is exactly one approved+unlinked registration for this email,
-    # link it to this user and materialize its assigned membership.
+    # The SECURITY DEFINER function provides an RLS-safe, row-locked,
+    # single-candidate claim. A plain repository lookup cannot see first-time
+    # registrations under the production RLS policy and is race-prone.
     if user.email:
         result = await session.execute(
             text(
@@ -196,9 +199,11 @@ async def get_current_user_with_memberships(
                 user.email,
             )
 
-    # Populate TenantContext with authenticated roles for RLS GUC export
+    # Update the active transaction after membership lookup/linking so RLS sees
+    # the verified application roles rather than unverified token payload data.
     from app.tenant import TenantContext
-    user_roles = [m.role.value for m in memberships]
+
+    user_roles = [membership.role.value for membership in memberships]
     if user.is_superadmin:
         user_roles.append("SUPERADMIN")
     TenantContext.set_context(

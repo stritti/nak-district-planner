@@ -17,13 +17,14 @@ from __future__ import annotations
 import uuid
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
-from app.adapters.api.deps import get_notification_service
+from app.adapters.api.deps import get_calendar_integration_repository, get_notification_service
+from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
 from app.main import app
 
@@ -51,7 +52,12 @@ def mock_oidc_adapter():
 @pytest.fixture(autouse=True)
 def override_db_session():
     async def _override_db_session():
-        return AsyncMock()
+        session = AsyncMock()
+        result = MagicMock()
+        result.mappings.return_value.one_or_none.return_value = None
+        result.scalar_one_or_none.return_value = False
+        session.execute.return_value = result
+        return session
 
     app.dependency_overrides[deps.get_db_session] = _override_db_session
     yield
@@ -83,7 +89,6 @@ def auth_client(mock_oidc_adapter):
 
     with (
         patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
-        patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
         patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
     ):
         user_repo = AsyncMock()
@@ -92,12 +97,16 @@ def auth_client(mock_oidc_adapter):
         user_repo.save = AsyncMock()
         MockUserRepo.return_value = user_repo
 
-        reg_repo = AsyncMock()
-        reg_repo.list_approved_unlinked_by_email.return_value = []
-        MockRegRepo.return_value = reg_repo
 
         membership_repo = AsyncMock()
-        membership_repo.get_all_by_user.return_value = []
+        membership_repo.get_all_by_user.return_value = [
+            Membership.create(
+                user_sub="user-403",
+                role=Role.VIEWER,
+                scope_type=ScopeType.DISTRICT,
+                scope_id=district1,
+            )
+        ]
         MockMembershipRepo.return_value = membership_repo
 
         client = TestClient(app)
@@ -109,10 +118,8 @@ def auth_client(mock_oidc_adapter):
 
         yield client, _auth_headers, district1
 
-        # The requests above populated deps._token_claims_context (module-level,
         # never auto-cleared). Reset it so unit tests that call
         # get_current_user_with_memberships directly don't inherit stale claims.
-        deps._token_claims_context.clear()
 
 
 @pytest.fixture
@@ -137,7 +144,6 @@ def auth_client_no_membership(mock_oidc_adapter):
 
     with (
         patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
-        patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
         patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
     ):
         user_repo = AsyncMock()
@@ -146,9 +152,6 @@ def auth_client_no_membership(mock_oidc_adapter):
         user_repo.save = AsyncMock()
         MockUserRepo.return_value = user_repo
 
-        reg_repo = AsyncMock()
-        reg_repo.list_approved_unlinked_by_email.return_value = []
-        MockRegRepo.return_value = reg_repo
 
         membership_repo = AsyncMock()
         membership_repo.get_all_by_user.return_value = []
@@ -395,26 +398,27 @@ def test_calendar_and_export_routes_return_403(auth_client, method, path_templat
     token_repo = AsyncMock()
     token_repo.get.return_value = _district_obj(district1)
 
-    with (
-        patch(
-            "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
-        ) as MockIntRepo,
-        patch("app.adapters.api.routers.export.SqlExportTokenRepository") as MockTokenRepo,
-    ):
-        MockIntRepo.return_value = integration_repo
-        MockTokenRepo.return_value = token_repo
+    # The calendar-integration routes resolve their repository through the
+    # dependency injector, so the override must replace that dependency;
+    # module-attribute patching never reaches the Depends(...) callable.
+    app.dependency_overrides[get_calendar_integration_repository] = lambda: integration_repo
+    try:
+        with patch("app.adapters.api.routers.export.SqlExportTokenRepository") as MockTokenRepo:
+            MockTokenRepo.return_value = token_repo
 
-        path = path_template.format(district_id=district1, resource_id=resource_id)
-        kwargs = {}
-        if body is not None:
-            kwargs["json"] = {
-                k: (str(district1) if v == "{district_id}" else v) for k, v in body.items()
-            }
-        if query is not None:
-            kwargs["params"] = {k: str(district1) for k in query}
-        kwargs["headers"] = auth_headers()
-        response = getattr(client, method)(path, **kwargs)
-        assert response.status_code == 403
+            path = path_template.format(district_id=district1, resource_id=resource_id)
+            kwargs = {}
+            if body is not None:
+                kwargs["json"] = {
+                    k: (str(district1) if v == "{district_id}" else v) for k, v in body.items()
+                }
+            if query is not None:
+                kwargs["params"] = {k: str(district1) for k in query}
+            kwargs["headers"] = auth_headers()
+            response = getattr(client, method)(path, **kwargs)
+            assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_calendar_integration_repository, None)
 
 
 # ── Events, assignments, invitations ────────────────────────────────────
@@ -620,7 +624,6 @@ def auth_client_non_viewer(mock_oidc_adapter):
 
     with (
         patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
-        patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
         patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
     ):
         user_repo = AsyncMock()
@@ -629,12 +632,16 @@ def auth_client_non_viewer(mock_oidc_adapter):
         user_repo.save = AsyncMock()
         MockUserRepo.return_value = user_repo
 
-        reg_repo = AsyncMock()
-        reg_repo.list_approved_unlinked_by_email.return_value = []
-        MockRegRepo.return_value = reg_repo
 
         membership_repo = AsyncMock()
-        membership_repo.get_all_by_user.return_value = []
+        membership_repo.get_all_by_user.return_value = [
+            Membership.create(
+                user_sub="user-403-non-viewer",
+                role=Role.CONGREGATION_ADMIN,
+                scope_type=ScopeType.CONGREGATION,
+                scope_id=congregation_id,
+            )
+        ]
         MockMembershipRepo.return_value = membership_repo
 
         client = TestClient(app)
