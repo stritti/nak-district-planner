@@ -23,7 +23,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
-from app.adapters.api.deps import get_notification_service
+from app.adapters.api.deps import get_calendar_integration_repository, get_notification_service
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
 from app.main import app
@@ -398,26 +398,27 @@ def test_calendar_and_export_routes_return_403(auth_client, method, path_templat
     token_repo = AsyncMock()
     token_repo.get.return_value = _district_obj(district1)
 
-    with (
-        patch(
-            "app.adapters.api.routers.calendar_integrations.SqlCalendarIntegrationRepository"
-        ) as MockIntRepo,
-        patch("app.adapters.api.routers.export.SqlExportTokenRepository") as MockTokenRepo,
-    ):
-        MockIntRepo.return_value = integration_repo
-        MockTokenRepo.return_value = token_repo
+    # The calendar-integration routes resolve their repository through the
+    # dependency injector, so the override must replace that dependency;
+    # module-attribute patching never reaches the Depends(...) callable.
+    app.dependency_overrides[get_calendar_integration_repository] = lambda: integration_repo
+    try:
+        with patch("app.adapters.api.routers.export.SqlExportTokenRepository") as MockTokenRepo:
+            MockTokenRepo.return_value = token_repo
 
-        path = path_template.format(district_id=district1, resource_id=resource_id)
-        kwargs = {}
-        if body is not None:
-            kwargs["json"] = {
-                k: (str(district1) if v == "{district_id}" else v) for k, v in body.items()
-            }
-        if query is not None:
-            kwargs["params"] = {k: str(district1) for k in query}
-        kwargs["headers"] = auth_headers()
-        response = getattr(client, method)(path, **kwargs)
-        assert response.status_code == 403
+            path = path_template.format(district_id=district1, resource_id=resource_id)
+            kwargs = {}
+            if body is not None:
+                kwargs["json"] = {
+                    k: (str(district1) if v == "{district_id}" else v) for k, v in body.items()
+                }
+            if query is not None:
+                kwargs["params"] = {k: str(district1) for k in query}
+            kwargs["headers"] = auth_headers()
+            response = getattr(client, method)(path, **kwargs)
+            assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_calendar_integration_repository, None)
 
 
 # ── Events, assignments, invitations ────────────────────────────────────
