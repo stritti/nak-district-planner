@@ -514,7 +514,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             signal: controller.signal,
             body: JSON.stringify({
               grant_type: 'refresh_token',
-              refresh_token: current.refreshToken,
+              refresh_token: refreshTokenUsed,
             }),
           })
 
@@ -595,10 +595,8 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
       }
 
-      // Without Web Locks, an expiring storage lease prevents tabs from
-      // refreshing the same rotating token simultaneously. Storage does not
-      // provide an atomic compare-and-set, so competing tabs yield once and
-      // verify ownership before requesting a token.
+      // localStorage read/write is not atomic across tabs, so no lease or
+      // ownership check can safely serialize rotating refresh tokens.
       if (typeof navigator === 'undefined' || !navigator.locks) {
         // localStorage read/write is not atomic across tabs. A delay or
         // ownership recheck cannot safely serialize rotating refresh tokens.
@@ -856,11 +854,13 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   }
 
   function setToken(nextToken: OIDCToken | null, nextUser: OIDCUser | null = null): void {
+    // invalidateSession() already advanced the generation; installing the
+    // new token must not advance it again — the refresh pipeline treats the
+    // post-invalidation generation as the new session's identity.
     invalidateSession()
     clearRotationReceipts()
     authStore.setToken(nextToken, nextUser)
     if (nextToken) {
-      sessionGeneration += 1
       setupRefreshTimer()
     }
   }

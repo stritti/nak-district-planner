@@ -3,6 +3,7 @@ import { apiFetch } from './client'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
 import { __resetOIDCModuleState, useOIDC } from '../composables/useOIDC'
+import { stubWebLocks } from '../testing/webLocks'
 
 // Mock useCSRF composable
 vi.mock('../composables/useCSRF', () => ({
@@ -35,13 +36,7 @@ describe('apiFetch', () => {
   beforeEach(() => {
     __resetOIDCModuleState()
     vi.stubGlobal('fetch', vi.fn())
-    vi.stubGlobal('navigator', {
-      ...navigator,
-      locks: {
-        request: async (name: string, _options: { ifAvailable: boolean }, callback: (lock: Lock | null) => Promise<boolean>) =>
-          callback({ name, mode: 'exclusive' } as Lock),
-      },
-    })
+    stubWebLocks()
     setActivePinia(createPinia())
   })
 

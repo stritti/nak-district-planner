@@ -12,6 +12,8 @@ RBAC Notes:
 - /access: VIEWER - Requires VIEWER role in at least one district
 """
 
+from typing import Literal
+
 import httpx
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, model_validator
@@ -38,7 +40,7 @@ class OIDCTokenExchangeRequest(BaseModel):
     is never exposed to the browser.
     """
 
-    grant_type: str = "authorization_code"
+    grant_type: Literal["authorization_code", "refresh_token"] = "authorization_code"
     code: str | None = None
     redirect_uri: str | None = None
     code_verifier: str | None = None
@@ -49,11 +51,8 @@ class OIDCTokenExchangeRequest(BaseModel):
         if self.grant_type == "authorization_code":
             if not self.code or not self.redirect_uri or not self.code_verifier:
                 raise ValueError("Authorization-code grant requires code, redirect_uri, and code_verifier")
-        elif self.grant_type == "refresh_token":
-            if not self.refresh_token:
-                raise ValueError("Refresh-token grant requires refresh_token")
-        else:
-            raise ValueError(f"Unsupported grant type: {self.grant_type}")
+        elif not self.refresh_token:
+            raise ValueError("Refresh-token grant requires refresh_token")
         return self
 
 
@@ -129,7 +128,7 @@ async def exchange_oidc_token(body: OIDCTokenExchangeRequest) -> dict:
             code=body.code,
             redirect_uri=body.redirect_uri,
             code_verifier=body.code_verifier,
-        )
+        )  # Fields are guaranteed non-None by OIDCTokenExchangeRequest validators.
     else:
         data["refresh_token"] = body.refresh_token
 

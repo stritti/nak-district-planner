@@ -6,23 +6,8 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { __resetOIDCModuleState, useOIDC } from './useOIDC'
 import { useAuthStore } from '../stores/auth'
-
-const postedBroadcastMessages: unknown[] = []
-
-class MockBroadcastChannel {
-  static instances: MockBroadcastChannel[] = []
-  onmessage: ((event: MessageEvent) => void) | null = null
-
-  constructor(public name: string) {
-    MockBroadcastChannel.instances.push(this)
-  }
-
-  postMessage(message: unknown) {
-    postedBroadcastMessages.push(message)
-  }
-
-  close() {}
-}
+import { MockBroadcastChannel, postedBroadcastMessages, resetBroadcastChannelMocks } from '../testing/broadcastChannel'
+import { stubWebLocks, stubNoWebLocks } from '../testing/webLocks'
 
 // Mock Vue Router
 vi.mock('vue-router', () => ({
@@ -55,16 +40,8 @@ describe('useOIDC', () => {
 
   beforeEach(() => {
     __resetOIDCModuleState()
-    MockBroadcastChannel.instances = []
-    postedBroadcastMessages.length = 0
-    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel)
-    vi.stubGlobal('navigator', {
-      ...navigator,
-      locks: {
-        request: async (name: string, _options: { ifAvailable: boolean }, callback: (lock: Lock | null) => Promise<boolean>) =>
-          callback({ name, mode: 'exclusive' } as Lock),
-      },
-    })
+    resetBroadcastChannelMocks()
+    stubWebLocks()
     setActivePinia(createPinia())
     sessionStorage.clear()
     localStorage.clear()
@@ -529,7 +506,7 @@ describe('useOIDC', () => {
   })
 
   it('does not send a rotating refresh token without Web Locks', async () => {
-    vi.stubGlobal('navigator', { ...navigator, locks: undefined })
+    stubNoWebLocks()
     global.fetch = vi.fn()
     const oidc = createOidc()
     oidc.setToken(expiredToken('unsafe-fallback-token'), { sub: 'user-sub' })
@@ -619,7 +596,7 @@ describe('useOIDC', () => {
   })
 
   it('clears an expired session when Web Locks are unavailable', async () => {
-    vi.stubGlobal('navigator', { ...navigator, locks: undefined })
+    stubNoWebLocks()
     const oidc = createOidc()
     oidc.setToken(expiredToken('unsupported-browser'), { sub: 'user-sub' })
     global.fetch = vi.fn().mockResolvedValue(new Response('', { status: 200 }))
