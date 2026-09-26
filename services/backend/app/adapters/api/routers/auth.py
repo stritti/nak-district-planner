@@ -12,9 +12,11 @@ RBAC Notes:
 - /access: VIEWER - Requires VIEWER role in at least one district
 """
 
+from typing import Literal
+
 import httpx
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.adapters.api.deps import (
     AuthenticatedUser,
@@ -38,10 +40,20 @@ class OIDCTokenExchangeRequest(BaseModel):
     is never exposed to the browser.
     """
 
-    grant_type: str = "authorization_code"
-    code: str
-    redirect_uri: str
-    code_verifier: str
+    grant_type: Literal["authorization_code", "refresh_token"] = "authorization_code"
+    code: str | None = None
+    redirect_uri: str | None = None
+    code_verifier: str | None = None
+    refresh_token: str | None = None
+
+    @model_validator(mode="after")
+    def validate_grant_parameters(self) -> "OIDCTokenExchangeRequest":
+        if self.grant_type == "authorization_code":
+            if not self.code or not self.redirect_uri or not self.code_verifier:
+                raise ValueError("Authorization-code grant requires code, redirect_uri, and code_verifier")
+        elif not self.refresh_token:
+            raise ValueError("Refresh-token grant requires refresh_token")
+        return self
 
 
 @router.get("/oidc/discovery")
@@ -108,12 +120,17 @@ async def exchange_oidc_token(body: OIDCTokenExchangeRequest) -> dict:
     client = await adapter.get_httpx_client()
     data: dict[str, str] = {
         "grant_type": body.grant_type,
-        "code": body.code,
-        "redirect_uri": body.redirect_uri,
-        "code_verifier": body.code_verifier,
         "client_id": adapter.client_id,
         "client_secret": adapter.client_secret,
     }
+    if body.grant_type == "authorization_code":
+        data.update(
+            code=body.code,
+            redirect_uri=body.redirect_uri,
+            code_verifier=body.code_verifier,
+        )  # Fields are guaranteed non-None by OIDCTokenExchangeRequest validators.
+    else:
+        data["refresh_token"] = body.refresh_token
 
     try:
         response = await client.post(token_endpoint, data=data, timeout=15)

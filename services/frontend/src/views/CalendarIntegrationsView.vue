@@ -256,7 +256,7 @@
                 class="form-input"
               />
             </div>
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="form-label">Benutzername</label>
                 <input v-model="editForm.creds.username" type="text"
@@ -418,7 +418,7 @@
                 class="form-input"
               />
             </div>
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="form-label">Benutzername</label>
                 <input

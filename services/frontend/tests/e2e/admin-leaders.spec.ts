@@ -55,6 +55,6 @@ test.describe('Leaders admin view', () => {
     })
 
     await page.goto(`${FRONTEND_URL}/admin/leaders`)
-    await expect(page.getByText('Pastor Schmidt')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('cell', { name: 'Pastor Schmidt' })).toBeVisible({ timeout: 10000 })
   })
 })
