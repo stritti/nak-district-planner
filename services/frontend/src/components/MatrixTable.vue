@@ -4,12 +4,16 @@
     v-if="!matrixStore.loading && !matrixStore.error && matrixStore.matrix && matrixStore.matrix.dates.length > 0"
     class="overflow-x-auto overscroll-x-contain touch-auto"
   >
-    <table :class="tableClass">
+    <table :class="tableClass" :style="{ width: `max(100%, ${tableWidth}px)` }">
+      <colgroup>
+        <col :style="{ width: `${congregationColumnWidth}px` }" />
+        <col v-for="date in matrixStore.matrix.dates" :key="date" :style="{ width: `${dateColumnWidth}px` }" />
+      </colgroup>
       <thead>
         <tr>
           <th
             class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-left font-medium text-gray-700 dark:text-gray-300"
-            :class="compactMode ? 'px-2 py-2 w-[120px] min-w-[120px]' : 'px-3 py-2 w-[170px] min-w-[170px]'"
+            :class="compactMode ? 'px-2 py-2' : 'px-3 py-2'"
           >
             Gemeinde
           </th>
@@ -18,7 +22,7 @@
             :key="date"
             class="border text-center font-medium"
             :class="[
-              compactMode ? 'px-1.5 py-2 min-w-[92px]' : 'px-2.5 py-2 min-w-[118px]',
+              compactMode ? 'px-1.5 py-2' : 'px-2.5 py-2',
               matrixStore.matrix.holidays[date]?.length
                 ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200'
                 : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300',
@@ -46,7 +50,7 @@
       <tbody>
         <tr v-for="row in displayedRows" :key="row.congregation_id">
           <td
-            class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-medium text-gray-800 dark:text-gray-200"
+            class="sticky left-0 z-10 break-words bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 font-medium text-gray-800 dark:text-gray-200"
             :class="compactMode ? 'px-2 py-2' : 'px-3 py-2'"
           >
             {{ row.congregation_name }}
@@ -146,7 +150,7 @@
                 </div>
                 <div
                   v-if="row.cells[date].invitation_source_congregation_name"
-                  class="text-[10px] text-amber-700 dark:text-amber-300"
+                  class="break-words text-[10px] text-amber-700 dark:text-amber-300"
                 >
                   Einladung von {{ row.cells[date].invitation_source_congregation_name }}
                 </div>
@@ -246,10 +250,14 @@ const vOverflowTitle: Directive<OverflowTitleEl, string> = {
 
 const tableClass = computed(() => {
   return [
-    'w-max min-w-full border-collapse',
+    'table-fixed border-collapse',
     props.compactMode ? 'text-[11px] matrix-table--compact' : 'text-xs matrix-table--normal',
   ]
 })
+
+const congregationColumnWidth = computed(() => props.compactMode ? 120 : 170)
+const dateColumnWidth = computed(() => props.compactMode ? 92 : 118)
+const tableWidth = computed(() => congregationColumnWidth.value + (matrixStore.matrix?.dates.length ?? 0) * dateColumnWidth.value)
 
 const gapTitleClass = computed(() => {
   return [
