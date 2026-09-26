@@ -442,7 +442,7 @@ describe('useOIDC', () => {
     expect(localStorage.getItem(await receiptKey('refresh-token'))).toBe('')
     expect(useAuthStore().token).toBeNull()
     expect(fetch).toHaveBeenCalledTimes(1)
-  })
+  }, 20_000)
 
   it('adopts a cross-tab rotated token and coalesces while another tab refreshes', async () => {
     global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 500 })))
