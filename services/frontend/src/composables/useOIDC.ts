@@ -665,23 +665,21 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
         return true
       }
-      return navigator.locks.request(`oidc-refresh:${refreshTokenUsed}`, { ifAvailable: true }, async (lock) => {
-        if (!lock) {
-          const received = await waitForCrossTabRefresh(refreshTokenUsed)
-          if (received && authStore.token && authStore.token.expiresAt > Date.now() / 1000) return true
-          return await adoptLatestReceipt()
-        }
+      type ReceiptClaim = 'proceed' | 'stop' | 'adopt'
+      // Decide under the Web Lock whether the captured refresh token may be
+      // submitted, has an adoptable successor, or must not be replayed.
+      const inspectStoredReceipt = async (): Promise<ReceiptClaim> => {
         try {
           const raw = localStorage.getItem(receiptKey)
           if (raw === 'consumed') {
             failClosed() // The token was rotated before this tab was suspended.
-            return false
+            return 'stop'
           }
           if (raw === '') {
             // The previous owner may have crashed after submitting a rotating
             // token. Preserve the marker across local logout.
             if (isRefreshStillCurrent()) void logout()
-            return false
+            return 'stop'
           }
           if (raw) {
             const receipt = JSON.parse(raw) as {
@@ -689,7 +687,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             }
             if (!validReceiptToken(receipt.token)) {
               failClosed()
-              return false
+              return 'stop'
             }
             if (receipt.token.refreshToken === refreshTokenUsed &&
                 (receipt.token.accessToken === current.accessToken || receipt.token.expiresAt <= Date.now() / 1000)) {
@@ -699,7 +697,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
               localStorage.removeItem(receiptKey)
               localStorage.setItem(receiptKey, '') // Protect the next request, even if it rotates.
             } else {
-              return await adoptLatestReceipt()
+              return 'adopt'
             }
           }
           // Shared storage is required to communicate rotation to the next
@@ -708,15 +706,15 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
             prunePersistedReceipts()
             localStorage.setItem(receiptKey, '')
           }
+          return 'proceed'
         } catch {
           failClosed()
-          return false
+          return 'stop'
         }
-        if (!isRefreshStillCurrent()) {
-          try { if (localStorage.getItem(receiptKey) === '') localStorage.removeItem(receiptKey) } catch { /* fail closed */ }
-          return false
-        }
-        const ok = await runRefreshBody()
+      }
+      // Persist the outcome for the next lock owner and, on ambiguous
+      // failures, end the local session without enabling token replay.
+      const persistRefreshOutcome = (ok: boolean): boolean => {
         if (ok) {
           const rotated = rotatedTokens.get(refreshTokenUsed)
           if (rotated) {
@@ -748,6 +746,21 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           }
         }
         return ok
+      }
+      return navigator.locks.request(`oidc-refresh:${refreshTokenUsed}`, { ifAvailable: true }, async (lock) => {
+        if (!lock) {
+          const received = await waitForCrossTabRefresh(refreshTokenUsed)
+          if (received && authStore.token && authStore.token.expiresAt > Date.now() / 1000) return true
+          return await adoptLatestReceipt()
+        }
+        const claim = await inspectStoredReceipt()
+        if (claim === 'adopt') return await adoptLatestReceipt()
+        if (claim === 'stop') return false
+        if (!isRefreshStillCurrent()) {
+          try { if (localStorage.getItem(receiptKey) === '') localStorage.removeItem(receiptKey) } catch { /* fail closed */ }
+          return false
+        }
+        return persistRefreshOutcome(await runRefreshBody())
       })
     })()
 
