@@ -48,6 +48,8 @@ const CROSS_TAB_WAIT_TIMEOUT_MS = 40_000
 const ROTATED_TOKEN_TTL_MS = 60_000
 const PERSISTED_RECEIPT_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_PERSISTED_RECEIPTS = 32
+const MAX_RECEIPT_CHAIN_LENGTH = 64
+const TRANSIENT_RETRY_DELAY_MS = 30_000
 
 // Module-level guards: listeners must only be attached once per page load,
 // regardless of how many times useOIDC() is instantiated across the app.
@@ -277,7 +279,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     transientRetryTimer = setTimeout(() => {
       transientRetryTimer = null
       void refreshToken()
-    }, 30_000)
+    }, TRANSIENT_RETRY_DELAY_MS)
   }
 
   function adoptRotatedToken(token: OIDCToken, nextUser: OIDCUser | null): void {
@@ -619,15 +621,19 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       // Persist the rotation receipt while still holding the lock; the next
       // owner must consult it before submitting the captured refresh token.
       const receiptKey = await rotationReceiptKey(refreshTokenUsed)
-      const failClosed = (): void => {
-        if (!isRefreshStillCurrent()) return
+      // End the local session while preserving the non-secret replay markers
+      // that suspended tabs rely on for token-replay protection.
+      const endLocalSession = (): void => {
         invalidateSession()
         // Completed receipts still hold the raw refresh token that was just
         // submitted; a failure before reaching the provider leaves it usable.
-        // Keep only the non-secret replay markers required by suspended tabs.
         clearRotationReceipts()
         authStore.clearAuth()
-        try { void Promise.resolve(getRouter().push('/login')).catch(() => {}) } catch { /* Router unavailable during startup. */ }
+        try { void getRouter().push('/login').catch(() => {}) } catch { /* Router unavailable during startup. */ }
+      }
+      const failClosed = (): void => {
+        if (!isRefreshStillCurrent()) return
+        endLocalSession()
       }
       const adoptLatestReceipt = async (): Promise<boolean> => {
         if (!isRefreshStillCurrent()) return false
@@ -635,7 +641,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         const seen = new Set<string>()
         let latest: { token: OIDCToken; user: OIDCUser | null } | null = null
         try {
-          while (!seen.has(next) && seen.size < 64) {
+          while (!seen.has(next) && seen.size < MAX_RECEIPT_CHAIN_LENGTH) {
             seen.add(next)
             const raw = localStorage.getItem(await rotationReceiptKey(next))
             if (!raw) break
@@ -721,9 +727,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
               // The provider may have rotated: preserve the pending marker,
               // and do not leave an apparently authenticated stale session.
               if (authStore.token?.refreshToken === rotated.token.refreshToken && authStore.token?.accessToken === rotated.token.accessToken) {
-                invalidateSession()
-                authStore.clearAuth()
-                try { void Promise.resolve(getRouter().push('/login')).catch(() => {}) } catch { /* Router unavailable. */ }
+                endLocalSession()
               }
               return false
             }
