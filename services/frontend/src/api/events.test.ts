@@ -21,11 +21,10 @@ describe('listEvents', () => {
   })
 
    it('appends multiple query params', async () => {
-     await listEvents({ district_id: 'abc', status: 'PUBLISHED', limit: 10, offset: 20 })
+     await listEvents({ district_id: 'abc', status: 'ACTIVE', limit: 10, offset: 20 })
      const url = vi.mocked(client.apiFetch).mock.calls[0][0] as string
-     console.log('Generated URL:', url)  // Debug output
      expect(url).toContain('district_id=abc')
-     expect(url).toContain('status=PUBLISHED')
+     expect(url).toContain('status=ACTIVE')
      expect(url).toContain('limit=10')
      expect(url).toContain('offset=20')
    })
@@ -48,10 +47,10 @@ describe('listEvents', () => {
 describe('updateEvent', () => {
   it('sends PATCH to /api/v1/events/:id with body', async () => {
     vi.mocked(client.apiFetch).mockResolvedValue({ id: '1' })
-    await updateEvent('1', { status: 'PUBLISHED' })
+    await updateEvent('1', { status: 'ACTIVE' })
     expect(client.apiFetch).toHaveBeenCalledWith('/api/v1/events/1', {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'PUBLISHED' }),
+      body: JSON.stringify({ status: 'ACTIVE' }),
     })
   })
 })

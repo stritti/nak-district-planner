@@ -278,10 +278,9 @@ onUnmounted(() => {
   notificationStore.stopPolling()
 })
 
-function handleNotificationClick(notification: { id: string; type: string; payload: Record<string, unknown> }) {
+function handleNotificationClick(_notification: { id: string; type: string; payload: Record<string, unknown> }) {
   // Router navigation based on notification type can be added later
   // e.g., for type "registration": router.push('/admin/leaders')
-  console.debug('Notification clicked:', notification.type, notification.payload)
 }
 
 const links = [

@@ -7,12 +7,10 @@ from enum import Enum, StrEnum
 
 
 class EventApprovalStatus(StrEnum):
-    """Planning/release workflow status."""
+    """Planning/release workflow status (matches the DB enum event_approval_status)."""
 
-    DRAFT = "DRAFT"
     PLANNED = "PLANNED"
     CONFIRMED = "CONFIRMED"
-    CANCELLED = "CANCELLED"
 
 
 class PlanningSlotStatus(str, Enum):

@@ -411,6 +411,6 @@ class AuditMiddleware(BaseHTTPMiddleware):
             try:
                 return uuid.UUID(matches[-1])
             except ValueError:
-                pass
+                logger.debug("Ignoring invalid UUID %r in audit path %r", matches[-1], path)
 
         return None

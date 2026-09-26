@@ -38,9 +38,8 @@ function requireAuth(
     } else {
       next('/login')
     }
-  } catch (err) {
+  } catch {
     // If pinia isn't available, redirect to login to be safe
-    console.debug('Auth guard: pinia not ready, redirecting to login', err)
     next('/login')
   }
 }
