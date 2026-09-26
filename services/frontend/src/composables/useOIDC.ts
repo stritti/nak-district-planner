@@ -472,7 +472,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
     // An expired successor is adopted first, then refreshed in a new locked
     // operation after the current operation has released its lock.
-    let expiredSuccessor: { token: OIDCToken; generation: number } | null = null
+    const followUp: { expiredSuccessor?: { token: OIDCToken; generation: number } } = {}
     const operation: Promise<boolean> = (async () => {
       const current = authStore.token
       if (!current?.refreshToken) {
@@ -661,7 +661,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         adoptRotatedToken(latest.token, latest.user)
         // Never report success with an expired bearer token.
         if (latest.token.expiresAt <= Date.now() / 1000) {
-          expiredSuccessor = { token: latest.token, generation: sessionGeneration }
+          followUp.expiredSuccessor = { token: latest.token, generation: sessionGeneration }
           return false
         }
         return true
@@ -776,7 +776,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     }
     // The new token must acquire its own Web Lock and check its own receipt.
     // Never refresh if a login/logout replaced the adopted session meanwhile.
-    const successor = expiredSuccessor
+    const successor = followUp.expiredSuccessor
     if (successor && sessionGeneration === successor.generation &&
         authStore.token?.refreshToken === successor.token.refreshToken &&
         authStore.token?.accessToken === successor.token.accessToken) {
