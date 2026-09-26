@@ -34,6 +34,19 @@ export interface OIDCConfig {
 
 const SESSION_CODE_VERIFIER_KEY = 'oidc_code_verifier'
 const SESSION_STATE_KEY = 'oidc_state'
+const RECEIPT_KEY_PREFIX = 'oidc-refresh-result:'
+
+/**
+ * Receipt states persisted in localStorage, keyed by
+ * `oidc-refresh-result:<sha256(refreshToken)>` and shared across tabs:
+ * - `pending`: another tab may have submitted this refresh token to the
+ *   provider; it must never be replayed until the outcome is known.
+ * - `consumed`: tombstone; the receipt was completed and compacted. The
+ *   refresh token was already used and must not be replayed either.
+ * - `rotation`: JSON receipt with the rotated token for the next lock owner.
+ */
+const RECEIPT_STATE_PENDING = ''
+const RECEIPT_STATE_CONSUMED = 'consumed'
 
 // Refresh eagerly if user activity is detected while the token is within this
 // many seconds of expiry. Catches cases where the scheduled setTimeout-based
@@ -105,7 +118,39 @@ function generateState(): string {
 
 async function rotationReceiptKey(refreshToken: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(refreshToken))
-  return 'oidc-refresh-result:' + toBase64Url(new Uint8Array(digest))
+  return RECEIPT_KEY_PREFIX + toBase64Url(new Uint8Array(digest))
+}
+
+interface RotationReceipt {
+  token: OIDCToken
+  user: OIDCUser | null
+  recordedAt: number
+}
+
+type StoredReceipt =
+  | { state: 'absent' }
+  | { state: 'pending' }
+  | { state: 'consumed' }
+  | { state: 'rotation'; receipt: RotationReceipt }
+  | { state: 'invalid' }
+
+/**
+ * Decodes the raw localStorage value of a rotation receipt. Malformed
+ * JSON or a receipt that fails token validation yields `invalid`; callers
+ * must fail closed for `pending` and `invalid`.
+ */
+function parseStoredReceipt(raw: string | null): StoredReceipt {
+  if (raw === null) return { state: 'absent' }
+  if (raw === RECEIPT_STATE_PENDING) return { state: 'pending' }
+  if (raw === RECEIPT_STATE_CONSUMED) return { state: 'consumed' }
+  try {
+    const parsed = JSON.parse(raw) as Partial<RotationReceipt>
+    if (!parsed || !validReceiptToken(parsed.token)) return { state: 'invalid' }
+    if (typeof parsed.recordedAt !== 'number' || !Number.isFinite(parsed.recordedAt)) return { state: 'invalid' }
+    return { state: 'rotation', receipt: parsed as RotationReceipt }
+  } catch {
+    return { state: 'invalid' }
+  }
 }
 
 function validReceiptToken(value: unknown): value is OIDCToken {
@@ -122,15 +167,15 @@ function prunePersistedReceipts(): void {
   const completed: { key: string; recordedAt: number }[] = []
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i)
-    if (!key?.startsWith('oidc-refresh-result:')) continue
+    if (!key?.startsWith(RECEIPT_KEY_PREFIX)) continue
     const raw = localStorage.getItem(key)
-    if (!raw || raw === 'consumed') continue // Retain pending markers and replay tombstones.
+    if (!raw || raw === RECEIPT_STATE_CONSUMED) continue // Retain pending markers and replay tombstones.
     try {
       const receipt = JSON.parse(raw) as { recordedAt?: number }
       const recordedAt = receipt.recordedAt
       if (typeof recordedAt !== 'number' || !Number.isFinite(recordedAt) ||
           recordedAt > now || now - recordedAt > PERSISTED_RECEIPT_TTL_MS) {
-        localStorage.setItem(key, 'consumed') // Non-secret replay tombstone for suspended tabs.
+        localStorage.setItem(key, RECEIPT_STATE_CONSUMED) // Non-secret replay tombstone for suspended tabs.
       } else completed.push({ key, recordedAt })
     } catch {
       // Malformed receipts are handled by fail-closed adoption, not pruning.
@@ -138,7 +183,7 @@ function prunePersistedReceipts(): void {
   }
   completed.sort((a, b) => b.recordedAt - a.recordedAt)
   for (const entry of completed.slice(MAX_PERSISTED_RECEIPTS)) {
-    localStorage.setItem(entry.key, 'consumed')
+    localStorage.setItem(entry.key, RECEIPT_STATE_CONSUMED)
   }
 }
 
@@ -637,18 +682,16 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         if (!isRefreshStillCurrent()) return false
         let next = refreshTokenUsed
         const seen = new Set<string>()
-        let latest: { token: OIDCToken; user: OIDCUser | null } | null = null
+        let latest: RotationReceipt | null = null
         try {
           while (!seen.has(next) && seen.size < MAX_RECEIPT_CHAIN_LENGTH) {
             seen.add(next)
-            const raw = localStorage.getItem(await rotationReceiptKey(next))
-            if (!raw) break
-            if (raw === 'consumed') throw new Error('Refresh token was already consumed; receipt compacted')
-            const receipt = JSON.parse(raw) as { token: OIDCToken; user: OIDCUser | null }
-            if (!validReceiptToken(receipt.token)) throw new Error('Invalid persisted rotation receipt')
-            latest = receipt
-            if (receipt.token.refreshToken === next) break // Non-rotating provider.
-            next = receipt.token.refreshToken!
+            const stored = parseStoredReceipt(localStorage.getItem(await rotationReceiptKey(next)))
+            if (stored.state === 'absent') break
+            if (stored.state !== 'rotation') throw new Error(`Unusable refresh receipt state: ${stored.state}`)
+            latest = stored.receipt
+            if (stored.receipt.token.refreshToken === next) break // Non-rotating provider.
+            next = stored.receipt.token.refreshToken!
           }
         } catch {
           failClosed()
@@ -668,32 +711,30 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       // submitted, has an adoptable successor, or must not be replayed.
       const inspectStoredReceipt = async (): Promise<ReceiptClaim> => {
         try {
-          const raw = localStorage.getItem(receiptKey)
-          if (raw === 'consumed') {
+          const stored = parseStoredReceipt(localStorage.getItem(receiptKey))
+          if (stored.state === 'consumed') {
             failClosed() // The token was rotated before this tab was suspended.
             return 'stop'
           }
-          if (raw === '') {
+          if (stored.state === 'pending') {
             // The previous owner may have crashed after submitting a rotating
             // token. Preserve the marker across local logout.
             if (isRefreshStillCurrent()) void logout()
             return 'stop'
           }
-          if (raw) {
-            const receipt = JSON.parse(raw) as {
-              token: OIDCToken; user: OIDCUser | null; recordedAt: number
-            }
-            if (!validReceiptToken(receipt.token)) {
-              failClosed()
-              return 'stop'
-            }
+          if (stored.state === 'invalid') {
+            failClosed()
+            return 'stop'
+          }
+          if (stored.state === 'rotation') {
+            const receipt = stored.receipt
             if (receipt.token.refreshToken === refreshTokenUsed &&
                 (receipt.token.accessToken === current.accessToken || receipt.token.expiresAt <= Date.now() / 1000)) {
               // A stable refresh token may be reused after the previous
               // completed receipt has been consumed. This check and removal
               // happen exclusively under the Web Lock.
               localStorage.removeItem(receiptKey)
-              localStorage.setItem(receiptKey, '') // Protect the next request, even if it rotates.
+              localStorage.setItem(receiptKey, RECEIPT_STATE_PENDING) // Protect the next request, even if it rotates.
             } else {
               return 'adopt'
             }
@@ -702,7 +743,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           // lock owner; without it we cannot safely refresh across tabs.
           if (localStorage.getItem(receiptKey) === null) {
             prunePersistedReceipts()
-            localStorage.setItem(receiptKey, '')
+            localStorage.setItem(receiptKey, RECEIPT_STATE_PENDING)
           }
           return 'proceed'
         } catch {
@@ -733,7 +774,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           // An ambiguous response must retain the pending marker.
           // Never remove a receipt that another operation has replaced.
           try {
-            if (localStorage.getItem(receiptKey) === '') localStorage.removeItem(receiptKey)
+            if (localStorage.getItem(receiptKey) === RECEIPT_STATE_PENDING) localStorage.removeItem(receiptKey)
           } catch { /* A missing storage facility fails closed on the next attempt. */ }
         } else {
           // Unknown outcome: the provider may already have rotated. Keep the
@@ -755,7 +796,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         if (claim === 'adopt') return await adoptLatestReceipt()
         if (claim === 'stop') return false
         if (!isRefreshStillCurrent()) {
-          try { if (localStorage.getItem(receiptKey) === '') localStorage.removeItem(receiptKey) } catch { /* fail closed */ }
+          try { if (localStorage.getItem(receiptKey) === RECEIPT_STATE_PENDING) localStorage.removeItem(receiptKey) } catch { /* fail closed */ }
           return false
         }
         return persistRefreshOutcome(await runRefreshBody())
@@ -806,9 +847,9 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       const keys: string[] = []
       for (let i = 0; i < localStorage.length; i += 1) {
         const key = localStorage.key(i)
-        // Empty markers represent possibly consumed tokens and must survive
+        // Pending markers represent possibly consumed tokens and must survive
         // logout and account replacement to protect other suspended tabs.
-        if (key?.startsWith('oidc-refresh-result:') && localStorage.getItem(key) !== '') keys.push(key)
+        if (key?.startsWith(RECEIPT_KEY_PREFIX) && localStorage.getItem(key) !== RECEIPT_STATE_PENDING) keys.push(key)
       }
       keys.forEach((key) => localStorage.removeItem(key))
     } catch { /* Storage may be unavailable. */ }
