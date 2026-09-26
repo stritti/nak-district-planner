@@ -3,21 +3,16 @@
     <Transition name="dialog">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+        class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm"
+        @click.self="onCancel"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="`confirm-title-${uid}`"
       >
-        <!-- Backdrop -->
-        <div
-          class="absolute inset-0 bg-black/40 backdrop-blur-sm"
-          @click="onCancel"
-        />
-
         <!-- Dialog panel -->
         <div
           ref="panelRef"
-          class="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900 my-auto"
+          class="relative z-10 my-auto w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900"
           @keydown.escape="onCancel"
         >
           <!-- Title -->
@@ -102,7 +97,7 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const uid = computed(() => `cd-${(Math.random() * 1e9).toFixed(0)}`)
+const uid = `cd-${Math.random().toString(36).slice(2)}`
 const confirmWord = computed(() => {
   switch (props.variant) {
     case 'danger':
