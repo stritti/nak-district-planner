@@ -70,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -97,7 +97,7 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const uid = `cd-${Math.random().toString(36).slice(2)}`
+const uid = useId()
 const confirmWord = computed(() => {
   switch (props.variant) {
     case 'danger':
