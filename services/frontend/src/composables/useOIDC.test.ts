@@ -790,4 +790,84 @@ describe('useOIDC', () => {
 
     expect(authStore.token?.accessToken).toBe('rotated-access-token')
   })
+  it('does not submit a refresh token when another tab owns the Web Lock', async () => {
+    let signalLockRequested!: () => void
+    const lockRequested = new Promise<void>((resolve) => { signalLockRequested = resolve })
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      locks: { request: async (_name: string, _options: unknown, callback: (lock: Lock | null) => Promise<boolean>) => {
+        signalLockRequested()
+        return callback(null)
+      } },
+    })
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('busy-lock-token'), { sub: 'user-sub' })
+    global.fetch = vi.fn()
+    const pending = oidc.refreshToken()
+    await lockRequested
+    const channel = MockBroadcastChannel.instances[0]
+    const rotated = {
+      accessToken: 'adopted-access',
+      idToken: '',
+      refreshToken: 'adopted-refresh',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }
+    // The other tab finishes while this tab is waiting for the lock owner.
+    channel.onmessage?.({
+      data: {
+        type: 'refresh-complete',
+        ok: true,
+        refreshToken: 'busy-lock-token',
+        token: rotated,
+        user: { sub: 'user-sub' },
+        completedAt: Date.now(),
+      },
+    } as MessageEvent)
+    await expect(pending).resolves.toBe(true)
+    expect(useAuthStore().token?.accessToken).toBe('adopted-access')
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not submit a token after the session changes before lock acquisition', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('stale-lock-token'), { sub: 'old-user' })
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      locks: {
+        request: async (_name: string, _options: unknown, callback: (lock: Lock | null) => Promise<boolean>) => {
+          oidc.setToken({
+            accessToken: 'replacement-access',
+            idToken: '',
+            refreshToken: 'replacement-refresh',
+            expiresAt: Math.floor(Date.now() / 1000) + 3600,
+          }, { sub: 'new-user' })
+          return callback({ name: 'test-lock', mode: 'exclusive' } as Lock)
+        },
+      },
+    })
+    global.fetch = vi.fn()
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(useAuthStore().token?.accessToken).toBe('replacement-access')
+  })
+
+  it('fails closed when persisting a successful refresh receipt fails', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('storage-error-token'), { sub: 'user-sub' })
+    const key = await receiptKey('storage-error-token')
+    const originalSetItem = Storage.prototype.setItem
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, name, value) {
+      if (name === key && value.startsWith('{')) throw new Error('storage quota exceeded')
+      return originalSetItem.call(this, name, value)
+    })
+    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      access_token: 'rotated-access',
+      refresh_token: 'rotated-refresh',
+      expires_in: 3600,
+    }), { status: 200 }))
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(useAuthStore().token).toBeNull()
+    expect(setItem).toHaveBeenCalled()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
 })

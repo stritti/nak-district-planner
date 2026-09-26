@@ -195,6 +195,52 @@ function postRefreshMessage(message: RefreshChannelMessage): void {
   }
 }
 
+type ReceiptClaim = 'proceed' | 'stop' | 'adopt'
+
+interface LockOwnerContext {
+  receiptKey: string
+  isRefreshStillCurrent: () => boolean
+  inspectStoredReceipt: () => Promise<ReceiptClaim>
+  adoptLatestReceipt: () => Promise<boolean>
+  runRefreshBody: () => Promise<boolean>
+  persistRefreshOutcome: (ok: boolean) => boolean
+}
+
+// Phases run while holding the Web Lock: decide whether the captured
+// refresh token may be submitted, then persist the outcome for the next
+// lock owner. Kept as a named function so each phase reads in isolation.
+async function runLockOwnerPhases(context: LockOwnerContext): Promise<boolean> {
+  const claim = await context.inspectStoredReceipt()
+  if (claim === 'adopt') return await context.adoptLatestReceipt()
+  if (claim === 'stop') return false
+  if (!context.isRefreshStillCurrent()) {
+    try {
+      if (localStorage.getItem(context.receiptKey) === '') localStorage.removeItem(context.receiptKey)
+    } catch { /* fail closed */ }
+    return false
+  }
+  return context.persistRefreshOutcome(await context.runRefreshBody())
+}
+
+interface LockedRefreshContext extends LockOwnerContext {
+  refreshTokenUsed: string
+  waitForCrossTabRefresh: (refreshToken: string) => Promise<boolean>
+  hasFreshAdoptedToken: () => boolean
+}
+
+// Serialize the refresh across tabs: either acquire the Web Lock and run
+// the owner phases, or yield to the current owner and adopt its result.
+async function runLockedRefresh(context: LockedRefreshContext): Promise<boolean> {
+  return navigator.locks.request(`oidc-refresh:${context.refreshTokenUsed}`, { ifAvailable: true }, async (lock) => {
+    if (!lock) {
+      const received = await context.waitForCrossTabRefresh(context.refreshTokenUsed)
+      if (received && context.hasFreshAdoptedToken()) return true
+      return await context.adoptLatestReceipt()
+    }
+    return await runLockOwnerPhases(context)
+  })
+}
+
 /** @internal — resets module-level state; used by tests */
 export function __resetOIDCModuleState(): void {
   refreshInFlight = null
@@ -666,7 +712,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
         return true
       }
-      type ReceiptClaim = 'proceed' | 'stop' | 'adopt'
       // Decide under the Web Lock whether the captured refresh token may be
       // submitted, has an adoptable successor, or must not be replayed.
       const inspectStoredReceipt = async (): Promise<ReceiptClaim> => {
@@ -748,20 +793,19 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         }
         return ok
       }
-      return navigator.locks.request(`oidc-refresh:${refreshTokenUsed}`, { ifAvailable: true }, async (lock) => {
-        if (!lock) {
-          const received = await waitForCrossTabRefresh(refreshTokenUsed)
-          if (received && authStore.token && authStore.token.expiresAt > Date.now() / 1000) return true
-          return await adoptLatestReceipt()
-        }
-        const claim = await inspectStoredReceipt()
-        if (claim === 'adopt') return await adoptLatestReceipt()
-        if (claim === 'stop') return false
-        if (!isRefreshStillCurrent()) {
-          try { if (localStorage.getItem(receiptKey) === '') localStorage.removeItem(receiptKey) } catch { /* fail closed */ }
-          return false
-        }
-        return persistRefreshOutcome(await runRefreshBody())
+      return runLockedRefresh({
+        receiptKey,
+        refreshTokenUsed,
+        isRefreshStillCurrent,
+        inspectStoredReceipt,
+        adoptLatestReceipt,
+        runRefreshBody,
+        persistRefreshOutcome,
+        waitForCrossTabRefresh,
+        hasFreshAdoptedToken: () => {
+          const token = authStore.token
+          return token !== null && token.expiresAt > Date.now() / 1000
+        },
       })
     })()
 
