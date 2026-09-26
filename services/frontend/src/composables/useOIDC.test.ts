@@ -422,8 +422,14 @@ describe('useOIDC', () => {
 
   it('fails closed after an ambiguous refresh timeout without replaying the token', async () => {
     vi.useFakeTimers()
+    // crypto.subtle.digest (receipt key) runs as a real async step outside the
+    // virtual clock; wait for the fetch to start so the abort timer is
+    // guaranteed to be registered before virtual time advances.
+    let signalFetchStarted!: () => void
+    const fetchStarted = new Promise<void>((resolve) => { signalFetchStarted = resolve })
     global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === '/api/v1/auth/oidc/token') {
+        signalFetchStarted()
         return new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
         })
@@ -434,6 +440,7 @@ describe('useOIDC', () => {
     oidc.setToken(expiredToken(), { sub: 'user-sub' })
 
     const first = oidc.refreshToken()
+    await fetchStarted
     // The abort timer fires at the 35s deadline; advancing beyond it lets the
     // rejection propagate through the async refresh pipeline.
     await vi.advanceTimersByTimeAsync(36_000)
