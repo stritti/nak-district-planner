@@ -16,6 +16,14 @@
     <div v-if="matrixStore.loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
     <div v-else-if="matrixStore.error" class="text-sm text-red-600 dark:text-red-400">{{ matrixStore.error }}</div>
 
+    <!-- Mobile hint: matrix stays a scrollable table, unlike other views -->
+    <p
+      v-if="!matrixStore.loading && !matrixStore.error"
+      class="sm:hidden text-xs text-gray-400 dark:text-gray-500 mb-2 flex items-center gap-1"
+    >
+      ← Horizontal scrollen, um weitere Gemeinden zu sehen →
+    </p>
+
     <!-- Matrix Table -->
     <MatrixTable
       :compact-mode="compactMode"

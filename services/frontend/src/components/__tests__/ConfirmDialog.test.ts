@@ -17,6 +17,20 @@ describe('ConfirmDialog', () => {
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
   })
 
+  it('keeps the backdrop on the fixed scrolling container', async () => {
+    const wrapper = mount(ConfirmDialog, {
+      ...globalStubs,
+      props: { open: true, title: 'Confirm', message: 'Long message' },
+    })
+    const overlay = wrapper.find('[role="dialog"]')
+    expect(overlay.classes()).toContain('fixed')
+    expect(overlay.classes()).toContain('overflow-y-auto')
+    expect(overlay.classes()).toContain('bg-black/40')
+    expect(overlay.find('.absolute.inset-0').exists()).toBe(false)
+    await overlay.trigger('click')
+    expect(wrapper.emitted('cancel')).toHaveLength(1)
+  })
+
   it('renders title and message when open', () => {
     const wrapper = mount(ConfirmDialog, {
       ...globalStubs,

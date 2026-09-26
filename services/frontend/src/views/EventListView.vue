@@ -184,7 +184,58 @@
 
     <!-- ── Listenansicht ───────────────────────────────────────────────────── -->
     <template v-if="viewMode === 'list'">
-      <div class="table-container">
+      <!-- Mobile: card list (no horizontal scroll needed) -->
+      <div class="md:hidden space-y-3">
+        <div v-if="eventsStore.loading" class="py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</div>
+        <div v-else-if="eventsStore.error" class="py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</div>
+        <div v-else-if="eventsStore.items.length === 0" class="py-10 text-center text-gray-400 dark:text-gray-500 text-sm">
+          Keine Ereignisse gefunden.
+        </div>
+        <div
+          v-for="event in eventsStore.items"
+          v-else
+          :key="event.id"
+          class="card p-3"
+        >
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="font-medium text-gray-900 dark:text-gray-100 break-words">{{ event.title }}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDt(event.start_at) }} · {{ event.category ?? '—' }}</p>
+            </div>
+            <button
+              class="btn-icon border border-gray-300 dark:border-gray-600 shrink-0"
+              title="Zuordnung bearbeiten"
+              @click="openEdit(event)"
+            >
+              <BuildingOffice2Icon class="h-4 w-4" />
+            </button>
+          </div>
+          <p class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+            <span>{{ districtName(event.district_id) }}</span>
+            <template v-if="event.congregation_id">
+              <span class="text-gray-400 dark:text-gray-500"> › </span>
+              <span>{{ congregationName(event.congregation_id) }}</span>
+            </template>
+            <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
+          </p>
+          <p v-if="event.invitation_source_congregation_name" class="mt-1 text-xs text-amber-700 dark:text-amber-300">
+            Einladung von {{ event.invitation_source_congregation_name }}
+          </p>
+          <div class="mt-2 flex items-center gap-1.5 flex-wrap">
+            <span :class="statusClass(event.status)" class="badge">{{ statusLabel(event.status) }}</span>
+            <EventApprovalStatusBadge :status="event.approval_status" />
+            <span
+              class="badge"
+              :class="event.source === 'EXTERNAL' ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'"
+            >
+              {{ event.source === 'EXTERNAL' ? 'Import' : 'Intern' }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desktop: table -->
+      <div class="table-container hidden md:block">
         <div class="table-scroll">
         <table class="table-min-w w-full text-sm">
           <thead>
@@ -324,7 +375,7 @@
                   :class="eventPillClass(event)"
                   @click="openEdit(event)"
                 >
-                  <div class="font-medium truncate">{{ event.title }}</div>
+                  <div class="font-medium break-words">{{ event.title }}</div>
                   <div class="text-[10px] opacity-70">{{ formatTime(event.start_at) }}</div>
                 </div>
               </template>
@@ -417,7 +468,7 @@
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 truncate">{{ editTarget.title }}</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 break-words">{{ editTarget.title }}</p>
         <p
           v-if="editTarget.invitation_source_congregation_name"
           class="text-xs text-amber-700 dark:text-amber-300 mb-4"

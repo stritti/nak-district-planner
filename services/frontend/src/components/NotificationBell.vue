@@ -1,7 +1,7 @@
 <template>
   <div class="relative">
     <button
-      class="relative p-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+      class="btn-icon relative rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
       :title="unreadCount > 0 ? `${unreadCount} ungelesene Benachrichtigungen` : 'Keine ungelesenen Benachrichtigungen'"
       :aria-label="`Benachrichtigungen${unreadCount > 0 ? ` (${unreadCount} ungelesen)` : ''}`"
       @click.stop="toggleOpen"
