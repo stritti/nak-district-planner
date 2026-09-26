@@ -89,7 +89,7 @@
                   <span class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
                     {{ leader.rank ?? '—' }}
                   </span>
-                  <p class="font-medium text-gray-800 dark:text-gray-200 truncate">{{ leader.name }}</p>
+                  <p class="font-medium text-gray-800 dark:text-gray-200 break-words min-w-0">{{ leader.name }}</p>
                 </div>
                 <p v-if="section.congregationId === null" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   {{ congregationName(leader.congregation_id) || '—' }}
