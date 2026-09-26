@@ -470,6 +470,9 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   async function refreshToken(): Promise<boolean> {
     if (refreshInFlight) return refreshInFlight
 
+    // An expired successor is adopted first, then refreshed in a new locked
+    // operation after the current operation has released its lock.
+    let expiredSuccessor: { token: OIDCToken; generation: number } | null = null
     const operation: Promise<boolean> = (async () => {
       const current = authStore.token
       if (!current?.refreshToken) {
@@ -658,7 +661,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         adoptRotatedToken(latest.token, latest.user)
         // Never report success with an expired bearer token.
         if (latest.token.expiresAt <= Date.now() / 1000) {
-          scheduleTransientRefreshRetry()
+          expiredSuccessor = { token: latest.token, generation: sessionGeneration }
           return false
         }
         return true
@@ -765,11 +768,21 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     const operationId = refreshInFlightId + 1
     refreshInFlightId = operationId
     refreshInFlight = operation
+    let result: boolean
     try {
-      return await operation
+      result = await operation
     } finally {
       if (refreshInFlightId === operationId) refreshInFlight = null
     }
+    // The new token must acquire its own Web Lock and check its own receipt.
+    // Never refresh if a login/logout replaced the adopted session meanwhile.
+    const successor = expiredSuccessor
+    if (successor && sessionGeneration === successor.generation &&
+        authStore.token?.refreshToken === successor.token.refreshToken &&
+        authStore.token?.accessToken === successor.token.accessToken) {
+      return refreshToken()
+    }
+    return result
   }
 
   function setupRefreshTimer(): void {
@@ -806,11 +819,12 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       const keys: string[] = []
       for (let i = 0; i < localStorage.length; i += 1) {
         const key = localStorage.key(i)
-        // Empty markers represent possibly consumed tokens and must survive
-        // logout and account replacement to protect other suspended tabs.
-        if (key?.startsWith('oidc-refresh-result:') && localStorage.getItem(key) !== '') keys.push(key)
+        // Keep both ambiguous pending markers and non-secret consumed-token
+        // tombstones: suspended tabs must never replay a rotated credential.
+        if (key?.startsWith('oidc-refresh-result:') &&
+            localStorage.getItem(key) !== '' && localStorage.getItem(key) !== 'consumed') keys.push(key)
       }
-      keys.forEach((key) => localStorage.removeItem(key))
+      keys.forEach((key) => localStorage.setItem(key, 'consumed'))
     } catch { /* Storage may be unavailable. */ }
   }
 

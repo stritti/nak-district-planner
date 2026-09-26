@@ -557,6 +557,38 @@ describe('useOIDC', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
+  it('refreshes the latest expired successor synchronously without replaying predecessors', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('old-chain-token'), { sub: 'user-sub' })
+    const middle = { ...expiredToken('middle-chain-token'), accessToken: 'expired-middle' }
+    const latest = { ...expiredToken('latest-chain-token'), accessToken: 'expired-latest' }
+    localStorage.setItem(await receiptKey('old-chain-token'), JSON.stringify({ token: middle, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    localStorage.setItem(await receiptKey('middle-chain-token'), JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
+    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ access_token: 'recovered-access', refresh_token: 'recovered-refresh', expires_in: 3600 }), { status: 200 }))
+    await expect(oidc.refreshToken()).resolves.toBe(true)
+    expect(useAuthStore().token?.accessToken).toBe('recovered-access')
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body).refresh_token).toBe('latest-chain-token')
+  })
+
+  it('retains replay tombstones across logout and blocks a resumed stale tab', async () => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('active-token'), { sub: 'user-sub' })
+    localStorage.setItem(await receiptKey('stale-token'), JSON.stringify({
+      token: { ...expiredToken('active-token'), accessToken: 'rotated-access' },
+      user: { sub: 'user-sub' }, recordedAt: Date.now(),
+    }))
+    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      authorization_endpoint: 'https://idp.example/auth', token_endpoint: 'https://idp.example/token', client_id: 'test-client',
+    }), { status: 200 }))
+    await oidc.logout()
+    expect(localStorage.getItem(await receiptKey('stale-token'))).toBe('consumed')
+    oidc.setToken(expiredToken('stale-token'), { sub: 'user-sub' })
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+    expect(useAuthStore().token).toBeNull()
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
+  })
+
   it('recovers a missed cross-tab completion from the persisted receipt', async () => {
     vi.useFakeTimers()
     const oidc = createOidc()
@@ -650,7 +682,7 @@ describe('useOIDC', () => {
     // The raw refresh token persisted in the predecessor receipt must not
     // outlive the forced logout; the pending marker is retained for replay
     // protection.
-    expect(localStorage.getItem(await receiptKey('predecessor-token'))).toBeNull()
+    expect(localStorage.getItem(await receiptKey('predecessor-token'))).toBe('consumed')
     expect(localStorage.getItem(await receiptKey('scrub-token'))).toBe('')
   })
 
