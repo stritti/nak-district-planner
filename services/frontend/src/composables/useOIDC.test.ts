@@ -855,10 +855,18 @@ describe('useOIDC', () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('storage-error-token'), { sub: 'user-sub' })
     const key = await receiptKey('storage-error-token')
-    const originalSetItem = Storage.prototype.setItem
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, name, value) {
+    const backing = localStorage
+    const setItem = vi.fn((name: string, value: string) => {
       if (name === key && value.startsWith('{')) throw new Error('storage quota exceeded')
-      return originalSetItem.call(this, name, value)
+      backing.setItem(name, value)
+    })
+    vi.stubGlobal('localStorage', {
+      getItem: (name: string) => backing.getItem(name),
+      setItem,
+      removeItem: (name: string) => backing.removeItem(name),
+      key: (index: number) => backing.key(index),
+      clear: () => backing.clear(),
+      get length() { return backing.length },
     })
     global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       access_token: 'rotated-access',
