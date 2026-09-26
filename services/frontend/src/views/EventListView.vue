@@ -138,8 +138,7 @@
             @change="onFilterChange"
           >
             <option value="">Alle</option>
-            <option value="DRAFT">Entwurf</option>
-            <option value="PUBLISHED">Veröffentlicht</option>
+            <option value="ACTIVE">Aktiv</option>
             <option value="CANCELLED">Abgesagt</option>
           </select>
         </div>
@@ -444,8 +443,7 @@
               v-model="editForm.status"
               class="form-input"
             >
-              <option value="DRAFT">Entwurf</option>
-              <option value="PUBLISHED">Veröffentlicht</option>
+              <option value="ACTIVE">Aktiv</option>
               <option value="CANCELLED">Abgesagt</option>
             </select>
           </div>

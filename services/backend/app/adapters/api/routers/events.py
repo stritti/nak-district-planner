@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
 from app.adapters.auth.permissions import require_role_in_district
@@ -72,6 +72,8 @@ class EventUpdate(BaseModel):
     fields are not accepted (no silent drops).
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     title: str | None = Field(None, min_length=1, max_length=500)
     description: str | None = None
     start_at: datetime | None = None
@@ -83,6 +85,8 @@ class EventUpdate(BaseModel):
 
 
 class BulkApprovalStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     year: int = Field(ge=1900, le=9999)
     month: int = Field(ge=1, le=12)
     approval_status: EventApprovalStatus
@@ -123,9 +127,7 @@ def _slot_to_event(slot: PlanningSlot, instance: EventInstance | None) -> EventR
     )
 
 
-async def _load_instances(
-    slot_ids: list[uuid.UUID], session
-) -> dict[uuid.UUID, EventInstance]:
+async def _load_instances(slot_ids: list[uuid.UUID], session) -> dict[uuid.UUID, EventInstance]:
     """Batch load EventInstances for the given slot IDs."""
     inst_repo = SqlEventInstanceRepository(session)
     instances = await inst_repo.list_by_planning_slots(slot_ids)
@@ -221,33 +223,46 @@ async def update_event(
     slot_repo = SqlPlanningSlotRepository(session)
     slot = await slot_repo.get(event_id)
     if slot is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
 
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
 
     inst_repo = SqlEventInstanceRepository(session)
     instance = await inst_repo.get_by_planning_slot(event_id)
 
-    if body.congregation_id is not None and body.congregation_id != slot.congregation_id:
-        cong_repo = SqlCongregationRepository(session)
-        congregation = await cong_repo.get(body.congregation_id)
-        if congregation is None or congregation.district_id != slot.district_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Gemeinde gehört nicht zum Bezirk des Ereignisses.",
-            )
-        slot.congregation_id = body.congregation_id
+    if "congregation_id" in body.model_fields_set:
+        if body.congregation_id is None:
+            slot.congregation_id = None
+        elif body.congregation_id != slot.congregation_id:
+            cong_repo = SqlCongregationRepository(session)
+            congregation = await cong_repo.get(body.congregation_id)
+            if congregation is None or congregation.district_id != slot.district_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Gemeinde gehört nicht zum Bezirk des Ereignisses.",
+                )
+            slot.congregation_id = body.congregation_id
 
     if body.status is not None:
         slot.status = body.status
     if body.approval_status is not None:
         slot.approval_status = body.approval_status
-    if body.category is not None:
+    if "category" in body.model_fields_set:
         slot.category = body.category
     if body.title is not None:
         slot.title = body.title
+        if instance is not None:
+            instance.title = body.title
+
+    instance_changed = instance is not None and body.title is not None
+    if "description" in body.model_fields_set:
+        if instance is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Beschreibung kann nur bei einem Ereignis mit EventInstance geändert werden.",
+            )
+        instance.description = body.description
+        instance_changed = True
 
     if body.start_at is not None or body.end_at is not None:
         new_start = body.start_at or (
@@ -259,13 +274,21 @@ async def update_event(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="end_at muss nach start_at liegen.",
             )
+        if instance is None and body.end_at is not None and new_end != new_start:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="end_at kann ohne EventInstance nicht geändert werden.",
+            )
         slot.planning_date = new_start.date()
         slot.planning_time = new_start.timetz()
         if instance is not None:
             instance.actual_start_at = new_start
             instance.actual_end_at = new_end
-            instance.updated_at = datetime.now(UTC)
-            await inst_repo.save(instance)
+            instance_changed = True
+
+    if instance_changed and instance is not None:
+        instance.updated_at = datetime.now(UTC)
+        await inst_repo.save(instance)
 
     slot.updated_at = datetime.now(UTC)
     await slot_repo.save(slot)
