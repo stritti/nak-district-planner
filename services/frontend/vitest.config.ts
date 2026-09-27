@@ -18,6 +18,7 @@ export default defineConfig({
         "src/composables/jwt.ts",
         "src/composables/oidcToken.ts",
         "src/composables/oidcRefresh.ts",
+        "src/composables/useOIDC.ts",
       ],
       thresholds: {
         perFile: true,

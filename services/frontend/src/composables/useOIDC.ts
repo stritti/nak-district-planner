@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { useRouter, type Router } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { parseJwt } from './jwt'
+import { identityFromTokenExchange, isValidTokenExchangeResponse, isValidTokenShape } from './oidcToken'
 import {
   clearCrossTabWaiter as clearWaiter,
   clearRotationReceipts,
@@ -171,14 +171,16 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
     if (!response.ok) return null
 
-    const data = await response.json()
-    if (!data.sub) return null
+    const data: unknown = await response.json()
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    const record = data as Partial<OIDCUser>
+    if (typeof record.sub !== 'string' || record.sub.length === 0) return null
 
     return {
-      sub: data.sub,
-      email: data.email,
-      name: data.name,
-      picture: data.picture,
+      sub: record.sub,
+      email: typeof record.email === 'string' ? record.email : undefined,
+      name: typeof record.name === 'string' ? record.name : undefined,
+      picture: typeof record.picture === 'string' ? record.picture : undefined,
     }
   }
 
@@ -224,6 +226,11 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       }
 
       if (message.ok && message.token) {
+        if (!isValidTokenShape(message.token)) {
+          clearWaiter(crossTabState, false)
+          crossTabState.inFlight = null
+          return
+        }
         // BroadcastChannel does not totally order messages across senders.
         // With a non-rotating refresh token every completion carries the same
         // refreshToken, so a delayed older completion must not roll the
@@ -348,25 +355,19 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         throw new Error(`Token exchange failed (${response.status}): ${JSON.stringify(parsed)}`)
       }
 
-      const data = await response.json()
-      if (!data.access_token) throw new Error('Token response missing access_token')
-
-      const claims = parseJwt((data.id_token as string) || (data.access_token as string))
-      const nextToken: OIDCToken = {
-        accessToken: data.access_token,
-        idToken: data.id_token || '',
-        refreshToken: data.refresh_token,
-        expiresAt: Math.floor(Date.now() / 1000) + Number(data.expires_in || 3600),
+      const data: unknown = await response.json()
+      if (!isValidTokenExchangeResponse(data)) {
+        throw new Error('Token response missing or malformed access_token')
       }
 
-      let nextUser: OIDCUser | null = {
-        sub: (claims.sub as string) || '',
-        email: (claims.email as string) || undefined,
-        name: (claims.name as string) || undefined,
-        picture: (claims.picture as string) || undefined,
-      }
+      const { token: nextToken, user: derivedUser } = identityFromTokenExchange(
+        data,
+        { accessToken: '', idToken: '', refreshToken: undefined, expiresAt: 0 },
+        null,
+      )
 
-      if (!nextUser.sub) {
+      let nextUser: OIDCUser | null = derivedUser
+      if (!nextUser?.sub) {
         nextUser = await fetchUserInfo(nextToken.accessToken)
       }
 
