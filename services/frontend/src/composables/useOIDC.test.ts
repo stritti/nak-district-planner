@@ -668,6 +668,22 @@ describe('useOIDC', () => {
     expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
   })
 
+  it.each(['not-a-timestamp', null])('fails closed for a receipt with invalid recordedAt %s', async (recordedAt) => {
+    const oidc = createOidc()
+    oidc.setToken(expiredToken('invalid-recorded-at'), { sub: 'user-sub' })
+    localStorage.setItem(await receiptKey('invalid-recorded-at'), JSON.stringify({
+      token: expiredToken('next-token'),
+      user: { sub: 'user-sub' },
+      recordedAt,
+    }))
+    global.fetch = vi.fn()
+
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+
+    expect(useAuthStore().token).toBeNull()
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
+  })
+
   it('scrubs credential receipts when an ambiguous refresh fails closed', async () => {
     const oidc = createOidc()
     oidc.setToken(expiredToken('scrub-token'), { sub: 'user-sub' })
