@@ -295,4 +295,145 @@ test.describe('Conflict handling in assignment flow', () => {
     await expect(submit).toBeDisabled()
     expect(submitAttempts).toBe(1)
   })
+  test('changing the leader discards a stale BLOCK and checks the replacement', async ({ page }) => {
+    await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
+    const bodies: Record<string, unknown>[] = []
+    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      bodies.push(body)
+      await route.fulfill(bodies.length === 1 ? {
+        status: 409, contentType: 'application/json',
+        body: JSON.stringify({ detail: { conflicts: [{
+          rule_id: 'no_double_booking', severity: 'BLOCK',
+          message: 'Bereits zugewiesen', details: {},
+        }] } }),
+      } : {
+        status: 201, contentType: 'application/json',
+        body: JSON.stringify({ id: 'assignment-1', event_id: 'event-1',
+          leader_id: null, leader_name: 'Pr. Frei', status: 'ASSIGNED',
+          created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' }),
+      })
+    })
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    await page.getByRole('button', { name: /LÜCKE/i }).click()
+    const input = page.getByPlaceholder(/Name eingeben/i)
+    await input.fill('Pr. Besetzt')
+    await page.getByTestId('submit-assignment').click()
+    await expect(page.getByTestId('submit-assignment')).toBeDisabled()
+    await input.fill('Pr. Frei')
+    await expect(page.getByTestId('conflict-banner')).toBeHidden()
+    await expect(page.getByTestId('submit-assignment')).toBeEnabled()
+    await page.getByTestId('submit-assignment').click()
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1]).toMatchObject({ leader_name: 'Pr. Frei' })
+    expect(bodies[1].confirm_warnings).toBeUndefined()
+  })
+
+  test('changing leader after WARN never sends an unreviewed override', async ({ page }) => {
+    await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
+    const bodies: Record<string, unknown>[] = []
+    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      bodies.push(route.request().postDataJSON() as Record<string, unknown>)
+      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
+        detail: { conflicts: [{ rule_id: 'travel_time_check', severity: 'WARN',
+          message: 'Wechselzeit', details: {} }] },
+      }) })
+    })
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    await page.getByRole('button', { name: /LÜCKE/i }).click()
+    const input = page.getByPlaceholder(/Name eingeben/i)
+    await input.fill('Pr. Alt')
+    await page.getByTestId('submit-assignment').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByRole('button', { name: 'Abbrechen' }).last().click()
+    await input.fill('Pr. Neu')
+    await expect(page.getByTestId('conflict-banner')).toBeHidden()
+    await page.getByTestId('submit-assignment').click()
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1]).toMatchObject({ leader_name: 'Pr. Neu' })
+    expect(bodies[1].confirm_warnings).toBeUndefined()
+  })
+
+  test('confirmation retry preserves CONFIRMED status', async ({ page }) => {
+    await setupAuthAndMatrix(page, matrixResponse({ isGap: false, leaderName: 'Pr. Bestand' }))
+    const bodies: Record<string, unknown>[] = []
+    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      bodies.push(body)
+      await route.fulfill(bodies.length === 1 ? {
+        status: 409, contentType: 'application/json',
+        body: JSON.stringify({ detail: { conflicts: [{
+          rule_id: 'travel_time_check', severity: 'WARN', message: 'Wechselzeit', details: {},
+        }] } }),
+      } : {
+        status: 201, contentType: 'application/json',
+        body: JSON.stringify({ id: 'assignment-1', event_id: 'event-1',
+          leader_id: null, leader_name: 'Pr. Bestand', status: 'CONFIRMED',
+          created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' }),
+      })
+    })
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    await page.getByRole('button', { name: /Pr. Bestand/i }).first().click()
+    await page.getByRole('button', { name: 'Bestaetigen' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByRole('button', { name: 'Trotzdem zuweisen' }).click()
+    await expect(page.getByRole('dialog')).toBeHidden()
+    expect(bodies).toHaveLength(2)
+    expect(bodies[0].status).toBe('CONFIRMED')
+    expect(bodies[1]).toMatchObject({ status: 'CONFIRMED', confirm_warnings: true })
+  })
+
+  test('mixed BLOCK and WARN never offers an override, including for confirmation', async ({ page }) => {
+    await setupAuthAndMatrix(page, matrixResponse({ isGap: false, leaderName: 'Pr. Bestand' }))
+    let attempts = 0
+    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      attempts++
+      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
+        detail: { conflicts: [
+          { rule_id: 'travel_time_check', severity: 'WARN', message: 'Wechselzeit', details: {} },
+          { rule_id: 'no_double_booking', severity: 'BLOCK', message: 'Bereits gebucht', details: {} },
+        ] },
+      }) })
+    })
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    await page.getByRole('button', { name: /Pr. Bestand/i }).first().click()
+    await page.getByRole('button', { name: 'Bestaetigen' }).click()
+    await expect(page.getByTestId('conflict-banner')).toBeVisible()
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Bestaetigen' })).toBeDisabled()
+    await expect(page.getByTestId('submit-assignment')).toBeDisabled()
+    expect(attempts).toBe(1)
+  })
+
+  test('a failed warning override closes overlay and shows the error', async ({ page }) => {
+    await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
+    let attempts = 0
+    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      attempts++
+      await route.fulfill(attempts === 1 ? {
+        status: 409, contentType: 'application/json',
+        body: JSON.stringify({ detail: { conflicts: [{
+          rule_id: 'travel_time_check', severity: 'WARN', message: 'Wechselzeit', details: {},
+        }] } }),
+      } : {
+        status: 503, contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Service temporarily unavailable' }),
+      })
+    })
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    await page.getByRole('button', { name: /LÜCKE/i }).click()
+    await page.getByPlaceholder(/Name eingeben/i).fill('Pr. Weitweg')
+    await page.getByTestId('submit-assignment').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByRole('button', { name: 'Trotzdem zuweisen' }).click()
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page.getByText(/Service temporarily unavailable/)).toBeVisible()
+    expect(attempts).toBe(2)
+  })
+
 })
