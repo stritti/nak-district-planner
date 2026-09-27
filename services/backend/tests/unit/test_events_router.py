@@ -144,6 +144,40 @@ async def test_list_events_filters_district_slots_by_applicability() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_events_accepts_datetime_range_filters() -> None:
+    district_id = uuid.uuid4()
+    slot_repo = AsyncMock()
+    slot_repo.list_for_date_range.return_value = []
+    instance_repo = AsyncMock()
+    instance_repo.list_by_planning_slots.return_value = []
+    with (
+        patch("app.adapters.api.routers.events.require_role_in_district"),
+        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
+        patch(
+            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
+        ),
+    ):
+        await events.list_events(
+            _auth(),
+            AsyncMock(),
+            district_id=district_id,
+            congregation_id=None,
+            group_id=None,
+            only_district_level=False,
+            status_filter=None,
+            approval_status=None,
+            from_dt=datetime(2026, 9, 26, 22, 0, tzinfo=UTC),
+            to_dt=datetime(2026, 10, 3, 21, 59, 59, tzinfo=UTC),
+            limit=50,
+            offset=0,
+        )
+
+    kwargs = slot_repo.list_for_date_range.await_args.kwargs
+    assert kwargs["from_date"] == date(2026, 9, 26)
+    assert kwargs["to_date"] == date(2026, 10, 3)
+
+
+@pytest.mark.asyncio
 async def test_list_events_requires_district_for_non_superadmin() -> None:
     with pytest.raises(HTTPException) as error:
         await events.list_events(_auth(), AsyncMock())
@@ -299,13 +333,14 @@ async def test_update_event_rejects_congregation_from_another_district() -> None
 
 
 @pytest.mark.asyncio
-async def test_update_event_rejects_end_time_without_instance_and_invalid_range() -> None:
+async def test_update_event_moves_slot_without_instance_and_rejects_invalid_range() -> None:
     slot = _slot()
     slot_repo = AsyncMock()
     slot_repo.get.return_value = slot
     instance_repo = AsyncMock()
     instance_repo.get_by_planning_slot.return_value = None
-
+    new_start = datetime(2026, 10, 1, 8, 30, tzinfo=UTC)
+    new_end = new_start + timedelta(hours=1)
     with (
         patch("app.adapters.api.routers.events.require_role_in_district"),
         patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
@@ -313,13 +348,12 @@ async def test_update_event_rejects_end_time_without_instance_and_invalid_range(
             "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
         ),
     ):
-        with pytest.raises(HTTPException) as no_instance_error:
-            await events.update_event(
-                slot.id,
-                events.EventUpdate(end_at=datetime(2026, 9, 26, 12, tzinfo=UTC)),
-                _auth(),
-                AsyncMock(),
-            )
+        result = await events.update_event(
+            slot.id,
+            events.EventUpdate(start_at=new_start, end_at=new_end),
+            _auth(),
+            AsyncMock(),
+        )
         with pytest.raises(HTTPException) as range_error:
             await events.update_event(
                 slot.id,
@@ -331,8 +365,13 @@ async def test_update_event_rejects_end_time_without_instance_and_invalid_range(
                 AsyncMock(),
             )
 
-    assert no_instance_error.value.status_code == 400
     assert range_error.value.status_code == 400
+    assert result.start_at == new_start
+    assert slot.planning_date == new_start.date()
+    assert slot.planning_time == new_start.timetz()
+    assert result.end_at == new_start  # duration not representable without instance
+    slot_repo.save.assert_awaited_once_with(slot)
+    instance_repo.save.assert_not_awaited()
 
 
 @pytest.mark.asyncio

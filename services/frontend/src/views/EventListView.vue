@@ -638,8 +638,8 @@ async function fetchCalendar() {
     if (viewMode.value === 'week') {
       const end = new Date(currentPeriodStart.value)
       end.setDate(end.getDate() + 6)
-      from = localDate(currentPeriodStart.value) + 'T00:00:00'
-      to   = localDate(end) + 'T23:59:59'
+      from = localDate(currentPeriodStart.value)
+      to   = localDate(end)
     } else {
       // Monatsansicht: komplettes Kalender-Grid (bis zu 6 Wochen)
       const year = currentPeriodStart.value.getFullYear()
@@ -650,8 +650,8 @@ async function fetchCalendar() {
       gridStart.setDate(gridStart.getDate() - (dow === 0 ? 6 : dow - 1))
       const gridEnd = new Date(gridStart)
       gridEnd.setDate(gridEnd.getDate() + 41)
-      from = localDate(gridStart) + 'T00:00:00'
-      to   = localDate(gridEnd)   + 'T23:59:59'
+      from = localDate(gridStart)
+      to   = localDate(gridEnd)
     }
     const params: EventListParams = { from_dt: from, to_dt: to, limit: 500, offset: 0 }
     if (districtsStore.selectedDistrictId) params.district_id = districtsStore.selectedDistrictId
@@ -840,8 +840,8 @@ function applyFilters() {
     only_district_level: isDistrictOnly,
     status:          selectedStatus.value || undefined,
     approval_status: selectedApprovalStatus.value || undefined,
-    from_dt: fromDate.value ? fromDate.value + 'T00:00:00' : undefined,
-    to_dt:   toDate.value   ? toDate.value   + 'T23:59:59' : undefined,
+    from_dt: fromDate.value || undefined,
+    to_dt:   toDate.value   || undefined,
   })
   eventsStore.fetch()
 }
@@ -960,11 +960,11 @@ async function triggerEventsExport() {
   exportWarning.value = ''
   try {
     // Fetch all matching events (no pagination) using current filter settings.
-    // The limit of 10 000 acts as a safety cap; normal districts have far fewer events.
+    // The limit acts as a safety cap; normal districts have far fewer events.
     const { district_id, congregation_id, group_id, only_district_level, status, from_dt, to_dt } = eventsStore.filters
-    const res = await listEvents({ district_id, congregation_id, group_id, only_district_level, status, from_dt, to_dt, limit: 10000, offset: 0 })
-    if (res.total > 10000) {
-      exportWarning.value = `Hinweis: Es wurden nur die ersten 10.000 von ${res.total} Ereignissen exportiert.`
+    const res = await listEvents({ district_id, congregation_id, group_id, only_district_level, status, from_dt, to_dt, limit: 500, offset: 0 })
+    if (res.total > 500) {
+      exportWarning.value = `Hinweis: Es wurden nur die ersten 500 von ${res.total} Ereignissen exportiert.`
     }
     const fromLabel = from_dt ? from_dt.slice(0, 10) : ''
     const toLabel   = to_dt   ? to_dt.slice(0, 10)   : ''

@@ -35,6 +35,10 @@ from app.domain.models.role import Role
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
 
+def _to_utc(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
 # ── Pydantic schemas ─────────────────────────────────────────────────────────
 
 
@@ -147,8 +151,8 @@ async def list_events(
     only_district_level: bool = Query(False),
     status_filter: PlanningSlotStatus | None = Query(None, alias="status"),
     approval_status: EventApprovalStatus | None = Query(None),
-    from_dt: date | None = Query(None),
-    to_dt: date | None = Query(None),
+    from_dt: datetime | None = Query(None),
+    to_dt: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> EventListResponse:
@@ -163,14 +167,24 @@ async def list_events(
 
     slot_repo = SqlPlanningSlotRepository(session)
     now = datetime.now(UTC).date()
-    from_date = from_dt or now - timedelta(days=365)
-    to_date = to_dt or now + timedelta(days=365 * 2)
+    from_date = _to_utc(from_dt).date() if from_dt is not None else now - timedelta(days=365)
+    to_date = _to_utc(to_dt).date() if to_dt is not None else now + timedelta(days=365 * 2)
 
     all_slots = await slot_repo.list_for_date_range(
         district_id=district_id or uuid.UUID(int=0),
         from_date=from_date,
         to_date=to_date,
     )
+
+    if group_id is not None:
+        cong_repo = SqlCongregationRepository(session)
+        congregations = await cong_repo.list_by_district(district_id or uuid.UUID(int=0))
+        group_congregation_ids = {c.id for c in congregations if c.group_id == group_id}
+        all_slots = [
+            s
+            for s in all_slots
+            if s.congregation_id is None or s.congregation_id in group_congregation_ids
+        ]
 
     if only_district_level:
         all_slots = [s for s in all_slots if s.congregation_id is None]
@@ -187,12 +201,6 @@ async def list_events(
                 and ("all" in s.applicability or str(congregation_id) in s.applicability)
             )
         ]
-
-    if group_id is not None:
-        cong_repo = SqlCongregationRepository(session)
-        congregations = await cong_repo.list_by_district(district_id or uuid.UUID(int=0))
-        group_congregation_ids = {c.id for c in congregations if c.group_id == group_id}
-        all_slots = [s for s in all_slots if s.congregation_id in group_congregation_ids]
 
     if status_filter is not None:
         all_slots = [s for s in all_slots if s.status == status_filter]
@@ -245,7 +253,7 @@ async def update_event(
 
     if body.status is not None:
         slot.status = body.status
-    if body.approval_status is not None:
+    if "approval_status" in body.model_fields_set:
         slot.approval_status = body.approval_status
     if "category" in body.model_fields_set:
         slot.category = body.category
@@ -265,19 +273,16 @@ async def update_event(
         instance_changed = True
 
     if body.start_at is not None or body.end_at is not None:
-        new_start = body.start_at or (
-            instance.actual_start_at if instance else _slot_start_at(slot)
+        new_start = _to_utc(
+            body.start_at or (instance.actual_start_at if instance else _slot_start_at(slot))
         )
-        new_end = body.end_at or (instance.actual_end_at if instance else new_start)
+        new_end = _to_utc(
+            body.end_at or (instance.actual_end_at if instance else new_start)
+        )
         if new_end < new_start:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="end_at muss nach start_at liegen.",
-            )
-        if instance is None and body.end_at is not None and new_end != new_start:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="end_at kann ohne EventInstance nicht geändert werden.",
             )
         slot.planning_date = new_start.date()
         slot.planning_time = new_start.timetz()
