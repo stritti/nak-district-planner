@@ -93,6 +93,7 @@ async def test_list_events_applies_filters_and_paginates() -> None:
             only_district_level=False,
             status_filter=PlanningSlotStatus.ACTIVE,
             approval_status=EventApprovalStatus.PLANNED,
+            is_service=None,
             from_dt=None,
             to_dt=None,
             limit=1,
@@ -134,6 +135,7 @@ async def test_list_events_filters_district_slots_by_applicability() -> None:
             only_district_level=False,
             status_filter=None,
             approval_status=None,
+            is_service=None,
             from_dt=None,
             to_dt=None,
             limit=50,
@@ -141,6 +143,69 @@ async def test_list_events_filters_district_slots_by_applicability() -> None:
         )
 
     assert [item.id for item in result.items] == [visible.id]
+
+
+@pytest.mark.asyncio
+async def test_list_events_marks_and_filters_service_events() -> None:
+    district_id = uuid.uuid4()
+    service = _slot(district_id=district_id)
+    other = PlanningSlot.create(
+        district_id=district_id,
+        planning_date=date(2026, 9, 27),
+        planning_time=time(10),
+        title="Andacht",
+        category="Andacht",
+    )
+    uncategorised = PlanningSlot.create(
+        district_id=district_id,
+        planning_date=date(2026, 9, 28),
+        planning_time=time(10),
+        title="Ohne Kategorie",
+        category=None,
+    )
+    slot_repo = AsyncMock()
+    slot_repo.list_for_date_range.return_value = [service, other, uncategorised]
+    instance_repo = AsyncMock()
+    instance_repo.list_by_planning_slots.return_value = []
+
+    async def call(is_service: bool | None):
+        with (
+            patch("app.adapters.api.routers.events.require_role_in_district"),
+            patch(
+                "app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo
+            ),
+            patch(
+                "app.adapters.api.routers.events.SqlEventInstanceRepository",
+                return_value=instance_repo,
+            ),
+        ):
+            return await events.list_events(
+                _auth(),
+                AsyncMock(),
+                district_id=district_id,
+                congregation_id=None,
+                group_id=None,
+                only_district_level=False,
+                status_filter=None,
+                approval_status=None,
+                is_service=is_service,
+                from_dt=None,
+                to_dt=None,
+                limit=50,
+                offset=0,
+            )
+
+    all_result = await call(None)
+    assert [item.id for item in all_result.items] == [service.id, other.id, uncategorised.id]
+    assert [item.is_service for item in all_result.items] == [True, False, False]
+
+    service_only = await call(True)
+    assert [item.id for item in service_only.items] == [service.id]
+    assert service_only.total == 1
+
+    other_only = await call(False)
+    assert [item.id for item in other_only.items] == [other.id, uncategorised.id]
+    assert other_only.total == 2
 
 
 @pytest.mark.asyncio
@@ -166,6 +231,7 @@ async def test_list_events_accepts_datetime_range_filters() -> None:
             only_district_level=False,
             status_filter=None,
             approval_status=None,
+            is_service=None,
             from_dt=datetime(2026, 9, 26, 22, 0, tzinfo=UTC),
             to_dt=datetime(2026, 10, 3, 21, 59, 59, tzinfo=UTC),
             limit=50,
@@ -206,6 +272,7 @@ async def test_list_events_allows_superadmin_without_district() -> None:
             only_district_level=False,
             status_filter=None,
             approval_status=None,
+            is_service=None,
             from_dt=None,
             to_dt=None,
             limit=50,
