@@ -633,7 +633,11 @@ async def get_matrix(
                 category=slot.category,
                 approval_status=slot.approval_status,
                 is_gap=(assignment is None and not is_invitation_copy),
-                planned_time=slot.planning_time,
+                planned_time=(
+                    datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
+                    if slot.planning_time is not None
+                    else None
+                ),
                 actual_start_at=(instance.actual_start_at if instance is not None else None),
                 actual_end_at=(instance.actual_end_at if instance is not None else None),
                 has_deviation=instance.deviation_flag if instance is not None else False,

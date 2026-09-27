@@ -20,7 +20,7 @@ from app.adapters.api.routers import (
     auth,
     calendar_integrations,
     districts,
-    events_compat,
+    events,
     export,
     invitations,
     leader_unavailabilities,
@@ -218,7 +218,7 @@ async def health() -> JSONResponse:
 # Register routers
 app.include_router(health_router.router)
 app.include_router(auth.router)
-app.include_router(events_compat.router)
+app.include_router(events.router)
 app.include_router(invitations.router)
 app.include_router(service_assignments.router)
 app.include_router(calendar_integrations.router)

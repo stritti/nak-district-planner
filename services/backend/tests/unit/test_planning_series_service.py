@@ -105,9 +105,11 @@ class TestPlanningSeriesSlotGenerationService:
         assert result["skipped"] == 0
         assert len(slot_repo.slots) == 4
 
-        # Check that all slots have correct time
+        # Check that all slots store the UTC instant of the local 09:30
+        # Berlin time (January = CET = UTC+1)
         for slot in slot_repo.slots:
-            assert slot.planning_time == time(9, 30)
+            assert slot.planning_time == time(8, 30)
+            assert slot.planning_date.weekday() == 6  # Sunday
             assert slot.series_id == series.id
 
     @pytest.mark.asyncio
@@ -140,10 +142,15 @@ class TestPlanningSeriesSlotGenerationService:
         assert result["generated"] == 6  # 6 months
         assert result["skipped"] == 0
 
-        # Check that all slots are on the 1st of the month
+        # Check that all slots are on the 1st of the month (local 10:00
+        # Berlin = 09:00 UTC in January/March, 08:00 UTC after DST starts)
+        expected_utc = {1: time(9, 0), 2: time(9, 0), 3: time(9, 0), 4: time(8, 0), 5: time(8, 0), 6: time(8, 0)}
         for slot in slot_repo.slots:
-            assert slot.planning_date.day == 1
-            assert slot.planning_time == time(10, 0)
+            assert slot.planning_date.day == 1 or (
+                slot.planning_date.day == 2 and slot.planning_time == time(23, 0)
+            )
+            month = slot.planning_date.month if slot.planning_date.day != 2 else slot.planning_date.month - 1 or 12
+            assert slot.planning_time == expected_utc[month]
 
     @pytest.mark.asyncio
     async def test_generate_slots_skips_existing(self):

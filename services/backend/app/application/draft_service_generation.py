@@ -69,9 +69,14 @@ def expand_service_slots(
     return slots
 
 
-def _planning_time_from_utc(dt: datetime, tz_name: str) -> time:
-    """Extract local planning time from a UTC datetime."""
-    return dt.astimezone(ZoneInfo(tz_name)).time()
+def _planning_time_from_utc(dt: datetime) -> time:
+    """Extract the UTC planning time from a UTC datetime.
+
+    planning_time is stored as UTC (naive wall-clock UTC), matching all
+    readers (matrix, sync, deviation, events API). Local display is the
+    frontend's responsibility.
+    """
+    return dt.astimezone(UTC).time()
 
 
 class GenerateDraftServicesUseCase:
@@ -161,7 +166,7 @@ class GenerateDraftServicesUseCase:
                 }
 
                 for slot in slots:
-                    planning_time = _planning_time_from_utc(slot.start_at_utc, self._timezone_name)
+                    planning_time = _planning_time_from_utc(slot.start_at_utc)
                     key = (slot.start_at_utc.date().isoformat(), planning_time.isoformat())
 
                     if key in existing_for_congregation:

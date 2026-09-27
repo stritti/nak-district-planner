@@ -133,11 +133,11 @@ def test_district_slot_with_matching_applicability_appears_in_congregation_view(
     with (
         _auth_client(district_id) as (client, headers),
         patch(
-            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
             return_value=slot_repo,
         ),
         patch(
-            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            "app.adapters.api.routers.events.SqlEventInstanceRepository",
             return_value=inst_repo,
         ),
     ):
@@ -163,11 +163,11 @@ def test_district_slot_with_other_congregation_applicability_excluded():
     with (
         _auth_client(district_id) as (client, headers),
         patch(
-            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
             return_value=slot_repo,
         ),
         patch(
-            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            "app.adapters.api.routers.events.SqlEventInstanceRepository",
             return_value=inst_repo,
         ),
     ):
@@ -186,11 +186,11 @@ def test_district_slot_with_empty_applicability_excluded():
     with (
         _auth_client(district_id) as (client, headers),
         patch(
-            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
             return_value=slot_repo,
         ),
         patch(
-            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            "app.adapters.api.routers.events.SqlEventInstanceRepository",
             return_value=inst_repo,
         ),
     ):
@@ -214,11 +214,11 @@ def test_cancelled_district_slot_excluded_even_with_matching_applicability():
     with (
         _auth_client(district_id) as (client, headers),
         patch(
-            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
             return_value=slot_repo,
         ),
         patch(
-            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            "app.adapters.api.routers.events.SqlEventInstanceRepository",
             return_value=inst_repo,
         ),
     ):
@@ -237,11 +237,11 @@ def test_district_view_still_returns_district_slots():
     with (
         _auth_client(district_id) as (client, headers),
         patch(
-            "app.adapters.api.routers.events_compat.SqlPlanningSlotRepository",
+            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
             return_value=slot_repo,
         ),
         patch(
-            "app.adapters.api.routers.events_compat.SqlEventInstanceRepository",
+            "app.adapters.api.routers.events.SqlEventInstanceRepository",
             return_value=inst_repo,
         ),
     ):
