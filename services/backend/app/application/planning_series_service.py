@@ -171,11 +171,18 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
         series: PlanningSeries,
         date_obj: date,
     ) -> PlanningSlot:
-        """Create a PlanningSlot from a PlanningSeries for a specific date."""
+        """Create a PlanningSlot from a PlanningSeries for a specific date.
+
+        default_planning_time is local wall-clock time; the slot stores the
+        UTC instant (DST-aware per date).
+        """
+        start_utc = datetime.combine(
+            date_obj, series.default_planning_time, tzinfo=ZoneInfo(self._timezone_name)
+        ).astimezone(UTC)
         return PlanningSlot.create(
             district_id=series.district_id,
-            planning_date=date_obj,
-            planning_time=series.default_planning_time,
+            planning_date=start_utc.date(),
+            planning_time=start_utc.timetz().replace(tzinfo=None),
             series_id=series.id,
             congregation_id=series.congregation_id,
             category=series.category or "Gottesdienst",
