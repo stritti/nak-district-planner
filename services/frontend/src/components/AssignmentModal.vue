@@ -124,6 +124,11 @@
         class="mb-3"
       />
 
+      <ConflictBanner
+        v-if="conflictStore.conflicts.length > 0"
+        :conflicts="conflictStore.conflicts"
+        class="mb-3"
+      />
       <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modal.error }}</p>
 
       <div class="flex justify-end gap-3 mt-5">
@@ -149,6 +154,8 @@
         <button
           class="btn-primary px-4 py-2"
           :disabled="!canSubmit || modal.saving"
+          :title="submitTooltip"
+          data-testid="submit-assignment"
           @click="submitAssignment"
         >
           {{ modal.saving ? 'Speichern…' : (modal.isGap ? 'Zuweisen' : 'Speichern') }}
@@ -156,11 +163,23 @@
       </div>
     </div>
   </div>
+  <ConfirmDialog
+    :open="conflictStore.confirmingWarning"
+    title="Trotz Konflikt zuweisen?"
+    :message="warnConfirmMessage"
+    confirm-text="Trotzdem zuweisen"
+    variant="warning"
+    :loading="modal.saving"
+    @confirm="overrideWarnConflicts"
+    @cancel="conflictStore.cancelWarnConfirmation()"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
+import { ConflictError } from '../api/errors'
+import { useConflictStore } from '../stores/conflict'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
 import { useLeadersStore } from '../stores/leaders'
@@ -173,12 +192,15 @@ import {
 import { updateEvent } from '../api/events'
 import type { MatrixCell } from '../api/matrix'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from './AutocompleteInput.vue'
+import ConflictBanner from './ConflictBanner.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
 const leadersStore = useLeadersStore()
+const conflictStore = useConflictStore()
 
 // ── Assignment Modal ──────────────────────────────────────────────────────────
 
@@ -201,11 +223,27 @@ const modal = reactive({
   moveError: '',
 })
 
+const hasBlockingConflicts = computed(() => conflictStore.blocking.length > 0)
+
 const canSubmit = computed(() => {
+  if (hasBlockingConflicts.value) return false
   if (modal.isGap) {
     return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
   }
   return true
+})
+
+const submitTooltip = computed(() => {
+  if (hasBlockingConflicts.value) {
+    return conflictStore.blocking.map((c) => c.message).join(' ')
+  }
+  return ''
+})
+
+const warnConfirmMessage = computed(() => {
+  const leader = modal.leaderInput.text.trim() || 'der/die Amtstragende'
+  const warnings = conflictStore.warnings.map((c) => c.message).join(' ')
+  return `Es liegen Konflikte vor: ${warnings}. Soll ${leader} trotzdem zugewiesen werden?`
 })
 
 const hasLeaderSelection = computed(() => {
@@ -243,6 +281,7 @@ const autocompleteOptions = computed((): AutocompleteOption[] => {
 })
 
 function openModal(cell: MatrixCell, date: string, congregationName: string, congregationId: string) {
+  conflictStore.clear()
   modal.open = true
   modal.eventId = cell.assignment_event_id ?? cell.event_id!
   modal.assignmentId = cell.assignment_id
@@ -376,29 +415,50 @@ async function removeInvitation(invitationId: string) {
 
 function closeModal() {
   modal.open = false
+  conflictStore.clear()
 }
 
 async function submitAssignment() {
   if (!canSubmit.value) return
+  if (conflictStore.warnings.length > 0 && !conflictStore.confirmingWarning) {
+    conflictStore.beginWarnConfirmation()
+    return
+  }
+  await persistAssignment()
+}
+
+async function persistAssignment(confirmWarnings = false) {
   modal.saving = true
   modal.error = ''
   try {
     const leaderText = modal.leaderInput.text.trim()
     const hasLeader = modal.leaderInput.id !== null || leaderText.length > 0
-
+    const options = {
+      leaderId: modal.leaderInput.id,
+      leaderName: modal.leaderInput.id === null && leaderText.length > 0 ? leaderText : null,
+      ...(confirmWarnings ? { confirmWarnings: true } : {}),
+    }
     if (!hasLeader) {
       await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
-    } else if (modal.leaderInput.id !== null) {
-      await matrixStore.assign(modal.eventId, modal.assignmentId, { leaderId: modal.leaderInput.id })
     } else {
-      await matrixStore.assign(modal.eventId, modal.assignmentId, { leaderName: leaderText })
+      await matrixStore.assign(modal.eventId, modal.assignmentId, options)
     }
     closeModal()
   } catch (e) {
-    modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+    if (e instanceof ConflictError) {
+      conflictStore.setConflicts(e.conflicts)
+      modal.error = ''
+    } else {
+      modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+    }
   } finally {
+    conflictStore.cancelWarnConfirmation()
     modal.saving = false
   }
+}
+
+async function overrideWarnConflicts() {
+  await persistAssignment(true)
 }
 
 async function confirmAssignment() {
@@ -406,29 +466,30 @@ async function confirmAssignment() {
     modal.error = 'Bitte waehle zuerst eine:n Amtstragende:n aus.'
     return
   }
+  if (conflictStore.warnings.length > 0 && !conflictStore.confirmingWarning) {
+    conflictStore.beginWarnConfirmation()
+    return
+  }
   modal.saving = true
   modal.error = ''
   try {
     const leaderText = modal.leaderInput.text.trim()
-    if (modal.leaderInput.id !== null) {
-      await matrixStore.assign(
-        modal.eventId,
-        modal.assignmentId,
-        { leaderId: modal.leaderInput.id },
-        'CONFIRMED',
-      )
-    } else {
-      await matrixStore.assign(
-        modal.eventId,
-        modal.assignmentId,
-        { leaderName: leaderText },
-        'CONFIRMED',
-      )
+    const options = {
+      leaderId: modal.leaderInput.id,
+      leaderName: modal.leaderInput.id === null && leaderText.length > 0 ? leaderText : null,
+      ...(conflictStore.confirmingWarning ? { confirmWarnings: true } : {}),
     }
+    await matrixStore.assign(modal.eventId, modal.assignmentId, options, 'CONFIRMED')
     closeModal()
   } catch (e) {
-    modal.error = e instanceof Error ? e.message : 'Fehler beim Bestaetigen'
+    if (e instanceof ConflictError) {
+      conflictStore.setConflicts(e.conflicts)
+      modal.error = ''
+    } else {
+      modal.error = e instanceof Error ? e.message : 'Fehler beim Bestaetigen'
+    }
   } finally {
+    conflictStore.cancelWarnConfirmation()
     modal.saving = false
   }
 }

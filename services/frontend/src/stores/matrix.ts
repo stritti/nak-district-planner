@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchMatrix, type MatrixResponse } from '../api/matrix'
-import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
+import { parseConflictError } from '../api/errors'
+import {
+  createAssignment,
+  deleteAssignment,
+  type AssignmentOptions,
+  updateAssignment,
+} from '../api/serviceAssignments'
 import { generateMatrixDraftServices } from '../api/districts'
 
 export const useMatrixStore = defineStore('matrix', () => {
@@ -36,17 +42,25 @@ export const useMatrixStore = defineStore('matrix', () => {
   async function assign(
     eventId: string,
     assignmentId: string | null,
-    options: { leaderId?: string | null; leaderName?: string | null },
+    options: AssignmentOptions,
     assignmentStatus?: 'OPEN' | 'ASSIGNED' | 'CONFIRMED',
   ) {
-    if (assignmentId) {
-      if (assignmentStatus) {
-        await updateAssignment(eventId, assignmentId, options, assignmentStatus)
+    try {
+      if (assignmentId) {
+        if (assignmentStatus) {
+          await updateAssignment(eventId, assignmentId, options, assignmentStatus)
+        } else {
+          await updateAssignment(eventId, assignmentId, options)
+        }
       } else {
-        await updateAssignment(eventId, assignmentId, options)
+        await createAssignment(eventId, options, assignmentStatus ?? 'ASSIGNED')
       }
-    } else {
-      await createAssignment(eventId, options, assignmentStatus ?? 'ASSIGNED')
+    } catch (e) {
+      const conflictError = parseConflictError(e)
+      if (conflictError) {
+        throw conflictError
+      }
+      throw e
     }
     await fetch() // refresh matrix
   }
