@@ -43,6 +43,16 @@
             class="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700"
           >{{ pendingCount }}</span>
         </button>
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-t transition-colors"
+          :class="activeTab === 'unavailabilities'
+            ? 'border-b-2 border-blue-600 text-blue-600'
+            : 'text-gray-500 hover:text-gray-800'"
+          data-testid="unavailability-tab"
+          @click="switchToUnavailabilities()"
+        >
+          Abwesenheiten
+        </button>
       </div>
       <!-- Leaders tab -->
       <template v-if="activeTab === 'leaders'">
@@ -109,6 +119,13 @@
             <div class="mt-2 flex items-center justify-end gap-1">
               <button class="btn-icon" title="Bearbeiten" @click="openEditModal(leader)">
                 <PencilSquareIcon class="h-4 w-4" />
+              </button>
+              <button
+                class="btn-icon hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400"
+                title="Abwesenheiten verwalten"
+                @click="openUnavailabilitiesFor(leader)"
+              >
+                <CalendarDaysIcon class="h-4 w-4" />
               </button>
               <button
                 class="btn-icon hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400"
@@ -187,6 +204,13 @@
                       @click="openEditModal(leader)"
                     >
                       <PencilSquareIcon class="h-4 w-4" />
+                    </button>
+                    <button
+                      class="btn-icon hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400"
+                      title="Abwesenheiten verwalten"
+                      @click="openUnavailabilitiesFor(leader)"
+                    >
+                      <CalendarDaysIcon class="h-4 w-4" />
                     </button>
                     <button
                       class="btn-icon hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400"
@@ -316,6 +340,33 @@
       </div>
     </template>
     <!-- /Registrations tab -->
+
+    <!-- Unavailabilities tab -->
+    <template v-else-if="activeTab === 'unavailabilities'">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2">
+          <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Erfasste Abwesenheiten</h2>
+          <LeaderUnavailabilityList
+            :items="unavailabilitiesStore.items"
+            :leaders="leaders"
+            :loading="unavailabilitiesStore.loading"
+            :preset-leader-id="unavailabilityFilterLeaderId"
+            @delete="confirmDeleteUnavailability"
+          />
+        </div>
+        <div>
+          <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Neue Abwesenheit</h2>
+          <LeaderUnavailabilityForm
+            ref="unavailabilityFormRef"
+            :leaders="leaders"
+            :preset-leader-id="unavailabilityFilterLeaderId"
+            :saving="unavailabilitySaving"
+            @submit="saveUnavailability"
+          />
+        </div>
+      </div>
+    </template>
+    <!-- /Unavailabilities tab -->
 
     <!-- Approve registration modal -->
     <div
@@ -450,6 +501,20 @@
       :loading="saving"
       @confirm="executeDeleteLeader"
       @cancel="pendingDeleteLeader = null"
+    />
+
+    <!-- Delete unavailability confirm dialog -->
+    <ConfirmDialog
+      :open="pendingDeleteUnavailability !== null"
+      variant="danger"
+      title="Abwesenheit löschen?"
+      :message="pendingDeleteUnavailability
+        ? `Die Abwesenheit vom ${formatUnavailabilityPeriod(pendingDeleteUnavailability)} wird gelöscht.`
+        : ''"
+      confirm-text="Löschen"
+      :loading="unavailabilitySaving"
+      @confirm="executeDeleteUnavailability"
+      @cancel="pendingDeleteUnavailability = null"
     />
 
     <div
@@ -725,8 +790,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
+import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
 import {
   BuildingOffice2Icon,
+  CalendarDaysIcon,
   CheckIcon,
   HomeModernIcon,
   LinkIcon,
@@ -759,10 +827,16 @@ import {
   type RegistrationResponse,
 } from '../api/registrations'
 import { useDistrictsStore } from '../stores/districts'
+import { useLeaderUnavailabilitiesStore } from '../stores/leaderUnavailabilities'
 import { useToastStore } from '../stores/toast'
+import type {
+  LeaderUnavailabilityCreate,
+  LeaderUnavailabilityResponse,
+} from '../api/leaderUnavailabilities'
 
 const districtsStore = useDistrictsStore()
 const toastStore = useToastStore()
+const unavailabilitiesStore = useLeaderUnavailabilitiesStore()
 const congregations = ref<CongregationResponse[]>([])
 const leaders = ref<LeaderResponse[]>([])
 const selectedDistrictId = computed({
@@ -779,7 +853,7 @@ const selfLinkError = ref('')
 
 // ── Tab state ──────────────────────────────────────────────────────────────────
 
-const activeTab = ref<'leaders' | 'registrations'>('leaders')
+const activeTab = ref<'leaders' | 'registrations' | 'unavailabilities'>('leaders')
 
 // ── Registrations ─────────────────────────────────────────────────────────────
 
@@ -803,6 +877,79 @@ async function loadRegistrations() {
 async function switchToRegistrations() {
   activeTab.value = 'registrations'
   await loadRegistrations()
+}
+
+// ── Unavailabilities ─────────────────────────────────────────────
+
+const unavailabilityFilterLeaderId = ref('')
+const unavailabilitySaving = ref(false)
+const unavailabilityFormRef = ref<InstanceType<typeof LeaderUnavailabilityForm> | null>(null)
+const pendingDeleteUnavailability = ref<LeaderUnavailabilityResponse | null>(null)
+
+async function switchToUnavailabilities(leaderId?: string) {
+  activeTab.value = 'unavailabilities'
+  unavailabilityFilterLeaderId.value = leaderId ?? ''
+  if (selectedDistrictId.value) {
+    await unavailabilitiesStore.fetchUnavailabilities(selectedDistrictId.value)
+  }
+}
+
+function openUnavailabilitiesFor(leader: LeaderResponse) {
+  switchToUnavailabilities(leader.id)
+}
+
+async function saveUnavailability(body: LeaderUnavailabilityCreate) {
+  if (!selectedDistrictId.value) return
+  unavailabilitySaving.value = true
+  try {
+    const created = await unavailabilitiesStore.addUnavailability(selectedDistrictId.value, body)
+    unavailabilityFormRef.value?.reset()
+    toastStore.success(
+      'Abwesenheit erfasst',
+      `${leaderName(created.leader_id)}: ${formatUnavailabilityPeriod(created)}`,
+    )
+  } catch (e) {
+    toastStore.error(
+      'Abwesenheit konnte nicht erfasst werden',
+      e instanceof Error ? e.message : undefined,
+    )
+  } finally {
+    unavailabilitySaving.value = false
+  }
+}
+
+function confirmDeleteUnavailability(item: LeaderUnavailabilityResponse) {
+  pendingDeleteUnavailability.value = item
+}
+
+function formatUnavailabilityPeriod(item: LeaderUnavailabilityResponse): string {
+  const start = new Date(item.start_at)
+  const end = new Date(item.end_at)
+  const locale = 'de-DE'
+  return start.toDateString() === end.toDateString()
+    ? start.toLocaleDateString(locale)
+    : `${start.toLocaleDateString(locale)} – ${end.toLocaleDateString(locale)}`
+}
+
+async function executeDeleteUnavailability() {
+  if (!pendingDeleteUnavailability.value || !selectedDistrictId.value) return
+  const item = pendingDeleteUnavailability.value
+  unavailabilitySaving.value = true
+  try {
+    await unavailabilitiesStore.removeUnavailability(selectedDistrictId.value, item.id)
+    pendingDeleteUnavailability.value = null
+    toastStore.success('Abwesenheit gelöscht', formatUnavailabilityPeriod(item))
+  } catch (e) {
+    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
+  } finally {
+    unavailabilitySaving.value = false
+  }
+}
+
+function leaderName(leaderId: string): string {
+  const leader = leaders.value.find((l) => l.id === leaderId)
+  if (!leader) return '—'
+  return leader.rank ? `${leader.rank} ${leader.name}` : leader.name
 }
 
 // Approve modal
