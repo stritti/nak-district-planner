@@ -118,7 +118,8 @@
       <label class="form-label">Amtstragende:r</label>
       <AutocompleteInput
         ref="autocompleteRef"
-        v-model="modal.leaderInput"
+         :model-value="modal.leaderInput"
+        @update:model-value="updateLeaderSelection"
         :options="autocompleteOptions"
         placeholder="Name eingeben oder auswählen…"
         class="mb-3"
@@ -146,7 +147,7 @@
         <button
           v-if="!modal.isGap"
           class="btn-secondary px-4 py-2"
-          :disabled="!hasLeaderSelection || modal.saving"
+          :disabled="!hasLeaderSelection || hasBlockingConflicts || modal.saving"
           @click="confirmAssignment"
         >
           {{ modal.saving ? 'Speichern…' : 'Bestaetigen' }}
@@ -171,7 +172,7 @@
     variant="warning"
     :loading="modal.saving"
     @confirm="overrideWarnConflicts"
-    @cancel="conflictStore.cancelWarnConfirmation()"
+    @cancel="cancelWarnConfirmation"
   />
 </template>
 
@@ -222,6 +223,9 @@ const modal = reactive({
   moveSaving: false,
   moveError: '',
 })
+
+type AssignmentAction = 'save' | 'confirm'
+const pendingWarningAction = ref<AssignmentAction | null>(null)
 
 const hasBlockingConflicts = computed(() => conflictStore.blocking.length > 0)
 
@@ -281,7 +285,7 @@ const autocompleteOptions = computed((): AutocompleteOption[] => {
 })
 
 function openModal(cell: MatrixCell, date: string, congregationName: string, congregationId: string) {
-  conflictStore.clear()
+  resetConflicts()
   modal.open = true
   modal.eventId = cell.assignment_event_id ?? cell.event_id!
   modal.assignmentId = cell.assignment_id
@@ -413,21 +417,58 @@ async function removeInvitation(invitationId: string) {
   }
 }
 
+function resetConflicts() {
+  conflictStore.clear()
+  pendingWarningAction.value = null
+}
+
+function updateLeaderSelection(value: AutocompleteValue) {
+  if (modal.leaderInput.id !== value.id || modal.leaderInput.text !== value.text) {
+    resetConflicts()
+    modal.error = ''
+  }
+  modal.leaderInput = value
+}
+
+function cancelWarnConfirmation() {
+  conflictStore.cancelWarnConfirmation()
+  pendingWarningAction.value = null
+}
+
 function closeModal() {
   modal.open = false
-  conflictStore.clear()
+  resetConflicts()
+}
+
+function requestWarningConfirmation(action: AssignmentAction) {
+  pendingWarningAction.value = action
+  conflictStore.beginWarnConfirmation()
 }
 
 async function submitAssignment() {
-  if (!canSubmit.value) return
-  if (conflictStore.warnings.length > 0 && !conflictStore.confirmingWarning) {
-    conflictStore.beginWarnConfirmation()
+  if (!canSubmit.value || modal.saving) return
+  if (conflictStore.warnings.length > 0) {
+    requestWarningConfirmation('save')
     return
   }
-  await persistAssignment()
+  await persistAssignment('save')
 }
 
-async function persistAssignment(confirmWarnings = false) {
+async function confirmAssignment() {
+  if (!hasLeaderSelection.value) {
+    modal.error = 'Bitte waehle zuerst eine:n Amtstragende:n aus.'
+    return
+  }
+  if (hasBlockingConflicts.value || modal.saving) return
+  if (conflictStore.warnings.length > 0) {
+    requestWarningConfirmation('confirm')
+    return
+  }
+  await persistAssignment('confirm')
+}
+
+async function persistAssignment(action: AssignmentAction, confirmWarnings = false) {
+  if (modal.saving) return
   modal.saving = true
   modal.error = ''
   try {
@@ -438,21 +479,33 @@ async function persistAssignment(confirmWarnings = false) {
       leaderName: modal.leaderInput.id === null && leaderText.length > 0 ? leaderText : null,
       ...(confirmWarnings ? { confirmWarnings: true } : {}),
     }
-    if (!hasLeader) {
+    if (!hasLeader && action === 'save') {
       await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
     } else {
-      await matrixStore.assign(modal.eventId, modal.assignmentId, options)
+      await matrixStore.assign(
+        modal.eventId,
+        modal.assignmentId,
+        options,
+        action === 'confirm' ? 'CONFIRMED' : undefined,
+      )
     }
     closeModal()
   } catch (e) {
     if (e instanceof ConflictError) {
       conflictStore.setConflicts(e.conflicts)
       modal.error = ''
-      if (conflictStore.warnings.length > 0) {
-        conflictStore.beginWarnConfirmation()
+      if (e.blocking.length === 0 && e.warnings.length > 0 && !confirmWarnings) {
+        requestWarningConfirmation(action)
+      } else {
+        cancelWarnConfirmation()
       }
     } else {
-      modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+      // The error belongs to the underlying assignment modal, not the teleported dialog.
+      // Close the overlay so the user can actually see it and decide how to proceed.
+      cancelWarnConfirmation()
+      modal.error = e instanceof Error ? e.message : action === 'confirm'
+        ? 'Fehler beim Bestaetigen'
+        : 'Fehler beim Speichern'
     }
   } finally {
     modal.saving = false
@@ -460,42 +513,8 @@ async function persistAssignment(confirmWarnings = false) {
 }
 
 async function overrideWarnConflicts() {
-  await persistAssignment(true)
-}
-
-async function confirmAssignment() {
-  if (!hasLeaderSelection.value) {
-    modal.error = 'Bitte waehle zuerst eine:n Amtstragende:n aus.'
-    return
-  }
-  if (conflictStore.warnings.length > 0 && !conflictStore.confirmingWarning) {
-    conflictStore.beginWarnConfirmation()
-    return
-  }
-  modal.saving = true
-  modal.error = ''
-  try {
-    const leaderText = modal.leaderInput.text.trim()
-    const options = {
-      leaderId: modal.leaderInput.id,
-      leaderName: modal.leaderInput.id === null && leaderText.length > 0 ? leaderText : null,
-      ...(conflictStore.confirmingWarning ? { confirmWarnings: true } : {}),
-    }
-    await matrixStore.assign(modal.eventId, modal.assignmentId, options, 'CONFIRMED')
-    closeModal()
-  } catch (e) {
-    if (e instanceof ConflictError) {
-      conflictStore.setConflicts(e.conflicts)
-      modal.error = ''
-      if (conflictStore.warnings.length > 0) {
-        conflictStore.beginWarnConfirmation()
-      }
-    } else {
-      modal.error = e instanceof Error ? e.message : 'Fehler beim Bestaetigen'
-    }
-  } finally {
-    modal.saving = false
-  }
+  if (!pendingWarningAction.value || hasBlockingConflicts.value || modal.saving) return
+  await persistAssignment(pendingWarningAction.value, true)
 }
 
 async function removeAssignmentFromModal() {
