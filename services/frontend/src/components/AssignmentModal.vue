@@ -434,12 +434,20 @@ function updateLeaderSelection(value: AutocompleteValue) {
 
 function cancelWarnConfirmation() {
   if (modal.saving) return
+  dismissWarnConfirmation()
+}
+
+function dismissWarnConfirmation() {
   conflictStore.cancelWarnConfirmation()
   pendingWarningAction.value = null
 }
 
 function closeModal() {
   if (modal.saving) return
+  dismissModal()
+}
+
+function dismissModal() {
   modal.open = false
   resetConflicts()
 }
@@ -493,7 +501,7 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
         action === 'confirm' ? 'CONFIRMED' : undefined,
       )
     }
-    closeModal()
+    dismissModal()
   } catch (e) {
     if (e instanceof ConflictError) {
       conflictStore.setConflicts(e.conflicts)
@@ -501,12 +509,12 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
       if (e.blocking.length === 0 && e.warnings.length > 0 && !confirmWarnings) {
         requestWarningConfirmation(action)
       } else {
-        cancelWarnConfirmation()
+        dismissWarnConfirmation()
       }
     } else {
       // The error belongs to the underlying assignment modal, not the teleported dialog.
       // Close the overlay so the user can actually see it and decide how to proceed.
-      cancelWarnConfirmation()
+      dismissWarnConfirmation()
       modal.error = e instanceof Error ? e.message : action === 'confirm'
         ? 'Fehler beim Bestaetigen'
         : 'Fehler beim Speichern'
@@ -526,7 +534,7 @@ async function removeAssignmentFromModal() {
   modal.error = ''
   try {
     await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
-    closeModal()
+    dismissModal()
   } catch (e) {
     modal.error = e instanceof Error ? e.message : 'Fehler beim Entfernen'
   } finally {
@@ -560,7 +568,7 @@ async function moveServiceDateTime() {
       end_at: localEnd.toISOString(),
     })
     await matrixStore.fetch()
-    closeModal()
+    dismissModal()
   } catch (e) {
     modal.moveError = e instanceof Error ? e.message : 'Verschieben fehlgeschlagen'
   } finally {

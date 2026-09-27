@@ -72,6 +72,7 @@ interface Props {
   options: AutocompleteOption[]
   modelValue: AutocompleteValue
   placeholder?: string
+  disabled?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), { placeholder: '', disabled: false })
