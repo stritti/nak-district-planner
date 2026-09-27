@@ -10,7 +10,7 @@
         <h2 class="modal-title">
           {{ modal.isGap ? 'Amtstragende:n zuweisen' : 'Zuweisung bearbeiten' }}
         </h2>
-        <button class="modal-close" @click="closeModal">
+        <button class="modal-close" :disabled="modal.saving" @click="closeModal">
           <XMarkIcon class="h-5 w-5" />
         </button>
       </div>
@@ -121,6 +121,7 @@
         :model-value="modal.leaderInput"
         @update:model-value="updateLeaderSelection"
         :options="autocompleteOptions"
+        :disabled="modal.saving"
         placeholder="Name eingeben oder auswählen…"
         class="mb-3"
       />
@@ -141,7 +142,7 @@
         >
           Entfernen
         </button>
-        <button class="btn-secondary" @click="closeModal">
+        <button class="btn-secondary" :disabled="modal.saving" @click="closeModal">
           Abbrechen
         </button>
         <button
@@ -423,6 +424,7 @@ function resetConflicts() {
 }
 
 function updateLeaderSelection(value: AutocompleteValue) {
+  if (modal.saving) return
   if (modal.leaderInput.id !== value.id || modal.leaderInput.text !== value.text) {
     resetConflicts()
     modal.error = ''
@@ -431,11 +433,13 @@ function updateLeaderSelection(value: AutocompleteValue) {
 }
 
 function cancelWarnConfirmation() {
+  if (modal.saving) return
   conflictStore.cancelWarnConfirmation()
   pendingWarningAction.value = null
 }
 
 function closeModal() {
+  if (modal.saving) return
   modal.open = false
   resetConflicts()
 }
