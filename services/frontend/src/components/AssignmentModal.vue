@@ -118,7 +118,7 @@
       <label class="form-label">Amtstragende:r</label>
       <AutocompleteInput
         ref="autocompleteRef"
-         :model-value="modal.leaderInput"
+        :model-value="modal.leaderInput"
         @update:model-value="updateLeaderSelection"
         :options="autocompleteOptions"
         placeholder="Name eingeben oder auswählen…"
