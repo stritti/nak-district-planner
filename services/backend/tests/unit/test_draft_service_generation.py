@@ -180,6 +180,14 @@ def test_expand_service_slots_is_timezone_aware_and_handles_dst() -> None:
     assert (slots[2].end_at_utc - slots[2].start_at_utc) == timedelta(minutes=90)
 
 
+def test_planning_time_is_utc_not_local() -> None:
+    """_planning_time_from_utc returns UTC wall-clock, matching all readers."""
+    from app.application.draft_service_generation import _planning_time_from_utc
+
+    assert _planning_time_from_utc(datetime(2026, 4, 1, 18, 0, tzinfo=UTC)) == time(18, 0)
+    assert _planning_time_from_utc(datetime(2026, 1, 4, 8, 30, tzinfo=UTC)) == time(8, 30)
+
+
 # ── Use case tests ──────────────────────────────────────────────────────
 
 

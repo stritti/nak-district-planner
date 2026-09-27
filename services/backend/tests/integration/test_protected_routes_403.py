@@ -233,8 +233,8 @@ def test_viewer_state_change_in_own_district_returns_200(auth_client):
 def test_viewer_get_events_in_own_district_returns_200(auth_client):
     client, auth_headers, district1 = auth_client
     with (
-        patch("app.adapters.api.routers.events_compat.SqlPlanningSlotRepository") as MockSlotRepo,
-        patch("app.adapters.api.routers.events_compat.SqlEventInstanceRepository") as MockInstRepo,
+        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository") as MockSlotRepo,
+        patch("app.adapters.api.routers.events.SqlEventInstanceRepository") as MockInstRepo,
     ):
         slot_repo = AsyncMock()
         slot_repo.list_for_date_range.return_value = []
@@ -505,7 +505,7 @@ def test_events_and_related_routes_return_403(
     overwrite_repo.get.return_value = SimpleNamespace(id=assignment_id, target_event_id=resource_id)
 
     with (
-        patch("app.adapters.api.routers.events_compat.SqlPlanningSlotRepository") as MockCompatSlot,
+        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository") as MockCompatSlot,
         patch(
             "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
         ) as MockAssignSlot,

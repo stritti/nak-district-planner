@@ -42,10 +42,7 @@ class CalDAVConnector(CalendarConnector):
         headers = {}
         if "access_token" in credentials:
             headers["Authorization"] = f"Bearer {credentials['access_token']}"
-        elif "username" in credentials and "password" in credentials:
-            # Basic auth will be handled by httpx if we pass username/password to client
-            pass
-        else:
+        elif not ("username" in credentials and "password" in credentials):
             raise CalendarConnectorError(
                 "CalDAV credentials must include either access_token or username/password"
             )
