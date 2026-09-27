@@ -299,7 +299,7 @@ test.describe('Conflict handling in assignment flow', () => {
   test('changing the leader discards a stale BLOCK and checks the replacement', async ({ page }) => {
     await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
     const bodies: Record<string, unknown>[] = []
-    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+    await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
       const body = route.request().postDataJSON() as Record<string, unknown>
       bodies.push(body)
@@ -334,7 +334,7 @@ test.describe('Conflict handling in assignment flow', () => {
   test('changing leader after WARN never sends an unreviewed override', async ({ page }) => {
     await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
     const bodies: Record<string, unknown>[] = []
-    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+    await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
       bodies.push(route.request().postDataJSON() as Record<string, unknown>)
       await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
@@ -360,7 +360,7 @@ test.describe('Conflict handling in assignment flow', () => {
   test('confirmation retry preserves CONFIRMED status', async ({ page }) => {
     await setupAuthAndMatrix(page, matrixResponse({ isGap: false, leaderName: 'Pr. Bestand' }))
     const bodies: Record<string, unknown>[] = []
-    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+    await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
       const body = route.request().postDataJSON() as Record<string, unknown>
       bodies.push(body)
@@ -390,7 +390,7 @@ test.describe('Conflict handling in assignment flow', () => {
   test('mixed BLOCK and WARN never offers an override, including for confirmation', async ({ page }) => {
     await setupAuthAndMatrix(page, matrixResponse({ isGap: false, leaderName: 'Pr. Bestand' }))
     let attempts = 0
-    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+    await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
       attempts++
       await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
@@ -413,7 +413,7 @@ test.describe('Conflict handling in assignment flow', () => {
   test('a failed warning override closes overlay and shows the error', async ({ page }) => {
     await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
     let attempts = 0
-    await page.route(/\\/api\\/v1\\/events\\/event-1\\/assignments(?:\\?.*)?$/, async (route) => {
+    await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
       attempts++
       await route.fulfill(attempts === 1 ? {
