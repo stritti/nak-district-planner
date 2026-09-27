@@ -443,7 +443,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         isRefreshStillCurrent,
         logout,
         adoptRotatedToken: (token, user) => {
-          authStore.setToken(token, user)
+          authStore.setToken(token, user ?? authStore.user)
           if (transientRetryTimer) clearTimeout(transientRetryTimer)
           transientRetryTimer = null
           setupRefreshTimer()
