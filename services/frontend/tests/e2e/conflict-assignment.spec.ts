@@ -295,6 +295,7 @@ test.describe('Conflict handling in assignment flow', () => {
     await expect(submit).toBeDisabled()
     expect(submitAttempts).toBe(1)
   })
+
   test('changing the leader discards a stale BLOCK and checks the replacement', async ({ page }) => {
     await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
     const bodies: Record<string, unknown>[] = []
@@ -435,5 +436,4 @@ test.describe('Conflict handling in assignment flow', () => {
     await expect(page.getByText(/Service temporarily unavailable/)).toBeVisible()
     expect(attempts).toBe(2)
   })
-
 })
