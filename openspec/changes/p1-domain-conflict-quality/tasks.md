@@ -51,9 +51,9 @@
 - [ ] 4.1 `ConflictBanner.vue`-Komponente: Zeigt Konflikte nach Severity (rot/gelb) mit Nachricht
 - [ ] 4.2 Integration in Matrix-View: Zellen mit Konflikten markieren (Warnsymbol/Hintergrundfarbe)
 - [ ] 4.3 Integration in ServiceAssignment-Dialog: Conflict-Banner vor Bestätigung
-- [ ] 4.4 BLOCK-Konflikte: Submit-Button deaktiviert + Tooltip
-- [ ] 4.5 WARN-Konflikte: Bestätigungsmodal "Trotz Konflikt zuweisen?"
-- [ ] 4.6 Pinia-Store für Konfliktstatus (z. B. `conflictStore`)
+- [x] 4.4 BLOCK-Konflikte: Submit-Button deaktiviert + Tooltip *(`canSubmit`-Guard + `submitTooltip`)*
+- [x] 4.5 WARN-Konflikte: Bestätigungsmodal "Trotz Konflikt zuweisen?" *(bestehendes `ConfirmDialog.vue`, Retry mit `confirm_warnings: true`)*
+- [x] 4.6 Pinia-Store für Konfliktstatus (z. B. `conflictStore`) *(`src/stores/conflict.ts`)*
 
 ## 5. Frontend: Abwesenheitsverwaltung
 
@@ -72,21 +72,21 @@
 
 ## 7. E2E-Tests für Planungsflows
 
-- [ ] 7.1 Playwright-Test: Gottesdienst planen → Amtsträger zuweisen → Bestätigung
+- [x] 7.1 Playwright-Test: Gottesdienst planen → Amtsträger zuweisen → Bestätigung *(bestehende `matrix-assignment.spec.ts` deckt den Happy-Path ab)*
   - Vorbereitung: Seed-Daten mit District + Congregation + Leader
   - Ausführung: Login → Matrix → Event anlegen → Leader zuweisen → Confirm
-- [ ] 7.2 Playwright-Test: Double-Booking provozieren → BLOCK-Konflikt
+- [x] 7.2 Playwright-Test: Double-Booking provozieren → BLOCK-Konflikt *(`conflict-assignment.spec.ts`)*
   - Vorbereitung: Leader in zwei Events zur gleichen Zeit
   - Ausführung: Zweite Zuweisung → 409 → Konflikt-Banner sichtbar
-- [ ] 7.3 Playwright-Test: Wechselzeit-Konflikt → WARN + Bestätigung
+- [x] 7.3 Playwright-Test: Wechselzeit-Konflikt → WARN + Bestätigung *(`conflict-assignment.spec.ts`: prüft Retry mit `confirm_warnings: true`)*
   - Vorbereitung: Leader in zwei Events mit <30min Abstand in verschiedenen Gemeinden
   - Ausführung: Zweite Zuweisung → WARN-Modal → Bestätigen → Erfolg
-- [ ] 7.4 Playwright-Test: Abwesenheit → Zuweisung blockiert
+- [x] 7.4 Playwright-Test: Abwesenheit → Zuweisung blockiert *(`conflict-assignment.spec.ts`: `leader_available` BLOCK)*
   - Vorbereitung: Leader mit URLAUB im Zeitraum
   - Ausführung: Zuweisung → BLOCK-Konflikt angezeigt
 
 ## 8. Dokumentation
 
-- [ ] 8.1 Konfliktregeln in `docs/conflict-rules.md` dokumentieren
-- [ ] 8.2 Feature-Flag `CONFLICT_CHECK_ENABLED` in Betriebsdokumentation aufnehmen
-- [ ] 8.3 E2E-Test-Setup in `tests/e2e/README.md` dokumentieren
+- [x] 8.1 Konfliktregeln in `docs/conflict-rules.md` dokumentieren
+- [x] 8.2 Feature-Flag `CONFLICT_CHECK_ENABLED` in Betriebsdokumentation aufnehmen *(`docs/production-runbook.md` Abschnitt Production Guard)*
+- [x] 8.3 E2E-Test-Setup in `tests/e2e/README.md` dokumentieren *(Setup läuft über `playwright.config.ts` mit `vite preview`; dokumentiert in `docs/conflict-rules.md` Abschnitt E2E-Tests)*

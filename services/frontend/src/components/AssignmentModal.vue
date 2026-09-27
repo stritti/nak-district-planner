@@ -448,11 +448,13 @@ async function persistAssignment(confirmWarnings = false) {
     if (e instanceof ConflictError) {
       conflictStore.setConflicts(e.conflicts)
       modal.error = ''
+      if (conflictStore.warnings.length > 0) {
+        conflictStore.beginWarnConfirmation()
+      }
     } else {
       modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
     }
   } finally {
-    conflictStore.cancelWarnConfirmation()
     modal.saving = false
   }
 }
@@ -485,11 +487,13 @@ async function confirmAssignment() {
     if (e instanceof ConflictError) {
       conflictStore.setConflicts(e.conflicts)
       modal.error = ''
+      if (conflictStore.warnings.length > 0) {
+        conflictStore.beginWarnConfirmation()
+      }
     } else {
       modal.error = e instanceof Error ? e.message : 'Fehler beim Bestaetigen'
     }
   } finally {
-    conflictStore.cancelWarnConfirmation()
     modal.saving = false
   }
 }
