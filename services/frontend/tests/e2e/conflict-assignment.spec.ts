@@ -144,7 +144,7 @@ async function setupAuthAndMatrix(
   })
 }
 
-test.describe('Conflict handling in assignment flow', () => {
+test.describe('Mocked conflict UI contract in assignment flow', () => {
   test('BLOCK conflict (double booking) shows banner and disables submit', async ({ page }) => {
     await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
     let submitAttempts = 0
@@ -436,4 +436,67 @@ test.describe('Conflict handling in assignment flow', () => {
     await expect(page.getByText(/Service temporarily unavailable/)).toBeVisible()
     expect(attempts).toBe(2)
   })
+  test('submits a selected leader ID when the server reports a conflict', async ({ page }) => {
+    await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
+    await page.route('**/api/v1/districts/district-1/leaders', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+        { id: 'leader-1', name: 'Max Beispiel', rank: 'Pr.', congregation_id: 'cong-1', is_active: true },
+      ]) })
+    })
+    const requests: Record<string, unknown>[] = []
+    await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      requests.push(route.request().postDataJSON() as Record<string, unknown>)
+      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
+        detail: { conflicts: [{ rule_id: 'no_double_booking', severity: 'BLOCK',
+          message: 'Bereits zugewiesen', details: {} }] },
+      }) })
+    })
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    await page.getByRole('button', { name: /LÜCKE/i }).click()
+    await page.getByRole('combobox').last().fill('Max Beispiel')
+    await page.getByRole('option', { name: /Max Beispiel/i }).click()
+    await page.getByTestId('submit-assignment').click()
+    await expect(page.getByTestId('conflict-banner')).toBeVisible()
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ leader_id: 'leader-1' })
+  })
+
+  test('locks leader and cancellation while a warning override is pending', async ({ page }) => {
+    await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
+    let releaseOverride: (() => void) | undefined
+    const overrideStarted = new Promise<void>((resolve) => {
+      page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
+        if (route.request().method() !== 'POST') return route.fallback()
+        const body = route.request().postDataJSON() as Record<string, unknown>
+        if (body.confirm_warnings) {
+          await new Promise<void>((release) => { releaseOverride = release; resolve() })
+          await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({
+            id: 'assignment-1', event_id: 'event-1', leader_id: null,
+            leader_name: 'Pr. Beispiel', status: 'ASSIGNED',
+          }) })
+        } else {
+          await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
+            detail: { conflicts: [{ rule_id: 'travel_time_check', severity: 'WARN',
+              message: 'Wechselzeit', details: {} }] },
+          }) })
+        }
+      })
+    })
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    await page.getByRole('button', { name: /LÜCKE/i }).click()
+    const input = page.getByPlaceholder(/Name eingeben/i)
+    await input.fill('Pr. Beispiel')
+    await page.getByTestId('submit-assignment').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByRole('button', { name: 'Trotzdem zuweisen' }).click()
+    await overrideStarted
+    await expect(input).toBeDisabled()
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'Abbrechen' })).toBeDisabled()
+    await page.getByRole('dialog').press('Escape')
+    await expect(page.getByRole('dialog')).toBeVisible()
+    releaseOverride?.()
+    await expect(page.getByRole('dialog')).toBeHidden()
+  })
+
 })
