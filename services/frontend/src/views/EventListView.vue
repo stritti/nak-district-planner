@@ -157,6 +157,20 @@
           </select>
         </div>
 
+        <!-- Typ (Gottesdienst / andere Ereignisse) -->
+        <div class="w-full sm:w-auto">
+          <label class="filter-label">Typ</label>
+          <select
+            v-model="selectedType"
+            class="form-select px-2"
+            @change="onFilterChange"
+          >
+            <option value="">Alle</option>
+            <option value="service">Gottesdienste</option>
+            <option value="other">Andere Ereignisse</option>
+          </select>
+        </div>
+
         <!-- Datumsfelder: nur in der Listenansicht -->
         <template v-if="viewMode === 'list'">
           <div class="w-full sm:w-auto">
@@ -222,6 +236,7 @@
           </p>
           <div class="mt-2 flex items-center gap-1.5 flex-wrap">
             <span :class="statusClass(event.status)" class="badge">{{ statusLabel(event.status) }}</span>
+            <span v-if="event.is_service" class="badge bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">Gottesdienst</span>
             <EventApprovalStatusBadge v-if="event.approval_status" :status="event.approval_status" />
             <span
               class="badge"
@@ -245,6 +260,7 @@
               <th class="table-th">Zuordnung</th>
               <th class="table-th">Einladung</th>
               <th class="table-th">Status</th>
+              <th class="table-th">Typ</th>
               <th class="table-th">Freigabe</th>
               <th class="table-th">Quelle</th>
               <th class="table-th"></th>
@@ -252,13 +268,13 @@
           </thead>
           <tbody>
             <tr v-if="eventsStore.loading">
-              <td colspan="9" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
+              <td colspan="10" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
             </tr>
             <tr v-else-if="eventsStore.error">
-              <td colspan="9" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
+              <td colspan="10" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
             </tr>
             <tr v-else-if="eventsStore.items.length === 0">
-              <td colspan="9" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
+              <td colspan="10" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
             </tr>
             <tr
               v-else
@@ -287,6 +303,9 @@
                 <span :class="statusClass(event.status)" class="badge">
                   {{ statusLabel(event.status) }}
                 </span>
+              </td>
+              <td class="px-4 py-3">
+                <span v-if="event.is_service" class="badge bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">Gottesdienst</span>
               </td>
               <td class="px-4 py-3">
                 <EventApprovalStatusBadge v-if="event.approval_status" :status="event.approval_status" />
@@ -663,21 +682,25 @@ async function fetchCalendar() {
     if (selectedGroupId.value)        params.group_id        = selectedGroupId.value
     if (selectedStatus.value)         params.status          = selectedStatus.value
     if (selectedApprovalStatus.value) params.approval_status = selectedApprovalStatus.value
+    if (selectedType.value === 'service')      params.is_service = true
+    else if (selectedType.value === 'other')   params.is_service = false
     const res = await listEvents(params)
     let events = res.items
 
     // Bei Gemeinde-Filter: Feiertage des Bezirks zusätzlich laden (keine congregation_id-Einschränkung)
     if (selectedCongregationId.value && districtsStore.selectedDistrictId) {
-      const feierRes = await listEvents({
-        district_id: districtsStore.selectedDistrictId,
-        from_dt: from,
-        to_dt: to,
-        limit: 500,
-        offset: 0,
-      })
-      const existing = new Set(events.map(e => e.id))
-      const feiertage = feierRes.items.filter(e => e.category === 'Feiertag' && !existing.has(e.id))
-      events = [...events, ...feiertage]
+      if (selectedType.value !== 'service') {
+        const feierRes = await listEvents({
+          district_id: districtsStore.selectedDistrictId,
+          from_dt: from,
+          to_dt: to,
+          limit: 500,
+          offset: 0,
+        })
+        const existing = new Set(events.map(e => e.id))
+        const feiertage = feierRes.items.filter(e => e.category === 'Feiertag' && !existing.has(e.id))
+        events = [...events, ...feiertage]
+      }
     }
 
     calendarEvents.value = events
@@ -768,6 +791,7 @@ const selectedCongregationId = ref('')
 const selectedGroupId        = ref('')
 const selectedStatus         = ref<PlanningSlotStatus | ''>('')
 const selectedApprovalStatus = ref<EventApprovalStatus | ''>('')
+const selectedType           = ref<'' | 'service' | 'other'>('')
 const fromDate               = ref('')
 const toDate                 = ref('')
 
@@ -840,6 +864,7 @@ function applyFilters() {
     only_district_level: isDistrictOnly,
     status:          selectedStatus.value || undefined,
     approval_status: selectedApprovalStatus.value || undefined,
+    is_service:      selectedType.value === 'service' ? true : selectedType.value === 'other' ? false : undefined,
     from_dt: fromDate.value || undefined,
     to_dt:   toDate.value   || undefined,
   })
@@ -899,7 +924,7 @@ function statusClass(s: PlanningSlotStatus): string {
 function eventPillClass(event: EventResponse): string {
   if (event.category === 'Feiertag')   return 'bg-amber-100 text-amber-800'
   if (event.status === 'CANCELLED')    return 'bg-red-100 text-red-600 line-through'
-  if (event.category === 'Gottesdienst') return 'bg-blue-100 text-blue-800'
+  if (event.is_service)                return 'bg-blue-100 text-blue-800'
   return 'bg-gray-100 text-gray-700'
 }
 

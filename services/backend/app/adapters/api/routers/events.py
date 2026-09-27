@@ -34,6 +34,8 @@ from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
+SERVICE_CATEGORY = "Gottesdienst"
+
 
 def _to_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
@@ -53,6 +55,7 @@ class EventResponse(BaseModel):
     district_id: uuid.UUID
     congregation_id: uuid.UUID | None
     category: str | None
+    is_service: bool
     source: EventSource
     status: PlanningSlotStatus
     approval_status: EventApprovalStatus | None
@@ -119,6 +122,7 @@ def _slot_to_event(slot: PlanningSlot, instance: EventInstance | None) -> EventR
         district_id=slot.district_id,
         congregation_id=slot.congregation_id,
         category=slot.category,
+        is_service=slot.category == SERVICE_CATEGORY,
         source=instance.source if instance else EventSource.INTERNAL,
         status=slot.status,
         approval_status=slot.approval_status,
@@ -151,6 +155,7 @@ async def list_events(
     only_district_level: bool = Query(False),
     status_filter: PlanningSlotStatus | None = Query(None, alias="status"),
     approval_status: EventApprovalStatus | None = Query(None),
+    is_service: bool | None = Query(None),
     from_dt: datetime | None = Query(None),
     to_dt: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
@@ -207,6 +212,9 @@ async def list_events(
 
     if approval_status is not None:
         all_slots = [s for s in all_slots if s.approval_status == approval_status]
+
+    if is_service is not None:
+        all_slots = [s for s in all_slots if (s.category == SERVICE_CATEGORY) == is_service]
 
     total = len(all_slots)
     page = all_slots[offset : offset + limit]

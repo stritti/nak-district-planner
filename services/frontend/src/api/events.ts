@@ -14,6 +14,7 @@ export interface EventResponse {
   district_id: string
   congregation_id: string | null
   category: string | null
+  is_service: boolean
   source: EventSource
   status: PlanningSlotStatus
   approval_status: EventApprovalStatus | null
@@ -39,6 +40,7 @@ export interface EventListParams {
   only_district_level?: boolean
   status?: PlanningSlotStatus
   approval_status?: EventApprovalStatus
+  is_service?: boolean
   from_dt?: string
   to_dt?: string
   limit?: number
@@ -71,6 +73,7 @@ export function listEvents(params: EventListParams = {}): Promise<EventListRespo
   if (params.only_district_level === true) query.set('only_district_level', 'true')
   if (params.status) query.set('status', params.status)
   if (params.approval_status) query.set('approval_status', params.approval_status)
+  if (params.is_service !== undefined) query.set('is_service', String(params.is_service))
   if (params.from_dt) query.set('from_dt', params.from_dt)
   if (params.to_dt) query.set('to_dt', params.to_dt)
   if (params.limit !== undefined) query.set('limit', String(params.limit))
