@@ -209,6 +209,7 @@ export async function runRefreshOperation(options: {
   }
 
   const logoutIfRefreshStillCurrent = (): void => {
+    pruneRotatedTokens(rotatedTokens)
     const rotated = rotatedTokens.get(refreshTokenUsed)
     if (rotated && isRefreshStillCurrent()) {
       adoptRotatedToken(rotated.token, rotated.user)
