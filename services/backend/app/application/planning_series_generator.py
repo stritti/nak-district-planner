@@ -154,20 +154,23 @@ class PlanningSeriesGenerator:
             )
 
             for gslot in generated:
+                # The recurrence time is local wall-clock time; the slot
+                # stores the UTC instant (DST-aware per date).
+                local_time = (
+                    datetime.combine(gslot.planning_date, datetime.min.time()) + gslot.planning_time
+                ).time()
+                start_utc = datetime.combine(
+                    gslot.planning_date, local_time, tzinfo=ZoneInfo(self._timezone_name)
+                ).astimezone(UTC)
                 # Check if slot already exists for this date/series/congregation
                 existing_slot = await self._slot_repo.get_by_series_date(
                     series_id=series.id,
-                    planning_date=gslot.planning_date,
+                    planning_date=start_utc.date(),
                     congregation_id=series.congregation_id,
                 )
                 if existing_slot is not None:
                     skipped += 1
                     continue
-
-                # Create PlanningSlot
-                planning_time = (
-                    datetime.combine(gslot.planning_date, datetime.min.time()) + gslot.planning_time
-                ).time()
 
                 slot = PlanningSlot.create(
                     series_id=series.id,
@@ -175,8 +178,8 @@ class PlanningSeriesGenerator:
                     congregation_id=series.congregation_id,
                     category=gslot.category or series.category,
                     title=gslot.title,
-                    planning_date=gslot.planning_date,
-                    planning_time=planning_time,
+                    planning_date=start_utc.date(),
+                    planning_time=start_utc.timetz().replace(tzinfo=None),
                     status=PlanningSlotStatus.ACTIVE,
                 )
                 await self._slot_repo.save(slot)
@@ -185,11 +188,8 @@ class PlanningSeriesGenerator:
                 instance = EventInstance.create(
                     planning_slot_id=slot.id,
                     title=gslot.title or "Gottesdienst",
-                    actual_start_at=datetime.combine(
-                        gslot.planning_date, planning_time, tzinfo=UTC
-                    ),
-                    actual_end_at=datetime.combine(gslot.planning_date, planning_time, tzinfo=UTC)
-                    + _DEFAULT_EVENT_DURATION,
+                    actual_start_at=start_utc,
+                    actual_end_at=start_utc + _DEFAULT_EVENT_DURATION,
                     source=EventSource.INTERNAL,
                     visibility=EventVisibility.INTERNAL,
                     deviation_flag=False,

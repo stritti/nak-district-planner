@@ -116,14 +116,13 @@ const submitted = ref(false)
 async function countPlanned() {
   if (!selectedMonth.value) return
   const [year, month] = selectedMonth.value.split('-').map(Number)
-  const fromDt = new Date(year, month - 1, 1)
-  const toDt = new Date(year, month, 0, 23, 59, 59)
+  const lastDay = new Date(year, month, 0).getDate()
   try {
     const res = await listEvents({
       district_id: props.districtId,
       approval_status: 'PLANNED',
-      from_dt: fromDt.toISOString(),
-      to_dt: toDt.toISOString(),
+      from_dt: `${year}-${String(month).padStart(2, '0')}-01`,
+      to_dt: `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
       limit: 1,
       offset: 0,
     })

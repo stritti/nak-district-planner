@@ -19,8 +19,8 @@ export default defineConfig({
         "src/composables/oidcToken.ts",
         "src/composables/oidcRefresh.ts",
       ],
-      perFile: true,
       thresholds: {
+        perFile: true,
         statements: 80,
         branches: 80,
         functions: 80,
