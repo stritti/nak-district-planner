@@ -49,8 +49,7 @@ describe('LeaderUnavailabilityForm', () => {
     await wrapper.find('[data-testid="unavailability-reason-select"]').setValue('URLAUB')
     await wrapper.find('form').trigger('submit')
     const payload = wrapper.emitted('submit')![0]![0] as { end_at: string; note: null }
-    const end = new Date(payload.end_at)
-    expect([end.getHours(), end.getMinutes(), end.getSeconds(), end.getMilliseconds()]).toEqual([23, 59, 59, 999])
+    expect(payload.end_at).toBe('2026-05-01T21:59:59.999Z')
     expect(payload.note).toBeNull()
     wrapper.vm.reset()
     await wrapper.find('form').trigger('submit')
@@ -115,7 +114,7 @@ describe('LeaderUnavailabilityForm', () => {
     expect(payload.leader_id).toBe('leader-1')
     expect(payload.reason).toBe('URLAUB')
     expect(payload.note).toBe('Familienurlaub')
-    expect(new Date(payload.start_at).getUTCFullYear()).toBe(2026)
+    expect(payload.start_at).toBe('2026-04-30T22:00:00.000Z')
     expect(new Date(payload.end_at).getTime()).toBeGreaterThan(new Date(payload.start_at).getTime())
   })
 
