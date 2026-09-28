@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
+from app.adapters.calendar.deletion import delete_resource
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -184,10 +186,31 @@ class CalDAVConnector(CalendarConnector):
                         description=description,
                         content_hash=_content_hash(uid, start_at, end_at, title),
                         is_cancelled=is_cancelled,
+                        revision_marker=resp.findtext("D:getetag", namespaces=namespaces)
+                        or resp.findtext(".//D:getetag", namespaces=namespaces),
+                        resource_id=resp.findtext("D:href", namespaces=namespaces),
                     )
                 )
 
         return events
+
+    async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
+        if not event.resource_id:
+            raise CalendarConnectorError("CalDAV resource href fehlt")
+        base = credentials["url"].rstrip("/") + "/"
+        url = urljoin(base, event.resource_id)
+        source, target = urlsplit(base), urlsplit(url)
+        if (source.scheme, source.netloc) != (target.scheme, target.netloc) or not target.path.startswith(source.path):
+            raise CalendarConnectorError("CalDAV resource liegt außerhalb des Kalenders")
+        headers = {}
+        if event.revision_marker:
+            headers["If-Match"] = event.revision_marker
+        if "access_token" in credentials:
+            headers["Authorization"] = f"Bearer {credentials['access_token']}"
+        await delete_resource(
+            self._client, url, headers=headers,
+            auth=(credentials["username"], credentials["password"]) if "username" in credentials else None,
+        )
 
     def _format_datetime(self, dt: datetime | None) -> str:
         """Format datetime for CalDAV time-range format."""

@@ -173,11 +173,12 @@ def mocks():
             "app.application.sync_service.decrypt_credentials",
             MagicMock(return_value={"url": "https://example.com/cal.ics"}),
         ),
-        patch("app.application.sync_service._compute_content_hash", compute_hash),
     ]
 
     for p in patchers:
         p.start()
+
+    slot_repo.get.return_value = None
 
     # Prevent auto-matching by default (no existing planning slots to match)
     slot_repo.list_for_date_range = AsyncMock(return_value=[])
@@ -201,6 +202,76 @@ def mocks():
 
 class TestRunSync:
     """Test suite for run_sync() with mocked repositories and connector."""
+
+    @pytest.mark.parametrize("hard_delete", [False, True])
+    async def test_cancel_with_unchanged_hash_and_duplicate_delivery(self, mocks, monkeypatch, hard_delete):
+        from app.config import settings
+        from app.domain.services.sync_policy import SyncDeleteMode
+
+        monkeypatch.setattr(settings, "sync_delete_mode", SyncDeleteMode.HARD_DELETE if hard_delete else SyncDeleteMode.MARK_CANCELLED)
+        slot = _make_slot()
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=_hash("uid@test"))
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [_raw(is_cancelled=True)]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        assert (await run_sync(_INT_ID, mocks["session"])).cancelled == 1
+        assert (await run_sync(_INT_ID, mocks["session"])).cancelled == 0
+        if hard_delete:
+            assert link.event_instance_id is None
+            mocks["slot_repo"].delete.assert_awaited_once_with(slot.id)
+        else:
+            assert slot.status == PlanningSlotStatus.CANCELLED
+
+    @pytest.mark.parametrize("cancelled", [False, True])
+    async def test_concurrent_edits_preserve_internal_data(self, mocks, cancelled):
+        instance = _make_event_instance(title="Internal edit")
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(event_instance_id=instance.id, last_synced_hash="acknowledged")
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [_raw(is_cancelled=cancelled)]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        await run_sync(_INT_ID, mocks["session"])
+        assert instance.title == "Internal edit"
+        assert instance.sync_state == SyncState.CONFLICT
+        assert link.last_synced_hash == "acknowledged"
+        mocks["slot_repo"].delete.assert_not_awaited()
+
+    async def test_internal_cancel_is_pushed_once(self, mocks):
+        integration = _integration()
+        integration.capabilities.append(CalendarCapability.WRITE)
+        slot = _make_slot()
+        slot.status = PlanningSlotStatus.CANCELLED
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(event_instance_id=instance.id)
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw()]
+        mocks["connector"].delete_event = AsyncMock()
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+        await run_sync(_INT_ID, mocks["session"])
+        await run_sync(_INT_ID, mocks["session"])
+        mocks["connector"].delete_event.assert_awaited_once()
+        assert link.revision_marker == "internal:deleted"
+
+    async def test_external_time_change_sets_deviation_without_moving_slot(self, mocks):
+        from datetime import time
+        slot = _make_slot(planning_time=time(7))
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [_raw()]
+        mocks["link_repo"].get_by_external_event.return_value = _make_link(event_instance_id=instance.id)
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+        await run_sync(_INT_ID, mocks["session"])
+        assert instance.deviation_flag
+        assert slot.planning_time == time(7)
 
     async def test_integration_not_found_raises(self, mocks):
         """Integration lookup returns None → ValueError."""

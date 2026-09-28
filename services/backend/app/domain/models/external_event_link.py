@@ -16,7 +16,7 @@ class ExternalEventLink:
     """
 
     id: uuid.UUID
-    event_instance_id: uuid.UUID
+    event_instance_id: uuid.UUID | None
     provider: str  # e.g. "ICAL", "GOOGLE", "MICROSOFT", "CALDAV"
     external_event_id: str  # Stable UID from the external calendar
     calendar_integration_id: uuid.UUID  # scopes the link to one integration

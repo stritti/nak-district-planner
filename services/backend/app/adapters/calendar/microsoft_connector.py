@@ -9,11 +9,13 @@ Credentials format: {"access_token": "EwBgA8l6BAAUE..."}
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
+from app.adapters.calendar.deletion import delete_resource
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -44,7 +46,7 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
             params["startDateTime"] = from_dt.isoformat()
         if to_dt is not None:
             params["endDateTime"] = to_dt.isoformat()
-        params["$select"] = "subject,start,end,bodyPreview,iCalUId,status"
+        params["$select"] = "id,subject,start,end,bodyPreview,iCalUId,isCancelled,changeKey"
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -80,6 +82,10 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
             try:
                 start_at = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
                 end_at = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                if start_at.tzinfo is None:
+                    start_at = start_at.replace(tzinfo=UTC)
+                if end_at.tzinfo is None:
+                    end_at = end_at.replace(tzinfo=UTC)
             except ValueError:
                 # If parsing fails, skip this event
                 continue
@@ -90,7 +96,7 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
 
             # Microsoft Graph uses status field; cancelled events have status="cancelled"
             status = item.get("status")
-            is_cancelled = status == "cancelled"
+            is_cancelled = item.get("isCancelled", False) or status == "cancelled"
 
             # Optional client-side time-window filtering
             if from_dt is not None and end_at < from_dt:
@@ -107,7 +113,21 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
                     description=description,
                     content_hash=_content_hash(uid, start_at, end_at, title),
                     is_cancelled=is_cancelled,
+                    revision_marker=item.get("@odata.etag"),
+                    resource_id=item.get("id"),
                 )
             )
 
         return events
+
+    async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
+        if not event.resource_id:
+            raise CalendarConnectorError("Microsoft resource ID fehlt")
+        headers = {"Authorization": f"Bearer {credentials['access_token']}"}
+        if event.revision_marker:
+            headers["If-Match"] = event.revision_marker
+        await delete_resource(
+            self._client,
+            f"https://graph.microsoft.com/v1.0/me/events/{quote(event.resource_id, safe='')}",
+            headers=headers,
+        )

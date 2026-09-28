@@ -11,9 +11,11 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
+from app.adapters.calendar.deletion import delete_resource
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -40,6 +42,7 @@ class GoogleCalendarConnector(CalendarConnector):
         url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 
         params: dict[str, Any] = {
+            "showDeleted": True,
             "singleEvents": True,
             "orderBy": "startTime",
         }
@@ -127,7 +130,19 @@ class GoogleCalendarConnector(CalendarConnector):
                     description=description,
                     content_hash=_content_hash(uid, start_at, end_at, title),
                     is_cancelled=is_cancelled,
+                    revision_marker=item.get("etag"),
+                    resource_id=uid,
                 )
             )
 
         return events
+
+    async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
+        headers = {"Authorization": f"Bearer {credentials['access_token']}"}
+        if event.revision_marker:
+            headers["If-Match"] = event.revision_marker
+        await delete_resource(
+            self._client,
+            f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{quote(event.uid, safe='')}",
+            headers=headers,
+        )

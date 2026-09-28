@@ -25,6 +25,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector
@@ -36,11 +37,18 @@ from app.adapters.db.repositories.event_instance import SqlEventInstanceReposito
 from app.adapters.db.repositories.external_event_link import SqlExternalEventLinkRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.crypto import decrypt_credentials
-from app.domain.models.calendar_integration import CalendarType
+from app.config import settings
+from app.domain.models.calendar_integration import CalendarCapability, CalendarType
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
 from app.domain.models.external_event_link import ExternalEventLink
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.calendar import CalendarConnector
+from app.domain.services.sync_policy import (
+    SyncDeleteMode,
+    SyncFieldAuthority,
+    classify_field,
+    inbound_state,
+)
 
 
 @dataclass
@@ -133,6 +141,10 @@ def _has_significant_deviation(slot: PlanningSlot, event_start: datetime) -> boo
 
 async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResult:
     """Sync one CalendarIntegration. Returns {created, updated, cancelled, auto_matched}."""
+    # Serialize duplicate deliveries per integration, including first-time mappings.
+    # The transaction owning this session releases the lock on commit/rollback.
+    lock_key = int.from_bytes(integration_id.bytes[:8], "big", signed=True)
+    await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
     integration_repo = SqlCalendarIntegrationRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
     slot_repo = SqlPlanningSlotRepository(session)
@@ -158,8 +170,8 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                 calendar_integration_id=integration_id,
             )
 
-            # content_hash is always set by the connector; use it directly.
-            new_content_hash = raw.content_hash
+            # Provider hashes may omit descriptions. Hash normalized business data here.
+            new_content_hash = _compute_content_hash(raw)
 
             if existing_link is None:
                 # ── NEW external event ──
@@ -245,16 +257,39 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
 
             else:
                 # ── EXISTING external event ──
+                if existing_link.event_instance_id is None or existing_link.revision_marker == "internal:deleted":
+                    continue  # Durable tombstone: never re-import a deleted mapping.
                 instance = await instance_repo.get(existing_link.event_instance_id)
                 if instance is None:
                     continue
 
-                if existing_link.last_synced_hash == new_content_hash:
-                    continue  # Unchanged — skip
+                slot = await slot_repo.get(instance.planning_slot_id)
+                if (slot and slot.status == PlanningSlotStatus.CANCELLED
+                        and instance.sync_state == SyncState.DIRTY_INTERNAL
+                        and CalendarCapability.WRITE in integration.capabilities):
+                    await connector.delete_event(credentials, raw)
+                    existing_link.revision_marker = "internal:deleted"
+                    existing_link.last_synced_hash = new_content_hash
+                    existing_link.updated_at = datetime.now(UTC)
+                    await link_repo.save(existing_link)
+                    instance.sync_state = SyncState.CLEAN
+                    await instance_repo.save(instance)
+                    cancelled += 1
+                    continue
 
                 if raw.is_cancelled:
+                    if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
+                        instance.sync_state = SyncState.CONFLICT
+                        await instance_repo.save(instance)
+                        continue
                     # Mark slot as CANCELLED
-                    slot = await slot_repo.get(instance.planning_slot_id)
+                    if slot and settings.sync_delete_mode == SyncDeleteMode.HARD_DELETE:
+                        existing_link.event_instance_id = None
+                        existing_link.last_synced_hash = new_content_hash
+                        await link_repo.save(existing_link)
+                        await slot_repo.delete(slot.id)
+                        cancelled += 1
+                        continue
                     if slot and slot.status != PlanningSlotStatus.CANCELLED:
                         slot.status = PlanningSlotStatus.CANCELLED
                         slot.updated_at = datetime.now(UTC)
@@ -266,19 +301,36 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                     await link_repo.save(existing_link)
                     continue
 
+                if existing_link.last_synced_hash == new_content_hash:
+                    continue  # Unchanged — skip
+
+                next_state = inbound_state(instance.sync_state, changed=True)
+                if next_state == SyncState.CONFLICT:
+                    instance.sync_state = next_state
+                    await instance_repo.save(instance)
+                    continue  # Keep the acknowledged hash so this change can be retried.
+
                 # Update EventInstance fields
-                instance.title = raw.title
-                instance.actual_start_at = raw.start_at
-                instance.actual_end_at = raw.end_at
-                instance.description = raw.description
+                incoming = {
+                    "title": raw.title,
+                    "actual_start_at": raw.start_at,
+                    "actual_end_at": raw.end_at,
+                    "description": raw.description,
+                }
+                for field, value in incoming.items():
+                    if classify_field(field) != SyncFieldAuthority.STRUCTURAL:
+                        setattr(instance, field, value)
                 instance.source = EventSource.EXTERNAL
-                instance.sync_state = SyncState.DIRTY_EXTERNAL
+                instance.sync_state = next_state
+                if slot:
+                    instance.deviation_flag = _has_significant_deviation(slot, raw.start_at)
                 instance.content_hash = new_content_hash
                 instance.last_external_modified_at = datetime.now(UTC)
                 instance.updated_at = datetime.now(UTC)
                 await instance_repo.save(instance)
 
                 existing_link.last_synced_hash = new_content_hash
+                existing_link.revision_marker = raw.revision_marker
                 existing_link.updated_at = datetime.now(UTC)
                 await link_repo.save(existing_link)
                 updated += 1

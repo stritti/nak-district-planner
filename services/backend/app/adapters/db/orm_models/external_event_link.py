@@ -18,10 +18,10 @@ class ExternalEventLinkORM(Base):
     __tablename__ = "external_event_links"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    event_instance_id: Mapped[uuid.UUID] = mapped_column(
+    event_instance_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("event_instances.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("event_instances.id", ondelete="SET NULL"),
+        nullable=True,
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     external_event_id: Mapped[str] = mapped_column(String(500), nullable=False)

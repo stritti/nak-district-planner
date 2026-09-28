@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 
-from app.domain.models.event_instance import EventInstance
+from app.domain.models.event_instance import EventInstance, SyncState
 from app.domain.models.planning_slot import PlanningSlot
 from app.domain.ports.repositories import (
     EventInstanceRepository,
     PlanningSlotRepository,
 )
+from app.domain.services.sync_policy import internal_state
 
 
 class DeviationService:
@@ -41,6 +42,7 @@ class DeviationService:
         return datetime.combine(
             slot.planning_date,
             slot.planning_time,
+            tzinfo=UTC,
         )
 
     def _calculate_expected_end(
@@ -67,9 +69,8 @@ class DeviationService:
         expected_start = self._calculate_expected_start(slot)
         expected_end = self._calculate_expected_end(slot, duration_minutes)
 
-        # Compare with actual times (ignoring timezone for comparison)
-        actual_start = instance.actual_start_at.replace(tzinfo=None)
-        actual_end = instance.actual_end_at.replace(tzinfo=None)
+        actual_start = instance.actual_start_at
+        actual_end = instance.actual_end_at
 
         return actual_start != expected_start or actual_end != expected_end
 
@@ -157,7 +158,7 @@ class DeviationService:
             return False
 
         # Update instance times to match slot
-        expected_start = datetime.combine(slot.planning_date, slot.planning_time)
+        expected_start = datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
         # Use same duration as current instance
         duration = instance.actual_end_at - instance.actual_start_at
         expected_end = expected_start + duration
@@ -165,6 +166,9 @@ class DeviationService:
         instance.actual_start_at = expected_start
         instance.actual_end_at = expected_end
         instance.deviation_flag = False
+        instance.updated_at = datetime.now(UTC)
+        instance.last_internal_modified_at = instance.updated_at
+        instance.sync_state = SyncState.DIRTY_INTERNAL
 
         await self._instance_repo.save(instance)
         return True
@@ -203,8 +207,8 @@ class DeviationService:
         expected_start = self._calculate_expected_start(slot)
         expected_end = self._calculate_expected_end(slot, duration_minutes)
 
-        actual_start = instance.actual_start_at.replace(tzinfo=None)
-        actual_end = instance.actual_end_at.replace(tzinfo=None)
+        actual_start = instance.actual_start_at
+        actual_end = instance.actual_end_at
 
         return {
             "has_deviation": True,
