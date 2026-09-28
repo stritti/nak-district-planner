@@ -43,6 +43,7 @@
               <td class="table-td py-2 text-gray-500 dark:text-gray-400">{{ item.note ?? '—' }}</td>
               <td class="table-td py-2 text-right">
                 <button
+                  v-if="canDelete"
                   class="btn-icon hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400"
                   title="Löschen"
                   aria-label="Abwesenheit löschen"
@@ -75,6 +76,7 @@ const props = defineProps<{
   leaders: LeaderResponse[]
   loading?: boolean
   presetLeaderId?: string | null
+  canDelete?: boolean
 }>()
 
 const emit = defineEmits<{
