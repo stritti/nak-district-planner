@@ -12,6 +12,8 @@
 - [x] 2.3 Link ExternalEventLink to EventInstance
 - [ ] 2.4 Add repository support to list active links by integration/reconciliation scope
 - [ ] 2.5 Define durable tombstone lifecycle and audit timestamps
+- [ ] 2.6 Add explicit ACTIVE/SYNC_TOMBSTONE state (with deletion origin/reason); never infer tombstone intent from event_instance_id IS NULL
+- [ ] 2.7 Audit non-sync EventInstance deletion flows to remove links or deliberately enter the sync-deletion transition
 
 ## 3. Field-aware State Machine
 
@@ -77,3 +79,5 @@
 - [ ] 9.10 Test transport and credential failures remain isolated and observable
 - [ ] 9.11 Test repeated cancellation produces no recurring writes
 - [ ] 9.12 Test auto-match without EventInstance does not duplicate PlanningSlot
+- [ ] 9.13 Test non-sync EventInstance deletion cannot create a synchronization tombstone
+- [ ] 9.14 Test only explicit sync HARD_DELETE transitions a link to SYNC_TOMBSTONE
