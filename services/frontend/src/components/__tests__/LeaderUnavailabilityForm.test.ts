@@ -32,7 +32,7 @@ describe('LeaderUnavailabilityForm', () => {
     const wrapper = mountForm()
     await wrapper.setProps({ leaders: [] })
     await wrapper.find('form').trigger('submit')
-    expect(wrapper.text()).toContain('Bitte eine Amtsträger:in wählen.')
+    expect(wrapper.text()).toContain('Keine Amtsträger:innen vorhanden.')
     expect(wrapper.emitted('submit')).toBeUndefined()
   })
 

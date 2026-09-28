@@ -13,6 +13,15 @@ export function unavailabilityReasonLabel(reason: UnavailabilityReason): string 
   return UNAVAILABILITY_REASONS.find((r) => r.value === reason)?.label ?? reason
 }
 
+export function formatUnavailabilityPeriod(item: LeaderUnavailabilityResponse): string {
+  const start = new Date(item.start_at)
+  const end = new Date(item.end_at)
+  const locale = 'de-DE'
+  return start.toDateString() === end.toDateString()
+    ? start.toLocaleDateString(locale)
+    : `${start.toLocaleDateString(locale)} – ${end.toLocaleDateString(locale)}`
+}
+
 export interface LeaderUnavailabilityResponse {
   id: string
   leader_id: string

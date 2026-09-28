@@ -11,51 +11,45 @@ import {
 export const useLeaderUnavailabilitiesStore = defineStore('leaderUnavailabilities', () => {
   const items = ref<LeaderUnavailabilityResponse[]>([])
   const loading = ref(false)
-  const districtId = ref('')
+  const currentDistrictId = ref('')
   let requestId = 0
-  let selectedLeaderId: string | undefined
 
   function sortItems(values: LeaderUnavailabilityResponse[]) {
-    return values.sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at))
+    return [...values].sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at))
   }
 
-  async function fetchUnavailabilities(newDistrictId: string, leaderId?: string) {
+  async function fetchUnavailabilities(districtId: string) {
     const currentRequest = ++requestId
-    districtId.value = newDistrictId
-    selectedLeaderId = leaderId
+    currentDistrictId.value = districtId
     items.value = []
-    if (!newDistrictId) {
+    if (!districtId) {
       loading.value = false
       return
     }
     loading.value = true
     try {
-      const result = await listUnavailabilities(newDistrictId, leaderId)
+      const result = await listUnavailabilities(districtId)
       if (currentRequest === requestId) items.value = sortItems(result)
     } finally {
       if (currentRequest === requestId) loading.value = false
     }
   }
 
-  async function addUnavailability(newDistrictId: string, body: LeaderUnavailabilityCreate) {
-    const created = await createUnavailability(newDistrictId, body)
-    if (districtId.value === newDistrictId && (!selectedLeaderId || selectedLeaderId === created.leader_id)) {
-      items.value = sortItems([...items.value.filter((item) => item.id !== created.id), created])
-    }
+  async function addUnavailability(body: LeaderUnavailabilityCreate) {
+    const created = await createUnavailability(currentDistrictId.value, body)
+    items.value = sortItems([...items.value.filter((item) => item.id !== created.id), created])
     return created
   }
 
-  async function removeUnavailability(newDistrictId: string, unavailabilityId: string) {
-    await deleteUnavailability(newDistrictId, unavailabilityId)
-    if (districtId.value === newDistrictId) {
-      items.value = items.value.filter((item) => item.id !== unavailabilityId)
-    }
+  async function removeUnavailability(unavailabilityId: string) {
+    await deleteUnavailability(currentDistrictId.value, unavailabilityId)
+    items.value = items.value.filter((item) => item.id !== unavailabilityId)
   }
 
   return {
     items,
     loading,
-    districtId,
+    districtId: currentDistrictId,
     fetchUnavailabilities,
     addUnavailability,
     removeUnavailability,

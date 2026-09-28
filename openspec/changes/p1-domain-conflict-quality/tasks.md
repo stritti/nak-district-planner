@@ -59,10 +59,13 @@
 
 - [x] 5.1 `LeaderUnavailabilityForm.vue`: Formular für neue Abwesenheit (Leader-Auswahl, Datum, Grund)
   - Umgesetzt in `services/frontend/src/components/LeaderUnavailabilityForm.vue` (Leader-Select, Datum von/bis, Grund, Notiz, clientseitige Validierung Ende > Beginn)
+  - Review-Korrekturen: Empty-State bei fehlenden Amtsträger:innen statt fehlerhafter Validierung, `required`/`aria-invalid` an Inputs, Fehlermeldung mit `role="alert"`/`aria-live`, einheitliche Leader-Anzeige via `leaderDisplayName`
 - [x] 5.2 `LeaderUnavailabilityList.vue`: Liste bestehender Abwesenheiten mit Filter
   - Umgesetzt in `services/frontend/src/components/LeaderUnavailabilityList.vue` (Leader-Filter, Zeitraum-/Grund-/Notiz-Anzeige, Löschen mit Bestätigungsdialog)
+  - Review-Korrekturen: Zeitraum-Formatierung und Leader-Namen aus geteilten Helpern (`formatUnavailabilityPeriod`, `leaderNameFromId`), `aria-label` am Löschen-Button
 - [x] 5.3 API-Integration in Pinia-Store
   - Umgesetzt in `services/frontend/src/stores/leaderUnavailabilities.ts` + `services/frontend/src/api/leaderUnavailabilities.ts` (List/Create/Delete gegen `/api/v1/districts/{id}/leader-unavailabilities`)
+  - Review-Korrekturen: Store-API nutzt den internen `districtId`-State (kein redundanter Parameter, kein stilles No-Op bei Mismatch), clientseitiger Leader-Filter statt ungenutztem Server-Filter-Pfad, `sortItems` mutiert Eingabearrays nicht mehr
 - [x] 5.4 Navigation: Abwesenheiten in Leader-Detailansicht integrieren
   - Umgesetzt als „Abwesenheiten“-Tab in `services/frontend/src/views/LeadersAdminView.vue` mit Kalender-Icon-Aktion je Amtsträger:in (Filter + Formular vorausgewählt)
 

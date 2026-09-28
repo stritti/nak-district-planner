@@ -27,7 +27,7 @@ describe('useLeaderUnavailabilitiesStore', () => {
   it('fetches unavailabilities for a district', async () => {
     const store = useLeaderUnavailabilitiesStore()
     await store.fetchUnavailabilities('district-1')
-    expect(unavailabilityApi.listUnavailabilities).toHaveBeenCalledWith('district-1', undefined)
+    expect(unavailabilityApi.listUnavailabilities).toHaveBeenCalledWith('district-1')
     expect(store.items).toHaveLength(1)
     expect(store.districtId).toBe('district-1')
   })
@@ -47,7 +47,7 @@ describe('useLeaderUnavailabilitiesStore', () => {
     })
     const store = useLeaderUnavailabilitiesStore()
     await store.fetchUnavailabilities('district-1')
-    await store.addUnavailability('district-1', {
+    await store.addUnavailability({
       leader_id: 'leader-1',
       start_at: '2026-04-01T00:00:00.000Z',
       end_at: '2026-04-02T00:00:00.000Z',
@@ -59,7 +59,7 @@ describe('useLeaderUnavailabilitiesStore', () => {
   it('removes a deleted unavailability from the list', async () => {
     const store = useLeaderUnavailabilitiesStore()
     await store.fetchUnavailabilities('district-1')
-    await store.removeUnavailability('district-1', 'unavail-1')
+    await store.removeUnavailability('unavail-1')
     expect(unavailabilityApi.deleteUnavailability).toHaveBeenCalledWith('district-1', 'unavail-1')
     expect(store.items).toHaveLength(0)
   })
@@ -88,13 +88,12 @@ describe('useLeaderUnavailabilitiesStore', () => {
     expect(store.loading).toBe(false)
   })
 
-  it('does not mix mutations from another district or a different leader filter', async () => {
+  it('does not mutate the fetched array in place', async () => {
+    const fetched = [sampleUnavailability]
+    vi.mocked(unavailabilityApi.listUnavailabilities).mockResolvedValueOnce(fetched)
     const store = useLeaderUnavailabilitiesStore()
-    await store.fetchUnavailabilities('district-2', 'leader-2')
-    await store.addUnavailability('district-1', sampleUnavailability)
-    await store.removeUnavailability('district-1', sampleUnavailability.id)
-    expect(store.items).toEqual([sampleUnavailability])
-    await store.addUnavailability('district-2', sampleUnavailability)
-    expect(store.items).toHaveLength(1)
+    await store.fetchUnavailabilities('district-1')
+    store.removeUnavailability('unavail-1')
+    expect(fetched).toHaveLength(1)
   })
 })

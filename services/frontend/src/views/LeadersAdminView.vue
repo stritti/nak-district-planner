@@ -512,7 +512,7 @@
         ? `Die Abwesenheit vom ${formatUnavailabilityPeriod(pendingDeleteUnavailability)} wird gelöscht.`
         : ''"
       confirm-text="Löschen"
-      :loading="unavailabilitySaving"
+      :loading="unavailabilityDeleting"
       @confirm="executeDeleteUnavailability"
       @cancel="pendingDeleteUnavailability = null"
     />
@@ -814,6 +814,7 @@ import {
   updateLeader,
   LEADER_RANKS,
   SPECIAL_ROLES,
+  leaderNameFromId,
   type LeaderRank,
   type LeaderResponse,
   type SpecialRole,
@@ -829,9 +830,10 @@ import {
 import { useDistrictsStore } from '../stores/districts'
 import { useLeaderUnavailabilitiesStore } from '../stores/leaderUnavailabilities'
 import { useToastStore } from '../stores/toast'
-import type {
-  LeaderUnavailabilityCreate,
-  LeaderUnavailabilityResponse,
+import {
+  formatUnavailabilityPeriod,
+  type LeaderUnavailabilityCreate,
+  type LeaderUnavailabilityResponse,
 } from '../api/leaderUnavailabilities'
 
 const districtsStore = useDistrictsStore()
@@ -883,18 +885,17 @@ async function switchToRegistrations() {
 
 const unavailabilityFilterLeaderId = ref('')
 const unavailabilitySaving = ref(false)
+const unavailabilityDeleting = ref(false)
 const unavailabilityFormRef = ref<InstanceType<typeof LeaderUnavailabilityForm> | null>(null)
 const pendingDeleteUnavailability = ref<LeaderUnavailabilityResponse | null>(null)
 
 async function switchToUnavailabilities(leaderId?: string) {
   activeTab.value = 'unavailabilities'
   unavailabilityFilterLeaderId.value = leaderId ?? ''
-  if (selectedDistrictId.value) {
-    try {
-      await unavailabilitiesStore.fetchUnavailabilities(selectedDistrictId.value)
-    } catch (e) {
-      toastStore.error('Abwesenheiten konnten nicht geladen werden', e instanceof Error ? e.message : undefined)
-    }
+  try {
+    await unavailabilitiesStore.fetchUnavailabilities(selectedDistrictId.value)
+  } catch (e) {
+    toastStore.error('Abwesenheiten konnten nicht geladen werden', e instanceof Error ? e.message : undefined)
   }
 }
 
@@ -906,11 +907,11 @@ async function saveUnavailability(body: LeaderUnavailabilityCreate) {
   if (!selectedDistrictId.value) return
   unavailabilitySaving.value = true
   try {
-    const created = await unavailabilitiesStore.addUnavailability(selectedDistrictId.value, body)
+    const created = await unavailabilitiesStore.addUnavailability(body)
     unavailabilityFormRef.value?.reset()
     toastStore.success(
       'Abwesenheit erfasst',
-      `${leaderName(created.leader_id)}: ${formatUnavailabilityPeriod(created)}`,
+      `${leaderNameFromId(created.leader_id, leaders.value)}: ${formatUnavailabilityPeriod(created)}`,
     )
   } catch (e) {
     toastStore.error(
@@ -926,34 +927,19 @@ function confirmDeleteUnavailability(item: LeaderUnavailabilityResponse) {
   pendingDeleteUnavailability.value = item
 }
 
-function formatUnavailabilityPeriod(item: LeaderUnavailabilityResponse): string {
-  const start = new Date(item.start_at)
-  const end = new Date(item.end_at)
-  const locale = 'de-DE'
-  return start.toDateString() === end.toDateString()
-    ? start.toLocaleDateString(locale)
-    : `${start.toLocaleDateString(locale)} – ${end.toLocaleDateString(locale)}`
-}
-
 async function executeDeleteUnavailability() {
   if (!pendingDeleteUnavailability.value || !selectedDistrictId.value) return
   const item = pendingDeleteUnavailability.value
-  unavailabilitySaving.value = true
+  unavailabilityDeleting.value = true
   try {
-    await unavailabilitiesStore.removeUnavailability(selectedDistrictId.value, item.id)
+    await unavailabilitiesStore.removeUnavailability(item.id)
     pendingDeleteUnavailability.value = null
     toastStore.success('Abwesenheit gelöscht', formatUnavailabilityPeriod(item))
   } catch (e) {
     toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
   } finally {
-    unavailabilitySaving.value = false
+    unavailabilityDeleting.value = false
   }
-}
-
-function leaderName(leaderId: string): string {
-  const leader = leaders.value.find((l) => l.id === leaderId)
-  if (!leader) return '—'
-  return leader.rank ? `${leader.rank} ${leader.name}` : leader.name
 }
 
 // Approve modal

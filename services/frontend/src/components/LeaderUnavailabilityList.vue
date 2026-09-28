@@ -10,7 +10,7 @@
       >
         <option value="">Alle</option>
         <option v-for="leader in leaders" :key="leader.id" :value="leader.id">
-          {{ leader.rank ? `${leader.rank} ` : '' }}{{ leader.name }}
+          {{ leaderDisplayName(leader) }}
         </option>
       </select>
     </div>
@@ -33,8 +33,8 @@
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
             <tr v-for="item in filtered" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-800">
-              <td class="table-td py-2 font-medium text-gray-800 dark:text-gray-200">{{ leaderName(item.leader_id) }}</td>
-              <td class="table-td py-2">{{ formatPeriod(item.start_at, item.end_at) }}</td>
+              <td class="table-td py-2 font-medium text-gray-800 dark:text-gray-200">{{ leaderNameFromId(item.leader_id, leaders) }}</td>
+              <td class="table-td py-2">{{ formatUnavailabilityPeriod(item) }}</td>
               <td class="table-td py-2">
                 <span class="badge bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300">
                   {{ unavailabilityReasonLabel(item.reason) }}
@@ -45,6 +45,7 @@
                 <button
                   class="btn-icon hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400"
                   title="Löschen"
+                  aria-label="Abwesenheit löschen"
                   :data-testid="`unavailability-delete-${item.id}`"
                   @click="emit('delete', item)"
                 >
@@ -63,10 +64,11 @@
 import { computed, ref, watch } from 'vue'
 import { TrashIcon } from '@heroicons/vue/24/outline'
 import {
+  formatUnavailabilityPeriod,
   unavailabilityReasonLabel,
   type LeaderUnavailabilityResponse,
 } from '../api/leaderUnavailabilities'
-import type { LeaderResponse } from '../api/leaders'
+import { leaderDisplayName, leaderNameFromId, type LeaderResponse } from '../api/leaders'
 
 const props = defineProps<{
   items: LeaderUnavailabilityResponse[]
@@ -95,20 +97,4 @@ const filtered = computed(() =>
     : props.items,
 )
 
-function leaderName(leaderId: string): string {
-  const leader = props.leaders.find((l) => l.id === leaderId)
-  if (!leader) return '—'
-  return leader.rank ? `${leader.rank} ${leader.name}` : leader.name
-}
-
-function formatPeriod(startAt: string, endAt: string): string {
-  const start = new Date(startAt)
-  const end = new Date(endAt)
-  const locale = 'de-DE'
-  const sameDay = start.toDateString() === end.toDateString()
-  if (sameDay) {
-    return start.toLocaleDateString(locale)
-  }
-  return `${start.toLocaleDateString(locale)} – ${end.toLocaleDateString(locale)}`
-}
 </script>
