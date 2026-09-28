@@ -10,10 +10,18 @@ export interface ServiceAssignmentResponse {
   updated_at: string
 }
 
+export interface AssignmentOptions {
+  leaderId?: string | null
+  leaderName?: string | null
+  confirmWarnings?: boolean
+}
+
+export type AssignmentStatus = 'OPEN' | 'ASSIGNED' | 'CONFIRMED'
+
 export function createAssignment(
   eventId: string,
-  options: { leaderId?: string | null; leaderName?: string | null },
-  assignmentStatus: 'OPEN' | 'ASSIGNED' | 'CONFIRMED' = 'ASSIGNED',
+  options: AssignmentOptions,
+  assignmentStatus: AssignmentStatus = 'ASSIGNED',
 ): Promise<ServiceAssignmentResponse> {
   return apiFetch<ServiceAssignmentResponse>(`/api/v1/events/${eventId}/assignments`, {
     method: 'POST',
@@ -21,6 +29,7 @@ export function createAssignment(
       leader_id: options.leaderId ?? null,
       leader_name: options.leaderName ?? null,
       status: assignmentStatus,
+      ...(options.confirmWarnings !== undefined ? { confirm_warnings: options.confirmWarnings } : {}),
     }),
   })
 }
@@ -28,8 +37,8 @@ export function createAssignment(
 export function updateAssignment(
   eventId: string,
   assignmentId: string,
-  options: { leaderId?: string | null; leaderName?: string | null },
-  assignmentStatus?: 'OPEN' | 'ASSIGNED' | 'CONFIRMED',
+  options: AssignmentOptions,
+  assignmentStatus?: AssignmentStatus,
 ): Promise<ServiceAssignmentResponse> {
   return apiFetch<ServiceAssignmentResponse>(
     `/api/v1/events/${eventId}/assignments/${assignmentId}`,
@@ -39,6 +48,7 @@ export function updateAssignment(
         leader_id: options.leaderId ?? null,
         leader_name: options.leaderName ?? null,
         ...(assignmentStatus ? { status: assignmentStatus } : {}),
+        ...(options.confirmWarnings !== undefined ? { confirm_warnings: options.confirmWarnings } : {}),
       }),
     },
   )
