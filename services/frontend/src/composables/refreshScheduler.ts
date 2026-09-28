@@ -23,10 +23,18 @@ let refreshChannelListenerAttached = false
 let scheduledRefresh: (() => void) | null = null
 let shouldTriggerActivityRefresh: (() => void) | null = null
 
+/**
+ * Binds the scheduler callbacks for the whole page. The scheduler is an
+ * app-wide singleton (one browser profile performs one refresh per token),
+ * so the first binding wins: a second `useOIDC()` instance must not
+ * silently rewire timers and activity listeners that are already armed by
+ * the first instance — that would be last-writer-wins on live timers.
+ */
 export function bindRefreshScheduler(options: {
   onScheduledRefresh: () => void
   onActivityRefresh: () => void
 }): void {
+  if (scheduledRefresh || shouldTriggerActivityRefresh) return
   scheduledRefresh = options.onScheduledRefresh
   shouldTriggerActivityRefresh = options.onActivityRefresh
 }
@@ -127,6 +135,8 @@ export function __resetSchedulerState(): void {
   refreshChannelListenerAttached = false
   activity.listenersAttached = false
   activity.lastActivityCheckAt = 0
+  scheduledRefresh = null
+  shouldTriggerActivityRefresh = null
 }
 
 // Re-exported so cross-tab state stays adjacent to its scheduler plumbing.

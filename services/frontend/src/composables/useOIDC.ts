@@ -29,6 +29,7 @@ import {
   __resetSchedulerState,
 } from './refreshScheduler'
 import {
+  __resetSessionLifecycle,
   advanceSessionGeneration,
   bindSessionLifecycle,
   clearLocalArtifacts,
@@ -67,6 +68,7 @@ export function __resetOIDCModuleState(): void {
   lastAdoptedBroadcastAt = 0
   __resetSchedulerState()
   __resetDiscoveryState()
+  __resetSessionLifecycle()
 }
 
 export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {

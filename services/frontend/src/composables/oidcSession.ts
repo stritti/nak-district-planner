@@ -20,8 +20,21 @@ interface SessionLifecycleHost {
 
 let host: SessionLifecycleHost | null = null
 
+/**
+ * Binds the session lifecycle host for the whole page. The session module
+ * is an app-wide singleton, so the first binding wins: a later
+ * `useOIDC()` instance must not rewire which host invalidates timers and
+ * cross-tab state on generation changes — that would be
+ * last-writer-wins on live session state.
+ */
 export function bindSessionLifecycle(bindings: SessionLifecycleHost): void {
+  if (host) return
   host = bindings
+}
+
+/** @internal — unbinds the host; used by tests */
+export function __resetSessionLifecycle(): void {
+  host = null
 }
 
 export function getSessionGeneration(): number {

@@ -12,6 +12,7 @@ import {
   ACTIVITY_CHECK_THROTTLE_MS,
 } from './refreshScheduler'
 import {
+  __resetSessionLifecycle,
   advanceSessionGeneration,
   bindSessionLifecycle,
   clearLocalArtifacts,
@@ -32,6 +33,18 @@ describe('refreshScheduler', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('keeps the first bound callbacks — a second binding must not rewire armed timers', async () => {
+    vi.useFakeTimers()
+    const firstRefresh = vi.fn()
+    bindRefreshScheduler({ onScheduledRefresh: firstRefresh, onActivityRefresh: vi.fn() })
+    const secondRefresh = vi.fn()
+    bindRefreshScheduler({ onScheduledRefresh: secondRefresh, onActivityRefresh: vi.fn() })
+    scheduleRefreshTimer(Date.now() / 1000 + 100)
+    await vi.advanceTimersByTimeAsync(200_000)
+    expect(firstRefresh).toHaveBeenCalled()
+    expect(secondRefresh).not.toHaveBeenCalled()
   })
 
   it('returns null when BroadcastChannel is unavailable', () => {
@@ -112,6 +125,7 @@ describe('refreshScheduler', () => {
 describe('oidcSession', () => {
   beforeEach(() => {
     sessionStorage.clear()
+    __resetSessionLifecycle()
   })
 
   it('advances the generation and notifies the bound host', () => {
@@ -122,6 +136,16 @@ describe('oidcSession', () => {
     expect(getSessionGeneration()).toBe(before + 1)
     expect(host.invalidateCrossTabState).toHaveBeenCalled()
     expect(host.clearTimers).toHaveBeenCalled()
+  })
+
+  it('keeps the first bound host — a second binding must not rewire live session state', () => {
+    const firstHost = { invalidateCrossTabState: vi.fn(), clearTimers: vi.fn(), scheduleRefresh: vi.fn() }
+    bindSessionLifecycle(firstHost)
+    const secondHost = { invalidateCrossTabState: vi.fn(), clearTimers: vi.fn(), scheduleRefresh: vi.fn() }
+    bindSessionLifecycle(secondHost)
+    advanceSessionGeneration()
+    expect(firstHost.invalidateCrossTabState).toHaveBeenCalled()
+    expect(secondHost.invalidateCrossTabState).not.toHaveBeenCalled()
   })
 
   it('advances the generation and installs tokens before any host is bound', async () => {
