@@ -1,36 +1,79 @@
 ## 1. Sync Metadata
 
-- [x] 1.1 Add sync_state field to EventInstance *(`SyncState`-Enum + Feld in `domain/models/event_instance.py`, Sync setzt CLEAN/DIRTY_EXTERNAL)*
-- [x] 1.2 Add last_synced_hash field *(in `ExternalEventLink.last_synced_hash` persistiert statt direkt auf EventInstance — siehe 2.1)*
+- [x] 1.1 Add sync_state field to EventInstance
+- [x] 1.2 Persist last_synced_hash on ExternalEventLink
 - [x] 1.3 Add last_internal_modified_at field
 - [x] 1.4 Add last_external_modified_at field
 
 ## 2. External Mapping
 
-- [x] 2.1 Create ExternalEventLink table *(`domain/models/external_event_link.py` + ORM + Repository)*
-- [x] 2.2 Persist external revision markers *(`revision_marker`-Feld in ExternalEventLink)*
-- [x] 2.3 Link ExternalEventLink to EventInstance *(`event_instance_id`-FK)*
+- [x] 2.1 Create ExternalEventLink table
+- [x] 2.2 Persist external revision markers
+- [x] 2.3 Link ExternalEventLink to EventInstance
+- [ ] 2.4 Add repository support to list active links by integration/reconciliation scope
+- [ ] 2.5 Define durable tombstone lifecycle and audit timestamps
 
-## 3. State Machine Implementation
+## 3. Field-aware State Machine
 
-- [x] 3.1 Implement sync state transition logic *(formale State-Machine `inbound_state()`/`internal_state()` in `domain/services/sync_policy.py`; alle CLEAN/DIRTY_INTERNAL/DIRTY_EXTERNAL/CONFLICT-Übergänge abgedeckt)*
-- [x] 3.2 Implement structural vs soft field diffing
-- [x] 3.3 Implement conflict state handling *(Konflikt-Zustand über `inbound_state()`/`internal_state()` erreichbar und persistiert; REST-Endpoint zur Auflösung von Feldkonflikten steht noch aus und wird als eigene Aufgabe getrackt)*
-- [ ] 3.4 Expose CONFLICT state and resolution endpoint to PLANNER *(aktuell bleibt ein Konflikt ohne UI/Endpoint unerkannt; Hash wird bewusst nicht aktualisiert, sodass jede Sync-Runde erneut konfligiert)*
+- [x] 3.1 Implement base sync state transition logic
+- [x] 3.2 Implement structural vs soft field classification
+- [x] 3.3 Persist CONFLICT state
+- [ ] 3.4 Compute changed fields before conflict transition
+- [ ] 3.5 Merge non-overlapping SOFT changes while DIRTY_INTERNAL
+- [ ] 3.6 Route deviation/conflict resolution through state-machine functions
+- [ ] 3.7 Expose CONFLICT state and resolution endpoint to PLANNER
 
 ## 4. Idempotency and Loop Prevention
 
-- [x] 4.1 Implement payload hash comparison *(Hash-Vergleich gegen `last_synced_hash` in `sync_service.py`)*
+- [x] 4.1 Implement payload hash comparison
 - [x] 4.2 Implement outbound revision tracking
 - [x] 4.3 Implement inbound revision guard
+- [ ] 4.4 Skip already acknowledged cancellation tombstones without DB writes
+- [ ] 4.5 Verify update and delete echo suppression for every writable provider
 
-## 5. Delete Handling
+## 5. Provider Deletion Reconciliation
 
 - [x] 5.1 Implement MARK_CANCELLED behavior
 - [x] 5.2 Implement HARD_DELETE behavior
+- [ ] 5.3 Persist delete_behavior per CalendarIntegration and migrate existing integrations
+- [ ] 5.4 Parse Google cancelled tombstones before validating start/end timestamps
+- [ ] 5.5 Define connector metadata indicating authoritative/full reconciliation scope
+- [ ] 5.6 Reconcile active links missing from authoritative provider snapshots
+- [ ] 5.7 Never infer deletion from partial, failed, incremental, or narrowed responses
+- [ ] 5.8 Update retained tombstone audit timestamp in HARD_DELETE flow
 
-## 6. Integration Tests
+## 6. Bidirectional Deviation Resolution
 
-- [x] 6.1 Test duplicate webhook handling
-- [x] 6.2 Test concurrent internal/external modification
-- [x] 6.3 Test delete behavior modes
+- [x] 6.1 Detect start-time deviation
+- [ ] 6.2 Detect end-time/duration-only deviation
+- [ ] 6.3 Add connector update operation for corrected times
+- [ ] 6.4 Push resolved deviations to writable external providers
+- [ ] 6.5 Persist outbound revision/hash and return to CLEAN only after acknowledgement
+- [ ] 6.6 Return meaningful API status when no resolvable deviation exists or outbound sync fails
+
+## 7. Partial Failure Contract
+
+- [x] 7.1 Isolate CalendarConnectorError per event
+- [ ] 7.2 Translate transport, credential, HTTP, and provider concurrency failures to CalendarConnectorError
+- [ ] 7.3 Add SyncResult.failed distinct from skipped
+- [ ] 7.4 Expose failed count in HTTP and background-job results
+- [ ] 7.5 Preserve bounded last_sync_error summary for partial failures
+
+## 8. Auto-match Integrity
+
+- [ ] 8.1 Attach/create EventInstance on an existing matched PlanningSlot without creating a duplicate slot
+
+## 9. Tests
+
+- [x] 9.1 Test duplicate webhook handling
+- [x] 9.2 Test concurrent internal/external modification baseline
+- [x] 9.3 Test delete behavior modes baseline
+- [ ] 9.4 Test Google timestamp-less cancellation tombstone
+- [ ] 9.5 Test missing-resource reconciliation for authoritative Microsoft/CalDAV snapshots
+- [ ] 9.6 Test no false deletion on incomplete/failed/narrowed fetch
+- [ ] 9.7 Test SOFT-only external change while DIRTY_INTERNAL
+- [ ] 9.8 Test end-time-only deviation and outbound resolution
+- [ ] 9.9 Test per-integration delete policies in the same process
+- [ ] 9.10 Test transport and credential failures remain isolated and observable
+- [ ] 9.11 Test repeated cancellation produces no recurring writes
+- [ ] 9.12 Test auto-match without EventInstance does not duplicate PlanningSlot
