@@ -19,7 +19,6 @@ export function planningDayBounds(date: string): { start: string; end: string } 
   const [year, month, day] = date.split('-').map(Number)
   if (!year || !month || !day) throw new Error('Ungültiges Datum.')
 
-  const noonUtc = new Date(Date.UTC(year, month - 1, day, 12))
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: PLANNING_TIMEZONE,
     year: 'numeric',
@@ -30,21 +29,27 @@ export function planningDayBounds(date: string): { start: string; end: string } 
     second: '2-digit',
     hourCycle: 'h23',
   })
-  const parts = Object.fromEntries(
-    formatter.formatToParts(noonUtc).map((part) => [part.type, part.value]),
-  )
-  const zonedNoonAsUtc = Date.UTC(
-    Number(parts.year),
-    Number(parts.month) - 1,
-    Number(parts.day),
-    Number(parts.hour),
-    Number(parts.minute),
-    Number(parts.second),
-  )
-  const offsetMs = zonedNoonAsUtc - noonUtc.getTime()
-  const startMs = Date.UTC(year, month - 1, day) - offsetMs
-  const endMs = Date.UTC(year, month - 1, day + 1) - offsetMs - 1
-  return { start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString() }
+
+  const offsetAt = (utcMs: number) => {
+    const parts = Object.fromEntries(
+      formatter.formatToParts(new Date(utcMs)).map((part) => [part.type, part.value]),
+    )
+    const zonedAsUtc = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+      Number(parts.second),
+    )
+    return zonedAsUtc - utcMs
+  }
+
+  const startProbe = Date.UTC(year, month - 1, day, 12)
+  const nextDayProbe = Date.UTC(year, month - 1, day + 1, 12)
+  const startMs = Date.UTC(year, month - 1, day) - offsetAt(startProbe)
+  const nextDayStartMs = Date.UTC(year, month - 1, day + 1) - offsetAt(nextDayProbe)
+  return { start: new Date(startMs).toISOString(), end: new Date(nextDayStartMs - 1).toISOString() }
 }
 
 export function formatUnavailabilityPeriod(item: LeaderUnavailabilityResponse): string {
