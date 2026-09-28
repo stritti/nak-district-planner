@@ -4,80 +4,80 @@
       Keine Amtsträger:innen vorhanden. Bitte zuerst Amtsträger:innen anlegen.
     </p>
     <template v-else>
-    <div v-if="leaders.length > 1">
-      <label class="form-label" for="unavailability-leader">Amtsträger:in *</label>
-      <select id="unavailability-leader" v-model="leaderId" class="form-input" :aria-invalid="!!error" data-testid="unavailability-leader-select" :disabled="saving">
-        <option value="" disabled>Amtsträger:in wählen…</option>
-        <option v-for="leader in leaders" :key="leader.id" :value="leader.id">
-          {{ leaderDisplayName(leader) }}
-        </option>
-      </select>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <label class="form-label" for="unavailability-start">Beginn *</label>
-        <input
-          id="unavailability-start"
-          v-model="startDate"
-          type="date"
-          required
-          aria-required="true"
-          :aria-invalid="!!error"
-          class="form-input"
-          data-testid="unavailability-start-date"
-          :disabled="saving"
-        />
-      </div>
-      <div>
-        <label class="form-label" for="unavailability-end">Ende *</label>
-        <input
-          id="unavailability-end"
-          v-model="endDate"
-          type="date"
-          required
-          aria-required="true"
-          :aria-invalid="!!error"
-          class="form-input"
-          data-testid="unavailability-end-date"
-          :disabled="saving"
-        />
-      </div>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <label class="form-label" for="unavailability-reason">Grund *</label>
-        <select id="unavailability-reason" v-model="reason" required :aria-invalid="!!error" class="form-input" data-testid="unavailability-reason-select" :disabled="saving">
-          <option value="" disabled>Grund wählen…</option>
-          <option v-for="r in UNAVAILABILITY_REASONS" :key="r.value" :value="r.value">{{ r.label }}</option>
+      <div v-if="leaders.length > 1">
+        <label class="form-label" for="unavailability-leader">Amtsträger:in *</label>
+        <select id="unavailability-leader" v-model="leaderId" class="form-input" :aria-invalid="!!error" data-testid="unavailability-leader-select" :disabled="saving">
+          <option value="" disabled>Amtsträger:in wählen…</option>
+          <option v-for="leader in leaders" :key="leader.id" :value="leader.id">
+            {{ leaderDisplayName(leader) }}
+          </option>
         </select>
       </div>
-      <div>
-        <label class="form-label" for="unavailability-note">Notiz</label>
-        <input
-          id="unavailability-note"
-          v-model="note"
-          type="text"
-          class="form-input"
-          placeholder="optional"
-          maxlength="2000"
-          data-testid="unavailability-note-input"
-          :disabled="saving"
-        />
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="form-label" for="unavailability-start">Beginn *</label>
+          <input
+            id="unavailability-start"
+            v-model="startDate"
+            type="date"
+            required
+            aria-required="true"
+            :aria-invalid="!!error"
+            class="form-input"
+            data-testid="unavailability-start-date"
+            :disabled="saving"
+          />
+        </div>
+        <div>
+          <label class="form-label" for="unavailability-end">Ende *</label>
+          <input
+            id="unavailability-end"
+            v-model="endDate"
+            type="date"
+            required
+            aria-required="true"
+            :aria-invalid="!!error"
+            class="form-input"
+            data-testid="unavailability-end-date"
+            :disabled="saving"
+          />
+        </div>
       </div>
-    </div>
-    <p v-if="error" class="text-sm text-red-600 dark:text-red-400" role="alert" aria-live="polite" data-testid="unavailability-form-error">
-      {{ error }}
-    </p>
-    <div class="flex justify-end">
-      <button
-        type="submit"
-        class="btn-primary px-4 py-2"
-        :disabled="saving || leaders.length === 0"
-        data-testid="unavailability-submit"
-      >
-        {{ saving ? 'Speichern…' : 'Abwesenheit erfassen' }}
-      </button>
-    </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="form-label" for="unavailability-reason">Grund *</label>
+          <select id="unavailability-reason" v-model="reason" required :aria-invalid="!!error" class="form-input" data-testid="unavailability-reason-select" :disabled="saving">
+            <option value="" disabled>Grund wählen…</option>
+            <option v-for="r in UNAVAILABILITY_REASONS" :key="r.value" :value="r.value">{{ r.label }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label" for="unavailability-note">Notiz</label>
+          <input
+            id="unavailability-note"
+            v-model="note"
+            type="text"
+            class="form-input"
+            placeholder="optional"
+            maxlength="2000"
+            data-testid="unavailability-note-input"
+            :disabled="saving"
+          />
+        </div>
+      </div>
+      <p v-if="error" class="text-sm text-red-600 dark:text-red-400" role="alert" aria-live="polite" data-testid="unavailability-form-error">
+        {{ error }}
+      </p>
+      <div class="flex justify-end">
+        <button
+          type="submit"
+          class="btn-primary px-4 py-2"
+          :disabled="saving || leaders.length === 0"
+          data-testid="unavailability-submit"
+        >
+          {{ saving ? 'Speichern…' : 'Abwesenheit erfassen' }}
+        </button>
+      </div>
     </template>
   </form>
 </template>

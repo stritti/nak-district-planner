@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const FRONTEND_URL = 'http://localhost:5173'
+import { FRONTEND_URL } from './helpers'
 
 const ADMIN_AUTH = {
   token: {

@@ -15,6 +15,8 @@ export function unavailabilityReasonLabel(reason: UnavailabilityReason): string 
 
 export const PLANNING_TIMEZONE = 'Europe/Berlin'
 
+const OFFSET_ITERATION_LIMIT = 3
+
 export function planningDayBounds(date: string): { start: string; end: string } {
   const [year, month, day] = date.split('-').map(Number)
   if (!year || !month || !day) throw new Error('Ungültiges Datum.')
@@ -47,7 +49,7 @@ export function planningDayBounds(date: string): { start: string; end: string } 
 
   const localMidnightUtcMs = (y: number, m: number, d: number) => {
     let guess = Date.UTC(y, m, d)
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < OFFSET_ITERATION_LIMIT; i++) {
       const next = Date.UTC(y, m, d) - offsetAt(guess)
       if (next === guess) return guess
       guess = next
