@@ -12,5 +12,21 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     include: ["src/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      include: [
+        "src/composables/jwt.ts",
+        "src/composables/oidcToken.ts",
+        "src/composables/oidcRefresh.ts",
+        "src/composables/useOIDC.ts",
+      ],
+      thresholds: {
+        perFile: true,
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
+      },
+    },
   },
 });
