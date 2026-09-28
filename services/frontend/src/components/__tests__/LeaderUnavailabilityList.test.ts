@@ -101,11 +101,16 @@ describe('LeaderUnavailabilityList', () => {
   })
 
   it('emits delete with the item when the delete button is clicked', async () => {
-    const wrapper = mountList()
+    const wrapper = mountList({ canDelete: true })
     await wrapper.find('[data-testid="unavailability-delete-unavail-1"]').trigger('click')
     const events = wrapper.emitted('delete')
     expect(events).toHaveLength(1)
     expect((events![0]![0] as LeaderUnavailabilityResponse).id).toBe('unavail-1')
+  })
+
+  it('hides delete controls in read-only mode', () => {
+    const wrapper = mountList({ canDelete: false })
+    expect(wrapper.find('[data-testid="unavailability-delete-unavail-1"]').exists()).toBe(false)
   })
 
   it('renders German reason labels', () => {
