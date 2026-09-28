@@ -1,66 +1,90 @@
 ## Context
 
-The existing sync engine uses last-writer-wins semantics for all fields. This causes governance instability: external calendar changes to service time shift the matrix (Soll) position. The `planning-slot-hybrid-sync` change introduced `PlanningSlot` (Soll) and `EventInstance` (Ist) separation, but the sync engine still needs explicit field-level authority rules to leverage this separation.
-
-The current sync pipeline processes external calendar data and writes directly to the event model. After this change, it will classify each incoming field and route it appropriately.
+PlanningSlot represents the authoritative planned position; EventInstance represents actual/external execution data. Hybrid sync must preserve that separation across edits, deviations, and deletion semantics of different providers.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Define field-level authority: STRUCTURAL, SOFT, CONDITIONAL
-- External structural field changes are ignored
-- External time changes update EventInstance with deviation_flag=true
-- Deletions propagate bidirectionally
+- Preserve structural planning authority.
+- Merge safe external changes without unnecessary conflicts.
+- Represent both start and end/duration deviations.
+- Make deviation resolution bidirectional.
+- Detect provider deletions whether explicit or represented by absence from an authoritative snapshot.
+- Keep delete behavior configurable per integration and idempotent.
 
 **Non-Goals:**
-- Field-level authority UI for administrators (code-defined only)
-- External origin tracking beyond deviation storage
-- Batch operation handling
+- Admin-configurable field authority.
+- CRDT merging.
+- Inferring deletions from incomplete provider responses.
 
 ## Decisions
 
-### 1. Field Classification
+### 1. Field Classification and Conflict Scope
 
-| Field | Authority | Rationale |
+| Field | Authority | Behavior |
 |---|---|---|
-| `PlanningSlot.congregation_id` | STRUCTURAL | Congregation defines matrix position |
-| `PlanningSlot.planning_date` | STRUCTURAL | Date defines matrix row |
-| `PlanningSlot.planning_time` | SOFT → CONDITIONAL | Time change stored as deviation |
-| `EventInstance.title` | SOFT | External title changes accepted |
-| `EventInstance.description` | SOFT | External description changes accepted |
-| `PlanningSlot.category` | STRUCTURAL | Category defines service type |
+| `PlanningSlot.congregation_id` | STRUCTURAL | External mutation rejected |
+| `PlanningSlot.planning_date` | STRUCTURAL | External mutation rejected |
+| `PlanningSlot.planning_time` | CONDITIONAL | External time represented on EventInstance |
+| `EventInstance.title` | SOFT | External update mergeable |
+| `EventInstance.description` | SOFT | External update mergeable |
+| `PlanningSlot.category` | STRUCTURAL | External mutation rejected |
 
-**Decision:** Classification is code-defined (enum + mapping table), not admin-configurable. Keeps sync behavior predictable.
+Unclassified fields default to STRUCTURAL.
 
-### 2. Deviation Handling Flow
+The engine first computes which fields actually changed, then classifies them. DIRTY_INTERNAL alone is insufficient to declare CONFLICT. Non-overlapping SOFT changes may merge; conflicting/authority-violating concurrent changes enter CONFLICT.
 
-```mermaid
-External sync ──▶ Field classifier
-                       │
-            ┌──────────┼──────────┐
-            ▼          ▼          ▼
-       STRUCTURAL   SOFT     CONDITIONAL
-          │          │          │
-          ▼          ▼          ▼
-       Ignored    Update     Store in
-                   field    EventInstance
-                            deviation_flag=true
-```
+### 2. Deviation Semantics
 
-**Decision:** CONDITIONAL (time) updates only `EventInstance.actual_start/actual_end` and sets `deviation_flag = true`. The `PlanningSlot.planning_time` remains unchanged.
+A deviation is present when actual start or actual end/duration differs materially from the planned event.
 
-### 3. Symmetric Deletion
+External time changes update only EventInstance actual times. PlanningSlot remains authoritative.
 
-- External deletion → soft-delete `PlanningSlot` + `EventInstance`
-- Internal deletion → push deletion to external calendar (via existing `CalendarConnector`)
-- Both sides mark as `cancelled` rather than hard-deleting
+Resolving a deviation is a command, not merely a flag reset:
+1. derive intended corrected actual start/end from PlanningSlot and planned duration rules;
+2. transition through internal state-machine semantics;
+3. for writable linked integrations, call the connector update operation;
+4. persist provider revision/hash;
+5. clear deviation and return CLEAN only when the outbound correction is acknowledged.
 
-**Decision:** Soft-delete with `cancelled` status. Hard deletion would break audit trail and external sync references.
+Read-only integrations may resolve only the internal representation and must expose that external reconciliation was not possible.
+
+### 3. Symmetric Deletion and Reconciliation
+
+Deletion has two normalized inbound forms:
+- explicit provider tombstone/cancelled event;
+- absence from a complete authoritative provider snapshot.
+
+Google tombstones may lack timestamps and must be parsed by id/status first.
+
+Microsoft/CalDAV-style missing resources require post-fetch reconciliation against active ExternalEventLinks. Absence is deletion only for a complete authoritative scope.
+
+Internal deletion is pushed to writable providers. Self-originated delete echoes are ignored using durable link metadata.
+
+### 4. Delete Policy
+
+Delete behavior is stored per CalendarIntegration:
+- `MARK_CANCELLED`: retain planning entities and mark cancelled.
+- `HARD_DELETE`: remove eligible internal planning data but retain a minimal ExternalEventLink tombstone.
+
+A process-level default is allowed only as a creation default.
+
+### 5. Partial Failures
+
+Per-event connector failures are normalized to CalendarConnectorError and do not abort sibling events.
+
+Sync results distinguish `skipped` from `failed`. A partial failure remains visible through API/worker results and integration error metadata.
+
+### 6. Idempotency
+
+Identical active payloads and identical cancellation tombstones are no-ops. No-op processing must not update timestamps merely because the provider repeats the same tombstone.
 
 ## Risks / Trade-offs
 
 | Risk | Mitigation |
 |---|---|
-| **Classification mismatch** — future field additions not classified | Default to STRUCTURAL for unclassified fields (safe default) |
-| **Deviation accumulation** — repeated external time changes create churn | Store only latest deviation, not history |
-| **Deletion loops** — internal deletion triggers external deletion which triggers internal again | Track deletion origin; ignore deletions initiated by self |
+| False missing-resource deletion | Require authoritative complete reconciliation scope |
+| Deletion loops | Durable origin/revision tombstones |
+| False conflicts | Diff and classify before state transition |
+| Hidden partial failure | Dedicated failed result and error summary |
+| Policy inconsistency | Persist delete policy on each integration |
