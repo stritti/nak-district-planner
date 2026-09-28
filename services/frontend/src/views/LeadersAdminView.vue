@@ -898,7 +898,7 @@ const canManageUnavailabilities = computed(() => {
     (membership) =>
       membership.scope_type === 'DISTRICT' &&
       membership.scope_id === selectedDistrictId.value &&
-      ['PLANNER', 'DISTRICT_ADMIN'].includes(membership.role),
+      ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(membership.role),
   )
 })
 
