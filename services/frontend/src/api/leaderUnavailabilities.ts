@@ -13,13 +13,47 @@ export function unavailabilityReasonLabel(reason: UnavailabilityReason): string 
   return UNAVAILABILITY_REASONS.find((r) => r.value === reason)?.label ?? reason
 }
 
+export const PLANNING_TIMEZONE = 'Europe/Berlin'
+
+export function planningDayBounds(date: string): { start: string; end: string } {
+  const [year, month, day] = date.split('-').map(Number)
+  if (!year || !month || !day) throw new Error('Ungültiges Datum.')
+
+  const noonUtc = new Date(Date.UTC(year, month - 1, day, 12))
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: PLANNING_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  })
+  const parts = Object.fromEntries(
+    formatter.formatToParts(noonUtc).map((part) => [part.type, part.value]),
+  )
+  const zonedNoonAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second),
+  )
+  const offsetMs = zonedNoonAsUtc - noonUtc.getTime()
+  const startMs = Date.UTC(year, month - 1, day) - offsetMs
+  const endMs = Date.UTC(year, month - 1, day + 1) - offsetMs - 1
+  return { start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString() }
+}
+
 export function formatUnavailabilityPeriod(item: LeaderUnavailabilityResponse): string {
-  const start = new Date(item.start_at)
-  const end = new Date(item.end_at)
   const locale = 'de-DE'
-  return start.toDateString() === end.toDateString()
-    ? start.toLocaleDateString(locale)
-    : `${start.toLocaleDateString(locale)} – ${end.toLocaleDateString(locale)}`
+  const format = (value: string) =>
+    new Date(value).toLocaleDateString(locale, { timeZone: PLANNING_TIMEZONE })
+  const start = format(item.start_at)
+  const end = format(item.end_at)
+  return start === end ? start : `${start} – ${end}`
 }
 
 export interface LeaderUnavailabilityResponse {
