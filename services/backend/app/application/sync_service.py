@@ -472,13 +472,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                 # Do not include connector-controlled values in log records.
                 # External event identifiers and exception messages can contain
                 # control characters and are therefore intentionally omitted.
-                logger.warning(
-                    "Calendar sync event skipped after connector error",
-                    extra={
-                        "calendar_integration_id": str(integration_id),
-                        "sync_outcome": SKIPPED,
-                    },
-                )
+                logger.warning("Calendar sync event skipped after connector error")
                 counters[SKIPPED] += 1
 
         # Update integration last_synced_at
