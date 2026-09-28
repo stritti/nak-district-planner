@@ -12,14 +12,16 @@ export const useLeaderUnavailabilitiesStore = defineStore('leaderUnavailabilitie
   const items = ref<LeaderUnavailabilityResponse[]>([])
   const loading = ref(false)
   const currentDistrictId = ref('')
-  let requestId = 0
+  let fetchGeneration = 0
+  let mutationGeneration = 0
 
   function sortItems(values: LeaderUnavailabilityResponse[]) {
     return [...values].sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at))
   }
 
   async function fetchUnavailabilities(districtId: string) {
-    const currentRequest = ++requestId
+    const currentFetch = ++fetchGeneration
+    const mutationsAtStart = mutationGeneration
     currentDistrictId.value = districtId
     items.value = []
     if (!districtId) {
@@ -29,18 +31,23 @@ export const useLeaderUnavailabilitiesStore = defineStore('leaderUnavailabilitie
     loading.value = true
     try {
       const result = await listUnavailabilities(districtId)
-      if (currentRequest === requestId) items.value = sortItems(result)
+      if (
+        currentFetch === fetchGeneration &&
+        districtId === currentDistrictId.value &&
+        mutationsAtStart === mutationGeneration
+      ) {
+        items.value = sortItems(result)
+      }
     } finally {
-      if (currentRequest === requestId) loading.value = false
+      if (currentFetch === fetchGeneration) loading.value = false
     }
   }
 
   async function addUnavailability(body: LeaderUnavailabilityCreate) {
     const districtId = currentDistrictId.value
-    const mutationRequest = ++requestId
-    loading.value = false
     const created = await createUnavailability(districtId, body)
-    if (currentDistrictId.value === districtId && mutationRequest === requestId) {
+    if (currentDistrictId.value === districtId) {
+      mutationGeneration++
       items.value = sortItems([...items.value.filter((item) => item.id !== created.id), created])
     }
     return created
@@ -48,10 +55,9 @@ export const useLeaderUnavailabilitiesStore = defineStore('leaderUnavailabilitie
 
   async function removeUnavailability(unavailabilityId: string) {
     const districtId = currentDistrictId.value
-    const mutationRequest = ++requestId
-    loading.value = false
     await deleteUnavailability(districtId, unavailabilityId)
-    if (currentDistrictId.value === districtId && mutationRequest === requestId) {
+    if (currentDistrictId.value === districtId) {
+      mutationGeneration++
       items.value = items.value.filter((item) => item.id !== unavailabilityId)
     }
   }
