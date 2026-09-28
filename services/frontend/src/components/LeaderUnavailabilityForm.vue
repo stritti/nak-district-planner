@@ -6,7 +6,7 @@
     <template v-else>
     <div v-if="leaders.length > 1">
       <label class="form-label" for="unavailability-leader">Amtsträger:in *</label>
-      <select id="unavailability-leader" v-model="leaderId" class="form-input" :aria-invalid="!!error" data-testid="unavailability-leader-select">
+      <select id="unavailability-leader" v-model="leaderId" class="form-input" :aria-invalid="!!error" data-testid="unavailability-leader-select" :disabled="saving">
         <option value="" disabled>Amtsträger:in wählen…</option>
         <option v-for="leader in leaders" :key="leader.id" :value="leader.id">
           {{ leaderDisplayName(leader) }}
@@ -25,6 +25,7 @@
           :aria-invalid="!!error"
           class="form-input"
           data-testid="unavailability-start-date"
+          :disabled="saving"
         />
       </div>
       <div>
@@ -38,13 +39,14 @@
           :aria-invalid="!!error"
           class="form-input"
           data-testid="unavailability-end-date"
+          :disabled="saving"
         />
       </div>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div>
         <label class="form-label" for="unavailability-reason">Grund *</label>
-        <select id="unavailability-reason" v-model="reason" required :aria-invalid="!!error" class="form-input" data-testid="unavailability-reason-select">
+        <select id="unavailability-reason" v-model="reason" required :aria-invalid="!!error" class="form-input" data-testid="unavailability-reason-select" :disabled="saving">
           <option value="" disabled>Grund wählen…</option>
           <option v-for="r in UNAVAILABILITY_REASONS" :key="r.value" :value="r.value">{{ r.label }}</option>
         </select>
@@ -59,6 +61,7 @@
           placeholder="optional"
           maxlength="2000"
           data-testid="unavailability-note-input"
+          :disabled="saving"
         />
       </div>
     </div>
