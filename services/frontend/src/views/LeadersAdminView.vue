@@ -351,10 +351,11 @@
             :leaders="leaders"
             :loading="unavailabilitiesStore.loading"
             :preset-leader-id="unavailabilityFilterLeaderId"
+            :can-delete="canManageUnavailabilities"
             @delete="confirmDeleteUnavailability"
           />
         </div>
-        <div>
+        <div v-if="canManageUnavailabilities">
           <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Neue Abwesenheit</h2>
           <LeaderUnavailabilityForm
             ref="unavailabilityFormRef"
@@ -827,6 +828,7 @@ import {
   rejectRegistration,
   type RegistrationResponse,
 } from '../api/registrations'
+import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
 import { useLeaderUnavailabilitiesStore } from '../stores/leaderUnavailabilities'
 import { useToastStore } from '../stores/toast'
@@ -836,6 +838,7 @@ import {
   type LeaderUnavailabilityResponse,
 } from '../api/leaderUnavailabilities'
 
+const authStore = useAuthStore()
 const districtsStore = useDistrictsStore()
 const toastStore = useToastStore()
 const unavailabilitiesStore = useLeaderUnavailabilitiesStore()
@@ -889,6 +892,16 @@ const unavailabilityDeleting = ref(false)
 const unavailabilityFormRef = ref<InstanceType<typeof LeaderUnavailabilityForm> | null>(null)
 const pendingDeleteUnavailability = ref<LeaderUnavailabilityResponse | null>(null)
 
+const canManageUnavailabilities = computed(() => {
+  if (authStore.isSuperadmin) return true
+  return authStore.memberships.some(
+    (membership) =>
+      membership.scope_type === 'DISTRICT' &&
+      membership.scope_id === selectedDistrictId.value &&
+      ['PLANNER', 'DISTRICT_ADMIN'].includes(membership.role),
+  )
+})
+
 async function switchToUnavailabilities(leaderId?: string) {
   activeTab.value = 'unavailabilities'
   unavailabilityFilterLeaderId.value = leaderId ?? ''
@@ -904,15 +917,19 @@ function openUnavailabilitiesFor(leader: LeaderResponse) {
 }
 
 async function saveUnavailability(body: LeaderUnavailabilityCreate) {
-  if (!selectedDistrictId.value) return
+  const districtId = selectedDistrictId.value
+  if (!districtId || !canManageUnavailabilities.value) return
+  const leaderSnapshot = [...leaders.value]
   unavailabilitySaving.value = true
   try {
     const created = await unavailabilitiesStore.addUnavailability(body)
-    unavailabilityFormRef.value?.reset()
-    toastStore.success(
-      'Abwesenheit erfasst',
-      `${leaderNameFromId(created.leader_id, leaders.value)}: ${formatUnavailabilityPeriod(created)}`,
-    )
+    if (selectedDistrictId.value === districtId) {
+      unavailabilityFormRef.value?.reset()
+      toastStore.success(
+        'Abwesenheit erfasst',
+        `${leaderNameFromId(created.leader_id, leaderSnapshot)}: ${formatUnavailabilityPeriod(created)}`,
+      )
+    }
   } catch (e) {
     toastStore.error(
       'Abwesenheit konnte nicht erfasst werden',
@@ -928,7 +945,7 @@ function confirmDeleteUnavailability(item: LeaderUnavailabilityResponse) {
 }
 
 async function executeDeleteUnavailability() {
-  if (!pendingDeleteUnavailability.value || !selectedDistrictId.value) return
+  if (!pendingDeleteUnavailability.value || !selectedDistrictId.value || !canManageUnavailabilities.value) return
   const item = pendingDeleteUnavailability.value
   unavailabilityDeleting.value = true
   try {
