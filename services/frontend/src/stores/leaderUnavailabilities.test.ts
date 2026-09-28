@@ -103,6 +103,29 @@ describe('useLeaderUnavailabilitiesStore', () => {
     expect(store.items.map((item) => item.id)).toEqual(['unavail-created'])
   })
 
+  it('merges pre-existing rows from a pending fetch with a completed create', async () => {
+    let finishFetch!: (value: typeof sampleUnavailability[]) => void
+    vi.mocked(unavailabilityApi.listUnavailabilities).mockImplementationOnce(
+      () => new Promise((resolve) => { finishFetch = resolve }),
+    )
+    vi.mocked(unavailabilityApi.createUnavailability).mockResolvedValueOnce({
+      ...sampleUnavailability,
+      id: 'unavail-created',
+      start_at: '2026-04-01T00:00:00.000Z',
+    })
+    const store = useLeaderUnavailabilitiesStore()
+    const fetchRequest = store.fetchUnavailabilities('district-1')
+    await store.addUnavailability({
+      leader_id: 'leader-1',
+      start_at: '2026-04-01T00:00:00.000Z',
+      end_at: '2026-04-02T00:00:00.000Z',
+      reason: 'URLAUB',
+    })
+    finishFetch([sampleUnavailability])
+    await fetchRequest
+    expect(store.items.map((item) => item.id)).toEqual(['unavail-created', 'unavail-1'])
+  })
+
   it('keeps a pending fetch valid when a create fails', async () => {
     let finishFetch!: (value: typeof sampleUnavailability[]) => void
     vi.mocked(unavailabilityApi.listUnavailabilities).mockImplementationOnce(
