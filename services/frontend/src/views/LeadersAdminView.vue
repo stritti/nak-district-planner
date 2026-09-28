@@ -890,7 +890,11 @@ async function switchToUnavailabilities(leaderId?: string) {
   activeTab.value = 'unavailabilities'
   unavailabilityFilterLeaderId.value = leaderId ?? ''
   if (selectedDistrictId.value) {
-    await unavailabilitiesStore.fetchUnavailabilities(selectedDistrictId.value)
+    try {
+      await unavailabilitiesStore.fetchUnavailabilities(selectedDistrictId.value)
+    } catch (e) {
+      toastStore.error('Abwesenheiten konnten nicht geladen werden', e instanceof Error ? e.message : undefined)
+    }
   }
 }
 
@@ -1133,6 +1137,11 @@ onMounted(async () => {
 })
 
 async function onDistrictChange() {
+  unavailabilityFilterLeaderId.value = ''
+  pendingDeleteUnavailability.value = null
+  unavailabilityFormRef.value?.reset()
+  leaders.value = []
+  await unavailabilitiesStore.fetchUnavailabilities('')
   if (!selectedDistrictId.value) {
     selfLinkedLeader.value = null
     selfSelectedLeaderId.value = ''
@@ -1146,6 +1155,7 @@ async function onDistrictChange() {
       listCongregations(selectedDistrictId.value),
     ])
     await loadSelfLink()
+    if (activeTab.value === 'unavailabilities') await switchToUnavailabilities()
   } finally {
     loading.value = false
   }

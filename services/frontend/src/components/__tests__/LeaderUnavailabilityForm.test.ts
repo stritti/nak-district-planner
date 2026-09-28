@@ -28,6 +28,34 @@ function mountForm(props: Partial<InstanceType<typeof LeaderUnavailabilityForm>[
 }
 
 describe('LeaderUnavailabilityForm', () => {
+  it('clears an unavailable leader after a district switch', async () => {
+    const wrapper = mountForm()
+    await wrapper.setProps({ leaders: [] })
+    await wrapper.find('form').trigger('submit')
+    expect(wrapper.text()).toContain('Bitte eine Amtsträger:in wählen.')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+  })
+
+  it('prevents duplicate submissions while saving', async () => {
+    const wrapper = mountForm({ saving: true })
+    await wrapper.find('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+  })
+
+  it('includes the entire last day and resets after saving', async () => {
+    const wrapper = mountForm()
+    await wrapper.find('[data-testid="unavailability-start-date"]').setValue('2026-05-01')
+    await wrapper.find('[data-testid="unavailability-end-date"]').setValue('2026-05-01')
+    await wrapper.find('[data-testid="unavailability-reason-select"]').setValue('URLAUB')
+    await wrapper.find('form').trigger('submit')
+    const payload = wrapper.emitted('submit')![0]![0] as { end_at: string; note: null }
+    const end = new Date(payload.end_at)
+    expect([end.getHours(), end.getMinutes(), end.getSeconds(), end.getMilliseconds()]).toEqual([23, 59, 59, 999])
+    expect(payload.note).toBeNull()
+    wrapper.vm.reset()
+    await wrapper.find('form').trigger('submit')
+    expect(wrapper.text()).toContain('Bitte Beginn, Ende und Grund angeben.')
+  })
   it('hides the leader select when only one leader is provided', () => {
     const wrapper = mountForm()
     expect(wrapper.find('[data-testid="unavailability-leader-select"]').exists()).toBe(false)

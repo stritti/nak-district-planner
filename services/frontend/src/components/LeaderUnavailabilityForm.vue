@@ -97,18 +97,21 @@ const error = ref('')
 watch(
   () => [props.presetLeaderId, props.leaders] as const,
   ([preset, availableLeaders]) => {
-    if (preset) {
+    if (preset && availableLeaders.some((leader) => leader.id === preset)) {
       leaderId.value = preset
     } else if (availableLeaders.length === 1) {
       leaderId.value = availableLeaders[0]!.id
+    } else if (!availableLeaders.some((leader) => leader.id === leaderId.value)) {
+      leaderId.value = ''
     }
   },
   { immediate: true },
 )
 
 function submit() {
+  if (props.saving) return
   error.value = ''
-  if (!leaderId.value) {
+  if (!props.leaders.some((leader) => leader.id === leaderId.value)) {
     error.value = 'Bitte eine Amtsträger:in wählen.'
     return
   }
@@ -117,7 +120,7 @@ function submit() {
     return
   }
   const start = new Date(`${startDate.value}T00:00`)
-  const end = new Date(`${endDate.value}T23:59`)
+  const end = new Date(`${endDate.value}T23:59:59.999`)
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
     error.value = 'Ungültiges Datum.'
     return

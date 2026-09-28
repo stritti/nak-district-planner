@@ -13,7 +13,7 @@
 ## 3. Backend: Dependency Injection Patterns
 
 - [x] 3.1 Audit all FastAPI routers for inconsistent session/service injection
-- [ ] 3.2 Standardize all routers to use `Depends(get_<service>)` pattern
+- [ ] 3.2 Standardize all routers to use `Depends(get_<service>)` pattern *(nur `calendar_integrations.py` und `notifications.py` nutzen es konsequent; districts/events/leaders/invitations/registrations/service_assignments/planning_series/leader_unavailabilities fehlen)*
 - [ ] 3.3 Add type annotations to all `Depends()` parameters
 
 ## 4. Backend: Health Check Endpoint
@@ -29,12 +29,12 @@
 - [ ] 5.1 Create `src/services/api/httpClient.ts` (axios instance or fetch wrapper)
 - [ ] 5.2 Add auth token injection interceptor
 - [ ] 5.3 Add global 401 handler (trigger logout)
-- [ ] 5.4 Migrate all existing API files to use `httpClient` instead of raw `fetch`/`axios`
+- [ ] 5.4 Migrate all existing API files to use `httpClient` instead of raw `fetch`/`axios` *(15/16 API-Module nutzen `apiFetch` aus `src/api/client.ts`; `registrations.ts` nutzt bewusst `publicFetch` für unauthentifizierte Zugriffe — prüfen, ob Teil-Calls migrierbar sind)*
 
 ## 6. Frontend: OAuth Stub UI
 
-- [ ] 6.1 Add "Coming soon" badge in integration form for Google and Microsoft types
-- [ ] 6.2 Disable integration form submit button when Google/Microsoft type is selected
+- [x] 6.1 Add "Coming soon" badge in integration form for Google and Microsoft types *(Hinweis-Banner "OAuth-Flow ist noch nicht implementiert" in `CalendarIntegrationsView.vue`)*
+- [ ] 6.2 Disable integration form submit button when Google/Microsoft type is selected *(Submit bleibt aktiv — JSON-Credentials können manuell hinterlegt werden; prüfen, ob das beabsichtigt ist)*
 
 ## 7. Frontend: View Component Decomposition
 

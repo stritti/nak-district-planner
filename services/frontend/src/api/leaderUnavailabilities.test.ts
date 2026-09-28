@@ -8,6 +8,7 @@ import {
   deleteUnavailability,
   listUnavailabilities,
   unavailabilityReasonLabel,
+  type UnavailabilityReason,
 } from './leaderUnavailabilities'
 import * as client from './client'
 
@@ -79,5 +80,6 @@ describe('leaderUnavailabilities API', () => {
     expect(unavailabilityReasonLabel('SPERRZEIT')).toBe('Sperrzeit')
     expect(unavailabilityReasonLabel('FORTBILDUNG')).toBe('Fortbildung')
     expect(unavailabilityReasonLabel('SONSTIGES')).toBe('Sonstiges')
+    expect(unavailabilityReasonLabel('UNKNOWN' as UnavailabilityReason)).toBe('UNKNOWN')
   })
 })

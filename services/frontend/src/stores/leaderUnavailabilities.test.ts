@@ -18,6 +18,7 @@ const sampleUnavailability = {
 
 describe('useLeaderUnavailabilitiesStore', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     setActivePinia(createPinia())
     vi.mocked(unavailabilityApi.listUnavailabilities).mockResolvedValue([sampleUnavailability])
     vi.mocked(unavailabilityApi.createUnavailability).mockResolvedValue(sampleUnavailability)
@@ -45,7 +46,7 @@ describe('useLeaderUnavailabilitiesStore', () => {
       end_at: '2026-04-02T00:00:00.000Z',
     })
     const store = useLeaderUnavailabilitiesStore()
-    store.items = [sampleUnavailability]
+    await store.fetchUnavailabilities('district-1')
     await store.addUnavailability('district-1', {
       leader_id: 'leader-1',
       start_at: '2026-04-01T00:00:00.000Z',
@@ -57,9 +58,43 @@ describe('useLeaderUnavailabilitiesStore', () => {
 
   it('removes a deleted unavailability from the list', async () => {
     const store = useLeaderUnavailabilitiesStore()
-    store.items = [sampleUnavailability]
+    await store.fetchUnavailabilities('district-1')
     await store.removeUnavailability('district-1', 'unavail-1')
     expect(unavailabilityApi.deleteUnavailability).toHaveBeenCalledWith('district-1', 'unavail-1')
     expect(store.items).toHaveLength(0)
+  })
+
+  it('ignores stale responses and keeps the current request loading', async () => {
+    let finish!: (value: typeof sampleUnavailability[]) => void
+    vi.mocked(unavailabilityApi.listUnavailabilities).mockImplementationOnce(
+      () => new Promise((resolve) => { finish = resolve }),
+    )
+    const store = useLeaderUnavailabilitiesStore()
+    const oldRequest = store.fetchUnavailabilities('old')
+    await store.fetchUnavailabilities('new')
+    finish([])
+    await oldRequest
+    expect(store.districtId).toBe('new')
+    expect(store.items).toEqual([sampleUnavailability])
+    expect(store.loading).toBe(false)
+  })
+
+  it('clears old data and loading after a fetch failure', async () => {
+    const store = useLeaderUnavailabilitiesStore()
+    await store.fetchUnavailabilities('district-1')
+    vi.mocked(unavailabilityApi.listUnavailabilities).mockRejectedValueOnce(new Error('offline'))
+    await expect(store.fetchUnavailabilities('district-2')).rejects.toThrow('offline')
+    expect(store.items).toEqual([])
+    expect(store.loading).toBe(false)
+  })
+
+  it('does not mix mutations from another district or a different leader filter', async () => {
+    const store = useLeaderUnavailabilitiesStore()
+    await store.fetchUnavailabilities('district-2', 'leader-2')
+    await store.addUnavailability('district-1', sampleUnavailability)
+    await store.removeUnavailability('district-1', sampleUnavailability.id)
+    expect(store.items).toEqual([sampleUnavailability])
+    await store.addUnavailability('district-2', sampleUnavailability)
+    expect(store.items).toHaveLength(1)
   })
 })
