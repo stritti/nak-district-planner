@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { identityFromTokenExchange, isValidTokenExchangeResponse, isValidTokenShape } from './oidcToken'
-import type { OIDCToken, OIDCUser } from './useOIDC'
+import type { OIDCToken, OIDCUser } from './oidcTypes'
 
 const currentToken: OIDCToken = {
   accessToken: 'old-access',

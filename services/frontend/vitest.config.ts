@@ -16,8 +16,14 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/composables/jwt.ts",
+        "src/composables/base64url.ts",
+        "src/composables/pkce.ts",
         "src/composables/oidcToken.ts",
+        "src/composables/oidcSession.ts",
+        "src/composables/oidcDiscovery.ts",
+        "src/composables/oidcAuthorization.ts",
         "src/composables/oidcRefresh.ts",
+        "src/composables/refreshScheduler.ts",
         "src/composables/useOIDC.ts",
       ],
       thresholds: {
