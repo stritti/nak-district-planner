@@ -7,6 +7,7 @@ import {
   createUnavailability,
   deleteUnavailability,
   listUnavailabilities,
+  planningDayBounds,
   unavailabilityReasonLabel,
   type UnavailabilityReason,
 } from './leaderUnavailabilities'
@@ -73,6 +74,24 @@ describe('leaderUnavailabilities API', () => {
       '/api/v1/districts/district-1/leader-unavailabilities/unavail-1',
       { method: 'DELETE' },
     )
+  })
+
+  it('builds Europe/Berlin day bounds independent of browser timezone', () => {
+    expect(planningDayBounds('2026-05-01')).toEqual({
+      start: '2026-04-30T22:00:00.000Z',
+      end: '2026-05-01T21:59:59.999Z',
+    })
+  })
+
+  it('handles DST transition days correctly', () => {
+    expect(planningDayBounds('2026-03-29')).toEqual({
+      start: '2026-03-28T23:00:00.000Z',
+      end: '2026-03-29T21:59:59.999Z',
+    })
+    expect(planningDayBounds('2026-10-25')).toEqual({
+      start: '2026-10-24T22:00:00.000Z',
+      end: '2026-10-25T22:59:59.999Z',
+    })
   })
 
   it('maps reason values to German labels', () => {
