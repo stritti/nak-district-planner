@@ -51,7 +51,7 @@
 - [ ] 4.1 `ConflictBanner.vue`-Komponente: Zeigt Konflikte nach Severity (rot/gelb) mit Nachricht
 - [ ] 4.2 Integration in Matrix-View: Zellen mit Konflikten markieren (Warnsymbol/Hintergrundfarbe)
 - [ ] 4.3 Integration in ServiceAssignment-Dialog: Conflict-Banner vor Bestätigung
-- [x] 4.4 BLOCK-Konflikte: Submit-Button deaktiviert + Tooltip *(`canSubmit`-Guard + `submitTooltip`)*
+- [x] 4.4 BLOCK-Konflikte: Submit-Button deaktiviert + Begründung *(`canSubmit`-Guard + `aria-describedby`-Beschreibung; `title`-Tooltip auf deaktivierten Buttons ist browserabhängig unzuverlässig)*
 - [x] 4.5 WARN-Konflikte: Bestätigungsmodal "Trotz Konflikt zuweisen?" *(bestehendes `ConfirmDialog.vue`, Retry mit `confirm_warnings: true`)*
 - [x] 4.6 Pinia-Store für Konfliktstatus (z. B. `conflictStore`) *(`src/stores/conflict.ts`)*
 

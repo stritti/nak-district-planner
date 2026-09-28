@@ -131,6 +131,13 @@
         :conflicts="conflictStore.conflicts"
         class="mb-3"
       />
+      <p
+        v-if="hasBlockingConflicts"
+        id="submit-conflict-description"
+        class="sr-only"
+      >
+        {{ conflictStore.blocking.map((c) => c.message).join(' ') }}
+      </p>
       <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modal.error }}</p>
 
       <div class="flex justify-end gap-3 mt-5">
@@ -156,7 +163,7 @@
         <button
           class="btn-primary px-4 py-2"
           :disabled="!canSubmit || modal.saving"
-          :title="submitTooltip"
+          :aria-describedby="hasBlockingConflicts ? 'submit-conflict-description' : undefined"
           data-testid="submit-assignment"
           @click="submitAssignment"
         >
@@ -181,7 +188,7 @@
 import { computed, nextTick, reactive, ref } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { ConflictError } from '../api/errors'
-import { useConflictStore } from '../stores/conflict'
+import { useConflictStore, type PendingConflictAction } from '../stores/conflict'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
 import { useLeadersStore } from '../stores/leaders'
@@ -225,34 +232,26 @@ const modal = reactive({
   moveError: '',
 })
 
-type AssignmentAction = 'save' | 'confirm'
-const pendingWarningAction = ref<AssignmentAction | null>(null)
+type AssignmentAction = PendingConflictAction
 
 const hasBlockingConflicts = computed(() => conflictStore.blocking.length > 0)
+
+const hasLeaderSelection = computed(() => {
+  return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
+})
 
 const canSubmit = computed(() => {
   if (hasBlockingConflicts.value) return false
   if (modal.isGap) {
-    return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
+    return hasLeaderSelection.value
   }
   return true
-})
-
-const submitTooltip = computed(() => {
-  if (hasBlockingConflicts.value) {
-    return conflictStore.blocking.map((c) => c.message).join(' ')
-  }
-  return ''
 })
 
 const warnConfirmMessage = computed(() => {
   const leader = modal.leaderInput.text.trim() || 'der/die Amtstragende'
   const warnings = conflictStore.warnings.map((c) => c.message).join(' ')
   return `Es liegen Konflikte vor: ${warnings}. Soll ${leader} trotzdem zugewiesen werden?`
-})
-
-const hasLeaderSelection = computed(() => {
-  return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
 })
 
 const invitation = reactive({
@@ -420,7 +419,6 @@ async function removeInvitation(invitationId: string) {
 
 function resetConflicts() {
   conflictStore.clear()
-  pendingWarningAction.value = null
 }
 
 function updateLeaderSelection(value: AutocompleteValue) {
@@ -439,7 +437,6 @@ function cancelWarnConfirmation() {
 
 function dismissWarnConfirmation() {
   conflictStore.cancelWarnConfirmation()
-  pendingWarningAction.value = null
 }
 
 function closeModal() {
@@ -453,8 +450,7 @@ function dismissModal() {
 }
 
 function requestWarningConfirmation(action: AssignmentAction) {
-  pendingWarningAction.value = action
-  conflictStore.beginWarnConfirmation()
+  conflictStore.beginWarnConfirmation(action)
 }
 
 async function submitAssignment() {
@@ -525,8 +521,9 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
 }
 
 async function overrideWarnConflicts() {
-  if (!pendingWarningAction.value || hasBlockingConflicts.value || modal.saving) return
-  await persistAssignment(pendingWarningAction.value, true)
+  const action = conflictStore.pendingAction
+  if (!action || hasBlockingConflicts.value || modal.saving) return
+  await persistAssignment(action, true)
 }
 
 async function removeAssignmentFromModal() {

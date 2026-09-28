@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { ConflictItem } from '../api/errors'
+
+export type PendingConflictAction = 'save' | 'confirm'
 
 /**
  * Holds conflict state for the currently open assignment dialog.
@@ -9,30 +11,29 @@ import type { ConflictItem } from '../api/errors'
  */
 export const useConflictStore = defineStore('conflict', () => {
   const conflicts = ref<ConflictItem[]>([])
-  const confirmingWarning = ref(false)
+  const pendingAction = ref<PendingConflictAction | null>(null)
 
-  const blocking = ref<ConflictItem[]>([])
-  const warnings = ref<ConflictItem[]>([])
+  const blocking = computed(() =>
+    conflicts.value.filter((c) => c.severity !== 'WARN' && c.severity !== 'PASS'),
+  )
+  const warnings = computed(() => conflicts.value.filter((c) => c.severity === 'WARN'))
+  const confirmingWarning = computed(() => pendingAction.value !== null)
 
   function setConflicts(items: ConflictItem[]) {
     conflicts.value = items
-    blocking.value = items.filter((c) => c.severity === 'BLOCK')
-    warnings.value = items.filter((c) => c.severity === 'WARN')
+  }
+
+  function beginWarnConfirmation(action: PendingConflictAction) {
+    pendingAction.value = action
+  }
+
+  function cancelWarnConfirmation() {
+    pendingAction.value = null
   }
 
   function clear() {
     conflicts.value = []
-    blocking.value = []
-    warnings.value = []
-    confirmingWarning.value = false
-  }
-
-  function beginWarnConfirmation() {
-    confirmingWarning.value = true
-  }
-
-  function cancelWarnConfirmation() {
-    confirmingWarning.value = false
+    pendingAction.value = null
   }
 
   return {
@@ -40,9 +41,10 @@ export const useConflictStore = defineStore('conflict', () => {
     blocking,
     warnings,
     confirmingWarning,
+    pendingAction,
     setConflicts,
-    clear,
     beginWarnConfirmation,
     cancelWarnConfirmation,
+    clear,
   }
 })

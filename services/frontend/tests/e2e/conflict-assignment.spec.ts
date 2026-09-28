@@ -186,7 +186,10 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     const submit = page.getByTestId('submit-assignment')
     await expect(submit).toBeDisabled()
     await expect(submit).toHaveAttribute(
-      'title',
+      'aria-describedby',
+      'submit-conflict-description',
+    )
+    await expect(page.locator('#submit-conflict-description')).toHaveText(
       'Amtsträger ist im Zeitraum bereits anderweitig zugewiesen.',
     )
     expect(submitAttempts).toBe(1)

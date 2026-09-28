@@ -24,11 +24,15 @@ Die Konfliktprüfung läuft serverseitig vor jeder Zuweisung (`POST/PUT /api/v1/
 - `CONFLICT_CHECK_ENABLED` (Default: `true`) — schaltet die Prüfung ein/aus (Feature-Flag in den Backend-Settings)
 - `MIN_TRAVEL_MINUTES` (Default: `30`) — Mindest-Wechselzeit für `travel_time_check`
 
+## Fail-Safe bei unbekannten Severities
+
+Das Frontend behandelt nur `WARN` und `PASS` als nicht-blockierend. Fügt das Backend eine neue Severity hinzu, blockiert das Frontend die Zuweisung (Fail-Safe), statt sie kommentarlos durchzulassen.
+
 ## Frontend-Verhalten
 
 1. Der Nutzer wählt im Assignment-Dialog eine:n Amtsträger:in und klickt auf „Zuweisen"
 2. Bei 409 parst das Frontend die Konfliktliste (`ConflictError`) und zeigt sie im `ConflictBanner` an
-3. **BLOCK**: Submit bleibt deaktiviert, Tooltip listet die Blockierungsgründe
+3. **BLOCK**: Submit bleibt deaktiviert, `aria-describedby`-Beschreibung listet die Blockierungsgründe (das rote Banner zeigt dieselben Meldungen sichtbar an)
 4. **WARN**: Confirm-Dialog „Trotz Konflikt zuweisen?" — Bestätigen sendet die Zuweisung erneut mit `confirm_warnings: true`
 5. Nach erfolgreichem Speichern wird die Matrix neu geladen
 

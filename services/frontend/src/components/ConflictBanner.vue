@@ -27,12 +27,12 @@
     </div>
     <ul class="space-y-1 ml-7">
       <li
-        v-for="conflict in conflicts"
-        :key="conflict.rule_id"
+        v-for="(conflict, index) in conflicts"
+        :key="`${conflict.rule_id}-${index}`"
         class="text-xs"
-        :class="conflict.severity === 'BLOCK'
-          ? 'text-red-700 dark:text-red-300'
-          : 'text-amber-700 dark:text-amber-300'"
+        :class="conflict.severity === 'WARN'
+          ? 'text-amber-700 dark:text-amber-300'
+          : 'text-red-700 dark:text-red-300'"
         :data-testid="`conflict-${conflict.rule_id}`"
       >
         {{ conflict.message }}
@@ -51,6 +51,6 @@ const props = defineProps<{
 }>()
 
 const hasBlocking = computed(() =>
-  props.conflicts.some((conflict) => conflict.severity === 'BLOCK'),
+  props.conflicts.some((conflict) => conflict.severity !== 'WARN' && conflict.severity !== 'PASS'),
 )
 </script>
