@@ -83,6 +83,7 @@
 import { ref, watch } from 'vue'
 import {
   UNAVAILABILITY_REASONS,
+  planningDayBounds,
   type LeaderUnavailabilityCreate,
   type UnavailabilityReason,
 } from '../api/leaderUnavailabilities'
@@ -131,20 +132,23 @@ function submit() {
     error.value = 'Bitte Beginn, Ende und Grund angeben.'
     return
   }
-  const start = new Date(`${startDate.value}T00:00`)
-  const end = new Date(`${endDate.value}T23:59:59.999`)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    error.value = 'Ungültiges Datum.'
+  if (endDate.value < startDate.value) {
+    error.value = 'Das Ende muss nach dem Beginn liegen.'
     return
   }
-  if (end <= start) {
-    error.value = 'Das Ende muss nach dem Beginn liegen.'
+  let start: string
+  let end: string
+  try {
+    start = planningDayBounds(startDate.value).start
+    end = planningDayBounds(endDate.value).end
+  } catch {
+    error.value = 'Ungültiges Datum.'
     return
   }
   emit('submit', {
     leader_id: leaderId.value,
-    start_at: start.toISOString(),
-    end_at: end.toISOString(),
+    start_at: start,
+    end_at: end,
     reason: reason.value,
     note: note.value.trim() || null,
   })
