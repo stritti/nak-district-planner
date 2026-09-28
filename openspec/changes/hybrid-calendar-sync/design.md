@@ -69,6 +69,8 @@ Delete behavior is stored per CalendarIntegration:
 
 A process-level default is allowed only as a creation default.
 
+A retained link is a deletion tombstone only after an explicit synchronization transition marks it as such. `event_instance_id = NULL` alone has no tombstone semantics. Domain-driven EventInstance deletion outside calendar synchronization must clean up the link or explicitly delegate to the synchronization deletion workflow.
+
 ### 5. Partial Failures
 
 Per-event connector failures are normalized to CalendarConnectorError and do not abort sibling events.
