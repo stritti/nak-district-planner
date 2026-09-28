@@ -103,6 +103,52 @@ describe('useLeaderUnavailabilitiesStore', () => {
     expect(store.items.map((item) => item.id)).toEqual(['unavail-created'])
   })
 
+  it('keeps a pending fetch valid when a create fails', async () => {
+    let finishFetch!: (value: typeof sampleUnavailability[]) => void
+    vi.mocked(unavailabilityApi.listUnavailabilities).mockImplementationOnce(
+      () => new Promise((resolve) => { finishFetch = resolve }),
+    )
+    vi.mocked(unavailabilityApi.createUnavailability).mockRejectedValueOnce(new Error('create failed'))
+    const store = useLeaderUnavailabilitiesStore()
+    const fetchRequest = store.fetchUnavailabilities('district-1')
+    await expect(store.addUnavailability({
+      leader_id: 'leader-1',
+      start_at: '2026-05-01T00:00:00.000Z',
+      end_at: '2026-05-02T00:00:00.000Z',
+      reason: 'URLAUB',
+    })).rejects.toThrow('create failed')
+    expect(store.loading).toBe(true)
+    finishFetch([sampleUnavailability])
+    await fetchRequest
+    expect(store.items).toEqual([sampleUnavailability])
+    expect(store.loading).toBe(false)
+  })
+
+  it('applies every successful overlapping mutation', async () => {
+    let finishCreate!: (value: typeof sampleUnavailability) => void
+    let finishDelete!: () => void
+    vi.mocked(unavailabilityApi.createUnavailability).mockImplementationOnce(
+      () => new Promise((resolve) => { finishCreate = resolve }),
+    )
+    vi.mocked(unavailabilityApi.deleteUnavailability).mockImplementationOnce(
+      () => new Promise((resolve) => { finishDelete = resolve }),
+    )
+    const store = useLeaderUnavailabilitiesStore()
+    await store.fetchUnavailabilities('district-1')
+    const createRequest = store.addUnavailability({
+      leader_id: 'leader-1',
+      start_at: '2026-04-01T00:00:00.000Z',
+      end_at: '2026-04-02T00:00:00.000Z',
+      reason: 'URLAUB',
+    })
+    const deleteRequest = store.removeUnavailability('unavail-1')
+    finishDelete()
+    await deleteRequest
+    finishCreate({ ...sampleUnavailability, id: 'unavail-created', start_at: '2026-04-01T00:00:00.000Z' })
+    await createRequest
+    expect(store.items.map((item) => item.id)).toEqual(['unavail-created'])
+  })
+
   it('does not apply a create result after switching districts', async () => {
     let finishCreate!: (value: typeof sampleUnavailability) => void
     vi.mocked(unavailabilityApi.createUnavailability).mockImplementationOnce(
