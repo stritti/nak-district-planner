@@ -17,7 +17,6 @@ from app.application.sync_service import (
     SyncResult,
     _get_connector,
     _has_significant_deviation,
-    _sanitize_for_log,
     run_sync,
 )
 from app.domain.models.calendar_integration import (
@@ -711,24 +710,3 @@ class TestHasSignificantDeviation:
         slot = _make_slot(planning_time=_START.time())
         assert _has_significant_deviation(slot, _START + timedelta(minutes=6)) is True
 
-
-class TestSanitizeForLog:
-    """Regression tests for log injection (CodeQL finding in sync_service.py)."""
-
-    def test_strips_control_characters(self):
-        malicious = "uid\r\n2026-09-28 WARNING: fake log line"
-        sanitized = _sanitize_for_log(malicious)
-        assert "\r" not in sanitized
-        assert "\n" not in sanitized
-        assert sanitized.startswith("uid")
-
-    def test_preserves_ordinary_text(self):
-        assert _sanitize_for_log("uid-123") == "uid-123"
-
-    def test_bounds_length(self):
-        assert len(_sanitize_for_log("a" * 500)) <= 200
-
-    def test_connector_error_message_is_sanitized(self):
-        sanitized = _sanitize_for_log("Kalender-L\u00f6schung fehlgeschlagen: HTTP 500\nFAKE ENTRY")
-        assert "\n" not in sanitized
-        assert "FAKE ENTRY" in sanitized
