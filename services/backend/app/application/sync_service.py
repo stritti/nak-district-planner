@@ -146,6 +146,16 @@ def _has_significant_deviation(slot: PlanningSlot, event_start: datetime) -> boo
     return abs((event_start - slot_dt).total_seconds()) > 300
 
 
+def _sanitize_for_log(value: object) -> str:
+    """Render external values safely in log messages (prevents log injection).
+
+    Strips control characters — except the ordinary whitespace that is
+    harmless in single-line log output — and bounds the length.
+    """
+    text = str(value)
+    return "".join(ch for ch in text if ch >= " " or ch == "\t").replace("\t", " ")[:200]
+
+
 
 CREATED = "created"
 UPDATED = "updated"
@@ -473,8 +483,8 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                 logger.warning(
                     "Sync %s: skipping event %s after connector error: %s",
                     integration_id,
-                    raw.uid,
-                    exc,
+                    _sanitize_for_log(raw.uid),
+                    _sanitize_for_log(exc),
                 )
                 counters[SKIPPED] += 1
 

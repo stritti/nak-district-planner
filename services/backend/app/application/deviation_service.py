@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, time
+from datetime import UTC, datetime
 
 from app.domain.models.event_instance import EventInstance, SyncState
 from app.domain.models.planning_slot import PlanningSlot
@@ -11,7 +11,6 @@ from app.domain.ports.repositories import (
     EventInstanceRepository,
     PlanningSlotRepository,
 )
-from app.domain.services.sync_policy import internal_state
 
 
 class DeviationService:
