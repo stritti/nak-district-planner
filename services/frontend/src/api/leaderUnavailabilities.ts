@@ -45,10 +45,18 @@ export function planningDayBounds(date: string): { start: string; end: string } 
     return zonedAsUtc - utcMs
   }
 
-  const startProbe = Date.UTC(year, month - 1, day, 12)
-  const nextDayProbe = Date.UTC(year, month - 1, day + 1, 12)
-  const startMs = Date.UTC(year, month - 1, day) - offsetAt(startProbe)
-  const nextDayStartMs = Date.UTC(year, month - 1, day + 1) - offsetAt(nextDayProbe)
+  const localMidnightUtcMs = (y: number, m: number, d: number) => {
+    let guess = Date.UTC(y, m, d)
+    for (let i = 0; i < 3; i++) {
+      const next = Date.UTC(y, m, d) - offsetAt(guess)
+      if (next === guess) return guess
+      guess = next
+    }
+    return guess
+  }
+
+  const startMs = localMidnightUtcMs(year, month - 1, day)
+  const nextDayStartMs = localMidnightUtcMs(year, month - 1, day + 1)
   return { start: new Date(startMs).toISOString(), end: new Date(nextDayStartMs - 1).toISOString() }
 }
 
