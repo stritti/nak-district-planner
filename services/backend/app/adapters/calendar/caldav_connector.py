@@ -197,6 +197,8 @@ class CalDAVConnector(CalendarConnector):
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
         if not event.resource_id:
             raise CalendarConnectorError("CalDAV resource href fehlt")
+        if "url" not in credentials:
+            raise CalendarConnectorError("CalDAV Basis-URL fehlt in den Credentials")
         base = credentials["url"].rstrip("/") + "/"
         url = urljoin(base, event.resource_id)
         source, target = urlsplit(base), urlsplit(url)

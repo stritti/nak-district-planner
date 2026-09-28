@@ -21,6 +21,11 @@ class SyncDeleteMode(StrEnum):
     HARD_DELETE = "HARD_DELETE"
 
 
+# Loop-prevention sentinel stored in ExternalEventLink.revision_marker after an
+# internal deletion was pushed to the provider. Prevents re-import of the mapping.
+INTERNAL_DELETE_MARKER = "internal:deleted"
+
+
 FIELD_AUTHORITY = {
     **dict.fromkeys(
         ("id", "district_id", "series_id", "congregation_id", "category", "planning_date",
@@ -57,3 +62,4 @@ def internal_state(current: SyncState) -> SyncState:
     if current in (SyncState.DIRTY_EXTERNAL, SyncState.CONFLICT):
         return SyncState.CONFLICT
     return SyncState.DIRTY_INTERNAL
+

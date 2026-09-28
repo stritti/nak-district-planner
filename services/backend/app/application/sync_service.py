@@ -4,7 +4,7 @@ Implements deterministic, idempotent sync with state machine:
   1. Load integration from DB
   2. Decrypt credentials
   3. Fetch raw events from external source
-  4. For each raw event:
+  4. For each raw event (isolated — one failure never aborts the run):
      a. Look up ExternalEventLink by (provider, uid, calendar_integration_id)
      b. If NEW:
         - Skip cancelled events
@@ -12,18 +12,20 @@ Implements deterministic, idempotent sync with state machine:
         - If matched: update EventInstance actual times, set sync_state=CLEAN, create link
         - If unmatched: create new PlanningSlot + EventInstance (source=EXTERNAL) + link
      c. If EXISTING:
-        - Compare content_hash → skip if unchanged
-        - If raw.is_cancelled → CANCELLED status
-        - Update EventInstance fields, set sync_state=DIRTY_EXTERNAL
-        - Update ExternalEventLink hash
+        - Skip durable tombstones (never re-import deleted mappings)
+        - Push internal cancellation to provider (WRITE capability, once)
+        - If raw.is_cancelled → MARK_CANCELLED or HARD_DELETE per settings
+        - Field-level authority routing; concurrent edits → CONFLICT
+        - Update EventInstance fields, set sync_state, update ExternalEventLink hash
   5. Update integration.last_synced_at
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,13 +44,16 @@ from app.domain.models.calendar_integration import CalendarCapability, CalendarT
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
 from app.domain.models.external_event_link import ExternalEventLink
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
-from app.domain.ports.calendar import CalendarConnector
+from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 from app.domain.services.sync_policy import (
+    INTERNAL_DELETE_MARKER,
     SyncDeleteMode,
     SyncFieldAuthority,
     classify_field,
     inbound_state,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -60,12 +65,14 @@ class SyncResult:
         updated: Number of existing EventInstances updated.
         cancelled: Number of existing EventInstances cancelled.
         auto_matched: Number of events auto-matched to existing PlanningSlots.
+        skipped: Number of events skipped after per-event connector errors.
     """
 
     created: int = 0
     updated: int = 0
     cancelled: int = 0
     auto_matched: int = 0
+    skipped: int = 0
 
 
 _CONNECTOR_MAP: dict[CalendarType, type[CalendarConnector]] = {
@@ -139,8 +146,270 @@ def _has_significant_deviation(slot: PlanningSlot, event_start: datetime) -> boo
     return abs((event_start - slot_dt).total_seconds()) > 300
 
 
+
+CREATED = "created"
+UPDATED = "updated"
+CANCELLED = "cancelled"
+AUTO_MATCHED = "auto_matched"
+SKIPPED = "skipped"
+
+
+async def _import_new_event(
+    *,
+    raw,
+    integration,
+    integration_id: uuid.UUID,
+    session: AsyncSession,
+    instance_repo: SqlEventInstanceRepository,
+    slot_repo: SqlPlanningSlotRepository,
+    link_repo: SqlExternalEventLinkRepository,
+    new_content_hash: str,
+) -> str:
+    """Handle a raw event without an existing ExternalEventLink."""
+    # Skip cancelled events — don't create phantom slots for them
+    if raw.is_cancelled:
+        return SKIPPED
+
+    # Auto-matching: try to match to an existing PlanningSlot first
+    matched_slot = await _find_matching_planning_slot(
+        session=session,
+        district_id=integration.district_id,
+        congregation_id=integration.congregation_id,
+        event_start=raw.start_at,
+        event_category=raw.title,
+    )
+
+    if matched_slot is not None:
+        # Auto-match: update existing EventInstance with external data
+        instance = await instance_repo.get_by_planning_slot(matched_slot.id)
+        if instance is not None:
+            deviation = _has_significant_deviation(matched_slot, raw.start_at)
+            instance.actual_start_at = raw.start_at
+            instance.actual_end_at = raw.end_at
+            instance.title = raw.title
+            instance.description = raw.description
+            instance.source = EventSource.EXTERNAL
+            instance.sync_state = SyncState.CLEAN
+            instance.content_hash = new_content_hash
+            instance.external_uid = raw.uid
+            instance.calendar_integration_id = integration_id
+            instance.last_external_modified_at = datetime.now(UTC)
+            instance.deviation_flag = deviation
+            instance.updated_at = datetime.now(UTC)
+            await instance_repo.save(instance)
+
+            link = ExternalEventLink.create(
+                event_instance_id=instance.id,
+                provider=integration.type.value,
+                external_event_id=raw.uid,
+                calendar_integration_id=integration_id,
+                last_synced_hash=new_content_hash,
+            )
+            await link_repo.save(link)
+            return AUTO_MATCHED
+
+    # No match — create new PlanningSlot + EventInstance
+    slot = PlanningSlot.create(
+        district_id=integration.district_id,
+        planning_date=raw.start_at.date(),
+        planning_time=raw.start_at.time(),
+        congregation_id=integration.congregation_id,
+        category=integration.default_category or raw.title,
+        title=raw.title,
+    )
+    await slot_repo.save(slot)
+
+    instance = EventInstance.create(
+        planning_slot_id=slot.id,
+        title=raw.title,
+        actual_start_at=raw.start_at,
+        actual_end_at=raw.end_at,
+        description=raw.description,
+        source=EventSource.EXTERNAL,
+        visibility=EventVisibility.PUBLIC,
+        sync_state=SyncState.CLEAN,
+        content_hash=new_content_hash,
+        external_uid=raw.uid,
+        calendar_integration_id=integration_id,
+    )
+    await instance_repo.save(instance)
+
+    link = ExternalEventLink.create(
+        event_instance_id=instance.id,
+        provider=integration.type.value,
+        external_event_id=raw.uid,
+        calendar_integration_id=integration_id,
+        last_synced_hash=new_content_hash,
+    )
+    await link_repo.save(link)
+    return CREATED
+
+
+async def _push_internal_delete(
+    *,
+    connector: CalendarConnector,
+    credentials: dict,
+    raw,
+    integration,
+    existing_link: ExternalEventLink,
+    instance: EventInstance,
+    instance_repo: SqlEventInstanceRepository,
+    link_repo: SqlExternalEventLinkRepository,
+    new_content_hash: str,
+) -> None:
+    """Push an internal cancellation to the provider exactly once."""
+    await connector.delete_event(credentials, raw)
+    existing_link.revision_marker = INTERNAL_DELETE_MARKER
+    existing_link.last_synced_hash = new_content_hash
+    existing_link.updated_at = datetime.now(UTC)
+    await link_repo.save(existing_link)
+    instance.sync_state = SyncState.CLEAN
+    await instance_repo.save(instance)
+
+
+async def _handle_external_cancel(
+    *,
+    raw,
+    existing_link: ExternalEventLink,
+    instance: EventInstance,
+    slot: PlanningSlot | None,
+    instance_repo: SqlEventInstanceRepository,
+    slot_repo: SqlPlanningSlotRepository,
+    link_repo: SqlExternalEventLinkRepository,
+    new_content_hash: str,
+) -> str:
+    """Apply an external cancellation according to the configured delete mode."""
+    if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
+        instance.sync_state = SyncState.CONFLICT
+        await instance_repo.save(instance)
+        return SKIPPED
+    if slot and settings.sync_delete_mode == SyncDeleteMode.HARD_DELETE:
+        existing_link.event_instance_id = None
+        existing_link.last_synced_hash = new_content_hash
+        await link_repo.save(existing_link)
+        await slot_repo.delete(slot.id)
+        return CANCELLED
+    if slot and slot.status != PlanningSlotStatus.CANCELLED:
+        slot.status = PlanningSlotStatus.CANCELLED
+        slot.updated_at = datetime.now(UTC)
+        await slot_repo.save(slot)
+        existing_link.last_synced_hash = new_content_hash
+        existing_link.updated_at = datetime.now(UTC)
+        await link_repo.save(existing_link)
+        return CANCELLED
+    existing_link.last_synced_hash = new_content_hash
+    existing_link.updated_at = datetime.now(UTC)
+    await link_repo.save(existing_link)
+    return SKIPPED
+
+
+async def _apply_external_update(
+    *,
+    raw,
+    existing_link: ExternalEventLink,
+    instance: EventInstance,
+    slot: PlanningSlot | None,
+    instance_repo: SqlEventInstanceRepository,
+    link_repo: SqlExternalEventLinkRepository,
+    new_content_hash: str,
+) -> str:
+    """Route incoming fields by authority and advance the sync state machine."""
+    next_state = inbound_state(instance.sync_state, changed=True)
+    if next_state == SyncState.CONFLICT:
+        instance.sync_state = next_state
+        await instance_repo.save(instance)
+        return SKIPPED  # Keep the acknowledged hash so this change can be retried.
+
+    incoming = {
+        "title": raw.title,
+        "actual_start_at": raw.start_at,
+        "actual_end_at": raw.end_at,
+        "description": raw.description,
+    }
+    for field, value in incoming.items():
+        if classify_field(field) != SyncFieldAuthority.STRUCTURAL:
+            setattr(instance, field, value)
+    instance.source = EventSource.EXTERNAL
+    instance.sync_state = next_state
+    if slot:
+        instance.deviation_flag = _has_significant_deviation(slot, raw.start_at)
+    instance.content_hash = new_content_hash
+    instance.last_external_modified_at = datetime.now(UTC)
+    instance.updated_at = datetime.now(UTC)
+    await instance_repo.save(instance)
+
+    existing_link.last_synced_hash = new_content_hash
+    existing_link.revision_marker = raw.revision_marker
+    existing_link.updated_at = datetime.now(UTC)
+    await link_repo.save(existing_link)
+    return UPDATED
+
+
+async def _process_existing_event(
+    *,
+    raw,
+    integration,
+    connector: CalendarConnector,
+    credentials: dict,
+    integration_id: uuid.UUID,
+    instance_repo: SqlEventInstanceRepository,
+    slot_repo: SqlPlanningSlotRepository,
+    link_repo: SqlExternalEventLinkRepository,
+    existing_link: ExternalEventLink,
+    new_content_hash: str,
+) -> str:
+    """Handle a raw event with an existing ExternalEventLink."""
+    if existing_link.event_instance_id is None or existing_link.revision_marker == INTERNAL_DELETE_MARKER:
+        return SKIPPED  # Durable tombstone: never re-import a deleted mapping.
+    instance = await instance_repo.get(existing_link.event_instance_id)
+    if instance is None:
+        return SKIPPED
+
+    slot = await slot_repo.get(instance.planning_slot_id)
+    if (slot and slot.status == PlanningSlotStatus.CANCELLED
+            and instance.sync_state == SyncState.DIRTY_INTERNAL
+            and CalendarCapability.WRITE in integration.capabilities):
+        await _push_internal_delete(
+            connector=connector,
+            credentials=credentials,
+            raw=raw,
+            integration=integration,
+            existing_link=existing_link,
+            instance=instance,
+            instance_repo=instance_repo,
+            link_repo=link_repo,
+            new_content_hash=new_content_hash,
+        )
+        return CANCELLED
+
+    if raw.is_cancelled:
+        return await _handle_external_cancel(
+            raw=raw,
+            existing_link=existing_link,
+            instance=instance,
+            slot=slot,
+            instance_repo=instance_repo,
+            slot_repo=slot_repo,
+            link_repo=link_repo,
+            new_content_hash=new_content_hash,
+        )
+
+    if existing_link.last_synced_hash == new_content_hash:
+        return SKIPPED  # Unchanged — skip
+
+    return await _apply_external_update(
+        raw=raw,
+        existing_link=existing_link,
+        instance=instance,
+        slot=slot,
+        instance_repo=instance_repo,
+        link_repo=link_repo,
+        new_content_hash=new_content_hash,
+    )
+
+
 async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResult:
-    """Sync one CalendarIntegration. Returns {created, updated, cancelled, auto_matched}."""
+    """Sync one CalendarIntegration. Returns {created, updated, cancelled, auto_matched, skipped}."""
     # Serialize duplicate deliveries per integration, including first-time mappings.
     # The transaction owning this session releases the lock on commit/rollback.
     lock_key = int.from_bytes(integration_id.bytes[:8], "big", signed=True)
@@ -154,7 +423,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
     if integration is None:
         raise ValueError(f"CalendarIntegration {integration_id} not found")
 
-    created = updated = cancelled = auto_matched = 0
+    counters = {CREATED: 0, UPDATED: 0, CANCELLED: 0, AUTO_MATCHED: 0, SKIPPED: 0}
 
     try:
         credentials = decrypt_credentials(integration.credentials_enc)
@@ -163,7 +432,6 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
         raw_events = await connector.fetch_events(credentials, from_dt=cutoff)
 
         for raw in raw_events:
-            # 1. Check for existing mapping via ExternalEventLink
             existing_link = await link_repo.get_by_external_event(
                 provider=integration.type.value,
                 external_event_id=raw.uid,
@@ -173,167 +441,42 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
             # Provider hashes may omit descriptions. Hash normalized business data here.
             new_content_hash = _compute_content_hash(raw)
 
-            if existing_link is None:
-                # ── NEW external event ──
-
-                # Skip cancelled events — don't create phantom slots for them
-                if raw.is_cancelled:
-                    continue
-
-                # Auto-matching: try to match to an existing PlanningSlot first
-                matched_slot = await _find_matching_planning_slot(
-                    session=session,
-                    district_id=integration.district_id,
-                    congregation_id=integration.congregation_id,
-                    event_start=raw.start_at,
-                    event_category=raw.title,
+            # Partial failure isolation: one broken event never aborts the
+            # whole integration sync (harden-calendar-sync-algorithm, decision 6).
+            try:
+                if existing_link is None:
+                    outcome = await _import_new_event(
+                        raw=raw,
+                        integration=integration,
+                        integration_id=integration_id,
+                        session=session,
+                        instance_repo=instance_repo,
+                        slot_repo=slot_repo,
+                        link_repo=link_repo,
+                        new_content_hash=new_content_hash,
+                    )
+                else:
+                    outcome = await _process_existing_event(
+                        raw=raw,
+                        integration=integration,
+                        connector=connector,
+                        credentials=credentials,
+                        integration_id=integration_id,
+                        instance_repo=instance_repo,
+                        slot_repo=slot_repo,
+                        link_repo=link_repo,
+                        existing_link=existing_link,
+                        new_content_hash=new_content_hash,
+                    )
+                counters[outcome] += 1
+            except CalendarConnectorError as exc:
+                logger.warning(
+                    "Sync %s: skipping event %s after connector error: %s",
+                    integration_id,
+                    raw.uid,
+                    exc,
                 )
-
-                if matched_slot is not None:
-                    # Auto-match: update existing EventInstance with external data
-                    instance = await instance_repo.get_by_planning_slot(matched_slot.id)
-                    if instance is not None:
-                        deviation = _has_significant_deviation(matched_slot, raw.start_at)
-                        instance.actual_start_at = raw.start_at
-                        instance.actual_end_at = raw.end_at
-                        instance.title = raw.title
-                        instance.description = raw.description
-                        instance.source = EventSource.EXTERNAL
-                        instance.sync_state = SyncState.CLEAN
-                        instance.content_hash = new_content_hash
-                        instance.external_uid = raw.uid
-                        instance.calendar_integration_id = integration_id
-                        instance.last_external_modified_at = datetime.now(UTC)
-                        instance.deviation_flag = deviation
-                        instance.updated_at = datetime.now(UTC)
-                        await instance_repo.save(instance)
-
-                        link = ExternalEventLink.create(
-                            event_instance_id=instance.id,
-                            provider=integration.type.value,
-                            external_event_id=raw.uid,
-                            calendar_integration_id=integration_id,
-                            last_synced_hash=new_content_hash,
-                        )
-                        await link_repo.save(link)
-                        auto_matched += 1
-                        continue
-
-                # No match — create new PlanningSlot + EventInstance
-                slot = PlanningSlot.create(
-                    district_id=integration.district_id,
-                    planning_date=raw.start_at.date(),
-                    planning_time=raw.start_at.time(),
-                    congregation_id=integration.congregation_id,
-                    category=integration.default_category or raw.title,
-                    title=raw.title,
-                )
-                await slot_repo.save(slot)
-
-                instance = EventInstance.create(
-                    planning_slot_id=slot.id,
-                    title=raw.title,
-                    actual_start_at=raw.start_at,
-                    actual_end_at=raw.end_at,
-                    description=raw.description,
-                    source=EventSource.EXTERNAL,
-                    visibility=EventVisibility.PUBLIC,
-                    sync_state=SyncState.CLEAN,
-                    content_hash=new_content_hash,
-                    external_uid=raw.uid,
-                    calendar_integration_id=integration_id,
-                )
-                await instance_repo.save(instance)
-
-                link = ExternalEventLink.create(
-                    event_instance_id=instance.id,
-                    provider=integration.type.value,
-                    external_event_id=raw.uid,
-                    calendar_integration_id=integration_id,
-                    last_synced_hash=new_content_hash,
-                )
-                await link_repo.save(link)
-                created += 1
-
-            else:
-                # ── EXISTING external event ──
-                if existing_link.event_instance_id is None or existing_link.revision_marker == "internal:deleted":
-                    continue  # Durable tombstone: never re-import a deleted mapping.
-                instance = await instance_repo.get(existing_link.event_instance_id)
-                if instance is None:
-                    continue
-
-                slot = await slot_repo.get(instance.planning_slot_id)
-                if (slot and slot.status == PlanningSlotStatus.CANCELLED
-                        and instance.sync_state == SyncState.DIRTY_INTERNAL
-                        and CalendarCapability.WRITE in integration.capabilities):
-                    await connector.delete_event(credentials, raw)
-                    existing_link.revision_marker = "internal:deleted"
-                    existing_link.last_synced_hash = new_content_hash
-                    existing_link.updated_at = datetime.now(UTC)
-                    await link_repo.save(existing_link)
-                    instance.sync_state = SyncState.CLEAN
-                    await instance_repo.save(instance)
-                    cancelled += 1
-                    continue
-
-                if raw.is_cancelled:
-                    if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
-                        instance.sync_state = SyncState.CONFLICT
-                        await instance_repo.save(instance)
-                        continue
-                    # Mark slot as CANCELLED
-                    if slot and settings.sync_delete_mode == SyncDeleteMode.HARD_DELETE:
-                        existing_link.event_instance_id = None
-                        existing_link.last_synced_hash = new_content_hash
-                        await link_repo.save(existing_link)
-                        await slot_repo.delete(slot.id)
-                        cancelled += 1
-                        continue
-                    if slot and slot.status != PlanningSlotStatus.CANCELLED:
-                        slot.status = PlanningSlotStatus.CANCELLED
-                        slot.updated_at = datetime.now(UTC)
-                        await slot_repo.save(slot)
-                        cancelled += 1
-
-                    existing_link.last_synced_hash = new_content_hash
-                    existing_link.updated_at = datetime.now(UTC)
-                    await link_repo.save(existing_link)
-                    continue
-
-                if existing_link.last_synced_hash == new_content_hash:
-                    continue  # Unchanged — skip
-
-                next_state = inbound_state(instance.sync_state, changed=True)
-                if next_state == SyncState.CONFLICT:
-                    instance.sync_state = next_state
-                    await instance_repo.save(instance)
-                    continue  # Keep the acknowledged hash so this change can be retried.
-
-                # Update EventInstance fields
-                incoming = {
-                    "title": raw.title,
-                    "actual_start_at": raw.start_at,
-                    "actual_end_at": raw.end_at,
-                    "description": raw.description,
-                }
-                for field, value in incoming.items():
-                    if classify_field(field) != SyncFieldAuthority.STRUCTURAL:
-                        setattr(instance, field, value)
-                instance.source = EventSource.EXTERNAL
-                instance.sync_state = next_state
-                if slot:
-                    instance.deviation_flag = _has_significant_deviation(slot, raw.start_at)
-                instance.content_hash = new_content_hash
-                instance.last_external_modified_at = datetime.now(UTC)
-                instance.updated_at = datetime.now(UTC)
-                await instance_repo.save(instance)
-
-                existing_link.last_synced_hash = new_content_hash
-                existing_link.revision_marker = raw.revision_marker
-                existing_link.updated_at = datetime.now(UTC)
-                await link_repo.save(existing_link)
-                updated += 1
+                counters[SKIPPED] += 1
 
         # Update integration last_synced_at
         integration.last_synced_at = datetime.now(UTC)
@@ -345,8 +488,9 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
         raise
 
     return SyncResult(
-        created=created,
-        updated=updated,
-        cancelled=cancelled,
-        auto_matched=auto_matched,
+        created=counters[CREATED],
+        updated=counters[UPDATED],
+        cancelled=counters[CANCELLED],
+        auto_matched=counters[AUTO_MATCHED],
+        skipped=counters[SKIPPED],
     )

@@ -33,6 +33,8 @@ from app.domain.models.event_instance import (
 from app.domain.models.external_event_link import ExternalEventLink
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
+from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.sync_policy import INTERNAL_DELETE_MARKER
 
 # ── constants ──────────────────────────────────────────────────────────────────
 
@@ -220,11 +222,57 @@ class TestRunSync:
 
         assert (await run_sync(_INT_ID, mocks["session"])).cancelled == 1
         assert (await run_sync(_INT_ID, mocks["session"])).cancelled == 0
+        assert (await run_sync(_INT_ID, mocks["session"])).skipped == 1
         if hard_delete:
             assert link.event_instance_id is None
             mocks["slot_repo"].delete.assert_awaited_once_with(slot.id)
         else:
             assert slot.status == PlanningSlotStatus.CANCELLED
+
+    async def test_connector_error_isolates_event_and_continues(self, mocks):
+        """One failing external delete must not abort the whole sync run."""
+        integration = _integration()
+        integration.capabilities.append(CalendarCapability.WRITE)
+        slot = _make_slot()
+        slot.status = PlanningSlotStatus.CANCELLED
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        failing_link = _make_link(event_instance_id=instance.id, uid="uid@test")
+
+        healthy_slot = _make_slot()
+        healthy_instance = _make_event_instance(planning_slot_id=healthy_slot.id)
+        healthy_link = _make_link(event_instance_id=healthy_instance.id, uid="other@test")
+
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw(), _raw(uid="other@test")]
+        mocks["connector"].delete_event = AsyncMock(side_effect=CalendarConnectorError("HTTP 412"))
+
+        async def get_link(provider, external_event_id, calendar_integration_id):
+            if external_event_id == "uid@test":
+                return failing_link
+            return healthy_link
+
+        mocks["link_repo"].get_by_external_event.side_effect = get_link
+
+        async def get_instance(iid):
+            if iid == instance.id:
+                return instance
+            return healthy_instance
+
+        mocks["instance_repo"].get.side_effect = get_instance
+
+        async def get_slot(sid):
+            if sid == slot.id:
+                return slot
+            return healthy_slot
+
+        mocks["slot_repo"].get.side_effect = get_slot
+
+        result = await run_sync(_INT_ID, mocks["session"])
+        assert result.skipped == 1
+        assert result.updated == 1
+        assert failing_link.revision_marker != INTERNAL_DELETE_MARKER
+        assert healthy_link.last_synced_hash not in (None, failing_link.last_synced_hash)
 
     @pytest.mark.parametrize("cancelled", [False, True])
     async def test_concurrent_edits_preserve_internal_data(self, mocks, cancelled):
@@ -328,7 +376,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0)
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0, skipped=1)
         mocks["link_repo"].get_by_external_event.assert_awaited_once()
         mocks["slot_repo"].save.assert_not_called()
         mocks["instance_repo"].save.assert_not_called()
@@ -391,7 +439,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0)
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0, skipped=1)
         mocks["instance_repo"].save.assert_not_called()
         mocks["link_repo"].save.assert_not_called()
         mocks["slot_repo"].save.assert_not_called()
@@ -508,7 +556,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=1, updated=1, cancelled=1, auto_matched=0)
+        assert result == SyncResult(created=1, updated=1, cancelled=1, auto_matched=0, skipped=1)
 
     async def test_congregation_id_propagated(self, mocks):
         """New event inherits congregation_id from the integration."""

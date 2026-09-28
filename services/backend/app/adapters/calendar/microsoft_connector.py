@@ -113,7 +113,7 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
                     description=description,
                     content_hash=_content_hash(uid, start_at, end_at, title),
                     is_cancelled=is_cancelled,
-                    revision_marker=item.get("@odata.etag"),
+                    revision_marker=item.get("changeKey"),
                     resource_id=item.get("id"),
                 )
             )

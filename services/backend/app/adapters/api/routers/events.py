@@ -322,12 +322,12 @@ async def resolve_event_deviation(
     slot_repo = SqlPlanningSlotRepository(session)
     slot = await slot_repo.get(event_id)
     if slot is None:
-        raise HTTPException(status_code=404, detail="Ereignis nicht gefunden")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
     instance_repo = SqlEventInstanceRepository(session)
     instance = await instance_repo.get_by_planning_slot(event_id)
     if instance is None:
-        raise HTTPException(status_code=404, detail="EventInstance nicht gefunden")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
     await DeviationService(slot_repo, instance_repo).resolve_deviation(instance.id)
     return _slot_to_event(slot, await instance_repo.get(instance.id))
 
