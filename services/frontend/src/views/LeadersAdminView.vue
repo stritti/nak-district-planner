@@ -361,7 +361,7 @@
             ref="unavailabilityFormRef"
             :leaders="leaders"
             :preset-leader-id="unavailabilityFilterLeaderId"
-            :saving="unavailabilitySaving"
+            :saving="unavailabilitySavingDistrictId === selectedDistrictId"
             @submit="saveUnavailability"
           />
         </div>
@@ -887,7 +887,8 @@ async function switchToRegistrations() {
 // ── Unavailabilities ─────────────────────────────────────────────
 
 const unavailabilityFilterLeaderId = ref('')
-const unavailabilitySaving = ref(false)
+const unavailabilitySavingDistrictId = ref('')
+let districtLoadGeneration = 0
 const unavailabilityDeleting = ref(false)
 const unavailabilityFormRef = ref<InstanceType<typeof LeaderUnavailabilityForm> | null>(null)
 const pendingDeleteUnavailability = ref<LeaderUnavailabilityResponse | null>(null)
@@ -920,7 +921,7 @@ async function saveUnavailability(body: LeaderUnavailabilityCreate) {
   const districtId = selectedDistrictId.value
   if (!districtId || !canManageUnavailabilities.value) return
   const leaderSnapshot = [...leaders.value]
-  unavailabilitySaving.value = true
+  unavailabilitySavingDistrictId.value = districtId
   try {
     const created = await unavailabilitiesStore.addUnavailability(body)
     if (selectedDistrictId.value === districtId) {
@@ -936,7 +937,7 @@ async function saveUnavailability(body: LeaderUnavailabilityCreate) {
       e instanceof Error ? e.message : undefined,
     )
   } finally {
-    unavailabilitySaving.value = false
+    if (unavailabilitySavingDistrictId.value === districtId) unavailabilitySavingDistrictId.value = ''
   }
 }
 
@@ -1140,12 +1141,15 @@ onMounted(async () => {
 })
 
 async function onDistrictChange() {
+  const loadGeneration = ++districtLoadGeneration
+  const districtId = selectedDistrictId.value
   unavailabilityFilterLeaderId.value = ''
   pendingDeleteUnavailability.value = null
   unavailabilityFormRef.value?.reset()
   leaders.value = []
   await unavailabilitiesStore.fetchUnavailabilities('')
-  if (!selectedDistrictId.value) {
+  if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
+  if (!districtId) {
     selfLinkedLeader.value = null
     selfSelectedLeaderId.value = ''
     selfLinkError.value = ''
@@ -1153,14 +1157,18 @@ async function onDistrictChange() {
   }
   loading.value = true
   try {
-    ;[leaders.value, congregations.value] = await Promise.all([
-      listLeaders(selectedDistrictId.value),
-      listCongregations(selectedDistrictId.value),
+    const [loadedLeaders, loadedCongregations] = await Promise.all([
+      listLeaders(districtId),
+      listCongregations(districtId),
     ])
+    if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
+    leaders.value = loadedLeaders
+    congregations.value = loadedCongregations
     await loadSelfLink()
+    if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
     if (activeTab.value === 'unavailabilities') await switchToUnavailabilities()
   } finally {
-    loading.value = false
+    if (loadGeneration === districtLoadGeneration) loading.value = false
   }
 }
 
