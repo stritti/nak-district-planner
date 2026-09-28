@@ -36,7 +36,11 @@ The engine SHALL compute the changed field set and classify each changed field b
 
 ### 2. Idempotency and acknowledgement
 
-ExternalEventLink stores provider identity, external event id, last acknowledged content hash, revision marker, and durable deletion/tombstone state.
+ExternalEventLink stores provider identity, external event id, last acknowledged content hash, revision marker, and **explicit** durable deletion/tombstone state.
+
+A nullable `event_instance_id` is not sufficient to identify a synchronization tombstone. Nullability can also result from unrelated domain deletion flows through foreign-key actions. Tombstone intent SHALL therefore be represented explicitly (for example by `link_state = ACTIVE | SYNC_TOMBSTONE` plus deletion origin/reason). Only the sync deletion workflow may transition a link to `SYNC_TOMBSTONE`.
+
+If an EventInstance is deleted outside the synchronization deletion workflow, the owning domain flow SHALL either remove its ExternalEventLink or deliberately invoke the sync-deletion transition. A generic `ON DELETE SET NULL` side effect MUST NOT create a tombstone implicitly.
 
 - An already acknowledged unchanged event is a no-op.
 - An already acknowledged cancellation is a no-op and SHALL NOT cause recurring writes.
