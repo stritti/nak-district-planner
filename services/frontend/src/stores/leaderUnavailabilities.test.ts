@@ -79,6 +79,50 @@ describe('useLeaderUnavailabilitiesStore', () => {
     expect(store.loading).toBe(false)
   })
 
+  it('does not let an older fetch overwrite a completed create', async () => {
+    let finishFetch!: (value: typeof sampleUnavailability[]) => void
+    vi.mocked(unavailabilityApi.listUnavailabilities).mockImplementationOnce(
+      () => new Promise((resolve) => { finishFetch = resolve }),
+    )
+    vi.mocked(unavailabilityApi.createUnavailability).mockResolvedValueOnce({
+      ...sampleUnavailability,
+      id: 'unavail-created',
+    })
+    const store = useLeaderUnavailabilitiesStore()
+    const fetchRequest = store.fetchUnavailabilities('district-1')
+    const created = await store.addUnavailability({
+      leader_id: 'leader-1',
+      start_at: '2026-05-01T00:00:00.000Z',
+      end_at: '2026-05-02T00:00:00.000Z',
+      reason: 'URLAUB',
+    })
+    expect(created.id).toBe('unavail-created')
+    expect(store.items.map((item) => item.id)).toEqual(['unavail-created'])
+    finishFetch([])
+    await fetchRequest
+    expect(store.items.map((item) => item.id)).toEqual(['unavail-created'])
+  })
+
+  it('does not apply a create result after switching districts', async () => {
+    let finishCreate!: (value: typeof sampleUnavailability) => void
+    vi.mocked(unavailabilityApi.createUnavailability).mockImplementationOnce(
+      () => new Promise((resolve) => { finishCreate = resolve }),
+    )
+    const store = useLeaderUnavailabilitiesStore()
+    await store.fetchUnavailabilities('district-1')
+    const createRequest = store.addUnavailability({
+      leader_id: 'leader-1',
+      start_at: '2026-05-01T00:00:00.000Z',
+      end_at: '2026-05-02T00:00:00.000Z',
+      reason: 'URLAUB',
+    })
+    await store.fetchUnavailabilities('district-2')
+    finishCreate({ ...sampleUnavailability, id: 'unavail-created' })
+    await createRequest
+    expect(store.districtId).toBe('district-2')
+    expect(store.items).toEqual([sampleUnavailability])
+  })
+
   it('clears old data and loading after a fetch failure', async () => {
     const store = useLeaderUnavailabilitiesStore()
     await store.fetchUnavailabilities('district-1')
