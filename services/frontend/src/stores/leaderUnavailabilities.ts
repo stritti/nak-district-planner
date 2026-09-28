@@ -36,14 +36,24 @@ export const useLeaderUnavailabilitiesStore = defineStore('leaderUnavailabilitie
   }
 
   async function addUnavailability(body: LeaderUnavailabilityCreate) {
-    const created = await createUnavailability(currentDistrictId.value, body)
-    items.value = sortItems([...items.value.filter((item) => item.id !== created.id), created])
+    const districtId = currentDistrictId.value
+    const mutationRequest = ++requestId
+    loading.value = false
+    const created = await createUnavailability(districtId, body)
+    if (currentDistrictId.value === districtId && mutationRequest === requestId) {
+      items.value = sortItems([...items.value.filter((item) => item.id !== created.id), created])
+    }
     return created
   }
 
   async function removeUnavailability(unavailabilityId: string) {
-    await deleteUnavailability(currentDistrictId.value, unavailabilityId)
-    items.value = items.value.filter((item) => item.id !== unavailabilityId)
+    const districtId = currentDistrictId.value
+    const mutationRequest = ++requestId
+    loading.value = false
+    await deleteUnavailability(districtId, unavailabilityId)
+    if (currentDistrictId.value === districtId && mutationRequest === requestId) {
+      items.value = items.value.filter((item) => item.id !== unavailabilityId)
+    }
   }
 
   return {
