@@ -42,6 +42,14 @@ describe('LeaderUnavailabilityForm', () => {
     expect(wrapper.emitted('submit')).toBeUndefined()
   })
 
+  it('disables all editable fields while saving', () => {
+    const wrapper = mountForm({ saving: true })
+    expect(wrapper.find('[data-testid="unavailability-start-date"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-testid="unavailability-end-date"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-testid="unavailability-reason-select"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-testid="unavailability-note-input"]').attributes('disabled')).toBeDefined()
+  })
+
   it('includes the entire last day and resets after saving', async () => {
     const wrapper = mountForm()
     await wrapper.find('[data-testid="unavailability-start-date"]').setValue('2026-05-01')
