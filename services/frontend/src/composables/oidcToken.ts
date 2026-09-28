@@ -1,4 +1,4 @@
-import type { OIDCToken, OIDCUser } from './useOIDC'
+import type { OIDCToken, OIDCUser } from './oidcTypes'
 import { parseJwt } from './jwt'
 
 export interface TokenExchangeResponse {
