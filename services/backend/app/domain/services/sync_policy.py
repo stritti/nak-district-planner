@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from enum import StrEnum
 
+from app.domain.models.calendar_integration import SyncDeleteMode
 from app.domain.models.event_instance import SyncState
 
 logger = logging.getLogger(__name__)
@@ -14,11 +15,6 @@ class SyncFieldAuthority(StrEnum):
     STRUCTURAL = "STRUCTURAL"
     SOFT = "SOFT"
     CONDITIONAL = "CONDITIONAL"
-
-
-class SyncDeleteMode(StrEnum):
-    MARK_CANCELLED = "MARK_CANCELLED"
-    HARD_DELETE = "HARD_DELETE"
 
 
 # Loop-prevention sentinel stored in ExternalEventLink.revision_marker after an
