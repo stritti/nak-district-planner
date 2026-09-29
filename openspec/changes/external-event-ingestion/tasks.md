@@ -29,6 +29,8 @@
 - [x] 4.4 Implement `POST /api/v1/external-candidates/{id}/dismiss`
 - [x] 4.5 Protect endpoints with district-admin RBAC
 - [x] 4.6 Map explicit candidate review domain errors to HTTP 409
+- [x] 4.7 Provide candidate repository and review service through FastAPI dependency providers
+- [x] 4.8 Log candidate ingestion and review transitions with operational context
 
 ## 5. Frontend
 
