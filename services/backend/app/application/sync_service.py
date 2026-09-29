@@ -26,7 +26,7 @@ import hashlib
 import logging
 import uuid
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
@@ -462,6 +462,35 @@ async def _process_existing_event(
         return SyncOutcome.SKIPPED
 
     slot = await context.slot_repo.get(instance.planning_slot_id)
+
+    # A resolved deviation is a local correction that must be acknowledged by
+    # the writable provider before the instance can become CLEAN.
+    if (
+        instance.sync_state == SyncState.DIRTY_INTERNAL
+        and not instance.deviation_flag
+        and CalendarCapability.WRITE in context.integration.capabilities
+        and existing_link.last_synced_hash == new_content_hash
+    ):
+        revision = await context.connector.update_event_times(
+            context.credentials,
+            raw,
+            start_at=instance.actual_start_at,
+            end_at=instance.actual_end_at,
+        )
+        acknowledged = replace(
+            raw,
+            start_at=instance.actual_start_at,
+            end_at=instance.actual_end_at,
+            revision_marker=revision or raw.revision_marker,
+        )
+        existing_link.last_synced_hash = _compute_content_hash(acknowledged)
+        existing_link.last_synced_payload = _sync_payload(acknowledged)
+        existing_link.revision_marker = acknowledged.revision_marker
+        existing_link.updated_at = datetime.now(UTC)
+        instance.sync_state = SyncState.CLEAN
+        await context.link_repo.save(existing_link)
+        await context.instance_repo.save(instance)
+        return SyncOutcome.UPDATED
     if (slot and slot.status == PlanningSlotStatus.CANCELLED
             and instance.sync_state == SyncState.DIRTY_INTERNAL
             and CalendarCapability.WRITE in context.integration.capabilities):
