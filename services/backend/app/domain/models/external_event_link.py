@@ -5,6 +5,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import StrEnum
+
+
+class ExternalEventLinkState(StrEnum):
+    ACTIVE = "ACTIVE"
+    SYNC_TOMBSTONE = "SYNC_TOMBSTONE"
 
 
 @dataclass
@@ -24,6 +30,10 @@ class ExternalEventLink:
     revision_marker: str | None = None  # ETag or revision sequence from provider
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    state: ExternalEventLinkState = ExternalEventLinkState.ACTIVE
+    deletion_origin: str | None = None
+    deletion_reason: str | None = None
+    tombstoned_at: datetime | None = None
 
     @classmethod
     def create(
@@ -47,4 +57,5 @@ class ExternalEventLink:
             revision_marker=revision_marker,
             created_at=now,
             updated_at=now,
+            state=ExternalEventLinkState.ACTIVE,
         )
