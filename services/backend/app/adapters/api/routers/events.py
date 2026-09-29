@@ -328,7 +328,12 @@ async def resolve_event_deviation(
     instance = await instance_repo.get_by_planning_slot(event_id)
     if instance is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
-    await DeviationService(slot_repo, instance_repo).resolve_deviation(instance.id)
+    resolved = await DeviationService(slot_repo, instance_repo).resolve_deviation(instance.id)
+    if not resolved:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Keine aktive Abweichung zum Auflösen vorhanden.",
+        )
     return _slot_to_event(slot, await instance_repo.get(instance.id))
 
 
