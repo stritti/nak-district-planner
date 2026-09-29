@@ -5,8 +5,9 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from app.domain.models.event_instance import EventInstance, SyncState
+from app.domain.models.event_instance import EventInstance
 from app.domain.models.planning_slot import PlanningSlot
+from app.domain.services.sync_policy import internal_state
 from app.domain.ports.repositories import (
     EventInstanceRepository,
     PlanningSlotRepository,
@@ -166,7 +167,7 @@ class DeviationService:
         instance.deviation_flag = False
         instance.updated_at = datetime.now(UTC)
         instance.last_internal_modified_at = instance.updated_at
-        instance.sync_state = SyncState.DIRTY_INTERNAL
+        instance.sync_state = internal_state(instance.sync_state)
 
         await self._instance_repo.save(instance)
         return True
