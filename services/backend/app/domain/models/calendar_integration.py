@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
 
 from app.domain.services.sync_policy import SyncDeleteMode
 
