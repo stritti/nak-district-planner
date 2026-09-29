@@ -29,6 +29,7 @@ def _orm_to_domain(row: ExternalEventLinkORM) -> ExternalEventLink:
         deletion_reason=row.deletion_reason,
         tombstoned_at=row.tombstoned_at,
         last_synced_payload=row.last_synced_payload,
+        provider_resource_id=row.provider_resource_id,
     )
 
 
@@ -95,6 +96,7 @@ class SqlExternalEventLinkRepository(ExternalEventLinkRepository):
         row.deletion_reason = link.deletion_reason
         row.tombstoned_at = link.tombstoned_at
         row.last_synced_payload = link.last_synced_payload
+        row.provider_resource_id = link.provider_resource_id
         await self._session.flush()
 
     async def delete(self, link_id: uuid.UUID) -> None:
