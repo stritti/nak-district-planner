@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -24,6 +24,16 @@ from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:
     payload = f"{uid}|{start_at.isoformat()}|{end_at.isoformat()}|{title}"
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+_MAX_PAGES = 100
+
+
+def _validate_next_link(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.netloc != "graph.microsoft.com":
+        raise CalendarConnectorError("Ungültiger Microsoft Graph nextLink")
+    return url
 
 
 class MicrosoftGraphCalendarConnector(CalendarConnector):
@@ -58,7 +68,11 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
         items: list[dict[str, Any]] = []
         next_url: str | None = url
         next_params: dict[str, Any] | None = params
+        page_count = 0
         while next_url:
+            page_count += 1
+            if page_count > _MAX_PAGES:
+                raise CalendarConnectorError("Microsoft Pagination-Limit überschritten")
             response = await resilient_request(
                 lambda next_url=next_url, next_params=next_params: self._client.get(
                     next_url, params=next_params, headers=headers
@@ -67,7 +81,8 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
             )
             data = response.json()
             items.extend(data.get("value", []))
-            next_url = data.get("@odata.nextLink")
+            raw_next_url = data.get("@odata.nextLink")
+            next_url = _validate_next_link(raw_next_url) if raw_next_url else None
             next_params = None
 
         events: list[RawCalendarEvent] = []
@@ -103,9 +118,7 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
             if description is not None:
                 description = str(description).strip()
 
-            # Microsoft Graph uses status field; cancelled events have status="cancelled"
-            status = item.get("status")
-            is_cancelled = item.get("isCancelled", False) or status == "cancelled"
+            is_cancelled = bool(item.get("isCancelled", False))
 
             # Optional client-side time-window filtering
             if from_dt is not None and end_at < from_dt:
