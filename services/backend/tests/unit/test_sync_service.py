@@ -151,6 +151,7 @@ def mocks():
     integration_repo = AsyncMock()
     connector = MagicMock()
     connector.fetch_events = AsyncMock(return_value=[])
+    connector.authoritative_snapshot = False
     compute_hash = MagicMock(return_value="hash-current")
 
     patchers = [
@@ -206,15 +207,17 @@ class TestRunSync:
     """Test suite for run_sync() with mocked repositories and connector."""
 
     @pytest.mark.parametrize("hard_delete", [False, True])
-    async def test_cancel_with_unchanged_hash_and_duplicate_delivery(self, mocks, monkeypatch, hard_delete):
-        from app.config import settings
+    async def test_cancel_with_unchanged_hash_and_duplicate_delivery(self, mocks, hard_delete):
         from app.domain.services.sync_policy import SyncDeleteMode
 
-        monkeypatch.setattr(settings, "sync_delete_mode", SyncDeleteMode.HARD_DELETE if hard_delete else SyncDeleteMode.MARK_CANCELLED)
+        integration = _integration()
+        integration.delete_behavior = (
+            SyncDeleteMode.HARD_DELETE if hard_delete else SyncDeleteMode.MARK_CANCELLED
+        )
         slot = _make_slot()
         instance = _make_event_instance(planning_slot_id=slot.id)
         link = _make_link(event_instance_id=instance.id, last_synced_hash=_hash("uid@test"))
-        mocks["integration_repo"].get.return_value = _integration()
+        mocks["integration_repo"].get.return_value = integration
         mocks["connector"].fetch_events.return_value = [_raw(is_cancelled=True)]
         mocks["link_repo"].get_by_external_event.return_value = link
         mocks["instance_repo"].get.return_value = instance
@@ -273,7 +276,8 @@ class TestRunSync:
         mocks["slot_repo"].get.side_effect = get_slot
 
         result = await run_sync(_INT_ID, mocks["session"])
-        assert result.skipped == 1
+        assert result.failed == 1
+        assert result.skipped == 0
         assert result.updated == 1
         assert failing_link.revision_marker != INTERNAL_DELETE_MARKER
         assert healthy_link.last_synced_hash not in (None, failing_link.last_synced_hash)
