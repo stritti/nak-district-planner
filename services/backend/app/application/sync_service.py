@@ -414,8 +414,10 @@ async def _apply_external_update(
         # Non-overlapping SOFT provider changes can be merged without discarding
         # the independent local edit. Keep DIRTY_INTERNAL for the outbound side.
         next_state = SyncState.DIRTY_INTERNAL
+        fields_to_apply = external_changed
     else:
         next_state = inbound_state(instance.sync_state, changed=True)
+        fields_to_apply = set(incoming_payload)
 
     incoming = {
         "title": raw.title,
@@ -424,7 +426,7 @@ async def _apply_external_update(
         "description": raw.description,
     }
     for field, value in incoming.items():
-        if classify_field(field) != SyncFieldAuthority.STRUCTURAL:
+        if field in fields_to_apply and classify_field(field) != SyncFieldAuthority.STRUCTURAL:
             setattr(instance, field, value)
     instance.source = EventSource.EXTERNAL
     instance.sync_state = next_state
