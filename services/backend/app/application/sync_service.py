@@ -114,7 +114,7 @@ def _compute_content_hash(raw_event: RawCalendarEvent) -> str:
 
     raw_str = (
         f"{raw_event.uid}|{raw_event.start_at}|{raw_event.end_at}"
-        f"|{raw_event.title}|{raw_event.description}"
+        f"|{raw_event.title}|{raw_event.description}|{raw_event.is_cancelled}"
     )
     return hashlib.sha256(raw_str.encode()).hexdigest()
 
