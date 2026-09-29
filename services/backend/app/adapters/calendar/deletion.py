@@ -7,15 +7,14 @@ from app.domain.ports.calendar import CalendarConnectorError
 
 async def delete_resource(client: httpx.AsyncClient, url: str, **kwargs) -> None:
     try:
-        try:
         response = await client.delete(url, **kwargs)
-    except httpx.RequestError as exc:
-        raise CalendarConnectorError("Kalender-Löschung wegen Transportfehler fehlgeschlagen") from exc
     except httpx.RequestError as exc:
         raise CalendarConnectorError("Transportfehler bei Kalender-Löschung") from exc
     if response.status_code in (404, 410):
-        return  # Retrying an already completed deletion is safe.
+        return
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        raise CalendarConnectorError(f"Kalender-Löschung fehlgeschlagen: HTTP {response.status_code}") from exc
+        raise CalendarConnectorError(
+            f"Kalender-Löschung fehlgeschlagen: HTTP {response.status_code}"
+        ) from exc
