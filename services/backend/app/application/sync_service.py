@@ -158,10 +158,16 @@ async def _find_matching_planning_slot(
     return None
 
 
-def _has_significant_deviation(slot: PlanningSlot, event_start: datetime) -> bool:
-    """Check if external event start deviates >5 min from planned time."""
-    slot_dt = datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
-    return abs((event_start - slot_dt).total_seconds()) > 300
+def _has_significant_deviation(
+    slot: PlanningSlot, event_start: datetime, event_end: datetime
+) -> bool:
+    """Check start or end deviation against the planned 90-minute interval."""
+    planned_start = datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
+    planned_end = planned_start + timedelta(minutes=90)
+    return (
+        abs((event_start - planned_start).total_seconds()) > 300
+        or abs((event_end - planned_end).total_seconds()) > 300
+    )
 
 
 class SyncOutcome(StrEnum):
@@ -224,7 +230,7 @@ async def _import_new_event(
         # exists yet, create it for this PlanningSlot instead of duplicating
         # the PlanningSlot.
         instance = await context.instance_repo.get_by_planning_slot(matched_slot.id)
-        deviation = _has_significant_deviation(matched_slot, raw.start_at)
+        deviation = _has_significant_deviation(matched_slot, raw.start_at, raw.end_at)
         if instance is None:
             instance = EventInstance.create(
                 planning_slot_id=matched_slot.id,
@@ -423,7 +429,7 @@ async def _apply_external_update(
     instance.source = EventSource.EXTERNAL
     instance.sync_state = next_state
     if slot:
-        instance.deviation_flag = _has_significant_deviation(slot, raw.start_at)
+        instance.deviation_flag = _has_significant_deviation(slot, raw.start_at, raw.end_at)
     instance.content_hash = new_content_hash
     instance.last_external_modified_at = datetime.now(UTC)
     instance.updated_at = datetime.now(UTC)
