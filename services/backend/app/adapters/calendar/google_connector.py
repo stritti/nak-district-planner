@@ -16,6 +16,7 @@ from urllib.parse import quote
 import httpx
 
 from app.adapters.calendar.deletion import delete_resource
+from app.adapters.calendar.http_policy import resilient_request
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -37,7 +38,9 @@ class GoogleCalendarConnector(CalendarConnector):
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
     ) -> list[RawCalendarEvent]:
-        access_token: str = credentials["access_token"]
+        access_token = credentials.get("access_token")
+        if not access_token:
+            raise CalendarConnectorError("Google access_token fehlt")
         # Use primary calendar; could be made configurable
         url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 
@@ -53,23 +56,27 @@ class GoogleCalendarConnector(CalendarConnector):
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        response = await self._client.get(url, params=params, headers=headers)
-        content_type = response.headers.get("content-type", "")
-        if "text/html" in content_type:
-            raise CalendarConnectorError(
-                f"URL liefert HTML statt eines Kalenders (Content-Type: {content_type}). "
-                "Bitte die direkte .ics-URL verwenden."
+        items: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while True:
+            page_params = dict(params)
+            if page_token:
+                page_params["pageToken"] = page_token
+            response = await resilient_request(
+                lambda: self._client.get(url, params=page_params, headers=headers),
+                provider="Google",
             )
-
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise CalendarConnectorError(
-                f"HTTP {exc.response.status_code} beim Laden des Google Kalenders: {exc}"
-            ) from exc
-
-        data = response.json()
-        items = data.get("items", [])
+            content_type = response.headers.get("content-type", "")
+            if "text/html" in content_type:
+                raise CalendarConnectorError(
+                    f"URL liefert HTML statt eines Kalenders (Content-Type: {content_type}). "
+                    "Bitte die direkte .ics-URL verwenden."
+                )
+            data = response.json()
+            items.extend(data.get("items", []))
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
 
         events: list[RawCalendarEvent] = []
         for item in items:
