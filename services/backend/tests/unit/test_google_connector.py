@@ -439,3 +439,22 @@ class TestFetchEvents:
 
         raw_events = await connector.fetch_events(CREDS)
         assert len(raw_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_timestamp_less_cancellation_tombstone_is_retained(
+    connector: GoogleCalendarConnector, mock_client: MagicMock
+) -> None:
+    _setup_mock_client(
+        mock_client,
+        {"items": [{"id": "deleted-event", "status": "cancelled", "etag": '"rev-2"'}]},
+    )
+
+    raw_events = await connector.fetch_events(
+        CREDS, from_dt=datetime(2026, 4, 1, tzinfo=UTC)
+    )
+
+    assert len(raw_events) == 1
+    assert raw_events[0].uid == "deleted-event"
+    assert raw_events[0].is_cancelled is True
+    assert raw_events[0].revision_marker == '"rev-2"'
