@@ -6,6 +6,7 @@ import MatrixView from '../views/MatrixView.vue'
 import DistrictsAdminView from '../views/DistrictsAdminView.vue'
 import LeadersAdminView from '../views/LeadersAdminView.vue'
 import CalendarIntegrationsView from '../views/CalendarIntegrationsView.vue'
+import ExternalCandidatesView from '../views/ExternalCandidatesView.vue'
 import ExportTokensView from '../views/ExportTokensView.vue'
 import AuthCallbackView from '../views/AuthCallbackView.vue'
 import LoginView from '../views/LoginView.vue'
@@ -93,6 +94,12 @@ export const router = createRouter({
       path: '/admin/calendars',
       name: 'admin-calendars',
       component: CalendarIntegrationsView,
+      beforeEnter: requireAuth,
+    },
+    {
+      path: '/admin/external-candidates',
+      name: 'admin-external-candidates',
+      component: ExternalCandidatesView,
       beforeEnter: requireAuth,
     },
     {
