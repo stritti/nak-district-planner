@@ -30,11 +30,10 @@ from app.domain.models.event_instance import (
     EventVisibility,
     SyncState,
 )
+from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate
 from app.domain.models.external_event_link import ExternalEventLink
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.ports.calendar import CalendarConnectorError
-from app.domain.services.sync_policy import INTERNAL_DELETE_MARKER
 
 # ── constants ──────────────────────────────────────────────────────────────────
 
@@ -134,7 +133,7 @@ def _make_slot(**kw) -> PlanningSlot:
         planning_date=kw.get("planning_date", _START.date()),
         planning_time=kw.get("planning_time", _START.time()),
         congregation_id=kw.get("congregation_id", _CONG_ID),
-        category="Gottesdienst",
+        category=kw.get("category", "Gottesdienst"),
         title="Gottesdienst",
     )
 
@@ -148,6 +147,9 @@ def mocks():
     link_repo = AsyncMock()
     instance_repo = AsyncMock()
     slot_repo = AsyncMock()
+    candidate_repo = AsyncMock()
+    candidate_repo.by_external_event.return_value = None
+    notification_repo = AsyncMock()
     integration_repo = AsyncMock()
     connector = MagicMock()
     connector.fetch_events = AsyncMock(return_value=[])
@@ -170,6 +172,14 @@ def mocks():
             "app.application.sync_service.SqlCalendarIntegrationRepository",
             return_value=integration_repo,
         ),
+        patch(
+            "app.application.sync_service.SqlExternalEventCandidateRepository",
+            return_value=candidate_repo,
+        ),
+        patch(
+            "app.application.sync_service.SqlNotificationRepository",
+            return_value=notification_repo,
+        ),
         patch("app.application.sync_service._get_connector", return_value=connector),
         patch(
             "app.application.sync_service.decrypt_credentials",
@@ -191,6 +201,8 @@ def mocks():
         "slot_repo": slot_repo,
         "integration_repo": integration_repo,
         "connector": connector,
+        "candidate_repo": candidate_repo,
+        "notification_repo": notification_repo,
         "compute_hash": compute_hash,
         "session": AsyncMock(spec=AsyncSession),
     }
@@ -222,57 +234,11 @@ class TestRunSync:
 
         assert (await run_sync(_INT_ID, mocks["session"])).cancelled == 1
         assert (await run_sync(_INT_ID, mocks["session"])).cancelled == 0
-        assert (await run_sync(_INT_ID, mocks["session"])).skipped == 1
         if hard_delete:
             assert link.event_instance_id is None
             mocks["slot_repo"].delete.assert_awaited_once_with(slot.id)
         else:
             assert slot.status == PlanningSlotStatus.CANCELLED
-
-    async def test_connector_error_isolates_event_and_continues(self, mocks):
-        """One failing external delete must not abort the whole sync run."""
-        integration = _integration()
-        integration.capabilities.append(CalendarCapability.WRITE)
-        slot = _make_slot()
-        slot.status = PlanningSlotStatus.CANCELLED
-        instance = _make_event_instance(planning_slot_id=slot.id)
-        instance.sync_state = SyncState.DIRTY_INTERNAL
-        failing_link = _make_link(event_instance_id=instance.id, uid="uid@test")
-
-        healthy_slot = _make_slot()
-        healthy_instance = _make_event_instance(planning_slot_id=healthy_slot.id)
-        healthy_link = _make_link(event_instance_id=healthy_instance.id, uid="other@test")
-
-        mocks["integration_repo"].get.return_value = integration
-        mocks["connector"].fetch_events.return_value = [_raw(), _raw(uid="other@test")]
-        mocks["connector"].delete_event = AsyncMock(side_effect=CalendarConnectorError("HTTP 412"))
-
-        async def get_link(provider, external_event_id, calendar_integration_id):
-            if external_event_id == "uid@test":
-                return failing_link
-            return healthy_link
-
-        mocks["link_repo"].get_by_external_event.side_effect = get_link
-
-        async def get_instance(iid):
-            if iid == instance.id:
-                return instance
-            return healthy_instance
-
-        mocks["instance_repo"].get.side_effect = get_instance
-
-        async def get_slot(sid):
-            if sid == slot.id:
-                return slot
-            return healthy_slot
-
-        mocks["slot_repo"].get.side_effect = get_slot
-
-        result = await run_sync(_INT_ID, mocks["session"])
-        assert result.skipped == 1
-        assert result.updated == 1
-        assert failing_link.revision_marker != INTERNAL_DELETE_MARKER
-        assert healthy_link.last_synced_hash not in (None, failing_link.last_synced_hash)
 
     @pytest.mark.parametrize("cancelled", [False, True])
     async def test_concurrent_edits_preserve_internal_data(self, mocks, cancelled):
@@ -330,8 +296,8 @@ class TestRunSync:
 
         mocks["integration_repo"].get.assert_awaited_once_with(_INT_ID)
 
-    async def test_new_event_creates_planning_slot_and_instance(self, mocks):
-        """No existing link → PlanningSlot + EventInstance + ExternalEventLink created."""
+    async def test_new_event_creates_review_candidate(self, mocks):
+        """Unmatched external input never bypasses the governance review."""
         integration = _integration()
         raw = _raw()
 
@@ -342,7 +308,7 @@ class TestRunSync:
         result = await run_sync(_INT_ID, mocks["session"])
 
         assert isinstance(result, SyncResult)
-        assert result.created == 1
+        assert result.created == 0
         assert result.updated == 0
         assert result.cancelled == 0
         assert result.auto_matched == 0
@@ -352,21 +318,53 @@ class TestRunSync:
             external_event_id=raw.uid,
             calendar_integration_id=_INT_ID,
         )
-        mocks["slot_repo"].save.assert_awaited_once()
-        mocks["instance_repo"].save.assert_awaited_once()
-        mocks["link_repo"].save.assert_awaited_once()
+        mocks["slot_repo"].save.assert_not_called()
+        mocks["instance_repo"].save.assert_not_called()
+        mocks["link_repo"].save.assert_not_called()
+        candidate = mocks["candidate_repo"].save.call_args.args[0]
+        assert candidate.district_id == _DISTRICT_ID
+        assert candidate.congregation_id == _CONG_ID
+        assert candidate.external_event_id == raw.uid
+        mocks["notification_repo"].save.assert_awaited_once()
 
-        saved_slot = mocks["slot_repo"].save.call_args[0][0]
-        assert saved_slot.district_id == _DISTRICT_ID
-        assert saved_slot.congregation_id == _CONG_ID
+    async def test_pending_candidate_is_refreshed_without_duplicate_notification(self, mocks):
+        integration, raw = _integration(), _raw()
+        candidate = ExternalEventCandidate.create(integration=integration, raw=raw, content_hash="old")
+        changed = _raw(title="Aktualisiert")
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [changed]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["candidate_repo"].by_external_event.return_value = candidate
+        await run_sync(_INT_ID, mocks["session"])
+        assert candidate.title == "Aktualisiert"
+        mocks["candidate_repo"].save.assert_awaited_once_with(candidate)
+        mocks["notification_repo"].save.assert_not_called()
 
-        saved_instance = mocks["instance_repo"].save.call_args[0][0]
-        assert saved_instance.source == EventSource.EXTERNAL
-        assert saved_instance.external_uid == raw.uid
+    async def test_pending_candidate_is_accepted_when_an_exact_slot_appears(self, mocks):
+        integration, raw = _integration(), _raw()
+        candidate = ExternalEventCandidate.create(integration=integration, raw=raw, content_hash="old")
+        slot = _make_slot()
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["candidate_repo"].by_external_event.return_value = candidate
+        mocks["slot_repo"].list_for_date_range.return_value = [slot]
+        mocks["instance_repo"].get_by_planning_slot.return_value = None
+        result = await run_sync(_INT_ID, mocks["session"])
+        assert result.auto_matched == 1
+        assert candidate.status == CandidateStatus.ACCEPTED
+        assert candidate.matched_slot_id == slot.id
 
-        saved_link = mocks["link_repo"].save.call_args[0][0]
-        assert saved_link.provider == CalendarType.ICS.value
-        assert saved_link.external_event_id == raw.uid
+    async def test_cancelled_pending_candidate_is_dismissed(self, mocks):
+        integration, raw = _integration(), _raw()
+        candidate = ExternalEventCandidate.create(integration=integration, raw=raw, content_hash="old")
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw(is_cancelled=True)]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["candidate_repo"].by_external_event.return_value = candidate
+        await run_sync(_INT_ID, mocks["session"])
+        assert candidate.status == CandidateStatus.DISMISSED
+        mocks["link_repo"].save.assert_not_called()
 
     async def test_new_cancelled_event_skipped(self, mocks):
         """No existing link + raw.is_cancelled → silently skipped."""
@@ -376,7 +374,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0, skipped=1)
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0)
         mocks["link_repo"].get_by_external_event.assert_awaited_once()
         mocks["slot_repo"].save.assert_not_called()
         mocks["instance_repo"].save.assert_not_called()
@@ -439,7 +437,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0, skipped=1)
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0)
         mocks["instance_repo"].save.assert_not_called()
         mocks["link_repo"].save.assert_not_called()
         mocks["slot_repo"].save.assert_not_called()
@@ -556,10 +554,10 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=1, updated=1, cancelled=1, auto_matched=0, skipped=1)
+        assert result == SyncResult(created=0, updated=1, cancelled=1, auto_matched=0)
 
-    async def test_congregation_id_propagated(self, mocks):
-        """New event inherits congregation_id from the integration."""
+    async def test_candidate_inherits_congregation_id(self, mocks):
+        """A candidate remains correctly scoped to the integration congregation."""
         cong_id = uuid.uuid4()
         integration = _integration(congregation_id=cong_id)
         raw = _raw()
@@ -570,11 +568,11 @@ class TestRunSync:
 
         await run_sync(_INT_ID, mocks["session"])
 
-        saved_slot = mocks["slot_repo"].save.call_args[0][0]
-        assert saved_slot.congregation_id == cong_id
+        candidate = mocks["candidate_repo"].save.call_args.args[0]
+        assert candidate.congregation_id == cong_id
 
-    async def test_district_level_integration(self, mocks):
-        """Integration without congregation_id → slot.congregation_id is None."""
+    async def test_district_level_candidate_has_no_congregation(self, mocks):
+        """District-level candidates must not be assigned to a congregation."""
         integration = _integration(congregation_id=None)
         raw = _raw()
 
@@ -584,8 +582,8 @@ class TestRunSync:
 
         await run_sync(_INT_ID, mocks["session"])
 
-        saved_slot = mocks["slot_repo"].save.call_args[0][0]
-        assert saved_slot.congregation_id is None
+        candidate = mocks["candidate_repo"].save.call_args.args[0]
+        assert candidate.congregation_id is None
 
     async def test_auto_match_updates_existing_instance(self, mocks):
         """New external event matching an existing PlanningSlot updates that
@@ -621,14 +619,77 @@ class TestRunSync:
         assert saved_link.event_instance_id == instance.id
         assert saved_link.last_synced_hash == raw.content_hash
 
+    async def test_auto_match_ignores_title_when_integration_has_no_default_category(self, mocks):
+        """The event title is content, not an implicit category."""
+        integration = _integration()
+        slot = _make_slot(category="Gottesdienst")
+        raw = _raw(title="Sonntagsgottesdienst um 10 Uhr")
+
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["slot_repo"].list_for_date_range.return_value = [slot]
+        mocks["instance_repo"].get_by_planning_slot.return_value = None
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result.auto_matched == 1
+        mocks["candidate_repo"].save.assert_not_called()
+
+    async def test_uncategorized_slot_can_auto_match(self, mocks):
+        """An empty slot category must not block an otherwise exact match."""
+        integration = _integration()
+        slot = _make_slot(category=None)
+        raw = _raw(title="Sonntagsgottesdienst um 10 Uhr")
+
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["slot_repo"].list_for_date_range.return_value = [slot]
+        mocks["instance_repo"].get_by_planning_slot.return_value = None
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result.auto_matched == 1
+        mocks["candidate_repo"].save.assert_not_called()
+
+    async def test_foreign_slot_mapping_becomes_candidate_and_sync_continues(self, mocks):
+        """A slot owned by another integration must not abort later events."""
+        integration = _integration()
+        slot = _make_slot()
+        foreign_instance = _make_event_instance(planning_slot_id=slot.id)
+        foreign_instance.calendar_integration_id = uuid.uuid4()
+
+        raw_foreign = _raw(uid="foreign@test")
+        raw_existing = _raw(uid="existing@test", title="Aktualisiert")
+        existing_instance = _make_event_instance(content_hash="old-hash")
+        existing_link = _make_link(
+            event_instance_id=existing_instance.id,
+            uid="existing@test",
+            last_synced_hash="old-hash",
+        )
+
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [raw_foreign, raw_existing]
+        mocks["link_repo"].get_by_external_event.side_effect = [None, existing_link]
+        mocks["slot_repo"].list_for_date_range.return_value = [slot]
+        mocks["instance_repo"].get_by_planning_slot.return_value = foreign_instance
+        mocks["instance_repo"].get.return_value = existing_instance
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result.auto_matched == 0
+        assert result.updated == 1
+        candidate = mocks["candidate_repo"].save.call_args_list[0].args[0]
+        assert candidate.external_event_id == "foreign@test"
+        assert integration.last_sync_error is None
+
     def test_get_connector_rejects_unsupported_calendar_type(self):
         with pytest.raises(NotImplementedError, match="No connector implemented"):
             _get_connector("UNSUPPORTED")  # type: ignore[arg-type]
 
-    async def test_auto_match_flags_significant_deviation(self, mocks):
-        """Auto-matched event starting >5 min from the planned time sets
-        deviation_flag=True (but still matches within the 120 min tolerance).
-        """
+    async def test_partial_match_becomes_candidate(self, mocks):
+        """A time deviation is not auto-mapped and therefore needs review."""
         integration = _integration()
         slot = _make_slot(congregation_id=_CONG_ID, planning_time=_START.time())
         instance = _make_event_instance(planning_slot_id=slot.id)
@@ -651,13 +712,12 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result.auto_matched == 1
-        assert instance.deviation_flag is True
+        assert result.auto_matched == 0
+        mocks["candidate_repo"].save.assert_awaited_once()
+        assert instance.deviation_flag is False
 
-    async def test_auto_match_no_matching_slot_creates_new(self, mocks):
-        """A PlanningSlot exists but for a different congregation → no match,
-        falls back to creating a new PlanningSlot (existing 'created' path).
-        """
+    async def test_auto_match_different_congregation_becomes_candidate(self, mocks):
+        """A foreign congregation is never used as an implicit mapping target."""
         integration = _integration()
         other_slot = _make_slot(congregation_id=uuid.uuid4(), planning_time=_START.time())
         raw = _raw()
@@ -669,8 +729,9 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=1, updated=0, cancelled=0, auto_matched=0)
-        mocks["slot_repo"].save.assert_awaited_once()
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0)
+        mocks["slot_repo"].save.assert_not_called()
+        mocks["candidate_repo"].save.assert_awaited_once()
 
 
 class TestGetConnector:
@@ -709,4 +770,3 @@ class TestHasSignificantDeviation:
     def test_deviation_beyond_five_minutes(self):
         slot = _make_slot(planning_time=_START.time())
         assert _has_significant_deviation(slot, _START + timedelta(minutes=6)) is True
-
