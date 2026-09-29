@@ -40,6 +40,8 @@ def _to_utc(value) -> datetime:
 class CalDAVConnector(CalendarConnector):
     """Adapter for CalDAV servers."""
 
+    authoritative_snapshot = True
+
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client or httpx.AsyncClient(timeout=30.0)
 
