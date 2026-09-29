@@ -144,6 +144,26 @@ class GoogleCalendarConnector(CalendarConnector):
 
         return events
 
+    async def update_event_times(
+        self, credentials: dict, event: RawCalendarEvent, *, start_at: datetime, end_at: datetime
+    ) -> str | None:
+        access_token = credentials.get("access_token")
+        if not access_token:
+            raise CalendarConnectorError("Google access_token fehlt")
+        headers = {"Authorization": f"Bearer {access_token}"}
+        if event.revision_marker:
+            headers["If-Match"] = event.revision_marker
+        try:
+            response = await self._client.patch(
+                f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{quote(event.uid, safe='')}",
+                headers=headers,
+                json={"start": {"dateTime": start_at.isoformat()}, "end": {"dateTime": end_at.isoformat()}},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CalendarConnectorError("Google Kalender-Aktualisierung fehlgeschlagen") from exc
+        return response.json().get("etag")
+
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
         access_token = credentials.get("access_token")
         if not access_token:
