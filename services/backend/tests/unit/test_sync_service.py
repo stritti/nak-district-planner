@@ -778,11 +778,15 @@ class TestHasSignificantDeviation:
 
     def test_no_deviation_within_five_minutes(self):
         slot = _make_slot(planning_time=_START.time())
-        assert _has_significant_deviation(slot, _START + timedelta(minutes=4)) is False
+        assert _has_significant_deviation(
+            slot, _START + timedelta(minutes=4), _END + timedelta(minutes=4)
+        ) is False
 
     def test_deviation_beyond_five_minutes(self):
         slot = _make_slot(planning_time=_START.time())
-        assert _has_significant_deviation(slot, _START + timedelta(minutes=6)) is True
+        assert _has_significant_deviation(
+            slot, _START + timedelta(minutes=6), _END + timedelta(minutes=6)
+        ) is True
 
 
 
