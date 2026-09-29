@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from app.domain.errors import CandidateAlreadyReviewed
+from app.domain.errors import CandidateAlreadyReviewedError
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 
 if TYPE_CHECKING:
@@ -100,7 +100,7 @@ class ExternalEventCandidate:
         slot_id: UUID | None = None,
     ) -> None:
         if self.status != CandidateStatus.PENDING:
-            raise CandidateAlreadyReviewed("Kandidat wurde bereits geprüft")
+            raise CandidateAlreadyReviewedError("Kandidat wurde bereits geprüft")
         self.status = status
         self.reviewed_by = user_sub
         self.matched_slot_id = slot_id

@@ -6,9 +6,9 @@ import pytest
 
 from app.application.candidate_review import CandidateReviewService
 from app.domain.errors import (
-    CandidateAlreadyReviewed,
-    CandidateSlotAlreadyLinked,
-    CandidateSlotNotAssignable,
+    CandidateAlreadyReviewedError,
+    CandidateSlotAlreadyLinkedError,
+    CandidateSlotNotAssignableError,
 )
 from app.domain.models.calendar_integration import CalendarIntegration, CalendarType
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
@@ -76,12 +76,12 @@ async def test_accept_existing_slot_requires_same_district_and_active_state():
     )
     review.slots.get.return_value = foreign_slot
 
-    with pytest.raises(CandidateSlotNotAssignable):
+    with pytest.raises(CandidateSlotNotAssignableError):
         await review.accept(item, user_sub="admin", slot_id=foreign_slot.id)
 
     foreign_slot.district_id = item.district_id
     foreign_slot.status = PlanningSlotStatus.CANCELLED
-    with pytest.raises(CandidateSlotNotAssignable):
+    with pytest.raises(CandidateSlotNotAssignableError):
         await review.accept(item, user_sub="admin", slot_id=foreign_slot.id)
 
 
@@ -104,12 +104,12 @@ async def test_accept_refuses_duplicate_or_dirty_linked_slot():
     )
     review.instances.get_by_planning_slot.return_value = linked
 
-    with pytest.raises(CandidateSlotAlreadyLinked):
+    with pytest.raises(CandidateSlotAlreadyLinkedError):
         await review.accept(item, user_sub="admin", slot_id=slot.id)
 
     linked.calendar_integration_id = None
     linked.sync_state = SyncState.DIRTY_INTERNAL
-    with pytest.raises(CandidateSlotAlreadyLinked):
+    with pytest.raises(CandidateSlotAlreadyLinkedError):
         await review.accept(item, user_sub="admin", slot_id=slot.id)
 
 
@@ -120,7 +120,7 @@ async def test_review_state_is_terminal_and_dismiss_records_actor():
 
     assert dismissed.status == CandidateStatus.DISMISSED
     assert dismissed.reviewed_by == "admin"
-    with pytest.raises(CandidateAlreadyReviewed):
+    with pytest.raises(CandidateAlreadyReviewedError):
         await review.accept(item, user_sub="admin")
 
 

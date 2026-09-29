@@ -14,7 +14,9 @@ from app.adapters.api.deps import (
 )
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.locks import acquire_advisory_xact_lock
-from app.adapters.db.repositories.external_event_candidate import SqlExternalEventCandidateRepository
+from app.adapters.db.repositories.external_event_candidate import (
+    SqlExternalEventCandidateRepository,
+)
 from app.application.candidate_review import CandidateReviewService
 from app.domain.errors import CandidateReviewError
 from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate

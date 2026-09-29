@@ -62,7 +62,6 @@ from app.domain.services.sync_policy import (
     inbound_state,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

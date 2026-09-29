@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import logging
-
 from typing import Protocol
 from uuid import UUID
 
 from app.domain.errors import (
-    CandidateAlreadyReviewed,
-    CandidateInvalidPeriod,
-    CandidateSlotAlreadyLinked,
-    CandidateSlotNotAssignable,
+    CandidateAlreadyReviewedError,
+    CandidateInvalidPeriodError,
+    CandidateSlotAlreadyLinkedError,
+    CandidateSlotNotAssignableError,
 )
 from app.domain.models.event_instance import EventInstance, SyncState
 from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate
@@ -22,7 +21,6 @@ from app.domain.services.external_event_mapping import (
     apply_external_event_to_instance,
     create_external_event_link,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +65,9 @@ class CandidateReviewService:
         slot_id: UUID | None = None,
     ) -> ExternalEventCandidate:
         if candidate.status != CandidateStatus.PENDING:
-            raise CandidateAlreadyReviewed("Kandidat wurde bereits geprüft")
+            raise CandidateAlreadyReviewedError("Kandidat wurde bereits geprüft")
         if candidate.end_at < candidate.start_at:
-            raise CandidateInvalidPeriod("Ungültiger Zeitraum")
+            raise CandidateInvalidPeriodError("Ungültiger Zeitraum")
 
         slot = await self._resolve_slot(candidate, slot_id)
         instance = await self.instances.get_by_planning_slot(slot.id)
@@ -77,7 +75,7 @@ class CandidateReviewService:
             instance.calendar_integration_id is not None
             or instance.sync_state != SyncState.CLEAN
         ):
-            raise CandidateSlotAlreadyLinked(
+            raise CandidateSlotAlreadyLinkedError(
                 "Termin ist bereits verknüpft oder hat ungeklärte Änderungen"
             )
 
@@ -149,9 +147,9 @@ class CandidateReviewService:
 
         slot = await self.slots.get(slot_id)
         if slot is None or slot.district_id != candidate.district_id:
-            raise CandidateSlotNotAssignable("Termin gehört nicht zum Bezirk")
+            raise CandidateSlotNotAssignableError("Termin gehört nicht zum Bezirk")
         if slot.status != PlanningSlotStatus.ACTIVE:
-            raise CandidateSlotNotAssignable(
+            raise CandidateSlotNotAssignableError(
                 "Abgesagter Termin kann nicht zugeordnet werden"
             )
         return slot
