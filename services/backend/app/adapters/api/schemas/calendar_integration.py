@@ -75,3 +75,5 @@ class SyncResult(BaseModel):
     updated: int
     cancelled: int
     auto_matched: int
+    skipped: int = 0
+    failed: int = 0
