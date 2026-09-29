@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.adapters.api.routers import external_candidates
+from app.domain.errors import CandidateAlreadyReviewed
 from app.domain.models.external_event_candidate import CandidateStatus
 
 
@@ -41,8 +42,8 @@ async def test_accept_maps_value_error_to_conflict_without_running_service_when_
 @pytest.mark.asyncio
 async def test_accept_and_dismiss_return_conflict_for_terminal_candidate():
     candidate_id, candidate, review = uuid4(), object(), AsyncMock()
-    review.accept.side_effect = ValueError("Kandidat wurde bereits geprüft")
-    review.dismiss.side_effect = ValueError("Kandidat wurde bereits geprüft")
+    review.accept.side_effect = CandidateAlreadyReviewed("Kandidat wurde bereits geprüft")
+    review.dismiss.side_effect = CandidateAlreadyReviewed("Kandidat wurde bereits geprüft")
     with patch.object(external_candidates, "load_for_review", return_value=(candidate, review)):
         for operation in (
             external_candidates.accept_candidate(candidate_id, external_candidates.AcceptCandidate(), auth(), AsyncMock()),
