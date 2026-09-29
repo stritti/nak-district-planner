@@ -129,6 +129,32 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
 
         return events
 
+    async def update_event_times(
+        self, credentials: dict, event: RawCalendarEvent, *, start_at: datetime, end_at: datetime
+    ) -> str | None:
+        access_token = credentials.get("access_token")
+        if not access_token:
+            raise CalendarConnectorError("Microsoft access_token fehlt")
+        if not event.resource_id:
+            raise CalendarConnectorError("Microsoft resource ID fehlt")
+        headers = {"Authorization": f"Bearer {access_token}"}
+        if event.revision_marker:
+            headers["If-Match"] = event.revision_marker
+        payload = {
+            "start": {"dateTime": start_at.isoformat(), "timeZone": "UTC"},
+            "end": {"dateTime": end_at.isoformat(), "timeZone": "UTC"},
+        }
+        try:
+            response = await self._client.patch(
+                f"https://graph.microsoft.com/v1.0/me/events/{quote(event.resource_id, safe='')}",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CalendarConnectorError("Microsoft Kalender-Aktualisierung fehlgeschlagen") from exc
+        return response.json().get("changeKey")
+
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
         access_token = credentials.get("access_token")
         if not access_token:
