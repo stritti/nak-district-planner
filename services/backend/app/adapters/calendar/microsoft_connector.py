@@ -29,6 +29,8 @@ def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) ->
 class MicrosoftGraphCalendarConnector(CalendarConnector):
     """Adapter for Microsoft Graph Calendar API."""
 
+    authoritative_snapshot = True
+
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client or httpx.AsyncClient(timeout=30.0)
 
