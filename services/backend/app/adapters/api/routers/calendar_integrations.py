@@ -154,6 +154,8 @@ async def trigger_sync(
         updated=summary.updated,
         cancelled=summary.cancelled,
         auto_matched=summary.auto_matched,
+        skipped=summary.skipped,
+        failed=summary.failed,
     )
 
 
