@@ -30,7 +30,7 @@ from app.domain.models.event_instance import (
     EventVisibility,
     SyncState,
 )
-from app.domain.models.external_event_link import ExternalEventLink
+from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnectorError
@@ -228,6 +228,7 @@ class TestRunSync:
         assert (await run_sync(_INT_ID, mocks["session"])).skipped == 1
         if hard_delete:
             assert link.event_instance_id is None
+            assert link.state == ExternalEventLinkState.SYNC_TOMBSTONE
             mocks["slot_repo"].delete.assert_awaited_once_with(slot.id)
         else:
             assert slot.status == PlanningSlotStatus.CANCELLED
