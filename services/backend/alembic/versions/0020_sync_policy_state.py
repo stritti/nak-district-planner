@@ -11,6 +11,11 @@ depends_on = None
 
 
 def upgrade():
+    op.drop_constraint("external_event_links_event_instance_id_fkey", "external_event_links", type_="foreignkey")
+    op.create_foreign_key(
+        "external_event_links_event_instance_id_fkey", "external_event_links", "event_instances",
+        ["event_instance_id"], ["id"], ondelete="CASCADE"
+    )
     op.add_column(
         "calendar_integrations",
         sa.Column(
@@ -62,6 +67,11 @@ def upgrade():
 
 
 def downgrade():
+    op.drop_constraint("external_event_links_event_instance_id_fkey", "external_event_links", type_="foreignkey")
+    op.create_foreign_key(
+        "external_event_links_event_instance_id_fkey", "external_event_links", "event_instances",
+        ["event_instance_id"], ["id"], ondelete="SET NULL"
+    )
     op.drop_column("external_event_links", "tombstoned_at")
     op.drop_column("external_event_links", "deletion_reason")
     op.drop_column("external_event_links", "deletion_origin")
