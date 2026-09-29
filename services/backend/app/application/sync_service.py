@@ -56,6 +56,20 @@ from app.domain.services.sync_policy import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class SyncContext:
+    """Runtime dependencies for one integration sync run."""
+
+    integration_id: uuid.UUID
+    session: AsyncSession
+    integration: object
+    connector: CalendarConnector
+    credentials: dict
+    instance_repo: SqlEventInstanceRepository
+    slot_repo: SqlPlanningSlotRepository
+    link_repo: SqlExternalEventLinkRepository
+
+
 @dataclass
 class SyncResult:
     """Result of a calendar sync operation.
@@ -347,36 +361,30 @@ async def _apply_external_update(
 async def _process_existing_event(
     *,
     raw,
-    integration,
-    connector: CalendarConnector,
-    credentials: dict,
-    integration_id: uuid.UUID,
-    instance_repo: SqlEventInstanceRepository,
-    slot_repo: SqlPlanningSlotRepository,
-    link_repo: SqlExternalEventLinkRepository,
+    context: SyncContext,
     existing_link: ExternalEventLink,
     new_content_hash: str,
 ) -> str:
     """Handle a raw event with an existing ExternalEventLink."""
     if existing_link.event_instance_id is None or existing_link.revision_marker == INTERNAL_DELETE_MARKER:
         return SKIPPED  # Durable tombstone: never re-import a deleted mapping.
-    instance = await instance_repo.get(existing_link.event_instance_id)
+    instance = await context.instance_repo.get(existing_link.event_instance_id)
     if instance is None:
         return SKIPPED
 
-    slot = await slot_repo.get(instance.planning_slot_id)
+    slot = await context.slot_repo.get(instance.planning_slot_id)
     if (slot and slot.status == PlanningSlotStatus.CANCELLED
             and instance.sync_state == SyncState.DIRTY_INTERNAL
-            and CalendarCapability.WRITE in integration.capabilities):
+            and CalendarCapability.WRITE in context.integration.capabilities):
         await _push_internal_delete(
-            connector=connector,
-            credentials=credentials,
+            connector=context.connector,
+            credentials=context.credentials,
             raw=raw,
-            integration=integration,
+            integration=context.integration,
             existing_link=existing_link,
             instance=instance,
-            instance_repo=instance_repo,
-            link_repo=link_repo,
+            instance_repo=context.instance_repo,
+            link_repo=context.link_repo,
             new_content_hash=new_content_hash,
         )
         return CANCELLED
@@ -387,9 +395,9 @@ async def _process_existing_event(
             existing_link=existing_link,
             instance=instance,
             slot=slot,
-            instance_repo=instance_repo,
-            slot_repo=slot_repo,
-            link_repo=link_repo,
+            instance_repo=context.instance_repo,
+            slot_repo=context.slot_repo,
+            link_repo=context.link_repo,
             new_content_hash=new_content_hash,
         )
 
@@ -401,8 +409,8 @@ async def _process_existing_event(
         existing_link=existing_link,
         instance=instance,
         slot=slot,
-        instance_repo=instance_repo,
-        link_repo=link_repo,
+        instance_repo=context.instance_repo,
+        link_repo=context.link_repo,
         new_content_hash=new_content_hash,
     )
 
@@ -427,6 +435,16 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
     try:
         credentials = decrypt_credentials(integration.credentials_enc)
         connector = _get_connector(integration.type)
+        context = SyncContext(
+            integration_id=integration_id,
+            session=session,
+            integration=integration,
+            connector=connector,
+            credentials=credentials,
+            instance_repo=instance_repo,
+            slot_repo=slot_repo,
+            link_repo=link_repo,
+        )
         cutoff = datetime.now(UTC) - timedelta(days=62)
         raw_events = await connector.fetch_events(credentials, from_dt=cutoff)
 
@@ -457,13 +475,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                 else:
                     outcome = await _process_existing_event(
                         raw=raw,
-                        integration=integration,
-                        connector=connector,
-                        credentials=credentials,
-                        integration_id=integration_id,
-                        instance_repo=instance_repo,
-                        slot_repo=slot_repo,
-                        link_repo=link_repo,
+                        context=context,
                         existing_link=existing_link,
                         new_content_hash=new_content_hash,
                     )
