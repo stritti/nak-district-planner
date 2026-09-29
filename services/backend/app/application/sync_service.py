@@ -42,7 +42,12 @@ from app.adapters.db.repositories.event_instance import SqlEventInstanceReposito
 from app.adapters.db.repositories.external_event_link import SqlExternalEventLinkRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.crypto import decrypt_credentials
-from app.domain.models.calendar_integration import CalendarCapability, CalendarIntegration, CalendarType
+from app.domain.models.calendar_integration import (
+    CalendarCapability,
+    CalendarIntegration,
+    CalendarType,
+    SyncDeleteMode,
+)
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
 from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
@@ -50,7 +55,6 @@ from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 from app.domain.services.sync_policy import (
     INTERNAL_DELETE_MARKER,
-    SyncDeleteMode,
     SyncFieldAuthority,
     classify_field,
     inbound_state,
