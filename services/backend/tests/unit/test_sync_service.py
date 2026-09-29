@@ -237,7 +237,11 @@ class TestRunSync:
         slot.status = PlanningSlotStatus.CANCELLED
         instance = _make_event_instance(planning_slot_id=slot.id)
         instance.sync_state = SyncState.DIRTY_INTERNAL
-        failing_link = _make_link(event_instance_id=instance.id, uid="uid@test")
+        failing_link = _make_link(
+            event_instance_id=instance.id,
+            uid="uid@test",
+            last_synced_hash=_hash("uid@test"),
+        )
 
         healthy_slot = _make_slot()
         healthy_instance = _make_event_instance(planning_slot_id=healthy_slot.id)
@@ -296,7 +300,7 @@ class TestRunSync:
         slot.status = PlanningSlotStatus.CANCELLED
         instance = _make_event_instance(planning_slot_id=slot.id)
         instance.sync_state = SyncState.DIRTY_INTERNAL
-        link = _make_link(event_instance_id=instance.id)
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=_hash("uid@test"))
         mocks["integration_repo"].get.return_value = integration
         mocks["connector"].fetch_events.return_value = [_raw()]
         mocks["connector"].delete_event = AsyncMock()
@@ -307,6 +311,28 @@ class TestRunSync:
         await run_sync(_INT_ID, mocks["session"])
         mocks["connector"].delete_event.assert_awaited_once()
         assert link.revision_marker == "internal:deleted"
+
+    async def test_internal_cancel_with_remote_edit_preserves_provider_event(self, mocks):
+        integration = _integration()
+        integration.capabilities.append(CalendarCapability.WRITE)
+        slot = _make_slot()
+        slot.status = PlanningSlotStatus.CANCELLED
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(event_instance_id=instance.id, last_synced_hash="acknowledged")
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw(title="Remote edit")]
+        mocks["connector"].delete_event = AsyncMock()
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result.skipped == 1
+        assert instance.sync_state == SyncState.CONFLICT
+        assert link.last_synced_hash == "acknowledged"
+        mocks["connector"].delete_event.assert_not_awaited()
 
     async def test_external_time_change_sets_deviation_without_moving_slot(self, mocks):
         from datetime import time
