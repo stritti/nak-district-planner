@@ -368,6 +368,49 @@ class TestRunSync:
         assert saved_link.provider == CalendarType.ICS.value
         assert saved_link.external_event_id == raw.uid
 
+    async def test_auto_match_without_instance_reuses_existing_slot(self, mocks):
+        """Matched PlanningSlot without EventInstance creates the instance on that slot."""
+        slot = _make_slot()
+        raw = _raw()
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["slot_repo"].list_for_date_range.return_value = [slot]
+        mocks["instance_repo"].get_by_planning_slot.return_value = None
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result.auto_matched == 1
+        assert result.created == 0
+        mocks["slot_repo"].save.assert_not_called()
+        saved_instance = mocks["instance_repo"].save.call_args.args[0]
+        assert saved_instance.planning_slot_id == slot.id
+        assert saved_instance.calendar_integration_id == _INT_ID
+        saved_link = mocks["link_repo"].save.call_args.args[0]
+        assert saved_link.event_instance_id == saved_instance.id
+
+    async def test_acknowledged_cancel_is_write_free(self, mocks):
+        """Repeated provider cancellation with acknowledged hash performs no writes."""
+        raw = _raw(is_cancelled=True)
+        instance = _make_event_instance()
+        link = _make_link(
+            event_instance_id=instance.id,
+            last_synced_hash=_hash(raw.uid),
+        )
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = _make_slot()
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result.skipped == 1
+        mocks["instance_repo"].save.assert_not_called()
+        mocks["slot_repo"].save.assert_not_called()
+        mocks["slot_repo"].delete.assert_not_called()
+        mocks["link_repo"].save.assert_not_called()
+
     async def test_new_cancelled_event_skipped(self, mocks):
         """No existing link + raw.is_cancelled → silently skipped."""
         mocks["integration_repo"].get.return_value = _integration()
