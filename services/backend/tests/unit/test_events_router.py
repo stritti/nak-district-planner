@@ -58,7 +58,7 @@ def _instance(slot: PlanningSlot) -> EventInstance:
 
 
 @pytest.mark.asyncio
-async def test_resolve_deviation_aligns_utc_and_preserves_duration():
+async def test_resolve_deviation_restores_planned_duration():
     from app.domain.models.event_instance import SyncState
     slot = _slot()
     instance = _instance(slot)
@@ -78,9 +78,30 @@ async def test_resolve_deviation_aligns_utc_and_preserves_duration():
         result = await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
     require_role.assert_called_once_with(_auth(), Role.PLANNER, slot.district_id)
     assert result.start_at == datetime(2026, 9, 26, 10, tzinfo=UTC)
-    assert result.end_at - result.start_at == timedelta(hours=1)
+    assert result.end_at - result.start_at == timedelta(minutes=90)
     assert instance.sync_state == SyncState.DIRTY_INTERNAL
     assert not instance.deviation_flag
+
+
+@pytest.mark.asyncio
+async def test_resolve_deviation_reports_no_active_deviation():
+    slot = _slot()
+    instance = _instance(slot)
+    instance.deviation_flag = False
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get.return_value = instance
+    instance_repo.get_by_planning_slot.return_value = instance
+    with (
+        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
+        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
+        patch.object(events, "require_role_in_district"),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+    assert exc.value.status_code == 409
+    instance_repo.save.assert_not_awaited()
 
 
 @pytest.mark.asyncio
