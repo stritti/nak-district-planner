@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.sync_service import (
     SyncResult,
     _get_connector,
-    _has_significant_deviation,
+    has_significant_deviation,
     run_sync,
 )
 from app.domain.models.calendar_integration import (
@@ -34,6 +34,7 @@ from app.domain.models.external_event_candidate import CandidateStatus, External
 from app.domain.models.external_event_link import ExternalEventLink
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
+from app.domain.services.external_event_mapping import has_significant_deviation
 
 # ── constants ──────────────────────────────────────────────────────────────────
 
