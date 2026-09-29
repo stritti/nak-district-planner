@@ -468,6 +468,7 @@ async def _process_existing_event(
     if (
         instance.sync_state == SyncState.DIRTY_INTERNAL
         and not instance.deviation_flag
+        and (raw.start_at != instance.actual_start_at or raw.end_at != instance.actual_end_at)
         and CalendarCapability.WRITE in context.integration.capabilities
         and existing_link.last_synced_hash == new_content_hash
     ):
