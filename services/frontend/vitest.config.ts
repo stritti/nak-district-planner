@@ -25,6 +25,10 @@ export default defineConfig({
         "src/composables/oidcRefresh.ts",
         "src/composables/refreshScheduler.ts",
         "src/composables/useOIDC.ts",
+        "src/api/leaderUnavailabilities.ts",
+        "src/stores/leaderUnavailabilities.ts",
+        "src/components/LeaderUnavailabilityForm.vue",
+        "src/components/LeaderUnavailabilityList.vue",
       ],
       thresholds: {
         perFile: true,
