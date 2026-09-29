@@ -32,6 +32,7 @@
 - [x] 4.3 Implement inbound revision guard
 - [ ] 4.4 Skip already acknowledged cancellation tombstones without DB writes
 - [ ] 4.5 Verify update and delete echo suppression for every writable provider
+- [ ] 4.6 Before outbound delete, compare provider state with last acknowledged hash/revision and route concurrent remote edits through field-aware conflict handling
 
 ## 5. Provider Deletion Reconciliation
 
@@ -52,6 +53,7 @@
 - [ ] 6.4 Push resolved deviations to writable external providers
 - [ ] 6.5 Persist outbound revision/hash and return to CLEAN only after acknowledgement
 - [ ] 6.6 Return meaningful API status when no resolvable deviation exists or outbound sync fails
+- [ ] 6.7 Derive resolved end time from the authoritative planned-duration rule, never from the deviating actual duration
 
 ## 7. Partial Failure Contract
 
@@ -81,3 +83,6 @@
 - [ ] 9.12 Test auto-match without EventInstance does not duplicate PlanningSlot
 - [ ] 9.13 Test non-sync EventInstance deletion cannot create a synchronization tombstone
 - [ ] 9.14 Test only explicit sync HARD_DELETE transitions a link to SYNC_TOMBSTONE
+- [ ] 9.15 Test local delete versus concurrent provider edit preserves provider event and enters conflict handling
+- [ ] 9.16 Test duration deviation resolution restores planned duration
+- [ ] 9.17 Test repeated/stale deviation resolution reports explicit no-op/non-success
