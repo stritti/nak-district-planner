@@ -35,6 +35,7 @@ class ExternalEventLink:
     deletion_reason: str | None = None
     tombstoned_at: datetime | None = None
     last_synced_payload: dict[str, str | None] | None = None
+    provider_resource_id: str | None = None
 
     @classmethod
     def create(
@@ -47,6 +48,7 @@ class ExternalEventLink:
         last_synced_hash: str | None = None,
         revision_marker: str | None = None,
         last_synced_payload: dict[str, str | None] | None = None,
+        provider_resource_id: str | None = None,
     ) -> ExternalEventLink:
         now = datetime.now(timezone.utc)
         return cls(
@@ -61,4 +63,5 @@ class ExternalEventLink:
             updated_at=now,
             state=ExternalEventLinkState.ACTIVE,
             last_synced_payload=last_synced_payload,
+            provider_resource_id=provider_resource_id,
         )
