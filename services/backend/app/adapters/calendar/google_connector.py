@@ -104,20 +104,16 @@ class GoogleCalendarConnector(CalendarConnector):
                 end_at = start_at
             else:
                 try:
-                # If it's a date (all-day), treat as starting at midnight of that day
-                if "T" in start_str:
-                    start_at = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
-                else:
-                    start_at = datetime.fromisoformat(start_str).replace(tzinfo=UTC)
-
-                if "T" in end_str:
-                    end_at = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-                else:
-                    # All-day events: end is exclusive (the day after the last full day)
-                    # So if end date is 2026-04-06, the event ends at 2026-04-06 00:00:00 UTC
-                    end_at = datetime.fromisoformat(end_str).replace(tzinfo=UTC)
+                    # Date-only events start/end at midnight UTC.
+                    if "T" in start_str:
+                        start_at = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                    else:
+                        start_at = datetime.fromisoformat(start_str).replace(tzinfo=UTC)
+                    if "T" in end_str:
+                        end_at = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                    else:
+                        end_at = datetime.fromisoformat(end_str).replace(tzinfo=UTC)
                 except ValueError:
-                    # If parsing fails, skip this event
                     continue
 
             description = item.get("description")
