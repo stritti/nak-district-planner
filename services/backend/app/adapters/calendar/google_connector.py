@@ -87,6 +87,9 @@ class GoogleCalendarConnector(CalendarConnector):
             summary = item.get("summary", "")
             title = str(summary) if summary else "(kein Titel)"
 
+            # Google may return cancellation tombstones with only id/status.
+            # Normalize cancellation before requiring event timestamps.
+            is_cancelled = item.get("status") == "cancelled"
             start_info = item.get("start", {})
             end_info = item.get("end", {})
 
@@ -95,9 +98,12 @@ class GoogleCalendarConnector(CalendarConnector):
             end_str = end_info.get("dateTime") or end_info.get("date")
 
             if start_str is None or end_str is None:
-                continue
-
-            try:
+                if not is_cancelled:
+                    continue
+                start_at = datetime.min.replace(tzinfo=UTC)
+                end_at = start_at
+            else:
+                try:
                 # If it's a date (all-day), treat as starting at midnight of that day
                 if "T" in start_str:
                     start_at = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
@@ -110,23 +116,21 @@ class GoogleCalendarConnector(CalendarConnector):
                     # All-day events: end is exclusive (the day after the last full day)
                     # So if end date is 2026-04-06, the event ends at 2026-04-06 00:00:00 UTC
                     end_at = datetime.fromisoformat(end_str).replace(tzinfo=UTC)
-            except ValueError:
-                # If parsing fails, skip this event
-                continue
+                except ValueError:
+                    # If parsing fails, skip this event
+                    continue
 
             description = item.get("description")
             if description is not None:
                 description = str(description).strip()
 
-            # Google Calendar uses status field; cancelled events have status="cancelled"
-            status = item.get("status")
-            is_cancelled = status == "cancelled"
-
-            # Optional client-side time-window filtering
-            if from_dt is not None and end_at < from_dt:
-                continue
-            if to_dt is not None and start_at > to_dt:
-                continue
+            # Cancellation tombstones must survive client-side time filtering;
+            # their timestamps may be absent and are not part of their identity.
+            if not is_cancelled:
+                if from_dt is not None and end_at < from_dt:
+                    continue
+                if to_dt is not None and start_at > to_dt:
+                    continue
 
             events.append(
                 RawCalendarEvent(
