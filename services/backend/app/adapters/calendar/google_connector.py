@@ -145,7 +145,10 @@ class GoogleCalendarConnector(CalendarConnector):
         return events
 
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
-        headers = {"Authorization": f"Bearer {credentials['access_token']}"}
+        access_token = credentials.get("access_token")
+        if not access_token:
+            raise CalendarConnectorError("Google access_token fehlt")
+        headers = {"Authorization": f"Bearer {access_token}"}
         if event.revision_marker:
             headers["If-Match"] = event.revision_marker
         await delete_resource(
