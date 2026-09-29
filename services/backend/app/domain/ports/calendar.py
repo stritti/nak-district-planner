@@ -19,6 +19,8 @@ class CalendarConnector(ABC):
     *decrypted* credentials (a plain dict) so it stays framework-free.
     """
 
+    authoritative_snapshot: bool = False
+
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
         """Delete a fetched resource; read-only connectors explicitly refuse writes."""
         raise CalendarConnectorError("Dieser Kalender unterstützt keine Löschoperationen")
