@@ -204,7 +204,7 @@ async def _import_new_event(
             instance.sync_state = SyncState.CLEAN
             instance.content_hash = new_content_hash
             instance.external_uid = raw.uid
-            instance.calendar_integration_id = integration_id
+            instance.calendar_integration_id = context.integration_id
             instance.last_external_modified_at = datetime.now(UTC)
             instance.deviation_flag = deviation
             instance.updated_at = datetime.now(UTC)
@@ -259,18 +259,19 @@ async def _import_new_event(
 
 async def _push_internal_delete(
     *,
-    connector: CalendarConnector,
-    credentials: dict,
+    context: SyncContext,
     raw: RawCalendarEvent,
-    integration: CalendarIntegration,
     existing_link: ExternalEventLink,
     instance: EventInstance,
-    instance_repo: SqlEventInstanceRepository,
-    link_repo: SqlExternalEventLinkRepository,
     new_content_hash: str,
 ) -> None:
-    """Push an internal cancellation to the provider exactly once."""
-    await connector.delete_event(credentials, raw)
+    """Push an internal cancellation to the provider exactly once.
+
+    Deletes deliberately bypass the fetch retry policy: an automatic retry
+    could repeat a non-idempotent write. Provider revision/If-Match semantics
+    are handled by the connector instead.
+    """
+    await context.connector.delete_event(context.credentials, raw)
     existing_link.revision_marker = INTERNAL_DELETE_MARKER
     existing_link.last_synced_hash = new_content_hash
     existing_link.updated_at = datetime.now(UTC)
@@ -281,13 +282,11 @@ async def _push_internal_delete(
 
 async def _handle_external_cancel(
     *,
+    context: SyncContext,
     raw: RawCalendarEvent,
     existing_link: ExternalEventLink,
     instance: EventInstance,
     slot: PlanningSlot | None,
-    instance_repo: SqlEventInstanceRepository,
-    slot_repo: SqlPlanningSlotRepository,
-    link_repo: SqlExternalEventLinkRepository,
     new_content_hash: str,
 ) -> SyncOutcome:
     """Apply an external cancellation according to the configured delete mode."""
@@ -299,7 +298,7 @@ async def _handle_external_cancel(
         existing_link.event_instance_id = None
         existing_link.last_synced_hash = new_content_hash
         await context.link_repo.save(existing_link)
-        await slot_repo.delete(slot.id)
+        await context.slot_repo.delete(slot.id)
         return SyncOutcome.CANCELLED
     if slot and slot.status != PlanningSlotStatus.CANCELLED:
         slot.status = PlanningSlotStatus.CANCELLED
@@ -317,12 +316,11 @@ async def _handle_external_cancel(
 
 async def _apply_external_update(
     *,
+    context: SyncContext,
     raw: RawCalendarEvent,
     existing_link: ExternalEventLink,
     instance: EventInstance,
     slot: PlanningSlot | None,
-    instance_repo: SqlEventInstanceRepository,
-    link_repo: SqlExternalEventLinkRepository,
     new_content_hash: str,
 ) -> SyncOutcome:
     """Route incoming fields by authority and advance the sync state machine."""
@@ -376,40 +374,33 @@ async def _process_existing_event(
             and instance.sync_state == SyncState.DIRTY_INTERNAL
             and CalendarCapability.WRITE in context.integration.capabilities):
         await _push_internal_delete(
-            connector=context.connector,
-            credentials=context.credentials,
+            context=context,
             raw=raw,
-            integration=context.integration,
             existing_link=existing_link,
             instance=instance,
-            instance_repo=context.instance_repo,
-            link_repo=context.link_repo,
             new_content_hash=new_content_hash,
         )
         return SyncOutcome.CANCELLED
 
+    if existing_link.last_synced_hash == new_content_hash:
+        return SyncOutcome.SKIPPED  # Unchanged — includes acknowledged cancellations
+
     if raw.is_cancelled:
         return await _handle_external_cancel(
+            context=context,
             raw=raw,
             existing_link=existing_link,
             instance=instance,
             slot=slot,
-            instance_repo=context.instance_repo,
-            slot_repo=context.slot_repo,
-            link_repo=context.link_repo,
             new_content_hash=new_content_hash,
         )
 
-    if existing_link.last_synced_hash == new_content_hash:
-        return SyncOutcome.SKIPPED  # Unchanged — skip
-
     return await _apply_external_update(
+        context=context,
         raw=raw,
         existing_link=existing_link,
         instance=instance,
         slot=slot,
-        instance_repo=context.instance_repo,
-        link_repo=context.link_repo,
         new_content_hash=new_content_hash,
     )
 
