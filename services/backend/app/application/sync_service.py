@@ -8,9 +8,9 @@ Implements deterministic, idempotent sync with state machine:
      a. Look up ExternalEventLink by (provider, uid, calendar_integration_id)
      b. If NEW:
         - Skip cancelled events
-        - Try auto-match to PlanningSlot (congregation, date, time ±2h, category)
+        - Try exact auto-match to PlanningSlot (congregation, date, time, category)
         - If matched: update EventInstance actual times, set sync_state=CLEAN, create link
-        - If unmatched: create new PlanningSlot + EventInstance (source=EXTERNAL) + link
+        - If unmatched or slot is not safely assignable: create/update Candidate
      c. If EXISTING:
         - Compare content_hash → skip if unchanged
         - If raw.is_cancelled → CANCELLED status
