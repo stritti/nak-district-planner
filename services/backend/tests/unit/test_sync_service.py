@@ -789,6 +789,12 @@ class TestHasSignificantDeviation:
         ) is True
 
 
+    def test_end_only_deviation(self):
+        slot = _make_slot(planning_time=_START.time())
+        assert _has_significant_deviation(
+            slot, _START, _END + timedelta(minutes=31)
+        ) is True
+
 
 async def test_non_overlapping_soft_changes_merge_without_conflict(mocks):
     instance = _make_event_instance(title="Internal title")
