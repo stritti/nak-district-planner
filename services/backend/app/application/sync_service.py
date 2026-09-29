@@ -192,10 +192,26 @@ async def _import_new_event(
     )
 
     if matched_slot is not None:
-        # Auto-match: update existing EventInstance with external data
+        # Auto-match always reuses the matched aggregate. If no EventInstance
+        # exists yet, create it for this PlanningSlot instead of duplicating
+        # the PlanningSlot.
         instance = await context.instance_repo.get_by_planning_slot(matched_slot.id)
-        if instance is not None:
-            deviation = _has_significant_deviation(matched_slot, raw.start_at)
+        deviation = _has_significant_deviation(matched_slot, raw.start_at)
+        if instance is None:
+            instance = EventInstance.create(
+                planning_slot_id=matched_slot.id,
+                title=raw.title,
+                actual_start_at=raw.start_at,
+                actual_end_at=raw.end_at,
+                description=raw.description,
+                source=EventSource.EXTERNAL,
+                visibility=EventVisibility.PUBLIC,
+                sync_state=SyncState.CLEAN,
+                content_hash=new_content_hash,
+                external_uid=raw.uid,
+                calendar_integration_id=context.integration_id,
+            )
+        else:
             instance.actual_start_at = raw.start_at
             instance.actual_end_at = raw.end_at
             instance.title = raw.title
@@ -206,19 +222,20 @@ async def _import_new_event(
             instance.external_uid = raw.uid
             instance.calendar_integration_id = context.integration_id
             instance.last_external_modified_at = datetime.now(UTC)
-            instance.deviation_flag = deviation
             instance.updated_at = datetime.now(UTC)
-            await context.instance_repo.save(instance)
 
-            link = ExternalEventLink.create(
-                event_instance_id=instance.id,
-                provider=context.integration.type.value,
-                external_event_id=raw.uid,
-                calendar_integration_id=context.integration_id,
-                last_synced_hash=new_content_hash,
-            )
-            await context.link_repo.save(link)
-            return SyncOutcome.AUTO_MATCHED
+        instance.deviation_flag = deviation
+        await context.instance_repo.save(instance)
+
+        link = ExternalEventLink.create(
+            event_instance_id=instance.id,
+            provider=context.integration.type.value,
+            external_event_id=raw.uid,
+            calendar_integration_id=context.integration_id,
+            last_synced_hash=new_content_hash,
+        )
+        await context.link_repo.save(link)
+        return SyncOutcome.AUTO_MATCHED
 
     # No match — create new PlanningSlot + EventInstance
     slot = PlanningSlot.create(
