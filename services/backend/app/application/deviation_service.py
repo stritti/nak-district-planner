@@ -156,11 +156,10 @@ class DeviationService:
             # No deviation to resolve
             return False
 
-        # Update instance times to match slot
-        expected_start = datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
-        # Use same duration as current instance
-        duration = instance.actual_end_at - instance.actual_start_at
-        expected_end = expected_start + duration
+        # Restore the authoritative planned interval. Reusing the current
+        # actual duration would preserve an end-time/duration deviation.
+        expected_start = self._calculate_expected_start(slot)
+        expected_end = self._calculate_expected_end(slot)
 
         instance.actual_start_at = expected_start
         instance.actual_end_at = expected_end
