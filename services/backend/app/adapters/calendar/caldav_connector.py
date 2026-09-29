@@ -52,7 +52,10 @@ class CalDAVConnector(CalendarConnector):
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
     ) -> list[RawCalendarEvent]:
-        url: str = credentials["url"].rstrip("/")
+        url_value = credentials.get("url")
+        if not url_value:
+            raise CalendarConnectorError("CalDAV Basis-URL fehlt in den Credentials")
+        url: str = str(url_value).rstrip("/")
 
         # Determine authentication method
         headers = {}
@@ -85,15 +88,18 @@ class CalDAVConnector(CalendarConnector):
         # For simplicity, we'll use calendar-query on the calendar collection itself
         report_url = f"{url}" if url.endswith("/") else f"{url}/"
 
-        response = await self._client.request(
-            "REPORT",
-            report_url,
-            data=calendar_query.encode("utf-8"),  # type: ignore[arg-type]
-            headers={"Content-Type": "application/xml; charset=utf-8", "Depth": "1", **headers},
-            auth=(str(credentials["username"]), str(credentials["password"]))
-            if "username" in credentials and "password" in credentials
-            else None,
-        )
+        try:
+            response = await self._client.request(
+                "REPORT",
+                report_url,
+                data=calendar_query.encode("utf-8"),  # type: ignore[arg-type]
+                headers={"Content-Type": "application/xml; charset=utf-8", "Depth": "1", **headers},
+                auth=(str(credentials["username"]), str(credentials["password"]))
+                if "username" in credentials and "password" in credentials
+                else None,
+            )
+        except httpx.RequestError as exc:
+            raise CalendarConnectorError("Transportfehler beim Laden des CalDAV Kalenders") from exc
 
         try:
             response.raise_for_status()
