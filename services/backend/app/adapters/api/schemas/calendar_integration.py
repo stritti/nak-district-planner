@@ -77,5 +77,3 @@ class SyncResult(BaseModel):
     auto_matched: int
     skipped: int = 0
     failed: int = 0
-    skipped: int = 0
-    failed: int = 0
