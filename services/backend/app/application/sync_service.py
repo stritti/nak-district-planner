@@ -611,7 +611,7 @@ async def push_deviation_resolution(instance: EventInstance, session: AsyncSessi
         link.updated_at = datetime.now(UTC)
         await link_repo.save(link)
         pushed = True
-    if pushed:
+    if pushed and instance.sync_state == SyncState.DIRTY_INTERNAL:
         instance.sync_state = SyncState.CLEAN
         await instance_repo.save(instance)
     return pushed
