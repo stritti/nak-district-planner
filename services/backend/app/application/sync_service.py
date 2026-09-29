@@ -263,6 +263,7 @@ async def _import_new_event(
             last_synced_hash=new_content_hash,
             revision_marker=raw.revision_marker,
             last_synced_payload=_sync_payload(raw),
+            provider_resource_id=raw.resource_id,
         )
         await context.link_repo.save(link)
         return SyncOutcome.AUTO_MATCHED
@@ -301,6 +302,7 @@ async def _import_new_event(
         last_synced_hash=new_content_hash,
         revision_marker=raw.revision_marker,
         last_synced_payload=_sync_payload(raw),
+        provider_resource_id=raw.resource_id,
     )
     await context.link_repo.save(link)
     return SyncOutcome.CREATED
