@@ -63,7 +63,7 @@ def _hash(
         start_at = _START
     if end_at is ...:
         end_at = _END
-    raw_str = f"{uid}|{start_at}|{end_at}|{title}|{description}"
+    raw_str = f"{uid}|{start_at}|{end_at}|{title}|{description}|False"
     return hashlib.sha256(raw_str.encode()).hexdigest()
 
 
