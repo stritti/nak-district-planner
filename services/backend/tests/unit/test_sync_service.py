@@ -762,11 +762,11 @@ class TestGetConnector:
 
 
 class TestHasSignificantDeviation:
-    """Test suite for the pure _has_significant_deviation() helper."""
+    """Test suite for the pure has_significant_deviation() helper."""
 
     def test_no_deviation_within_five_minutes(self):
         slot = _make_slot(planning_time=_START.time())
-        assert _has_significant_deviation(slot, _START + timedelta(minutes=4)) is False
+        assert has_significant_deviation(slot, _START + timedelta(minutes=4)) is False
 
     def test_deviation_beyond_five_minutes(self):
         slot = _make_slot(planning_time=_START.time())
