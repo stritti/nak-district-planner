@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
 
+from app.domain.services.sync_policy import SyncDeleteMode
+
 
 class CalendarType(StrEnum):
     """CalendarType domain model."""
@@ -46,6 +48,7 @@ class CalendarIntegration:
     congregation_id: uuid.UUID | None = None
     default_category: str | None = None
     last_sync_error: str | None = None
+    delete_behavior: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
 
     @classmethod
     def create(
@@ -59,6 +62,7 @@ class CalendarIntegration:
         capabilities: list[CalendarCapability] | None = None,
         congregation_id: uuid.UUID | None = None,
         default_category: str | None = None,
+        delete_behavior: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED,
     ) -> CalendarIntegration:
         now = datetime.now(UTC)
         return cls(
@@ -76,4 +80,5 @@ class CalendarIntegration:
             created_at=now,
             updated_at=now,
             default_category=default_category,
+            delete_behavior=delete_behavior,
         )
