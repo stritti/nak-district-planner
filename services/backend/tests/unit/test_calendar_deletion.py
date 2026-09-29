@@ -51,3 +51,20 @@ async def test_ics_is_read_only():
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(204))) as client:
         with pytest.raises(CalendarConnectorError):
             await ICalConnector(client).delete_event({}, event())
+
+
+async def test_delete_transport_error_is_normalized():
+    async def handler(_request):
+        raise httpx.ConnectError("offline")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(CalendarConnectorError, match="Transportfehler"):
+            await GoogleCalendarConnector(client).delete_event(
+                {"access_token": "test"}, event()
+            )
+
+
+@pytest.mark.parametrize("connector_type", [GoogleCalendarConnector, MicrosoftGraphCalendarConnector])
+async def test_missing_access_token_refuses_delete(connector_type):
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: pytest.fail("must not send"))) as client:
+        with pytest.raises(CalendarConnectorError, match="access_token"):
+            await connector_type(client).delete_event({}, event())
