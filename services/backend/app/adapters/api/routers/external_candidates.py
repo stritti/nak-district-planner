@@ -56,7 +56,6 @@ class AcceptCandidate(BaseModel):
 async def list_candidates(
     district_id: UUID,
     auth: CurrentUserWithMemberships,
-    session: DbSession,
     repository: SqlExternalEventCandidateRepository = Depends(
         get_external_event_candidate_repository
     ),
@@ -76,7 +75,6 @@ async def list_candidates(
 async def load_for_review(
     candidate_id: UUID,
     auth: CurrentUserWithMemberships,
-    session: DbSession,
     repository: SqlExternalEventCandidateRepository,
     service: CandidateReviewService,
 ) -> tuple[ExternalEventCandidate, CandidateReviewService]:
@@ -98,7 +96,7 @@ async def accept_candidate(
     ),
     service: CandidateReviewService = Depends(get_candidate_review_service),
 ) -> ExternalEventCandidate:
-    candidate, service = await load_for_review(candidate_id, auth, session, repository, service)
+    candidate, service = await load_for_review(candidate_id, auth, repository, service)
     if body.matched_slot_id is not None:
         await acquire_advisory_xact_lock(session, body.matched_slot_id)
     try:
@@ -115,9 +113,12 @@ async def accept_candidate(
 async def dismiss_candidate(
     candidate_id: UUID,
     auth: CurrentUserWithMemberships,
-    session: DbSession,
+    repository: SqlExternalEventCandidateRepository = Depends(
+        get_external_event_candidate_repository
+    ),
+    service: CandidateReviewService = Depends(get_candidate_review_service),
 ) -> ExternalEventCandidate:
-    candidate, service = await load_for_review(candidate_id, auth, session)
+    candidate, service = await load_for_review(candidate_id, auth, repository, service)
     try:
         return await service.dismiss(candidate, user_sub=auth.user.sub)
     except CandidateReviewError as exc:
