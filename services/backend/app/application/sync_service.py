@@ -82,7 +82,8 @@ class SyncResult:
         updated: Number of existing EventInstances updated.
         cancelled: Number of existing EventInstances cancelled.
         auto_matched: Number of events auto-matched to existing PlanningSlots.
-        skipped: Number of idempotent/no-op events skipped.\n        failed: Number of isolated per-event failures.
+        skipped: Number of idempotent/no-op events skipped.
+        failed: Number of isolated per-event failures.
     """
 
     created: int = 0
@@ -168,7 +169,9 @@ class SyncOutcome(StrEnum):
     UPDATED = "updated"
     CANCELLED = "cancelled"
     AUTO_MATCHED = "auto_matched"
-    SKIPPED = "skipped"\n    FAILED = "failed"\n
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
 
 def _sync_payload(raw: RawCalendarEvent) -> dict[str, str | None]:
     return {
@@ -257,7 +260,10 @@ async def _import_new_event(
             provider=context.integration.type.value,
             external_event_id=raw.uid,
             calendar_integration_id=context.integration_id,
-            last_synced_hash=new_content_hash,\n            revision_marker=raw.revision_marker,\n            last_synced_payload=_sync_payload(raw),\n        )
+            last_synced_hash=new_content_hash,
+            revision_marker=raw.revision_marker,
+            last_synced_payload=_sync_payload(raw),
+        )
         await context.link_repo.save(link)
         return SyncOutcome.AUTO_MATCHED
 
@@ -293,6 +299,8 @@ async def _import_new_event(
         external_event_id=raw.uid,
         calendar_integration_id=context.integration_id,
         last_synced_hash=new_content_hash,
+        revision_marker=raw.revision_marker,
+        last_synced_payload=_sync_payload(raw),
     )
     await context.link_repo.save(link)
     return SyncOutcome.CREATED
@@ -621,4 +629,6 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
         updated=counters[SyncOutcome.UPDATED],
         cancelled=counters[SyncOutcome.CANCELLED],
         auto_matched=counters[SyncOutcome.AUTO_MATCHED],
-        skipped=counters[SyncOutcome.SKIPPED],\n        failed=counters[SyncOutcome.FAILED],\n    )
+        skipped=counters[SyncOutcome.SKIPPED],
+        failed=counters[SyncOutcome.FAILED],
+    )
