@@ -174,12 +174,7 @@ class SyncOutcome(StrEnum):
 async def _import_new_event(
     *,
     raw: RawCalendarEvent,
-    integration: CalendarIntegration,
-    integration_id: uuid.UUID,
-    session: AsyncSession,
-    instance_repo: SqlEventInstanceRepository,
-    slot_repo: SqlPlanningSlotRepository,
-    link_repo: SqlExternalEventLinkRepository,
+    context: SyncContext,
     new_content_hash: str,
 ) -> SyncOutcome:
     """Handle a raw event without an existing ExternalEventLink."""
@@ -189,16 +184,16 @@ async def _import_new_event(
 
     # Auto-matching: try to match to an existing PlanningSlot first
     matched_slot = await _find_matching_planning_slot(
-        session=session,
-        district_id=integration.district_id,
-        congregation_id=integration.congregation_id,
+        session=context.session,
+        district_id=context.integration.district_id,
+        congregation_id=context.integration.congregation_id,
         event_start=raw.start_at,
         event_category=raw.title,
     )
 
     if matched_slot is not None:
         # Auto-match: update existing EventInstance with external data
-        instance = await instance_repo.get_by_planning_slot(matched_slot.id)
+        instance = await context.instance_repo.get_by_planning_slot(matched_slot.id)
         if instance is not None:
             deviation = _has_significant_deviation(matched_slot, raw.start_at)
             instance.actual_start_at = raw.start_at
@@ -213,28 +208,28 @@ async def _import_new_event(
             instance.last_external_modified_at = datetime.now(UTC)
             instance.deviation_flag = deviation
             instance.updated_at = datetime.now(UTC)
-            await instance_repo.save(instance)
+            await context.instance_repo.save(instance)
 
             link = ExternalEventLink.create(
                 event_instance_id=instance.id,
-                provider=integration.type.value,
+                provider=context.integration.type.value,
                 external_event_id=raw.uid,
-                calendar_integration_id=integration_id,
+                calendar_integration_id=context.integration_id,
                 last_synced_hash=new_content_hash,
             )
-            await link_repo.save(link)
+            await context.link_repo.save(link)
             return SyncOutcome.AUTO_MATCHED
 
     # No match — create new PlanningSlot + EventInstance
     slot = PlanningSlot.create(
-        district_id=integration.district_id,
+        district_id=context.integration.district_id,
         planning_date=raw.start_at.date(),
         planning_time=raw.start_at.time(),
-        congregation_id=integration.congregation_id,
-        category=integration.default_category or raw.title,
+        congregation_id=context.integration.congregation_id,
+        category=context.integration.default_category or raw.title,
         title=raw.title,
     )
-    await slot_repo.save(slot)
+    await context.slot_repo.save(slot)
 
     instance = EventInstance.create(
         planning_slot_id=slot.id,
@@ -247,18 +242,18 @@ async def _import_new_event(
         sync_state=SyncState.CLEAN,
         content_hash=new_content_hash,
         external_uid=raw.uid,
-        calendar_integration_id=integration_id,
+        calendar_integration_id=context.integration_id,
     )
-    await instance_repo.save(instance)
+    await context.instance_repo.save(instance)
 
     link = ExternalEventLink.create(
         event_instance_id=instance.id,
-        provider=integration.type.value,
+        provider=context.integration.type.value,
         external_event_id=raw.uid,
-        calendar_integration_id=integration_id,
+        calendar_integration_id=context.integration_id,
         last_synced_hash=new_content_hash,
     )
-    await link_repo.save(link)
+    await context.link_repo.save(link)
     return SyncOutcome.CREATED
 
 
@@ -279,9 +274,9 @@ async def _push_internal_delete(
     existing_link.revision_marker = INTERNAL_DELETE_MARKER
     existing_link.last_synced_hash = new_content_hash
     existing_link.updated_at = datetime.now(UTC)
-    await link_repo.save(existing_link)
+    await context.link_repo.save(existing_link)
     instance.sync_state = SyncState.CLEAN
-    await instance_repo.save(instance)
+    await context.instance_repo.save(instance)
 
 
 async def _handle_external_cancel(
@@ -298,25 +293,25 @@ async def _handle_external_cancel(
     """Apply an external cancellation according to the configured delete mode."""
     if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
         instance.sync_state = SyncState.CONFLICT
-        await instance_repo.save(instance)
+        await context.instance_repo.save(instance)
         return SyncOutcome.SKIPPED
     if slot and settings.sync_delete_mode == SyncDeleteMode.HARD_DELETE:
         existing_link.event_instance_id = None
         existing_link.last_synced_hash = new_content_hash
-        await link_repo.save(existing_link)
+        await context.link_repo.save(existing_link)
         await slot_repo.delete(slot.id)
         return SyncOutcome.CANCELLED
     if slot and slot.status != PlanningSlotStatus.CANCELLED:
         slot.status = PlanningSlotStatus.CANCELLED
         slot.updated_at = datetime.now(UTC)
-        await slot_repo.save(slot)
+        await context.slot_repo.save(slot)
         existing_link.last_synced_hash = new_content_hash
         existing_link.updated_at = datetime.now(UTC)
-        await link_repo.save(existing_link)
+        await context.link_repo.save(existing_link)
         return SyncOutcome.CANCELLED
     existing_link.last_synced_hash = new_content_hash
     existing_link.updated_at = datetime.now(UTC)
-    await link_repo.save(existing_link)
+    await context.link_repo.save(existing_link)
     return SyncOutcome.SKIPPED
 
 
@@ -334,7 +329,7 @@ async def _apply_external_update(
     next_state = inbound_state(instance.sync_state, changed=True)
     if next_state == SyncState.CONFLICT:
         instance.sync_state = next_state
-        await instance_repo.save(instance)
+        await context.instance_repo.save(instance)
         return SyncOutcome.SKIPPED  # Keep the acknowledged hash so this change can be retried.
 
     incoming = {
@@ -353,12 +348,12 @@ async def _apply_external_update(
     instance.content_hash = new_content_hash
     instance.last_external_modified_at = datetime.now(UTC)
     instance.updated_at = datetime.now(UTC)
-    await instance_repo.save(instance)
+    await context.instance_repo.save(instance)
 
     existing_link.last_synced_hash = new_content_hash
     existing_link.revision_marker = raw.revision_marker
     existing_link.updated_at = datetime.now(UTC)
-    await link_repo.save(existing_link)
+    await context.link_repo.save(existing_link)
     return SyncOutcome.UPDATED
 
 
@@ -454,9 +449,9 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
 
         for raw in raw_events:
             existing_link = await link_repo.get_by_external_event(
-                provider=integration.type.value,
+                provider=context.integration.type.value,
                 external_event_id=raw.uid,
-                calendar_integration_id=integration_id,
+                calendar_integration_id=context.integration_id,
             )
 
             # Provider hashes may omit descriptions. Hash normalized business data here.
@@ -468,12 +463,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                 if existing_link is None:
                     outcome = await _import_new_event(
                         raw=raw,
-                        integration=integration,
-                        integration_id=integration_id,
-                        session=session,
-                        instance_repo=instance_repo,
-                        slot_repo=slot_repo,
-                        link_repo=link_repo,
+                        context=context,
                         new_content_hash=new_content_hash,
                     )
                 else:
