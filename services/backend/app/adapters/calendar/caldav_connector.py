@@ -15,6 +15,8 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urljoin, urlsplit
 
 import httpx
+import defusedxml.ElementTree as ET
+from icalendar import Calendar as ICalendar
 
 from app.adapters.calendar.deletion import delete_resource
 from app.domain.models.raw_calendar_event import RawCalendarEvent
@@ -24,6 +26,15 @@ from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:
     payload = f"{uid}|{start_at.isoformat()}|{end_at.isoformat()}|{title}"
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+
+def _to_utc(value) -> datetime:
+    """Normalize iCalendar date/datetime values to UTC."""
+    raw = value.dt if hasattr(value, "dt") else value
+    if isinstance(raw, datetime):
+        return raw.replace(tzinfo=UTC) if raw.tzinfo is None else raw.astimezone(UTC)
+    return datetime(raw.year, raw.month, raw.day, tzinfo=UTC)
 
 
 class CalDAVConnector(CalendarConnector):
@@ -91,8 +102,6 @@ class CalDAVConnector(CalendarConnector):
         # Parse the multi-status response
         # This is simplified - a production implementation would properly parse XML
         # For now, we'll look for calendar-data elements
-        import defusedxml.ElementTree as ET
-
         try:
             root = ET.fromstring(response.content)
         except ET.ParseError as exc:
@@ -120,8 +129,6 @@ class CalDAVConnector(CalendarConnector):
 
             # Parse the iCalendar data
             try:
-                from icalendar import Calendar as ICalendar
-
                 cal = ICalendar.from_ical(cal_data)
             except Exception:
                 # Skip invalid iCalendar data
@@ -146,20 +153,6 @@ class CalDAVConnector(CalendarConnector):
 
                 if dtstart is None:
                     continue
-
-                # Convert to UTC datetime
-                def _to_utc(dt):
-                    if hasattr(dt, "dt"):
-                        dt_val = dt.dt
-                    else:
-                        dt_val = dt
-
-                    if isinstance(dt_val, datetime):
-                        if dt_val.tzinfo is None:
-                            return dt_val.replace(tzinfo=UTC)
-                        return dt_val.astimezone(UTC)
-                    else:  # date object
-                        return datetime(dt_val.year, dt_val.month, dt_val.day, tzinfo=UTC)
 
                 start_at = _to_utc(dtstart)
 
