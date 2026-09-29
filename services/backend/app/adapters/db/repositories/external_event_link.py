@@ -62,6 +62,17 @@ class SqlExternalEventLinkRepository(ExternalEventLinkRepository):
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
 
+    async def list_active_by_integration(
+        self, calendar_integration_id: uuid.UUID
+    ) -> list[ExternalEventLink]:
+        result = await self._session.execute(
+            select(ExternalEventLinkORM).where(
+                ExternalEventLinkORM.calendar_integration_id == calendar_integration_id,
+                ExternalEventLinkORM.state == ExternalEventLinkState.ACTIVE.value,
+            )
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
     async def save(self, link: ExternalEventLink) -> None:
         existing = await self._session.get(ExternalEventLinkORM, link.id)
         if existing is None:
