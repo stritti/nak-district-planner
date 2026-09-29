@@ -341,7 +341,8 @@ async def resolve_event_deviation(
     if current is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
     try:
-        await push_deviation_resolution(current, session)
+        if current.calendar_integration_id is not None:
+            await push_deviation_resolution(current, session)
     except CalendarConnectorError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
