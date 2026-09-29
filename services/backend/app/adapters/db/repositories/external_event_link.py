@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.external_event_link import ExternalEventLinkORM
-from app.domain.models.external_event_link import ExternalEventLink
+from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.ports.repositories import ExternalEventLinkRepository
 
 
@@ -24,6 +24,10 @@ def _orm_to_domain(row: ExternalEventLinkORM) -> ExternalEventLink:
         revision_marker=row.revision_marker,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        state=ExternalEventLinkState(row.state),
+        deletion_origin=row.deletion_origin,
+        deletion_reason=row.deletion_reason,
+        tombstoned_at=row.tombstoned_at,
     )
 
 
@@ -74,6 +78,10 @@ class SqlExternalEventLinkRepository(ExternalEventLinkRepository):
         row.calendar_integration_id = link.calendar_integration_id
         row.created_at = link.created_at or datetime.now(UTC)
         row.updated_at = link.updated_at or datetime.now(UTC)
+        row.state = link.state.value
+        row.deletion_origin = link.deletion_origin
+        row.deletion_reason = link.deletion_reason
+        row.tombstoned_at = link.tombstoned_at
         await self._session.flush()
 
     async def delete(self, link_id: uuid.UUID) -> None:
