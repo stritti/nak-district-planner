@@ -1,21 +1,26 @@
 ## Context
 
-When the calendar sync detects an external event that has no corresponding `PlanningSlot`, the current sync engine has no defined behavior. This change introduces a governed ingestion workflow: create an `ExternalEventCandidate`, attempt auto-mapping to existing slots, and provide a review interface for administrators.
+When the calendar sync detects an external event that has no corresponding `PlanningSlot`, the current sync engine needs a governed fallback. This change introduces `ExternalEventCandidate`, attempts safe auto-mapping to existing slots, and provides a backend review API for administrators.
 
-The `planning-slot-hybrid-sync` change established `PlanningSlot` as the authoritative planning structure. External events should not create `PlanningSlot` entries without governance approval.
+The `planning-slot-hybrid-sync` change established `PlanningSlot` as the authoritative planning structure. External events must not create `PlanningSlot` entries without governance approval.
 
 ## Goals / Non-Goals
 
 **Goals:**
 - Create `ExternalEventCandidate` for unmatched external events
-- Auto-map external events to existing `PlanningSlot` on exact match (congregation, date, time, category)
-- Provide API endpoints for candidate review (list, accept, dismiss)
-- Provide frontend candidate review modal
+- Auto-map external events to an existing `PlanningSlot` when congregation, date and time match and category constraints are compatible
+- Keep per-event mapping failures isolated so later events continue to sync
+- Provide backend API endpoints for candidate review (list, accept, dismiss)
+- Reuse one mapping service for automatic and reviewed assignment
+- Use explicit domain errors instead of string-based `ValueError` contracts
+- Keep candidate refresh and candidate status transitions separate
 
 **Non-Goals:**
-- Partial matching (fuzzy date ranges, approximate times)
+- Frontend candidate review UI, route, Pinia store, or API client
+- Fuzzy matching or approximate time matching
 - Bulk candidate operations
 - Candidate expiry/cleanup policy
+- Introducing a new dependency-injection framework
 
 ## Decisions
 
@@ -23,70 +28,81 @@ The `planning-slot-hybrid-sync` change established `PlanningSlot` as the authori
 
 ```text
 ExternalEventCandidate
-──────────────────────
+----------------------
   id: UUID
   district_id: UUID (FK)
-  external_event_id: str (UID from source)
-  source: str (calendar integration name)
+  calendar_integration_id: UUID (FK)
+  external_event_id: str
+  source: str
   congregation_id: UUID | null
-  event_date: date
-  event_time: time | null
   title: str
   category: str | null
+  start_at: datetime
+  end_at: datetime
+  description: str | null
   content_hash: str
   status: PENDING | ACCEPTED | DISMISSED
-  matched_slot_id: UUID | null (auto-mapped)
+  matched_slot_id: UUID | null
   created_at: datetime
   updated_at: datetime
   reviewed_at: datetime | null
-  reviewed_by: UUID | null (User ID)
+  reviewed_by: str | null
 ```
 
-**Decision:** Keep candidate as a simple entity with status. While status is
-PENDING, a new source version updates the candidate's event data, `content_hash`,
-and `updated_at` in place. When accepted, either link to an existing
-`PlanningSlot` (via `matched_slot_id`) or create a new one.
+While status is PENDING, a new source version updates event data, `content_hash`, and `updated_at` in place. Refreshing data never changes status implicitly. Cancellation is handled explicitly by the sync workflow by dismissing a pending candidate.
 
 ### 2. Auto-Mapping Logic
 
-```mermaid
-External event detected
-       │
-       ▼
-┌─────────────────────────┐
-│ Query PlanningSlots     │
-│ WHERE congregation =    │
-│   event.congregation    │
-│   AND date = event.date │
-│   AND time = event.time │
-│   AND category = cat    │
-└─────────┬───────────────┘
-          │
-    ┌─────┴─────┐
-    ▼           ▼
-  Match     No match
-    │           │
-    ▼           ▼
-  Create     Create
-  mapping    Candidate
-  (skip      (needs
-  candidate)  review)
-```
+A slot is eligible when:
+- district is already scoped by the slot query
+- congregation matches exactly
+- planning date equals the external event date in UTC
+- planning time equals the external event time in UTC
+- if the integration defines `default_category`, the slot category is either that category or unset
+- if the integration has no default category, category does not block an otherwise exact match
 
-**Decision:** Exact match only (all four fields: congregation, date, time, category). No fuzzy matching for MVP.
+The external event title is content and is never used as an implicit category.
 
-### 3. Review Actions
+If a matching slot already belongs to another calendar integration or has unresolved local changes, the event is not fatal to the sync run. It remains or becomes a candidate and processing continues with the next event.
+
+### 3. Shared Mapping Service
+
+Automatic mapping and candidate acceptance SHALL use the same application/domain service for:
+- creating or updating `EventInstance`
+- assigning external identifiers and integration
+- setting `sync_state=CLEAN`
+- computing deviation against the slot
+- creating `ExternalEventLink`
+- persisting the source revision marker when available
+
+This prevents semantic drift between automatic and manual review flows.
+
+### 4. Review Actions
 
 | Action | Effect |
 |---|---|
-| **Accept & Map** | Link candidate to existing `PlanningSlot`, set status=ACCEPTED, emit event |
-| **Accept & Create** | Create new `PlanningSlot` from candidate data, set status=ACCEPTED |
-| **Dismiss** | Set status=DISMISSED, no further action |
+| **Accept & Map** | Link candidate to an existing active `PlanningSlot`, set status=ACCEPTED |
+| **Accept & Create** | Create a new `PlanningSlot`, map the external event, set status=ACCEPTED |
+| **Dismiss** | Set status=DISMISSED, no mapping is created |
+
+Review operations are terminal. Re-reviewing a non-PENDING candidate raises a dedicated domain exception.
+
+### 5. Error Semantics
+
+Candidate review uses dedicated exception types such as:
+- `CandidateAlreadyReviewed`
+- `CandidateInvalidPeriod`
+- `CandidateSlotNotAssignable`
+- `CandidateSlotAlreadyLinked`
+
+The API translates these to HTTP 409. Authorization and not-found behavior remain separate API concerns.
 
 ## Risks / Trade-offs
 
 | Risk | Mitigation |
 |---|---|
-| **False positives** — auto-mapping matches wrong slot | Exact-match criteria minimize this. Manual review can correct. |
-| **Duplicate candidates** — same external event detected in consecutive syncs | Check existing candidates before creating new ones (by external_event_id + source); refresh PENDING candidate data and content hash in place |
-| **Orphaned candidates** — accepted but slot later deleted | Accept writes into PlanningSlot; slot lifecycle is independent after mapping |
+| **False positive auto-match** | Exact congregation/date/time matching and conservative category compatibility |
+| **Duplicate candidates** | Unique key on integration + external event ID and locked repository lookup |
+| **Semantic drift** | One shared mapping service used by sync and review |
+| **One bad event blocks sync** | Unassignable slot becomes candidate; sync continues |
+| **Hidden state transitions** | Refresh only updates data; dismiss/accept are explicit transitions |
