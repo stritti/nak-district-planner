@@ -390,6 +390,20 @@ async def _process_existing_event(
     if (slot and slot.status == PlanningSlotStatus.CANCELLED
             and instance.sync_state == SyncState.DIRTY_INTERNAL
             and CalendarCapability.WRITE in context.integration.capabilities):
+        # A local deletion is a concurrent write. Never approve a newer remote
+        # revision merely by passing the freshly fetched revision to delete_event.
+        # Route unacknowledged provider changes through normal field authority
+        # first; DIRTY_INTERNAL + remote change becomes CONFLICT and preserves
+        # the provider resource.
+        if existing_link.last_synced_hash != new_content_hash:
+            return await _apply_external_update(
+                context=context,
+                raw=raw,
+                existing_link=existing_link,
+                instance=instance,
+                slot=slot,
+                new_content_hash=new_content_hash,
+            )
         await _push_internal_delete(
             context=context,
             raw=raw,
