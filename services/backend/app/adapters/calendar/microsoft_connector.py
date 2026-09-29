@@ -16,6 +16,7 @@ from urllib.parse import quote
 import httpx
 
 from app.adapters.calendar.deletion import delete_resource
+from app.adapters.calendar.http_policy import resilient_request
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -37,7 +38,9 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
     ) -> list[RawCalendarEvent]:
-        access_token: str = credentials["access_token"]
+        access_token = credentials.get("access_token")
+        if not access_token:
+            raise CalendarConnectorError("Microsoft access_token fehlt")
         # Use primary calendar; could be made configurable
         url = "https://graph.microsoft.com/v1.0/me/calendar/calendarView"
 
@@ -50,16 +53,20 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        response = await self._client.get(url, params=params, headers=headers)
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise CalendarConnectorError(
-                f"HTTP {exc.response.status_code} beim Laden des Microsoft Kalenders: {exc}"
-            ) from exc
-
-        data = response.json()
-        items = data.get("value", [])
+        items: list[dict[str, Any]] = []
+        next_url: str | None = url
+        next_params: dict[str, Any] | None = params
+        while next_url:
+            response = await resilient_request(
+                lambda next_url=next_url, next_params=next_params: self._client.get(
+                    next_url, params=next_params, headers=headers
+                ),
+                provider="Microsoft",
+            )
+            data = response.json()
+            items.extend(data.get("value", []))
+            next_url = data.get("@odata.nextLink")
+            next_params = None
 
         events: list[RawCalendarEvent] = []
         for item in items:
