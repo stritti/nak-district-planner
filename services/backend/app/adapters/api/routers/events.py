@@ -332,7 +332,7 @@ async def resolve_event_deviation(
     if instance is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
     resolved = await DeviationService(slot_repo, instance_repo).resolve_deviation(instance.id)
-    if not resolved and instance.sync_state != SyncState.DIRTY_INTERNAL:
+    if not resolved:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Keine aktive Abweichung zum Auflösen vorhanden.",
@@ -344,6 +344,9 @@ async def resolve_event_deviation(
         if current.calendar_integration_id is not None:
             await push_deviation_resolution(current, session)
     except CalendarConnectorError as exc:
+        current.deviation_flag = True
+        current.sync_state = SyncState.DIRTY_INTERNAL
+        await instance_repo.save(current)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Abweichung lokal aufgelöst, Provider-Aktualisierung fehlgeschlagen.",
