@@ -23,15 +23,15 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector
 from app.adapters.calendar.google_connector import GoogleCalendarConnector
 from app.adapters.calendar.ical_connector import ICalConnector
 from app.adapters.calendar.microsoft_connector import MicrosoftGraphCalendarConnector
+from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.external_event_candidate import (
@@ -43,12 +43,17 @@ from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.crypto import decrypt_credentials
 from app.config import settings
 from app.domain.models.calendar_integration import CalendarCapability, CalendarType
-from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
+from app.domain.models.event_instance import EventSource, SyncState
 from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate
-from app.domain.models.external_event_link import ExternalEventLink
 from app.domain.models.notification import Notification, NotificationType
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.calendar import CalendarConnector
+from app.domain.services.external_event_mapping import (
+    ExternalEventMappingData,
+    apply_external_event_to_instance,
+    create_external_event_link,
+    has_significant_deviation,
+)
 from app.domain.services.sync_policy import (
     SyncDeleteMode,
     SyncFieldAuthority,
@@ -111,7 +116,7 @@ async def _find_exact_matching_planning_slot(
     """Find an exact, governance-safe mapping target for an external event."""
     slot_repo = SqlPlanningSlotRepository(session)
 
-    event_date = event_start.date()
+    event_date = event_start.astimezone(UTC).date()
 
     slots = await slot_repo.list_for_date_range(
         district_id=district_id,
@@ -124,7 +129,7 @@ async def _find_exact_matching_planning_slot(
             continue
         if event_category is not None and slot.category not in (None, event_category):
             continue
-        if slot.planning_time.replace(tzinfo=None) != event_start.timetz().replace(tzinfo=None):
+        if slot.planning_time != event_start.astimezone(UTC).time():
             continue
 
         return slot
@@ -141,58 +146,45 @@ async def _map_external_event_to_slot(
     instance_repo: SqlEventInstanceRepository,
     link_repo: SqlExternalEventLinkRepository,
 ) -> bool:
-    """Map an event when the slot is free for this integration."""
+    """Map an event when the slot is safe for this integration."""
     instance = await instance_repo.get_by_planning_slot(slot.id)
-    if instance is not None and instance.calendar_integration_id not in (None, integration.id):
+    if instance is not None and (
+        instance.calendar_integration_id not in (None, integration.id)
+        or instance.sync_state != SyncState.CLEAN
+    ):
         return False
-    if instance is None:
-        instance = EventInstance.create(
-            planning_slot_id=slot.id,
-            title=raw.title,
-            actual_start_at=raw.start_at,
-            actual_end_at=raw.end_at,
-            description=raw.description,
-            source=EventSource.EXTERNAL,
-            visibility=EventVisibility.PUBLIC,
-        )
-    instance.actual_start_at = raw.start_at
-    instance.actual_end_at = raw.end_at
-    instance.title = raw.title
-    instance.description = raw.description
-    instance.source = EventSource.EXTERNAL
-    instance.sync_state = SyncState.CLEAN
-    instance.content_hash = content_hash
-    instance.external_uid = raw.uid
-    instance.calendar_integration_id = integration.id
-    instance.last_external_modified_at = datetime.now(UTC)
-    instance.deviation_flag = _has_significant_deviation(slot, raw.start_at)
-    instance.updated_at = datetime.now(UTC)
-    await instance_repo.save(instance)
+
+    data = ExternalEventMappingData(
+        title=raw.title,
+        description=raw.description,
+        start_at=raw.start_at,
+        end_at=raw.end_at,
+        external_event_id=raw.uid,
+        provider=integration.type.value,
+        calendar_integration_id=integration.id,
+        content_hash=content_hash,
+        revision_marker=raw.revision_marker,
+    )
+    mapped_instance = apply_external_event_to_instance(
+        slot=slot,
+        instance=instance,
+        data=data,
+    )
+    await instance_repo.save(mapped_instance)
     await link_repo.save(
-        ExternalEventLink.create(
-            event_instance_id=instance.id,
-            provider=integration.type.value,
-            external_event_id=raw.uid,
-            calendar_integration_id=integration.id,
-            last_synced_hash=content_hash,
-            revision_marker=raw.revision_marker,
+        create_external_event_link(
+            event_instance_id=mapped_instance.id,
+            data=data,
         )
     )
     return True
-
-
-def _has_significant_deviation(slot: PlanningSlot, event_start: datetime) -> bool:
-    """Check if external event start deviates >5 min from planned time."""
-    slot_dt = datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
-    return abs((event_start - slot_dt).total_seconds()) > 300
 
 
 async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResult:
     """Sync one CalendarIntegration. Returns {created, updated, cancelled, auto_matched}."""
     # Serialize duplicate deliveries per integration, including first-time mappings.
     # The transaction owning this session releases the lock on commit/rollback.
-    lock_key = int.from_bytes(integration_id.bytes[:8], "big", signed=True)
-    await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
+    await acquire_advisory_xact_lock(session, integration_id)
     integration_repo = SqlCalendarIntegrationRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
     slot_repo = SqlPlanningSlotRepository(session)
@@ -231,6 +223,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                 if raw.is_cancelled:
                     if candidate is not None and candidate.status == CandidateStatus.PENDING:
                         candidate.refresh(raw, new_content_hash, integration.default_category)
+                        candidate.review(CandidateStatus.DISMISSED, None)
                         await candidate_repo.save(candidate)
                     continue
 
@@ -340,7 +333,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                 instance.source = EventSource.EXTERNAL
                 instance.sync_state = next_state
                 if slot:
-                    instance.deviation_flag = _has_significant_deviation(slot, raw.start_at)
+                    instance.deviation_flag = has_significant_deviation(slot, raw.start_at)
                 instance.content_hash = new_content_hash
                 instance.last_external_modified_at = datetime.now(UTC)
                 instance.updated_at = datetime.now(UTC)
