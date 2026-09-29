@@ -21,6 +21,17 @@ class CalendarConnector(ABC):
 
     authoritative_snapshot: bool = False
 
+    async def update_event_times(
+        self,
+        credentials: dict,
+        event: RawCalendarEvent,
+        *,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> str | None:
+        """Update event times and return the acknowledged provider revision."""
+        raise CalendarConnectorError("Dieser Kalender unterstützt keine Aktualisierungen")
+
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
         """Delete a fetched resource; read-only connectors explicitly refuse writes."""
         raise CalendarConnectorError("Dieser Kalender unterstützt keine Löschoperationen")
