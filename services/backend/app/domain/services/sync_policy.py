@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from enum import StrEnum
 
-from app.domain.models.calendar_integration import SyncDeleteMode
 from app.domain.models.event_instance import SyncState
 
 logger = logging.getLogger(__name__)
