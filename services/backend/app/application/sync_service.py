@@ -22,12 +22,13 @@ Implements deterministic, idempotent sync with state machine:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from collections import Counter
 from dataclasses import dataclass
-from enum import StrEnum
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,9 +108,8 @@ def _get_connector(calendar_type: CalendarType) -> CalendarConnector:
     return connector_cls()
 
 
-def _compute_content_hash(raw_event) -> SyncOutcome:
+def _compute_content_hash(raw_event: RawCalendarEvent) -> str:
     """Compute deterministic SHA-256 hash for external event change detection."""
-    import hashlib
 
     raw_str = (
         f"{raw_event.uid}|{raw_event.start_at}|{raw_event.end_at}"
@@ -266,8 +266,8 @@ async def _push_internal_delete(
     *,
     connector: CalendarConnector,
     credentials: dict,
-    raw,
-    integration,
+    raw: RawCalendarEvent,
+    integration: CalendarIntegration,
     existing_link: ExternalEventLink,
     instance: EventInstance,
     instance_repo: SqlEventInstanceRepository,
@@ -322,7 +322,7 @@ async def _handle_external_cancel(
 
 async def _apply_external_update(
     *,
-    raw,
+    raw: RawCalendarEvent,
     existing_link: ExternalEventLink,
     instance: EventInstance,
     slot: PlanningSlot | None,
