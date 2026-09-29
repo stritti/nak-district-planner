@@ -48,4 +48,6 @@ async def resilient_request(
         raise CalendarConnectorError(
             f"Transportfehler beim Laden des {provider} Kalenders"
         ) from exc
-    raise AssertionError("unreachable")
+    raise CalendarConnectorError(
+        f"Unbekannter Fehler beim Laden des {provider} Kalenders"
+    )
