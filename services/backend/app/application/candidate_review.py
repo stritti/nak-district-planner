@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from typing import Protocol
 from uuid import UUID
 
@@ -20,6 +22,9 @@ from app.domain.services.external_event_mapping import (
     apply_external_event_to_instance,
     create_external_event_link,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class CandidateRepository(Protocol):
@@ -100,6 +105,13 @@ class CandidateReviewService:
         )
         candidate.review(CandidateStatus.ACCEPTED, user_sub, slot.id)
         await self.candidates.save(candidate)
+        logger.info(
+            "External event candidate accepted candidate_id=%s district_id=%s slot_id=%s reviewer=%s",
+            candidate.id,
+            candidate.district_id,
+            slot.id,
+            user_sub,
+        )
         return candidate
 
     async def dismiss(
@@ -110,6 +122,12 @@ class CandidateReviewService:
     ) -> ExternalEventCandidate:
         candidate.review(CandidateStatus.DISMISSED, user_sub)
         await self.candidates.save(candidate)
+        logger.info(
+            "External event candidate dismissed candidate_id=%s district_id=%s reviewer=%s",
+            candidate.id,
+            candidate.district_id,
+            user_sub,
+        )
         return candidate
 
     async def _resolve_slot(
