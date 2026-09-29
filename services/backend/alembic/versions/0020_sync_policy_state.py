@@ -26,6 +26,10 @@ def upgrade():
     )
     op.add_column(
         "external_event_links",
+        sa.Column("last_synced_payload", sa.JSON(), nullable=True),
+    )
+    op.add_column(
+        "external_event_links",
         sa.Column("deletion_origin", sa.String(length=32), nullable=True),
     )
     op.add_column(
@@ -57,5 +61,6 @@ def downgrade():
     op.drop_column("external_event_links", "tombstoned_at")
     op.drop_column("external_event_links", "deletion_reason")
     op.drop_column("external_event_links", "deletion_origin")
+    op.drop_column("external_event_links", "last_synced_payload")
     op.drop_column("external_event_links", "state")
     op.drop_column("calendar_integrations", "delete_behavior")
