@@ -11,10 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+from app.adapters.db.repositories.external_event_candidate import SqlExternalEventCandidateRepository
+from app.adapters.db.repositories.external_event_link import SqlExternalEventLinkRepository
+from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.notification import SqlNotificationRepository
 from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
+from app.application.candidate_review import CandidateReviewService
 from app.application.notification_service import NotificationService
 from app.application.services.calendar_integration_service import CalendarIntegrationService
 from app.domain.models.membership import Membership
@@ -270,6 +275,21 @@ def make_repository_dependency(
 get_calendar_integration_repository = make_repository_dependency(
     SqlCalendarIntegrationRepository
 )
+get_external_event_candidate_repository = make_repository_dependency(
+    SqlExternalEventCandidateRepository
+)
+
+
+async def get_candidate_review_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> CandidateReviewService:
+    """Provide the candidate review service with its repository adapters."""
+    return CandidateReviewService(
+        candidates=SqlExternalEventCandidateRepository(session),
+        slots=SqlPlanningSlotRepository(session),
+        instances=SqlEventInstanceRepository(session),
+        links=SqlExternalEventLinkRepository(session),
+    )
 
 
 async def get_calendar_integration_service(
