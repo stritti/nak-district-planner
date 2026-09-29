@@ -130,9 +130,12 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
         return events
 
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
+        access_token = credentials.get("access_token")
+        if not access_token:
+            raise CalendarConnectorError("Microsoft access_token fehlt")
         if not event.resource_id:
             raise CalendarConnectorError("Microsoft resource ID fehlt")
-        headers = {"Authorization": f"Bearer {credentials['access_token']}"}
+        headers = {"Authorization": f"Bearer {access_token}"}
         if event.revision_marker:
             headers["If-Match"] = event.revision_marker
         await delete_resource(
