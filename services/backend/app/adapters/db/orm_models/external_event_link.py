@@ -34,3 +34,7 @@ class ExternalEventLinkORM(Base):
     revision_marker: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE")
+    deletion_origin: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    deletion_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tombstoned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
