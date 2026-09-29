@@ -21,10 +21,12 @@ from app.adapters.db.repositories import (
     SqlPlanningSlotRepository,
 )
 from app.application.deviation_service import DeviationService
+from app.application.sync_service import push_deviation_resolution
 from app.domain.models.event_instance import (
     EventInstance,
     EventSource,
     EventVisibility,
+    SyncState,
 )
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
@@ -32,6 +34,7 @@ from app.domain.models.planning_slot import (
     PlanningSlotStatus,
 )
 from app.domain.models.role import Role
+from app.domain.ports.calendar import CalendarConnectorError
 from app.domain.services.sync_policy import internal_state
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
@@ -329,11 +332,21 @@ async def resolve_event_deviation(
     if instance is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
     resolved = await DeviationService(slot_repo, instance_repo).resolve_deviation(instance.id)
-    if not resolved:
+    if not resolved and instance.sync_state != SyncState.DIRTY_INTERNAL:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Keine aktive Abweichung zum Auflösen vorhanden.",
         )
+    current = await instance_repo.get(instance.id)
+    if current is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
+    try:
+        await push_deviation_resolution(current, session)
+    except CalendarConnectorError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Abweichung lokal aufgelöst, Provider-Aktualisierung fehlgeschlagen.",
+        ) from exc
     return _slot_to_event(slot, await instance_repo.get(instance.id))
 
 
