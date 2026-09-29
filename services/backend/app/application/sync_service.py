@@ -42,10 +42,9 @@ from app.adapters.db.repositories.event_instance import SqlEventInstanceReposito
 from app.adapters.db.repositories.external_event_link import SqlExternalEventLinkRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.crypto import decrypt_credentials
-from app.config import settings
 from app.domain.models.calendar_integration import CalendarCapability, CalendarIntegration, CalendarType
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
-from app.domain.models.external_event_link import ExternalEventLink
+from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
@@ -83,7 +82,7 @@ class SyncResult:
         updated: Number of existing EventInstances updated.
         cancelled: Number of existing EventInstances cancelled.
         auto_matched: Number of events auto-matched to existing PlanningSlots.
-        skipped: Number of events skipped after per-event connector errors.
+        skipped: Number of idempotent/no-op events skipped.\n        failed: Number of isolated per-event failures.
     """
 
     created: int = 0
@@ -91,6 +90,7 @@ class SyncResult:
     cancelled: int = 0
     auto_matched: int = 0
     skipped: int = 0
+    failed: int = 0
 
 
 _CONNECTOR_MAP: dict[CalendarType, type[CalendarConnector]] = {
@@ -168,7 +168,32 @@ class SyncOutcome(StrEnum):
     UPDATED = "updated"
     CANCELLED = "cancelled"
     AUTO_MATCHED = "auto_matched"
-    SKIPPED = "skipped"
+    SKIPPED = "skipped"\n    FAILED = "failed"\n
+
+def _sync_payload(raw: RawCalendarEvent) -> dict[str, str | None]:
+    return {
+        "title": raw.title,
+        "description": raw.description,
+        "actual_start_at": raw.start_at.isoformat(),
+        "actual_end_at": raw.end_at.isoformat(),
+    }
+
+
+def _instance_payload(instance: EventInstance) -> dict[str, str | None]:
+    return {
+        "title": instance.title,
+        "description": instance.description,
+        "actual_start_at": instance.actual_start_at.isoformat(),
+        "actual_end_at": instance.actual_end_at.isoformat(),
+    }
+
+
+def _changed_fields(
+    current: dict[str, str | None], baseline: dict[str, str | None] | None
+) -> set[str]:
+    if baseline is None:
+        return set(current)
+    return {field for field, value in current.items() if baseline.get(field) != value}
 
 
 async def _import_new_event(
@@ -232,8 +257,7 @@ async def _import_new_event(
             provider=context.integration.type.value,
             external_event_id=raw.uid,
             calendar_integration_id=context.integration_id,
-            last_synced_hash=new_content_hash,
-        )
+            last_synced_hash=new_content_hash,\n            revision_marker=raw.revision_marker,\n            last_synced_payload=_sync_payload(raw),\n        )
         await context.link_repo.save(link)
         return SyncOutcome.AUTO_MATCHED
 
@@ -289,9 +313,14 @@ async def _push_internal_delete(
     are handled by the connector instead.
     """
     await context.connector.delete_event(context.credentials, raw)
+    now = datetime.now(UTC)
     existing_link.revision_marker = INTERNAL_DELETE_MARKER
     existing_link.last_synced_hash = new_content_hash
-    existing_link.updated_at = datetime.now(UTC)
+    existing_link.state = ExternalEventLinkState.SYNC_TOMBSTONE
+    existing_link.deletion_origin = "INTERNAL"
+    existing_link.deletion_reason = "local-cancellation-pushed"
+    existing_link.tombstoned_at = now
+    existing_link.updated_at = now
     await context.link_repo.save(existing_link)
     instance.sync_state = SyncState.CLEAN
     await context.instance_repo.save(instance)
@@ -311,9 +340,16 @@ async def _handle_external_cancel(
         instance.sync_state = SyncState.CONFLICT
         await context.instance_repo.save(instance)
         return SyncOutcome.SKIPPED
-    if slot and settings.sync_delete_mode == SyncDeleteMode.HARD_DELETE:
+    if slot and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
+        now = datetime.now(UTC)
         existing_link.event_instance_id = None
         existing_link.last_synced_hash = new_content_hash
+        existing_link.last_synced_payload = _sync_payload(raw)
+        existing_link.state = ExternalEventLinkState.SYNC_TOMBSTONE
+        existing_link.deletion_origin = "EXTERNAL"
+        existing_link.deletion_reason = "provider-cancellation"
+        existing_link.tombstoned_at = now
+        existing_link.updated_at = now
         await context.link_repo.save(existing_link)
         await context.slot_repo.delete(slot.id)
         return SyncOutcome.CANCELLED
@@ -322,10 +358,14 @@ async def _handle_external_cancel(
         slot.updated_at = datetime.now(UTC)
         await context.slot_repo.save(slot)
         existing_link.last_synced_hash = new_content_hash
+        existing_link.last_synced_payload = _sync_payload(raw)
+        existing_link.revision_marker = raw.revision_marker
         existing_link.updated_at = datetime.now(UTC)
         await context.link_repo.save(existing_link)
         return SyncOutcome.CANCELLED
     existing_link.last_synced_hash = new_content_hash
+    existing_link.last_synced_payload = _sync_payload(raw)
+    existing_link.revision_marker = raw.revision_marker
     existing_link.updated_at = datetime.now(UTC)
     await context.link_repo.save(existing_link)
     return SyncOutcome.SKIPPED
@@ -341,11 +381,25 @@ async def _apply_external_update(
     new_content_hash: str,
 ) -> SyncOutcome:
     """Route incoming fields by authority and advance the sync state machine."""
-    next_state = inbound_state(instance.sync_state, changed=True)
-    if next_state == SyncState.CONFLICT:
-        instance.sync_state = next_state
-        await context.instance_repo.save(instance)
-        return SyncOutcome.SKIPPED  # Keep the acknowledged hash so this change can be retried.
+    incoming_payload = _sync_payload(raw)
+    if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
+        external_changed = _changed_fields(incoming_payload, existing_link.last_synced_payload)
+        internal_changed = _changed_fields(_instance_payload(instance), existing_link.last_synced_payload)
+        overlapping = external_changed & internal_changed
+        unsafe = {
+            field
+            for field in external_changed
+            if classify_field(field) != SyncFieldAuthority.SOFT
+        }
+        if existing_link.last_synced_payload is None or overlapping or unsafe:
+            instance.sync_state = SyncState.CONFLICT
+            await context.instance_repo.save(instance)
+            return SyncOutcome.SKIPPED
+        # Non-overlapping SOFT provider changes can be merged without discarding
+        # the independent local edit. Keep DIRTY_INTERNAL for the outbound side.
+        next_state = SyncState.DIRTY_INTERNAL
+    else:
+        next_state = inbound_state(instance.sync_state, changed=True)
 
     incoming = {
         "title": raw.title,
@@ -366,6 +420,7 @@ async def _apply_external_update(
     await context.instance_repo.save(instance)
 
     existing_link.last_synced_hash = new_content_hash
+    existing_link.last_synced_payload = incoming_payload
     existing_link.revision_marker = raw.revision_marker
     existing_link.updated_at = datetime.now(UTC)
     await context.link_repo.save(existing_link)
@@ -380,8 +435,12 @@ async def _process_existing_event(
     new_content_hash: str,
 ) -> SyncOutcome:
     """Handle a raw event with an existing ExternalEventLink."""
-    if existing_link.event_instance_id is None or existing_link.revision_marker == INTERNAL_DELETE_MARKER:
-        return SyncOutcome.SKIPPED  # Durable tombstone: never re-import a deleted mapping.
+    if existing_link.state == ExternalEventLinkState.SYNC_TOMBSTONE:
+        return SyncOutcome.SKIPPED
+    if existing_link.event_instance_id is None:
+        # SET NULL alone is not a sync tombstone. Keep the mapping observable,
+        # but never silently re-import or infer deletion intent from the FK.
+        return SyncOutcome.SKIPPED
     instance = await context.instance_repo.get(existing_link.event_instance_id)
     if instance is None:
         return SyncOutcome.SKIPPED
@@ -396,14 +455,9 @@ async def _process_existing_event(
         # first; DIRTY_INTERNAL + remote change becomes CONFLICT and preserves
         # the provider resource.
         if existing_link.last_synced_hash != new_content_hash:
-            return await _apply_external_update(
-                context=context,
-                raw=raw,
-                existing_link=existing_link,
-                instance=instance,
-                slot=slot,
-                new_content_hash=new_content_hash,
-            )
+            instance.sync_state = SyncState.CONFLICT
+            await context.instance_repo.save(instance)
+            return SyncOutcome.SKIPPED
         await _push_internal_delete(
             context=context,
             raw=raw,
@@ -434,6 +488,44 @@ async def _process_existing_event(
         slot=slot,
         new_content_hash=new_content_hash,
     )
+
+
+async def _reconcile_missing_provider_events(
+    *, context: SyncContext, seen_uids: set[str], cutoff: datetime
+) -> Counter[SyncOutcome]:
+    """Reconcile links absent from a complete authoritative provider window."""
+    outcomes: Counter[SyncOutcome] = Counter()
+    for link in await context.link_repo.list_active_by_integration(context.integration_id):
+        if link.external_event_id in seen_uids or link.event_instance_id is None:
+            continue
+        instance = await context.instance_repo.get(link.event_instance_id)
+        if instance is None or instance.actual_end_at < cutoff:
+            continue
+        slot = await context.slot_repo.get(instance.planning_slot_id)
+        if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
+            instance.sync_state = SyncState.CONFLICT
+            await context.instance_repo.save(instance)
+            outcomes[SyncOutcome.SKIPPED] += 1
+            continue
+        now = datetime.now(UTC)
+        if slot and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
+            link.event_instance_id = None
+            link.state = ExternalEventLinkState.SYNC_TOMBSTONE
+            link.deletion_origin = "EXTERNAL"
+            link.deletion_reason = "missing-from-authoritative-snapshot"
+            link.tombstoned_at = now
+            link.updated_at = now
+            await context.link_repo.save(link)
+            await context.slot_repo.delete(slot.id)
+            outcomes[SyncOutcome.CANCELLED] += 1
+        elif slot and slot.status != PlanningSlotStatus.CANCELLED:
+            slot.status = PlanningSlotStatus.CANCELLED
+            slot.updated_at = now
+            link.updated_at = now
+            await context.slot_repo.save(slot)
+            await context.link_repo.save(link)
+            outcomes[SyncOutcome.CANCELLED] += 1
+    return outcomes
 
 
 async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResult:
@@ -468,8 +560,10 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
         )
         cutoff = datetime.now(UTC) - timedelta(days=62)
         raw_events = await connector.fetch_events(credentials, from_dt=cutoff)
+        seen_uids: set[str] = set()
 
         for raw in raw_events:
+            seen_uids.add(raw.uid)
             existing_link = await link_repo.get_by_external_event(
                 provider=context.integration.type.value,
                 external_event_id=raw.uid,
@@ -501,11 +595,21 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                 # External event identifiers and exception messages can contain
                 # control characters and are therefore intentionally omitted.
                 logger.warning("Calendar sync event skipped after connector error")
-                counters[SyncOutcome.SKIPPED] += 1
+                counters[SyncOutcome.FAILED] += 1
+
+        if connector.authoritative_snapshot:
+            counters.update(
+                await _reconcile_missing_provider_events(
+                    context=context, seen_uids=seen_uids, cutoff=cutoff
+                )
+            )
 
         # Update integration last_synced_at
         integration.last_synced_at = datetime.now(UTC)
-        integration.last_sync_error = None
+        failed = counters[SyncOutcome.FAILED]
+        integration.last_sync_error = (
+            f"{failed} calendar event(s) failed during partial sync" if failed else None
+        )
         await integration_repo.save(integration)
     except Exception as exc:
         integration.last_sync_error = str(exc)[:500]
@@ -517,5 +621,4 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
         updated=counters[SyncOutcome.UPDATED],
         cancelled=counters[SyncOutcome.CANCELLED],
         auto_matched=counters[SyncOutcome.AUTO_MATCHED],
-        skipped=counters[SyncOutcome.SKIPPED],
-    )
+        skipped=counters[SyncOutcome.SKIPPED],\n        failed=counters[SyncOutcome.FAILED],\n    )
