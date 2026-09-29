@@ -395,3 +395,21 @@ class TestFetchEvents:
 
         raw_events = await connector.fetch_events(CREDS)
         assert len(raw_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_rejects_cross_origin_next_link(
+    connector: MicrosoftGraphCalendarConnector, mock_client: MagicMock
+) -> None:
+    response = MagicMock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = {
+        "value": [],
+        "@odata.nextLink": "https://example.invalid/steal",
+    }
+    mock_client.get = AsyncMock(return_value=response)
+
+    with pytest.raises(CalendarConnectorError, match="nextLink"):
+        await connector.fetch_events(CREDS)
+
+    assert mock_client.get.await_count == 1
