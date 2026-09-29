@@ -21,6 +21,7 @@ Implements deterministic, idempotent sync with state machine:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -60,6 +61,9 @@ from app.domain.services.sync_policy import (
     classify_field,
     inbound_state,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -247,9 +251,18 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                         auto_matched += 1
                         continue
 
+                candidate_reason = "no_exact_slot" if matched_slot is None else "slot_not_assignable"
                 if candidate is None:
                     candidate = ExternalEventCandidate.create(
                         integration=integration, raw=raw, content_hash=new_content_hash,
+                    )
+                    logger.info(
+                        "External event candidate created candidate_id=%s integration_id=%s "
+                        "external_event_id=%s reason=%s",
+                        candidate.id,
+                        integration.id,
+                        raw.uid,
+                        candidate_reason,
                     )
                     await notification_repo.save(
                         Notification.create(
@@ -263,6 +276,14 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
                     )
                 else:
                     candidate.refresh(raw, new_content_hash, integration.default_category)
+                    logger.info(
+                        "External event candidate refreshed candidate_id=%s integration_id=%s "
+                        "external_event_id=%s reason=%s",
+                        candidate.id,
+                        integration.id,
+                        raw.uid,
+                        candidate_reason,
+                    )
                 await candidate_repo.save(candidate)
 
             else:
