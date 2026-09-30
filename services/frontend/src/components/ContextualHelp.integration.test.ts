@@ -17,12 +17,16 @@ function signIn(role: string) {
   auth.memberships = [{ role, scope_type: 'DISTRICT', scope_id: 'district' }]
 }
 
+function render(context: 'events' | 'matrix') {
+  return mount(ContextualHelp, { props: { context }, global: { stubs: ['RouterLink'] } })
+}
+
 describe('contextual help role integration', () => {
   it('shows planner matrix help and restores it without affecting the events context', async () => {
     signIn('PLANNER')
     const store = useHelpStore()
     store.hide('planner-events', 'events')
-    const wrapper = mount(ContextualHelp, { props: { context: 'matrix' } })
+    const wrapper = render('matrix')
     expect(wrapper.text()).toContain('Dienstplan-Matrix')
     await wrapper.get('button[aria-label="Mit der Dienstplan-Matrix arbeiten ausblenden"]').trigger('click')
     expect(wrapper.text()).not.toContain('Mit der Dienstplan-Matrix arbeiten')
@@ -34,10 +38,10 @@ describe('contextual help role integration', () => {
 
   it('shows nothing for an unknown authenticated role or pending access', () => {
     signIn('UNRELATED')
-    expect(mount(ContextualHelp, { props: { context: 'events' } }).find('section').exists()).toBe(false)
+    expect(render('events').find('section').exists()).toBe(false)
     const auth = useAuthStore()
     auth.memberships = [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'district' }]
     auth.accessStatus = 'PENDING_APPROVAL'
-    expect(mount(ContextualHelp, { props: { context: 'matrix' } }).find('section').exists()).toBe(false)
+    expect(render('matrix').find('section').exists()).toBe(false)
   })
 })
