@@ -206,6 +206,27 @@ CREATE POLICY events_write_policy ON events
     );
 ```
 
+Tables added after the baseline revision `0014` receive their policies in
+dedicated migrations (e.g. `0022` for `external_event_candidates` and
+`leader_unavailabilities`) — `RLS_POLICIES` must not reference tables that do
+not exist yet when `0014` runs.
+
+### Verifying RLS against PostgreSQL
+
+`services/backend/tests/integration/test_rls_postgres.py` runs as the
+NOBYPASSRLS application role against a freshly migrated database (CI job
+`backend-tests`). It fails when a table with a tenant key (`district_id`,
+`congregation_id`, `leader_id`, `planning_slot_id`) has no RLS, unless the
+table is listed with a justification in `RLS_EXEMPT_TABLES`. Locally:
+
+```bash
+cd services/backend
+DATABASE_URL=postgresql+asyncpg://nak:changeme@localhost:5432/nak_rls \
+  APP_DB_PASSWORD=local-only uv run alembic upgrade head
+RLS_TEST_DATABASE_URL=postgresql://nak:changeme@localhost:5432/nak_rls \
+  RLS_TEST_APP_PASSWORD=local-only uv run pytest tests/integration/test_rls_postgres.py
+```
+
 ## Integration
 
 ### FastAPI Integration (`app/main.py`)
