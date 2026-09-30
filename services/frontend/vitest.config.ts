@@ -29,6 +29,11 @@ export default defineConfig({
         "src/stores/leaderUnavailabilities.ts",
         "src/components/LeaderUnavailabilityForm.vue",
         "src/components/LeaderUnavailabilityList.vue",
+        "src/components/CopyButton.vue",
+        "src/components/EmptyState.vue",
+        "src/components/ConfirmHost.vue",
+        "src/composables/useConfirm.ts",
+        "src/composables/useToast.ts",
       ],
       thresholds: {
         perFile: true,

@@ -48,13 +48,11 @@
               <code class="text-xs bg-gray-100 dark:bg-gray-700 rounded px-2 py-1 text-gray-700 dark:text-gray-300 truncate max-w-sm block">
                 {{ icsUrl(t.token, tokenFilter[t.id]) }}
               </code>
-              <button
-                class="btn-icon shrink-0"
-                title="URL kopieren"
-                @click="copyUrl(t.token, tokenFilter[t.id])"
-              >
-                <ClipboardDocumentIcon class="h-4 w-4" />
-              </button>
+              <CopyButton
+                :value="icsUrl(t.token, tokenFilter[t.id])"
+                label="URL kopieren"
+                variant="icon"
+              />
               <a
                 :href="icsUrl(t.token, tokenFilter[t.id])"
                 target="_blank"
@@ -86,7 +84,6 @@
                 Inkl. Geplante
               </button>
             </div>
-            <p v-if="copiedToken === t.token" class="text-xs text-green-600 mt-1">Kopiert!</p>
           </div>
           <button
             class="btn-icon hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
@@ -210,13 +207,13 @@
 import { onMounted, reactive, ref } from 'vue'
 import {
   ArrowTopRightOnSquareIcon,
-  ClipboardDocumentIcon,
   LinkIcon,
   PlusIcon,
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import CopyButton from '../components/CopyButton.vue'
 import {
   createExportToken,
   deleteExportToken,
@@ -232,7 +229,6 @@ const toastStore = useToastStore()
 const tokens = ref<ExportTokenResponse[]>([])
 const loading = ref(false)
 const error = ref('')
-const copiedToken = ref<string | null>(null)
 const deleteTarget = ref<ExportTokenResponse | null>(null)
 const deleting = ref(false)
 const formCongregations = ref<CongregationResponse[]>([])
@@ -290,12 +286,6 @@ function icsUrl(token: string, filter?: 'confirmed_only' | 'include_planned'): s
   const base = `${window.location.origin}/api/v1/export/${token}/calendar.ics`
   if (filter) return `${base}?approval_status=${filter}`
   return base
-}
-
-async function copyUrl(token: string, filter?: 'confirmed_only' | 'include_planned') {
-  await navigator.clipboard.writeText(icsUrl(token, filter))
-  copiedToken.value = token
-  setTimeout(() => { copiedToken.value = null }, 2000)
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────

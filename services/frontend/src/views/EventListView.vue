@@ -201,9 +201,12 @@
       <div class="md:hidden space-y-3">
         <div v-if="eventsStore.loading" class="py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</div>
         <div v-else-if="eventsStore.error" class="py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</div>
-        <div v-else-if="eventsStore.items.length === 0" class="py-10 text-center text-gray-400 dark:text-gray-500 text-sm">
-          Keine Ereignisse gefunden.
-        </div>
+        <EmptyState
+          v-else-if="eventsStore.items.length === 0"
+          message="Keine Ereignisse gefunden."
+          hint="Filter oder Zeitraum anpassen, um weitere Termine zu sehen."
+          :icon="CalendarDaysIcon"
+        />
         <div
           v-for="event in eventsStore.items"
           v-else
@@ -274,7 +277,13 @@
               <td colspan="10" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
             </tr>
             <tr v-else-if="eventsStore.items.length === 0">
-              <td colspan="10" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
+              <td colspan="10">
+                <EmptyState
+                  message="Keine Ereignisse gefunden."
+                  hint="Filter oder Zeitraum anpassen, um weitere Termine zu sehen."
+                  :icon="CalendarDaysIcon"
+                />
+              </td>
             </tr>
             <tr
               v-else
@@ -566,6 +575,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   ArrowDownTrayIcon,
   BuildingOffice2Icon,
+  CalendarDaysIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
@@ -582,10 +592,15 @@ import {
   type PlanningSlotStatus,
 } from '../api/events'
 import { exportEventsToExcel } from '../composables/useExcelExport'
+import { useConfirm } from '../composables/useConfirm'
+import { errorMessage, useToast } from '../composables/useToast'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
+const toast = useToast()
+const confirm = useConfirm()
 
 // ── Ansichts-Modus ───────────────────────────────────────────────────────────
 
@@ -949,11 +964,24 @@ async function openEdit(event: EventResponse) {
 }
 
 async function saveEdit() {
-  if (!editTarget.value) return
+  const target = editTarget.value
+  if (!target) return
+  const cancelsEvent = target.status !== 'CANCELLED' && editForm.status === 'CANCELLED'
+  if (
+    cancelsEvent &&
+    !(await confirm({
+      title: 'Termin absagen?',
+      message: `„${target.title}“ wird als abgesagt markiert und erscheint so in allen Kalender-Exporten.`,
+      confirmText: 'Absagen',
+      variant: 'warning',
+    }))
+  ) {
+    return
+  }
   editSaving.value = true
   editError.value  = ''
   try {
-    const updated = await updateEvent(editTarget.value.id, {
+    const updated = await updateEvent(target.id, {
       congregation_id: editForm.congregation_id || null,
       status:          editForm.status,
       approval_status: editForm.approval_status,
@@ -968,8 +996,10 @@ async function saveEdit() {
       if (idx !== -1) calendarEvents.value[idx] = updated
     }
     editTarget.value = null
+    toast.success('Termin gespeichert', updated.title)
   } catch (e) {
-    editError.value = e instanceof Error ? e.message : 'Fehler beim Speichern'
+    editError.value = errorMessage(e, 'Fehler beim Speichern')
+    toast.error('Termin konnte nicht gespeichert werden', e)
   } finally {
     editSaving.value = false
   }

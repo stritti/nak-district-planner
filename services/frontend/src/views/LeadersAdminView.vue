@@ -78,12 +78,11 @@
         </div>
 
         <!-- Empty state -->
-        <div
+        <EmptyState
           v-if="leadersForSection(section.congregationId).length === 0"
-          class="text-xs text-gray-400 dark:text-gray-500 py-2 pl-1"
-        >
-          Keine Amtstragende angelegt.
-        </div>
+          message="Keine Amtstragende angelegt."
+          compact
+        />
 
         <!-- Leaders: mobile card list (no horizontal scroll needed) -->
         <div v-else class="md:hidden space-y-2">
@@ -241,9 +240,11 @@
     <template v-else-if="activeTab === 'registrations'">
       <div v-if="regLoading" class="text-sm text-gray-500">Lade Registrierungen…</div>
 
-      <div v-else-if="registrations.length === 0" class="text-sm text-gray-400 py-4">
-        Keine Registrierungsanfragen vorhanden.
-      </div>
+      <EmptyState
+        v-else-if="registrations.length === 0"
+        message="Keine Registrierungsanfragen vorhanden."
+        compact
+      />
 
       <div v-else class="border border-gray-200 rounded-lg overflow-hidden">
         <div class="table-scroll">
@@ -751,14 +752,8 @@
               readonly
               class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono"
             />
-            <button
-              class="btn-primary shrink-0 px-3 py-2"
-              @click="copyUrl"
-            >
-              Kopieren
-            </button>
+            <CopyButton :value="exportModal.icsUrl" />
           </div>
-          <p v-if="exportModal.copied" class="text-xs text-green-600">Kopiert!</p>
         </template>
 
         <template v-else>
@@ -791,6 +786,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import CopyButton from '../components/CopyButton.vue'
+import EmptyState from '../components/EmptyState.vue'
 import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
 import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
 import {
@@ -1350,7 +1347,6 @@ const exportModal = reactive({
   leaderName: '',
   leaderRank: '',
   icsUrl: '',
-  copied: false,
   error: '',
 })
 
@@ -1360,7 +1356,6 @@ function openExportModal(leader: LeaderResponse) {
   exportModal.leaderName = leader.name
   exportModal.leaderRank = leader.rank ?? ''
   exportModal.icsUrl = ''
-  exportModal.copied = false
   exportModal.error = ''
 }
 
@@ -1387,11 +1382,4 @@ async function createExportToken() {
   }
 }
 
-async function copyUrl() {
-  await navigator.clipboard.writeText(exportModal.icsUrl)
-  exportModal.copied = true
-  setTimeout(() => {
-    exportModal.copied = false
-  }, 2000)
-}
 </script>
