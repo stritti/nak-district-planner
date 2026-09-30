@@ -103,7 +103,7 @@ describe('ExternalCandidatesView', () => {
     expect(wrapper.text()).toContain('Keine offenen externen Termine.')
   })
 
-  it('keeps the candidate visible when a review mutation fails', async () => {
+  it('keeps the candidate list visible when a review mutation fails', async () => {
     const item = candidate()
     vi.mocked(candidatesApi.listExternalCandidates).mockResolvedValue([item])
     vi.mocked(candidatesApi.acceptExternalCandidate).mockRejectedValue(new Error('Speichern fehlgeschlagen'))
@@ -114,6 +114,8 @@ describe('ExternalCandidatesView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Speichern fehlgeschlagen')
+    expect(wrapper.text()).toContain(item.title)
+    expect(wrapper.find('button.btn-primary').exists()).toBe(true)
     expect(candidatesApi.acceptExternalCandidate).toHaveBeenCalledWith(item.id)
   })
 })
