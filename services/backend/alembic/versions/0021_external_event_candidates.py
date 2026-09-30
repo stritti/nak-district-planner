@@ -24,6 +24,8 @@ def upgrade():
         sa.Column("end_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("description", sa.Text()),
         sa.Column("content_hash", sa.String(64), nullable=False),
+        sa.Column("revision_marker", sa.String(500)),
+        sa.Column("provider_resource_id", sa.Text()),
         sa.Column("status", sa.String(20), nullable=False),
         sa.Column("matched_slot_id", sa.UUID(), sa.ForeignKey("planning_slots.id", ondelete="SET NULL")),
         sa.Column("reviewed_at", sa.DateTime(timezone=True)),
