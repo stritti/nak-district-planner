@@ -182,21 +182,15 @@ def production_guard(settings: Settings) -> None:
                     "IDP_PROVISIONING_KEYCLOAK_BASE_URL must be configured when using keycloak provider"
                 )
             if not settings.idp_provisioning_keycloak_realm:
-                errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_REALM must be configured when using keycloak provider"
-                )
+                errors.append("IDP_PROVISIONING_KEYCLOAK_REALM must be configured when using keycloak provider")
             if not settings.idp_provisioning_keycloak_admin_username:
-                errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME must be configured when using keycloak provider"
-                )
+                errors.append("IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME must be configured when using keycloak provider")
             if settings.idp_provisioning_keycloak_admin_password in (
                 None,
                 "",
                 "replace-with-admin-password",
             ):
-                errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD must be changed from the default value"
-                )
+                errors.append("IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD must be changed from the default value")
 
     if errors:
         raise RuntimeError(
