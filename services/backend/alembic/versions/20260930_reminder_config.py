@@ -1,7 +1,7 @@
 """Create district reminders, delivery ledger, and tenant isolation policies.
 
 Revision ID: 20260930_reminder
-Revises: 0018
+Revises: 0020
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from alembic import op
 
 revision = "20260930_reminder"
-down_revision = "0018"
+down_revision = "0020"
 branch_labels = None
 depends_on = None
 
