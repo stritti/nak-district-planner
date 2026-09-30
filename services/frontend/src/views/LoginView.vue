@@ -61,7 +61,6 @@ import ContextualHelp from '../components/ContextualHelp.vue'
 
 const router = useRouter()
 const oidc = useOIDC(router)
-
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
@@ -69,15 +68,27 @@ async function handleLogin() {
   try {
     error.value = null
     isLoading.value = true
-
-    // Get authorization URL (triggers discovery if needed)
     const authUrl = await oidc.getAuthorizationUrl()
-
-    // Redirect to OIDC provider
     window.location.href = authUrl
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen.'
+    error.value = err instanceof Error ? err.message : 'Authentifizierung fehlgeschlagen'
+    console.error('Login error:', err)
+  } finally {
     isLoading.value = false
   }
 }
+
+async function loadDiscovery() {
+  try {
+    isLoading.value = true
+    await oidc.loadDiscovery()
+  } catch (err) {
+    error.value = 'OIDC Discovery fehlgeschlagen. Bitte versuchen Sie es später.'
+    console.error('Discovery error:', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+loadDiscovery()
 </script>
