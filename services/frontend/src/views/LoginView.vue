@@ -1,6 +1,7 @@
 <template>
   <div class="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
     <div class="w-full max-w-md">
+      <ContextualHelp context="login" />
       <div class="bg-white rounded-lg shadow-lg p-8">
         <!-- Header -->
         <div class="text-center mb-8">
@@ -56,6 +57,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOIDC } from '../composables/useOIDC'
+import ContextualHelp from '../components/ContextualHelp.vue'
 
 const router = useRouter()
 const oidc = useOIDC(router)
@@ -74,26 +76,8 @@ async function handleLogin() {
     // Redirect to OIDC provider
     window.location.href = authUrl
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Authentifizierung fehlgeschlagen'
-    console.error('Login error:', err)
-  } finally {
+    error.value = err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen.'
     isLoading.value = false
   }
 }
-
-// Load discovery on mount to improve UX
-async function loadDiscovery() {
-  try {
-    isLoading.value = true
-    await oidc.loadDiscovery()
-  } catch (err) {
-    error.value = 'OIDC Discovery fehlgeschlagen. Bitte versuchen Sie es später.'
-    console.error('Discovery error:', err)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-// Initialize
-loadDiscovery()
 </script>
