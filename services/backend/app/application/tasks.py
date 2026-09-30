@@ -67,6 +67,8 @@ def sync_calendar_integration(self, integration_id: str) -> dict:
                 "updated": result.updated,
                 "cancelled": result.cancelled,
                 "auto_matched": result.auto_matched,
+                "skipped": result.skipped,
+                "failed": result.failed,
             }
 
     try:

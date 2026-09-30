@@ -14,6 +14,7 @@ from app.domain.models.calendar_integration import (
     CalendarType,
 )
 from app.domain.ports.repositories import CalendarIntegrationRepository
+from app.domain.models.calendar_integration import SyncDeleteMode
 
 
 def _orm_to_domain(row: CalendarIntegrationORM) -> CalendarIntegration:
@@ -32,6 +33,7 @@ def _orm_to_domain(row: CalendarIntegrationORM) -> CalendarIntegration:
         created_at=row.created_at,
         updated_at=row.updated_at,
         default_category=row.default_category,
+        delete_behavior=SyncDeleteMode(row.delete_behavior),
     )
 
 
@@ -53,6 +55,7 @@ def _domain_to_orm(
     row.created_at = integration.created_at
     row.updated_at = integration.updated_at
     row.default_category = integration.default_category
+    row.delete_behavior = integration.delete_behavior.value
     return row
 
 

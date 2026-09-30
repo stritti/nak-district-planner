@@ -31,6 +31,7 @@ from app.adapters.api.routers import (
     service_assignments,
     system,
 )
+from app.adapters.api.routers import external_candidates
 from app.adapters.api.routers import (
     health as health_router,
 )
@@ -232,3 +233,4 @@ app.include_router(registrations.router)
 app.include_router(export.router, prefix="/api/v1")
 app.include_router(system.router)
 app.include_router(notifications.router)
+app.include_router(external_candidates.router)
