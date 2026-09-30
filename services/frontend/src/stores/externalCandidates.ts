@@ -11,17 +11,27 @@ export const useExternalCandidatesStore = defineStore('externalCandidates', () =
   const items = ref<ExternalEventCandidate[]>([])
   const loading = ref(false)
   const reviewingId = ref<string | null>(null)
-  const error = ref<string | null>(null)
+  const loadError = ref<string | null>(null)
+  const reviewError = ref<string | null>(null)
+  let fetchSequence = 0
 
   async function fetchPending(districtId: string) {
+    const requestSequence = ++fetchSequence
     loading.value = true
-    error.value = null
+    loadError.value = null
     try {
-      items.value = await listExternalCandidates(districtId)
+      const candidates = await listExternalCandidates(districtId)
+      if (requestSequence === fetchSequence) {
+        items.value = candidates
+      }
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : 'Kandidaten konnten nicht geladen werden'
+      if (requestSequence === fetchSequence) {
+        loadError.value = cause instanceof Error ? cause.message : 'Kandidaten konnten nicht geladen werden'
+      }
     } finally {
-      loading.value = false
+      if (requestSequence === fetchSequence) {
+        loading.value = false
+      }
     }
   }
 
@@ -35,18 +45,27 @@ export const useExternalCandidatesStore = defineStore('externalCandidates', () =
 
   async function review(candidateId: string, action: () => Promise<ExternalEventCandidate>) {
     reviewingId.value = candidateId
-    error.value = null
+    reviewError.value = null
     try {
       const updated = await action()
       items.value = items.value.filter((item) => item.id !== updated.id)
       return updated
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : 'Prüfung konnte nicht gespeichert werden'
+      reviewError.value = cause instanceof Error ? cause.message : 'Prüfung konnte nicht gespeichert werden'
       return null
     } finally {
       reviewingId.value = null
     }
   }
 
-  return { items, loading, reviewingId, error, fetchPending, acceptAndCreate, dismiss }
+  return {
+    items,
+    loading,
+    reviewingId,
+    loadError,
+    reviewError,
+    fetchPending,
+    acceptAndCreate,
+    dismiss,
+  }
 })
