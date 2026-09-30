@@ -20,6 +20,14 @@ async function signIn(page: Page, role: 'VIEWER' | 'PLANNER', user: string): Pro
     }))
   }, { role, user })
   await mockReadOnlyApi(page)
+  await page.route('**/api/v1/auth/me', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ sub: user, is_superadmin: false }),
+  }))
+  await page.route('**/api/v1/auth/access', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ status: 'ACTIVE', memberships: [{ role, scope_type: 'DISTRICT', scope_id: 'district-1' }] }),
+  }))
 }
 
 test.describe('contextual help', () => {
