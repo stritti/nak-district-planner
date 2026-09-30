@@ -1,5 +1,5 @@
 <template>
-  <section v-if="enabled && entries.length" aria-label="Kontextuelle Hilfe" class="mb-5 space-y-2" data-testid="contextual-help">
+  <section v-if="enabled && entries.length && helpStore.identity" aria-label="Kontextuelle Hilfe" class="mb-5 space-y-2" data-testid="contextual-help">
     <div v-for="entry in visibleEntries" :key="entry.help_id" class="rounded-lg border border-blue-200 bg-blue-50/70 dark:border-blue-900 dark:bg-blue-950/30 px-3 py-2 text-sm">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h2 class="font-medium text-blue-900 dark:text-blue-100">{{ entry.title }}</h2>
@@ -15,9 +15,6 @@
       </div>
     </div>
     <button v-if="hiddenCount > 0" type="button" class="text-xs text-blue-700 dark:text-blue-300 underline underline-offset-2" @click="helpStore.restore(context)">Ausgeblendete Hilfe wiederherstellen</button>
-  </section>
-  <section v-else-if="enabled && hiddenCount > 0" aria-label="Kontextuelle Hilfe" class="mb-5" data-testid="contextual-help-restore">
-    <button type="button" class="text-xs text-blue-700 dark:text-blue-300 underline underline-offset-2" @click="helpStore.restore(context)">Ausgeblendete Hilfe wiederherstellen</button>
   </section>
 </template>
 
