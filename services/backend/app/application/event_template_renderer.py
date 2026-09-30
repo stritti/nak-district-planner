@@ -7,7 +7,7 @@ from string import Formatter
 from typing import Any
 
 from app.domain.events import EventType
-from app.domain.models.event_mail_hook import validate_template
+from app.domain.models.event_mail_hook import EVENT_PLACEHOLDERS, validate_template
 
 
 class _MissingAsBlank(dict[str, str]):
@@ -21,6 +21,10 @@ def render_event_template(
     """Reject unsupported expressions and substitute absent fields with blanks."""
     validate_template(event_type, template)
     values = _MissingAsBlank(
-        {key: "" if value is None else str(value) for key, value in payload.items()}
+        {
+            key: "" if payload.get(key) is None else str(payload[key])
+            for key in EVENT_PLACEHOLDERS[event_type]
+            if key in payload
+        }
     )
     return Formatter().vformat(template, (), values)
