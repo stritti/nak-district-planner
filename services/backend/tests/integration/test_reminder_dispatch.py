@@ -32,8 +32,7 @@ async def test_full_monthly_reminder_flow() -> None:
     if not db_url:
         pytest.skip("TEST_DATABASE_URL is not configured")
     engine = create_async_engine(db_url, pool_pre_ping=True)
-    # Exactly mirror production's per-transaction RLS setup: dispatch commits
-    # a claim before SMTP and must retain worker privileges after that commit.
+    # Mirror production RLS setup after every transaction and intermediate commit.
     event.listen(engine.sync_engine, "begin", _set_tenant_gucs)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     district_id = uuid.uuid4()
@@ -65,6 +64,9 @@ async def test_full_monthly_reminder_flow() -> None:
                     id=uuid.uuid4(), sub=sub, email=email, username=sub,
                     is_superadmin=False, created_at=now, updated_at=now,
                 ))
+            # These ORM classes have no mapped relationships. Flush principals
+            # explicitly so that FK inserts never depend on flush ordering.
+            await db.flush()
             for sub, scope_id in ((matching_user, district_id), (outside_user, another_district_id)):
                 db.add(MembershipORM(
                     id=uuid.uuid4(), user_sub=sub, role=Role.PLANNER.value,
