@@ -5,7 +5,18 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, time
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    Time,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,7 +29,10 @@ class DistrictReminderConfigORM(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     district_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("districts.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("districts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     day_of_month: Mapped[int] = mapped_column(Integer, nullable=False)
     time_of_day: Mapped[time] = mapped_column(Time(timezone=False), nullable=False)
@@ -31,16 +45,20 @@ class DistrictReminderConfigORM(Base):
 
 
 class ReminderDeliveryORM(Base):
-    """One claim per reminder, recipient, and scheduled month to prevent duplicate dispatches."""
+    """One claim per reminder, recipient, and scheduled month to prevent duplicates."""
 
     __tablename__ = "reminder_deliveries"
     __table_args__ = (
         UniqueConstraint("reminder_id", "scheduled_month", "recipient", name="uq_reminder_delivery"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     reminder_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("district_reminder_config.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("district_reminder_config.id", ondelete="CASCADE"),
+        nullable=False,
     )
     scheduled_month: Mapped[date] = mapped_column(Date, nullable=False)
     recipient: Mapped[str] = mapped_column(String(255), nullable=False)
