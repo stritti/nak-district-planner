@@ -29,6 +29,7 @@ export default defineConfig({
         "src/stores/leaderUnavailabilities.ts",
         "src/components/LeaderUnavailabilityForm.vue",
         "src/components/LeaderUnavailabilityList.vue",
+        "src/components/ApplicabilitySelect.vue",
       ],
       thresholds: {
         perFile: true,
