@@ -119,9 +119,7 @@ class SyncIntegrationTask(celery.Task):
             return
         try:
             asyncio.run(
-                _run_as_system_worker(
-                    _alert_sync_failure(integration_id, exc, context["attempt"])
-                )
+                _run_as_system_worker(_alert_sync_failure(integration_id, exc, context["attempt"]))
             )
         except Exception:
             # Alerting must never mask the original failure.
@@ -228,13 +226,27 @@ def cleanup_old_events() -> dict:
             # PlanningSlot uses planning_date (date), not end_at (datetime).
             # Delete slots with planning_date before cutoff date.
             cutoff_date = cutoff.date()
-            from sqlalchemy import delete
+            from sqlalchemy import delete, insert
 
+            from app.adapters.db.domain_audit import bulk_delete_audit_row
+            from app.adapters.db.orm_models.audit_log import AuditLogORM
             from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 
             stmt = delete(PlanningSlotORM).where(PlanningSlotORM.planning_date < cutoff_date)
             result = await session.execute(stmt)
             deleted = result.rowcount  # type: ignore[attr-defined]
+            if deleted:
+                await session.execute(
+                    insert(AuditLogORM.__table__),
+                    [
+                        bulk_delete_audit_row(
+                            "planning_slot",
+                            deleted=deleted,
+                            reason="retention",
+                            criteria={"planning_date_before": cutoff_date},
+                        )
+                    ],
+                )
             await session.commit()
 
         return {"deleted": deleted, "cutoff": cutoff.isoformat()}
