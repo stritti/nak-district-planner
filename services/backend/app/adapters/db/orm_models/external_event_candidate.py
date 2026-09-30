@@ -29,6 +29,8 @@ class ExternalEventCandidateORM(Base):
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    revision_marker: Mapped[str | None] = mapped_column(String(500))
+    provider_resource_id: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     matched_slot_id: Mapped[UUID | None] = mapped_column(ForeignKey("planning_slots.id", ondelete="SET NULL"))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
