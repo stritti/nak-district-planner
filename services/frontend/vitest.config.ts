@@ -34,6 +34,10 @@ export default defineConfig({
         "src/components/ConfirmHost.vue",
         "src/composables/useConfirm.ts",
         "src/composables/useToast.ts",
+        "src/composables/useScrollShadow.ts",
+        "src/components/MatrixSkeleton.vue",
+        "src/components/MatrixFilters.vue",
+        "src/utils/matrixRows.ts",
       ],
       thresholds: {
         perFile: true,

@@ -4,7 +4,7 @@
 - [x] 1.2 Create `AppToast.vue` component (fixed-position container, auto-dismiss) *(als `ToastContainer.vue` umgesetzt)*
 - [x] 1.3 Register `AppToast.vue` in `App.vue` *(`ToastContainer` ist registriert)*
 - [x] 1.4 Create `useToast()` composable wrapping the store *(`composables/useToast.ts` inkl. `errorMessage()` zur einheitlichen Fehlernormalisierung)*
-- [ ] 1.5 Update all Pinia store API calls to emit success/error toasts *(Events: Bearbeiten-Dialog nutzt `useToast()`; Matrix/Invitations weiterhin offen)*
+- [x] 1.5 Update all Pinia store API calls to emit success/error toasts *(Events: Bearbeiten-Dialog; Matrix: Freigabe, Entwurfsgenerierung, Excel-Export; Zuweisungs-Dialog: Speichern/Bestätigen/Entfernen/Verschieben und Einladungen anlegen/löschen. Fehler im Dialog bleiben inline am Formular, damit der Kontext sichtbar bleibt; der ungenutzte `useInvitationsStore` hat keine Aufrufer)*
 
 ## 2. Sync Status
 
@@ -37,7 +37,7 @@
 
 ## 6. Matrix UX Enhancements
 
-- [ ] 6.1 Add skeleton loading screen to `MatrixView.vue` (animate-pulse placeholder rows)
+- [x] 6.1 Add skeleton loading screen to `MatrixView.vue` (animate-pulse placeholder rows) *(`MatrixSkeleton.vue`, `role="status"` mit Screenreader-Text)*
 - [x] 6.2 Make first column sticky (`position: sticky; left: 0`) in matrix table *(`MatrixTable.vue`)*
-- [ ] 6.3 Add scroll-shadow CSS via Intersection Observer on the matrix table container
-- [ ] 6.4 Add congregation text filter input to matrix filter bar (client-side filtering)
+- [x] 6.3 Add scroll-shadow CSS via Intersection Observer on the matrix table container *(`useScrollShadow()` auf `useScroll`/`useResizeObserver` aus `@vueuse/core` statt eigenem IntersectionObserver; linker Schatten beginnt nach der Sticky-Spalte)*
+- [x] 6.4 Add congregation text filter input to matrix filter bar (client-side filtering) *(`filterMatrixRows()`: Groß-/Kleinschreibung und Umlaute egal, trifft auch den Gruppennamen; Leer-Zustand mit „Filter zurücksetzen“)*
