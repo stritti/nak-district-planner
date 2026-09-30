@@ -9,6 +9,7 @@ from app.adapters.db.orm_models.district_reminder_config import (
     ReminderDeliveryORM,
 )
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
+from app.adapters.db.orm_models.event_mail_hook import EventMailHookORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
 from app.adapters.db.orm_models.external_event_candidate import ExternalEventCandidateORM
 from app.adapters.db.orm_models.external_event_link import ExternalEventLinkORM

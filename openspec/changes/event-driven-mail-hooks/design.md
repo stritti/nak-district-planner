@@ -169,6 +169,20 @@ Same pattern as reminder config endpoints. Soft-delete via `is_active=false`.
 
 **Decision:** Reuse the same pattern and router structure as `DistrictReminderConfig` endpoints. This keeps the API consistent.
 
+### 8. Implementation note: after-commit publication and worker dispatch
+
+Two refinements over the original synchronous design, made during implementation:
+
+- **Publish after commit.** Emitters call `publish_after_commit(session, event)`.
+  Events reach the bus only when the outermost transaction commits; events from
+  a rolled-back transaction or savepoint are discarded. Otherwise a failed
+  request could still send mail about a change that never became visible.
+- **Dispatch in the Celery worker.** Bus handlers are synchronous, while hook
+  lookup is async and SMTP is slow. The registered handler only enqueues
+  `dispatch_event_mail_hooks`; the worker runs `EventMailHookDispatcher`. A
+  broker outage is logged and never fails the business operation. Delivery
+  stays at-most-once, like monthly reminders.
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |

@@ -8,7 +8,7 @@ from string import Formatter
 from uuid import UUID, uuid4
 
 from app.domain.events import EventType
-
+from app.domain.models.role import Role
 
 EVENT_PLACEHOLDERS: dict[EventType, frozenset[str]] = {
     EventType.SLOT_UNASSIGNED: frozenset(
@@ -46,7 +46,7 @@ def validate_template(event_type: EventType, template: str) -> None:
 class EventMailHook:
     district_id: UUID
     event_type: EventType
-    recipient_role: str
+    recipient_role: Role
     subject_template: str
     body_template: str
     id: UUID = field(default_factory=uuid4)
@@ -55,15 +55,21 @@ class EventMailHook:
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
-        if not self.recipient_role.strip():
-            raise ValueError("recipient_role must not be empty")
+        """Normalise enums and reject unknown roles or unsafe templates."""
+        # Accept plain strings from adapters but store the canonical enum.
+        try:
+            role = Role(self.recipient_role)
+        except ValueError as exc:
+            raise ValueError(f"Unknown recipient_role: {self.recipient_role!r}") from exc
+        object.__setattr__(self, "recipient_role", role)
+        object.__setattr__(self, "event_type", EventType(self.event_type))
         validate_template(self.event_type, self.subject_template)
         validate_template(self.event_type, self.body_template)
 
     def update(
         self,
         *,
-        recipient_role: str | None = None,
+        recipient_role: Role | str | None = None,
         subject_template: str | None = None,
         body_template: str | None = None,
         is_active: bool | None = None,

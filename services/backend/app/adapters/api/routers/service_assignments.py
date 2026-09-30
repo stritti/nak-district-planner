@@ -16,10 +16,13 @@ from app.adapters.api.schemas.service_assignment import (
 )
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.repositories import SqlPlanningSlotRepository
+from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
+from app.adapters.db.transactional_events import publish_after_commit
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
+from app.domain.event_payloads import assignment_confirmed
 from app.domain.models.role import Role
-from app.domain.models.service_assignment import ServiceAssignment
+from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
 router = APIRouter(
     prefix="/api/v1/events/{event_id}/assignments",
@@ -154,11 +157,33 @@ async def update_assignment(
         assignment.leader_id = body.leader_id
     if "leader_name" in fields:
         assignment.leader_name = body.leader_name
+    newly_confirmed = (
+        body.status == AssignmentStatus.CONFIRMED and assignment.status != AssignmentStatus.CONFIRMED
+    )
     if body.status is not None:
         assignment.status = body.status
     assignment.updated_at = datetime.now(UTC)
     await repo.save(assignment)
+    if newly_confirmed:
+        publish_after_commit(
+            db,
+            assignment_confirmed(
+                planning_slot.district_id,
+                leader_name=await _leader_display_name(db, assignment),
+                event_title=planning_slot.title or "",
+                event_date=planning_slot.planning_date,
+            ),
+        )
     return _assignment_response(assignment)
+
+
+async def _leader_display_name(db, assignment: ServiceAssignment) -> str:
+    if assignment.leader_name:
+        return assignment.leader_name
+    if assignment.leader_id is None:
+        return ""
+    leader = await SqlLeaderRepository(db).get(assignment.leader_id)
+    return leader.name if leader else ""
 
 
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
