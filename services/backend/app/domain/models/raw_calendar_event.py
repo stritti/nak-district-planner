@@ -21,3 +21,5 @@ class RawCalendarEvent:
     description: str | None
     content_hash: str  # SHA-256 of (uid + start + end + title) for change detection
     is_cancelled: bool  # True if STATUS=CANCELLED in the source
+    revision_marker: str | None = None
+    resource_id: str | None = None

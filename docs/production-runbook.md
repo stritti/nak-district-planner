@@ -22,6 +22,7 @@ Vor jedem Deployment in Produktion pruefen:
 | Debug-Modus | `DEBUG` ist nicht `true` (oder gar nicht gesetzt) |
 | CORS-Origins | Nicht `["*"]` |
 | OIDC-Redirect-URIs | Verwenden HTTPS |
+| `CONFLICT_CHECK_ENABLED` | Standardmäßig aktiv (`true`); nur bei Notfällen deaktivieren — die Konfliktprüfung verhindert Doppelbuchungen und Zuweisungen abwesender Amtsträger (siehe `docs/conflict-rules.md`) |
 | IDP-Provisioning (falls aktiv) | `IDP_PROVISIONING_API_KEY` und `IDP_PROVISIONING_ENDPOINT` (HTTPS) gesetzt |
 | `SUPERADMIN_SUB` (optional) | Wenn gesetzt, wird dieser User erzwungen; sonst wird der erste User automatisch Superadmin |
 | Backup-Key | `BACKUP_ENCRYPT_KEY` ist gesetzt fuer verschluesselte Backups |

@@ -22,6 +22,18 @@ export const SPECIAL_ROLES = [
 
 export type SpecialRole = (typeof SPECIAL_ROLES)[number]['value']
 
+export function leaderDisplayName(leader: LeaderResponse): string {
+  return leader.rank ? `${leader.rank} ${leader.name}` : leader.name
+}
+
+export function leaderNameFromId(
+  leaderId: string,
+  leaders: LeaderResponse[],
+): string {
+  const leader = leaders.find((l) => l.id === leaderId)
+  return leader ? leaderDisplayName(leader) : '—'
+}
+
 export interface LeaderResponse {
   id: string
   name: string
