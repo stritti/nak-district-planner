@@ -126,6 +126,14 @@ jobs:
             --junitxml=junit.xml \
             -q 2>&1 | tee coverage-output.txt
 
+      - name: Run reminder PostgreSQL integration test
+        env:
+          DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
+          TEST_DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
+        run: |
+          uv run alembic upgrade head
+          uv run pytest tests/integration/test_reminder_dispatch.py -q
+
       - name: Parse coverage summary
         id: coverage
         run: |
@@ -190,7 +198,6 @@ jobs:
 
           _Reported by CI workflow_"
 
-          # Find existing coverage comment by this bot
           COMMENT_ID=$(gh api \
             repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
             --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## Backend Test Coverage"))) | .id' \
@@ -274,7 +281,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock','package.json','services/frontend/bun.lock','services/frontend/package.json') }}
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
