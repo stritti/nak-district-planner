@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, nextTick } from 'vue'
 import ContextualHelp from './ContextualHelp.vue'
 import { useAuthStore } from '../stores/auth'
 import { useHelpStore } from '../stores/help'
@@ -51,9 +51,11 @@ describe('ContextualHelp', () => {
     auth.accessStatus = 'ACTIVE'
     auth.memberships = [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'd' }]
     const helpStore = useHelpStore()
+    await nextTick()
     expect(helpStore.identity).toBe('user:alice')
     expect(helpStore.hidden).toEqual([])
     auth.clearAuth()
+    await nextTick()
     expect(helpStore.hidden).toHaveLength(1)
   })
 })
