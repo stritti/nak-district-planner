@@ -7,6 +7,7 @@ import pytest
 from app.application.candidate_review import CandidateReviewService
 from app.domain.errors import (
     CandidateAlreadyReviewedError,
+    CandidateInvalidPeriodError,
     CandidateSlotAlreadyLinkedError,
     CandidateSlotNotAssignableError,
 )
@@ -51,7 +52,6 @@ def service() -> CandidateReviewService:
 
 async def test_accept_creates_slot_instance_and_link():
     item, review = candidate(), service()
-    review.instances.get_by_planning_slot.return_value = None
 
     accepted = await review.accept(item, user_sub="admin")
 
@@ -65,6 +65,7 @@ async def test_accept_creates_slot_instance_and_link():
     assert created_instance.external_uid == item.external_event_id
     assert created_instance.sync_state == SyncState.CLEAN
     assert link.calendar_integration_id == item.calendar_integration_id
+    review.instances.get_by_planning_slot.assert_not_awaited()
 
 
 async def test_accept_existing_slot_requires_same_district_and_active_state():
@@ -83,6 +84,8 @@ async def test_accept_existing_slot_requires_same_district_and_active_state():
     foreign_slot.status = PlanningSlotStatus.CANCELLED
     with pytest.raises(CandidateSlotNotAssignableError):
         await review.accept(item, user_sub="admin", slot_id=foreign_slot.id)
+    assert item.status == CandidateStatus.PENDING
+    review.instances.save.assert_not_awaited()
 
 
 async def test_accept_refuses_duplicate_or_dirty_linked_slot():
@@ -111,6 +114,46 @@ async def test_accept_refuses_duplicate_or_dirty_linked_slot():
     linked.sync_state = SyncState.DIRTY_INTERNAL
     with pytest.raises(CandidateSlotAlreadyLinkedError):
         await review.accept(item, user_sub="admin", slot_id=slot.id)
+    assert item.status == CandidateStatus.PENDING
+    review.links.save.assert_not_awaited()
+
+
+@pytest.mark.parametrize("duration_minutes", [0, -1])
+async def test_accept_rejects_invalid_intervals_before_any_write(duration_minutes):
+    from datetime import timedelta
+
+    item, review = candidate(), service()
+    item.end_at = item.start_at + timedelta(minutes=duration_minutes)
+
+    with pytest.raises(CandidateInvalidPeriodError):
+        await review.accept(item, user_sub="admin")
+    assert item.status == CandidateStatus.PENDING
+    review.slots.save.assert_not_awaited()
+    review.instances.save.assert_not_awaited()
+    review.links.save.assert_not_awaited()
+    review.candidates.save.assert_not_awaited()
+
+
+async def test_accept_missing_slot_preserves_candidate_and_does_not_write():
+    item, review = candidate(), service()
+    review.slots.get.return_value = None
+
+    with pytest.raises(CandidateSlotNotAssignableError):
+        await review.accept(item, user_sub="admin", slot_id=uuid4())
+    assert item.status == CandidateStatus.PENDING
+    review.instances.save.assert_not_awaited()
+    review.links.save.assert_not_awaited()
+    review.candidates.save.assert_not_awaited()
+
+
+async def test_accept_link_persistence_failure_does_not_mark_candidate_accepted():
+    item, review = candidate(), service()
+    review.links.save.side_effect = RuntimeError("database unavailable")
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await review.accept(item, user_sub="admin")
+    assert item.status == CandidateStatus.PENDING
+    review.candidates.save.assert_not_awaited()
 
 
 async def test_review_state_is_terminal_and_dismiss_records_actor():
@@ -122,6 +165,8 @@ async def test_review_state_is_terminal_and_dismiss_records_actor():
     assert dismissed.reviewed_by == "admin"
     with pytest.raises(CandidateAlreadyReviewedError):
         await review.accept(item, user_sub="admin")
+    with pytest.raises(CandidateAlreadyReviewedError):
+        await review.dismiss(item, user_sub="admin")
 
 
 def test_refresh_updates_data_without_implicit_status_transition():
