@@ -1,6 +1,7 @@
 <template>
   <div class="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
     <div class="w-full max-w-lg">
+      <ContextualHelp context="registration" />
       <div class="bg-white rounded-xl shadow-lg p-8">
         <!-- Header -->
         <div class="text-center mb-8">
@@ -144,6 +145,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { CheckCircleIcon } from '@heroicons/vue/24/outline'
+import ContextualHelp from '../components/ContextualHelp.vue'
 import { LEADER_RANKS, SPECIAL_ROLES } from '../api/leaders'
 import type { LeaderRank, SpecialRole } from '../api/leaders'
 import {
@@ -181,14 +183,12 @@ const form = ref<{
   notes: '',
 })
 
-// Load districts on mount — uses the public (unauthenticated) endpoint
 listDistrictsPublic()
   .then((d) => (districts.value = d))
   .catch(() => {
     error.value = 'Bezirke konnten nicht geladen werden. Bitte Seite neu laden.'
   })
 
-// Load congregations when district changes
 watch(
   () => form.value.district_id,
   async (id) => {
