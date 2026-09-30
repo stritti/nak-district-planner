@@ -610,6 +610,104 @@ def test_event_update_rejects_unknown_fields_and_empty_title() -> None:
         events.EventUpdate.model_validate({"title": ""})
 
 
+async def _patch_event(slot: PlanningSlot, body: events.EventUpdate, congregations: list):
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get_by_planning_slot.return_value = None
+    congregation_repo = AsyncMock()
+    congregation_repo.list_by_district.return_value = congregations
+    with (
+        patch("app.adapters.api.routers.events.require_role_in_district"),
+        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
+        patch(
+            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
+        ),
+        patch(
+            "app.adapters.api.routers.events.SqlCongregationRepository",
+            return_value=congregation_repo,
+        ),
+    ):
+        result = await events.update_event(slot.id, body, _auth(), AsyncMock())
+    return result, slot_repo, congregation_repo
+
+
+@pytest.mark.asyncio
+async def test_update_event_distributes_district_event_to_congregations() -> None:
+    slot = _slot()
+    congregations = [SimpleNamespace(id=uuid.uuid4()), SimpleNamespace(id=uuid.uuid4())]
+    body = events.EventUpdate(applicability=[str(c.id) for c in congregations])
+
+    result, slot_repo, congregation_repo = await _patch_event(slot, body, congregations)
+
+    assert result.applicability == [str(c.id) for c in congregations]
+    congregation_repo.list_by_district.assert_awaited_once_with(slot.district_id)
+    slot_repo.save.assert_awaited_once_with(slot)
+
+
+@pytest.mark.asyncio
+async def test_update_event_null_applicability_clears_distribution() -> None:
+    slot = _slot(applicability=["all"])
+
+    result, _, _ = await _patch_event(slot, events.EventUpdate(applicability=None), [])
+
+    assert result.applicability == []
+
+
+@pytest.mark.asyncio
+async def test_update_event_rejects_foreign_congregation_in_applicability() -> None:
+    slot = _slot(applicability=["all"])
+
+    with pytest.raises(HTTPException) as error:
+        await _patch_event(
+            slot, events.EventUpdate(applicability=[str(uuid.uuid4())]), [SimpleNamespace(id=uuid.uuid4())]
+        )
+
+    assert error.value.status_code == 400
+    assert "Bezirk" in error.value.detail
+    assert slot.applicability == ["all"]
+
+
+@pytest.mark.asyncio
+async def test_update_event_moving_to_congregation_drops_distribution() -> None:
+    slot = _slot(applicability=["all"])
+    congregation = SimpleNamespace(id=uuid.uuid4(), district_id=slot.district_id)
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get_by_planning_slot.return_value = None
+    congregation_repo = AsyncMock()
+    congregation_repo.get.return_value = congregation
+
+    with (
+        patch("app.adapters.api.routers.events.require_role_in_district"),
+        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
+        patch(
+            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
+        ),
+        patch(
+            "app.adapters.api.routers.events.SqlCongregationRepository",
+            return_value=congregation_repo,
+        ),
+    ):
+        result = await events.update_event(
+            slot.id, events.EventUpdate(congregation_id=congregation.id), _auth(), AsyncMock()
+        )
+
+    assert result.congregation_id == congregation.id
+    assert result.applicability == []
+
+
+@pytest.mark.parametrize(
+    "applicability",
+    [[""], ["x" * 65], ["all"] * 501],
+    ids=["blank-entry", "overlong-entry", "too-many-entries"],
+)
+def test_event_update_bounds_applicability_input(applicability) -> None:
+    with pytest.raises(ValidationError):
+        events.EventUpdate.model_validate({"applicability": applicability})
+
+
 @pytest.mark.asyncio
 async def test_bulk_approval_status_updates_month_slots() -> None:
     district_id = uuid.uuid4()

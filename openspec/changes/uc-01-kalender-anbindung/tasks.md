@@ -30,7 +30,7 @@
       ⚠️ **Abweichung:** GET-Endpoint hat `district_id`-Query-Filter (nicht congregation-spezifisch wie im Design)
 - [x] 5.2 Pydantic-Schemas für Request/Response (Credentials aus Response ausgeblendet)
 - [x] 5.3 Router in `main.py` eingebunden
-- [ ] 5.4 Integrations-Tests für alle Endpunkte *(CRUD abgedeckt in `test_calendar_integrations_crud.py`; Sync-Endpoint `POST /{id}/sync` fehlt in den Integrationstests)*
+- [x] 5.4 Integrations-Tests für alle Endpunkte *(CRUD in `test_calendar_integrations_crud.py`; Sync-Endpoint in `test_calendar_integration_sync.py` neu aufgebaut: echter Sync-Service mit Mock-Connector, SyncResult-Assertion, leerer Feed, 400/404/403/500, CSRF)*
 
 ## 6. Frontend
 
