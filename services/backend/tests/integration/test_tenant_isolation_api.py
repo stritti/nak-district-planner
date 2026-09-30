@@ -11,6 +11,7 @@ repositories on the NOBYPASSRLS application role. Skipped unless configured:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -184,6 +185,9 @@ async def api(world: World) -> AsyncIterator[httpx.AsyncClient]:
             patch("app.adapters.db.session.AsyncSessionLocal", factory),
             patch.object(audit_module, "AsyncSessionLocal", factory),
         ):
+            # The global service outlives the per-test event loop; its queue
+            # must belong to the current loop or the writer spins on errors.
+            audit_module.audit_service._queue = asyncio.Queue()
             await audit_module.audit_service.start()
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
