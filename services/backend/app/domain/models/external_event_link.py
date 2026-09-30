@@ -5,6 +5,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import StrEnum
+
+
+class ExternalEventLinkState(StrEnum):
+    ACTIVE = "ACTIVE"
+    SYNC_TOMBSTONE = "SYNC_TOMBSTONE"
 
 
 @dataclass
@@ -16,7 +22,7 @@ class ExternalEventLink:
     """
 
     id: uuid.UUID
-    event_instance_id: uuid.UUID
+    event_instance_id: uuid.UUID | None
     provider: str  # e.g. "ICAL", "GOOGLE", "MICROSOFT", "CALDAV"
     external_event_id: str  # Stable UID from the external calendar
     calendar_integration_id: uuid.UUID  # scopes the link to one integration
@@ -24,6 +30,12 @@ class ExternalEventLink:
     revision_marker: str | None = None  # ETag or revision sequence from provider
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    state: ExternalEventLinkState = ExternalEventLinkState.ACTIVE
+    deletion_origin: str | None = None
+    deletion_reason: str | None = None
+    tombstoned_at: datetime | None = None
+    last_synced_payload: dict[str, str | None] | None = None
+    provider_resource_id: str | None = None
 
     @classmethod
     def create(
@@ -35,6 +47,8 @@ class ExternalEventLink:
         calendar_integration_id: uuid.UUID,
         last_synced_hash: str | None = None,
         revision_marker: str | None = None,
+        last_synced_payload: dict[str, str | None] | None = None,
+        provider_resource_id: str | None = None,
     ) -> ExternalEventLink:
         now = datetime.now(timezone.utc)
         return cls(
@@ -47,4 +61,7 @@ class ExternalEventLink:
             revision_marker=revision_marker,
             created_at=now,
             updated_at=now,
+            state=ExternalEventLinkState.ACTIVE,
+            last_synced_payload=last_synced_payload,
+            provider_resource_id=provider_resource_id,
         )

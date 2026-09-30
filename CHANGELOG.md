@@ -2808,7 +2808,7 @@
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 
 ## [v0.2.0] - 2026-04-17
 
@@ -2844,7 +2844,7 @@
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 
@@ -2881,7 +2881,7 @@
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
@@ -2916,7 +2916,7 @@
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
@@ -2953,7 +2953,7 @@
 ### Other Changes
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
@@ -2990,7 +2990,7 @@
 
 ### Other Changes
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)

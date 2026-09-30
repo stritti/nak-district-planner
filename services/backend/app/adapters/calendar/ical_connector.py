@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 import httpx
 from icalendar import Calendar as ICalendar  # type: ignore[import-untyped]
 
+from app.adapters.calendar.http_policy import resilient_request
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -45,14 +46,13 @@ class ICalConnector(CalendarConnector):
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
     ) -> list[RawCalendarEvent]:
-        url: str = credentials["url"]
-        response = await self._client.get(url)
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise CalendarConnectorError(
-                f"HTTP {exc.response.status_code} beim Laden des Kalenders: {url}"
-            ) from exc
+        url_value = credentials.get("url")
+        if not url_value:
+            raise CalendarConnectorError("iCal URL fehlt")
+        url = str(url_value)
+        response = await resilient_request(
+            lambda: self._client.get(url), provider="iCal"
+        )
 
         content_type = response.headers.get("content-type", "")
         if "text/html" in content_type:
