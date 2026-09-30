@@ -63,9 +63,9 @@
 - [ ] ~Unit Tests für TenantAwareRepository~ *(entfällt, da Basisklasse nicht existiert)*
 
 #### Integration Tests
-- [ ] Integration Tests für RLS Policies gegen echte PostgreSQL-Instanz *(nicht gefunden — bestehende Tests laufen gegen Mocks, nicht gegen eine DB mit aktiven RLS-Policies)*
-- [ ] Integration Tests für Cross-Tenant Zugriff auf DB-Ebene *(gleiche Lücke)*
-- [ ] Integration Tests für Superadmin-Bypass auf DB-Ebene
+- [x] Integration Tests für RLS Policies gegen echte PostgreSQL-Instanz *(`tests/integration/test_rls_postgres.py`, läuft in CI im Job `backend-tests` gegen frisch migriertes PostgreSQL als NOBYPASSRLS-Rolle `nak_app`; Strukturtest verlangt RLS für jede Tabelle mit Tenant-Schlüssel)*
+- [x] Integration Tests für Cross-Tenant Zugriff auf DB-Ebene *(Lesen, Einfügen, Update/Delete fremder Zeilen, Verschieben in fremden Bezirk, ohne Identität/Membership, gefälschtes Subject)*
+- [x] Integration Tests für Superadmin-Bypass auf DB-Ebene *(Superadmin und System-Worker)*
 
 #### End-to-End Tests
 - [ ] E2E Tests für Tenant-Isolation *(nicht gefunden)*
@@ -85,7 +85,7 @@
 #### Deployment
 - [x] Staging/Produktion Rollout durchgeführt *(Feature ist laut CHANGELOG in v0.29.3 bereits live)*
 - [ ] Monitoring für Tenant-Isolation-Fehler einrichten *(kein dediziertes Monitoring/Alerting gefunden)*
-- [ ] Fehlerbehandlung explizit getestet *(offen — siehe Integration/E2E-Lücken oben)*
+- [ ] Fehlerbehandlung explizit getestet *(DB-Ebene abgedeckt; Befund: `external_event_candidates` und `leader_unavailabilities` hatten kein RLS → Migration `0022`; E2E weiterhin offen)*
 
 #### Nachbereitung
 - [ ] Monitoring-Dashboard erstellen
