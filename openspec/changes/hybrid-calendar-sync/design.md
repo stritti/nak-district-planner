@@ -41,7 +41,7 @@ A deviation is present when actual start or actual end/duration differs material
 External time changes update only EventInstance actual times. PlanningSlot remains authoritative.
 
 Resolving a deviation is a command, not merely a flag reset:
-1. derive intended corrected actual start/end from PlanningSlot and planned duration rules;
+1. derive intended corrected actual start/end from PlanningSlot and the authoritative planned-duration rule; never preserve a deviating actual duration;
 2. transition through internal state-machine semantics;
 3. for writable linked integrations, call the connector update operation;
 4. persist provider revision/hash;
@@ -59,7 +59,9 @@ Google tombstones may lack timestamps and must be parsed by id/status first.
 
 Microsoft/CalDAV-style missing resources require post-fetch reconciliation against active ExternalEventLinks. Absence is deletion only for a complete authoritative scope.
 
-Internal deletion is pushed to writable providers. Self-originated delete echoes are ignored using durable link metadata.
+Internal deletion is pushed to writable providers only after optimistic concurrency validation against the last acknowledged external state. If the provider changed meanwhile, the deletion is withheld and the remote changes are evaluated through field authority/conflict handling. A freshly fetched provider revision MUST NOT be reused to authorize deletion of an unacknowledged remote edit.
+
+Self-originated delete echoes are ignored using durable link metadata.
 
 ### 4. Delete Policy
 

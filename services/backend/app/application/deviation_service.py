@@ -5,8 +5,11 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from app.domain.models.event_instance import EventInstance, SyncState
+from app.config import settings
+
+from app.domain.models.event_instance import EventInstance
 from app.domain.models.planning_slot import PlanningSlot
+from app.domain.services.sync_policy import internal_state
 from app.domain.ports.repositories import (
     EventInstanceRepository,
     PlanningSlotRepository,
@@ -47,22 +50,23 @@ class DeviationService:
     def _calculate_expected_end(
         self,
         slot: PlanningSlot,
-        duration_minutes: int = 90,
+        duration_minutes: int | None = None,
     ) -> datetime:
         """Calculate the expected end datetime from a PlanningSlot.
 
-        Uses a default duration of 90 minutes if not specified otherwise.
+        Uses the configured expected duration if not specified otherwise.
         """
         from datetime import timedelta
 
         expected_start = self._calculate_expected_start(slot)
-        return expected_start + timedelta(minutes=duration_minutes)
+        minutes = settings.sync_expected_duration_minutes if duration_minutes is None else duration_minutes
+        return expected_start + timedelta(minutes=minutes)
 
     def _has_deviation(
         self,
         slot: PlanningSlot,
         instance: EventInstance,
-        duration_minutes: int = 90,
+        duration_minutes: int | None = None,
     ) -> bool:
         """Check if an EventInstance deviates from its PlanningSlot."""
         expected_start = self._calculate_expected_start(slot)
@@ -76,13 +80,13 @@ class DeviationService:
     async def detect_and_update_deviation(
         self,
         instance: EventInstance,
-        duration_minutes: int = 90,
+        duration_minutes: int | None = None,
     ) -> bool:
         """Detect deviation for an EventInstance and update its deviation_flag.
 
         Args:
             instance: The EventInstance to check
-            duration_minutes: Expected duration in minutes (default: 90)
+            duration_minutes: Expected duration in minutes (default: from settings)
 
         Returns:
             True if deviation was detected and flag was set, False otherwise
@@ -104,13 +108,13 @@ class DeviationService:
     async def detect_deviation_for_slot(
         self,
         slot_id: uuid.UUID,
-        duration_minutes: int = 90,
+        duration_minutes: int | None = None,
     ) -> bool:
         """Detect deviation for all EventInstances of a PlanningSlot.
 
         Args:
             slot_id: The PlanningSlot ID
-            duration_minutes: Expected duration in minutes (default: 90)
+            duration_minutes: Expected duration in minutes (default: from settings)
 
         Returns:
             True if any deviation was detected and updated
@@ -156,18 +160,17 @@ class DeviationService:
             # No deviation to resolve
             return False
 
-        # Update instance times to match slot
-        expected_start = datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
-        # Use same duration as current instance
-        duration = instance.actual_end_at - instance.actual_start_at
-        expected_end = expected_start + duration
+        # Restore the authoritative planned interval. Reusing the current
+        # actual duration would preserve an end-time/duration deviation.
+        expected_start = self._calculate_expected_start(slot)
+        expected_end = self._calculate_expected_end(slot)
 
         instance.actual_start_at = expected_start
         instance.actual_end_at = expected_end
         instance.deviation_flag = False
         instance.updated_at = datetime.now(UTC)
         instance.last_internal_modified_at = instance.updated_at
-        instance.sync_state = SyncState.DIRTY_INTERNAL
+        instance.sync_state = internal_state(instance.sync_state)
 
         await self._instance_repo.save(instance)
         return True
@@ -175,13 +178,13 @@ class DeviationService:
     async def get_deviation_details(
         self,
         instance_id: uuid.UUID,
-        duration_minutes: int = 90,
+        duration_minutes: int | None = None,
     ) -> dict[str, any] | None:
         """Get detailed deviation information for an EventInstance.
 
         Args:
             instance_id: The EventInstance ID
-            duration_minutes: Expected duration in minutes (default: 90)
+            duration_minutes: Expected duration in minutes (default: from settings)
 
         Returns:
             dict with deviation details or None if no deviation

@@ -1,7 +1,8 @@
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRouter, type Router } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { identityFromTokenExchange, isValidTokenExchangeResponse, isValidTokenShape } from './oidcToken'
+import type { OIDCConfig, OIDCToken, OIDCUser } from './oidcTypes'
+import { isValidTokenShape } from './oidcToken'
 import {
   clearCrossTabWaiter as clearWaiter,
   clearRotationReceipts,
@@ -13,136 +14,69 @@ import {
   TRANSIENT_RETRY_DELAY_MS,
   waitForCrossTabRefresh,
 } from './oidcRefresh'
+import {
+  ACTIVITY_REFRESH_LEAD_SECONDS,
+  bindRefreshScheduler,
+  clearRefreshTimer,
+  clearTransientRetryTimer,
+  getRefreshChannel,
+  isRefreshChannelListenerAttached,
+  markRefreshChannelListenerAttached,
+  postRefreshMessage,
+  scheduleRefreshTimer,
+  scheduleTransientRetry,
+  setupActivityRefresh,
+  __resetSchedulerState,
+} from './refreshScheduler'
+import {
+  __resetSessionLifecycle,
+  advanceSessionGeneration,
+  bindSessionLifecycle,
+  clearLocalArtifacts,
+  endLocalSession,
+  getSessionGeneration,
+  installSessionToken,
+  isLatestRefreshOperation,
+  nextRefreshOperationId,
+} from './oidcSession'
+import { __resetDiscoveryState, loadDiscovery, useDiscoveryState } from './oidcDiscovery'
+import {
+  exchangeCodeForToken as runCodeExchange,
+  getAuthorizationUrl as buildAuthorizationUrl,
+} from './oidcAuthorization'
 
-export interface OIDCToken {
-  accessToken: string
-  idToken: string
-  refreshToken?: string
-  expiresAt: number
-}
-
-export interface OIDCUser {
-  sub: string
-  email?: string
-  name?: string
-  picture?: string
-}
-
-export interface OIDCDiscovery {
-  authorization_endpoint: string
-  token_endpoint: string
-  userinfo_endpoint?: string
-  revocation_endpoint?: string
-  end_session_endpoint?: string
-  jwks_uri?: string
-  /** Added by backend proxy — the OIDC client ID for this application */
-  client_id?: string
-}
-
-export interface OIDCConfig {
-  redirectUri: string
-  scope: string
-}
-
-const SESSION_CODE_VERIFIER_KEY = 'oidc_code_verifier'
-const SESSION_STATE_KEY = 'oidc_state'
-
-// Refresh eagerly if user activity is detected while the token is within this
-// many seconds of expiry. Catches cases where the scheduled setTimeout-based
-// refresh was throttled or paused (backgrounded tab, device sleep) so the
-// session gets extended as soon as the user resumes working.
-const ACTIVITY_REFRESH_LEAD_SECONDS = 120
-// Don't re-check on every single event — throttle to avoid excessive work.
-const ACTIVITY_CHECK_THROTTLE_MS = 15_000
-const REFRESH_CHANNEL = 'oidc-refresh'
-
-// Module-level guards: listeners must only be attached once per page load,
-// regardless of how many times useOIDC() is instantiated across the app.
-let activityListenersAttached = false
-let lastActivityCheckAt = 0
-let refreshInFlightId = 0
-let sessionGeneration = 0
-let refreshTimer: ReturnType<typeof setTimeout> | null = null
-let transientRetryTimer: ReturnType<typeof setTimeout> | null = null
-let refreshChannel: BroadcastChannel | null = null
-let refreshChannelListenerAttached = false
-let lastAdoptedBroadcastAt = 0
-const rotatedTokens = new Map<string, RotationReceipt>()
-const crossTabState: CrossTabRefreshState = { inFlight: null, waiter: null }
+export type { OIDCConfig, OIDCDiscovery, OIDCToken, OIDCUser } from './oidcTypes'
 
 const envConfig: OIDCConfig = {
   redirectUri: `${window.location.origin}/auth/callback`,
   scope: import.meta.env.VITE_OIDC_SCOPE || 'openid profile email',
 }
 
-function toBase64Url(bytes: Uint8Array): string {
-  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
-}
-
-function generateCodeVerifier(): string {
-  const bytes = new Uint8Array(96)
-  crypto.getRandomValues(bytes)
-  return toBase64Url(bytes)
-}
-
-async function generateCodeChallenge(verifier: string): Promise<string> {
-  const data = new TextEncoder().encode(verifier)
-  const digest = await crypto.subtle.digest('SHA-256', data)
-  return toBase64Url(new Uint8Array(digest))
-}
-
-function generateState(): string {
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  return toBase64Url(bytes)
-}
-
-function getRefreshChannel(): BroadcastChannel | null {
-  if (typeof BroadcastChannel === 'undefined') return null
-  if (!refreshChannel) refreshChannel = new BroadcastChannel(REFRESH_CHANNEL)
-  return refreshChannel
-}
-
-function postRefreshMessage(message: RefreshChannelMessage): void {
-  try {
-    getRefreshChannel()?.postMessage(message)
-  } catch {
-    // BroadcastChannel failures must never break local refresh/session flow.
-  }
-}
+// Module-level guards: the cross-tab protocol and the rotated-token memory
+// are shared by all composable instances by design — one browser profile
+// performs exactly one refresh per token.
+let lastAdoptedBroadcastAt = 0
+const rotatedTokens = new Map<string, RotationReceipt>()
+const crossTabState: CrossTabRefreshState = { inFlight: null, waiter: null }
 
 /** @internal — resets module-level state; used by tests */
 export function __resetOIDCModuleState(): void {
   crossTabState.inFlight = null
-  refreshInFlightId = 0
-  sessionGeneration = 0
-  if (refreshTimer) clearTimeout(refreshTimer)
-  refreshTimer = null
-  if (transientRetryTimer) clearTimeout(transientRetryTimer)
-  transientRetryTimer = null
   if (crossTabState.waiter) clearTimeout(crossTabState.waiter.timeoutId)
   crossTabState.waiter = null
   rotatedTokens.clear()
-  refreshChannel?.close()
-  refreshChannel = null
-  refreshChannelListenerAttached = false
   lastAdoptedBroadcastAt = 0
-  activityListenersAttached = false
-  lastActivityCheckAt = 0
+  __resetSchedulerState()
+  __resetDiscoveryState()
+  __resetSessionLifecycle()
 }
 
 export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   let injectedRouter: Router | null = router || null
   const authStore = useAuthStore()
   const oidcConfig: OIDCConfig = { ...envConfig, ...(config || {}) }
-  setupRefreshChannelListener()
+  const { discovery, clientId, isLoading, error } = useDiscoveryState()
 
-  const discovery = ref<OIDCDiscovery | null>(null)
-  const clientId = ref<string>('')
-  const discoveryPromise = ref<Promise<void> | null>(null)
-  const isLoading = ref(false)
-  const error = ref<string | null>(null)
   const token = computed(() => authStore.token)
   const user = computed(() => authStore.user)
   const isAuthenticated = computed(() => authStore.isAuthenticated)
@@ -156,10 +90,34 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     return injectedRouter
   }
 
-  function clearLocalArtifacts(): void {
-    sessionStorage.removeItem(SESSION_CODE_VERIFIER_KEY)
-    sessionStorage.removeItem(SESSION_STATE_KEY)
+  function scheduleRefreshFor(token: OIDCToken | null): void {
+    if (token) scheduleRefreshTimer(token.expiresAt)
   }
+
+  bindSessionLifecycle({
+    invalidateCrossTabState: () => {
+      crossTabState.inFlight = null
+      clearWaiter(crossTabState, false)
+    },
+    clearTimers: () => {
+      clearRefreshTimer()
+      clearTransientRetryTimer()
+    },
+    scheduleRefresh: scheduleRefreshFor,
+  })
+
+  bindRefreshScheduler({
+    onScheduledRefresh: () => { void refreshToken() },
+    onActivityRefresh: () => {
+      const current = authStore.token
+      if (!current || crossTabState.inFlight) return
+      // Refresh eagerly if user activity is detected while the token is
+      // within ACTIVITY_REFRESH_LEAD_SECONDS of expiry — this catches
+      // throttled or paused timers in backgrounded tabs.
+      const secondsUntilExpiry = current.expiresAt - Date.now() / 1000
+      if (secondsUntilExpiry < ACTIVITY_REFRESH_LEAD_SECONDS) void refreshToken()
+    },
+  })
 
   async function fetchUserInfo(accessToken: string): Promise<OIDCUser | null> {
     const endpoint = discovery.value?.userinfo_endpoint
@@ -184,35 +142,65 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     }
   }
 
-  function scheduleTransientRefreshRetry(): void {
-    const current = authStore.token
-    if (!current) return
-    if (transientRetryTimer) clearTimeout(transientRetryTimer)
-    transientRetryTimer = null
-
-    if (Date.now() / 1000 < current.expiresAt) {
-      setupRefreshTimer()
-      return
-    }
-
-    transientRetryTimer = setTimeout(() => {
-      transientRetryTimer = null
-      void refreshToken()
-    }, TRANSIENT_RETRY_DELAY_MS)
+  function adoptRotatedToken(token: OIDCToken, nextUser: OIDCUser | null): void {
+    clearTransientRetryTimer()
+    authStore.setToken(token, nextUser ?? authStore.user)
+    scheduleRefreshTimer(token.expiresAt)
   }
 
-  function adoptRotatedToken(token: OIDCToken, nextUser: OIDCUser | null): void {
-    if (transientRetryTimer) clearTimeout(transientRetryTimer)
-    transientRetryTimer = null
-    authStore.setToken(token, nextUser ?? authStore.user)
-    setupRefreshTimer()
+  function navigateToLogin(): void {
+    try { void getRouter().push('/login').catch(() => {}) } catch { /* Router unavailable during startup. */ }
+  }
+
+  function setToken(nextToken: OIDCToken | null, nextUser: OIDCUser | null = null): void {
+    advanceSessionGeneration()
+    installSessionToken((t, u) => authStore.setToken(t, u), nextToken, nextUser)
+  }
+
+  async function logout(): Promise<void> {
+    const current = authStore.token
+    advanceSessionGeneration()
+    clearRotationReceipts()
+    clearLocalArtifacts()
+    authStore.clearAuth()
+    // Local logout is immediate. Discovery/revocation are best effort and
+    // must never hold the shared refresh promise hostage.
+
+    try {
+      await Promise.race([loadDiscovery(), new Promise<void>((resolve) => setTimeout(resolve, 2_000))]).catch(() => {
+        // best effort
+      })
+
+      const revocationEndpoint = discovery.value?.revocation_endpoint
+      if (current && revocationEndpoint) {
+        const body = new URLSearchParams({
+          client_id: clientId.value,
+          token: current.refreshToken || current.accessToken,
+        })
+
+        await fetch(revocationEndpoint, {
+          method: 'POST',
+          signal: AbortSignal.timeout(2_000),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        }).catch(() => {
+          // ignore remote logout errors
+        })
+      }
+    } finally {
+      try {
+        await getRouter().push('/login')
+      } catch {
+        // router can be unavailable during startup/tests
+      }
+    }
   }
 
   function setupRefreshChannelListener(): void {
-    if (refreshChannelListenerAttached) return
+    if (isRefreshChannelListenerAttached()) return
     const channel = getRefreshChannel()
     if (!channel) return
-    refreshChannelListenerAttached = true
+    markRefreshChannelListenerAttached()
 
     channel.onmessage = (event: MessageEvent<RefreshChannelMessage>) => {
       const message = event.data
@@ -253,136 +241,15 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     }
   }
 
-  async function loadDiscovery(): Promise<void> {
-    if (discovery.value) return
-    if (discoveryPromise.value) return discoveryPromise.value
-
-    const promise = (async () => {
-      isLoading.value = true
-      error.value = null
-
-      try {
-        // Fetch discovery document from backend proxy (avoids CORS + build-time env)
-        const response = await fetch('/api/v1/auth/oidc/discovery')
-        if (!response.ok) {
-          const body = await response.text().catch(() => '')
-          throw new Error(`OIDC discovery failed (${response.status}): ${body}`)
-        }
-
-        const data = (await response.json()) as OIDCDiscovery
-        if (!data.authorization_endpoint || !data.token_endpoint) {
-          throw new Error('OIDC discovery document misses required endpoints')
-        }
-
-        discovery.value = data
-        // client_id is provided by the backend alongside the discovery doc
-        if (data.client_id) {
-          clientId.value = data.client_id
-        } else {
-          throw new Error('OIDC client ID not provided by backend')
-        }
-      } catch (err) {
-        error.value = err instanceof Error ? err.message : 'Discovery failed'
-        throw err
-      } finally {
-        isLoading.value = false
-      }
-    })()
-
-    discoveryPromise.value = promise
-    try {
-      await promise
-    } finally {
-      discoveryPromise.value = null
-    }
-  }
-
-  async function getAuthorizationUrl(): Promise<string> {
-    await loadDiscovery()
-    if (!discovery.value) throw new Error('Discovery not loaded')
-
-    const codeVerifier = generateCodeVerifier()
-    const codeChallenge = await generateCodeChallenge(codeVerifier)
-    const state = generateState()
-
-    sessionStorage.setItem(SESSION_CODE_VERIFIER_KEY, codeVerifier)
-    sessionStorage.setItem(SESSION_STATE_KEY, state)
-
-    const params = new URLSearchParams({
-      client_id: clientId.value,
-      redirect_uri: oidcConfig.redirectUri,
-      response_type: 'code',
-      scope: oidcConfig.scope,
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
-      state,
-    })
-
-    return `${discovery.value.authorization_endpoint}?${params.toString()}`
-  }
-
-  async function exchangeCodeForToken(code: string): Promise<void> {
-    await loadDiscovery()
-    if (!discovery.value) throw new Error('Discovery not loaded')
-
-    const codeVerifier = sessionStorage.getItem(SESSION_CODE_VERIFIER_KEY)
-    if (!codeVerifier) throw new Error('Code verifier not found in session storage')
-
-    isLoading.value = true
-    error.value = null
-
-    try {
-      // Send code + PKCE verifier to backend proxy; backend adds client_secret
-      const response = await fetch('/api/v1/auth/oidc/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grant_type: 'authorization_code',
-          code,
-          redirect_uri: oidcConfig.redirectUri,
-          code_verifier: codeVerifier,
-        }),
-      })
-
-      if (!response.ok) {
-        const raw = await response.text()
-        let parsed: unknown = raw
-        try {
-          parsed = JSON.parse(raw)
-        } catch {
-          // keep raw text
-        }
-        throw new Error(`Token exchange failed (${response.status}): ${JSON.stringify(parsed)}`)
-      }
-
-      const data: unknown = await response.json()
-      if (!isValidTokenExchangeResponse(data)) {
-        throw new Error('Token response missing or malformed access_token')
-      }
-
-      const { token: nextToken, user: derivedUser } = identityFromTokenExchange(
-        data,
-        { accessToken: '', idToken: '', refreshToken: undefined, expiresAt: 0 },
-        null,
-      )
-
-      let nextUser: OIDCUser | null = derivedUser
-      if (!nextUser?.sub) {
-        nextUser = await fetchUserInfo(nextToken.accessToken)
-      }
-
-      if (!nextUser?.sub) {
-        throw new Error('OIDC identity missing: no sub in id_token/access_token or userinfo response')
-      }
-
-      setToken(nextToken, nextUser)
-      clearLocalArtifacts()
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Token exchange failed'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
+  const authorizationDeps = {
+    config: oidcConfig,
+    getClientId: () => clientId.value,
+    getDiscovery: () => discovery.value,
+    loadDiscovery,
+    fetchUserInfo,
+    onSessionInstalled: (nextToken: unknown, nextUser: OIDCUser | null) => {
+      setToken(nextToken as OIDCToken, nextUser)
+    },
   }
 
   async function refreshToken(): Promise<boolean> {
@@ -397,25 +264,15 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         await logout()
         return false
       }
-      const refreshGeneration = sessionGeneration
+      const refreshGeneration = getSessionGeneration()
       const refreshTokenUsed = current.refreshToken
       const isRefreshStillCurrent = (): boolean => {
         const latest = authStore.token
         return (
-          refreshGeneration === sessionGeneration &&
+          refreshGeneration === getSessionGeneration() &&
           Boolean(latest) &&
           latest?.refreshToken === refreshTokenUsed
         )
-      }
-      // End the local session while preserving the non-secret replay markers
-      // that suspended tabs rely on for token-replay protection.
-      const endLocalSession = (): void => {
-        invalidateSession()
-        // Completed receipts still hold the raw refresh token that was just
-        // submitted; a failure before reaching the provider leaves it usable.
-        clearRotationReceipts()
-        authStore.clearAuth()
-        try { void getRouter().push('/login').catch(() => {}) } catch { /* Router unavailable during startup. */ }
       }
 
       // localStorage read/write is not atomic across tabs, so no lease or
@@ -443,152 +300,49 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         fetchUserInfo,
         isRefreshStillCurrent,
         logout,
-        adoptRotatedToken: (token, user) => {
-          authStore.setToken(token, user ?? authStore.user)
-          if (transientRetryTimer) clearTimeout(transientRetryTimer)
-          transientRetryTimer = null
-          setupRefreshTimer()
+        adoptRotatedToken: (token, nextUser) => {
+          authStore.setToken(token, nextUser ?? authStore.user)
+          clearTransientRetryTimer()
+          scheduleRefreshTimer(token.expiresAt)
         },
         onExpiredSuccessor: (token) => {
-          followUp.expiredSuccessor = { token, generation: sessionGeneration }
+          followUp.expiredSuccessor = { token, generation: getSessionGeneration() }
         },
-        scheduleTransientRefreshRetry,
-        endLocalSession,
+        scheduleTransientRefreshRetry: () => {
+          const currentToken = authStore.token
+          if (!currentToken) return
+          if (Date.now() / 1000 < currentToken.expiresAt) {
+            scheduleRefreshTimer(currentToken.expiresAt)
+            return
+          }
+          scheduleTransientRetry(TRANSIENT_RETRY_DELAY_MS)
+        },
+        endLocalSession: () => {
+          endLocalSession(() => authStore.clearAuth(), navigateToLogin)
+        },
         rotatedTokens,
         crossTabState,
         postRefreshMessage,
       })
     })()
 
-    const operationId = refreshInFlightId + 1
-    refreshInFlightId = operationId
+    const operationId = nextRefreshOperationId()
     crossTabState.inFlight = operation
     let result: boolean
     try {
       result = await operation
     } finally {
-      if (refreshInFlightId === operationId) crossTabState.inFlight = null
+      if (isLatestRefreshOperation(operationId)) crossTabState.inFlight = null
     }
     // The successor owns a different refresh token and therefore must acquire
     // its own Web Lock. Abort the follow-up if login/logout replaced it.
     const successor = followUp.expiredSuccessor
-    if (successor && sessionGeneration === successor.generation &&
+    if (successor && getSessionGeneration() === successor.generation &&
         authStore.token?.refreshToken === successor.token.refreshToken &&
         authStore.token?.accessToken === successor.token.accessToken) {
       return refreshToken()
     }
     return result
-  }
-
-  function setupRefreshTimer(): void {
-    if (refreshTimer) clearTimeout(refreshTimer)
-    refreshTimer = null
-    if (!authStore.token) return
-
-    const nowSeconds = Date.now() / 1000
-    const ttlSeconds = Math.max(authStore.token.expiresAt - nowSeconds, 0)
-
-    // Avoid refresh loops for short-lived tokens.
-    // Refresh at ~80% of lifetime with sane bounds.
-    const refreshLeadSeconds = Math.min(300, Math.max(5, Math.floor(ttlSeconds * 0.2)))
-    const delay = Math.max((ttlSeconds - refreshLeadSeconds) * 1000, 1000)
-
-    refreshTimer = setTimeout(() => {
-      void refreshToken()
-    }, delay)
-  }
-
-  function invalidateSession(): void {
-    sessionGeneration += 1
-    refreshInFlightId += 1
-    crossTabState.inFlight = null
-    clearWaiter(crossTabState, false)
-    if (refreshTimer) clearTimeout(refreshTimer)
-    refreshTimer = null
-    if (transientRetryTimer) clearTimeout(transientRetryTimer)
-    transientRetryTimer = null
-  }
-
-  async function logout(): Promise<void> {
-    const current = authStore.token
-    invalidateSession()
-    clearRotationReceipts()
-    clearLocalArtifacts()
-    authStore.clearAuth()
-    // Local logout is immediate. Discovery/revocation are best effort and
-    // must never hold the shared refresh promise hostage.
-
-    try {
-      await Promise.race([loadDiscovery(), new Promise<void>((resolve) => setTimeout(resolve, 2_000))]).catch(() => {
-        // best effort
-      })
-
-      const revocationEndpoint = discovery.value?.revocation_endpoint
-      if (current && revocationEndpoint) {
-        const body = new URLSearchParams({
-          client_id: clientId.value,
-          token: current.refreshToken || current.accessToken,
-        })
-
-        await fetch(revocationEndpoint, {
-          method: 'POST',
-          signal: AbortSignal.timeout(2_000),
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString(),
-        }).catch(() => {
-          // ignore remote logout errors
-        })
-      }
-    } finally {
-      try {
-        await getRouter().push('/login')
-      } catch {
-        // router can be unavailable during startup/tests
-      }
-    }
-  }
-
-  function setToken(nextToken: OIDCToken | null, nextUser: OIDCUser | null = null): void {
-    // invalidateSession() already advanced the generation; installing the
-    // new token must not advance it again — the refresh pipeline treats the
-    // post-invalidation generation as the new session's identity.
-    invalidateSession()
-    clearRotationReceipts()
-    authStore.setToken(nextToken, nextUser)
-    if (nextToken) {
-      setupRefreshTimer()
-    }
-  }
-
-  function handleUserActivity(): void {
-    const now = Date.now()
-    if (now - lastActivityCheckAt < ACTIVITY_CHECK_THROTTLE_MS) return
-    lastActivityCheckAt = now
-
-    const current = authStore.token
-    if (!current || crossTabState.inFlight) return
-
-    const secondsUntilExpiry = current.expiresAt - now / 1000
-    if (secondsUntilExpiry < ACTIVITY_REFRESH_LEAD_SECONDS) {
-      void refreshToken()
-    }
-  }
-
-  // Attach once, app-wide: browsers throttle/suspend setTimeout in background
-  // tabs, so user interaction is used as a second trigger to keep the
-  // session alive whenever the token is close to (or past) expiry.
-  function setupActivityRefresh(): void {
-    if (activityListenersAttached) return
-    activityListenersAttached = true
-
-    const activityEvents = ['mousemove', 'keydown', 'click', 'touchstart', 'scroll']
-    activityEvents.forEach((eventName) => {
-      document.addEventListener(eventName, handleUserActivity, { passive: true })
-    })
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') handleUserActivity()
-    })
-    window.addEventListener('focus', handleUserActivity)
   }
 
   function initialize(): void {
@@ -601,8 +355,10 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
       return
     }
 
-    setupRefreshTimer()
+    scheduleRefreshTimer(authStore.token.expiresAt)
   }
+
+  setupRefreshChannelListener()
 
   return {
     token,
@@ -612,12 +368,12 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     isLoading,
     error,
     loadDiscovery,
-    getAuthorizationUrl,
-    exchangeCodeForToken,
+    getAuthorizationUrl: () => buildAuthorizationUrl(authorizationDeps),
+    exchangeCodeForToken: (code: string) => runCodeExchange(authorizationDeps, code),
     refreshToken,
     logout,
     setToken,
-    getSessionGeneration: () => sessionGeneration,
+    getSessionGeneration,
     initialize,
   }
 }

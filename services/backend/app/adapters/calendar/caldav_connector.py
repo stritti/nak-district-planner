@@ -15,6 +15,9 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urljoin, urlsplit
 
 import httpx
+import defusedxml.ElementTree as ET
+from icalendar import Calendar as ICalendar
+from icalendar import Event as ICalendarEvent
 
 from app.adapters.calendar.deletion import delete_resource
 from app.domain.models.raw_calendar_event import RawCalendarEvent
@@ -26,8 +29,19 @@ def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) ->
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+
+def _to_utc(value) -> datetime:
+    """Normalize iCalendar date/datetime values to UTC."""
+    raw = value.dt if hasattr(value, "dt") else value
+    if isinstance(raw, datetime):
+        return raw.replace(tzinfo=UTC) if raw.tzinfo is None else raw.astimezone(UTC)
+    return datetime(raw.year, raw.month, raw.day, tzinfo=UTC)
+
+
 class CalDAVConnector(CalendarConnector):
     """Adapter for CalDAV servers."""
+
+    authoritative_snapshot = True
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client or httpx.AsyncClient(timeout=30.0)
@@ -38,7 +52,10 @@ class CalDAVConnector(CalendarConnector):
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
     ) -> list[RawCalendarEvent]:
-        url: str = credentials["url"].rstrip("/")
+        url_value = credentials.get("url")
+        if not url_value:
+            raise CalendarConnectorError("CalDAV Basis-URL fehlt in den Credentials")
+        url: str = str(url_value).rstrip("/")
 
         # Determine authentication method
         headers = {}
@@ -71,15 +88,18 @@ class CalDAVConnector(CalendarConnector):
         # For simplicity, we'll use calendar-query on the calendar collection itself
         report_url = f"{url}" if url.endswith("/") else f"{url}/"
 
-        response = await self._client.request(
-            "REPORT",
-            report_url,
-            data=calendar_query.encode("utf-8"),  # type: ignore[arg-type]
-            headers={"Content-Type": "application/xml; charset=utf-8", "Depth": "1", **headers},
-            auth=(str(credentials["username"]), str(credentials["password"]))
-            if "username" in credentials and "password" in credentials
-            else None,
-        )
+        try:
+            response = await self._client.request(
+                "REPORT",
+                report_url,
+                data=calendar_query.encode("utf-8"),  # type: ignore[arg-type]
+                headers={"Content-Type": "application/xml; charset=utf-8", "Depth": "1", **headers},
+                auth=(str(credentials["username"]), str(credentials["password"]))
+                if "username" in credentials and "password" in credentials
+                else None,
+            )
+        except httpx.RequestError as exc:
+            raise CalendarConnectorError("Transportfehler beim Laden des CalDAV Kalenders") from exc
 
         try:
             response.raise_for_status()
@@ -91,8 +111,6 @@ class CalDAVConnector(CalendarConnector):
         # Parse the multi-status response
         # This is simplified - a production implementation would properly parse XML
         # For now, we'll look for calendar-data elements
-        import defusedxml.ElementTree as ET
-
         try:
             root = ET.fromstring(response.content)
         except ET.ParseError as exc:
@@ -120,8 +138,6 @@ class CalDAVConnector(CalendarConnector):
 
             # Parse the iCalendar data
             try:
-                from icalendar import Calendar as ICalendar
-
                 cal = ICalendar.from_ical(cal_data)
             except Exception:
                 # Skip invalid iCalendar data
@@ -146,20 +162,6 @@ class CalDAVConnector(CalendarConnector):
 
                 if dtstart is None:
                     continue
-
-                # Convert to UTC datetime
-                def _to_utc(dt):
-                    if hasattr(dt, "dt"):
-                        dt_val = dt.dt
-                    else:
-                        dt_val = dt
-
-                    if isinstance(dt_val, datetime):
-                        if dt_val.tzinfo is None:
-                            return dt_val.replace(tzinfo=UTC)
-                        return dt_val.astimezone(UTC)
-                    else:  # date object
-                        return datetime(dt_val.year, dt_val.month, dt_val.day, tzinfo=UTC)
 
                 start_at = _to_utc(dtstart)
 
@@ -193,6 +195,48 @@ class CalDAVConnector(CalendarConnector):
                 )
 
         return events
+
+    async def update_event_times(
+        self, credentials: dict, event: RawCalendarEvent, *, start_at: datetime, end_at: datetime
+    ) -> str | None:
+        if not event.resource_id or "url" not in credentials:
+            raise CalendarConnectorError("CalDAV resource href oder Basis-URL fehlt")
+        base = credentials["url"].rstrip("/") + "/"
+        url = urljoin(base, event.resource_id)
+        source, target = urlsplit(base), urlsplit(url)
+        if (source.scheme, source.netloc) != (target.scheme, target.netloc) or not target.path.startswith(source.path):
+            raise CalendarConnectorError("CalDAV resource liegt außerhalb des Kalenders")
+        headers = {"Content-Type": "text/calendar; charset=utf-8"}
+        if event.revision_marker:
+            headers["If-Match"] = event.revision_marker
+        if "access_token" in credentials:
+            headers["Authorization"] = f"Bearer {credentials['access_token']}"
+        elif not ("username" in credentials and "password" in credentials):
+            raise CalendarConnectorError("CalDAV Credentials fehlen")
+        calendar = ICalendar()
+        calendar.add("prodid", "-//NAK District Planner//Calendar Sync//")
+        calendar.add("version", "2.0")
+        component = ICalendarEvent()
+        component.add("uid", event.uid)
+        component.add("summary", event.title)
+        component.add("dtstart", start_at)
+        component.add("dtend", end_at)
+        if event.description:
+            component.add("description", event.description)
+        calendar.add_component(component)
+        try:
+            response = await self._client.put(
+                url,
+                content=calendar.to_ical(),
+                headers=headers,
+                auth=(credentials["username"], credentials["password"])
+                if "username" in credentials and "password" in credentials
+                else None,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CalendarConnectorError("CalDAV Kalender-Aktualisierung fehlgeschlagen") from exc
+        return response.headers.get("etag")
 
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
         if not event.resource_id:

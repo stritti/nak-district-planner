@@ -1,4 +1,4 @@
-import type { OIDCToken, OIDCUser } from './useOIDC'
+import type { OIDCToken, OIDCUser } from './oidcTypes'
 import {
   identityFromTokenExchange,
   isValidTokenExchangeResponse,

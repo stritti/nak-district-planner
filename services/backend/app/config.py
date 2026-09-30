@@ -5,7 +5,7 @@ import importlib.metadata
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.domain.services.sync_policy import SyncDeleteMode
+from app.domain.models.calendar_integration import SyncDeleteMode
 
 
 class Settings(BaseSettings):
@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     use_series_generation: bool = True
     conflict_check_enabled: bool = True
     sync_delete_mode: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
+    sync_expected_duration_minutes: int = Field(default=90, ge=1)
     min_travel_minutes: int = Field(default=30, ge=0)
 
     # Version check & self-update

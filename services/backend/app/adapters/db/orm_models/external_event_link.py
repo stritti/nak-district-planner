@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,7 +20,7 @@ class ExternalEventLinkORM(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_instance_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("event_instances.id", ondelete="SET NULL"),
+        ForeignKey("event_instances.id", ondelete="CASCADE"),
         nullable=True,
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -34,3 +34,9 @@ class ExternalEventLinkORM(Base):
     revision_marker: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE")
+    last_synced_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    provider_resource_id: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    deletion_origin: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    deletion_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tombstoned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

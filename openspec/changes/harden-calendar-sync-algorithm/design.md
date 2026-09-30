@@ -47,6 +47,8 @@ If an EventInstance is deleted outside the synchronization deletion workflow, th
 - The stored hash/revision is advanced only after the corresponding inbound change is safely applied or deliberately acknowledged.
 - Self-originated outbound revisions/deletions are recognized and ignored on re-entry.
 
+An internal delete is also a concurrent write. Before pushing a provider deletion, the engine SHALL compare the freshly fetched external content/revision with the last acknowledged ExternalEventLink state. If the provider changed since acknowledgement, the delete SHALL NOT be issued using the newly fetched revision as an implicit approval. The changed fields SHALL first pass the normal authority/conflict rules; an unresolved concurrent change transitions to CONFLICT and preserves the provider resource.
+
 ### 3. Provider deletion normalization
 
 Connectors SHALL normalize provider deletion signals into a deletion-capable representation before requiring ordinary event fields.
@@ -79,12 +81,14 @@ Reconciliation failures are per-event failures and SHALL NOT invalidate successf
 A deviation exists when actual start **or actual end/duration** differs materially from the planned values.
 
 Resolving a deviation SHALL:
-- restore EventInstance actual times to the intended planned values;
+- restore EventInstance actual times to the intended planned values, including the **planned duration/end-time rule**; it MUST NOT derive the target duration from the deviating actual interval;
 - mark the change as an internal outbound change through the state machine;
 - push the corrected times through a connector update operation when the event is externally linked and the integration is writable;
 - store the resulting provider revision/hash and return to CLEAN after acknowledgement.
 
 If outbound correction fails, the instance remains retryable and the API SHALL NOT report the deviation as fully synchronized.
+
+The resolution command SHALL expose whether a state transition was actually applied. A stale/repeated request with no active resolvable deviation must return an explicit idempotent/no-op outcome or an appropriate non-success response; it must not be indistinguishable from a successful resolution.
 
 ### 6. Integration-specific deletion policy
 

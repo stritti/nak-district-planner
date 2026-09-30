@@ -361,6 +361,51 @@ describe('useOIDC token exchange and session', () => {
     expect(error.value).toContain('OIDC discovery failed (503)')
   })
 
+  it('keeps timer, activity, and session invalidation bound to the first composable instance', async () => {
+    let tokenFetches = 0
+    const fetchMock = vi.fn(() => {
+      tokenFetches += 1
+      return Promise.resolve(new Response(
+        JSON.stringify({ access_token: 'fresh-' + tokenFetches, expires_in: 3600, refresh_token: 'rotated-' + tokenFetches }),
+        { status: 200 },
+      ))
+    })
+    global.fetch = fetchMock
+    const first = createOidc()
+    const second = createOidc()
+    first.setToken(
+      { ...unexpiredToken, expiresAt: Math.floor(Date.now() / 1000) + 60 },
+      { sub: 'user-sub' },
+    )
+
+    // The activity refresh armed by `first` must fire into `first`'s
+    // binding, even though `second` was created afterwards.
+    first.initialize()
+    document.dispatchEvent(new Event('mousemove'))
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything()))
+    expect(useAuthStore().token?.accessToken).toBe('fresh-1')
+
+    // Session invalidation triggered through `second` (logout) must still
+    // invalidate the timers armed by the first binding.
+    await second.logout()
+    expect(useAuthStore().token).toBeNull()
+  })
+
+  it('binds module singletons only once across composable instances', async () => {
+    const first = createOidc()
+    const second = createOidc()
+    first.setToken(unexpiredToken, { sub: 'user-sub' })
+    second.setToken(unexpiredToken, { sub: 'user-sub' })
+
+    // Both instances share one auth store; the session generation must
+    // advance for both, and repeated bindings must not create duplicate
+    // timers or listeners.
+    const generationAfterFirst = first.getSessionGeneration()
+    expect(second.getSessionGeneration()).toBe(generationAfterFirst)
+    expect(() => first.initialize()).not.toThrow()
+    expect(() => second.initialize()).not.toThrow()
+  })
+
   it('exposes the token expiry state as computed values', () => {
     const oidc = createOidc()
     expect(oidc.isTokenExpired.value).toBe(true)

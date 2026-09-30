@@ -16,11 +16,6 @@ class SyncFieldAuthority(StrEnum):
     CONDITIONAL = "CONDITIONAL"
 
 
-class SyncDeleteMode(StrEnum):
-    MARK_CANCELLED = "MARK_CANCELLED"
-    HARD_DELETE = "HARD_DELETE"
-
-
 # Loop-prevention sentinel stored in ExternalEventLink.revision_marker after an
 # internal deletion was pushed to the provider. Prevents re-import of the mapping.
 INTERNAL_DELETE_MARKER = "internal:deleted"

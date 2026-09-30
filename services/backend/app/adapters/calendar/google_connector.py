@@ -16,6 +16,7 @@ from urllib.parse import quote
 import httpx
 
 from app.adapters.calendar.deletion import delete_resource
+from app.adapters.calendar.http_policy import resilient_request
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -37,7 +38,9 @@ class GoogleCalendarConnector(CalendarConnector):
         from_dt: datetime | None = None,
         to_dt: datetime | None = None,
     ) -> list[RawCalendarEvent]:
-        access_token: str = credentials["access_token"]
+        access_token = credentials.get("access_token")
+        if not access_token:
+            raise CalendarConnectorError("Google access_token fehlt")
         # Use primary calendar; could be made configurable
         url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 
@@ -53,23 +56,27 @@ class GoogleCalendarConnector(CalendarConnector):
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        response = await self._client.get(url, params=params, headers=headers)
-        content_type = response.headers.get("content-type", "")
-        if "text/html" in content_type:
-            raise CalendarConnectorError(
-                f"URL liefert HTML statt eines Kalenders (Content-Type: {content_type}). "
-                "Bitte die direkte .ics-URL verwenden."
+        items: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while True:
+            page_params = dict(params)
+            if page_token:
+                page_params["pageToken"] = page_token
+            response = await resilient_request(
+                lambda: self._client.get(url, params=page_params, headers=headers),
+                provider="Google",
             )
-
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise CalendarConnectorError(
-                f"HTTP {exc.response.status_code} beim Laden des Google Kalenders: {exc}"
-            ) from exc
-
-        data = response.json()
-        items = data.get("items", [])
+            content_type = response.headers.get("content-type", "")
+            if "text/html" in content_type:
+                raise CalendarConnectorError(
+                    f"URL liefert HTML statt eines Kalenders (Content-Type: {content_type}). "
+                    "Bitte die direkte .ics-URL verwenden."
+                )
+            data = response.json()
+            items.extend(data.get("items", []))
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
 
         events: list[RawCalendarEvent] = []
         for item in items:
@@ -80,6 +87,9 @@ class GoogleCalendarConnector(CalendarConnector):
             summary = item.get("summary", "")
             title = str(summary) if summary else "(kein Titel)"
 
+            # Google may return cancellation tombstones with only id/status.
+            # Normalize cancellation before requiring event timestamps.
+            is_cancelled = item.get("status") == "cancelled"
             start_info = item.get("start", {})
             end_info = item.get("end", {})
 
@@ -88,38 +98,35 @@ class GoogleCalendarConnector(CalendarConnector):
             end_str = end_info.get("dateTime") or end_info.get("date")
 
             if start_str is None or end_str is None:
-                continue
-
-            try:
-                # If it's a date (all-day), treat as starting at midnight of that day
-                if "T" in start_str:
-                    start_at = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
-                else:
-                    start_at = datetime.fromisoformat(start_str).replace(tzinfo=UTC)
-
-                if "T" in end_str:
-                    end_at = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-                else:
-                    # All-day events: end is exclusive (the day after the last full day)
-                    # So if end date is 2026-04-06, the event ends at 2026-04-06 00:00:00 UTC
-                    end_at = datetime.fromisoformat(end_str).replace(tzinfo=UTC)
-            except ValueError:
-                # If parsing fails, skip this event
-                continue
+                if not is_cancelled:
+                    continue
+                start_at = datetime.min.replace(tzinfo=UTC)
+                end_at = start_at
+            else:
+                try:
+                    # Date-only events start/end at midnight UTC.
+                    if "T" in start_str:
+                        start_at = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                    else:
+                        start_at = datetime.fromisoformat(start_str).replace(tzinfo=UTC)
+                    if "T" in end_str:
+                        end_at = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                    else:
+                        end_at = datetime.fromisoformat(end_str).replace(tzinfo=UTC)
+                except ValueError:
+                    continue
 
             description = item.get("description")
             if description is not None:
                 description = str(description).strip()
 
-            # Google Calendar uses status field; cancelled events have status="cancelled"
-            status = item.get("status")
-            is_cancelled = status == "cancelled"
-
-            # Optional client-side time-window filtering
-            if from_dt is not None and end_at < from_dt:
-                continue
-            if to_dt is not None and start_at > to_dt:
-                continue
+            # Cancellation tombstones must survive client-side time filtering;
+            # their timestamps may be absent and are not part of their identity.
+            if not is_cancelled:
+                if from_dt is not None and end_at < from_dt:
+                    continue
+                if to_dt is not None and start_at > to_dt:
+                    continue
 
             events.append(
                 RawCalendarEvent(
@@ -137,8 +144,31 @@ class GoogleCalendarConnector(CalendarConnector):
 
         return events
 
+    async def update_event_times(
+        self, credentials: dict, event: RawCalendarEvent, *, start_at: datetime, end_at: datetime
+    ) -> str | None:
+        access_token = credentials.get("access_token")
+        if not access_token:
+            raise CalendarConnectorError("Google access_token fehlt")
+        headers = {"Authorization": f"Bearer {access_token}"}
+        if event.revision_marker:
+            headers["If-Match"] = event.revision_marker
+        try:
+            response = await self._client.patch(
+                f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{quote(event.uid, safe='')}",
+                headers=headers,
+                json={"start": {"dateTime": start_at.isoformat()}, "end": {"dateTime": end_at.isoformat()}},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CalendarConnectorError("Google Kalender-Aktualisierung fehlgeschlagen") from exc
+        return response.json().get("etag")
+
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
-        headers = {"Authorization": f"Bearer {credentials['access_token']}"}
+        access_token = credentials.get("access_token")
+        if not access_token:
+            raise CalendarConnectorError("Google access_token fehlt")
+        headers = {"Authorization": f"Bearer {access_token}"}
         if event.revision_marker:
             headers["If-Match"] = event.revision_marker
         await delete_resource(

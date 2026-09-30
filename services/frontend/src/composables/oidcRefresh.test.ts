@@ -16,7 +16,7 @@ import {
   type CrossTabRefreshState,
   type RotationReceipt,
 } from './oidcRefresh'
-import type { OIDCToken } from './useOIDC'
+import type { OIDCToken } from './oidcTypes'
 
 const validToken: OIDCToken = {
   accessToken: 'access',

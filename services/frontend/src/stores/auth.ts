@@ -10,7 +10,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { OIDCToken, OIDCUser } from '../composables/useOIDC'
+import type { OIDCToken, OIDCUser } from '../composables/oidcTypes'
 import { getAccessContext, getCurrentUser, type MembershipAccess } from '../api/auth'
 import { getPendingRegistrationsOverview } from '../api/registrations'
 
