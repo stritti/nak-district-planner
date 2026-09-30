@@ -19,16 +19,6 @@ class Settings(BaseSettings):
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
 
-    # SMTP outbound delivery (SMTP is selected only in production)
-    smtp_host: str = ""
-    smtp_port: int = Field(default=587, ge=1, le=65535)
-    smtp_user: str | None = None
-    smtp_password: str | None = None
-    smtp_starttls: bool = True
-    smtp_timeout_seconds: float = Field(default=10.0, gt=0)
-    email_from_address: str = ""
-    email_footer: str = ""
-
     # Backup/Restore (scripts/backup.sh, scripts/restore.sh)
     backup_encrypt_key: str | None = None
 
@@ -151,14 +141,6 @@ def production_guard(settings: Settings) -> None:
         "",
     ):
         errors.append("OIDC_CLIENT_ID must be changed from the default value")
-
-    # Outbound mail must never silently fall back to logging in production.
-    if not settings.smtp_host:
-        errors.append("SMTP_HOST must be configured in production")
-    if not settings.email_from_address:
-        errors.append("EMAIL_FROM_ADDRESS must be configured in production")
-    if bool(settings.smtp_user) != bool(settings.smtp_password):
-        errors.append("SMTP_USER and SMTP_PASSWORD must both be supplied or both absent")
 
     # IDP provisioning secrets — validate only the fields relevant to the selected provider
     if settings.idp_provisioning_enabled:
