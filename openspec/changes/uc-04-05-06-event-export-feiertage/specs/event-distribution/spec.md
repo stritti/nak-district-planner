@@ -28,3 +28,22 @@ Das System SHALL Events NICHT physisch duplizieren. Die Gemeindeansicht kombinie
 #### Scenario: Änderung am Bezirks-Event
 - **WHEN** ein Bezirks-Event mit `applicability` geändert wird
 - **THEN** sehen alle betroffenen Gemeinden sofort den geänderten Stand (kein manuelles Re-Sync nötig)
+
+### Requirement: Pflege der Verteilung über PATCH /api/v1/events/{id}
+Das System SHALL `applicability` über `PATCH /api/v1/events/{id}` (Rolle PLANNER im Bezirk) pflegbar machen und dabei die Verteilungsregeln im Domänenmodell (`PlanningSlot.distribute_to`) durchsetzen.
+
+#### Scenario: Gültige Gemeindeauswahl
+- **WHEN** ein Planer für ein Bezirks-Event Gemeinde-IDs des eigenen Bezirks übermittelt
+- **THEN** speichert das System die IDs kanonisch, ohne Duplikate und in Eingabereihenfolge
+
+#### Scenario: Fremde oder ungültige Gemeinde
+- **WHEN** eine ID keiner Gemeinde des Bezirks entspricht oder keine UUID ist
+- **THEN** antwortet das System mit 400 und lässt die bestehende Verteilung unverändert
+
+#### Scenario: "all" kombiniert mit einzelnen Gemeinden
+- **WHEN** `applicability` sowohl `"all"` als auch einzelne Gemeinde-IDs enthält
+- **THEN** antwortet das System mit 400, da die Auswahl mehrdeutig ist
+
+#### Scenario: Gemeinde-Event wird nicht verteilt
+- **WHEN** ein Event einer Gemeinde zugeordnet ist oder wird
+- **THEN** lehnt das System eine nicht-leere Verteilung ab bzw. entfernt eine bestehende Verteilung

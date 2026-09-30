@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 from enum import Enum, StrEnum
+
+APPLICABILITY_ALL = "all"
+"""Sentinel: a district-level slot applies to every congregation of the district."""
+
+
+class InvalidApplicabilityError(ValueError):
+    """The requested congregation distribution violates the UC-04 rules."""
 
 
 class EventApprovalStatus(StrEnum):
@@ -83,3 +91,45 @@ class PlanningSlot:
             created_at=now,
             updated_at=now,
         )
+
+    def distribute_to(
+        self,
+        entries: Iterable[str],
+        district_congregation_ids: Collection[uuid.UUID],
+    ) -> None:
+        """Set the congregations a district-level slot is distributed to (UC-04).
+
+        Accepts either the ``"all"`` sentinel alone, an empty list (not
+        distributed) or congregation IDs of this slot's district. IDs are stored
+        canonically and de-duplicated in input order.
+        """
+        requested = list(dict.fromkeys(entry.strip() for entry in entries))
+        if requested and self.congregation_id is not None:
+            raise InvalidApplicabilityError(
+                "Nur Bezirksveranstaltungen können an Gemeinden verteilt werden."
+            )
+        if APPLICABILITY_ALL in requested:
+            if len(requested) > 1:
+                raise InvalidApplicabilityError(
+                    "'all' kann nicht mit einzelnen Gemeinden kombiniert werden."
+                )
+            self.applicability = [APPLICABILITY_ALL]
+            return
+        self.applicability = list(
+            dict.fromkeys(
+                str(_congregation_in_district(entry, district_congregation_ids))
+                for entry in requested
+            )
+        )
+
+
+def _congregation_in_district(
+    entry: str, district_congregation_ids: Collection[uuid.UUID]
+) -> uuid.UUID:
+    try:
+        congregation_id = uuid.UUID(entry)
+    except ValueError as exc:
+        raise InvalidApplicabilityError(f"Ungültige Gemeinde-ID: {entry!r}") from exc
+    if congregation_id not in district_congregation_ids:
+        raise InvalidApplicabilityError("Gemeinde gehört nicht zum Bezirk des Ereignisses.")
+    return congregation_id

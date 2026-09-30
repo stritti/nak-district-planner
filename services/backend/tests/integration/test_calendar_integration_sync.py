@@ -15,6 +15,7 @@ from app.adapters.api import deps
 from app.adapters.api.deps import get_calendar_integration_repository, get_db_session
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
+from app.domain.ports.calendar import CalendarConnectorError
 from app.main import app
 
 
@@ -95,70 +96,192 @@ def _integration(district_id: uuid.UUID):
     )
 
 
-def test_trigger_sync_success_persists_last_synced_and_clears_error():
-    district_id = uuid.uuid4()
-    integration = _integration(district_id)
-    repo = AsyncMock()
-    repo.get.return_value = integration
-
-    raw_event = SimpleNamespace(
-        uid="uid-1",
+def _raw_event(uid: str = "uid-1"):
+    return SimpleNamespace(
+        uid=uid,
         start_at=datetime(2026, 1, 1, tzinfo=UTC),
         end_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
         title="Title",
         description="Desc",
+        location=None,
         is_cancelled=False,
-        content_hash="hash-1",
+        content_hash=f"hash-{uid}",
     )
+
+
+def _connector(*, events=(), error: Exception | None = None) -> AsyncMock:
     connector = AsyncMock()
-    connector.fetch_events.return_value = [raw_event]
+    connector.authoritative_snapshot = False
+    if error is not None:
+        connector.fetch_events.side_effect = error
+    else:
+        connector.fetch_events.return_value = list(events)
+    return connector
 
-    with _mock_auth_context(district_id, repo) as (client, headers), patch(
-        "app.application.sync_service.SqlCalendarIntegrationRepository"
-    ) as MockRepoSync, patch(
-        "app.application.sync_service._get_connector"
-    ) as mock_get_connector, patch(
-        "app.application.sync_service.decrypt_credentials", return_value={}
-    ), patch(
-        "app.application.sync_service.SqlExternalEventLinkRepository"
-    ) as MockLinkRepo, patch(
-        "app.application.sync_service.SqlEventInstanceRepository"
-    ) as MockInstRepo, patch(
-        "app.application.sync_service.SqlPlanningSlotRepository"
-    ) as MockSlotRepo:
-        MockRepoSync.return_value = repo
-        mock_get_connector.return_value = connector
-        MockLinkRepo.return_value = AsyncMock(get_by_external_event=AsyncMock(return_value=None), save=AsyncMock())
-        MockInstRepo.return_value = AsyncMock(save=AsyncMock(), get_by_planning_slot=AsyncMock(return_value=None), get=AsyncMock(return_value=None))
-        MockSlotRepo.return_value = AsyncMock(save=AsyncMock(), list_for_date_range=AsyncMock(return_value=[]))
 
-        response = client.post(f"/api/v1/calendar-integrations/{integration.id}/sync", headers=headers)
+@contextmanager
+def _sync_pipeline(repo: AsyncMock, connector: AsyncMock, *, matched: bool = True):
+    """Run the real sync service with a mocked connector and repository adapters."""
+    with (
+        patch("app.application.sync_service.SqlCalendarIntegrationRepository", return_value=repo),
+        patch("app.application.sync_service._get_connector", return_value=connector),
+        patch("app.application.sync_service.decrypt_credentials", return_value={}),
+        patch(
+            "app.application.sync_service.SqlExternalEventLinkRepository",
+            return_value=AsyncMock(get_by_external_event=AsyncMock(return_value=None)),
+        ),
+        patch("app.application.sync_service.SqlEventInstanceRepository"),
+        patch("app.application.sync_service.SqlPlanningSlotRepository"),
+        patch(
+            "app.application.sync_service.import_candidate_or_match",
+            new=AsyncMock(return_value=matched),
+        ) as ingest,
+    ):
+        yield ingest
+
+
+def _sync_url(integration) -> str:
+    return f"/api/v1/calendar-integrations/{integration.id}/sync"
+
+
+def _repo_returning(integration) -> AsyncMock:
+    repo = AsyncMock()
+    repo.get.return_value = integration
+    return repo
+
+
+def test_trigger_sync_returns_sync_result_and_persists_success():
+    district_id = uuid.uuid4()
+    integration = _integration(district_id)
+    integration.last_sync_error = "previous failure"
+    repo = _repo_returning(integration)
+    connector = _connector(events=[_raw_event("a"), _raw_event("b")])
+
+    with (
+        _mock_auth_context(district_id, repo) as (client, headers),
+        _sync_pipeline(repo, connector) as ingest,
+    ):
+        response = client.post(_sync_url(integration), headers=headers)
 
     assert response.status_code == 200
-    assert response.json()["integration_id"] == str(integration.id)
+    assert response.json() == {
+        "integration_id": str(integration.id),
+        "created": 0,
+        "updated": 0,
+        "cancelled": 0,
+        "auto_matched": 2,
+        "skipped": 0,
+        "failed": 0,
+    }
+    assert ingest.await_count == 2
     assert integration.last_sync_error is None
     assert integration.last_synced_at is not None
 
 
-def test_trigger_sync_failure_persists_last_sync_error():
+def test_trigger_sync_counts_unmatched_events_as_skipped():
     district_id = uuid.uuid4()
     integration = _integration(district_id)
-    repo = AsyncMock()
-    repo.get.return_value = integration
-    connector = AsyncMock()
-    connector.fetch_events.side_effect = RuntimeError("boom sync failed")
+    repo = _repo_returning(integration)
 
-    with _mock_auth_context(district_id, repo) as (client, headers), patch(
-        "app.application.sync_service.SqlCalendarIntegrationRepository"
-    ) as MockRepoSync, patch(
-        "app.application.sync_service._get_connector"
-    ) as mock_get_connector, patch(
-        "app.application.sync_service.decrypt_credentials", return_value={}
+    with (
+        _mock_auth_context(district_id, repo) as (client, headers),
+        _sync_pipeline(repo, _connector(events=[_raw_event()]), matched=False),
     ):
-        MockRepoSync.return_value = repo
-        mock_get_connector.return_value = connector
+        response = client.post(_sync_url(integration), headers=headers)
 
-        response = client.post(f"/api/v1/calendar-integrations/{integration.id}/sync", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["skipped"] == 1
+    assert response.json()["auto_matched"] == 0
+
+
+def test_trigger_sync_with_empty_feed_succeeds():
+    district_id = uuid.uuid4()
+    integration = _integration(district_id)
+    repo = _repo_returning(integration)
+
+    with (
+        _mock_auth_context(district_id, repo) as (client, headers),
+        _sync_pipeline(repo, _connector()) as ingest,
+    ):
+        response = client.post(_sync_url(integration), headers=headers)
+
+    assert response.status_code == 200
+    assert ingest.await_count == 0
+    assert integration.last_synced_at is not None
+
+
+def test_trigger_sync_connector_error_returns_400_and_persists_error():
+    district_id = uuid.uuid4()
+    integration = _integration(district_id)
+    repo = _repo_returning(integration)
+    connector = _connector(error=CalendarConnectorError("provider unavailable"))
+
+    with (
+        _mock_auth_context(district_id, repo) as (client, headers),
+        _sync_pipeline(repo, connector),
+    ):
+        response = client.post(_sync_url(integration), headers=headers)
+
+    assert response.status_code == 400
+    assert integration.last_sync_error == "provider unavailable"
+
+
+def test_trigger_sync_unexpected_failure_returns_500_and_persists_error():
+    district_id = uuid.uuid4()
+    integration = _integration(district_id)
+    repo = _repo_returning(integration)
+    connector = _connector(error=RuntimeError("boom sync failed"))
+
+    with (
+        _mock_auth_context(district_id, repo) as (client, headers),
+        _sync_pipeline(repo, connector),
+    ):
+        response = client.post(_sync_url(integration), headers=headers)
 
     assert response.status_code == 500
     assert integration.last_sync_error == "boom sync failed"
+
+
+def test_trigger_sync_unknown_integration_returns_404():
+    district_id = uuid.uuid4()
+    repo = _repo_returning(None)
+
+    with (
+        _mock_auth_context(district_id, repo) as (client, headers),
+        patch("app.adapters.api.routers.calendar_integrations.run_sync") as run_sync,
+    ):
+        response = client.post(f"/api/v1/calendar-integrations/{uuid.uuid4()}/sync", headers=headers)
+
+    assert response.status_code == 404
+    run_sync.assert_not_called()
+
+
+def test_trigger_sync_in_foreign_district_is_forbidden():
+    foreign_integration = _integration(uuid.uuid4())
+    repo = _repo_returning(foreign_integration)
+
+    with (
+        _mock_auth_context(uuid.uuid4(), repo) as (client, headers),
+        patch("app.adapters.api.routers.calendar_integrations.run_sync") as run_sync,
+    ):
+        response = client.post(_sync_url(foreign_integration), headers=headers)
+
+    assert response.status_code == 403
+    run_sync.assert_not_called()
+
+
+def test_trigger_sync_requires_csrf_token():
+    district_id = uuid.uuid4()
+    integration = _integration(district_id)
+    repo = _repo_returning(integration)
+
+    with (
+        _mock_auth_context(district_id, repo) as (client, headers),
+        patch("app.adapters.api.routers.calendar_integrations.run_sync") as run_sync,
+    ):
+        response = client.post(
+            _sync_url(integration), headers={"Authorization": headers["Authorization"]}
+        )
+
+    assert response.status_code == 403
+    run_sync.assert_not_called()

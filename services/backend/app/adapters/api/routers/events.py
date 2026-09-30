@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,6 +31,7 @@ from app.domain.models.event_instance import (
 )
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
+    InvalidApplicabilityError,
     PlanningSlot,
     PlanningSlotStatus,
 )
@@ -94,6 +96,9 @@ class EventUpdate(BaseModel):
     status: PlanningSlotStatus | None = None
     approval_status: EventApprovalStatus | None = None
     category: str | None = Field(None, max_length=255)
+    applicability: list[Annotated[str, Field(min_length=1, max_length=64)]] | None = Field(
+        None, max_length=500
+    )
 
 
 class BulkApprovalStatusRequest(BaseModel):
@@ -263,6 +268,16 @@ async def update_event(
                     detail="Gemeinde gehört nicht zum Bezirk des Ereignisses.",
                 )
             slot.congregation_id = body.congregation_id
+
+    if "applicability" in body.model_fields_set:
+        congregations = await SqlCongregationRepository(session).list_by_district(slot.district_id)
+        try:
+            slot.distribute_to(body.applicability or [], {c.id for c in congregations})
+        except InvalidApplicabilityError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    elif slot.congregation_id is not None:
+        # A congregation-level event is never distributed further (UC-04).
+        slot.applicability = []
 
     if body.status is not None:
         slot.status = body.status

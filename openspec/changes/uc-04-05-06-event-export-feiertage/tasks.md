@@ -46,6 +46,6 @@
 ## 5. Frontend
 
 - [x] 5.1 UI für manuellen Feiertags-Import in Kalender-Integrationsseite vorhanden (POST /districts/{id}/feiertage)
-- [ ] 5.2 `applicability`-Auswahl im Event-Erstellungsformular fehlt (kein Event-Erstellungsformular im Frontend vorhanden)
+- [x] 5.2 `applicability`-Auswahl *(es gibt kein Event-Erstellungsformular; die Verteilung wird im Bearbeiten-Dialog der Terminübersicht über `ApplicabilitySelect.vue` gepflegt, Backend-Validierung in `PlanningSlot.distribute_to`)*
 - [x] 5.3 `ExportTokensView.vue` mit Token-CRUD (erstellen, auflisten, löschen)
 - [x] 5.4 ICS-Download-Link im Frontend anzeigbar

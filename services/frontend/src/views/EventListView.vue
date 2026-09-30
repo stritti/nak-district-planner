@@ -507,6 +507,11 @@
               <option v-for="c in editCongregations" :key="c.id" :value="c.id">{{ c.name }}</option>
             </select>
           </div>
+          <ApplicabilitySelect
+            v-if="!editForm.congregation_id"
+            v-model="editForm.applicability"
+            :congregations="editCongregations"
+          />
           <div>
             <label class="form-label">Status</label>
             <select
@@ -583,6 +588,7 @@ import {
 } from '../api/events'
 import { exportEventsToExcel } from '../composables/useExcelExport'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
+import ApplicabilitySelect from '../components/ApplicabilitySelect.vue'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
@@ -935,7 +941,13 @@ const editSaving       = ref(false)
 const editError        = ref('')
 const editCongregations = ref<CongregationResponse[]>([])
 
-const editForm = reactive({ congregation_id: '', status: 'ACTIVE' as PlanningSlotStatus, approval_status: 'PLANNED' as EventApprovalStatus, category: '' })
+const editForm = reactive({
+  congregation_id: '',
+  status: 'ACTIVE' as PlanningSlotStatus,
+  approval_status: 'PLANNED' as EventApprovalStatus,
+  category: '',
+  applicability: [] as string[],
+})
 
 async function openEdit(event: EventResponse) {
   editTarget.value = event
@@ -944,6 +956,7 @@ async function openEdit(event: EventResponse) {
   editForm.status          = event.status
   editForm.approval_status = event.approval_status ?? 'PLANNED'
   editForm.category        = event.category ?? ''
+  editForm.applicability   = [...event.applicability]
   editCongregations.value  = []
   listCongregations(event.district_id).then(cs => { editCongregations.value = cs }).catch(() => {})
 }
@@ -953,11 +966,14 @@ async function saveEdit() {
   editSaving.value = true
   editError.value  = ''
   try {
+    const isDistrictLevel = !editForm.congregation_id
     const updated = await updateEvent(editTarget.value.id, {
       congregation_id: editForm.congregation_id || null,
       status:          editForm.status,
       approval_status: editForm.approval_status,
       category:        editForm.category || null,
+      // Congregation-level events are never distributed; the backend clears it.
+      ...(isDistrictLevel && { applicability: editForm.applicability }),
     })
     // In-place update je nach aktiver Ansicht
     if (viewMode.value === 'list') {
