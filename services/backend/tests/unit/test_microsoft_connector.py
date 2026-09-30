@@ -28,6 +28,7 @@ def _make_event(
     end: dict[str, str],
     body_preview: str | None = None,
     status: str | None = None,
+    isCancelled: bool | None = None,
 ) -> dict:
     """Build a Microsoft Graph API event dict."""
     event: dict = {
@@ -41,6 +42,8 @@ def _make_event(
         event["bodyPreview"] = body_preview
     if status is not None:
         event["status"] = status
+    if isCancelled is not None:
+        event["isCancelled"] = isCancelled
     return event
 
 
@@ -156,7 +159,7 @@ class TestFetchEvents:
                     subject="Gottesdienst",
                     start={"dateTime": "2026-04-05T10:00:00Z"},
                     end={"dateTime": "2026-04-05T11:00:00Z"},
-                    status="cancelled",
+                    isCancelled=True,
                 )
             ],
         )
@@ -275,6 +278,46 @@ class TestFetchEvents:
         assert len(raw_events) == 1
         assert raw_events[0].uid == "early"
 
+
+    async def test_paginates_using_odata_next_link(
+        self, connector: MicrosoftGraphCalendarConnector, mock_client: MagicMock
+    ) -> None:
+        first = MagicMock()
+        first.raise_for_status.return_value = None
+        first.json.return_value = {
+            "value": [
+                _make_event(
+                    id="page-1",
+                    subject="Page 1",
+                    start={"dateTime": "2026-04-05T10:00:00Z"},
+                    end={"dateTime": "2026-04-05T11:00:00Z"},
+                )
+            ],
+            "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/calendar/calendarView?$skiptoken=abc",
+        }
+        second = MagicMock()
+        second.raise_for_status.return_value = None
+        second.json.return_value = {
+            "value": [
+                _make_event(
+                    id="page-2",
+                    subject="Page 2",
+                    start={"dateTime": "2026-04-05T12:00:00Z"},
+                    end={"dateTime": "2026-04-05T13:00:00Z"},
+                )
+            ]
+        }
+        mock_client.get = AsyncMock(side_effect=[first, second])
+
+        raw_events = await connector.fetch_events(CREDS)
+
+        assert [event.uid for event in raw_events] == ["page-1", "page-2"]
+        assert mock_client.get.await_count == 2
+        assert mock_client.get.await_args_list[1].args[0].startswith(
+            "https://graph.microsoft.com/v1.0/me/calendar/calendarView"
+        )
+        assert mock_client.get.await_args_list[1].kwargs["params"] is None
+
     async def test_http_404_raises_value_error(
         self, connector: MicrosoftGraphCalendarConnector, mock_client: MagicMock
     ) -> None:
@@ -355,3 +398,21 @@ class TestFetchEvents:
 
         raw_events = await connector.fetch_events(CREDS)
         assert len(raw_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_rejects_cross_origin_next_link(
+    connector: MicrosoftGraphCalendarConnector, mock_client: MagicMock
+) -> None:
+    response = MagicMock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = {
+        "value": [],
+        "@odata.nextLink": "https://example.invalid/steal",
+    }
+    mock_client.get = AsyncMock(return_value=response)
+
+    with pytest.raises(CalendarConnectorError, match="nextLink"):
+        await connector.fetch_events(CREDS)
+
+    assert mock_client.get.await_count == 1

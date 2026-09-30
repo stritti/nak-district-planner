@@ -16,13 +16,13 @@
 ## 3. ICalConnector
 
 - [x] 3.1 `ICalConnector` in `adapters/calendar/ical_connector.py` implementieren
-- [ ] 3.2 Dedizierte `CalendarConnectorError`-Exception-Klasse definieren und in ICalConnector nutzen (aktuell werden generische Exceptions verwendet)
+- [x] 3.2 Dedizierte `CalendarConnectorError`-Exception-Klasse definieren und in ICalConnector nutzen *(`domain/ports/calendar.py::CalendarConnectorError`, wird im `ICalConnector` genutzt)*
 - [x] 3.3 Unit-Tests für `ICalConnector` → `tests/unit/test_ical_connector.py` (21 Tests, inkl. valide/ungültige ICS, Zeit-Filterung)
 
 ## 4. Repository & Service
 
 - [x] 4.1 `CalendarIntegrationRepository` (Port + SQLAlchemy-Implementierung) → `SqlCalendarIntegrationRepository`
-- [ ] 4.2 Dedizierter `CalendarIntegrationService` in `application/services/` fehlt — Encryption-Logik liegt aktuell direkt im Router (`adapters/api/routers/calendar_integrations.py`)
+- [x] 4.2 Dedizierter `CalendarIntegrationService` in `application/services/` *(`application/services/calendar_integration_service.py` — Encryption aus dem Router ausgelagert)*
 
 ## 5. API-Endpunkte
 
@@ -30,7 +30,7 @@
       ⚠️ **Abweichung:** GET-Endpoint hat `district_id`-Query-Filter (nicht congregation-spezifisch wie im Design)
 - [x] 5.2 Pydantic-Schemas für Request/Response (Credentials aus Response ausgeblendet)
 - [x] 5.3 Router in `main.py` eingebunden
-- [ ] 5.4 Integrations-Tests für alle Endpunkte
+- [ ] 5.4 Integrations-Tests für alle Endpunkte *(CRUD abgedeckt in `test_calendar_integrations_crud.py`; Sync-Endpoint `POST /{id}/sync` fehlt in den Integrationstests)*
 
 ## 6. Frontend
 
