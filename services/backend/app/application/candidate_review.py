@@ -26,21 +26,29 @@ logger = logging.getLogger(__name__)
 
 
 class CandidateRepository(Protocol):
-    async def save(self, candidate: ExternalEventCandidate) -> None: ...
+    async def save(self, candidate: ExternalEventCandidate) -> None:
+        raise NotImplementedError
 
 
 class PlanningSlotRepository(Protocol):
-    async def get(self, slot_id: UUID) -> PlanningSlot | None: ...
-    async def save(self, slot: PlanningSlot) -> None: ...
+    async def get(self, slot_id: UUID) -> PlanningSlot | None:
+        raise NotImplementedError
+
+    async def save(self, slot: PlanningSlot) -> None:
+        raise NotImplementedError
 
 
 class EventInstanceRepository(Protocol):
-    async def get_by_planning_slot(self, planning_slot_id: UUID) -> EventInstance | None: ...
-    async def save(self, instance: EventInstance) -> None: ...
+    async def get_by_planning_slot(self, planning_slot_id: UUID) -> EventInstance | None:
+        raise NotImplementedError
+
+    async def save(self, instance: EventInstance) -> None:
+        raise NotImplementedError
 
 
 class ExternalEventLinkRepository(Protocol):
-    async def save(self, link: ExternalEventLink) -> None: ...
+    async def save(self, link: ExternalEventLink) -> None:
+        raise NotImplementedError
 
 
 class CandidateReviewService:
