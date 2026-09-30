@@ -50,14 +50,14 @@
           <div class="flex flex-wrap justify-end gap-2 mt-5">
             <button
               class="btn-secondary px-4 py-2"
-              :disabled="store.reviewingId === candidate.id"
+              :disabled="store.reviewingId !== null"
               @click="store.dismiss(candidate.id)"
             >
               Verwerfen
             </button>
             <button
               class="btn-primary px-4 py-2"
-              :disabled="store.reviewingId === candidate.id"
+              :disabled="store.reviewingId !== null"
               @click="store.acceptAndCreate(candidate.id)"
             >
               {{ store.reviewingId === candidate.id ? 'Speichern…' : 'Als neuen Termin übernehmen' }}
