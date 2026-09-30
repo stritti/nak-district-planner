@@ -43,7 +43,7 @@ describe('useExternalCandidatesStore', () => {
 
     expect(candidatesApi.listExternalCandidates).toHaveBeenCalledWith('district-1')
     expect(store.items).toHaveLength(1)
-    expect(store.error).toBeNull()
+    expect(store.loadError).toBeNull()
     expect(store.loading).toBe(false)
   })
 
@@ -55,7 +55,7 @@ describe('useExternalCandidatesStore', () => {
     await store.fetchPending('district-1')
 
     expect(store.items).toHaveLength(1)
-    expect(store.error).toBe('Backend nicht erreichbar')
+    expect(store.loadError).toBe('Backend nicht erreichbar')
     expect(store.loading).toBe(false)
   })
 
@@ -65,7 +65,42 @@ describe('useExternalCandidatesStore', () => {
 
     await store.fetchPending('district-1')
 
-    expect(store.error).toBe('Kandidaten konnten nicht geladen werden')
+    expect(store.loadError).toBe('Kandidaten konnten nicht geladen werden')
+  })
+
+  it('ignores stale responses after switching districts', async () => {
+    let resolveFirst!: (value: candidatesApi.ExternalEventCandidate[]) => void
+    let resolveSecond!: (value: candidatesApi.ExternalEventCandidate[]) => void
+    vi.mocked(candidatesApi.listExternalCandidates)
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve }))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve }))
+    const store = useExternalCandidatesStore()
+
+    const first = store.fetchPending('district-1')
+    const second = store.fetchPending('district-2')
+    resolveSecond([{ ...candidate('new'), district_id: 'district-2' }])
+    await second
+    resolveFirst([candidate('stale')])
+    await first
+
+    expect(store.items.map((item) => item.id)).toEqual(['new'])
+    expect(store.loading).toBe(false)
+  })
+
+  it('ignores stale errors after switching districts', async () => {
+    let rejectFirst!: (reason: unknown) => void
+    vi.mocked(candidatesApi.listExternalCandidates)
+      .mockReturnValueOnce(new Promise((_resolve, reject) => { rejectFirst = reject }))
+      .mockResolvedValueOnce([{ ...candidate('new'), district_id: 'district-2' }])
+    const store = useExternalCandidatesStore()
+
+    const first = store.fetchPending('district-1')
+    await store.fetchPending('district-2')
+    rejectFirst(new Error('alter Bezirk fehlgeschlagen'))
+    await first
+
+    expect(store.items.map((item) => item.id)).toEqual(['new'])
+    expect(store.loadError).toBeNull()
   })
 
   it('accepts a candidate and removes only the reviewed item', async () => {
@@ -98,7 +133,7 @@ describe('useExternalCandidatesStore', () => {
     expect(store.reviewingId).toBeNull()
   })
 
-  it('keeps a candidate and reports a review failure', async () => {
+  it('keeps candidates visible and reports a review failure separately', async () => {
     const item = candidate()
     vi.mocked(candidatesApi.acceptExternalCandidate).mockRejectedValue(new Error('Konflikt'))
     const store = useExternalCandidatesStore()
@@ -108,7 +143,8 @@ describe('useExternalCandidatesStore', () => {
 
     expect(result).toBeNull()
     expect(store.items).toEqual([item])
-    expect(store.error).toBe('Konflikt')
+    expect(store.reviewError).toBe('Konflikt')
+    expect(store.loadError).toBeNull()
     expect(store.reviewingId).toBeNull()
   })
 
@@ -118,6 +154,6 @@ describe('useExternalCandidatesStore', () => {
 
     await store.dismiss('candidate-1')
 
-    expect(store.error).toBe('Prüfung konnte nicht gespeichert werden')
+    expect(store.reviewError).toBe('Prüfung konnte nicht gespeichert werden')
   })
 })
