@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.adapters.db.base import Base
 from app.domain.models.calendar_integration import CalendarType
-from app.domain.services.sync_policy import SyncDeleteMode
+from app.domain.models.calendar_integration import SyncDeleteMode
 
 
 class CalendarIntegrationORM(Base):

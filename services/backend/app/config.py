@@ -5,7 +5,7 @@ import importlib.metadata
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.domain.services.sync_policy import SyncDeleteMode
+from app.domain.models.calendar_integration import SyncDeleteMode
 
 
 class Settings(BaseSettings):

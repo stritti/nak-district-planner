@@ -8,7 +8,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.domain.models.calendar_integration import CalendarCapability, CalendarType
-from app.domain.services.sync_policy import SyncDeleteMode
+from app.domain.models.calendar_integration import SyncDeleteMode
 
 
 class CalendarIntegrationCreate(BaseModel):
