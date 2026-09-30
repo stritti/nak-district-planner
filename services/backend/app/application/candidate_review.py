@@ -77,7 +77,8 @@ class CandidateReviewService:
             start_at=candidate.start_at, end_at=candidate.end_at,
             external_event_id=candidate.external_event_id, provider=candidate.source,
             calendar_integration_id=candidate.calendar_integration_id,
-            content_hash=candidate.content_hash,
+            content_hash=candidate.content_hash, revision_marker=candidate.revision_marker,
+            provider_resource_id=candidate.provider_resource_id,
         )
         mapped = apply_external_event_to_instance(slot=slot, instance=instance, data=data)
         await self.instances.save(mapped)
