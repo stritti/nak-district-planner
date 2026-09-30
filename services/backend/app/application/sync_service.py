@@ -42,6 +42,7 @@ from app.adapters.db.repositories.event_instance import SqlEventInstanceReposito
 from app.adapters.db.repositories.external_event_link import SqlExternalEventLinkRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.crypto import decrypt_credentials
+from app.config import settings
 from app.domain.models.calendar_integration import (
     CalendarCapability,
     CalendarIntegration,
@@ -165,9 +166,9 @@ async def _find_matching_planning_slot(
 def _has_significant_deviation(
     slot: PlanningSlot, event_start: datetime, event_end: datetime
 ) -> bool:
-    """Check start or end deviation against the planned 90-minute interval."""
+    """Check start or end deviation against the planned expected interval."""
     planned_start = datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
-    planned_end = planned_start + timedelta(minutes=90)
+    planned_end = planned_start + timedelta(minutes=settings.sync_expected_duration_minutes)
     return (
         abs((event_start - planned_start).total_seconds()) > 300
         or abs((event_end - planned_end).total_seconds()) > 300

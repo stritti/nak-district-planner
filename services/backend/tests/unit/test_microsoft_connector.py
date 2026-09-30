@@ -28,6 +28,7 @@ def _make_event(
     end: dict[str, str],
     body_preview: str | None = None,
     status: str | None = None,
+    isCancelled: bool | None = None,
 ) -> dict:
     """Build a Microsoft Graph API event dict."""
     event: dict = {
@@ -41,6 +42,8 @@ def _make_event(
         event["bodyPreview"] = body_preview
     if status is not None:
         event["status"] = status
+    if isCancelled is not None:
+        event["isCancelled"] = isCancelled
     return event
 
 
@@ -156,7 +159,7 @@ class TestFetchEvents:
                     subject="Gottesdienst",
                     start={"dateTime": "2026-04-05T10:00:00Z"},
                     end={"dateTime": "2026-04-05T11:00:00Z"},
-                    status="cancelled",
+                    isCancelled=True,
                 )
             ],
         )

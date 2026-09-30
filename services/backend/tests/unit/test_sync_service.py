@@ -55,6 +55,7 @@ def _hash(
     end_at=...,
     title: str = "Gottesdienst",
     description: str | None = "Beschreibung",
+    is_cancelled: bool = False,
 ) -> str:
     """Compute a deterministic SHA-256 hash matching sync_service._compute_content_hash."""
     import hashlib
@@ -63,7 +64,7 @@ def _hash(
         start_at = _START
     if end_at is ...:
         end_at = _END
-    raw_str = f"{uid}|{start_at}|{end_at}|{title}|{description}|False"
+    raw_str = f"{uid}|{start_at}|{end_at}|{title}|{description}|{is_cancelled}"
     return hashlib.sha256(raw_str.encode()).hexdigest()
 
 
@@ -93,14 +94,16 @@ def _raw(
     title: str = "Gottesdienst",
     description: str = "Beschreibung",
     is_cancelled: bool = False,
+    start_at: datetime = _START,
+    end_at: datetime = _END,
 ) -> RawCalendarEvent:
     return RawCalendarEvent(
         uid=uid,
         title=title,
-        start_at=_START,
-        end_at=_END,
+        start_at=start_at,
+        end_at=end_at,
         description=description,
-        content_hash=_hash(uid, title=title, description=description),
+        content_hash=_hash(uid, start_at=start_at, end_at=end_at, title=title, description=description, is_cancelled=is_cancelled),
         is_cancelled=is_cancelled,
     )
 
@@ -208,7 +211,7 @@ class TestRunSync:
 
     @pytest.mark.parametrize("hard_delete", [False, True])
     async def test_cancel_with_unchanged_hash_and_duplicate_delivery(self, mocks, hard_delete):
-        from app.domain.services.sync_policy import SyncDeleteMode
+        from app.domain.models.calendar_integration import SyncDeleteMode
 
         integration = _integration()
         integration.delete_behavior = (
@@ -426,7 +429,7 @@ class TestRunSync:
         instance = _make_event_instance()
         link = _make_link(
             event_instance_id=instance.id,
-            last_synced_hash=_hash(raw.uid),
+            last_synced_hash=_hash(raw.uid, is_cancelled=True),
         )
         mocks["integration_repo"].get.return_value = _integration()
         mocks["connector"].fetch_events.return_value = [raw]
@@ -669,7 +672,8 @@ class TestRunSync:
         integration = _integration()
         slot = _make_slot(congregation_id=_CONG_ID, planning_time=_START.time())
         instance = _make_event_instance(planning_slot_id=slot.id, title="Alter Titel")
-        raw = _raw(title="Gottesdienst")  # matches slot.category="Gottesdienst"
+        # 90-minute event matches the expected planned interval -> no deviation.
+        raw = _raw(title="Gottesdienst", end_at=_START + timedelta(minutes=90))
 
         mocks["integration_repo"].get.return_value = integration
         mocks["connector"].fetch_events.return_value = [raw]
@@ -774,26 +778,39 @@ class TestGetConnector:
 
 
 class TestHasSignificantDeviation:
-    """Test suite for the pure _has_significant_deviation() helper."""
+    """Test suite for the pure _has_significant_deviation() helper.
+
+    The expected interval defaults to 90 minutes (settings.sync_expected_duration_minutes).
+    """
 
     def test_no_deviation_within_five_minutes(self):
         slot = _make_slot(planning_time=_START.time())
+        # Planned end is _START + 90 min = 10:30; _END + 30 min.
         assert _has_significant_deviation(
-            slot, _START + timedelta(minutes=4), _END + timedelta(minutes=4)
+            slot, _START + timedelta(minutes=4), _END + timedelta(minutes=34)
         ) is False
 
     def test_deviation_beyond_five_minutes(self):
         slot = _make_slot(planning_time=_START.time())
         assert _has_significant_deviation(
-            slot, _START + timedelta(minutes=6), _END + timedelta(minutes=6)
+            slot, _START + timedelta(minutes=6), _END + timedelta(minutes=36)
         ) is True
-
 
     def test_end_only_deviation(self):
         slot = _make_slot(planning_time=_START.time())
+        # 36 min past _END = 96 min past _START -> 6 min past the planned end.
         assert _has_significant_deviation(
-            slot, _START, _END + timedelta(minutes=31)
+            slot, _START, _END + timedelta(minutes=36)
         ) is True
+
+    def test_configured_duration_replaces_default(self, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "sync_expected_duration_minutes", 60)
+        slot = _make_slot(planning_time=_START.time())
+        assert _has_significant_deviation(slot, _START, _END) is False
+        monkeypatch.setattr(settings, "sync_expected_duration_minutes", 120)
+        assert _has_significant_deviation(slot, _START, _END) is True
 
 
 async def test_non_overlapping_soft_changes_merge_without_conflict(mocks):
@@ -822,7 +839,13 @@ async def test_non_overlapping_soft_changes_merge_without_conflict(mocks):
 
 async def test_authoritative_snapshot_reconciles_missing_provider_event(mocks):
     slot = _make_slot()
-    instance = _make_event_instance(planning_slot_id=slot.id)
+    # Instance must end after the 62-day sync window to be reconciled.
+    future_start = datetime.now(UTC) + timedelta(days=1)
+    instance = _make_event_instance(
+        planning_slot_id=slot.id,
+        actual_start_at=future_start,
+        actual_end_at=future_start + timedelta(minutes=90),
+    )
     link = _make_link(event_instance_id=instance.id, last_synced_hash="old")
     mocks["integration_repo"].get.return_value = _integration()
     mocks["connector"].authoritative_snapshot = True
