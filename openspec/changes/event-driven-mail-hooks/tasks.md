@@ -46,11 +46,11 @@
 
 ## 7. Frontend
 
-- [ ] 7.1 Add API client methods for event hook CRUD in `app/api/eventHooks.ts`
-- [ ] 7.2 Add Pinia store for event hook configuration state
-- [ ] 7.3 Add event hooks configuration section to district settings view
-- [ ] 7.4 Implement event hook form (event type dropdown, role select, subject/body template inputs)
-- [ ] 7.5 Implement event hook list with enable/disable toggle per hook
+- [x] 7.1 Add API client methods for event hook CRUD in `app/api/eventHooks.ts` *(`src/api/eventHooks.ts`)*
+- [x] 7.2 Add Pinia store for event hook configuration state *(`src/stores/eventHooks.ts`, verwirft Antworten nach Bezirkswechsel)*
+- [x] 7.3 Add event hooks configuration section to district settings view *(`EventHooksPanel` auf `/admin/reminders` neben den monatlichen Erinnerungen)*
+- [x] 7.4 Implement event hook form (event type dropdown, role select, subject/body template inputs) *(Platzhalter-Hinweis je Ereignistyp aus `GET …/event-types`; Ereignistyp beim Bearbeiten unveränderlich)*
+- [x] 7.5 Implement event hook list with enable/disable toggle per hook
 
 ## 8. Tests
 
