@@ -2,9 +2,9 @@
 
 Bus handlers run synchronously inside the emitting request or task, while
 hook lookup and SMTP delivery are async and slow. The bus handler therefore
-only enqueues a Celery task; ``EventMailHookDispatcher`` does the work in the
-worker. The dispatcher has no access to the event bus, so sending mail can
-never emit further events (no feedback loops).
+only enqueues a Celery task (see ``event_mail_hook_tasks``);
+``EventMailHookDispatcher`` does the work in the worker. The dispatcher has no
+access to the event bus, so sending mail can never emit further events.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any
 from uuid import UUID
 
 from app.application.event_template_renderer import render_event_template
-from app.domain.events import DomainEvent, DomainEventBus, EventType, event_bus
+from app.domain.events import DomainEvent, EventType
 from app.domain.models.event_mail_hook import EventMailHook
 from app.domain.ports.event_mail_hooks import EventMailHookRepository, RecipientDirectory
 from app.domain.ports.mail import MailDeliveryError, MailService
@@ -118,23 +118,3 @@ def deserialize_event(data: Mapping[str, Any]) -> DomainEvent:
         payload=dict(data["payload"]),
         occurred_at=datetime.fromisoformat(data["occurred_at"]),
     )
-
-
-# ── Wiring ───────────────────────────────────────────────────────────────────
-
-
-def enqueue_event_mail_dispatch(event: DomainEvent) -> None:
-    """Bus handler: hand the event to the worker without blocking the emitter."""
-    from app.application.event_mail_hook_tasks import dispatch_event_mail_hooks
-
-    try:
-        dispatch_event_mail_hooks.delay(serialize_event(event))
-    except Exception:
-        # An unavailable broker must not fail the business operation.
-        logger.exception("Event mail hook dispatch could not be queued: %s", event.event_type)
-
-
-def register_event_mail_hooks(bus: DomainEventBus = event_bus) -> None:
-    """Subscribe the hook evaluator to every event type (idempotent)."""
-    for event_type in EventType:
-        bus.subscribe(event_type, enqueue_event_mail_dispatch)

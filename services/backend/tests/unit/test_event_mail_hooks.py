@@ -8,12 +8,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application import event_mail_hooks
+from app.application import event_mail_hook_tasks, event_mail_hooks
+from app.application.event_mail_hook_tasks import (
+    dispatch_event_mail_hooks,
+    enqueue_event_mail_dispatch,
+    register_event_mail_hooks,
+)
 from app.application.event_mail_hooks import (
     EventMailHookDispatcher,
     deserialize_event,
-    enqueue_event_mail_dispatch,
-    register_event_mail_hooks,
     serialize_event,
 )
 from app.domain.events import DomainEvent, DomainEventBus, EventType
@@ -166,6 +169,11 @@ class TestSerialisation:
 
 
 class TestWiring:
+    def test_worker_init_registers_handlers_on_global_bus(self) -> None:
+        with patch.object(event_mail_hook_tasks, "register_event_mail_hooks") as register:
+            event_mail_hook_tasks._register_in_worker(sender=None)
+        register.assert_called_once_with()
+
     def test_register_subscribes_all_event_types_once(self) -> None:
         bus = DomainEventBus()
         register_event_mail_hooks(bus)
@@ -176,22 +184,20 @@ class TestWiring:
     def test_enqueue_passes_serialised_event_to_celery(self) -> None:
         event = _event()
         task = MagicMock()
-        with patch("app.application.event_mail_hook_tasks.dispatch_event_mail_hooks", task):
+        with patch.object(event_mail_hook_tasks, "dispatch_event_mail_hooks", task):
             enqueue_event_mail_dispatch(event)
         task.delay.assert_called_once_with(serialize_event(event))
 
     def test_unavailable_broker_is_logged_not_raised(self, caplog) -> None:
         task = MagicMock()
         task.delay.side_effect = ConnectionError("broker down")
-        with patch("app.application.event_mail_hook_tasks.dispatch_event_mail_hooks", task):
+        with patch.object(event_mail_hook_tasks, "dispatch_event_mail_hooks", task):
             enqueue_event_mail_dispatch(_event())
         assert "could not be queued" in caplog.text
 
 
 class TestCeleryTask:
     def test_task_dispatches_deserialised_event_with_sql_adapters(self) -> None:
-        from app.application.event_mail_hook_tasks import dispatch_event_mail_hooks
-
         session = MagicMock()
         factory = MagicMock()
         factory.return_value.__aenter__ = AsyncMock(return_value=session)

@@ -23,6 +23,7 @@ from app.adapters.api.routers import (
     event_hooks,
     events,
     export,
+    external_candidates,
     invitations,
     leader_unavailabilities,
     leaders,
@@ -33,18 +34,17 @@ from app.adapters.api.routers import (
     service_assignments,
     system,
 )
-from app.adapters.api.routers import external_candidates
 from app.adapters.api.routers import (
     health as health_router,
 )
 from app.adapters.api.routers.health import _build_health_response
 from app.adapters.auth.oidc import OIDCAdapter
-from app.application.event_mail_hooks import register_event_mail_hooks
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
+from app.application.event_mail_hook_tasks import register_event_mail_hooks
 from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry

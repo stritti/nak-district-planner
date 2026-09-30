@@ -2,10 +2,8 @@
 
 from celery import Celery
 from celery.schedules import crontab, timedelta
-from celery.signals import worker_init
 
 from app.adapters.db.session import engine
-from app.application.event_mail_hooks import register_event_mail_hooks
 from app.config import settings
 from app.telemetry import setup_telemetry
 
@@ -76,8 +74,3 @@ celery.conf.update(
 
 setup_telemetry(sqlalchemy_engine=engine)
 
-
-@worker_init.connect
-def _register_domain_event_handlers(**_: object) -> None:
-    """Events emitted inside worker tasks (e.g. calendar sync) trigger mail hooks too."""
-    register_event_mail_hooks()
