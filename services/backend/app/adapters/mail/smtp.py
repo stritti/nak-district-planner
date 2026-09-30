@@ -36,11 +36,6 @@ class SmtpMailService(MailService):
             return
         if any("\n" in value or "\r" in value for value in [*recipients, subject]):
             raise MailDeliveryError("Invalid email header")
-        message = EmailMessage()
-        message["From"] = self._from_address
-        # Deliver individually to avoid exposing district members' addresses to each other.
-        message["Subject"] = subject
-        message.set_content(body)
         try:
             with smtplib.SMTP(self._host, self._port, timeout=self._timeout) as smtp:
                 smtp.ehlo()
@@ -49,12 +44,13 @@ class SmtpMailService(MailService):
                     smtp.ehlo()
                 if self._username and self._password:
                     smtp.login(self._username, self._password)
+                # Individual envelope recipients prevent disclosure of membership addresses.
                 for recipient in recipients:
-                    outgoing = EmailMessage()
-                    outgoing["From"] = self._from_address
-                    outgoing["To"] = recipient
-                    outgoing["Subject"] = subject
-                    outgoing.set_content(body)
-                    smtp.send_message(outgoing)
+                    message = EmailMessage()
+                    message["From"] = self._from_address
+                    message["To"] = recipient
+                    message["Subject"] = subject
+                    message.set_content(body)
+                    smtp.send_message(message)
         except (smtplib.SMTPException, OSError, TimeoutError) as exc:
             raise MailDeliveryError("SMTP delivery failed") from exc
