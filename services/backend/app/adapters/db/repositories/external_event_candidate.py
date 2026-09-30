@@ -22,6 +22,7 @@ def _to_domain(row: ExternalEventCandidateORM) -> ExternalEventCandidate:
         status=CandidateStatus(row.status), matched_slot_id=row.matched_slot_id,
         reviewed_at=row.reviewed_at, reviewed_by=row.reviewed_by,
         created_at=row.created_at, updated_at=row.updated_at,
+        revision_marker=row.revision_marker, provider_resource_id=row.provider_resource_id,
     )
 
 
