@@ -31,22 +31,13 @@ EVENT_PLACEHOLDERS: dict[EventType, frozenset[str]] = {
 
 
 def validate_template(event_type: EventType, template: str) -> None:
-    """Accept plain named fields only, never attribute/index access or formatting.
-
-    Templates are configured by admins but event payloads can contain external
-    data. Restricting the format grammar prevents unintended object traversal.
-    """
+    """Accept named fields only, never indexing, attributes, or format modifiers."""
     try:
-        fields = Formatter().parse(template)
-        for _, field_name, format_spec, conversion in fields:
-            if field_name is None:
-                continue
-            if (
-                field_name not in EVENT_PLACEHOLDERS[event_type]
-                or format_spec
-                or conversion
+        for _, name, format_spec, conversion in Formatter().parse(template):
+            if name is not None and (
+                name not in EVENT_PLACEHOLDERS[event_type] or format_spec or conversion
             ):
-                raise ValueError(f"Unsupported event placeholder: {field_name!r}")
+                raise ValueError(f"Unsupported event placeholder: {name!r}")
     except ValueError as exc:
         raise ValueError(f"Invalid {event_type} template: {exc}") from exc
 
