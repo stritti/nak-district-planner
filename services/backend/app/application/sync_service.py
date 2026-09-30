@@ -54,11 +54,11 @@ from app.domain.models.calendar_integration import (
     SyncDeleteMode,
 )
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
+from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate
 from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
+from app.domain.models.notification import Notification, NotificationType
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate
-from app.domain.models.notification import Notification, NotificationType
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 from app.domain.services.external_event_mapping import (
     ExternalEventMappingData,
