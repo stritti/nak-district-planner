@@ -17,6 +17,7 @@ from app.domain.models.planning_slot import (
     PlanningSlotStatus,
 )
 from app.domain.models.role import Role
+from app.domain.ports.calendar import CalendarConnectorError
 
 
 def _auth(*, is_superadmin: bool = False):
@@ -55,6 +56,144 @@ def _instance(slot: PlanningSlot) -> EventInstance:
         source=EventSource.INTERNAL,
         visibility=EventVisibility.PUBLIC,
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_deviation_restores_planned_duration():
+    from app.domain.models.event_instance import SyncState
+    slot = _slot()
+    instance = _instance(slot)
+    instance.actual_start_at += timedelta(hours=2)
+    instance.actual_end_at += timedelta(hours=2)
+    instance.deviation_flag = True
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get.return_value = instance
+    instance_repo.get_by_planning_slot.return_value = instance
+    with (
+        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
+        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
+        patch.object(events, "require_role_in_district") as require_role,
+    ):
+        result = await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+    require_role.assert_called_once_with(_auth(), Role.PLANNER, slot.district_id)
+    assert result.start_at == datetime(2026, 9, 26, 10, tzinfo=UTC)
+    assert result.end_at - result.start_at == timedelta(minutes=90)
+    assert instance.sync_state == SyncState.DIRTY_INTERNAL
+    assert not instance.deviation_flag
+
+
+@pytest.mark.asyncio
+async def test_resolve_deviation_reports_no_active_deviation():
+    slot = _slot()
+    instance = _instance(slot)
+    instance.deviation_flag = False
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get.return_value = instance
+    instance_repo.get_by_planning_slot.return_value = instance
+    with (
+        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
+        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
+        patch.object(events, "require_role_in_district"),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+    assert exc.value.status_code == 409
+    instance_repo.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_deviation_reports_provider_failure_and_remains_retryable():
+    from app.domain.models.event_instance import SyncState
+
+    slot = _slot()
+    instance = _instance(slot)
+    instance.calendar_integration_id = uuid.uuid4()
+    instance.actual_start_at += timedelta(hours=1)
+    instance.actual_end_at += timedelta(hours=1)
+    instance.deviation_flag = True
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get.return_value = instance
+    instance_repo.get_by_planning_slot.return_value = instance
+    with (
+        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
+        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
+        patch.object(events, "require_role_in_district"),
+        patch.object(
+            events,
+            "push_deviation_resolution",
+            AsyncMock(side_effect=CalendarConnectorError("provider")),
+        ),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+
+    assert exc.value.status_code == 502
+    assert instance.deviation_flag is True
+    assert instance.sync_state == SyncState.DIRTY_INTERNAL
+
+
+@pytest.mark.asyncio
+async def test_resolve_deviation_pushes_linked_instance():
+    slot = _slot()
+    instance = _instance(slot)
+    instance.calendar_integration_id = uuid.uuid4()
+    instance.actual_start_at += timedelta(hours=1)
+    instance.actual_end_at += timedelta(hours=1)
+    instance.deviation_flag = True
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get.return_value = instance
+    instance_repo.get_by_planning_slot.return_value = instance
+    push = AsyncMock(return_value=True)
+    with (
+        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
+        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
+        patch.object(events, "require_role_in_district"),
+        patch.object(events, "push_deviation_resolution", push),
+    ):
+        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+
+    push.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing_slot", [True, False])
+async def test_resolve_deviation_missing_entities(missing_slot):
+    slot = _slot()
+    slot_repo, instance_repo = AsyncMock(), AsyncMock()
+    slot_repo.get.return_value = None if missing_slot else slot
+    instance_repo.get_by_planning_slot.return_value = None
+    with (
+        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
+        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
+        patch.object(events, "require_role_in_district"),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_deviation_enforces_district_permission():
+    slot = _slot()
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    with (
+        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
+        patch.object(events, "require_role_in_district", side_effect=HTTPException(403)),
+        patch.object(events, "SqlEventInstanceRepository") as instances,
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+    assert exc.value.status_code == 403
+    instances.assert_not_called()
 
 
 @pytest.mark.asyncio

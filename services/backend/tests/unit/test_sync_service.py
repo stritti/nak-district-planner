@@ -30,9 +30,11 @@ from app.domain.models.event_instance import (
     EventVisibility,
     SyncState,
 )
-from app.domain.models.external_event_link import ExternalEventLink
+from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
+from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.sync_policy import INTERNAL_DELETE_MARKER
 
 # ── constants ──────────────────────────────────────────────────────────────────
 
@@ -53,6 +55,7 @@ def _hash(
     end_at=...,
     title: str = "Gottesdienst",
     description: str | None = "Beschreibung",
+    is_cancelled: bool = False,
 ) -> str:
     """Compute a deterministic SHA-256 hash matching sync_service._compute_content_hash."""
     import hashlib
@@ -61,7 +64,7 @@ def _hash(
         start_at = _START
     if end_at is ...:
         end_at = _END
-    raw_str = f"{uid}|{start_at}|{end_at}|{title}|{description}"
+    raw_str = f"{uid}|{start_at}|{end_at}|{title}|{description}|{is_cancelled}"
     return hashlib.sha256(raw_str.encode()).hexdigest()
 
 
@@ -91,14 +94,16 @@ def _raw(
     title: str = "Gottesdienst",
     description: str = "Beschreibung",
     is_cancelled: bool = False,
+    start_at: datetime = _START,
+    end_at: datetime = _END,
 ) -> RawCalendarEvent:
     return RawCalendarEvent(
         uid=uid,
         title=title,
-        start_at=_START,
-        end_at=_END,
+        start_at=start_at,
+        end_at=end_at,
         description=description,
-        content_hash=_hash(uid, title=title, description=description),
+        content_hash=_hash(uid, start_at=start_at, end_at=end_at, title=title, description=description, is_cancelled=is_cancelled),
         is_cancelled=is_cancelled,
     )
 
@@ -149,6 +154,7 @@ def mocks():
     integration_repo = AsyncMock()
     connector = MagicMock()
     connector.fetch_events = AsyncMock(return_value=[])
+    connector.authoritative_snapshot = False
     compute_hash = MagicMock(return_value="hash-current")
 
     patchers = [
@@ -173,11 +179,12 @@ def mocks():
             "app.application.sync_service.decrypt_credentials",
             MagicMock(return_value={"url": "https://example.com/cal.ics"}),
         ),
-        patch("app.application.sync_service._compute_content_hash", compute_hash),
     ]
 
     for p in patchers:
         p.start()
+
+    slot_repo.get.return_value = None
 
     # Prevent auto-matching by default (no existing planning slots to match)
     slot_repo.list_for_date_range = AsyncMock(return_value=[])
@@ -201,6 +208,152 @@ def mocks():
 
 class TestRunSync:
     """Test suite for run_sync() with mocked repositories and connector."""
+
+    @pytest.mark.parametrize("hard_delete", [False, True])
+    async def test_cancel_with_unchanged_hash_and_duplicate_delivery(self, mocks, hard_delete):
+        from app.domain.models.calendar_integration import SyncDeleteMode
+
+        integration = _integration()
+        integration.delete_behavior = (
+            SyncDeleteMode.HARD_DELETE if hard_delete else SyncDeleteMode.MARK_CANCELLED
+        )
+        slot = _make_slot()
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=_hash("uid@test"))
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw(is_cancelled=True)]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        assert (await run_sync(_INT_ID, mocks["session"])).cancelled == 1
+        assert (await run_sync(_INT_ID, mocks["session"])).cancelled == 0
+        assert (await run_sync(_INT_ID, mocks["session"])).skipped == 1
+        if hard_delete:
+            assert link.event_instance_id is None
+            assert link.state == ExternalEventLinkState.SYNC_TOMBSTONE
+            mocks["slot_repo"].delete.assert_awaited_once_with(slot.id)
+        else:
+            assert slot.status == PlanningSlotStatus.CANCELLED
+
+    async def test_connector_error_isolates_event_and_continues(self, mocks):
+        """One failing external delete must not abort the whole sync run."""
+        integration = _integration()
+        integration.capabilities.append(CalendarCapability.WRITE)
+        slot = _make_slot()
+        slot.status = PlanningSlotStatus.CANCELLED
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        failing_link = _make_link(
+            event_instance_id=instance.id,
+            uid="uid@test",
+            last_synced_hash=_hash("uid@test"),
+        )
+
+        healthy_slot = _make_slot()
+        healthy_instance = _make_event_instance(planning_slot_id=healthy_slot.id)
+        healthy_link = _make_link(event_instance_id=healthy_instance.id, uid="other@test")
+
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw(), _raw(uid="other@test")]
+        mocks["connector"].delete_event = AsyncMock(side_effect=CalendarConnectorError("HTTP 412"))
+
+        async def get_link(provider, external_event_id, calendar_integration_id):
+            if external_event_id == "uid@test":
+                return failing_link
+            return healthy_link
+
+        mocks["link_repo"].get_by_external_event.side_effect = get_link
+
+        async def get_instance(iid):
+            if iid == instance.id:
+                return instance
+            return healthy_instance
+
+        mocks["instance_repo"].get.side_effect = get_instance
+
+        async def get_slot(sid):
+            if sid == slot.id:
+                return slot
+            return healthy_slot
+
+        mocks["slot_repo"].get.side_effect = get_slot
+
+        result = await run_sync(_INT_ID, mocks["session"])
+        assert result.failed == 1
+        assert result.skipped == 0
+        assert result.updated == 1
+        assert failing_link.revision_marker != INTERNAL_DELETE_MARKER
+        assert healthy_link.last_synced_hash not in (None, failing_link.last_synced_hash)
+
+    @pytest.mark.parametrize("cancelled", [False, True])
+    async def test_concurrent_edits_preserve_internal_data(self, mocks, cancelled):
+        instance = _make_event_instance(title="Internal edit")
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(event_instance_id=instance.id, last_synced_hash="acknowledged")
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [_raw(is_cancelled=cancelled)]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        await run_sync(_INT_ID, mocks["session"])
+        assert instance.title == "Internal edit"
+        assert instance.sync_state == SyncState.CONFLICT
+        assert link.last_synced_hash == "acknowledged"
+        mocks["slot_repo"].delete.assert_not_awaited()
+
+    async def test_internal_cancel_is_pushed_once(self, mocks):
+        integration = _integration()
+        integration.capabilities.append(CalendarCapability.WRITE)
+        slot = _make_slot()
+        slot.status = PlanningSlotStatus.CANCELLED
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=_hash("uid@test"))
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw()]
+        mocks["connector"].delete_event = AsyncMock()
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+        await run_sync(_INT_ID, mocks["session"])
+        await run_sync(_INT_ID, mocks["session"])
+        mocks["connector"].delete_event.assert_awaited_once()
+        assert link.revision_marker == "internal:deleted"
+
+    async def test_internal_cancel_with_remote_edit_preserves_provider_event(self, mocks):
+        integration = _integration()
+        integration.capabilities.append(CalendarCapability.WRITE)
+        slot = _make_slot()
+        slot.status = PlanningSlotStatus.CANCELLED
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(event_instance_id=instance.id, last_synced_hash="acknowledged")
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw(title="Remote edit")]
+        mocks["connector"].delete_event = AsyncMock()
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result.skipped == 1
+        assert instance.sync_state == SyncState.CONFLICT
+        assert link.last_synced_hash == "acknowledged"
+        mocks["connector"].delete_event.assert_not_awaited()
+
+    async def test_external_time_change_sets_deviation_without_moving_slot(self, mocks):
+        from datetime import time
+        slot = _make_slot(planning_time=time(7))
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [_raw()]
+        mocks["link_repo"].get_by_external_event.return_value = _make_link(event_instance_id=instance.id)
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+        await run_sync(_INT_ID, mocks["session"])
+        assert instance.deviation_flag
+        assert slot.planning_time == time(7)
 
     async def test_integration_not_found_raises(self, mocks):
         """Integration lookup returns None → ValueError."""
@@ -249,6 +402,49 @@ class TestRunSync:
         assert saved_link.provider == CalendarType.ICS.value
         assert saved_link.external_event_id == raw.uid
 
+    async def test_auto_match_without_instance_reuses_existing_slot(self, mocks):
+        """Matched PlanningSlot without EventInstance creates the instance on that slot."""
+        slot = _make_slot()
+        raw = _raw()
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["slot_repo"].list_for_date_range.return_value = [slot]
+        mocks["instance_repo"].get_by_planning_slot.return_value = None
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result.auto_matched == 1
+        assert result.created == 0
+        mocks["slot_repo"].save.assert_not_called()
+        saved_instance = mocks["instance_repo"].save.call_args.args[0]
+        assert saved_instance.planning_slot_id == slot.id
+        assert saved_instance.calendar_integration_id == _INT_ID
+        saved_link = mocks["link_repo"].save.call_args.args[0]
+        assert saved_link.event_instance_id == saved_instance.id
+
+    async def test_acknowledged_cancel_is_write_free(self, mocks):
+        """Repeated provider cancellation with acknowledged hash performs no writes."""
+        raw = _raw(is_cancelled=True)
+        instance = _make_event_instance()
+        link = _make_link(
+            event_instance_id=instance.id,
+            last_synced_hash=_hash(raw.uid, is_cancelled=True),
+        )
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [raw]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = _make_slot()
+
+        result = await run_sync(_INT_ID, mocks["session"])
+
+        assert result.skipped == 1
+        mocks["instance_repo"].save.assert_not_called()
+        mocks["slot_repo"].save.assert_not_called()
+        mocks["slot_repo"].delete.assert_not_called()
+        mocks["link_repo"].save.assert_not_called()
+
     async def test_new_cancelled_event_skipped(self, mocks):
         """No existing link + raw.is_cancelled → silently skipped."""
         mocks["integration_repo"].get.return_value = _integration()
@@ -257,7 +453,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0)
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0, skipped=1)
         mocks["link_repo"].get_by_external_event.assert_awaited_once()
         mocks["slot_repo"].save.assert_not_called()
         mocks["instance_repo"].save.assert_not_called()
@@ -320,7 +516,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0)
+        assert result == SyncResult(created=0, updated=0, cancelled=0, auto_matched=0, skipped=1)
         mocks["instance_repo"].save.assert_not_called()
         mocks["link_repo"].save.assert_not_called()
         mocks["slot_repo"].save.assert_not_called()
@@ -437,7 +633,7 @@ class TestRunSync:
 
         result = await run_sync(_INT_ID, mocks["session"])
 
-        assert result == SyncResult(created=1, updated=1, cancelled=1, auto_matched=0)
+        assert result == SyncResult(created=1, updated=1, cancelled=1, auto_matched=0, skipped=1)
 
     async def test_congregation_id_propagated(self, mocks):
         """New event inherits congregation_id from the integration."""
@@ -476,7 +672,8 @@ class TestRunSync:
         integration = _integration()
         slot = _make_slot(congregation_id=_CONG_ID, planning_time=_START.time())
         instance = _make_event_instance(planning_slot_id=slot.id, title="Alter Titel")
-        raw = _raw(title="Gottesdienst")  # matches slot.category="Gottesdienst"
+        # 90-minute event matches the expected planned interval -> no deviation.
+        raw = _raw(title="Gottesdienst", end_at=_START + timedelta(minutes=90))
 
         mocks["integration_repo"].get.return_value = integration
         mocks["connector"].fetch_events.return_value = [raw]
@@ -581,12 +778,105 @@ class TestGetConnector:
 
 
 class TestHasSignificantDeviation:
-    """Test suite for the pure _has_significant_deviation() helper."""
+    """Test suite for the pure _has_significant_deviation() helper.
+
+    The expected interval defaults to 90 minutes (settings.sync_expected_duration_minutes).
+    """
 
     def test_no_deviation_within_five_minutes(self):
         slot = _make_slot(planning_time=_START.time())
-        assert _has_significant_deviation(slot, _START + timedelta(minutes=4)) is False
+        # Planned end is _START + 90 min = 10:30; _END + 30 min.
+        assert _has_significant_deviation(
+            slot, _START + timedelta(minutes=4), _END + timedelta(minutes=34)
+        ) is False
 
     def test_deviation_beyond_five_minutes(self):
         slot = _make_slot(planning_time=_START.time())
-        assert _has_significant_deviation(slot, _START + timedelta(minutes=6)) is True
+        assert _has_significant_deviation(
+            slot, _START + timedelta(minutes=6), _END + timedelta(minutes=36)
+        ) is True
+
+    def test_end_only_deviation(self):
+        slot = _make_slot(planning_time=_START.time())
+        # 36 min past _END = 96 min past _START -> 6 min past the planned end.
+        assert _has_significant_deviation(
+            slot, _START, _END + timedelta(minutes=36)
+        ) is True
+
+    def test_configured_duration_replaces_default(self, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "sync_expected_duration_minutes", 60)
+        slot = _make_slot(planning_time=_START.time())
+        assert _has_significant_deviation(slot, _START, _END) is False
+        monkeypatch.setattr(settings, "sync_expected_duration_minutes", 120)
+        assert _has_significant_deviation(slot, _START, _END) is True
+
+
+async def test_non_overlapping_soft_changes_merge_without_conflict(mocks):
+    instance = _make_event_instance(title="Internal title")
+    instance.description = "Beschreibung"
+    instance.sync_state = SyncState.DIRTY_INTERNAL
+    link = _make_link(event_instance_id=instance.id, last_synced_hash="old")
+    link.last_synced_payload = {
+        "title": "Gottesdienst",
+        "description": "Beschreibung",
+        "actual_start_at": _START.isoformat(),
+        "actual_end_at": _END.isoformat(),
+    }
+    mocks["integration_repo"].get.return_value = _integration()
+    mocks["connector"].fetch_events.return_value = [_raw(description="Remote description")]
+    mocks["link_repo"].get_by_external_event.return_value = link
+    mocks["instance_repo"].get.return_value = instance
+
+    result = await run_sync(_INT_ID, mocks["session"])
+
+    assert result.updated == 1
+    assert instance.title == "Internal title"
+    assert instance.description == "Remote description"
+    assert instance.sync_state == SyncState.DIRTY_INTERNAL
+
+
+async def test_authoritative_snapshot_reconciles_missing_provider_event(mocks):
+    slot = _make_slot()
+    # Instance must end after the 62-day sync window to be reconciled.
+    future_start = datetime.now(UTC) + timedelta(days=1)
+    instance = _make_event_instance(
+        planning_slot_id=slot.id,
+        actual_start_at=future_start,
+        actual_end_at=future_start + timedelta(minutes=90),
+    )
+    link = _make_link(event_instance_id=instance.id, last_synced_hash="old")
+    mocks["integration_repo"].get.return_value = _integration()
+    mocks["connector"].authoritative_snapshot = True
+    mocks["connector"].fetch_events.return_value = []
+    mocks["link_repo"].list_active_by_integration.return_value = [link]
+    mocks["instance_repo"].get.return_value = instance
+    mocks["slot_repo"].get.return_value = slot
+
+    result = await run_sync(_INT_ID, mocks["session"])
+
+    assert result.cancelled == 1
+    assert slot.status == PlanningSlotStatus.CANCELLED
+
+
+async def test_partial_connector_failure_is_reported_separately(mocks):
+    integration = _integration()
+    integration.capabilities.append(CalendarCapability.WRITE)
+    slot = _make_slot()
+    slot.status = PlanningSlotStatus.CANCELLED
+    instance = _make_event_instance(planning_slot_id=slot.id)
+    instance.sync_state = SyncState.DIRTY_INTERNAL
+    link = _make_link(event_instance_id=instance.id, last_synced_hash=_hash("uid@test"))
+    mocks["integration_repo"].get.return_value = integration
+    mocks["connector"].fetch_events.return_value = [_raw()]
+    mocks["connector"].delete_event = AsyncMock(side_effect=CalendarConnectorError("provider"))
+    mocks["link_repo"].get_by_external_event.return_value = link
+    mocks["instance_repo"].get.return_value = instance
+    mocks["slot_repo"].get.return_value = slot
+
+    result = await run_sync(_INT_ID, mocks["session"])
+
+    assert result.failed == 1
+    assert result.skipped == 0
+    assert integration.last_sync_error == "1 calendar event(s) failed during partial sync"
