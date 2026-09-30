@@ -1,136 +1,106 @@
 ## Context
 
-The planning workflow in a district follows a monthly cycle: by the 10th, planners should start assigning leaders to service slots; by the 20th, the plan should be finalized and approved. Currently there is no system that proactively reminds participants of these milestones. Administrators must rely on manual communication (e-mail, chat, verbal).
+District planners work on monthly milestones. Administrators need configurable
+monthly reminders without manual email coordination. The existing backend
+provides Celery beat, scoped memberships, PostgreSQL/SQLAlchemy and strict
+row-level security (RLS). This change introduces transport-agnostic mail delivery
+and tenant-specific reminder configuration.
 
-The existing infrastructure includes:
-- Celery beat scheduler (task every 5 min for sync, daily for holiday import, etc.)
-- RBAC roles (PLANNER, ADMIN, etc.) available via the `User` and `Membership` model
-- Per-district configuration pattern already established (e.g., `state_code`, calendar integrations)
+## Goals
 
-There is currently **no mail delivery infrastructure** in the system — no SMTP configuration, no mail templates, no send capability. This must be built from scratch.
+- Configurable monthly reminders per district: day (1-31), local time, subject,
+  plain-text body, exact district membership role and active state.
+- Pluggable synchronous `MailService`: SMTP in production, logging in development,
+  capturing mock in tests.
+- An automatically appended system-wide plain-text footer.
+- District-admin REST CRUD and a reminder administration view.
+- Role membership resolution when a reminder is due, not when created.
+- Monthly idempotency under overlapping scheduler checks.
 
-## Goals / Non-Goals
+## Non-goals
 
-**Goals:**
-- Provide a configurable `DistrictReminderConfig` entity per district (day-of-month, time-of-day, subject, body, recipient role)
-- Build an abstract `MailService` port with SMTP adapter for production and log/mock adapter for development
-- Add a daily Celery beat task that evaluates reminder configurations and dispatches emails
-- Add REST API endpoints for CRUD operations on reminder configurations
-- Add a district admin UI for reminder configuration
-- Support a system-wide email footer that is appended to all messages automatically
+- Event-triggered notification rules, end-user preference controls and weekly,
+  daily or one-off schedules.
+- HTML and multilingual email templates.
+- SMTP delivery confirmation, bounce handling or automatic replay of uncertain
+  delivery attempts. Claim status is retained for explicit operator review.
 
-**Non-Goals:**
-- Event-driven hooks (e.g., "LÜCKE detected → send mail") — will be proposed separately
-- Per-user reminder preferences — all targeting is role-based
-- Multi-language email templates — initial release in German only
-- Email delivery tracking (bounce handling, open tracking) — basic send-and-forget
-- Scheduling beyond monthly intervals (weekly, daily, one-off) — future extension
+## Architectural decisions
 
-## Decisions
+### Transport boundary
 
-### 1. MailService Port — Abstract interface with pluggable adapters
+`app.domain.ports.mail.MailService` owns the synchronous `send()` contract.
+`SmtpMailService`, `LogMailService`, and `MockMailService` are independent
+adapters. `FooterMailService` decorates the selected adapter at the composition
+root; transport adapters never append the footer themselves. Standard-library
+`smtplib` is sufficient for the synchronous Celery worker and avoids adding a
+mail API dependency. SMTP messages are sent separately per recipient to avoid
+revealing members' addresses to other members. Header newlines are rejected.
+Production requires a configured SMTP host and sender address; optional SMTP
+credentials must be supplied together.
 
-```mermaid
-┌─────────────────────────────────────────────────────┐
-│                  MailService (ABC)                    │
-│  + send(to: list[str], subject: str, body: str)      │
-└─────────────────────┬───────────────────────────────┘
-                      │
-          ┌───────────┼───────────┐
-          ▼           ▼           ▼
-   ┌──────────┐ ┌──────────┐ ┌──────────┐
-   │  SMTP    │ │  Log     │ │  Mock    │
-   │ Adapter  │ │  Adapter │ │  Adapter │
-   ├──────────┤ ├──────────┤ ├──────────┤
-   │Real mail │ │Log to    │ │Capture to│
-   │via SMTP  │ │logger    │ │list for  │
-   │server    │ │(dev)     │ │tests     │
-   └──────────┘ └──────────┘ └──────────┘
-```
+### District configuration and recipient scope
 
-**Decision:** Use Python standard library `smtplib` for the SMTP adapter (no external dependency). Use `aiosmtplib` only if async sending becomes necessary (Celery runs synchronously, so sync `smtplib` is sufficient). The Log adapter writes to `logger.info()` for development. The Mock adapter stores sent emails in an in-memory list for test assertions.
+Each district owns zero or more `DistrictReminderConfig` entries. CRUD requires
+`DISTRICT_ADMIN` of that district or the application's existing superadmin
+privilege. All repository reads and updates include the district ID. RLS policies
+reinforce the API-level authorization. A soft-delete sets `is_active=false`.
+Recipients are resolved when due: users whose membership has exactly the
+configured role and `scope_type=DISTRICT`, `scope_id=district_id`; duplicate and
+missing addresses are filtered.
 
-**Alternative considered:** External mail API (SendGrid, Mailjet) — rejected because SMTP is simpler, self-hostable, and avoids another API dependency for an MVP. Can be added later as another adapter.
+Templates use only `{district_name}`, `{month}`, `{year}` and `{day}`. Unknown
+placeholders are retained literally. Rendering does not execute arbitrary
+expressions and starts with plain text only.
 
-### 2. Domain Model — DistrictReminderConfig
+### Monthly scheduling
 
-```text
-DistrictReminderConfig
-──────────────────────
-  id: UUID
-  district_id: UUID (FK → district)
-  day_of_month: int (1-31)
-  time_of_day: time (HH:MM, e.g. 10:00)
-  subject_template: str (with placeholders)
-  body_template: str (with placeholders)
-  recipient_role: str (e.g. "PLANNER")
-  is_active: bool
-  created_at: datetime
-  updated_at: datetime
-```
+Celery beat invokes the single `check_due_reminders` task **hourly** with the
+`Europe/Berlin` timezone. Each reminder is due on its configured local day once
+the configured local `time_of_day` has passed. For a day beyond the length of
+the month, the last local day is used, including February leap years.
 
-**Decision:** Keep the model flat and per-district. Placeholders in templates: `{district_name}`, `{month}`, `{year}`, `{day}`. The system footer is not stored per-reminder but configured globally via settings (environment variable `EMAIL_FOOTER`).
+A previously proposed daily 01:00 evaluation was inconsistent with arbitrary
+per-config `time_of_day` (for example, a 14:00 reminder could never dispatch
+on its scheduled day). Hourly evaluation is intentionally used instead: the
+time is respected with up to 59 minutes of scheduler granularity. An exact-time
+per-reminder scheduler is outside this MVP.
 
-**Alternative considered:** One global config with district overrides — rejected because each district has its own planning rhythm. Simpler to keep per-district from the start.
+### Idempotency and failure semantics
 
-### 3. Recipient Resolution
+`reminder_deliveries` has a unique constraint on `(reminder_id,
+scheduled_month, recipient)`. A worker inserts and **commits** a claim before
+sending mail. The database uniqueness constraint prevents duplicate dispatches
+when hourly checks overlap. A successful send writes `sent_at`. If SMTP reports
+failure, or a worker dies between sending and recording success, the claim
+remains without `sent_at`: it is intentionally **not** retried automatically
+because SMTP might already have accepted the mail. Operators must reconcile an
+uncertain claim before re-dispatch. This is at-most-once dispatch, not
+guaranteed delivery; exactly-once delivery is unavailable via plain SMTP.
+Failures for an individual recipient do not abort dispatch for other recipients.
 
-Recipients are resolved at send-time by querying all users who have a `Membership` in the target district with the matching role (e.g., `PLANNER`). The `User.email` field is used as the recipient address.
+### Security and operations
 
-**Decision:** Resolve at send-time, not config-creation-time, so new users with the correct role are automatically included.
+The migration enables and forces RLS for reminder configurations and the
+monthly delivery ledger. Configurations are available to the district admin,
+superadmin and system worker. The delivery ledger is system-worker only.
+Workers use the existing bounded system-worker tenant context. SMTP errors are
+translated into `MailDeliveryError` without logging credentials. Startup fails
+in production when SMTP essentials are missing rather than silently switching
+to the development logging adapter. `EMAIL_FOOTER` is centrally configured.
 
-### 4. Scheduling — Daily Celery Beat Task
-
-A single daily task `check_due_reminders` runs at 01:00 Europe/Berlin. It queries all active `DistrictReminderConfig` records where `day_of_month == today.day` and `time_of_day <= current_time`. For each match, it resolves recipients and sends the mail.
-
-```mermaid
-01:00 daily ──▶ check_due_reminders()
-                    │
-                    ▼
-              ┌────────────────┐
-              │ Query all       │
-              │ active configs  │
-              │ where           │
-              │ day == today    │
-              └────────┬───────┘
-                       │
-              ┌────────▼────────┐
-              │ For each match: │
-              │ 1. Resolve role │
-              │    → user emails│
-              │ 2. Render       │
-              │    template     │
-              │ 3. MailService  │
-              │    .send()      │
-              └─────────────────┘
-```
-
-**Decision:** One task per day, not one task per reminder config. This keeps the beat schedule simple and allows batch processing. The cut-off at `time_of_day <= current_time` ensures reminders scheduled for e.g. 14:00 are not sent before that time even if the task runs early.
-
-### 5. Email Templates
-
-Templates are stored as plain strings (subject + body) in the `DistrictReminderConfig`. They support simple placeholder substitution (`{district_name}`, `{month}`, `{year}`, `{day}`). No HTML templating engine — plain text initially.
-
-The system footer is appended to every outgoing mail body as a final paragraph:
-```text
-───
-<footer_text>
-```
-
-**Reason:** Keeps implementation simple and avoids introducing a template engine dependency. If HTML emails are needed later, a richer template format can be added.
-
-## Risks / Trade-offs
+## Risks and trade-offs
 
 | Risk | Mitigation |
 |------|------------|
-| **SMTP credentials in env** — credentials stored in environment variable, single point of failure | Follow existing pattern (`SECRET_KEY`, `OIDC_CLIENT_SECRET`). Already standard practice in this project. |
-| **Day-of-month overflow** — reminder configured for 31st but month has only 28/30 days | Clamp to last day of month (e.g., config for 31st in February → send on 28th/29th). |
-| **No email delivery confirmation** — network issues cause silent mail loss | Log send attempts and failures. Future: add delivery tracking to mail adapter. |
-| **Template injection** — admin could inject malicious content via subject/body | Sanitize on output. Placeholder substitution only — no arbitrary rendering. |
-| **Spam from misconfiguration** — high-frequency reminders could annoy users | Reminder is max 1× per day per config. `is_active` flag for quick disable. |
+| Month has fewer days than configured | Clamp to that month's final day. |
+| Multiple workers evaluate concurrently | Unique persisted claim before SMTP side effect. |
+| SMTP accepts mail before a worker crashes | Do not auto-retry uncertain claims; require explicit reconciliation. |
+| Wrong district or role receives mail | Exact district membership and role match; application RBAC plus database RLS. |
+| Configured send time falls between checks | Document hourly granularity. |
+| Template/header injection | Allowlist placeholder renderer; reject header newlines. |
 
-## Open Questions
+## Deferred follow-ups
 
-- Should the system footer be a plain-text setting or point to an HTML template file? → Plain text setting (`EMAIL_FOOTER` env var) for MVP.
-- Should reminder configs be deletable or only deactivatable? → Soft-delete via `is_active=false`; keep history.
-- Should there be a per-district send-test endpoint to verify SMTP config? → Useful but deferred to post-MVP.
+A per-district test-send endpoint, operational dashboard for uncertain sends,
+HTML templating, and exact-minute scheduling can be specified separately.
