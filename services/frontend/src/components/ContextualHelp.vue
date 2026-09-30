@@ -1,5 +1,5 @@
 <template>
-  <section v-if="enabled && entries.length && helpStore.identity" aria-label="Kontextuelle Hilfe" class="mb-5 space-y-2" data-testid="contextual-help">
+  <section v-if="enabled && entries.length && helpStore.identity" role="region" aria-label="Kontextuelle Hilfe" class="mb-5 space-y-2" data-testid="contextual-help">
     <div v-for="entry in visibleEntries" :key="entry.help_id" class="rounded-lg border border-blue-200 bg-blue-50/70 dark:border-blue-900 dark:bg-blue-950/30 px-3 py-2 text-sm">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h2 class="font-medium text-blue-900 dark:text-blue-100">{{ entry.title }}</h2>
