@@ -6,7 +6,6 @@ import MatrixView from '../views/MatrixView.vue'
 import DistrictsAdminView from '../views/DistrictsAdminView.vue'
 import LeadersAdminView from '../views/LeadersAdminView.vue'
 import CalendarIntegrationsView from '../views/CalendarIntegrationsView.vue'
-import ExternalCandidatesView from '../views/ExternalCandidatesView.vue'
 import ExportTokensView from '../views/ExportTokensView.vue'
 import AuthCallbackView from '../views/AuthCallbackView.vue'
 import LoginView from '../views/LoginView.vue'
@@ -99,7 +98,9 @@ export const router = createRouter({
     {
       path: '/admin/external-candidates',
       name: 'admin-external-candidates',
-      component: ExternalCandidatesView,
+      // Keep this view lazy: its API client depends on the router for auth recovery.
+      // A top-level import here would therefore create router -> view -> API -> router.
+      component: () => import('../views/ExternalCandidatesView.vue'),
       beforeEnter: requireAuth,
     },
     {
