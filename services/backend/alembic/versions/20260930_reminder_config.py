@@ -1,4 +1,4 @@
-"""Create district reminders and idempotent per-recipient monthly dispatch ledger.
+"""Create district reminders, delivery ledger, and tenant isolation policies.
 
 Revision ID: 20260930_reminder
 Revises: 0123
@@ -15,6 +15,21 @@ revision = "20260930_reminder"
 down_revision = "0123"
 branch_labels = None
 depends_on = None
+
+# New tenant tables require explicit policies: migrations creating tables after
+# the initial RLS rollout are not automatically covered by that rollout.
+_REMINDER_ADMIN = """(
+    current_setting('app.is_system_worker', true) = 'true'
+    OR EXISTS (SELECT 1 FROM users WHERE sub = current_setting('app.current_user_sub', true) AND is_superadmin)
+    OR EXISTS (
+        SELECT 1 FROM memberships
+        WHERE user_sub = current_setting('app.current_user_sub', true)
+          AND scope_type = 'DISTRICT'
+          AND role = 'DISTRICT_ADMIN'
+          AND scope_id = district_reminder_config.district_id
+    )
+)"""
+_DELIVERY_WORKER = "current_setting('app.is_system_worker', true) = 'true'"
 
 
 def upgrade() -> None:
@@ -43,6 +58,19 @@ def upgrade() -> None:
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True),
         sa.UniqueConstraint("reminder_id", "scheduled_month", "recipient", name="uq_reminder_delivery"),
     )
+    # Policies precede ENABLE ROW LEVEL SECURITY. Workers use an explicit
+    # transaction-local system context and never expose the ledger to clients.
+    op.execute(f"CREATE POLICY reminder_configs_select ON district_reminder_config FOR SELECT USING {_REMINDER_ADMIN}")
+    op.execute(f"CREATE POLICY reminder_configs_insert ON district_reminder_config FOR INSERT WITH CHECK {_REMINDER_ADMIN}")
+    op.execute(f"CREATE POLICY reminder_configs_update ON district_reminder_config FOR UPDATE USING {_REMINDER_ADMIN} WITH CHECK {_REMINDER_ADMIN}")
+    op.execute(f"CREATE POLICY reminder_configs_delete ON district_reminder_config FOR DELETE USING {_REMINDER_ADMIN}")
+    op.execute(f"CREATE POLICY reminder_deliveries_select ON reminder_deliveries FOR SELECT USING ({_DELIVERY_WORKER})")
+    op.execute(f"CREATE POLICY reminder_deliveries_insert ON reminder_deliveries FOR INSERT WITH CHECK ({_DELIVERY_WORKER})")
+    op.execute(f"CREATE POLICY reminder_deliveries_update ON reminder_deliveries FOR UPDATE USING ({_DELIVERY_WORKER}) WITH CHECK ({_DELIVERY_WORKER})")
+    op.execute("ALTER TABLE district_reminder_config ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE reminder_deliveries ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE district_reminder_config FORCE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE reminder_deliveries FORCE ROW LEVEL SECURITY")
 
 
 def downgrade() -> None:
