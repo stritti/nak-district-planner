@@ -38,6 +38,8 @@ class ExternalEventCandidate:
     status: CandidateStatus
     created_at: datetime
     updated_at: datetime
+    revision_marker: str | None = None
+    provider_resource_id: str | None = None
     matched_slot_id: UUID | None = None
     reviewed_at: datetime | None = None
     reviewed_by: str | None = None
@@ -61,6 +63,7 @@ class ExternalEventCandidate:
             start_at=raw.start_at, end_at=raw.end_at, description=raw.description,
             content_hash=content_hash, status=CandidateStatus.PENDING,
             created_at=now, updated_at=now,
+            revision_marker=raw.revision_marker, provider_resource_id=raw.resource_id,
         )
 
     def refresh(self, raw: RawCalendarEvent, content_hash: str, category: str | None) -> None:
@@ -72,6 +75,8 @@ class ExternalEventCandidate:
         self.end_at = raw.end_at
         self.content_hash = content_hash
         self.category = category
+        self.revision_marker = raw.revision_marker
+        self.provider_resource_id = raw.resource_id
         self.updated_at = datetime.now(UTC)
 
     def review(self, status: CandidateStatus, user_sub: str | None, slot_id: UUID | None = None) -> None:
