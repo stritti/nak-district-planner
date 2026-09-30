@@ -1,7 +1,7 @@
 """Process-local domain events.
 
-Subscribers are deliberately synchronous. A separate durable outbox is required
-before these events can provide delivery guarantees across worker processes.
+Subscribers are synchronous and isolated where appropriate. A durable outbox is
+required before providing delivery guarantees across worker processes.
 """
 
 from __future__ import annotations
