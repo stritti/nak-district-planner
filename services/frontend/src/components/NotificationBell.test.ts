@@ -28,6 +28,12 @@ function mountBell() {
   return { wrapper, store: useNotificationStore() }
 }
 
+function actionButton(wrapper: ReturnType<typeof mountBell>['wrapper'], text: string) {
+  const button = wrapper.findAll('button').find((element) => element.text() === text)
+  if (!button) throw new Error(`Button not found: ${text}`)
+  return button
+}
+
 describe('NotificationBell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -81,8 +87,7 @@ describe('NotificationBell', () => {
     const { wrapper } = mountBell()
     await wrapper.get('button[aria-controls="notification-center"]').trigger('click')
     await flushPromises()
-    await wrapper.get('button').trigger('focus')
-    await wrapper.get('button:text("Ansehen")').trigger('click')
+    await actionButton(wrapper, 'Ansehen').trigger('click')
     await flushPromises()
     expect(api.markNotificationRead).toHaveBeenCalledWith('notification-1')
     expect(wrapper.emitted('notification-click')).toHaveLength(1)
@@ -96,7 +101,7 @@ describe('NotificationBell', () => {
     const { wrapper } = mountBell()
     await wrapper.get('button[aria-controls="notification-center"]').trigger('click')
     await flushPromises()
-    await wrapper.get('button:text("Ansehen")').trigger('click')
+    await actionButton(wrapper, 'Ansehen').trigger('click')
     await flushPromises()
     expect(wrapper.emitted('notification-click')).toBeUndefined()
     expect(wrapper.text()).toContain('Aktion fehlgeschlagen')
@@ -109,7 +114,7 @@ describe('NotificationBell', () => {
     const { wrapper, store } = mountBell()
     await wrapper.get('button[aria-controls="notification-center"]').trigger('click')
     await flushPromises()
-    await wrapper.get('button:text("Alle gelesen")').trigger('click')
+    await actionButton(wrapper, 'Alle gelesen').trigger('click')
     await flushPromises()
     expect(api.markAllNotificationsRead).toHaveBeenCalledWith('district-1')
     expect(store.unreadCount).toBe(0)
