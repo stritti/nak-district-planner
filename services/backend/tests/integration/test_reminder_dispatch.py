@@ -1,7 +1,6 @@
-"""Database-backed reminder flow, including live membership resolution and claims.
+"""Database-backed reminder flow with live memberships and monthly deduplication.
 
-Requires TEST_DATABASE_URL to point to a migrated disposable PostgreSQL database.
-The test is skipped when no dedicated integration database is configured.
+TEST_DATABASE_URL must identify a migrated disposable PostgreSQL test database.
 """
 
 from __future__ import annotations
@@ -11,7 +10,7 @@ import uuid
 from datetime import UTC, datetime, time
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import event, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.db.orm_models.district import DistrictORM
@@ -19,8 +18,10 @@ from app.adapters.db.orm_models.district_reminder_config import ReminderDelivery
 from app.adapters.db.orm_models.membership import MembershipORM
 from app.adapters.db.orm_models.user import UserORM
 from app.adapters.db.repositories.district_reminder_config import SqlDistrictReminderConfigRepository
+from app.adapters.db.session import _set_tenant_gucs
 from app.adapters.mail.mock import MockMailService
 from app.application.reminder_service import dispatch_reminders
+from app.application.tasks import _run_as_system_worker
 from app.domain.models.district_reminder_config import DistrictReminderConfig
 from app.domain.models.role import Role
 
@@ -31,6 +32,9 @@ async def test_full_monthly_reminder_flow() -> None:
     if not db_url:
         pytest.skip("TEST_DATABASE_URL is not configured")
     engine = create_async_engine(db_url, pool_pre_ping=True)
+    # Exactly mirror production's per-transaction RLS setup: dispatch commits
+    # a claim before SMTP and must retain worker privileges after that commit.
+    event.listen(engine.sync_engine, "begin", _set_tenant_gucs)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     district_id = uuid.uuid4()
     another_district_id = uuid.uuid4()
@@ -38,17 +42,21 @@ async def test_full_monthly_reminder_flow() -> None:
     outside_user = f"reminder-test-{uuid.uuid4()}"
     now = datetime(2026, 3, 15, 12, tzinfo=UTC)
     config = DistrictReminderConfig.create(
-        district_id=district_id, day_of_month=15, time_of_day=time(10),
-        subject_template="{district_name}: {month}", body_template="Termin: {day}. {year}",
+        district_id=district_id,
+        day_of_month=15,
+        time_of_day=time(10),
+        subject_template="{district_name}: {month}",
+        body_template="Termin: {day}. {year}",
         recipient_role=Role.PLANNER,
     )
-    try:
+
+    async def run_with_worker_context(operation):
+        return await _run_as_system_worker(operation())
+
+    async def seed() -> None:
         async with sessions() as db:
-            await db.execute(text("SELECT set_config('app.is_system_worker', 'true', true)"))
             for id_, name in ((district_id, "Bezirk Mitte"), (another_district_id, "Anderer Bezirk")):
-                db.add(DistrictORM(
-                    id=id_, name=name, created_at=now, updated_at=now,
-                ))
+                db.add(DistrictORM(id=id_, name=name, created_at=now, updated_at=now))
             for sub, email in (
                 (matching_user, "matching@example.org"),
                 (outside_user, "outside@example.org"),
@@ -57,9 +65,7 @@ async def test_full_monthly_reminder_flow() -> None:
                     id=uuid.uuid4(), sub=sub, email=email, username=sub,
                     is_superadmin=False, created_at=now, updated_at=now,
                 ))
-            for sub, scope_id in (
-                (matching_user, district_id), (outside_user, another_district_id),
-            ):
+            for sub, scope_id in ((matching_user, district_id), (outside_user, another_district_id)):
                 db.add(MembershipORM(
                     id=uuid.uuid4(), user_sub=sub, role=Role.PLANNER.value,
                     scope_type="DISTRICT", scope_id=scope_id,
@@ -69,9 +75,9 @@ async def test_full_monthly_reminder_flow() -> None:
             await SqlDistrictReminderConfigRepository(db).save(config)
             await db.commit()
 
+    async def verify() -> None:
         mail = MockMailService()
         async with sessions() as db:
-            await db.execute(text("SELECT set_config('app.is_system_worker', 'true', true)"))
             first = await dispatch_reminders(db, mail, now=now)
             second = await dispatch_reminders(db, mail, now=now)
             assert first["sent"] == 1
@@ -85,13 +91,30 @@ async def test_full_monthly_reminder_flow() -> None:
             ).scalars().all()
             assert len(deliveries) == 1
             assert deliveries[0].sent_at is not None
-    finally:
+
+    async def cleanup() -> None:
         async with sessions() as db:
-            await db.execute(text("SELECT set_config('app.is_system_worker', 'true', true)"))
             await db.execute(text("DELETE FROM reminder_deliveries WHERE reminder_id = :id"), {"id": config.id})
             await db.execute(text("DELETE FROM district_reminder_config WHERE id = :id"), {"id": config.id})
-            await db.execute(text("DELETE FROM memberships WHERE user_sub IN (:first, :second)"), {"first": matching_user, "second": outside_user})
-            await db.execute(text("DELETE FROM users WHERE sub IN (:first, :second)"), {"first": matching_user, "second": outside_user})
-            await db.execute(text("DELETE FROM districts WHERE id IN (:first, :second)"), {"first": district_id, "second": another_district_id})
+            await db.execute(
+                text("DELETE FROM memberships WHERE user_sub IN (:first, :second)"),
+                {"first": matching_user, "second": outside_user},
+            )
+            await db.execute(
+                text("DELETE FROM users WHERE sub IN (:first, :second)"),
+                {"first": matching_user, "second": outside_user},
+            )
+            await db.execute(
+                text("DELETE FROM districts WHERE id IN (:first, :second)"),
+                {"first": district_id, "second": another_district_id},
+            )
             await db.commit()
-        await engine.dispose()
+
+    try:
+        await run_with_worker_context(seed)
+        await run_with_worker_context(verify)
+    finally:
+        try:
+            await run_with_worker_context(cleanup)
+        finally:
+            await engine.dispose()
