@@ -36,6 +36,7 @@ build/
 .coverage
 coverage.xml
 htmlcov/
+coverage/
 .tox/
 
 # Type checking
