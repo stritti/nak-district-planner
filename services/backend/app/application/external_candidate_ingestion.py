@@ -11,6 +11,7 @@ from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.domain.models.event_instance import EventInstance, SyncState
 from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate
@@ -86,8 +87,10 @@ async def ingest_unlinked_event(
             await candidate_repo.save(candidate)
         return False
     if raw.end_at <= raw.start_at:
-        # Never persist invalid candidate intervals or partially map bad input.
         logger.warning("External candidate event skipped because its interval is invalid")
+        return False
+    # Terminal review decisions are durable: later syncs must not bypass dismissal.
+    if candidate is not None and candidate.status != CandidateStatus.PENDING:
         return False
 
     slot = await find_exact_matching_slot(
@@ -96,8 +99,10 @@ async def ingest_unlinked_event(
         event_start=raw.start_at, event_category=integration.default_category,
     )
     if slot is not None:
+        # Other integrations and explicit reviews take the same advisory lock.
+        # Recheck the occupying instance only after acquiring that lock.
+        await acquire_advisory_xact_lock(session, slot.id)
         instance = await instance_repo.get_by_planning_slot(slot.id)
-        # Even the same integration must not claim a different already mapped UID.
         assignable = instance is None or (
             instance.calendar_integration_id is None and instance.sync_state == SyncState.CLEAN
         )
@@ -113,7 +118,7 @@ async def ingest_unlinked_event(
             mapped = apply_external_event_to_instance(slot=slot, instance=instance, data=data)
             await instance_repo.save(mapped)
             await link_repo.save(create_external_event_link(event_instance_id=mapped.id, data=data))
-            if candidate is not None and candidate.status == CandidateStatus.PENDING:
+            if candidate is not None:
                 candidate.review(CandidateStatus.ACCEPTED, None, slot.id)
                 await candidate_repo.save(candidate)
             return True
@@ -134,7 +139,7 @@ async def ingest_unlinked_event(
             )
         )
         logger.info("External candidate created candidate_id=%s", candidate.id)
-    elif candidate.status == CandidateStatus.PENDING:
+    else:
         candidate.refresh(raw, content_hash, integration.default_category)
         await candidate_repo.save(candidate)
     return False
