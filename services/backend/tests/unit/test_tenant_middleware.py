@@ -497,3 +497,92 @@ class TestTenantValidationMiddlewareDispatch:
         client = TestClient(app)
         response = client.patch("/api/v1/protected")
         assert response.status_code == 200
+
+
+# =========================================================================
+# RLS identity: only verified subjects reach the session GUC
+# =========================================================================
+
+
+def _bearer(sub: str) -> dict[str, str]:
+    payload = base64.urlsafe_b64encode(json.dumps({"sub": sub}).encode()).decode().rstrip("=")
+    return {"Authorization": f"Bearer e30.{payload}.forged"}
+
+
+class TestVerifiedSubjectOnly:
+    """The unverified JWT subject must not become the RLS identity of the request."""
+
+    @pytest.fixture
+    def client(self):
+        from app.tenant import TenantContext
+
+        app = FastAPI()
+        app.add_middleware(TenantMiddleware)
+
+        @app.get("/probe")
+        async def probe(request: Request):
+            return {
+                "context_sub": TenantContext.get_user_sub(),
+                "claimed_sub": request.state.tenant_context.get("user_sub"),
+            }
+
+        return TestClient(app)
+
+    def test_forged_bearer_subject_is_not_used_for_rls(self, client):
+        response = client.get("/probe", headers=_bearer("victim-admin"))
+        # The claim is kept for the validation pre-check, never as DB identity.
+        assert response.json() == {"context_sub": None, "claimed_sub": "victim-admin"}
+
+    def test_verified_user_from_state_is_used(self):
+        from app.adapters.api.middleware.tenant import _verified_sub
+
+        request = MagicMock()
+        request.state.user = MagicMock(sub="verified-user")
+        assert _verified_sub(request) == "verified-user"
+        request.state.user = None
+        assert _verified_sub(request) is None
+
+
+class TestValidationPreCheckIdentity:
+    """TenantValidationMiddleware scopes the claimed subject to its own session."""
+
+    @pytest.fixture
+    def app(self):
+        app = FastAPI()
+        app.add_middleware(TenantValidationMiddleware, exempt_methods={"OPTIONS"})
+        app.add_middleware(TenantMiddleware)
+
+        @app.get("/api/v1/districts/{district_id}/matrix")
+        async def matrix(district_id: str):
+            return {"ok": True}
+
+        return app
+
+    @staticmethod
+    def _session_factory(session):
+        factory = MagicMock()
+        factory.return_value.__aenter__ = AsyncMock(return_value=session)
+        factory.return_value.__aexit__ = AsyncMock(return_value=False)
+        return factory
+
+    def test_claimed_subject_is_set_on_the_validation_session_only(self, app):
+        from app.application.tenant_validation import TenantValidationError
+
+        session = MagicMock()
+        session.execute = AsyncMock()
+        district = uuid.uuid4()
+        with (
+            patch("app.adapters.db.session.AsyncSessionLocal", self._session_factory(session)),
+            patch(
+                "app.application.tenant_validation.TenantValidationService.validate_user_in_tenant",
+                AsyncMock(side_effect=TenantValidationError("Kein Zugriff")),
+            ),
+        ):
+            response = TestClient(app).get(
+                f"/api/v1/districts/{district}/matrix", headers=_bearer("claimed-user")
+            )
+
+        assert response.status_code == 403
+        statement, params = session.execute.await_args.args
+        assert "app.current_user_sub" in str(statement)
+        assert params == {"sub": "claimed-user"}

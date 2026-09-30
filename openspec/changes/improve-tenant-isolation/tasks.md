@@ -12,7 +12,7 @@
 #### Tenant Middleware
 - [x] TenantMiddleware implementieren (`app/adapters/api/middleware/tenant.py`)
 - [x] Extraktion aus JWT Token implementieren
-- [ ] Extraktion aus API Key implementieren *(kein API-Key-basierter Tenant-Kontext gefunden — API-Key-Auth trägt aktuell keinen Tenant-Kontext in die Middleware)*
+- [ ] ~Extraktion aus API Key implementieren~ *(entfällt — es gibt keine eingehende API-Key-Authentifizierung; `idp_provisioning_api_key` ist ein ausgehender Webhook-Schlüssel. Befund: `CSRFMiddleware` überspringt die Prüfung bei jedem `X-API-Key`-Header, obwohl kein Endpoint ihn auswertet → separat bewerten)*
 - [x] Kontext für Request-Lifecycle setzen
 - [x] Middleware in FastAPI registrieren (`TenantMiddleware` + `TenantValidationMiddleware` in `main.py`)
 
@@ -47,7 +47,7 @@
 - [x] validate_user_in_district() implementiert *(entspricht validate_district_access())*
 - [x] validate_user_in_congregation() implementiert *(entspricht validate_congregation_access())*
 - [x] Superadmin-Bypass implementiert
-- [ ] Audit-Logging Integration für Tenant-Validation-Fehler *(nicht explizit gefunden — verifizieren, ob Verstöße im Audit-Log landen)*
+- [x] Audit-Logging Integration für Tenant-Validation-Fehler *(jede 403-Antwort, auch bei GET, als `ACCESS_DENIED` mit geprüftem Tenant; vor der Authentifizierung abgelehnte Requests mit `extra_metadata.claimed_sub`. Migration `0023`. Befund und Fix: Der Audit-Writer schrieb wegen falsch gemappter Status-Enums (`failed` statt `FAILED`) überhaupt keine Einträge)*
 
 #### Decorators
 - [x] ~@validate_tenant_district / @validate_tenant_congregation Decorators~ *(anders gelöst: `assert_has_role_in_district()` / `assert_has_role_in_congregation()` als direkte Funktionsaufrufe in den Routern statt Decorators, siehe `app/adapters/auth/permissions.py`)*
@@ -68,35 +68,33 @@
 - [x] Integration Tests für Superadmin-Bypass auf DB-Ebene *(Superadmin und System-Worker)*
 
 #### End-to-End Tests
-- [ ] E2E Tests für Tenant-Isolation *(nicht gefunden)*
-- [ ] E2E Tests für alle CRUD Operationen *(nicht gefunden)*
+- [x] E2E Tests für Tenant-Isolation *(`tests/integration/test_tenant_isolation_api.py`: kompletter HTTP-Stack gegen PostgreSQL mit RLS als `nak_app`, nur der OIDC-Aufruf ist gemockt)*
+- [x] E2E Tests für alle CRUD Operationen *(Leader anlegen/lesen/ändern/löschen im eigenen Bezirk inkl. Audit-Trail; fremder Bezirk 403; fremde Datensätze unter eigenem Pfad und fremde Termine 404, Daten unverändert)*
 
 #### Performance Tests
-- [ ] Performance Tests für RLS Overhead *(nicht gefunden — Benchmark-Zahlen in `docs/security/tenant-isolation.md` scheinen Schätzungen, keine Testresultate)*
-- [ ] Performance Tests für Tenant-Validierung *(nicht gefunden)*
+- [x] Performance Tests für RLS Overhead *(`tests/performance/test_rls_overhead.py`, 5 Bezirke: Slots ohne messbaren Overhead. Befund: `service_assignments` hatte keine Indizes auf den Fremdschlüsseln, die Zuweisungsabfrage der Matrix scannte je nach Statistik alle Bezirke (~240 ms) → Migration `0024`, jetzt ~7 ms. Messwerte statt Schätzungen in `docs/security/tenant-isolation.md`)*
+- [x] Performance Tests für Tenant-Validierung *(`validate_user_in_district` p95 ~3–5 ms)*
 
 ### Phase 5: Rollout (1 Tag)
 
 #### Vorbereitung
 - [ ] ~Feature-Flag für Tenant-Isolation~ *(entfällt — Feature ist bereits fest verdrahtet in Produktion, kein Flag gefunden)*
 - [x] Dokumentation aktualisiert (`docs/security/tenant-isolation.md`)
-- [ ] Rollback-Plan erstellen *(nicht gefunden)*
+- [x] Rollback-Plan erstellen *(Abschnitt „Rollback Plan“ in `docs/security/tenant-isolation.md`)*
 
 #### Deployment
 - [x] Staging/Produktion Rollout durchgeführt *(Feature ist laut CHANGELOG in v0.29.3 bereits live)*
-- [ ] Monitoring für Tenant-Isolation-Fehler einrichten *(kein dediziertes Monitoring/Alerting gefunden)*
-- [ ] Fehlerbehandlung explizit getestet *(DB-Ebene abgedeckt; Befund: `external_event_candidates` und `leader_unavailabilities` hatten kein RLS → Migration `0022`; E2E weiterhin offen)*
+- [x] Monitoring für Tenant-Isolation-Fehler einrichten *(OpenTelemetry-Zähler `nak.access.denied` mit Methode und Route-Template, ohne IDs)*
+- [x] Fehlerbehandlung explizit getestet *(DB-Ebene und E2E; Befunde: fehlendes RLS auf `external_event_candidates`/`leader_unavailabilities` → `0022`; ungeprüfter JWT-`sub` landete als RLS-Identität in der GUC → nur noch verifizierte Identität)*
 
 #### Nachbereitung
-- [ ] Monitoring-Dashboard erstellen
-- [ ] Alerting für Tenant-Isolation Fehler konfigurieren
+- [x] Monitoring-Dashboard erstellen *(Panels und Audit-Abfrage dokumentiert; ein Dashboard-Export hängt vom eingesetzten Backend ab)*
+- [x] Alerting für Tenant-Isolation Fehler konfigurieren *(Beispielregeln `TenantProbing` und `AccessDeniedSpike` in `docs/security/tenant-isolation.md`)*
 - [x] Dokumentation finalisiert (`docs/security/tenant-isolation.md`, 546 Zeilen)
 
 ---
 
-## Verbleibende echte Lücken (Zusammenfassung)
+## Verbleibende Punkte
 
-1. **RLS-Integrationstests fehlen** — aktuelle Tests laufen gegen Mocks, nicht gegen eine PostgreSQL-Instanz mit aktiven Policies. Das ist die größte Lücke, da RLS die letzte Verteidigungslinie ist und ungetestet bleibt.
-2. **API-Key-Requests tragen keinen Tenant-Kontext** in der Middleware.
-3. **Kein Monitoring/Alerting** für Tenant-Isolation-Verstöße.
-4. **Kein Rollback-Plan** dokumentiert, falls RLS-Policies in Produktion Probleme verursachen.
+- Die Alerting-Regeln und Dashboard-Panels sind dokumentiert. Einspielen muss sie der Betrieb im jeweils eingesetzten Monitoring-Backend.
+- `CSRFMiddleware` überspringt die Prüfung bei jedem `X-API-Key`-Header, obwohl kein Endpoint diesen Header auswertet. Die Auswirkung hängt davon ab, ob Cookies zur Authentifizierung dienen; das ist gesondert zu bewerten.

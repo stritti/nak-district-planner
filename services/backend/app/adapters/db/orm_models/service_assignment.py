@@ -20,12 +20,17 @@ class ServiceAssignmentORM(Base):
     __tablename__ = "service_assignments"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    event_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    event_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     planning_slot_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("planning_slots.id", ondelete="CASCADE"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("planning_slots.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     leader_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("leaders.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("leaders.id", ondelete="SET NULL"), nullable=True, index=True
     )
     leader_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[AssignmentStatus] = mapped_column(

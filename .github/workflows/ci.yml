@@ -129,7 +129,11 @@ jobs:
       - name: Tenant isolation — RLS tests against PostgreSQL
         env:
           RLS_TEST_DATABASE_URL: postgresql://nak:changeme@localhost:5432/nak_planner_test
-        run: RLS_TEST_APP_PASSWORD="$APP_DB_PASSWORD" uv run pytest tests/integration/test_rls_postgres.py -v
+        run: >-
+          RLS_TEST_APP_PASSWORD="$APP_DB_PASSWORD" uv run pytest -v
+          tests/integration/test_rls_postgres.py
+          tests/integration/test_tenant_isolation_api.py
+          tests/performance/test_rls_overhead.py
 
       - name: Run unit tests with coverage
         id: unit-tests
