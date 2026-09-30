@@ -29,21 +29,29 @@ logger = logging.getLogger(__name__)
 
 
 class CandidateRepository(Protocol):
-    async def by_external_event(self, integration_id, external_id): ...
-    async def save(self, candidate: ExternalEventCandidate) -> None: ...
+    async def by_external_event(self, integration_id, external_id):
+        raise NotImplementedError
+
+    async def save(self, candidate: ExternalEventCandidate) -> None:
+        raise NotImplementedError
 
 
 class InstanceRepository(Protocol):
-    async def get_by_planning_slot(self, slot_id) -> EventInstance | None: ...
-    async def save(self, instance: EventInstance) -> None: ...
+    async def get_by_planning_slot(self, slot_id) -> EventInstance | None:
+        raise NotImplementedError
+
+    async def save(self, instance: EventInstance) -> None:
+        raise NotImplementedError
 
 
 class LinkRepository(Protocol):
-    async def save(self, link: ExternalEventLink) -> None: ...
+    async def save(self, link: ExternalEventLink) -> None:
+        raise NotImplementedError
 
 
 class NotificationRepository(Protocol):
-    async def save(self, notification: Notification) -> None: ...
+    async def save(self, notification: Notification) -> None:
+        raise NotImplementedError
 
 
 async def find_exact_matching_slot(
