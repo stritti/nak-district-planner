@@ -1,4 +1,4 @@
-"""Candidate review application service."""
+"""Application service for governed external event candidate review."""
 
 from __future__ import annotations
 
@@ -44,6 +44,12 @@ class ExternalEventLinkRepository(Protocol):
 
 
 class CandidateReviewService:
+    """Review a candidate using the same mapping rules as automatic ingestion.
+
+    The API owns the database transaction and locks the candidate row. No
+    review status is changed before validating the target and mapping it.
+    """
+
     def __init__(
         self,
         *,
@@ -66,12 +72,14 @@ class CandidateReviewService:
     ) -> ExternalEventCandidate:
         if candidate.status != CandidateStatus.PENDING:
             raise CandidateAlreadyReviewedError("Kandidat wurde bereits geprüft")
-        if candidate.end_at < candidate.start_at:
+        if candidate.end_at <= candidate.start_at:
             raise CandidateInvalidPeriodError("Ungültiger Zeitraum")
 
+        # Do not create a new slot until the candidate has passed validation.
+        # A pre-existing slot is checked for tenant ownership and active status.
         slot = await self._resolve_slot(candidate, slot_id)
-        instance = await self.instances.get_by_planning_slot(slot.id)
-        if instance and (
+        instance = await self.instances.get_by_planning_slot(slot.id) if slot_id else None
+        if instance is not None and (
             instance.calendar_integration_id is not None
             or instance.sync_state != SyncState.CLEAN
         ):
@@ -89,17 +97,10 @@ class CandidateReviewService:
             calendar_integration_id=candidate.calendar_integration_id,
             content_hash=candidate.content_hash,
         )
-        mapped_instance = apply_external_event_to_instance(
-            slot=slot,
-            instance=instance,
-            data=data,
-        )
+        mapped_instance = apply_external_event_to_instance(slot=slot, instance=instance, data=data)
         await self.instances.save(mapped_instance)
         await self.links.save(
-            create_external_event_link(
-                event_instance_id=mapped_instance.id,
-                data=data,
-            )
+            create_external_event_link(event_instance_id=mapped_instance.id, data=data)
         )
         candidate.review(CandidateStatus.ACCEPTED, user_sub, slot.id)
         await self.candidates.save(candidate)
