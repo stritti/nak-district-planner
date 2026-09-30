@@ -27,6 +27,7 @@ class CalendarIntegrationService:
             sync_interval=body.sync_interval,
             capabilities=body.capabilities,
             default_category=body.default_category,
+            delete_behavior=body.delete_behavior,
         )
         await self._repo.save(integration)
         return integration
@@ -47,6 +48,8 @@ class CalendarIntegrationService:
             integration.capabilities = body.capabilities
         if "default_category" in fields:
             integration.default_category = body.default_category
+        if "delete_behavior" in fields and body.delete_behavior is not None:
+            integration.delete_behavior = body.delete_behavior
 
         integration.updated_at = datetime.now(UTC)
         await self._repo.save(integration)

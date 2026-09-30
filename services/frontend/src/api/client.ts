@@ -2,7 +2,7 @@ import { useAuthStore } from '../stores/auth'
 import { useOIDC } from '../composables/useOIDC'
 import { useCSRF } from '../composables/useCSRF'
 import { router } from '../router'
-import { UnauthorizedError } from './errors'
+import { ApiError, UnauthorizedError } from './errors'
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const authStore = useAuthStore()
@@ -69,7 +69,13 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       throw new Error('CSRF validation failed - page reloaded')
     }
 
-    throw new Error(`${res.status} ${res.statusText}${text ? ': ' + text : ''}`)
+    let body: unknown
+    try {
+      body = text ? JSON.parse(text) : undefined
+    } catch {
+      body = text
+    }
+    throw new ApiError(res.status, res.statusText, body, text)
   }
 
   if (res.status === 204 || res.headers.get('content-length') === '0') {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { apiFetch } from './client'
+import { ApiError } from './errors'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
 import { __resetOIDCModuleState, useOIDC } from '../composables/useOIDC'
@@ -92,6 +93,21 @@ describe('apiFetch', () => {
     )
 
     await expect(apiFetch('/api/v1/fail')).rejects.toThrow('400')
+  })
+
+  it('throws a structured ApiError with parsed body for non-ok responses', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeResponse(JSON.stringify({ detail: 'Konflikt' }), {
+        status: 409,
+        ok: false,
+      }) as unknown as Response,
+    )
+
+    const error = await apiFetch('/api/v1/fail').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).status).toBe(409)
+    expect((error as ApiError).body).toEqual({ detail: 'Konflikt' })
+    expect((error as ApiError).message).toContain('409')
   })
 
   it('returns undefined for 204 No Content', async () => {
