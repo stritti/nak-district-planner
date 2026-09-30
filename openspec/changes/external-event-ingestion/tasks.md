@@ -34,7 +34,7 @@
 
 ## 5. Frontend
 
-- [ ] 5.1 Frontend review UI is intentionally out of scope for this PR and requires a separate OpenSpec change
+- [ ] 5.1 Frontend review UI is intentionally out of scope for this PR and tracked in PR #390
 
 ## 6. Tests
 
@@ -45,4 +45,13 @@
 - [x] 6.5 Regression test: foreign integration occupying an exact slot does not abort later events
 - [x] 6.6 Regression tests for category-less integrations and uncategorized slots
 - [x] 6.7 Tests for explicit review exceptions and terminal-state handling
-- [x] 6.8 Backend coverage remains >= 80%
+- [x] 6.8 Test invalid zero/negative candidate intervals before writes
+- [x] 6.9 Test missing, foreign, cancelled and already linked/dirty target slots
+- [x] 6.10 Test mapping persistence failure does not mark candidate ACCEPTED
+- [ ] 6.11 Revalidate >=80% backend coverage on the rebased integration head
+
+## 7. Integration Prerequisites
+
+- [ ] 7.1 Reconcile with latest PR #375 sync hardening, preserving governed candidate ingestion rather than automatic slot creation
+- [ ] 7.2 Rebase on the current #375 branch and reconcile the competing Alembic `0020` revisions into one linear migration chain
+- [ ] 7.3 Verify focused backend tests, OpenSpec checks, Alembic upgrade/head and CI on the reconciled head
