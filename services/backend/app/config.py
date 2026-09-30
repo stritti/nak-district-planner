@@ -5,6 +5,8 @@ import importlib.metadata
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.domain.models.calendar_integration import SyncDeleteMode
+
 
 class Settings(BaseSettings):
     """Settings."""
@@ -58,6 +60,8 @@ class Settings(BaseSettings):
     startup_generate_draft_services: bool = False
     use_series_generation: bool = True
     conflict_check_enabled: bool = True
+    sync_delete_mode: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
+    sync_expected_duration_minutes: int = Field(default=90, ge=1)
     min_travel_minutes: int = Field(default=30, ge=0)
 
     # Version check & self-update
@@ -178,15 +182,21 @@ def production_guard(settings: Settings) -> None:
                     "IDP_PROVISIONING_KEYCLOAK_BASE_URL must be configured when using keycloak provider"
                 )
             if not settings.idp_provisioning_keycloak_realm:
-                errors.append("IDP_PROVISIONING_KEYCLOAK_REALM must be configured when using keycloak provider")
+                errors.append(
+                    "IDP_PROVISIONING_KEYCLOAK_REALM must be configured when using keycloak provider"
+                )
             if not settings.idp_provisioning_keycloak_admin_username:
-                errors.append("IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME must be configured when using keycloak provider")
+                errors.append(
+                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME must be configured when using keycloak provider"
+                )
             if settings.idp_provisioning_keycloak_admin_password in (
                 None,
                 "",
                 "replace-with-admin-password",
             ):
-                errors.append("IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD must be changed from the default value")
+                errors.append(
+                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD must be changed from the default value"
+                )
 
     if errors:
         raise RuntimeError(
