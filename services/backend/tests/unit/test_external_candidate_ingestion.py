@@ -11,7 +11,7 @@ from app.application.external_candidate_ingestion import (
     ingest_unlinked_event,
 )
 from app.domain.models.calendar_integration import CalendarIntegration, CalendarType
-from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility, SyncState
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.raw_calendar_event import RawCalendarEvent
@@ -89,12 +89,17 @@ async def test_matching_occupied_slot_creates_candidate_and_never_overwrites_map
     )
     adapters["instance_repo"].get_by_planning_slot.return_value = instance
     adapters["candidate_repo"].by_external_event.return_value = None
-    with patch("app.application.external_candidate_ingestion.find_exact_matching_slot", return_value=slot):
+    session = AsyncMock()
+    with (
+        patch("app.application.external_candidate_ingestion.find_exact_matching_slot", return_value=slot),
+        patch("app.application.external_candidate_ingestion.acquire_advisory_xact_lock", new_callable=AsyncMock) as lock,
+    ):
         result = await ingest_unlinked_event(
-            raw=event(), integration=config, session=AsyncMock(),
+            raw=event(), integration=config, session=session,
             content_hash="hash", **adapters,
         )
     assert result is False
+    lock.assert_awaited_once_with(session, slot.id)
     adapters["instance_repo"].save.assert_not_awaited()
     adapters["link_repo"].save.assert_not_awaited()
     adapters["candidate_repo"].save.assert_awaited_once()
@@ -108,12 +113,17 @@ async def test_matching_unlinked_slot_preserves_provider_baseline():
     )
     adapters["candidate_repo"].by_external_event.return_value = None
     adapters["instance_repo"].get_by_planning_slot.return_value = None
-    with patch("app.application.external_candidate_ingestion.find_exact_matching_slot", return_value=slot):
+    session = AsyncMock()
+    with (
+        patch("app.application.external_candidate_ingestion.find_exact_matching_slot", return_value=slot),
+        patch("app.application.external_candidate_ingestion.acquire_advisory_xact_lock", new_callable=AsyncMock) as lock,
+    ):
         result = await ingest_unlinked_event(
-            raw=event(), integration=config, session=AsyncMock(),
+            raw=event(), integration=config, session=session,
             content_hash="hash", **adapters,
         )
     assert result is True
+    lock.assert_awaited_once_with(session, slot.id)
     link = adapters["link_repo"].save.call_args.args[0]
     assert link.revision_marker == "etag"
     assert link.provider_resource_id == "resource-id"
@@ -131,7 +141,10 @@ async def test_pending_candidate_is_accepted_after_later_exact_match():
         district_id=config.district_id, congregation_id=config.congregation_id,
         planning_date=START.date(), planning_time=time(10),
     )
-    with patch("app.application.external_candidate_ingestion.find_exact_matching_slot", return_value=slot):
+    with (
+        patch("app.application.external_candidate_ingestion.find_exact_matching_slot", return_value=slot),
+        patch("app.application.external_candidate_ingestion.acquire_advisory_xact_lock", new_callable=AsyncMock),
+    ):
         result = await ingest_unlinked_event(
             raw=raw, integration=config, session=AsyncMock(),
             content_hash="new", **adapters,
@@ -140,6 +153,24 @@ async def test_pending_candidate_is_accepted_after_later_exact_match():
     assert candidate.status == CandidateStatus.ACCEPTED
     assert candidate.matched_slot_id == slot.id
     adapters["notification_repo"].save.assert_not_awaited()
+
+
+@pytest.mark.parametrize("decision", [CandidateStatus.DISMISSED, CandidateStatus.ACCEPTED])
+async def test_terminal_candidate_never_auto_maps_again(decision):
+    config, adapters = integration(), repos()
+    raw = event()
+    candidate = ExternalEventCandidate.create(integration=config, raw=raw, content_hash="old")
+    candidate.review(decision, "admin")
+    adapters["candidate_repo"].by_external_event.return_value = candidate
+    with patch("app.application.external_candidate_ingestion.find_exact_matching_slot") as matcher:
+        result = await ingest_unlinked_event(
+            raw=raw, integration=config, session=AsyncMock(),
+            content_hash="new", **adapters,
+        )
+    assert result is False
+    matcher.assert_not_called()
+    adapters["instance_repo"].save.assert_not_awaited()
+    adapters["candidate_repo"].save.assert_not_awaited()
 
 
 async def test_cancelled_candidate_becomes_dismissed():
