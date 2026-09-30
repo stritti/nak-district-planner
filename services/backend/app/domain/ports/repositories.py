@@ -1,4 +1,4 @@
-"""Domain repository interfaces."""
+"""app/domain/ports/repositories.py: Module."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from app.domain.models.invitation import (
 from app.domain.models.leader import Leader
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.leader_unavailability import LeaderUnavailability
-from app.domain.models.notification import Notification
+from app.domain.models.notification import Notification, NotificationType
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
@@ -86,18 +86,22 @@ class PlanningSeriesRepository(ABC):
 
     @abstractmethod
     async def list_all(self) -> list[PlanningSeries]:
+        """List all planning series across all districts."""
         pass
 
     @abstractmethod
     async def list_by_district(self, district_id: uuid.UUID) -> list[PlanningSeries]:
+        """List all planning series for a given district."""
         pass
 
     @abstractmethod
     async def list_all_active(self) -> list[PlanningSeries]:
+        """List all active PlanningSeries across all districts."""
         pass
 
     @abstractmethod
     async def list_active(self) -> list[PlanningSeries]:
+        """List all active planning series (is_active=True, within active_from/active_until window)."""
         pass
 
     @abstractmethod
@@ -114,6 +118,7 @@ class PlanningSlotRepository(ABC):
     async def get_by_series_and_date(
         self, series_id: uuid.UUID, planning_date: date
     ) -> PlanningSlot | None:
+        """Get PlanningSlot by series_id and planning_date."""
         pass
 
     @abstractmethod
@@ -124,6 +129,7 @@ class PlanningSlotRepository(ABC):
         planning_date: date,
         congregation_id: uuid.UUID | None,
     ) -> PlanningSlot | None:
+        """Check if a slot already exists for this series on a given date."""
         pass
 
     @abstractmethod
@@ -134,6 +140,7 @@ class PlanningSlotRepository(ABC):
         from_date: date,
         to_date: date,
     ) -> list[PlanningSlot]:
+        """List all PlanningSlots for a district in a date range."""
         pass
 
     @abstractmethod
@@ -142,6 +149,7 @@ class PlanningSlotRepository(ABC):
 
     @abstractmethod
     async def delete(self, slot_id: uuid.UUID) -> None:
+        """Delete a PlanningSlot by its ID."""
         pass
 
 
@@ -152,16 +160,19 @@ class EventInstanceRepository(ABC):
 
     @abstractmethod
     async def list_by_planning_slot(self, planning_slot_id: uuid.UUID) -> list[EventInstance]:
+        """List all EventInstances for a specific PlanningSlot."""
         pass
 
     @abstractmethod
     async def get_by_planning_slot(self, planning_slot_id: uuid.UUID) -> EventInstance | None:
+        """Get the first EventInstance for a PlanningSlot (auto-matching)."""
         pass
 
     @abstractmethod
     async def list_by_planning_slots(
         self, planning_slot_ids: list[uuid.UUID]
     ) -> list[EventInstance]:
+        """List all EventInstances for multiple PlanningSlots."""
         pass
 
     @abstractmethod
@@ -172,16 +183,19 @@ class EventInstanceRepository(ABC):
     async def get_by_external_uid(
         self, external_uid: str, calendar_integration_id: uuid.UUID
     ) -> EventInstance | None:
+        """Get EventInstance by external UID and integration."""
         pass
 
     @abstractmethod
     async def list_by_calendar_integration(
         self, calendar_integration_id: uuid.UUID
     ) -> list[EventInstance]:
+        """List all EventInstances for a CalendarIntegration."""
         pass
 
     @abstractmethod
     async def delete(self, instance_id: uuid.UUID) -> None:
+        """Delete an EventInstance by its ID."""
         pass
 
 
@@ -194,10 +208,12 @@ class ExternalEventLinkRepository(ABC):
     async def get_by_external_event(
         self, provider: str, external_event_id: str, calendar_integration_id: uuid.UUID
     ) -> ExternalEventLink | None:
+        """Find link by provider + external event ID (for dedup), scoped to one integration."""
         pass
 
     @abstractmethod
     async def list_by_event_instance(self, event_instance_id: uuid.UUID) -> list[ExternalEventLink]:
+        """List all links for a given EventInstance."""
         pass
 
     @abstractmethod
@@ -371,6 +387,7 @@ class CalendarIntegrationRepository(ABC):
 
     @abstractmethod
     async def list_active(self) -> list[CalendarIntegration]:
+        """Return all active integrations — used by the Celery beat scheduler."""
         pass
 
     @abstractmethod
@@ -385,22 +402,27 @@ class CalendarIntegrationRepository(ABC):
 class UserRepository(ABC):
     @abstractmethod
     async def get_by_sub(self, sub: str) -> User | None:
+        """Get user by OIDC subject (user ID from IDP)."""
         pass
 
     @abstractmethod
     async def get_by_email(self, email: str) -> User | None:
+        """Get user by email address."""
         pass
 
     @abstractmethod
     async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        """Get user by internal UUID."""
         pass
 
     @abstractmethod
     async def save(self, user: User) -> None:
+        """Create or update user."""
         pass
 
     @abstractmethod
     async def has_any_user(self) -> bool:
+        """Check whether at least one user exists."""
         pass
 
 
@@ -418,7 +440,7 @@ class NotificationRepository(ABC):
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[Notification], int]:
-        """List visible notifications for a district, newest first."""
+        """List notifications for a district, newest first. Returns (items, total)."""
         pass
 
     @abstractmethod
@@ -431,12 +453,12 @@ class NotificationRepository(ABC):
 
     @abstractmethod
     async def mark_dismissed(self, notification_id: uuid.UUID) -> None:
-        """Mark an existing notification dismissed idempotently."""
+        """Idempotently dismiss an existing notification."""
         pass
 
     @abstractmethod
     async def mark_all_read(self, district_id: uuid.UUID, user_sub: str) -> int:
-        """Mark all visible unread notifications as read for a district."""
+        """Mark all unread notifications as read for a district. Returns count."""
         pass
 
 
