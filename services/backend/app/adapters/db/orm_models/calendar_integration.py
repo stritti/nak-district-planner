@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.adapters.db.base import Base
 from app.domain.models.calendar_integration import CalendarType
+from app.domain.models.calendar_integration import SyncDeleteMode
 
 
 class CalendarIntegrationORM(Base):
@@ -40,3 +41,6 @@ class CalendarIntegrationORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     default_category: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    delete_behavior: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=SyncDeleteMode.MARK_CANCELLED.value
+    )

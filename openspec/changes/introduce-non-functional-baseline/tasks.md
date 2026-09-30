@@ -1,17 +1,17 @@
 ## 1. Audit Infrastructure
 
-- [ ] 1.1 Create audit_log table
-- [ ] 1.2 Implement audit logging service
-- [ ] 1.3 Add audit hooks to PlanningSlot operations
-- [ ] 1.4 Add audit hooks to ServiceAssignment operations
-- [ ] 1.5 Add audit hooks to CalendarIntegration operations
-- [ ] 1.6 Add audit hooks to export token operations
+- [x] 1.1 Create audit_log table *(AuditService + Middleware in `app/main.py` registriert)*
+- [x] 1.2 Implement audit logging service *(`app/application/audit_service.py`)*
+- [ ] 1.3 Add audit hooks to PlanningSlot operations *(generische AuditMiddleware deckt HTTP-Requests ab; domänenspezifische Hooks fehlen)*
+- [ ] 1.4 Add audit hooks to ServiceAssignment operations *(siehe 1.3)*
+- [ ] 1.5 Add audit hooks to CalendarIntegration operations *(siehe 1.3 — Middleware deckt bereits die CalendarIntegration-Router ab)*
+- [x] 1.6 Add audit hooks to export token operations *(AuditMiddleware deckt state-changing Requests ab)*
 
 ## 2. Security Baseline
 
-- [ ] 2.1 Implement credential encryption at application layer
-- [ ] 2.2 Ensure export token generation meets entropy requirement
-- [ ] 2.3 Add rate limiting middleware to public endpoints
+- [x] 2.1 Implement credential encryption at application layer *(`app/application/crypto.py`)*
+- [x] 2.2 Ensure export token generation meets entropy requirement *(`secrets.token_urlsafe(32)` in `domain/models/export_token.py`)*
+- [x] 2.3 Add rate limiting middleware to public endpoints *(`RateLimitMiddleware` in `main.py`)*
 
 ## 3. Performance Validation
 
@@ -20,6 +20,6 @@
 
 ## 4. Operational Reliability
 
-- [ ] 4.1 Implement exponential backoff retry for sync jobs
-- [ ] 4.2 Emit structured logs for sync failures
+- [ ] 4.1 Implement exponential backoff retry for sync jobs *(Celery `max_retries=3`, `default_retry_delay=60` — festes Delay, kein exponentieller Backoff)*
+- [ ] 4.2 Emit structured logs for sync failures *(Audit- und Sync-Logs vorhanden; strukturiertes JSON-Logging für Sync-Fehler prüfen)*
 - [ ] 4.3 Add alert hook for repeated sync failures

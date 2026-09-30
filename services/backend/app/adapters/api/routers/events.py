@@ -20,10 +20,13 @@ from app.adapters.db.repositories import (
     SqlEventInstanceRepository,
     SqlPlanningSlotRepository,
 )
+from app.application.deviation_service import DeviationService
+from app.application.sync_service import push_deviation_resolution
 from app.domain.models.event_instance import (
     EventInstance,
     EventSource,
     EventVisibility,
+    SyncState,
 )
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
@@ -31,6 +34,8 @@ from app.domain.models.planning_slot import (
     PlanningSlotStatus,
 )
 from app.domain.models.role import Role
+from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.sync_policy import internal_state
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
@@ -270,7 +275,7 @@ async def update_event(
         if instance is not None:
             instance.title = body.title
 
-    instance_changed = instance is not None and body.title is not None
+    instance_changed = instance is not None and (body.title is not None or body.status is not None)
     if "description" in body.model_fields_set:
         if instance is None:
             raise HTTPException(
@@ -301,12 +306,52 @@ async def update_event(
 
     if instance_changed and instance is not None:
         instance.updated_at = datetime.now(UTC)
+        instance.last_internal_modified_at = instance.updated_at
+        instance.sync_state = internal_state(instance.sync_state)
         await inst_repo.save(instance)
 
     slot.updated_at = datetime.now(UTC)
     await slot_repo.save(slot)
 
     return _slot_to_event(slot, instance)
+
+
+@router.post("/{event_id}/resolve-deviation", response_model=EventResponse)
+async def resolve_event_deviation(
+    event_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    session: DbSession,
+) -> EventResponse:
+    slot_repo = SqlPlanningSlotRepository(session)
+    slot = await slot_repo.get(event_id)
+    if slot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    instance_repo = SqlEventInstanceRepository(session)
+    instance = await instance_repo.get_by_planning_slot(event_id)
+    if instance is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
+    resolved = await DeviationService(slot_repo, instance_repo).resolve_deviation(instance.id)
+    if not resolved:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Keine aktive Abweichung zum Auflösen vorhanden.",
+        )
+    current = await instance_repo.get(instance.id)
+    if current is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
+    try:
+        if current.calendar_integration_id is not None:
+            await push_deviation_resolution(current, session)
+    except CalendarConnectorError as exc:
+        current.deviation_flag = True
+        current.sync_state = SyncState.DIRTY_INTERNAL
+        await instance_repo.save(current)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Abweichung lokal aufgelöst, Provider-Aktualisierung fehlgeschlagen.",
+        ) from exc
+    return _slot_to_event(slot, await instance_repo.get(instance.id))
 
 
 @router.post("/bulk-approval-status", response_model=BulkApprovalStatusResponse)

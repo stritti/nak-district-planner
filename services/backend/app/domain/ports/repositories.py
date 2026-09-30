@@ -217,6 +217,13 @@ class ExternalEventLinkRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_active_by_integration(
+        self, calendar_integration_id: uuid.UUID
+    ) -> list[ExternalEventLink]:
+        """List active provider mappings for reconciliation."""
+        pass
+
+    @abstractmethod
     async def save(self, link: ExternalEventLink) -> None:
         pass
 

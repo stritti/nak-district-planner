@@ -43,6 +43,16 @@
             class="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700"
           >{{ pendingCount }}</span>
         </button>
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-t transition-colors"
+          :class="activeTab === 'unavailabilities'
+            ? 'border-b-2 border-blue-600 text-blue-600'
+            : 'text-gray-500 hover:text-gray-800'"
+          data-testid="unavailability-tab"
+          @click="switchToUnavailabilities()"
+        >
+          Abwesenheiten
+        </button>
       </div>
       <!-- Leaders tab -->
       <template v-if="activeTab === 'leaders'">
@@ -109,6 +119,13 @@
             <div class="mt-2 flex items-center justify-end gap-1">
               <button class="btn-icon" title="Bearbeiten" @click="openEditModal(leader)">
                 <PencilSquareIcon class="h-4 w-4" />
+              </button>
+              <button
+                class="btn-icon hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400"
+                title="Abwesenheiten verwalten"
+                @click="openUnavailabilitiesFor(leader)"
+              >
+                <CalendarDaysIcon class="h-4 w-4" />
               </button>
               <button
                 class="btn-icon hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400"
@@ -187,6 +204,13 @@
                       @click="openEditModal(leader)"
                     >
                       <PencilSquareIcon class="h-4 w-4" />
+                    </button>
+                    <button
+                      class="btn-icon hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400"
+                      title="Abwesenheiten verwalten"
+                      @click="openUnavailabilitiesFor(leader)"
+                    >
+                      <CalendarDaysIcon class="h-4 w-4" />
                     </button>
                     <button
                       class="btn-icon hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400"
@@ -316,6 +340,34 @@
       </div>
     </template>
     <!-- /Registrations tab -->
+
+    <!-- Unavailabilities tab -->
+    <template v-else-if="activeTab === 'unavailabilities'">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2">
+          <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Erfasste Abwesenheiten</h2>
+          <LeaderUnavailabilityList
+            :items="unavailabilitiesStore.items"
+            :leaders="leaders"
+            :loading="unavailabilitiesStore.loading"
+            :preset-leader-id="unavailabilityFilterLeaderId"
+            :can-delete="canManageUnavailabilities"
+            @delete="confirmDeleteUnavailability"
+          />
+        </div>
+        <div v-if="canManageUnavailabilities">
+          <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Neue Abwesenheit</h2>
+          <LeaderUnavailabilityForm
+            ref="unavailabilityFormRef"
+            :leaders="leaders"
+            :preset-leader-id="unavailabilityFilterLeaderId"
+            :saving="unavailabilitySavingDistrictId === selectedDistrictId"
+            @submit="saveUnavailability"
+          />
+        </div>
+      </div>
+    </template>
+    <!-- /Unavailabilities tab -->
 
     <!-- Approve registration modal -->
     <div
@@ -450,6 +502,20 @@
       :loading="saving"
       @confirm="executeDeleteLeader"
       @cancel="pendingDeleteLeader = null"
+    />
+
+    <!-- Delete unavailability confirm dialog -->
+    <ConfirmDialog
+      :open="pendingDeleteUnavailability !== null"
+      variant="danger"
+      title="Abwesenheit löschen?"
+      :message="pendingDeleteUnavailability
+        ? `Die Abwesenheit vom ${formatUnavailabilityPeriod(pendingDeleteUnavailability)} wird gelöscht.`
+        : ''"
+      confirm-text="Löschen"
+      :loading="unavailabilityDeleting"
+      @confirm="executeDeleteUnavailability"
+      @cancel="pendingDeleteUnavailability = null"
     />
 
     <div
@@ -725,8 +791,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
+import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
 import {
   BuildingOffice2Icon,
+  CalendarDaysIcon,
   CheckIcon,
   HomeModernIcon,
   LinkIcon,
@@ -746,6 +815,7 @@ import {
   updateLeader,
   LEADER_RANKS,
   SPECIAL_ROLES,
+  leaderNameFromId,
   type LeaderRank,
   type LeaderResponse,
   type SpecialRole,
@@ -758,11 +828,20 @@ import {
   rejectRegistration,
   type RegistrationResponse,
 } from '../api/registrations'
+import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
+import { useLeaderUnavailabilitiesStore } from '../stores/leaderUnavailabilities'
 import { useToastStore } from '../stores/toast'
+import {
+  formatUnavailabilityPeriod,
+  type LeaderUnavailabilityCreate,
+  type LeaderUnavailabilityResponse,
+} from '../api/leaderUnavailabilities'
 
+const authStore = useAuthStore()
 const districtsStore = useDistrictsStore()
 const toastStore = useToastStore()
+const unavailabilitiesStore = useLeaderUnavailabilitiesStore()
 const congregations = ref<CongregationResponse[]>([])
 const leaders = ref<LeaderResponse[]>([])
 const selectedDistrictId = computed({
@@ -779,7 +858,7 @@ const selfLinkError = ref('')
 
 // ── Tab state ──────────────────────────────────────────────────────────────────
 
-const activeTab = ref<'leaders' | 'registrations'>('leaders')
+const activeTab = ref<'leaders' | 'registrations' | 'unavailabilities'>('leaders')
 
 // ── Registrations ─────────────────────────────────────────────────────────────
 
@@ -803,6 +882,82 @@ async function loadRegistrations() {
 async function switchToRegistrations() {
   activeTab.value = 'registrations'
   await loadRegistrations()
+}
+
+// ── Unavailabilities ─────────────────────────────────────────────
+
+const unavailabilityFilterLeaderId = ref('')
+const unavailabilitySavingDistrictId = ref('')
+let districtLoadGeneration = 0
+const unavailabilityDeleting = ref(false)
+const unavailabilityFormRef = ref<InstanceType<typeof LeaderUnavailabilityForm> | null>(null)
+const pendingDeleteUnavailability = ref<LeaderUnavailabilityResponse | null>(null)
+
+const canManageUnavailabilities = computed(() => {
+  if (authStore.isSuperadmin) return true
+  return authStore.memberships.some(
+    (membership) =>
+      membership.scope_type === 'DISTRICT' &&
+      membership.scope_id === selectedDistrictId.value &&
+      ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(membership.role),
+  )
+})
+
+async function switchToUnavailabilities(leaderId?: string) {
+  activeTab.value = 'unavailabilities'
+  unavailabilityFilterLeaderId.value = leaderId ?? ''
+  try {
+    await unavailabilitiesStore.fetchUnavailabilities(selectedDistrictId.value)
+  } catch (e) {
+    toastStore.error('Abwesenheiten konnten nicht geladen werden', e instanceof Error ? e.message : undefined)
+  }
+}
+
+function openUnavailabilitiesFor(leader: LeaderResponse) {
+  switchToUnavailabilities(leader.id)
+}
+
+async function saveUnavailability(body: LeaderUnavailabilityCreate) {
+  const districtId = selectedDistrictId.value
+  if (!districtId || !canManageUnavailabilities.value) return
+  const leaderSnapshot = [...leaders.value]
+  unavailabilitySavingDistrictId.value = districtId
+  try {
+    const created = await unavailabilitiesStore.addUnavailability(body)
+    if (selectedDistrictId.value === districtId) {
+      unavailabilityFormRef.value?.reset()
+      toastStore.success(
+        'Abwesenheit erfasst',
+        `${leaderNameFromId(created.leader_id, leaderSnapshot)}: ${formatUnavailabilityPeriod(created)}`,
+      )
+    }
+  } catch (e) {
+    toastStore.error(
+      'Abwesenheit konnte nicht erfasst werden',
+      e instanceof Error ? e.message : undefined,
+    )
+  } finally {
+    if (unavailabilitySavingDistrictId.value === districtId) unavailabilitySavingDistrictId.value = ''
+  }
+}
+
+function confirmDeleteUnavailability(item: LeaderUnavailabilityResponse) {
+  pendingDeleteUnavailability.value = item
+}
+
+async function executeDeleteUnavailability() {
+  if (!pendingDeleteUnavailability.value || !selectedDistrictId.value || !canManageUnavailabilities.value) return
+  const item = pendingDeleteUnavailability.value
+  unavailabilityDeleting.value = true
+  try {
+    await unavailabilitiesStore.removeUnavailability(item.id)
+    pendingDeleteUnavailability.value = null
+    toastStore.success('Abwesenheit gelöscht', formatUnavailabilityPeriod(item))
+  } catch (e) {
+    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
+  } finally {
+    unavailabilityDeleting.value = false
+  }
 }
 
 // Approve modal
@@ -986,7 +1141,15 @@ onMounted(async () => {
 })
 
 async function onDistrictChange() {
-  if (!selectedDistrictId.value) {
+  const loadGeneration = ++districtLoadGeneration
+  const districtId = selectedDistrictId.value
+  unavailabilityFilterLeaderId.value = ''
+  pendingDeleteUnavailability.value = null
+  unavailabilityFormRef.value?.reset()
+  leaders.value = []
+  await unavailabilitiesStore.fetchUnavailabilities('')
+  if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
+  if (!districtId) {
     selfLinkedLeader.value = null
     selfSelectedLeaderId.value = ''
     selfLinkError.value = ''
@@ -994,13 +1157,18 @@ async function onDistrictChange() {
   }
   loading.value = true
   try {
-    ;[leaders.value, congregations.value] = await Promise.all([
-      listLeaders(selectedDistrictId.value),
-      listCongregations(selectedDistrictId.value),
+    const [loadedLeaders, loadedCongregations] = await Promise.all([
+      listLeaders(districtId),
+      listCongregations(districtId),
     ])
+    if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
+    leaders.value = loadedLeaders
+    congregations.value = loadedCongregations
     await loadSelfLink()
+    if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
+    if (activeTab.value === 'unavailabilities') await switchToUnavailabilities()
   } finally {
-    loading.value = false
+    if (loadGeneration === districtLoadGeneration) loading.value = false
   }
 }
 
