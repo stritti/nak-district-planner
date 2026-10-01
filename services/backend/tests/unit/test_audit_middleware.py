@@ -535,3 +535,130 @@ class TestInitialization:
         assert "/api/health" not in middleware.exempt_paths
         assert "PUT" in middleware.exempt_methods
         assert "GET" not in middleware.exempt_methods
+
+
+class TestAccessDenied:
+    """Denied requests are audited for every method and counted for monitoring."""
+
+    @staticmethod
+    def _request(method: str, path: str) -> MagicMock:
+        request = MagicMock(spec=Request)
+        request.method = method
+        request.url.path = path
+        request.scope = {}
+        return request
+
+    @staticmethod
+    def _response(status_code: int) -> MagicMock:
+        response = MagicMock()
+        response.status_code = status_code
+        response.headers = {}
+        return response
+
+    @pytest.mark.parametrize("method", ["GET", "HEAD", "POST"])
+    def test_denied_request_is_logged_for_every_method(self, middleware, method):
+        request = self._request(method, "/api/v1/districts/x/matrix")
+        assert middleware._should_log_audit(request, self._response(403)) is True
+
+    def test_denied_request_on_exempt_path_is_not_logged(self, middleware):
+        request = self._request("GET", "/api/health")
+        assert middleware._should_log_audit(request, self._response(403)) is False
+
+    @pytest.mark.parametrize("status_code", [200, 401, 404])
+    def test_other_get_responses_stay_exempt(self, middleware, status_code):
+        request = self._request("GET", "/api/v1/events")
+        assert middleware._should_log_audit(request, self._response(status_code)) is False
+
+    @pytest.mark.asyncio
+    async def test_denied_request_is_logged_as_access_denied_and_counted(self, middleware):
+        middleware.audit_service = AsyncMock()
+        district = uuid.uuid4()
+        request = self._request("GET", f"/api/v1/districts/{district}/matrix")
+
+        with patch("app.adapters.api.middleware.audit.record_access_denied") as record:
+            await middleware._log_audit_event(
+                request=request,
+                response=self._response(403),
+                error=None,
+                context=AuditContext(request_id="req-403"),
+                request_id="req-403",
+                duration=0.01,
+            )
+
+        kwargs = middleware.audit_service.log.call_args.kwargs
+        assert kwargs["action"] == AuditAction.ACCESS_DENIED
+        assert kwargs["status"] == AuditStatus.FAILED
+        assert kwargs["error_message"] == "HTTP 403"
+        assert kwargs["extra_metadata"]["http_method"] == "GET"
+        record.assert_called_once_with(request)
+
+    @pytest.mark.asyncio
+    async def test_failed_write_keeps_its_action(self, middleware):
+        middleware.audit_service = AsyncMock()
+        request = self._request("POST", "/api/v1/events")
+
+        with patch("app.adapters.api.middleware.audit.record_access_denied") as record:
+            await middleware._log_audit_event(
+                request=request,
+                response=self._response(422),
+                error=None,
+                context=AuditContext(request_id="req-422"),
+                request_id="req-422",
+                duration=0.01,
+            )
+
+        assert middleware.audit_service.log.call_args.kwargs["action"] == AuditAction.CREATE
+        record.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dispatch_passes_the_response_to_the_audit_decision(self, middleware):
+        middleware._log_audit_event = AsyncMock()
+        request = self._request("GET", "/api/v1/districts/x/matrix")
+        request.headers.get.return_value = None
+        request.client = None
+        request.state = MagicMock(spec=[])
+        request.path_params = {}
+
+        await middleware.dispatch(request, AsyncMock(return_value=self._response(403)))
+
+        middleware._log_audit_event.assert_called_once()
+
+
+class TestContextOfRejectedRequests:
+    def test_tenant_parsed_by_tenant_middleware_is_used_before_routing(self, middleware):
+        district = uuid.uuid4()
+        request = MagicMock(spec=Request)
+        request.state = MagicMock(spec=["tenant_context"])
+        request.state.tenant_context = {"district_id": district, "user_sub": "claimed"}
+        request.path_params = {}
+        request.headers.get.return_value = None
+        request.client = None
+
+        context = middleware._extract_context(request, "req")
+
+        assert context.district_id == district
+        # The unverified claim is not recorded as the acting user.
+        assert context.user_sub is None
+
+
+class TestClaimedIdentity:
+    @staticmethod
+    def _request(claimed):
+        request = MagicMock(spec=Request)
+        request.state = MagicMock(spec=["tenant_context"])
+        request.state.tenant_context = {"user_sub": claimed} if claimed else {}
+        return request
+
+    def test_unverified_subject_is_recorded_as_claim(self):
+        from app.adapters.api.middleware.audit import _claimed_identity
+
+        assert _claimed_identity(self._request("prober"), AuditContext()) == {
+            "claimed_sub": "prober"
+        }
+
+    def test_verified_user_needs_no_claim(self):
+        from app.adapters.api.middleware.audit import _claimed_identity
+
+        context = AuditContext(user_sub="verified")
+        assert _claimed_identity(self._request("prober"), context) == {}
+        assert _claimed_identity(self._request(None), AuditContext()) == {}

@@ -96,14 +96,6 @@ export const router = createRouter({
       beforeEnter: requireAuth,
     },
     {
-      path: '/admin/external-candidates',
-      name: 'admin-external-candidates',
-      // Keep this view lazy: its API client depends on the router for auth recovery.
-      // A top-level import here would therefore create router -> view -> API -> router.
-      component: () => import('../views/ExternalCandidatesView.vue'),
-      beforeEnter: requireAuth,
-    },
-    {
       path: '/admin/export',
       name: 'admin-export',
       component: ExportTokensView,

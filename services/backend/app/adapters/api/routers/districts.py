@@ -30,7 +30,6 @@ from app.adapters.auth.permissions import (
     assert_has_role_in_district,
     get_districts_where_user_has_role,
     require_role_in_district,
-    require_superadmin,
 )
 from app.adapters.db.repositories import (
     SqlCongregationGroupRepository,
@@ -63,6 +62,14 @@ from app.domain.models.service_assignment import ServiceAssignment
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
 
 
+def _assert_superadmin(user: CurrentUser) -> None:
+    if not getattr(user, "is_superadmin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nur Superadmin darf Bezirke anlegen",
+        )
+
+
 def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -> list[str]:
     """Return ISO date strings for all expected Gottesdienst dates in [from_date, to_date]."""
     dates: list[str] = []
@@ -87,7 +94,7 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
 async def create_district(
     body: DistrictCreate, user: CurrentUser, db: DbSession
 ) -> DistrictResponse:
-    require_superadmin(user, "Nur Superadmin darf Bezirke anlegen")
+    _assert_superadmin(user)
 
     state_code = body.state_code.upper() if body.state_code else None
     if state_code and state_code not in DE_STATES:
@@ -703,6 +710,38 @@ async def generate_matrix_drafts(
     await db.commit()
 
     return full_result
+
+
+# ── PlanningSeries Auto-Generation ────────────────────────────────────────────
+
+
+@router.post("/{district_id}/generate-planning-series")
+async def generate_planning_series_slots(
+    district_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    from_dt: datetime = Query(...),
+    to_dt: datetime = Query(...),
+) -> dict[str, int]:
+    """Manually trigger PlanningSlot generation from active PlanningSeries."""
+    if not await SqlDistrictRepository(db).get(district_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+
+    generator = PlanningSeriesGenerator(
+        series_repo=SqlPlanningSeriesRepository(db),
+        slot_repo=SqlPlanningSlotRepository(db),
+        instance_repo=SqlEventInstanceRepository(db),
+        district_repo=SqlDistrictRepository(db),
+        congregation_repo=SqlCongregationRepository(db),
+    )
+    result = await generator.run_for_window(
+        from_date=from_dt.date(),
+        to_date_exclusive=to_dt.date() + timedelta(days=1),
+        district_ids={district_id},
+    )
+    await db.commit()
+    return result
 
 
 # ── PlanningSeries Auto-Generation ────────────────────────────────────────────

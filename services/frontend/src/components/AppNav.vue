@@ -284,10 +284,9 @@ onUnmounted(() => {
   notificationStore.stopPolling()
 })
 
-function handleNotificationClick(notification: { id: string; type: string; payload: Record<string, unknown> }) {
-  if (notification.type === 'CANDIDATE_REVIEW') {
-    void router.push('/admin/external-candidates')
-  }
+function handleNotificationClick(_notification: { id: string; type: string; payload: Record<string, unknown> }) {
+  // Router navigation based on notification type can be added later
+  // e.g., for type "registration": router.push('/admin/leaders')
 }
 
 const links = [
@@ -296,7 +295,6 @@ const links = [
   { to: '/admin/districts', label: 'Bezirke & Gemeinden', icon: BuildingLibraryIcon },
   { to: '/admin/leaders',   label: 'Amtstragende',      icon: UsersIcon },
   { to: '/admin/calendars', label: 'Kalender',          icon: ArrowDownTrayIcon },
-  { to: '/admin/external-candidates', label: 'Prüfung', icon: CalendarDaysIcon },
   { to: '/admin/export',    label: 'Export',            icon: LinkIcon },
 ]
 
