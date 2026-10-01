@@ -1,7 +1,7 @@
 """Add persistent notification dismissal.
 
 Revision ID: 0025
-Revises: 0024
+Revises: 20260930_reminder
 Create Date: 2026-10-01
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0025"
-down_revision: str | None = "0024"
+down_revision: str | None = "20260930_reminder"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
