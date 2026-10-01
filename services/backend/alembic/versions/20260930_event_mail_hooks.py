@@ -1,7 +1,7 @@
 """Create event_mail_hooks with tenant isolation.
 
 Revision ID: 20260930_event_hooks
-Revises: 20260930_merge_heads
+Revises: 0026
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from alembic import op
 
 revision = "20260930_event_hooks"
-down_revision = "20260930_merge_heads"
+down_revision = "0026"
 branch_labels = None
 depends_on = None
 
