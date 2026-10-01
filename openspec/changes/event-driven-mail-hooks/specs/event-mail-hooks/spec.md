@@ -116,8 +116,12 @@ The system SHALL emit domain events at specific points in existing service opera
 - **THEN** the system SHALL emit an `EXTERNAL_EVENT_DETECTED` event with the event title, date, and source
 
 #### Scenario: Sync job failure emits SYNC_ERROR
-- **WHEN** a calendar sync job fails with an exception
-- **THEN** the system SHALL emit a `SYNC_ERROR` event with the integration name and error message
+- **WHEN** a calendar sync job has exhausted all retries
+- **THEN** the system SHALL emit a `SYNC_ERROR` event with the integration name and a provider-neutral error message (attempts and error class, never the exception text)
+
+#### Scenario: Ongoing sync failure is not mailed repeatedly
+- **WHEN** a sync job fails again while the alert for the same integration is still unread
+- **THEN** the system SHALL NOT emit another `SYNC_ERROR` event
 
 #### Scenario: Leader registration approval emits REGISTRATION_RECEIVED
 - **WHEN** a leader registration is approved

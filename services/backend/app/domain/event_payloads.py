@@ -7,7 +7,7 @@ emitters cannot drift from the template contract.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
 from app.domain.events import DomainEvent, EventType
@@ -38,6 +38,20 @@ def slot_unassigned(
             "congregation_name": congregation_name,
             "date": service_date.isoformat(),
             "event_title": event_title,
+        },
+    )
+
+
+def sync_error(
+    district_id: UUID, *, integration_name: str, error_message: str, occurred_at: datetime
+) -> DomainEvent:
+    return DomainEvent(
+        EventType.SYNC_ERROR,
+        district_id,
+        {
+            "integration_name": integration_name,
+            "error_message": error_message,
+            "timestamp": occurred_at.isoformat(timespec="minutes"),
         },
     )
 

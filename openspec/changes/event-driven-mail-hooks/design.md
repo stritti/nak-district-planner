@@ -132,7 +132,7 @@ Event emitted ──▶ HookEvaluator.on_event(event)
 |---|---|---|
 | Daily gap scan (Celery beat, 06:15) | `SLOT_UNASSIGNED` | For each gap (active `Gottesdienst` slot without `ServiceAssignment`, no invitation copy) in the next `SLOT_GAP_SCAN_DAYS` days (default 28) that was not reported while open |
 | Calendar sync → ExternalEventCandidate created | `EXTERNAL_EVENT_DETECTED` | After storing a new `ExternalEventCandidate` (not on update) |
-| Calendar sync job completion | `SYNC_ERROR` | On sync failure / exception |
+| Calendar sync job, retries exhausted (`SyncIntegrationTask.on_failure`) | `SYNC_ERROR` | When `SyncFailureAlerter` creates a new alert; while the alert for the integration is unread, further failures emit nothing. `error_message` contains attempts and error class only (exception texts may carry URLs or credentials) |
 | Leader registration approval | `REGISTRATION_RECEIVED` | When a leader registration is approved (or auto-approved) |
 | ServiceAssignment confirmation | `ASSIGNMENT_CONFIRMED` | When a leader confirms their assignment (status → CONFIRMED) |
 | Plan finalization action | `PLAN_FINALIZED` | When a district plan is explicitly finalized/released by an admin |
