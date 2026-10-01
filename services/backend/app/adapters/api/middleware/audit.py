@@ -11,7 +11,9 @@ import uuid
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from starlette.status import HTTP_403_FORBIDDEN
 
+from app.adapters.api.access_metrics import record_access_denied
 from app.application.audit_service import AuditAction, AuditContext, AuditStatus, audit_service
 
 logger = logging.getLogger(__name__)
@@ -93,7 +95,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
             # NOTE: context is extracted *after call_next* so FastAPI
             # dependency resolution (get_current_user etc.) has already
             # populated request.state.user before we read it.
-            if self._should_log_audit(request):
+            if self._should_log_audit(request, response):
                 context = self._extract_context(
                     request,
                     request_id,
@@ -146,11 +148,19 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if hasattr(request.state, "user_roles"):
             user_roles = request.state.user_roles
 
-        # Extract tenant context from path params (populated by FastAPI routing)
+        # Extract tenant context from path params (populated by FastAPI routing).
+        # Requests rejected by TenantValidationMiddleware never reach routing;
+        # fall back to the tenant the TenantMiddleware parsed from the path.
         path_params = getattr(request, "path_params", {}) or {}
-        district_id = path_params.get("district_id", getattr(request.state, "district_id", None))
+        tenant_context = getattr(request.state, "tenant_context", None) or {}
+        district_id = path_params.get(
+            "district_id",
+            getattr(request.state, "district_id", None) or tenant_context.get("district_id"),
+        )
         congregation_id = path_params.get(
-            "congregation_id", getattr(request.state, "congregation_id", None)
+            "congregation_id",
+            getattr(request.state, "congregation_id", None)
+            or tenant_context.get("congregation_id"),
         )
 
         # Extract request information (or use pre-extracted values)
@@ -196,11 +206,15 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         return None
 
-    def _should_log_audit(self, request: Request) -> bool:
+    def _should_log_audit(self, request: Request, response: Response | None = None) -> bool:
         """Determine if this request should be audit logged.
+
+        Denied requests are logged for every method: a rejected read of another
+        tenant's data is exactly what the audit trail must show.
 
         Args:
             request: HTTP request.
+            response: HTTP response, if the request completed.
 
         Returns:
             True if request should be audit logged.
@@ -208,6 +222,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
         # Skip exempt paths
         if request.url.path in self.exempt_paths:
             return False
+
+        if _is_denied(response):
+            return True
 
         # Skip exempt methods
         if request.method in self.exempt_methods:
@@ -236,7 +253,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
         """
         try:
             # Determine action based on HTTP method and path
-            action = self._get_action_from_method(request.method, request.url.path)
+            if _is_denied(response):
+                action = AuditAction.ACCESS_DENIED
+                record_access_denied(request)
+            else:
+                action = self._get_action_from_method(request.method, request.url.path)
 
             # Determine resource type from path
             resource_type = self._get_resource_type(request.url.path)
@@ -279,6 +300,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     "status_code": response.status_code if response else None,
                     "duration_ms": round(duration * 1000, 2),
                     "user_agent": context.user_agent,
+                    **_claimed_identity(request, context),
                 },
             )
 
@@ -414,3 +436,20 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 logger.debug("Ignoring invalid UUID %r in audit path %r", matches[-1], path)
 
         return None
+
+
+def _is_denied(response: Response | None) -> bool:
+    return response is not None and response.status_code == HTTP_403_FORBIDDEN
+
+
+def _claimed_identity(request: Request, context: AuditContext) -> dict[str, str]:
+    """Unverified subject of requests rejected before authentication.
+
+    Kept apart from ``user_sub`` because the token was never verified, but it
+    is the only trace of who probed a foreign tenant.
+    """
+    if context.user_sub:
+        return {}
+    tenant_context = getattr(request.state, "tenant_context", None) or {}
+    claimed = tenant_context.get("user_sub")
+    return {"claimed_sub": claimed} if claimed else {}

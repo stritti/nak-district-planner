@@ -54,6 +54,9 @@ include = ["app*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "postgres: requires a migrated PostgreSQL database (see tests/integration/test_rls_postgres.py)",
+]
 
 [tool.ruff]
 line-length = 100

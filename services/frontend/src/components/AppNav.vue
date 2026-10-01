@@ -296,6 +296,7 @@ const links = [
   { to: '/admin/districts', label: 'Bezirke & Gemeinden', icon: BuildingLibraryIcon },
   { to: '/admin/leaders',   label: 'Amtstragende',      icon: UsersIcon },
   { to: '/admin/calendars', label: 'Kalender',          icon: ArrowDownTrayIcon },
+  { to: '/admin/external-candidates', label: 'Prüfung', icon: CalendarDaysIcon },
   { to: '/admin/export',    label: 'Export',            icon: LinkIcon },
 ]
 
