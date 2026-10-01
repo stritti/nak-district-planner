@@ -4,12 +4,23 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session
 
+from app.adapters.db.domain_audit import record_domain_audit
 from app.config import settings
 
 engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
 
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+class AuditedSession(Session):
+    """Session that records domain audit entries on every flush."""
+
+
+event.listen(AuditedSession, "after_flush", record_domain_audit)
+
+AsyncSessionLocal = async_sessionmaker(
+    engine, expire_on_commit=False, sync_session_class=AuditedSession
+)
 
 
 def _set_tenant_gucs(connection, **kwargs):

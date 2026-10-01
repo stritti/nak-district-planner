@@ -28,6 +28,14 @@ The system SHALL record audit entries for governance-relevant actions.
 - **WHEN** a PlanningSlot is modified
 - **THEN** an audit log entry SHALL be created including user, timestamp, and action type
 
+#### Scenario: Rolled back modification
+- **WHEN** a transaction modifying an audited entity is rolled back
+- **THEN** no audit log entry SHALL remain for that modification
+
+#### Scenario: Credential change
+- **WHEN** the credentials of a CalendarIntegration or the value of an export token change
+- **THEN** the audit log entry SHALL name the changed field without its old or new value
+
 ### Requirement: Sync retry policy
 The system SHALL apply retry with exponential backoff for transient sync errors.
 
