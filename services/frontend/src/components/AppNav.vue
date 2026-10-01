@@ -104,7 +104,7 @@
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  <path class="" d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
                 </svg>
               </button>
 
@@ -227,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDownTrayIcon,
@@ -247,6 +247,8 @@ import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
 import { useNotificationStore } from '../stores/notifications'
 import { useOIDC } from '../composables/useOIDC'
+import { notificationDestination } from '../utils/notificationLinks'
+import type { NotificationItem } from '../api/notifications'
 import NotificationBell from './NotificationBell.vue'
 
 const router = useRouter()
@@ -265,28 +267,26 @@ watch(() => route.fullPath, () => {
   mobileNavOpen.value = false
 })
 
-// Start/stop notification polling based on auth state
-watch(() => authStore.isAuthenticated, (authenticated) => {
-  if (authenticated && districtStore.selectedDistrictId) {
-    notificationStore.startPolling(districtStore.selectedDistrictId)
-  } else {
-    notificationStore.stopPolling()
-  }
-}, { immediate: true })
-
-watch(() => districtStore.selectedDistrictId, (districtId) => {
-  if (authStore.isAuthenticated && districtId) {
-    notificationStore.startPolling(districtId)
-  }
-})
+watch(
+  [() => authStore.isAuthenticated, () => districtStore.selectedDistrictId],
+  ([authenticated, districtId]) => {
+    if (authenticated && districtId) {
+      notificationStore.startPolling(districtId)
+    } else {
+      notificationStore.reset()
+    }
+  },
+  { immediate: true },
+)
 
 onUnmounted(() => {
   notificationStore.stopPolling()
 })
 
-function handleNotificationClick(notification: { id: string; type: string; payload: Record<string, unknown> }) {
-  if (notification.type === 'CANDIDATE_REVIEW') {
-    void router.push('/admin/external-candidates')
+function handleNotificationClick(notification: NotificationItem) {
+  const destination = notificationDestination(notification)
+  if (destination && router.resolve(destination).matched.length > 0) {
+    void router.push(destination)
   }
 }
 
@@ -303,6 +303,7 @@ const links = [
 async function handleLogout() {
   menuOpen.value = false
   mobileNavOpen.value = false
+  notificationStore.reset()
   await oidc.logout()
   authStore.clearAuth()
   await router.push('/login')

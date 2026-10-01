@@ -207,6 +207,7 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | GET | `/api/v1/notifications/{district_id}` | `notifications.list_notifications` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/notifications/{district_id}/read-all` | `notifications.mark_all_read` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/notifications/{district_id}/unread-count` | `notifications.unread_count` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/notifications/{notification_id}/dismiss` | `notifications.dismiss_notification` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/notifications/{notification_id}/read` | `notifications.mark_read` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/planning-series` | `planning_series.create_planning_series` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/planning-series/districts/{district_id}/generate-slots` | `planning_series.generate_slots_for_district` | 🔐 Auth | `require_role_in_district` |

@@ -459,6 +459,11 @@ class NotificationRepository(ABC):
         pass
 
     @abstractmethod
+    async def mark_dismissed(self, notification_id: uuid.UUID) -> None:
+        """Idempotently dismiss an existing notification."""
+        pass
+
+    @abstractmethod
     async def mark_all_read(self, district_id: uuid.UUID, user_sub: str) -> int:
         """Mark all unread notifications as read for a district. Returns count."""
         pass
