@@ -4,6 +4,10 @@ from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationO
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.congregation_group import CongregationGroupORM
 from app.adapters.db.orm_models.district import DistrictORM
+from app.adapters.db.orm_models.district_reminder_config import (
+    DistrictReminderConfigORM,
+    ReminderDeliveryORM,
+)
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
 from app.adapters.db.orm_models.external_event_candidate import ExternalEventCandidateORM
