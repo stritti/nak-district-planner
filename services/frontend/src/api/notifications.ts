@@ -9,6 +9,7 @@ export interface NotificationItem {
   body: string
   payload: Record<string, unknown>
   read_at: string | null
+  dismissed_at: string | null
   created_at: string
 }
 
@@ -43,6 +44,10 @@ export function getUnreadCount(districtId: string): Promise<UnreadCountResponse>
 
 export function markNotificationRead(notificationId: string): Promise<void> {
   return apiFetch<void>(`/api/v1/notifications/${notificationId}/read`, { method: 'POST' })
+}
+
+export function dismissNotification(notificationId: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/notifications/${notificationId}/dismiss`, { method: 'POST' })
 }
 
 export function markAllNotificationsRead(districtId: string): Promise<{ marked_read: number }> {

@@ -48,6 +48,7 @@
           <div class="mt-6 flex justify-end gap-3">
             <button
               ref="cancelBtnRef"
+              :disabled="loading"
               class="min-h-11 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
               @click="onCancel"
             >
@@ -162,6 +163,7 @@ function onConfirm() {
 }
 
 function onCancel() {
+  if (props.loading) return
   emit('cancel')
 }
 </script>

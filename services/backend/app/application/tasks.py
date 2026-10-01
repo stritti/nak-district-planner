@@ -32,6 +32,7 @@ from datetime import UTC, datetime
 from typing import TypeVar
 
 from app.celery_app import celery
+from app.domain.errors import IntegrationNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +50,100 @@ async def _run_as_system_worker(coro: Awaitable[T]) -> T:
         TenantContext.clear_context()
 
 
-@celery.task(name="sync_calendar_integration", bind=True, max_retries=3, default_retry_delay=60)
+# Exponential backoff for failing syncs: 60 s, 120 s, 240 s, 480 s (capped at
+# one hour) with full jitter so simultaneous failures do not retry in lockstep.
+SYNC_MAX_RETRIES = 4
+SYNC_RETRY_BACKOFF_SECONDS = 60
+SYNC_RETRY_BACKOFF_MAX_SECONDS = 3600
+
+
+def _integration_id_from(args: tuple, kwargs: dict) -> str | None:
+    return args[0] if args else kwargs.get("integration_id")
+
+
+def _sync_failure_context(integration_id: str | None, exc: BaseException, attempt: int) -> dict:
+    """Structured log fields; exception text is omitted as it may carry provider data."""
+    return {
+        "integration_id": integration_id,
+        "error_class": type(exc).__name__,
+        "attempt": attempt,
+    }
+
+
+async def _alert_sync_failure(integration_id: str, exc: BaseException, attempts: int) -> None:
+    from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+    from app.adapters.db.repositories.notification import SqlNotificationRepository
+    from app.adapters.db.session import AsyncSessionLocal
+    from app.application.sync_failure_alerts import SyncFailure, SyncFailureAlerter
+
+    async with AsyncSessionLocal() as session:
+        alerter = SyncFailureAlerter(
+            integrations=SqlCalendarIntegrationRepository(session),
+            notifications=SqlNotificationRepository(session),
+        )
+        failure = SyncFailure(
+            integration_id=uuid.UUID(integration_id),
+            error_class=type(exc).__name__,
+            attempts=attempts,
+        )
+        if await alerter.alert(failure) is not None:
+            await session.commit()
+
+
+class SyncIntegrationTask(celery.Task):
+    """Celery hooks that log each failed attempt and alert once retries are exhausted."""
+
+    def on_retry(self, exc, task_id, args, kwargs, einfo) -> None:
+        context = _sync_failure_context(
+            _integration_id_from(args, kwargs), exc, self.request.retries + 1
+        )
+        logger.warning(
+            "Calendar sync attempt failed, retrying: integration_id=%s error_class=%s attempt=%d",
+            context["integration_id"],
+            context["error_class"],
+            context["attempt"],
+            extra=context,
+        )
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo) -> None:
+        integration_id = _integration_id_from(args, kwargs)
+        context = _sync_failure_context(integration_id, exc, self.request.retries + 1)
+        logger.error(
+            "Calendar sync failed permanently: integration_id=%s error_class=%s attempt=%d",
+            context["integration_id"],
+            context["error_class"],
+            context["attempt"],
+            extra=context,
+        )
+        if integration_id is None:
+            return
+        try:
+            asyncio.run(
+                _run_as_system_worker(_alert_sync_failure(integration_id, exc, context["attempt"]))
+            )
+        except Exception:
+            # Alerting must never mask the original failure.
+            logger.exception(
+                "Sync failure alert could not be created: integration_id=%s", integration_id
+            )
+
+
+@celery.task(
+    name="sync_calendar_integration",
+    base=SyncIntegrationTask,
+    bind=True,
+    autoretry_for=(Exception,),
+    dont_autoretry_for=(IntegrationNotFoundError,),
+    max_retries=SYNC_MAX_RETRIES,
+    retry_backoff=SYNC_RETRY_BACKOFF_SECONDS,
+    retry_backoff_max=SYNC_RETRY_BACKOFF_MAX_SECONDS,
+    retry_jitter=True,
+)
 def sync_calendar_integration(self, integration_id: str) -> dict:
     """Sync a single CalendarIntegration by ID.
+
+    Failures are retried with exponential backoff (see ``SYNC_*`` constants);
+    ``SyncIntegrationTask`` logs every failed attempt and alerts after the last.
 
     Returns a dict with ``created``, ``updated``, ``cancelled``, ``auto_matched`` counts.
     """
@@ -67,15 +159,13 @@ def sync_calendar_integration(self, integration_id: str) -> dict:
                 "updated": result.updated,
                 "cancelled": result.cancelled,
                 "auto_matched": result.auto_matched,
+                "skipped": result.skipped,
+                "failed": result.failed,
             }
 
-    try:
-        summary = asyncio.run(_run_as_system_worker(_run()))
-        logger.info("Sync %s completed: %s", integration_id, summary)
-        return summary
-    except Exception as exc:
-        logger.exception("Sync %s failed: %s", integration_id, exc)
-        raise self.retry(exc=exc)
+    summary = asyncio.run(_run_as_system_worker(_run()))
+    logger.info("Sync %s completed: %s", integration_id, summary)
+    return summary
 
 
 @celery.task(name="sync_all_active_integrations")
@@ -133,19 +223,30 @@ def cleanup_old_events() -> dict:
             cutoff = now.replace(year=now.year - 2, day=28)
 
         async with AsyncSessionLocal() as session:
-            from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-
-            repo = SqlPlanningSlotRepository(session)
             # PlanningSlot uses planning_date (date), not end_at (datetime).
             # Delete slots with planning_date before cutoff date.
             cutoff_date = cutoff.date()
-            from sqlalchemy import delete
+            from sqlalchemy import delete, insert
 
+            from app.adapters.db.domain_audit import bulk_delete_audit_row
+            from app.adapters.db.orm_models.audit_log import AuditLogORM
             from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 
             stmt = delete(PlanningSlotORM).where(PlanningSlotORM.planning_date < cutoff_date)
             result = await session.execute(stmt)
             deleted = result.rowcount  # type: ignore[attr-defined]
+            if deleted:
+                await session.execute(
+                    insert(AuditLogORM.__table__),
+                    [
+                        bulk_delete_audit_row(
+                            "planning_slot",
+                            deleted=deleted,
+                            reason="retention",
+                            criteria={"planning_date_before": cutoff_date},
+                        )
+                    ],
+                )
             await session.commit()
 
         return {"deleted": deleted, "cutoff": cutoff.isoformat()}
@@ -333,49 +434,6 @@ def generate_draft_services_window() -> dict:
         result["congregations"],
         result["created"],
         result["skipped_existing"],
-    )
-    return result
-
-
-@celery.task(name="generate_planning_series_slots")
-def generate_planning_series_slots() -> dict:
-    """Generate PlanningSlot + EventInstance from active PlanningSeries.
-
-    Runs daily to keep a rolling 12-month window of generated slots.
-    Safe to run repeatedly: skips existing slots by (series_id, date, congregation).
-    """
-    from app.adapters.db.repositories.congregation import SqlCongregationRepository
-    from app.adapters.db.repositories.district import SqlDistrictRepository
-    from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
-    from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
-    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-    from app.adapters.db.session import AsyncSessionLocal
-    from app.application.planning_series_generator import PlanningSeriesGenerator
-    from app.config import settings
-
-    if not settings.use_series_generation:
-        logger.info("generate_planning_series_slots: disabled via USE_SERIES_GENERATION=False")
-        return {"status": "disabled"}
-
-    async def _run() -> dict:
-        async with AsyncSessionLocal() as session:
-            generator = PlanningSeriesGenerator(
-                series_repo=SqlPlanningSeriesRepository(session),
-                slot_repo=SqlPlanningSlotRepository(session),
-                instance_repo=SqlEventInstanceRepository(session),
-                district_repo=SqlDistrictRepository(session),
-                congregation_repo=SqlCongregationRepository(session),
-            )
-            result = await generator.run()
-            await session.commit()
-            return result
-
-    result = asyncio.run(_run_as_system_worker(_run()))
-    logger.info(
-        "generate_planning_series_slots: series=%d created=%d skipped=%d",
-        result["series_processed"],
-        result["slots_created"],
-        result["slots_skipped"],
     )
     return result
 

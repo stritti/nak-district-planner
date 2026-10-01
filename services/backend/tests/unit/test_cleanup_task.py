@@ -76,9 +76,8 @@ class TestCleanupOldEvents:
 
     def test_calls_execute_with_delete_statement(self):
         _, session = self._run_task(deleted=3)
-        session.execute.assert_called_once()
-        # The argument should be a SQLAlchemy Delete statement
-        call_arg = session.execute.call_args[0][0]
+        # The first statement is the SQLAlchemy Delete, the second its audit entry
+        call_arg = session.execute.call_args_list[0][0][0]
         assert "planning_slot" in str(call_arg).lower() or "planningdate" in str(call_arg)
         assert "<" in str(call_arg) or "where" in str(call_arg).lower()
 
@@ -113,3 +112,20 @@ class TestCleanupOldEvents:
         assert cutoff.year == 2022
         assert cutoff.month == 2
         assert cutoff.day == 28
+
+    def test_bulk_deletion_is_audited_in_the_same_transaction(self):
+        _, session = self._run_task(deleted=3)
+
+        assert session.execute.call_count == 2
+        statement, rows = session.execute.call_args_list[1][0]
+        assert statement.table.name == "audit_logs"
+        [row] = rows
+        assert row["action"].value == "BULK_OPERATION"
+        assert row["resource_type"] == "planning_slot"
+        assert row["changes"] == {"operation": "DELETE", "deleted": 3, "reason": "retention"}
+        assert row["user_sub"] == "system:celery-worker"
+        session.commit.assert_called_once()
+
+    def test_no_audit_entry_when_nothing_was_deleted(self):
+        _, session = self._run_task(deleted=0)
+        session.execute.assert_called_once()

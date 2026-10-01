@@ -115,6 +115,28 @@ jobs:
       - name: Check RBAC guard pattern in routers
         run: uv run python scripts/check_rbac_guard_pattern.py
 
+      - name: Generate throwaway password for the app DB role
+        run: |
+          APP_DB_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$APP_DB_PASSWORD"
+          echo "APP_DB_PASSWORD=$APP_DB_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Migrate fresh database (includes RLS policies)
+        env:
+          DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
+        run: uv run alembic upgrade head
+
+      - name: PostgreSQL integration and performance tests with RLS
+        env:
+          RLS_TEST_DATABASE_URL: postgresql://nak:changeme@localhost:5432/nak_planner_test
+        run: >-
+          RLS_TEST_APP_PASSWORD="$APP_DB_PASSWORD" uv run pytest -v
+          tests/integration/test_rls_postgres.py
+          tests/integration/test_tenant_isolation_api.py
+          tests/integration/test_domain_audit_postgres.py
+          tests/performance/test_rls_overhead.py
+          tests/performance/test_performance_postgres.py
+
       - name: Run unit tests with coverage
         id: unit-tests
         run: |
@@ -125,6 +147,13 @@ jobs:
             --cov-report=xml \
             --junitxml=junit.xml \
             -q 2>&1 | tee coverage-output.txt
+
+      - name: Run reminder PostgreSQL integration test
+        env:
+          DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
+          TEST_DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
+        # The database is already migrated by "Migrate fresh database" above.
+        run: uv run pytest tests/integration/test_reminder_dispatch.py -q
 
       - name: Parse coverage summary
         id: coverage
@@ -190,7 +219,6 @@ jobs:
 
           _Reported by CI workflow_"
 
-          # Find existing coverage comment by this bot
           COMMENT_ID=$(gh api \
             repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
             --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## Backend Test Coverage"))) | .id' \
@@ -274,13 +302,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock','package.json','services/frontend/bun.lock','services/frontend/package.json') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock','package.json','services/frontend/bun.lock','services/frontend/package.json') }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

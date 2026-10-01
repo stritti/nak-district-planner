@@ -51,16 +51,23 @@
 - [ ] 4.1 `ConflictBanner.vue`-Komponente: Zeigt Konflikte nach Severity (rot/gelb) mit Nachricht
 - [ ] 4.2 Integration in Matrix-View: Zellen mit Konflikten markieren (Warnsymbol/Hintergrundfarbe)
 - [ ] 4.3 Integration in ServiceAssignment-Dialog: Conflict-Banner vor Bestätigung
-- [ ] 4.4 BLOCK-Konflikte: Submit-Button deaktiviert + Tooltip
-- [ ] 4.5 WARN-Konflikte: Bestätigungsmodal "Trotz Konflikt zuweisen?"
-- [ ] 4.6 Pinia-Store für Konfliktstatus (z. B. `conflictStore`)
+- [x] 4.4 BLOCK-Konflikte: Submit-Button deaktiviert + Begründung *(`canSubmit`-Guard + `aria-describedby`-Beschreibung; `title`-Tooltip auf deaktivierten Buttons ist browserabhängig unzuverlässig)*
+- [x] 4.5 WARN-Konflikte: Bestätigungsmodal "Trotz Konflikt zuweisen?" *(bestehendes `ConfirmDialog.vue`, Retry mit `confirm_warnings: true`)*
+- [x] 4.6 Pinia-Store für Konfliktstatus (z. B. `conflictStore`) *(`src/stores/conflict.ts`)*
 
 ## 5. Frontend: Abwesenheitsverwaltung
 
-- [ ] 5.1 `LeaderUnavailabilityForm.vue`: Formular für neue Abwesenheit (Leader-Auswahl, Datum, Grund)
-- [ ] 5.2 `LeaderUnavailabilityList.vue`: Liste bestehender Abwesenheiten mit Filter
-- [ ] 5.3 API-Integration in Pinia-Store
-- [ ] 5.4 Navigation: Abwesenheiten in Leader-Detailansicht integrieren
+- [x] 5.1 `LeaderUnavailabilityForm.vue`: Formular für neue Abwesenheit (Leader-Auswahl, Datum, Grund)
+  - Umgesetzt in `services/frontend/src/components/LeaderUnavailabilityForm.vue` (Leader-Select, Datum von/bis, Grund, Notiz, clientseitige Validierung Ende > Beginn)
+  - Review-Korrekturen: Empty-State bei fehlenden Amtsträger:innen statt fehlerhafter Validierung, `required`/`aria-invalid` an Inputs, Fehlermeldung mit `role="alert"`/`aria-live`, einheitliche Leader-Anzeige via `leaderDisplayName`
+- [x] 5.2 `LeaderUnavailabilityList.vue`: Liste bestehender Abwesenheiten mit Filter
+  - Umgesetzt in `services/frontend/src/components/LeaderUnavailabilityList.vue` (Leader-Filter, Zeitraum-/Grund-/Notiz-Anzeige, Löschen mit Bestätigungsdialog)
+  - Review-Korrekturen: Zeitraum-Formatierung und Leader-Namen aus geteilten Helpern (`formatUnavailabilityPeriod`, `leaderNameFromId`), `aria-label` am Löschen-Button
+- [x] 5.3 API-Integration in Pinia-Store
+  - Umgesetzt in `services/frontend/src/stores/leaderUnavailabilities.ts` + `services/frontend/src/api/leaderUnavailabilities.ts` (List/Create/Delete gegen `/api/v1/districts/{id}/leader-unavailabilities`)
+  - Review-Korrekturen: Store-API nutzt den internen `districtId`-State (kein redundanter Parameter, kein stilles No-Op bei Mismatch), clientseitiger Leader-Filter statt ungenutztem Server-Filter-Pfad, `sortItems` mutiert Eingabearrays nicht mehr
+- [x] 5.4 Navigation: Abwesenheiten in Leader-Detailansicht integrieren
+  - Umgesetzt als „Abwesenheiten“-Tab in `services/frontend/src/views/LeadersAdminView.vue` mit Kalender-Icon-Aktion je Amtsträger:in (Filter + Formular vorausgewählt)
 
 ## 6. Frontend: Formular-Validierung und Fehlerzustände
 
@@ -72,21 +79,21 @@
 
 ## 7. E2E-Tests für Planungsflows
 
-- [ ] 7.1 Playwright-Test: Gottesdienst planen → Amtsträger zuweisen → Bestätigung
+- [x] 7.1 Playwright-Test: Gottesdienst planen → Amtsträger zuweisen → Bestätigung *(bestehende `matrix-assignment.spec.ts` deckt den Happy-Path ab)*
   - Vorbereitung: Seed-Daten mit District + Congregation + Leader
   - Ausführung: Login → Matrix → Event anlegen → Leader zuweisen → Confirm
-- [ ] 7.2 Playwright-Test: Double-Booking provozieren → BLOCK-Konflikt
+- [x] 7.2 Playwright-Test: Double-Booking provozieren → BLOCK-Konflikt *(`conflict-assignment.spec.ts`)*
   - Vorbereitung: Leader in zwei Events zur gleichen Zeit
   - Ausführung: Zweite Zuweisung → 409 → Konflikt-Banner sichtbar
-- [ ] 7.3 Playwright-Test: Wechselzeit-Konflikt → WARN + Bestätigung
+- [x] 7.3 Playwright-Test: Wechselzeit-Konflikt → WARN + Bestätigung *(`conflict-assignment.spec.ts`: prüft Retry mit `confirm_warnings: true`)*
   - Vorbereitung: Leader in zwei Events mit <30min Abstand in verschiedenen Gemeinden
   - Ausführung: Zweite Zuweisung → WARN-Modal → Bestätigen → Erfolg
-- [ ] 7.4 Playwright-Test: Abwesenheit → Zuweisung blockiert
+- [x] 7.4 Playwright-Test: Abwesenheit → Zuweisung blockiert *(`conflict-assignment.spec.ts`: `leader_available` BLOCK)*
   - Vorbereitung: Leader mit URLAUB im Zeitraum
   - Ausführung: Zuweisung → BLOCK-Konflikt angezeigt
 
 ## 8. Dokumentation
 
-- [ ] 8.1 Konfliktregeln in `docs/conflict-rules.md` dokumentieren
-- [ ] 8.2 Feature-Flag `CONFLICT_CHECK_ENABLED` in Betriebsdokumentation aufnehmen
-- [ ] 8.3 E2E-Test-Setup in `tests/e2e/README.md` dokumentieren
+- [x] 8.1 Konfliktregeln in `docs/conflict-rules.md` dokumentieren
+- [x] 8.2 Feature-Flag `CONFLICT_CHECK_ENABLED` in Betriebsdokumentation aufnehmen *(`docs/production-runbook.md` Abschnitt Production Guard)*
+- [x] 8.3 E2E-Test-Setup in `tests/e2e/README.md` dokumentieren *(Setup läuft über `playwright.config.ts` mit `vite preview`; dokumentiert in `docs/conflict-rules.md` Abschnitt E2E-Tests)*

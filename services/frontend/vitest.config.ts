@@ -12,5 +12,31 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     include: ["src/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      include: [
+        "src/composables/jwt.ts",
+        "src/composables/base64url.ts",
+        "src/composables/pkce.ts",
+        "src/composables/oidcToken.ts",
+        "src/composables/oidcSession.ts",
+        "src/composables/oidcDiscovery.ts",
+        "src/composables/oidcAuthorization.ts",
+        "src/composables/oidcRefresh.ts",
+        "src/composables/refreshScheduler.ts",
+        "src/composables/useOIDC.ts",
+        "src/api/leaderUnavailabilities.ts",
+        "src/stores/leaderUnavailabilities.ts",
+        "src/components/LeaderUnavailabilityForm.vue",
+        "src/components/LeaderUnavailabilityList.vue",
+      ],
+      thresholds: {
+        perFile: true,
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
+      },
+    },
   },
 });

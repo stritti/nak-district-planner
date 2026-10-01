@@ -3,6 +3,7 @@
     <input
       ref="inputRef"
       :value="inputText"
+      :disabled="disabled"
       type="text"
       :placeholder="placeholder"
       autocomplete="off"
@@ -71,9 +72,10 @@ interface Props {
   options: AutocompleteOption[]
   modelValue: AutocompleteValue
   placeholder?: string
+  disabled?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), { placeholder: '' })
+const props = withDefaults(defineProps<Props>(), { placeholder: '', disabled: false })
 const emit = defineEmits<{
   (e: 'update:modelValue', value: AutocompleteValue): void
 }>()

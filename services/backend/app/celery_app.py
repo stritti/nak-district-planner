@@ -25,7 +25,7 @@ celery = Celery(
     "nak_planner",
     broker=f"sqla+{_sync_db_url}",
     backend=f"db+{_sync_db_url}",
-    include=["app.application.tasks"],
+    include=["app.application.tasks", "app.application.reminder_tasks"],
 )
 
 celery.conf.update(
@@ -34,38 +34,36 @@ celery.conf.update(
     accept_content=["json"],
     timezone="Europe/Berlin",
     enable_utc=True,
-    # Beat schedule: kick off a "sync all active integrations" task every 5 minutes.
-    # Individual integrations respect their own sync_interval; the task skips those
-    # that were synced more recently than their configured interval.
     beat_schedule={
         "sync-all-active-calendars": {
             "task": "sync_all_active_integrations",
             "schedule": timedelta(minutes=5),
         },
-        # 1st of each month at 03:00 Europe/Berlin — imports current year + next year from September
         "auto-import-feiertage": {
             "task": "auto_import_feiertage",
             "schedule": crontab(day_of_month="1", hour="3", minute="0"),
         },
-        # 1st of each month at 02:00 Europe/Berlin — deletes events older than 24 months
         "cleanup-old-events": {
             "task": "cleanup_old_events",
             "schedule": crontab(day_of_month="1", hour="2", minute="0"),
         },
-        # Daily at 01:10 Europe/Berlin — keep a rolling 8-week draft service window
         "generate-draft-services-window": {
             "task": "generate_draft_services_window",
             "schedule": crontab(hour="1", minute="10"),
         },
-        # Daily at 01:20 Europe/Berlin — generate PlanningSlot + EventInstance from PlanningSeries
         "generate-planning-series-slots": {
             "task": "generate_planning_series_slots",
             "schedule": crontab(hour="1", minute="20"),
         },
-        # Every 6 hours — check ghcr.io for newer Docker image versions
         "check-version": {
             "task": "check_version",
             "schedule": crontab(minute="0", hour="*/6"),
+        },
+        # Hourly evaluation respects per-config time_of_day (within the hour).
+        # The per-recipient delivery ledger makes overlapping checks idempotent.
+        "check-due-reminders": {
+            "task": "check_due_reminders",
+            "schedule": crontab(minute="0"),
         },
     },
 )

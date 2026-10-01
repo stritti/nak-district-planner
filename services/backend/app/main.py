@@ -28,9 +28,11 @@ from app.adapters.api.routers import (
     notifications,
     planning_series,
     registrations,
+    reminder_configs,
     service_assignments,
     system,
 )
+from app.adapters.api.routers import external_candidates
 from app.adapters.api.routers import (
     health as health_router,
 )
@@ -226,9 +228,11 @@ app.include_router(districts.router)
 app.include_router(leaders.router)
 app.include_router(leader_unavailabilities.router)
 app.include_router(planning_series.router)
+app.include_router(reminder_configs.router)
 app.include_router(registrations.public_router)
 app.include_router(registrations.overview_router)
 app.include_router(registrations.router)
-app.include_router(export.router, prefix="/api/v1")
+app.include_router(export.router)
 app.include_router(system.router)
 app.include_router(notifications.router)
+app.include_router(external_candidates.router)
