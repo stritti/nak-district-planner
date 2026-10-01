@@ -180,6 +180,10 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | DELETE | `/api/v1/districts/{district_id}/registrations/{registration_id}` | `registrations.delete_registration` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/districts/{district_id}/registrations/{registration_id}/approve` | `registrations.approve_registration` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/districts/{district_id}/registrations/{registration_id}/reject` | `registrations.reject_registration` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/reminder-configs` | `reminder_configs.list_reminder_configs` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/reminder-configs` | `reminder_configs.create_reminder_config` | 🔐 Auth | `require_role_in_district` |
+| DELETE | `/api/v1/districts/{district_id}/reminder-configs/{config_id}` | `reminder_configs.deactivate_reminder_config` | 🔐 Auth | `require_role_in_district` |
+| PUT | `/api/v1/districts/{district_id}/reminder-configs/{config_id}` | `reminder_configs.update_reminder_config` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/events` | `events.list_events` | 🔐 Auth | `is_superadmin`, `require_role_in_district` |
 | POST | `/api/v1/events/bulk-approval-status` | `events.bulk_update_approval_status` | 🔐 Auth | `is_superadmin`, `require_role_in_district` |
 | PATCH | `/api/v1/events/{event_id}` | `events.update_event` | 🔐 Auth | `require_role_in_district` |
