@@ -29,6 +29,7 @@ celery = Celery(
         "app.application.tasks",
         "app.application.reminder_tasks",
         "app.application.event_mail_hook_tasks",
+        "app.application.slot_gap_tasks",
     ],
 )
 
@@ -68,6 +69,12 @@ celery.conf.update(
         "check-due-reminders": {
             "task": "check_due_reminders",
             "schedule": crontab(minute="0"),
+        },
+        # After the nightly draft and series generation (01:10/01:20), so newly
+        # generated slots are included; reports go out before the workday.
+        "scan-slot-gaps": {
+            "task": "scan_slot_gaps",
+            "schedule": crontab(hour="6", minute="15"),
         },
     },
 )

@@ -28,7 +28,7 @@
 
 ## 5. Event Emission Points
 
-- [ ] 5.1 Emit `SLOT_UNASSIGNED` event from LÜCKE detection point (sync/matrix service) *(offen: LÜCKEN werden nur beim Lesen der Matrix berechnet; es gibt keinen Zustandswechsel, an dem einmalig emittiert werden könnte — braucht eine eigene Entscheidung, z. B. täglicher Scan mit Deduplizierung)*
+- [x] 5.1 Emit `SLOT_UNASSIGNED` event from LÜCKE detection point (sync/matrix service) *(täglicher Scan `scan_slot_gaps` statt Emission beim Lesen der Matrix; Deduplizierung pro fachlicher Lücke über den Ledger `slot_gap_alerts`, eine geschlossene und wieder geöffnete Lücke wird erneut gemeldet — siehe design.md)*
 - [x] 5.2 Emit `EXTERNAL_EVENT_DETECTED` event from ExternalEventCandidate creation
 - [ ] 5.3 Emit `SYNC_ERROR` event from calendar sync job on failure *(offen: gehört in `SyncIntegrationTask.on_failure` aus PR #399, um nicht bei jedem Retry zu mailen; nach dessen Merge nachziehen)*
 - [x] 5.4 Emit `REGISTRATION_RECEIVED` event from leader registration approval

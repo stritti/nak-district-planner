@@ -28,6 +28,20 @@ GERMAN_MONTHS = (
 )
 
 
+def slot_unassigned(
+    district_id: UUID, *, congregation_name: str, service_date: date, event_title: str
+) -> DomainEvent:
+    return DomainEvent(
+        EventType.SLOT_UNASSIGNED,
+        district_id,
+        {
+            "congregation_name": congregation_name,
+            "date": service_date.isoformat(),
+            "event_title": event_title,
+        },
+    )
+
+
 def external_event_detected(
     district_id: UUID, *, event_title: str, event_date: date, source: str
 ) -> DomainEvent:
