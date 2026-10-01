@@ -12,7 +12,7 @@
 #### Tenant Middleware
 - [x] TenantMiddleware implementieren (`app/adapters/api/middleware/tenant.py`)
 - [x] Extraktion aus JWT Token implementieren
-- [ ] ~Extraktion aus API Key implementieren~ *(entfällt — es gibt keine eingehende API-Key-Authentifizierung; `idp_provisioning_api_key` ist ein ausgehender Webhook-Schlüssel. Befund: `CSRFMiddleware` überspringt die Prüfung bei jedem `X-API-Key`-Header, obwohl kein Endpoint ihn auswertet → separat bewerten)*
+- [ ] ~Extraktion aus API Key implementieren~ *(entfällt — die API-Key-Authentifizierung wurde mit der OIDC-Migration entfernt (`phase4b`, Tasks 4.2/4.3); `idp_provisioning_api_key` ist ein ausgehender Webhook-Schlüssel. Befund behoben: `CSRFMiddleware` übersprang die Prüfung allein wegen eines `X-API-Key`-Headers; die Ausnahme ist entfernt, die Security-Doku korrigiert)*
 - [x] Kontext für Request-Lifecycle setzen
 - [x] Middleware in FastAPI registrieren (`TenantMiddleware` + `TenantValidationMiddleware` in `main.py`)
 
@@ -97,4 +97,3 @@
 ## Verbleibende Punkte
 
 - Die Alerting-Regeln und Dashboard-Panels sind dokumentiert. Einspielen muss sie der Betrieb im jeweils eingesetzten Monitoring-Backend.
-- `CSRFMiddleware` überspringt die Prüfung bei jedem `X-API-Key`-Header, obwohl kein Endpoint diesen Header auswertet. Die Auswirkung hängt davon ab, ob Cookies zur Authentifizierung dienen; das ist gesondert zu bewerten.

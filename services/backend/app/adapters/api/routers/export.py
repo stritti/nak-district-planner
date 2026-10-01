@@ -31,7 +31,7 @@ from app.domain.models.role import Role
 router = APIRouter()
 
 
-# ── Token management (requires API key) ──────────────────────────────────────
+# ── Token management (DISTRICT_ADMIN, OIDC Bearer) ───────────────────────────
 
 
 @router.post(
