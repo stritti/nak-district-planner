@@ -108,17 +108,19 @@ class TestCSRFMiddleware:
 
         assert response.status_code == 200
 
-    def test_api_key_exempt_from_csrf(self):
-        """Test that API-Key authenticated requests are exempt from CSRF."""
-        # This test requires an endpoint that accepts API-Key auth
-        # For now, we test the middleware logic
-        response = self.client.get(
-            "/api/health",
-            headers={"X-API-Key": "test-api-key"},
+    def test_api_key_header_does_not_bypass_csrf(self):
+        """A client-chosen X-API-Key header must not skip the CSRF check.
+
+        There is no API-key authentication; any client could set the header.
+        """
+        response = self.client.post(
+            "/api/v1/events/bulk-approval-status",
+            headers={"X-API-Key": "anything"},
+            json={},
         )
 
-        # Should succeed even without CSRF token
-        assert response.status_code == 200
+        assert response.status_code == 403
+        assert "CSRF" in response.json()["detail"]
 
 
 class TestCSRFTokenServiceIntegration:

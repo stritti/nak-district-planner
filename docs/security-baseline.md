@@ -158,7 +158,7 @@ server {
 | Methode | Verwendung | Header | Status |
 |---------|-----------|--------|--------|
 | **JWT Bearer** | Benutzer-Aktionen | `Authorization: Bearer <token>` | ✅ Implementiert |
-| **API Key** | Service-to-Service | `X-API-Key: <key>` | ✅ Implementiert |
+| ~~API Key~~ | ~~Service-to-Service~~ | ~~`X-API-Key`~~ | ❌ Entfernt mit der OIDC-Migration (`phase4b-oidc-auth-idp-agnostic`, Tasks 4.2/4.3); es gibt keine eingehende API-Key-Authentifizierung |
 | **Export Token** | Öffentlicher Kalender-Export | URL-Parameter | ✅ Implementiert |
 
 ### 4.3 Endpunkt-Klassifizierung
@@ -175,7 +175,7 @@ server {
 ### 4.4 Compliance-Checks
 
 - [ ] Alle geschützten Endpunkte erfordern Authentifizierung
-- [ ] API Keys werden sicher gespeichert und rotiert
+- [ ] Ausgehende Schlüssel (`IDP_PROVISIONING_API_KEY`) werden sicher gespeichert und rotiert
 - [ ] Rate Limiting ist für öffentliche Endpunkte implementiert
 - [ ] Input Validation ist für alle Endpunkte implementiert
 

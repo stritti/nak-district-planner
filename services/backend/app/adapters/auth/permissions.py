@@ -135,6 +135,17 @@ def require_role_in_district(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
 
+def require_superadmin(user: object, detail: str = "Nur Superadmin berechtigt") -> None:
+    """Raise 403 unless the user carries the database-reconciled superadmin flag.
+
+    Fails closed: objects without an ``is_superadmin`` attribute are rejected.
+    """
+    if getattr(user, "is_superadmin", False) is not True:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
 def assert_has_role_in_congregation(
     auth_context: AuthContext,
     required_role: Role,

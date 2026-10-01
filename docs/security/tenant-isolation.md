@@ -206,6 +206,35 @@ CREATE POLICY events_write_policy ON events
     );
 ```
 
+Tables added after the baseline revision `0014` receive their policies in
+dedicated migrations (e.g. `0022` for `external_event_candidates` and
+`leader_unavailabilities`) — `RLS_POLICIES` must not reference tables that do
+not exist yet when `0014` runs.
+
+### Verifying RLS against PostgreSQL
+
+`services/backend/tests/integration/test_rls_postgres.py` runs as the
+NOBYPASSRLS application role against a freshly migrated database (CI job
+`backend-tests`). It fails when a table with a tenant key (`district_id`,
+`congregation_id`, `leader_id`, `planning_slot_id`) has no RLS, unless the
+table is listed with a justification in `RLS_EXEMPT_TABLES`. Locally:
+
+```bash
+cd services/backend
+DATABASE_URL=postgresql+asyncpg://nak:changeme@localhost:5432/nak_rls \
+  APP_DB_PASSWORD=local-only uv run alembic upgrade head
+RLS_TEST_DATABASE_URL=postgresql://nak:changeme@localhost:5432/nak_rls \
+  RLS_TEST_APP_PASSWORD=local-only uv run pytest tests/integration/test_rls_postgres.py \
+  tests/integration/test_tenant_isolation_api.py tests/performance/test_rls_overhead.py
+```
+
+`test_tenant_isolation_api.py` covers the same boundary end to end through the
+HTTP API: middleware, token verification (only the OIDC call is mocked),
+membership loading, role guards and repositories on the application role. It
+checks CRUD within the own district, refused access to foreign districts,
+foreign rows being invisible even under the own district path, and the
+`ACCESS_DENIED` audit entry.
+
 ## Integration
 
 ### FastAPI Integration (`app/main.py`)
@@ -320,59 +349,55 @@ RLS policies are applied to the following tables:
 
 ### Setting RLS Context
 
-Before each request, the tenant context must be set in PostgreSQL:
+The RLS identity is a per-transaction GUC. `app/adapters/db/session.py`
+(`_set_tenant_gucs`) sets it at the beginning of every transaction from the
+`TenantContext`:
 
 ```sql
--- Set the current user and tenant
-SELECT set_config('app.current_user_sub', 'user-123', false);
-SELECT set_config('app.current_tenant_id', '12345678-1234-1234-1234-123456789012', false);
-SELECT set_config('app.current_district_id', '12345678-1234-1234-1234-123456789012', false);
+SELECT set_config('app.current_user_sub', :sub, true);   -- verified subject only
+SELECT set_config('app.is_system_worker', 'true', true);  -- Celery tasks
 ```
 
-This can be done in the TenantMiddleware:
+Only a **verified** identity may reach `app.current_user_sub`:
 
-```python
-class TenantMiddleware:
-    async def __call__(self, request: Request, call_next: Callable) -> Response:
-        # Extract tenant context
-        tenant_context = self._extract_tenant_context(request)
-
-        # Set context variables
-        TenantContext.set_context(**tenant_context)
-
-        # Set PostgreSQL settings (if using RLS)
-        if tenant_context.get("user_sub"):
-            await self._set_postgres_settings(tenant_context)
-
-        # Process request
-        response = await call_next(request)
-
-        # Clear context
-        TenantContext.clear_context()
-
-        return response
-
-    async def _set_postgres_settings(self, context: dict) -> None:
-        """Set PostgreSQL settings for RLS."""
-        # This would execute SQL to set the settings
-        pass
-```
+- `TenantMiddleware` stores the subject in `TenantContext` only when a user was
+  authenticated earlier in the stack (`request.state.user`). The subject it
+  decodes from the Bearer token without verification is kept in
+  `request.state.tenant_context` and used for nothing but the validation
+  pre-check. Before this rule, a forged token let public endpoints (which never
+  verify a token) run their queries with any chosen RLS identity.
+- `TenantValidationMiddleware` sets the claimed subject explicitly on its own,
+  short-lived session to read that subject's memberships.
+- The route dependency (`get_current_user_with_memberships`) verifies the token
+  and then sets the verified subject and roles for the rest of the request.
 
 ## Performance
 
-- **Context Extraction**: ~0.1ms per request
-- **Tenant Validation**: ~1-2ms per request (database query)
-- **RLS Policy Evaluation**: ~0.5-1ms per query (PostgreSQL)
-- **Total Overhead**: < 2% on request processing
+Measured against PostgreSQL 16 with five districts (6,500 planning slots,
+3,250 assignments), the application role `nak_app` versus the table owner
+(RLS bypassed). Test: `services/backend/tests/performance/test_rls_overhead.py`.
 
-### Benchmarks
+| Query (p95, one district) | Owner (no RLS) | `nak_app` (RLS) | Guard |
+|---|---|---|---|
+| Planning slots of a district, 3 months (1,300 rows) | ~40–105 ms | ~40–120 ms | 250 ms |
+| Assignments for those slots (650 rows) | ~5 ms | ~7 ms | 100 ms |
+| `TenantValidationService.validate_user_in_district` | – | ~2–5 ms | 25 ms |
 
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Context extraction | ~0.1ms | From request |
-| Membership validation | ~1-2ms | Database query |
-| RLS policy evaluation | ~0.5-1ms | Per query |
-| **Total** | **~1-3ms** | Per request |
+- RLS adds no measurable cost to the slot query: the membership subqueries are
+  hashed and evaluated once per query. The spread of that query comes from
+  transferring 1,300 wide rows and is the same without RLS.
+- **Finding (fixed by migration `0024`):** `service_assignments` had no index
+  besides its primary key. The assignment lookup of every matrix request
+  (`planning_slot_id = ANY(...)`, `event_id` as fallback) scanned the
+  assignments of all districts; depending on table statistics the RLS plan
+  took ~240 ms server-side for one district. With indexes on
+  `planning_slot_id`, `event_id` and `leader_id` it takes ~7 ms. The indexes
+  also serve the cascading foreign keys when slots or leaders are deleted.
+- The guards catch order-of-magnitude regressions (unhashed per-row membership
+  checks, missing indexes) and leave headroom for shared CI runners.
+- The whole matrix endpoint (50 congregations, 3 months) measured ~230 ms p95
+  under RLS before the indexes (`docs/performance-baseline.md`, NFR work
+  package).
 
 ## Security Features
 
@@ -452,17 +477,77 @@ pytest tests/unit/test_tenant_validation.py -v
 
 ## Monitoring
 
-Tenant access violations are logged with the following information:
+Every request rejected with HTTP 403, whether by `TenantValidationMiddleware`
+or by a role guard in a router, leaves two signals:
 
-```text
-WARNING: Tenant validation failed: User user-123 has no membership in district 12345678-1234-1234-1234-123456789012
+1. **Audit entry** with `action = ACCESS_DENIED`, `status = FAILED`, the probed
+   `district_id`/`congregation_id` and the route in `extra_metadata`. Reads are
+   included; a rejected GET of another tenant's data is the typical probe.
+   Requests rejected before authentication carry the unverified subject as
+   `extra_metadata.claimed_sub`, never as `user_sub`. District admins of the
+   probed district can read these entries (audit RLS policy).
+2. **Metric** `nak.access.denied` (OpenTelemetry counter, exported when
+   `OTEL_ENABLED=true`) with the bounded attributes `http.request.method` and
+   `http.route` (route template, UUIDs masked; no user or tenant identifiers).
+
+### Alerting
+
+Example rules for a Prometheus-compatible backend (the OTLP exporter turns
+`nak.access.denied` into `nak_access_denied_total`):
+
+```yaml
+groups:
+  - name: tenant-isolation
+    rules:
+      - alert: TenantProbing
+        # Many denials on one route: scripted access to foreign tenants.
+        expr: sum by (http_route) (increase(nak_access_denied_total[5m])) > 20
+        labels: {severity: warning}
+      - alert: AccessDeniedSpike
+        # Sudden rise overall: broken role assignment or attack.
+        expr: sum(rate(nak_access_denied_total[5m])) > 3 * sum(rate(nak_access_denied_total[1h] offset 1d))
+        for: 10m
+        labels: {severity: warning}
 ```
 
-These logs can be monitored for:
+To find the subject behind an alert, query the audit log:
 
-- Potential cross-tenant access attempts
-- Misconfigured permissions
-- Security incidents
+```sql
+SELECT timestamp, coalesce(user_sub, extra_metadata->>'claimed_sub') AS subject,
+       district_id, extra_metadata->>'path' AS path
+FROM audit_logs
+WHERE action = 'ACCESS_DENIED' AND timestamp > now() - interval '1 hour'
+ORDER BY timestamp DESC;
+```
+
+### Dashboard
+
+Recommended panels: denials per route (stacked, 5-minute rate), top subjects
+from the audit query above, and the ratio of denied to all requests
+(`http.server.request.duration` count from the FastAPI instrumentation).
+
+## Rollback Plan
+
+RLS is the last line of defence; disable it only to restore service, never
+as a permanent fix, and only for the table that misbehaves.
+
+1. **Identify** the table from the error (`new row violates row-level security
+   policy for table …`) or the slow query.
+2. **Emergency switch for one table**, as the migration owner:
+
+   ```sql
+   ALTER TABLE <table> DISABLE ROW LEVEL SECURITY;  -- policies stay defined
+   ```
+
+   Application guards (`require_role_in_district`, tenant validation) keep
+   protecting the API meanwhile. Record the change in the incident log.
+3. **Fix forward** with a migration that corrects the policy, then
+   `ALTER TABLE <table> ENABLE ROW LEVEL SECURITY;` (and `FORCE` where it was
+   set before), verified by `tests/integration/test_rls_postgres.py`.
+4. **Schema rollback** only when a policy migration itself is faulty:
+   `alembic downgrade <revision>`. Every RLS migration (`0014`, `0022`) has a
+   downgrade that drops exactly its own policies and disables RLS on its
+   tables.
 
 ## Compliance
 
