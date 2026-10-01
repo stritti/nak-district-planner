@@ -30,6 +30,7 @@ class AuditAction(str, Enum):
     EXPORT = "EXPORT"
     IMPORT = "IMPORT"
     BULK_OPERATION = "BULK_OPERATION"
+    ACCESS_DENIED = "ACCESS_DENIED"
 
 
 class AuditStatus(str, Enum):

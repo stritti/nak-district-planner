@@ -7,6 +7,7 @@ import logging
 import uuid
 
 from fastapi import Request
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
@@ -69,12 +70,15 @@ class TenantMiddleware(BaseHTTPMiddleware):
         # Extract tenant context from request
         tenant_context = self._extract_tenant_context(request)
 
-        # Set tenant context variables
+        # Set tenant context variables. The user subject feeds the RLS GUC
+        # ``app.current_user_sub`` of every session in this request, so only a
+        # verified identity may set it; the unverified JWT subject stays in
+        # ``request.state.tenant_context`` for the validation pre-check.
         TenantContext.set_context(
             tenant_id=tenant_context.get("tenant_id"),
             district_id=tenant_context.get("district_id"),
             congregation_id=tenant_context.get("congregation_id"),
-            user_sub=tenant_context.get("user_sub"),
+            user_sub=_verified_sub(request),
             user_roles=tenant_context.get("user_roles"),
         )
 
@@ -302,6 +306,12 @@ class TenantValidationMiddleware(BaseHTTPMiddleware):
             )
 
             async with AsyncSessionLocal() as session:
+                # Pre-check only: the claimed subject may read its own
+                # memberships. Authentication happens in the route dependency.
+                await session.execute(
+                    text("SELECT set_config('app.current_user_sub', :sub, true)"),
+                    {"sub": user_sub},
+                )
                 validation_service = TenantValidationService(session)
                 try:
                     await validation_service.validate_user_in_tenant(
@@ -346,3 +356,9 @@ class TenantValidationMiddleware(BaseHTTPMiddleware):
             return True
 
         return False
+
+
+def _verified_sub(request: Request) -> str | None:
+    """Subject of a user authenticated earlier in the stack, never the raw token."""
+    user = getattr(request.state, "user", None)
+    return getattr(user, "sub", None) if user else None

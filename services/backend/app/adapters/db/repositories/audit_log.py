@@ -13,7 +13,36 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.audit_log import AuditAction, AuditLogORM, AuditStatus
+from app.domain.models import audit_log as domain
 from app.domain.models.audit_log import AuditLog, AuditLogCreate
+
+
+# The domain enums carry lower-case values ("success") while the PostgreSQL
+# enums store the member names ("SUCCESS"); map by name in both directions.
+def _orm_status(status: domain.AuditStatus | AuditStatus | None) -> AuditStatus:
+    return AuditStatus[status.name] if status is not None else AuditStatus.SUCCESS
+
+
+def _orm_action(action: domain.AuditAction | AuditAction) -> AuditAction:
+    return AuditAction[action.name]
+
+
+def _domain_status(status: AuditStatus) -> domain.AuditStatus:
+    return domain.AuditStatus[status.name]
+
+
+def _domain_action(action: AuditAction) -> domain.AuditAction:
+    return domain.AuditAction[action.name]
+
+
+def _as_uuid(value: uuid.UUID | str | None) -> uuid.UUID | None:
+    """Tenant IDs from middleware path parameters arrive as strings."""
+    if value is None or isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except ValueError:
+        return None
 
 
 class SqlAuditLogRepository:
@@ -42,18 +71,18 @@ class SqlAuditLogRepository:
             user_sub=audit_log.user_sub,
             user_email=audit_log.user_email,
             user_roles=audit_log.user_roles,
-            action=audit_log.action,
+            action=_orm_action(audit_log.action),
             resource_type=audit_log.resource_type,
-            resource_id=audit_log.resource_id,
-            district_id=audit_log.district_id,
-            congregation_id=audit_log.congregation_id,
+            resource_id=_as_uuid(audit_log.resource_id),
+            district_id=_as_uuid(audit_log.district_id),
+            congregation_id=_as_uuid(audit_log.congregation_id),
             changes=audit_log.changes,
             old_values=audit_log.old_values,
             new_values=audit_log.new_values,
             ip_address=audit_log.ip_address,
             user_agent=audit_log.user_agent,
             request_id=audit_log.request_id,
-            status=audit_log.status or AuditStatus.SUCCESS,
+            status=_orm_status(audit_log.status),
             error_message=audit_log.error_message,
             extra_metadata=audit_log.extra_metadata,
             created_at=datetime.now(UTC),
@@ -68,7 +97,7 @@ class SqlAuditLogRepository:
             user_sub=orm_audit_log.user_sub,
             user_email=orm_audit_log.user_email,
             user_roles=orm_audit_log.user_roles,
-            action=orm_audit_log.action,
+            action=_domain_action(orm_audit_log.action),
             resource_type=orm_audit_log.resource_type,
             resource_id=orm_audit_log.resource_id,
             district_id=orm_audit_log.district_id,
@@ -79,7 +108,7 @@ class SqlAuditLogRepository:
             ip_address=orm_audit_log.ip_address,
             user_agent=orm_audit_log.user_agent,
             request_id=orm_audit_log.request_id,
-            status=orm_audit_log.status,
+            status=_domain_status(orm_audit_log.status),
             error_message=orm_audit_log.error_message,
             extra_metadata=orm_audit_log.extra_metadata,
             created_at=orm_audit_log.created_at,
@@ -108,7 +137,7 @@ class SqlAuditLogRepository:
             user_sub=orm_audit_log.user_sub,
             user_email=orm_audit_log.user_email,
             user_roles=orm_audit_log.user_roles,
-            action=orm_audit_log.action,
+            action=_domain_action(orm_audit_log.action),
             resource_type=orm_audit_log.resource_type,
             resource_id=orm_audit_log.resource_id,
             district_id=orm_audit_log.district_id,
@@ -119,7 +148,7 @@ class SqlAuditLogRepository:
             ip_address=orm_audit_log.ip_address,
             user_agent=orm_audit_log.user_agent,
             request_id=orm_audit_log.request_id,
-            status=orm_audit_log.status,
+            status=_domain_status(orm_audit_log.status),
             error_message=orm_audit_log.error_message,
             extra_metadata=orm_audit_log.extra_metadata,
             created_at=orm_audit_log.created_at,
@@ -157,7 +186,7 @@ class SqlAuditLogRepository:
                 user_sub=orm.user_sub,
                 user_email=orm.user_email,
                 user_roles=orm.user_roles,
-                action=orm.action,
+                action=_domain_action(orm.action),
                 resource_type=orm.resource_type,
                 resource_id=orm.resource_id,
                 district_id=orm.district_id,
@@ -168,7 +197,7 @@ class SqlAuditLogRepository:
                 ip_address=orm.ip_address,
                 user_agent=orm.user_agent,
                 request_id=orm.request_id,
-                status=orm.status,
+                status=_domain_status(orm.status),
                 error_message=orm.error_message,
                 extra_metadata=orm.extra_metadata,
                 created_at=orm.created_at,
@@ -215,7 +244,7 @@ class SqlAuditLogRepository:
                 user_sub=orm.user_sub,
                 user_email=orm.user_email,
                 user_roles=orm.user_roles,
-                action=orm.action,
+                action=_domain_action(orm.action),
                 resource_type=orm.resource_type,
                 resource_id=orm.resource_id,
                 district_id=orm.district_id,
@@ -226,7 +255,7 @@ class SqlAuditLogRepository:
                 ip_address=orm.ip_address,
                 user_agent=orm.user_agent,
                 request_id=orm.request_id,
-                status=orm.status,
+                status=_domain_status(orm.status),
                 error_message=orm.error_message,
                 extra_metadata=orm.extra_metadata,
                 created_at=orm.created_at,
@@ -273,7 +302,7 @@ class SqlAuditLogRepository:
                 user_sub=orm.user_sub,
                 user_email=orm.user_email,
                 user_roles=orm.user_roles,
-                action=orm.action,
+                action=_domain_action(orm.action),
                 resource_type=orm.resource_type,
                 resource_id=orm.resource_id,
                 district_id=orm.district_id,
@@ -284,7 +313,7 @@ class SqlAuditLogRepository:
                 ip_address=orm.ip_address,
                 user_agent=orm.user_agent,
                 request_id=orm.request_id,
-                status=orm.status,
+                status=_domain_status(orm.status),
                 error_message=orm.error_message,
                 extra_metadata=orm.extra_metadata,
                 created_at=orm.created_at,
@@ -310,7 +339,7 @@ class SqlAuditLogRepository:
         """
         result = await self.session.execute(
             select(AuditLogORM)
-            .where(AuditLogORM.action == action)
+            .where(AuditLogORM.action == _orm_action(action))
             .order_by(AuditLogORM.timestamp.desc())
             .limit(limit)
             .offset(offset)
@@ -324,7 +353,7 @@ class SqlAuditLogRepository:
                 user_sub=orm.user_sub,
                 user_email=orm.user_email,
                 user_roles=orm.user_roles,
-                action=orm.action,
+                action=_domain_action(orm.action),
                 resource_type=orm.resource_type,
                 resource_id=orm.resource_id,
                 district_id=orm.district_id,
@@ -335,7 +364,7 @@ class SqlAuditLogRepository:
                 ip_address=orm.ip_address,
                 user_agent=orm.user_agent,
                 request_id=orm.request_id,
-                status=orm.status,
+                status=_domain_status(orm.status),
                 error_message=orm.error_message,
                 extra_metadata=orm.extra_metadata,
                 created_at=orm.created_at,
