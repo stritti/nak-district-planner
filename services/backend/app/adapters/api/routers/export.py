@@ -28,10 +28,10 @@ from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.role import Role
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1")
 
 
-# ── Token management (requires API key) ──────────────────────────────────────
+# ── Token management (DISTRICT_ADMIN, OIDC Bearer) ───────────────────────────
 
 
 @router.post(

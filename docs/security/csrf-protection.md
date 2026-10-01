@@ -52,7 +52,6 @@ class CSRFMiddleware:
 - Automatic CSRF cookie setting on responses
 - Token validation on state-changing requests (POST, PUT, DELETE, PATCH)
 - Configurable exempt paths and methods
-- API-Key authentication exemption
 - Automatic token rotation
 
 #### 3. Integration (`app/main.py`)
@@ -170,9 +169,13 @@ The following are exempt from CSRF protection:
 - `HEAD` - Read-only operations
 - `OPTIONS` - CORS preflight
 
-### Exempt Authentication
+### No Header-Based Exemptions
 
-- Requests with `X-API-Key` header (machine-to-machine communication)
+An earlier version skipped the check for every request carrying an
+`X-API-Key` header. The API has no API-key authentication since the OIDC
+migration, so any client could set the header and bypass CSRF. An exemption
+may only rest on an authentication that was already verified for the
+request; none exists today, so there is none.
 
 ## Testing
 

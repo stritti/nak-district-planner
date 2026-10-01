@@ -30,18 +30,18 @@ class TestSyncCalendarIntegrationTask:
         assert result == mock_result
         mock_asyncio_run.assert_called_once()
 
-    def test_sync_calendar_integration_retry_on_error(self):
-        """sync_calendar_integration should retry on exception."""
-        integration_id = str(uuid.uuid4())
+    def test_sync_calendar_integration_propagates_error_to_autoretry(self):
+        """The task body lets errors propagate; Celery's autoretry schedules the retry.
 
-        task_mock = MagicMock()
-        task_mock.retry = MagicMock(side_effect=Exception("Retrying"))
+        Backoff behaviour itself is covered in ``test_sync_task_backoff.py``.
+        """
+        integration_id = str(uuid.uuid4())
 
         with patch("app.application.tasks.asyncio.run") as mock_asyncio_run:
             mock_asyncio_run.side_effect = RuntimeError("DB connection failed")
 
-            with pytest.raises(Exception):
-                sync_calendar_integration.__wrapped__(task_mock, integration_id)
+            with pytest.raises(RuntimeError, match="DB connection failed"):
+                sync_calendar_integration._orig_run(integration_id)
 
     def test_sync_calendar_integration_uuid_conversion(self):
         """sync_calendar_integration should convert string ID to UUID."""
