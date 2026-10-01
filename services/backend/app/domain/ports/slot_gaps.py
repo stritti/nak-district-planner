@@ -19,7 +19,9 @@ class SlotGapLedger(ABC):
         """Gaps already reported and not closed since."""
 
     @abstractmethod
-    async def mark_reported(self, gaps: Sequence[SlotGap]) -> None: ...
+    async def mark_reported(self, gaps: Sequence[SlotGap]) -> None:
+        """Remember ``gaps`` as reported while they stay open."""
 
     @abstractmethod
-    async def forget(self, keys: Sequence[GapKey]) -> None: ...
+    async def forget(self, keys: Sequence[GapKey]) -> None:
+        """Drop reports whose gap closed, so a reopened gap is reported again."""
