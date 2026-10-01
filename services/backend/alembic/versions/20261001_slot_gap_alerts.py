@@ -4,7 +4,7 @@ Only the daily scan (system worker) reads and writes it; RLS is forced so the
 application role cannot touch it from a request.
 
 Revision ID: 20261001_slot_gaps
-Revises: 20260930_event_hooks
+Revises: 20261001_merge_heads
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from alembic import op
 
 revision = "20261001_slot_gaps"
-down_revision = "20260930_event_hooks"
+down_revision = "20261001_merge_heads"
 branch_labels = None
 depends_on = None
 
