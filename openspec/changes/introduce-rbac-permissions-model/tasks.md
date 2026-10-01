@@ -17,8 +17,8 @@
 - [x] 3.4 Add role checks to Notification actions
 - [x] 3.5 Add RBAC guards to auth.py router (🔴 CRITICAL - 0 checks found)
 - [x] 3.6 Add RBAC guards to system.py router (🔴 CRITICAL - 0 checks found)
-- [ ] 3.7 Audit all routers for complete endpoint coverage (🟠 HIGH)
-- [ ] 3.8 Create automated permission coverage test (🟡 MEDIUM)
+- [x] 3.7 Audit all routers for complete endpoint coverage (🟠 HIGH) *(79 Operationen inventarisiert; Funde: doppelt registrierter `POST /districts/{id}/generate-planning-series` entfernt, zwei inline-Superadmin-Prüfungen auf `require_superadmin()` vereinheitlicht)*
+- [x] 3.8 Create automated permission coverage test (🟡 MEDIUM) *(`tests/unit/test_permission_coverage.py` + `app/adapters/api/route_inventory.py`: Auth über FastAPI-Dependency-Graph, Rollen-Guards über AST inkl. transitiver Modul-Helper; Allowlists mit Begründung)*
 
 ## 4. Authentication Integration
 
@@ -28,5 +28,5 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Create permission coverage report (🟡 MEDIUM)
-- [ ] 5.2 Document all protected endpoints (🟡 MEDIUM)
+- [x] 5.1 Create permission coverage report (🟡 MEDIUM) *(`scripts/rbac_coverage_report.py` erzeugt das Inventar in `docs/rbac-coverage.md`; der Test erzwingt Aktualität)*
+- [x] 5.2 Document all protected endpoints (🟡 MEDIUM) *(fachliche Tabelle um external-candidates, leader-unavailabilities, resolve-deviation ergänzt)*
