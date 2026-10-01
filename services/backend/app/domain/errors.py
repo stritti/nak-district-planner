@@ -1,4 +1,8 @@
-"""Domain errors for governed external event candidate review."""
+"""Domain errors for governed external event candidate review and calendar sync."""
+
+
+class IntegrationNotFoundError(ValueError):
+    """The calendar integration to sync no longer exists; retrying cannot succeed."""
 
 
 class CandidateReviewError(Exception):

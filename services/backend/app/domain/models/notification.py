@@ -30,12 +30,17 @@ class Notification:
     body: str
     created_at: datetime
     read_at: datetime | None = None
+    dismissed_at: datetime | None = None
     congregation_id: uuid.UUID | None = None
     payload: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_read(self) -> bool:
         return self.read_at is not None
+
+    @property
+    def is_dismissed(self) -> bool:
+        return self.dismissed_at is not None
 
     @classmethod
     def create(
@@ -56,10 +61,15 @@ class Notification:
             title=title,
             body=body,
             congregation_id=congregation_id,
-            payload=payload or {},
+            payload=payload if payload is not None else {},
             created_at=now,
-            read_at=None,
         )
 
     def mark_read(self) -> None:
-        self.read_at = datetime.now(timezone.utc)
+        if self.read_at is None:
+            self.read_at = datetime.now(timezone.utc)
+
+    def dismiss(self) -> None:
+        """Dismiss once without rewriting the original dismissal timestamp."""
+        if self.dismissed_at is None:
+            self.dismissed_at = datetime.now(timezone.utc)
