@@ -6,22 +6,28 @@ import uuid
 from datetime import UTC, datetime, time, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from icalendar import Calendar
 from icalendar import Event as ICalEvent
 from sqlalchemy import select
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_event_instance_repository,
+    get_export_token_repository,
+    get_leader_repository,
+    get_planning_slot_repository,
+    get_service_assignment_repository,
+)
 from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportTokenResponse
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
-from app.adapters.db.repositories import (
-    SqlEventInstanceRepository,
-    SqlPlanningSlotRepository,
-)
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
+from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.export_token import ExportToken, TokenType
@@ -40,7 +46,10 @@ router = APIRouter(prefix="/api/v1")
     status_code=status.HTTP_201_CREATED,
 )
 async def create_export_token(
-    auth: CurrentUserWithMemberships, body: ExportTokenCreate, session: DbSession
+    auth: CurrentUserWithMemberships,
+    body: ExportTokenCreate,
+    session: DbSession,
+    repo: SqlExportTokenRepository = Depends(get_export_token_repository),
 ) -> ExportTokenResponse:
     require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
 
@@ -51,7 +60,6 @@ async def create_export_token(
         congregation_id=body.congregation_id,
         leader_id=body.leader_id,
     )
-    repo = SqlExportTokenRepository(session)
     await repo.save(token)
     return _token_response(token)
 
@@ -64,6 +72,7 @@ async def list_export_tokens(
     auth: CurrentUserWithMemberships,
     session: DbSession,
     district_id: uuid.UUID | None = None,
+    repo: SqlExportTokenRepository = Depends(get_export_token_repository),
 ) -> list[ExportTokenResponse]:
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
@@ -74,7 +83,6 @@ async def list_export_tokens(
     if district_id is not None:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
-    repo = SqlExportTokenRepository(session)
     tokens = await repo.list_by_district(district_id) if district_id else await repo.list_all()
     return [_token_response(t) for t in tokens]
 
@@ -87,8 +95,8 @@ async def delete_export_token(
     auth: CurrentUserWithMemberships,
     token_id: uuid.UUID,
     session: DbSession,
+    repo: SqlExportTokenRepository = Depends(get_export_token_repository),
 ) -> None:
-    repo = SqlExportTokenRepository(session)
     token = await repo.get(token_id)
     if token is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht gefunden")
@@ -129,6 +137,11 @@ async def export_calendar_ics(
     token_str: str,
     session: DbSession,
     approval_status: Literal["confirmed_only", "include_planned"] | None = Query(None),
+    token_repo: SqlExportTokenRepository = Depends(get_export_token_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    sa_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leader_repo_dep: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> Response:
     from sqlalchemy import text
 
@@ -136,15 +149,12 @@ async def export_calendar_ics(
         text("SELECT set_config('app.current_export_token', :val, true)"),
         {"val": token_str},
     )
-    token_repo = SqlExportTokenRepository(session)
     export_token = await token_repo.get_by_token(token_str)
     if not export_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
 
     # RLS public export policies use app.current_export_token for scoped reads.
 
-    slot_repo = SqlPlanningSlotRepository(session)
-    instance_repo = SqlEventInstanceRepository(session)
 
     # Load PlanningSlots for a wide window (past 1 year, future 2 years)
     now = datetime.now(UTC).date()
@@ -186,7 +196,6 @@ async def export_calendar_ics(
         )
 
     # Load assignments in one batch query (keyed by planning_slot_id via event_id)
-    sa_repo = SqlServiceAssignmentRepository(session)
     assignments = await sa_repo.list_by_planning_slots(slot_ids)
 
     # For leader tokens: keep only assignments for this specific leader
@@ -195,7 +204,7 @@ async def export_calendar_ics(
 
     # Batch-load leaders so leader_id-only assignments can be resolved to a display name
     if export_token.district_id:
-        leader_repo = SqlLeaderRepository(session)
+        leader_repo = leader_repo_dep
         leaders = await leader_repo.list_by_district(export_token.district_id)
         leaders_by_id = {ldr.id: ldr for ldr in leaders}
     else:
