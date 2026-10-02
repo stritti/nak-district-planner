@@ -271,19 +271,13 @@ async def test_list_calendar_integrations_congregation_scoped_validates_district
     db = AsyncMock()
     auth = _auth_context()
 
-    with (
-        patch(
-            "app.adapters.api.routers.calendar_integrations.assert_has_role_in_congregation"
-        ),
-        patch(
-            "app.adapters.api.routers.calendar_integrations.SqlCongregationRepository"
-        ) as cong_repo_cls,
+    with patch(
+        "app.adapters.api.routers.calendar_integrations.assert_has_role_in_congregation"
     ):
         repo = AsyncMock()
         cong_repo = AsyncMock()
         # congregation belongs to a different district
         cong_repo.get.return_value = type("C", (), {"district_id": uuid.uuid4()})()
-        cong_repo_cls.return_value = cong_repo
 
         with pytest.raises(HTTPException) as exc:
             await ci_router.list_calendar_integrations(
@@ -292,6 +286,7 @@ async def test_list_calendar_integrations_congregation_scoped_validates_district
                 repo=repo,
                 district_id=other_district_id,
                 congregation_id=congregation_id,
+                cong_repo=cong_repo,
             )
 
     assert exc.value.status_code == 404

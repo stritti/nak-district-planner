@@ -12,6 +12,7 @@ from app.adapters.api.deps import (
     DbSession,
     get_calendar_integration_repository,
     get_calendar_integration_service,
+    get_congregation_repository,
 )
 from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationCreate,
@@ -62,13 +63,13 @@ async def create_calendar_integration(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     service: CalendarIntegrationService = Depends(get_calendar_integration_service),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
 ) -> CalendarIntegrationResponse:
     # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     if body.congregation_id is not None:
         try:
             assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, body.congregation_id)
             # Validate congregation belongs to the specified district
-            cong_repo = SqlCongregationRepository(db)
             congregation = await cong_repo.get(body.congregation_id)
             if congregation is None or congregation.district_id != body.district_id:
                 raise HTTPException(
@@ -91,6 +92,7 @@ async def list_calendar_integrations(
     repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
     district_id: uuid.UUID | None = None,
     congregation_id: uuid.UUID | None = None,
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
 ) -> CalendarIntegrationListResponse:
     if congregation_id is not None:
         # Congregation-scoped listing: require CONGREGATION_ADMIN for that congregation
@@ -100,7 +102,6 @@ async def list_calendar_integrations(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
         # When district_id is also provided, validate the congregation belongs to it
         if district_id is not None:
-            cong_repo = SqlCongregationRepository(db)
             congregation = await cong_repo.get(congregation_id)
             if congregation is None or congregation.district_id != district_id:
                 raise HTTPException(
