@@ -155,6 +155,11 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | GET | `/api/v1/districts/{district_id}/congregations` | `districts.list_congregations` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/districts/{district_id}/congregations` | `districts.create_congregation` | 🔐 Auth | `require_role_in_district` |
 | PATCH | `/api/v1/districts/{district_id}/congregations/{congregation_id}` | `districts.update_congregation` | 🔐 Auth | `assert_has_role_in_congregation`, `assert_has_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/event-hooks` | `event_hooks.list_event_hooks` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/districts/{district_id}/event-hooks` | `event_hooks.create_event_hook` | 🔐 Auth | `require_role_in_district` |
+| GET | `/api/v1/districts/{district_id}/event-hooks/event-types` | `event_hooks.list_event_types` | 🔐 Auth | `require_role_in_district` |
+| DELETE | `/api/v1/districts/{district_id}/event-hooks/{hook_id}` | `event_hooks.deactivate_event_hook` | 🔐 Auth | `require_role_in_district` |
+| PUT | `/api/v1/districts/{district_id}/event-hooks/{hook_id}` | `event_hooks.update_event_hook` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/districts/{district_id}/feiertage` | `districts.import_feiertage_endpoint` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/districts/{district_id}/feiertage/states` | `districts.list_de_states` | 🔐 Auth | – |
 | POST | `/api/v1/districts/{district_id}/generate-planning-series` | `districts.generate_planning_series_slots` | 🔐 Auth | `require_role_in_district` |
