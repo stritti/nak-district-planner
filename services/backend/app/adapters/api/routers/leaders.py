@@ -5,9 +5,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_district_repository,
+    get_leader_repository,
+)
 from app.adapters.api.schemas.leader import (
     LeaderCreate,
     LeaderResponse,
@@ -18,8 +23,6 @@ from app.adapters.api.schemas.leader import (
 from app.adapters.auth.permissions import (
     require_role_in_district,
 )
-from app.adapters.db.repositories.district import SqlDistrictRepository
-from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.domain.models.leader import Leader
 from app.domain.models.role import Role
 
@@ -49,11 +52,13 @@ async def list_leaders(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    districts: SqlDistrictRepository = Depends(get_district_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> list[LeaderResponse]:
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await districts.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.VIEWER, district_id)
-    leaders = await SqlLeaderRepository(db).list_by_district(district_id)
+    leaders = await leaders_repo.list_by_district(district_id)
     return [_leader_response(leader) for leader in leaders]
 
 
@@ -63,8 +68,10 @@ async def create_leader(
     body: LeaderCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    districts: SqlDistrictRepository = Depends(get_district_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> LeaderResponse:
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await districts.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.PLANNER, district_id)
     leader = Leader.create(
@@ -79,7 +86,7 @@ async def create_leader(
         notes=body.notes,
         is_active=body.is_active,
     )
-    await SqlLeaderRepository(db).save(leader)
+    await leaders_repo.save(leader)
     return _leader_response(leader)
 
 
@@ -90,8 +97,9 @@ async def update_leader(
     body: LeaderUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> LeaderResponse:
-    repo = SqlLeaderRepository(db)
+    repo = leaders_repo
     leader = await repo.get(leader_id)
     if not leader or leader.district_id != district_id:
         raise HTTPException(
@@ -128,8 +136,9 @@ async def link_self_to_leader(
     body: LeaderSelfLinkRequest,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> LeaderSelfLinkResponse:
-    repo = SqlLeaderRepository(db)
+    repo = leaders_repo
     target = await repo.get(body.leader_id)
     if not target or target.district_id != district_id:
         raise HTTPException(
@@ -163,8 +172,10 @@ async def unlink_self_from_leader(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    districts: SqlDistrictRepository = Depends(get_district_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> LeaderSelfLinkResponse:
-    repo = SqlLeaderRepository(db)
+    repo = leaders_repo
     linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
     congregation_ids = {linked.congregation_id} if linked and linked.congregation_id else None
     require_role_in_district(
@@ -184,8 +195,10 @@ async def get_self_link(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    districts: SqlDistrictRepository = Depends(get_district_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> LeaderSelfLinkResponse:
-    repo = SqlLeaderRepository(db)
+    repo = leaders_repo
     linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
     congregation_ids = {linked.congregation_id} if linked and linked.congregation_id else None
     require_role_in_district(
@@ -202,8 +215,9 @@ async def delete_leader(
     leader_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> None:
-    repo = SqlLeaderRepository(db)
+    repo = leaders_repo
     leader = await repo.get(leader_id)
     if not leader or leader.district_id != district_id:
         raise HTTPException(

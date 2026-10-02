@@ -5,19 +5,20 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_leader_repository,
+    get_leader_unavailability_repository,
+)
 from app.adapters.api.schemas.leader_unavailability import (
     LeaderUnavailabilityCreate,
     LeaderUnavailabilityResponse,
     LeaderUnavailabilityUpdate,
 )
 from app.adapters.auth.permissions import require_role_in_district
-from app.adapters.db.repositories.leader import SqlLeaderRepository
-from app.adapters.db.repositories.leader_unavailability import (
-    SqlLeaderUnavailabilityRepository,
-)
 from app.domain.models.leader_unavailability import LeaderUnavailability
 from app.domain.models.role import Role
 
@@ -40,8 +41,10 @@ def _response(item: LeaderUnavailability) -> LeaderUnavailabilityResponse:
     )
 
 
-async def _leader_for_district(db: DbSession, district_id: uuid.UUID, leader_id: uuid.UUID):
-    leader = await SqlLeaderRepository(db).get(leader_id)
+async def _leader_for_district(
+    leaders: SqlLeaderRepository, district_id: uuid.UUID, leader_id: uuid.UUID
+):
+    leader = await leaders.get(leader_id)
     if leader is None or leader.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtsträger nicht gefunden"
@@ -55,15 +58,16 @@ async def list_unavailabilities(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     leader_id: uuid.UUID | None = None,
+    leaders: SqlLeaderRepository = Depends(get_leader_repository),
+    repo: SqlLeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
 ) -> list[LeaderUnavailabilityResponse]:
     require_role_in_district(auth, Role.VIEWER, district_id)
-    repo = SqlLeaderUnavailabilityRepository(db)
     if leader_id is not None:
-        await _leader_for_district(db, district_id, leader_id)
+        await _leader_for_district(leaders, district_id, leader_id)
         items = await repo.list_by_leader(leader_id)
     else:
-        leaders = await SqlLeaderRepository(db).list_by_district(district_id)
-        items = [item for leader in leaders for item in await repo.list_by_leader(leader.id)]
+        district_leaders = await leaders.list_by_district(district_id)
+        items = [item for leader in district_leaders for item in await repo.list_by_leader(leader.id)]
         items.sort(key=lambda item: item.start_at)
     return [_response(item) for item in items]
 
@@ -74,9 +78,11 @@ async def create_unavailability(
     body: LeaderUnavailabilityCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    leaders: SqlLeaderRepository = Depends(get_leader_repository),
+    repo: SqlLeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
 ) -> LeaderUnavailabilityResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
-    await _leader_for_district(db, district_id, body.leader_id)
+    await _leader_for_district(leaders, district_id, body.leader_id)
     item = LeaderUnavailability.create(
         leader_id=body.leader_id,
         start_at=body.start_at,
@@ -84,7 +90,7 @@ async def create_unavailability(
         reason=body.reason,
         note=body.note,
     )
-    await SqlLeaderUnavailabilityRepository(db).save(item)
+    await repo.save(item)
     return _response(item)
 
 
@@ -95,15 +101,16 @@ async def update_unavailability(
     body: LeaderUnavailabilityUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    leaders: SqlLeaderRepository = Depends(get_leader_repository),
+    repo: SqlLeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
 ) -> LeaderUnavailabilityResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
-    repo = SqlLeaderUnavailabilityRepository(db)
     item = await repo.get(unavailability_id)
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Abwesenheit nicht gefunden"
         )
-    await _leader_for_district(db, district_id, item.leader_id)
+    await _leader_for_district(leaders, district_id, item.leader_id)
     fields = body.model_fields_set
     start_at = body.start_at if "start_at" in fields else item.start_at
     end_at = body.end_at if "end_at" in fields else item.end_at
@@ -126,9 +133,10 @@ async def delete_unavailability(
     unavailability_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    leaders: SqlLeaderRepository = Depends(get_leader_repository),
+    repo: SqlLeaderUnavailabilityRepository = Depends(get_leader_unavailability_repository),
 ) -> None:
     require_role_in_district(auth, Role.PLANNER, district_id)
-    repo = SqlLeaderUnavailabilityRepository(db)
     item = await repo.get(unavailability_id)
     if item is None:
         raise HTTPException(

@@ -15,7 +15,21 @@ from app.adapters.db.repositories.event_instance import SqlEventInstanceReposito
 from app.adapters.db.repositories.external_event_candidate import SqlExternalEventCandidateRepository
 from app.adapters.db.repositories.external_event_link import SqlExternalEventLinkRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+from app.adapters.db.repositories.congregation_group import SqlCongregationGroupRepository
+from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.db.repositories.district import SqlDistrictRepository
+from app.adapters.db.repositories.district_reminder_config import SqlDistrictReminderConfigRepository
+from app.adapters.db.repositories.export_token import SqlExportTokenRepository
+from app.adapters.db.repositories.invitation_overwrite_request import (
+    SqlInvitationOverwriteRequestRepository,
+)
+from app.adapters.db.repositories.invitation import SqlInvitationRepository
+from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
+from app.adapters.db.repositories.leader_unavailability import SqlLeaderUnavailabilityRepository
+from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
+from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
+from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.adapters.db.repositories.notification import SqlNotificationRepository
 from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
@@ -275,6 +289,25 @@ def make_repository_dependency(
 get_calendar_integration_repository = make_repository_dependency(
     SqlCalendarIntegrationRepository
 )
+get_congregation_group_repository = make_repository_dependency(SqlCongregationGroupRepository)
+get_congregation_repository = make_repository_dependency(SqlCongregationRepository)
+get_district_reminder_config_repository = make_repository_dependency(
+    SqlDistrictReminderConfigRepository
+)
+get_district_repository = make_repository_dependency(SqlDistrictRepository)
+get_event_instance_repository = make_repository_dependency(SqlEventInstanceRepository)
+get_export_token_repository = make_repository_dependency(SqlExportTokenRepository)
+get_invitation_overwrite_request_repository = make_repository_dependency(
+    SqlInvitationOverwriteRequestRepository
+)
+get_invitation_repository = make_repository_dependency(SqlInvitationRepository)
+get_leader_registration_repository = make_repository_dependency(SqlLeaderRegistrationRepository)
+get_leader_repository = make_repository_dependency(SqlLeaderRepository)
+get_leader_unavailability_repository = make_repository_dependency(SqlLeaderUnavailabilityRepository)
+get_membership_repository = make_repository_dependency(SqlMembershipRepository)
+get_planning_series_repository = make_repository_dependency(SqlPlanningSeriesRepository)
+get_planning_slot_repository = make_repository_dependency(SqlPlanningSlotRepository)
+get_service_assignment_repository = make_repository_dependency(SqlServiceAssignmentRepository)
 get_external_event_candidate_repository = make_repository_dependency(
     SqlExternalEventCandidateRepository
 )

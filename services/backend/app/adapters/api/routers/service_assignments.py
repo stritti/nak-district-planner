@@ -5,9 +5,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_planning_slot_repository,
+    get_service_assignment_repository,
+)
 from app.adapters.api.schemas.conflict import ConflictItem, ConflictResponse
 from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentCreate,
@@ -15,8 +20,6 @@ from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentUpdate,
 )
 from app.adapters.auth.permissions import require_role_in_district
-from app.adapters.db.repositories import SqlPlanningSlotRepository
-from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
@@ -69,8 +72,10 @@ async def create_assignment(
     body: ServiceAssignmentCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> ServiceAssignmentResponse:
-    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    planning_slot = await slots.get(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
@@ -93,7 +98,7 @@ async def create_assignment(
         leader_name=body.leader_name,
         status=body.status,
     )
-    await SqlServiceAssignmentRepository(db).save(assignment)
+    await assignments_repo.save(assignment)
     return _assignment_response(assignment)
 
 
@@ -102,8 +107,10 @@ async def list_assignments(
     event_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> list[ServiceAssignmentResponse]:
-    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    planning_slot = await slots.get(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
@@ -112,7 +119,7 @@ async def list_assignments(
     # Check if user has VIEWER role (or higher) in the district
     require_role_in_district(auth, Role.VIEWER, planning_slot.district_id)
 
-    assignments = await SqlServiceAssignmentRepository(db).list_by_planning_slot(event_id)
+    assignments = await assignments_repo.list_by_planning_slot(event_id)
     return [_assignment_response(a) for a in assignments]
 
 
@@ -123,8 +130,10 @@ async def update_assignment(
     body: ServiceAssignmentUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> ServiceAssignmentResponse:
-    repo = SqlServiceAssignmentRepository(db)
+    repo = assignments_repo
     assignment = await repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
         raise HTTPException(
@@ -132,7 +141,7 @@ async def update_assignment(
         )
 
     # Verify PlanningSlot exists and check district access
-    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    planning_slot = await slots.get(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
@@ -167,15 +176,17 @@ async def delete_assignment(
     assignment_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> None:
-    repo = SqlServiceAssignmentRepository(db)
+    repo = assignments_repo
     assignment = await repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
 
-    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    planning_slot = await slots.get(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
