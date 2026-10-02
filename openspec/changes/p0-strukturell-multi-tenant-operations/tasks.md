@@ -44,9 +44,9 @@
   - `alembic downgrade -1` → Exit-Code prüfen: **neu ergänzt**
   - `alembic upgrade head` → erneut (Roundtrip-Test): **neu ergänzt**
   - Seed-Daten via `make seed-dry-run`-Äquivalent (`seed_testdata.py --dry-run`) + Konsistenzprüfung: **neu ergänzt**
-- [x] 3.2 Migration-Check als erforderlichen Check in Branch-Protection-Regeln dokumentiert (`docs/production-runbook.md` Abschnitt 7.1). Das tatsächliche Setzen der GitHub-Branch-Protection-Regel erfordert Repo-Admin-Zugriff und wurde **nicht** automatisch vorgenommen.
+- [x] 3.2 Migration-Check als erforderlichen Check in Branch-Protection-Regeln dokumentiert (`docs/production-runbook.md` Abschnitt 7.1). Die tatsächliche GitHub-Ruleset-Konfiguration bleibt ein Admin-Schritt und wird in Issue #403 nachverfolgt. Der Workflow läuft seit diesem Change für jeden PR gegen `main`, damit er als stabiler Required Check verwendet werden kann.
 - [x] 3.3 Kritische Constraints dokumentiert (`docs/schema.md`: FK-Namenskonvention, Unique Constraints, Tenant-Scoping-FKs, bekannte Schema-Drift)
-- [x] 3.4 `alembic check` in CI aufgenommen — seit 2026-10-01 **blockierend**, nachdem die vorbestehende Drift bereinigt wurde (`docs/schema.md`, Abschnitt „Abgleich ORM ↔ Datenbank“). Ursprünglich **informativ, nicht blockierend** (`continue-on-error: true`). Ein blockierender Gate würde CI sofort für alle PRs rot machen: es besteht bereits substanzielle, vorbestehende Drift zwischen ORM-Modellen und migrierter DB (siehe `docs/schema.md`, Abschnitt "Bekannte Schema-Drift"). Eine dieser Ursachen (fehlender `notification.py`-Import in `orm_models/__init__.py`) wurde als Nebenfix behoben; der Rest bleibt bewusst offen für einen eigenen Reconciliation-Follow-up.
+- [x] 3.4 `alembic check` in CI aufgenommen — seit 2026-10-01 **blockierend**, nachdem die vorbestehende Drift bereinigt wurde (`docs/schema.md`, Abschnitt „Abgleich ORM ↔ Datenbank“). Ursprünglich **informativ, nicht blockierend** (`continue-on-error: true`). Der Workflow prüft zusätzlich Single-Head, FK-Namen, Offline-SQL, Apply, Downgrade/Upgrade-Roundtrip und Seed-Dry-Run.
 
 ## 4. Backup/Restore-Automatisierung
 
@@ -70,5 +70,5 @@
   - Restore-Protokoll (Schritt-für-Schritt)
   - Aufbewahrungsfrist (30 Tage)
   - Verantwortlichkeit
-- [ ] 4.5 Restore-Test auf separater Umgebung durchführen und protokollieren *(bewusst offen gelassen — erfordert eine echte Staging-Infrastruktur, die hier nicht verfügbar ist; die Skript-Logik selbst wurde per End-to-End-Test gegen einen Wegwerf-Container verifiziert: Backup → Datenänderung → Restore → Originaldaten wiederhergestellt, inkl. Fehlerfall "korruptes Archiv" und Klartext-Warnung ohne `BACKUP_ENCRYPT_KEY`. Protokoll-Tabelle für den echten Test steht bereit in `docs/production-runbook.md` Abschnitt 4.2.)*
+- [x] 4.5 Restore-Test auf separater Umgebung durchführen und protokollieren *(automatisiert mit `scripts/restore-drill.sh` und `.github/workflows/restore-drill.yml`: PostgreSQL-18-Source und unabhängiges PostgreSQL-18-Target, verschlüsseltes Backup, `--dry-run`, echter Restore, Datenintegritätsprüfung sowie Negativfall „korruptes Archiv verändert Ziel nicht“. GitHub-Actions-Lauf `37014902252` am 2026-10-02 erfolgreich. Ein zusätzlicher vierteljährlicher Restore in einer produktionsnahen Staging-Umgebung bleibt laut Runbook betriebliche Pflicht.)*
 - [x] 4.6 Backup-Strategie in README.md aktualisiert

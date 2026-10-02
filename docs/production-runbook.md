@@ -75,13 +75,35 @@ Schritt-für-Schritt:
 4. Nach dem Restore: Anwendung neu starten, Health-Check + Smoke-Test (siehe Abschnitt 3) durchführen.
 5. Ergebnis (Datum, Dauer, Auffälligkeiten) im Incident-/Ops-Log dokumentieren.
 
-**Ohne dokumentierten Restore-Test in einer separaten Umgebung gilt die Backup-Strategie
-als unvollständig** — ein Restore-Test ist mindestens vierteljährlich durchzuführen und
-hier zu protokollieren:
+#### Automatisierter Restore-Drill
+
+`scripts/restore-drill.sh` prüft die technische Wiederherstellbarkeit mit der gleichen
+PostgreSQL-Major-Version wie die Produktionsumgebung. Der Drill verwendet zwei voneinander
+getrennte PostgreSQL-18-Container:
+
+1. Source-Datenbank mit Prüfdaten anlegen.
+2. Mit dem produktiven `scripts/backup.sh` ein GPG-verschlüsseltes Backup erzeugen.
+3. Source-Datenbank vollständig stoppen.
+4. Unabhängige Target-Datenbank mit abweichenden Prüfdaten starten.
+5. Das Backup mit dem produktiven `scripts/restore.sh` zuerst im `--dry-run` prüfen und
+   anschließend wirklich wiederherstellen.
+6. Wiederhergestellte Daten gegen die Source-Prüfdaten verifizieren.
+7. Ein absichtlich beschädigtes Archiv prüfen; es muss vor einer Datenänderung abgewiesen
+   werden und die Target-Daten müssen unverändert bleiben.
+
+Der Workflow `.github/workflows/restore-drill.yml` führt diesen Drill für jeden Pull Request
+gegen `main`, bei jedem Push auf `main`, wöchentlich sowie manuell aus. Der erfolgreiche
+GitHub-Actions-Lauf `37014902252` vom 2. Oktober 2026 dokumentiert den ersten vollständigen
+CI-Nachweis.
+
+Der automatisierte Drill ersetzt nicht den vierteljährlichen Restore aus einem echten
+Produktionsbackup in einer produktionsnahen Staging-Umgebung. Dieser Test prüft zusätzlich
+externe Backup-Ablage, Berechtigungen, Betriebszugriffe und den realen Smoke-Test.
 
 | Datum | Umgebung | Ergebnis | Durchgeführt von |
 |-------|----------|----------|-------------------|
-| _(noch kein Eintrag)_ | | | |
+| 2026-10-02 | GitHub Actions, getrennte PostgreSQL-18-Source/Target-Container | Erfolgreich: GPG-Backup, Dry-Run, Restore, Datenvergleich und Korruptions-Negativtest | CI `Restore Drill` |
+| _(vierteljährlicher Staging-Test ausstehend)_ | | | |
 
 ### 4.3 Verantwortlichkeit
 
@@ -160,17 +182,25 @@ Kritische Secrets (SECRET_KEY, OIDC_CLIENT_SECRET, IDP_PROVISIONING_API_KEY) unt
 
 ### 7.1 Erforderliche Branch-Protection-Checks
 
-Der Job `alembic-check` (`.github/workflows/alembic-check.yml`) muss als
-**erforderlicher Status-Check** auf dem `main`-Branch konfiguriert sein
-(GitHub → Settings → Branches → Branch protection rule für `main` →
-"Require status checks to pass" → `alembic-check` auswählen). Ohne diesen
-Zwang kann ein PR mit gebrochener Migration (mehrere Heads, kaputter
-Downgrade-Pfad, Seed-Inkonsistenz) gemerged werden, auch wenn der Check rot
-ist. Der Drift-Teilschritt (`alembic check`, siehe `docs/schema.md`) ist
-Teil dieses Jobs und blockiert ihn bei Abweichungen zwischen Modell und
-Datenbank; er muss nicht als eigener Required Check gelistet werden — nur der
-Gesamtjob-Status zählt.
+Für `main` muss ein aktives GitHub-Ruleset Pull Requests und aktuelle erfolgreiche
+Status-Checks erzwingen. Die Workflows sind so ausgelegt, dass insbesondere die beiden
+operativen Datenbank-Gates auf jedem Pull Request gegen `main` einen stabilen Check-Namen
+liefern:
 
-Diese Einstellung kann nicht aus dem Repository-Code heraus gesetzt werden
-und muss von einem Repo-Admin manuell vorgenommen (oder per `gh api
-repos/{owner}/{repo}/branches/main/protection` gesetzt) werden.
+- `Migration Graph & FK Names` aus `.github/workflows/alembic-check.yml`
+- `Encrypted Backup & Isolated Restore` aus `.github/workflows/restore-drill.yml`
+- Backend-Tests und Coverage inklusive vollständiger Integration-/Performance-Suite
+- Frontend-Unit- und E2E-Tests
+- MegaLinter
+- Dependency Review
+- Security Scans / CodeQL
+
+Der Migrationsjob enthält Single-Head-Prüfung, FK-Namen, Offline-SQL, Migration auf einer
+frischen PostgreSQL-Datenbank, Downgrade/Upgrade-Roundtrip, Seed-Dry-Run und den blockierenden
+`alembic check`. Der Restore-Job prüft die Wiederherstellbarkeit eines verschlüsselten
+Backups in einer unabhängigen PostgreSQL-18-Zieldatenbank.
+
+Das aktuell vorhandene Ruleset schützt bereits vor Branch-Löschung und
+Non-Fast-Forward-Updates. Das Erzwingen von Pull Requests und Required Status Checks ist
+Repo-Admin-Konfiguration und wird in GitHub-Issue #403 nachverfolgt. Der Repository-Code
+allein kann diese Einstellung nicht erzwingen.

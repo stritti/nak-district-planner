@@ -2,10 +2,7 @@ name: Alembic Migration Check
 
 on:
   pull_request:
-    paths:
-      - "services/backend/alembic/**"
-      - "services/backend/app/adapters/db/**"
-      - "services/backend/app/domain/models/**"
+    branches: [main]
   push:
     branches: [main, develop]
     paths:
