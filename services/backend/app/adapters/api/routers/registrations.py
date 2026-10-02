@@ -37,7 +37,9 @@ from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
+from app.adapters.db.transactional_events import publish_after_commit
 from app.adapters.idp.provisioning import IdpProvisioningError, get_idp_provisioner
+from app.domain.event_payloads import registration_received
 from app.domain.models.leader import Leader, LeaderRank, SpecialRole
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.membership import ScopeType
@@ -305,6 +307,9 @@ async def approve_registration(
     await _handle_idp_provisioning(db, reg, body, district_id)
 
     await reg_repo.save(reg)
+    publish_after_commit(
+        db, registration_received(district_id, leader_name=reg.name, leader_email=reg.email)
+    )
 
     logger.info("Registration approved; leader record created.")
     return _to_response(reg)

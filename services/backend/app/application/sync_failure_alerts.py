@@ -4,15 +4,20 @@ The Celery task retries a failing sync with exponential backoff. Only when all
 retries are exhausted does it raise an alert, so transient provider hiccups do
 not produce notifications. Alerts are de-duplicated against unread alerts for
 the same integration because Celery beat keeps re-dispatching an integration
-until it syncs successfully.
+until it syncs successfully. Each created alert also publishes a ``SYNC_ERROR``
+domain event, so configured mail hooks follow the same de-duplication.
 """
 
 from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
+from app.domain.event_payloads import sync_error
+from app.domain.events import DomainEvent
 from app.domain.models.notification import Notification, NotificationType
 from app.domain.ports.repositories import CalendarIntegrationRepository, NotificationRepository
 
@@ -42,9 +47,13 @@ class SyncFailureAlerter:
         self,
         integrations: CalendarIntegrationRepository,
         notifications: NotificationRepository,
+        publish: Callable[[DomainEvent], None] | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._integrations = integrations
         self._notifications = notifications
+        self._publish = publish
+        self._clock = clock
 
     async def alert(self, failure: SyncFailure) -> Notification | None:
         """Persist an alert and return it, or ``None`` when no alert was needed."""
@@ -59,16 +68,13 @@ class SyncFailureAlerter:
         if await self._has_unread_alert(integration.district_id, failure.integration_id):
             return None
 
+        message = _error_message(failure)
         notification = Notification.create(
             district_id=integration.district_id,
             congregation_id=integration.congregation_id,
             type=NotificationType.SYSTEM,
             title=f"Kalender-Synchronisation fehlgeschlagen: {integration.name}",
-            body=(
-                f"Die Synchronisation ist nach {failure.attempts} Versuchen fehlgeschlagen "
-                f"({failure.error_class}). Bitte Zugangsdaten und Erreichbarkeit der "
-                "Kalenderquelle prüfen."
-            ),
+            body=f"{message}. Bitte Zugangsdaten und Erreichbarkeit der Kalenderquelle prüfen.",
             payload={
                 "kind": SYNC_FAILURE_ALERT_KIND,
                 "integration_id": str(failure.integration_id),
@@ -77,6 +83,16 @@ class SyncFailureAlerter:
             },
         )
         await self._notifications.save(notification)
+        if self._publish is not None:
+            # Provider-neutral text only: exception messages may contain URLs or tokens.
+            self._publish(
+                sync_error(
+                    integration.district_id,
+                    integration_name=integration.name,
+                    error_message=message,
+                    occurred_at=self._clock(),
+                )
+            )
         return notification
 
     async def _has_unread_alert(self, district_id: uuid.UUID, integration_id: uuid.UUID) -> bool:
@@ -84,6 +100,13 @@ class SyncFailureAlerter:
             district_id, unread_only=True, limit=DEDUPLICATION_WINDOW
         )
         return any(_is_alert_for(notification, integration_id) for notification in unread)
+
+
+def _error_message(failure: SyncFailure) -> str:
+    return (
+        f"Die Synchronisation ist nach {failure.attempts} Versuchen fehlgeschlagen "
+        f"({failure.error_class})"
+    )
 
 
 def _is_alert_for(notification: Notification, integration_id: uuid.UUID) -> bool:

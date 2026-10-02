@@ -1,6 +1,7 @@
 <template>
   <div class="p-2 sm:p-4">
     <h1 class="page-title">Dienstplan-Matrix</h1>
+    <ContextualHelp context="matrix" />
 
     <!-- Filter-Leiste -->
     <MatrixFilters
@@ -52,6 +53,7 @@ import MatrixTable from '../components/MatrixTable.vue'
 import AssignmentModal from '../components/AssignmentModal.vue'
 import MonthlyReleaseDialog from '../components/MonthlyReleaseDialog.vue'
 import MatrixSkeleton from '../components/MatrixSkeleton.vue'
+import ContextualHelp from '../components/ContextualHelp.vue'
 import { useToast } from '../composables/useToast'
 
 const matrixStore = useMatrixStore()

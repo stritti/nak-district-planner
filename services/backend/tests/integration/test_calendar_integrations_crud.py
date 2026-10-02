@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from contextlib import contextmanager
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -14,6 +14,11 @@ from app.adapters.api.deps import (
     get_calendar_integration_repository,
     get_calendar_integration_service,
     get_db_session,
+)
+from app.domain.models.calendar_integration import (
+    CalendarCapability,
+    CalendarIntegration,
+    CalendarType,
 )
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
@@ -89,21 +94,15 @@ def _auth_client(
         deps.set_oidc_adapter(None)
 
 
-def _integration(district_id: uuid.UUID):
-    return SimpleNamespace(
-        id=uuid.uuid4(),
+def _integration(district_id: uuid.UUID) -> CalendarIntegration:
+    # The real entity, so new domain fields cannot silently break the response mapping.
+    return CalendarIntegration.create(
         district_id=district_id,
-        congregation_id=None,
         name="Old",
-        type="GOOGLE",
+        type=CalendarType.GOOGLE,
+        credentials_enc="encrypted",
         sync_interval=15,
-        capabilities=["READ"],
-        is_active=True,
-        last_synced_at=None,
-        last_sync_error=None,
-        created_at="2026-01-01T00:00:00Z",
-        updated_at="2026-01-01T00:00:00Z",
-        default_category=None,
+        capabilities=[CalendarCapability.READ],
     )
 
 
@@ -149,8 +148,7 @@ def test_list_calendar_integrations_happy_path():
 def test_update_calendar_integration_happy_path():
     district_id = uuid.uuid4()
     integration = _integration(district_id)
-    updated = integration
-    updated.name = "New"
+    updated = dataclasses.replace(integration, name="New")
     repo = AsyncMock()
     repo.get.return_value = integration
     service = AsyncMock()

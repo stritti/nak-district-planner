@@ -166,9 +166,10 @@ Der Job `alembic-check` (`.github/workflows/alembic-check.yml`) muss als
 "Require status checks to pass" → `alembic-check` auswählen). Ohne diesen
 Zwang kann ein PR mit gebrochener Migration (mehrere Heads, kaputter
 Downgrade-Pfad, Seed-Inkonsistenz) gemerged werden, auch wenn der Check rot
-ist. Der informative Drift-Teilschritt (`alembic check`, siehe
-`docs/schema.md`) ist bewusst **nicht** blockierend und muss nicht als
-eigener Required Check gelistet werden — nur der Gesamtjob-Status zählt.
+ist. Der Drift-Teilschritt (`alembic check`, siehe `docs/schema.md`) ist
+Teil dieses Jobs und blockiert ihn bei Abweichungen zwischen Modell und
+Datenbank; er muss nicht als eigener Required Check gelistet werden — nur der
+Gesamtjob-Status zählt.
 
 Diese Einstellung kann nicht aus dem Repository-Code heraus gesetzt werden
 und muss von einem Repo-Admin manuell vorgenommen (oder per `gh api
