@@ -18,12 +18,20 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Query, Security, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from app.adapters.api import deps as api_deps
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_congregation_repository,
+    get_district_repository,
+    get_leader_registration_repository,
+    get_leader_repository,
+    get_membership_repository,
+)
 from app.adapters.api.schemas.registration import (
     RegistrationApprove,
     RegistrationCreate,
@@ -46,10 +54,6 @@ from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Public lookup router — minimal data for the self-registration form
-# ---------------------------------------------------------------------------
 
 
 class PublicDistrictInfo(BaseModel):
@@ -80,9 +84,12 @@ public_router = APIRouter(prefix="/api/v1/public", tags=["registrations-public"]
 
 
 @public_router.get("/districts", response_model=list[PublicDistrictInfo])
-async def list_districts_public(db: DbSession) -> list[PublicDistrictInfo]:
+async def list_districts_public(
+    db: DbSession,
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+) -> list[PublicDistrictInfo]:
     """List all districts — public endpoint for the self-registration form."""
-    districts = await SqlDistrictRepository(db).list_all()
+    districts = await district_repo.list_all()
     return [PublicDistrictInfo(id=d.id, name=d.name) for d in districts]
 
 
@@ -91,27 +98,23 @@ async def list_districts_public(db: DbSession) -> list[PublicDistrictInfo]:
     response_model=list[PublicCongregationInfo],
 )
 async def list_congregations_public(
-    district_id: uuid.UUID, db: DbSession
+    district_id: uuid.UUID,
+    db: DbSession,
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
 ) -> list[PublicCongregationInfo]:
     """List congregations for a district — public endpoint for the self-registration form."""
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-    congregations = await SqlCongregationRepository(db).list_by_district(district_id)
+    congregations = await cong_repo.list_by_district(district_id)
     return [PublicCongregationInfo(id=c.id, name=c.name) for c in congregations]
 
-
-# ---------------------------------------------------------------------------
-# Registration router (per-district)
-# ---------------------------------------------------------------------------
 
 router = APIRouter(
     prefix="/api/v1/districts/{district_id}/registrations",
     tags=["registrations"],
 )
-
 overview_router = APIRouter(prefix="/api/v1/registrations", tags=["registrations"])
-
-# Optional bearer — used only to extract user_sub when the registrant is logged in
 _optional_bearer = HTTPBearer(auto_error=False)
 
 
@@ -143,28 +146,19 @@ def _to_response(reg: LeaderRegistration) -> RegistrationResponse:
     )
 
 
-# ---------------------------------------------------------------------------
-# Public endpoint — no authentication required
-# ---------------------------------------------------------------------------
-
-
 @router.post("", response_model=RegistrationResponse, status_code=status.HTTP_201_CREATED)
 async def submit_registration(
     district_id: uuid.UUID,
     body: RegistrationCreate,
     db: DbSession,
     credentials: HTTPAuthorizationCredentials | None = Security(_optional_bearer),
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> RegistrationResponse:
-    """Submit a self-registration request for a new Amtstragender.
-
-    This endpoint is **public** — no authentication is required, making it
-    IDP-agnostic. If a Bearer token is provided, it is validated first and only
-    then its OIDC `sub` is linked to the registration.
-    """
-    if not await SqlDistrictRepository(db).get(district_id):
+    """Submit a self-registration request for a new Amtstragender."""
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
 
-    # Extract user_sub from token if present (hard validation required)
     user_sub: str | None = None
     if credentials:
         oidc_adapter = api_deps.get_oidc_adapter()
@@ -200,7 +194,7 @@ async def submit_registration(
         notes=body.notes,
         user_sub=user_sub,
     )
-    await SqlLeaderRegistrationRepository(db).save(reg)
+    await reg_repo.save(reg)
     logger.info(
         "New registration submitted: registration_id=%s district_id=%s",
         reg.id,
@@ -209,27 +203,20 @@ async def submit_registration(
     return _to_response(reg)
 
 
-# ---------------------------------------------------------------------------
-# District-admin endpoints
-# ---------------------------------------------------------------------------
-
-
 @router.get("", response_model=list[RegistrationResponse])
 async def list_registrations(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
     status_filter: RegistrationStatus | None = Query(default=None, alias="status"),
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> list[RegistrationResponse]:
     """List registration requests for a district (DISTRICT_ADMIN only)."""
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-
-    registrations = await SqlLeaderRegistrationRepository(db).list_by_district(
-        district_id, status=status_filter
-    )
+    registrations = await reg_repo.list_by_district(district_id, status=status_filter)
     return [_to_response(r) for r in registrations]
 
 
@@ -237,15 +224,10 @@ async def list_registrations(
 async def get_pending_overview(
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> RegistrationPendingOverviewResponse:
-    """Return pending registration counts for visible districts.
-
-    - Superadmin: all districts
-    - District admin: districts where user has DISTRICT_ADMIN role
-    """
-    district_repo = SqlDistrictRepository(db)
-    reg_repo = SqlLeaderRegistrationRepository(db)
-
+    """Return pending registration counts for visible districts."""
     if auth.user.is_superadmin:
         districts = await district_repo.list_all()
         district_ids = [d.id for d in districts]
@@ -259,53 +241,39 @@ async def get_pending_overview(
     for district_id in district_ids:
         pending = await reg_repo.count_by_district(district_id, status=RegistrationStatus.PENDING)
         if pending > 0:
-            counts.append(
-                RegistrationPendingCountResponse(district_id=district_id, pending=pending)
-            )
+            counts.append(RegistrationPendingCountResponse(district_id=district_id, pending=pending))
             total += pending
-
     return RegistrationPendingOverviewResponse(total_pending=total, by_district=counts)
 
 
-@router.post(
-    "/{registration_id}/approve",
-    response_model=RegistrationResponse,
-)
+@router.post("/{registration_id}/approve", response_model=RegistrationResponse)
 async def approve_registration(
     district_id: uuid.UUID,
     registration_id: uuid.UUID,
     body: RegistrationApprove,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    leader_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    mem_repo: SqlMembershipRepository = Depends(get_membership_repository),
 ) -> RegistrationResponse:
-    """Approve a registration request (DISTRICT_ADMIN only).
-
-    Creates an active Leader record and marks the registration as APPROVED.
-    The admin may override the congregation, rank, or special role.
-    """
+    """Approve a registration request (DISTRICT_ADMIN only)."""
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-
-    reg_repo = SqlLeaderRegistrationRepository(db)
     reg = await reg_repo.get(registration_id)
-
     await _validate_registration_pending(reg, district_id)
-    # reg is guaranteed non-None after _validate_registration_pending passes
     assert reg is not None
-    await _validate_scope_assignment(db, body, district_id)
+    await _validate_scope_assignment(cong_repo, body, district_id)
 
-    # Determine effective values (admin overrides take precedence)
-    congregation_id = (
-        body.congregation_id if body.congregation_id is not None else reg.congregation_id
-    )
+    congregation_id = body.congregation_id if body.congregation_id is not None else reg.congregation_id
     rank = body.rank if body.rank is not None else reg.rank
     special_role = body.special_role if body.special_role is not None else reg.special_role
 
     await _create_leader_and_approve(
-        db, reg, body, auth, district_id, congregation_id, rank, special_role
+        leader_repo, reg, body, auth, district_id, congregation_id, rank, special_role
     )
-    await _create_membership_if_linked(db, reg, body)
-    await _handle_idp_provisioning(db, reg, body, district_id)
-
+    await _create_membership_if_linked(mem_repo, reg, body)
+    await _handle_idp_provisioning(mem_repo, reg, body, district_id)
     await reg_repo.save(reg)
     publish_after_commit(
         db, registration_received(district_id, leader_name=reg.name, leader_email=reg.email)
@@ -319,7 +287,6 @@ async def _validate_registration_pending(
     reg: LeaderRegistration | None,
     district_id: uuid.UUID,
 ) -> None:
-    """Raise 404/409 if registration does not exist or is not in PENDING status."""
     if not reg or reg.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Registrierung nicht gefunden"
@@ -332,11 +299,10 @@ async def _validate_registration_pending(
 
 
 async def _validate_scope_assignment(
-    db: DbSession,
+    cong_repo: SqlCongregationRepository,
     body: RegistrationApprove,
     district_id: uuid.UUID,
 ) -> None:
-    """Check that scope_type/scope_id are consistent with the district."""
     if body.scope_type == ScopeType.DISTRICT:
         if body.scope_id != district_id:
             raise HTTPException(
@@ -344,7 +310,7 @@ async def _validate_scope_assignment(
                 detail="scope_id muss dem Bezirk entsprechen, wenn scope_type=DISTRICT",
             )
     elif body.scope_type == ScopeType.CONGREGATION:
-        congregation = await SqlCongregationRepository(db).get(body.scope_id)
+        congregation = await cong_repo.get(body.scope_id)
         if congregation is None or congregation.district_id != district_id:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -353,7 +319,7 @@ async def _validate_scope_assignment(
 
 
 async def _create_leader_and_approve(
-    db: DbSession,
+    leader_repo: SqlLeaderRepository,
     reg: LeaderRegistration,
     body: RegistrationApprove,
     auth: CurrentUserWithMemberships,
@@ -362,7 +328,6 @@ async def _create_leader_and_approve(
     rank: LeaderRank | None,
     special_role: SpecialRole | None,
 ) -> None:
-    """Create the Leader record and mark the registration as APPROVED."""
     leader = Leader.create(
         name=reg.name,
         district_id=district_id,
@@ -374,7 +339,7 @@ async def _create_leader_and_approve(
         notes=reg.notes,
         is_active=True,
     )
-    await SqlLeaderRepository(db).save(leader)
+    await leader_repo.save(leader)
 
     now = datetime.now(UTC)
     reg.status = RegistrationStatus.APPROVED
@@ -390,13 +355,12 @@ async def _create_leader_and_approve(
 
 
 async def _create_membership_if_linked(
-    db: DbSession,
+    mem_repo: SqlMembershipRepository,
     reg: LeaderRegistration,
     body: RegistrationApprove,
 ) -> None:
-    """Create/update membership when the registrant already has an OIDC user_sub."""
     if reg.user_sub is not None:
-        await SqlMembershipRepository(db).upsert_by_scope(
+        await mem_repo.upsert_by_scope(
             user_sub=reg.user_sub,
             role=body.role,
             scope_type=body.scope_type,
@@ -405,12 +369,11 @@ async def _create_membership_if_linked(
 
 
 async def _handle_idp_provisioning(
-    db: DbSession,
+    mem_repo: SqlMembershipRepository,
     reg: LeaderRegistration,
     body: RegistrationApprove,
     district_id: uuid.UUID,
 ) -> None:
-    """Optionally provision the user in the external IDP and capture the result."""
     provisioner = get_idp_provisioner()
     if provisioner is None:
         return
@@ -430,7 +393,7 @@ async def _handle_idp_provisioning(
         reg.idp_provisioned_at = datetime.now(UTC)
         if reg.user_sub is None and provision_result.user_sub:
             reg.user_sub = provision_result.user_sub
-            await SqlMembershipRepository(db).upsert_by_scope(
+            await mem_repo.upsert_by_scope(
                 user_sub=reg.user_sub,
                 role=body.role,
                 scope_type=body.scope_type,
@@ -441,21 +404,17 @@ async def _handle_idp_provisioning(
         reg.idp_provision_error = str(exc)
 
 
-@router.post(
-    "/{registration_id}/reject",
-    response_model=RegistrationResponse,
-)
+@router.post("/{registration_id}/reject", response_model=RegistrationResponse)
 async def reject_registration(
     district_id: uuid.UUID,
     registration_id: uuid.UUID,
     body: RegistrationReject,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> RegistrationResponse:
     """Reject a registration request (DISTRICT_ADMIN only)."""
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-
-    reg_repo = SqlLeaderRegistrationRepository(db)
     reg = await reg_repo.get(registration_id)
     if not reg or reg.district_id != district_id:
         raise HTTPException(
@@ -471,7 +430,6 @@ async def reject_registration(
     reg.rejection_reason = body.reason
     reg.updated_at = datetime.now(UTC)
     await reg_repo.save(reg)
-
     logger.info("Registration rejected.")
     return _to_response(reg)
 
@@ -482,11 +440,10 @@ async def delete_registration(
     registration_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    reg_repo: SqlLeaderRegistrationRepository = Depends(get_leader_registration_repository),
 ) -> None:
     """Delete a registration request (DISTRICT_ADMIN only)."""
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-
-    reg_repo = SqlLeaderRegistrationRepository(db)
     reg = await reg_repo.get(registration_id)
     if not reg or reg.district_id != district_id:
         raise HTTPException(
