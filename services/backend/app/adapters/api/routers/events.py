@@ -21,8 +21,10 @@ from app.adapters.db.repositories import (
     SqlEventInstanceRepository,
     SqlPlanningSlotRepository,
 )
+from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
 from app.application.sync_service import push_deviation_resolution
+from app.domain.event_payloads import plan_finalized
 from app.domain.models.event_instance import (
     EventInstance,
     EventSource,
@@ -406,5 +408,14 @@ async def bulk_update_approval_status(
         slot.approval_status = body.approval_status
         slot.updated_at = now_dt
         await slot_repo.save(slot)
+
+    # Releasing the whole district's month is the plan finalisation.
+    if (
+        district_id is not None
+        and body.congregation_id is None
+        and body.approval_status == EventApprovalStatus.CONFIRMED
+        and all_slots
+    ):
+        publish_after_commit(session, plan_finalized(district_id, year=body.year, month=body.month))
 
     return BulkApprovalStatusResponse(updated_count=len(all_slots))
