@@ -8,6 +8,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
+from app.adapters.api.deps import (
+    get_congregation_group_repository,
+    get_congregation_repository,
+    get_district_repository,
+    get_event_instance_repository,
+    get_invitation_repository,
+    get_leader_repository,
+    get_planning_slot_repository,
+    get_service_assignment_repository,
+)
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
 from app.domain.models.event_instance import EventInstance
@@ -69,21 +79,43 @@ def _make_client_for(
 
     app.dependency_overrides[deps.get_db_session] = override_db_session
 
+    district_repo = AsyncMock()
+    district_repo.get.return_value = District.create(name="Bezirk")
+
+    cong_repo = AsyncMock()
+    cong_repo.list_by_district.return_value = [congregation]
+    cong_repo.list_by_ids.return_value = []
+
+    slot_repo = AsyncMock()
+    slot_repo.list_for_date_range.return_value = slots
+
+    instance_repo = AsyncMock()
+    instance_repo.list_by_planning_slots.return_value = instances
+
+    assignment_repo = AsyncMock()
+    assignment_repo.list_by_planning_slots.return_value = assignments
+
+    leader_repo = AsyncMock()
+    leader_repo.list_by_district.return_value = []
+
+    group_repo = AsyncMock()
+    group_repo.list_by_district.return_value = []
+
+    invitation_repo = AsyncMock()
+    invitation_repo.list_by_source_planning_slots.return_value = []
+
+    app.dependency_overrides[get_district_repository] = lambda: district_repo
+    app.dependency_overrides[get_congregation_repository] = lambda: cong_repo
+    app.dependency_overrides[get_planning_slot_repository] = lambda: slot_repo
+    app.dependency_overrides[get_event_instance_repository] = lambda: instance_repo
+    app.dependency_overrides[get_service_assignment_repository] = lambda: assignment_repo
+    app.dependency_overrides[get_leader_repository] = lambda: leader_repo
+    app.dependency_overrides[get_congregation_group_repository] = lambda: group_repo
+    app.dependency_overrides[get_invitation_repository] = lambda: invitation_repo
+
     with (
         patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
         patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
-        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as district_repo_cls,
-        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as cong_repo_cls,
-        patch("app.adapters.api.routers.districts.SqlPlanningSlotRepository") as slot_repo_cls,
-        patch("app.adapters.api.routers.districts.SqlEventInstanceRepository") as instance_repo_cls,
-        patch(
-            "app.adapters.api.routers.districts.SqlServiceAssignmentRepository"
-        ) as assignment_repo_cls,
-        patch("app.adapters.api.routers.districts.SqlLeaderRepository") as leader_repo_cls,
-        patch(
-            "app.adapters.api.routers.districts.SqlCongregationGroupRepository"
-        ) as group_repo_cls,
-        patch("app.adapters.api.routers.districts.SqlInvitationRepository") as invitation_repo_cls,
     ):
         user_repo = AsyncMock()
         user_repo.get_by_sub.return_value = None
@@ -94,41 +126,19 @@ def _make_client_for(
         membership_repo.get_all_by_user.return_value = [membership]
         MockMembershipRepo.return_value = membership_repo
 
-        district_repo = AsyncMock()
-        district_repo.get.return_value = District.create(name="Bezirk")
-        district_repo_cls.return_value = district_repo
-
-        cong_repo = AsyncMock()
-        cong_repo.list_by_district.return_value = [congregation]
-        cong_repo.list_by_ids.return_value = []
-        cong_repo_cls.return_value = cong_repo
-
-        slot_repo = AsyncMock()
-        slot_repo.list_for_date_range.return_value = slots
-        slot_repo_cls.return_value = slot_repo
-
-        instance_repo = AsyncMock()
-        instance_repo.list_by_planning_slots.return_value = instances
-        instance_repo_cls.return_value = instance_repo
-
-        assignment_repo = AsyncMock()
-        assignment_repo.list_by_planning_slots.return_value = assignments
-        assignment_repo_cls.return_value = assignment_repo
-
-        leader_repo = AsyncMock()
-        leader_repo.list_by_district.return_value = []
-        leader_repo_cls.return_value = leader_repo
-
-        group_repo = AsyncMock()
-        group_repo.list_by_district.return_value = []
-        group_repo_cls.return_value = group_repo
-
-        invitation_repo = AsyncMock()
-        invitation_repo.list_by_source_planning_slots.return_value = []
-        invitation_repo_cls.return_value = invitation_repo
-
         yield TestClient(app)
 
+    for dep in (
+        get_district_repository,
+        get_congregation_repository,
+        get_planning_slot_repository,
+        get_event_instance_repository,
+        get_service_assignment_repository,
+        get_leader_repository,
+        get_congregation_group_repository,
+        get_invitation_repository,
+    ):
+        app.dependency_overrides.pop(dep, None)
     app.dependency_overrides.pop(deps.get_db_session, None)
 
 

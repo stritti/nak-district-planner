@@ -191,7 +191,7 @@ async def generate_slots_for_series(
 
     **RBAC:** Requires DISTRICT_ADMIN role in the series' district.
     """
-    series = await repo.get(series_id)
+    series = await series_repo.get(series_id)
 
     if not series:
         raise HTTPException(

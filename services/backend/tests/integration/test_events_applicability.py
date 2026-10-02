@@ -16,7 +16,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
-from app.adapters.api.deps import get_db_session
+from app.adapters.api.deps import (
+    get_db_session,
+    get_event_instance_repository,
+    get_planning_slot_repository,
+)
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
@@ -107,6 +111,20 @@ def _slot(
     )
 
 
+@contextmanager
+def _repository_overrides(*, slot_repo, instance_repo):
+    """Override the repository dependencies; module-attribute patching cannot
+    reach the classes captured by the dependency factories at registration.
+    """
+    app.dependency_overrides[get_planning_slot_repository] = lambda: slot_repo
+    app.dependency_overrides[get_event_instance_repository] = lambda: instance_repo
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_planning_slot_repository, None)
+        app.dependency_overrides.pop(get_event_instance_repository, None)
+
+
 def _mock_repos(slots: list[PlanningSlot]):
     slot_repo = AsyncMock()
     slot_repo.list_for_date_range.return_value = slots
@@ -132,14 +150,7 @@ def test_district_slot_with_matching_applicability_appears_in_congregation_view(
 
     with (
         _auth_client(district_id) as (client, headers),
-        patch(
-            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
-            return_value=slot_repo,
-        ),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository",
-            return_value=inst_repo,
-        ),
+        _repository_overrides(slot_repo=slot_repo, instance_repo=inst_repo),
     ):
         response = _list_events(client, headers, district_id, congregation_id)
 
@@ -162,14 +173,7 @@ def test_district_slot_with_other_congregation_applicability_excluded():
 
     with (
         _auth_client(district_id) as (client, headers),
-        patch(
-            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
-            return_value=slot_repo,
-        ),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository",
-            return_value=inst_repo,
-        ),
+        _repository_overrides(slot_repo=slot_repo, instance_repo=inst_repo),
     ):
         response = _list_events(client, headers, district_id, congregation_id)
 
@@ -185,14 +189,7 @@ def test_district_slot_with_empty_applicability_excluded():
 
     with (
         _auth_client(district_id) as (client, headers),
-        patch(
-            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
-            return_value=slot_repo,
-        ),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository",
-            return_value=inst_repo,
-        ),
+        _repository_overrides(slot_repo=slot_repo, instance_repo=inst_repo),
     ):
         response = _list_events(client, headers, district_id, congregation_id)
 
@@ -213,14 +210,7 @@ def test_cancelled_district_slot_excluded_even_with_matching_applicability():
 
     with (
         _auth_client(district_id) as (client, headers),
-        patch(
-            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
-            return_value=slot_repo,
-        ),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository",
-            return_value=inst_repo,
-        ),
+        _repository_overrides(slot_repo=slot_repo, instance_repo=inst_repo),
     ):
         response = _list_events(client, headers, district_id, congregation_id)
 
@@ -236,14 +226,7 @@ def test_district_view_still_returns_district_slots():
 
     with (
         _auth_client(district_id) as (client, headers),
-        patch(
-            "app.adapters.api.routers.events.SqlPlanningSlotRepository",
-            return_value=slot_repo,
-        ),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository",
-            return_value=inst_repo,
-        ),
+        _repository_overrides(slot_repo=slot_repo, instance_repo=inst_repo),
     ):
         response = client.get(
             "/api/v1/events",

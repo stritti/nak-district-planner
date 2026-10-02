@@ -116,11 +116,10 @@ async def _bulk(body, *, district_id=DISTRICT, slots=None):
     session = object()
     with (
         patch.object(events_router, "require_role_in_district"),
-        patch.object(events_router, "SqlPlanningSlotRepository", return_value=slot_repo),
         patch.object(events_router, "publish_after_commit") as publish,
     ):
         await events_router.bulk_update_approval_status(
-            body, _auth(superadmin=True), session, district_id
+            body, _auth(superadmin=True), session, district_id, slot_repo
         )
     return publish
 
@@ -169,15 +168,17 @@ async def _update_assignment(assignment: ServiceAssignment, body, leader_name: s
     leader_repo.get.return_value = SimpleNamespace(name=leader_name)
     with (
         patch.object(assignments_router, "require_role_in_district"),
-        patch.object(
-            assignments_router, "SqlServiceAssignmentRepository", return_value=assignment_repo
-        ),
-        patch.object(assignments_router, "SqlPlanningSlotRepository", return_value=slot_repo),
-        patch.object(assignments_router, "SqlLeaderRepository", return_value=leader_repo),
         patch.object(assignments_router, "publish_after_commit") as publish,
     ):
         await assignments_router.update_assignment(
-            assignment.event_id, assignment.id, body, _auth(), object()
+            assignment.event_id,
+            assignment.id,
+            body,
+            _auth(),
+            object(),
+            slot_repo,
+            assignment_repo,
+            leader_repo,
         )
     return publish
 
@@ -231,12 +232,6 @@ async def test_registration_approval_publishes_event() -> None:
     db = AsyncMock()
     with (
         patch.object(registrations_router, "require_role_in_district"),
-        patch.object(
-            registrations_router, "SqlLeaderRegistrationRepository", return_value=reg_repo
-        ),
-        patch.object(registrations_router, "SqlCongregationRepository", return_value=cong_repo),
-        patch.object(registrations_router, "SqlLeaderRepository", return_value=AsyncMock()),
-        patch.object(registrations_router, "SqlMembershipRepository", return_value=AsyncMock()),
         patch.object(registrations_router, "get_idp_provisioner", return_value=None),
         patch.object(registrations_router, "publish_after_commit") as publish,
     ):
@@ -251,6 +246,10 @@ async def test_registration_approval_publishes_event() -> None:
             ),
             _auth(),
             db,
+            reg_repo,
+            cong_repo,
+            AsyncMock(),
+            AsyncMock(),
         )
 
     (event,) = _published(publish)
