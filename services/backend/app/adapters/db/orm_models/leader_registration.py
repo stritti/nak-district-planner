@@ -16,6 +16,10 @@ class LeaderRegistrationORM(Base):
     """ORM model for leaderregistrationorm."""
 
     __tablename__ = "leader_registrations"
+    __table_args__ = (
+        sa.Index("ix_leader_registrations_district_id", "district_id"),
+        sa.Index("ix_leader_registrations_status", "status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     district_id: Mapped[uuid.UUID] = mapped_column(

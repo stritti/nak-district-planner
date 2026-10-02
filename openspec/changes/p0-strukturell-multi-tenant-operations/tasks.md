@@ -46,7 +46,7 @@
   - Seed-Daten via `make seed-dry-run`-Äquivalent (`seed_testdata.py --dry-run`) + Konsistenzprüfung: **neu ergänzt**
 - [x] 3.2 Migration-Check als erforderlichen Check in Branch-Protection-Regeln dokumentiert (`docs/production-runbook.md` Abschnitt 7.1). Das tatsächliche Setzen der GitHub-Branch-Protection-Regel erfordert Repo-Admin-Zugriff und wurde **nicht** automatisch vorgenommen.
 - [x] 3.3 Kritische Constraints dokumentiert (`docs/schema.md`: FK-Namenskonvention, Unique Constraints, Tenant-Scoping-FKs, bekannte Schema-Drift)
-- [x] 3.4 `alembic check` in CI aufgenommen — **informativ, nicht blockierend** (`continue-on-error: true`). Ein blockierender Gate würde CI sofort für alle PRs rot machen: es besteht bereits substanzielle, vorbestehende Drift zwischen ORM-Modellen und migrierter DB (siehe `docs/schema.md`, Abschnitt "Bekannte Schema-Drift"). Eine dieser Ursachen (fehlender `notification.py`-Import in `orm_models/__init__.py`) wurde als Nebenfix behoben; der Rest bleibt bewusst offen für einen eigenen Reconciliation-Follow-up.
+- [x] 3.4 `alembic check` in CI aufgenommen — seit 2026-10-01 **blockierend**, nachdem die vorbestehende Drift bereinigt wurde (`docs/schema.md`, Abschnitt „Abgleich ORM ↔ Datenbank“). Ursprünglich **informativ, nicht blockierend** (`continue-on-error: true`). Ein blockierender Gate würde CI sofort für alle PRs rot machen: es besteht bereits substanzielle, vorbestehende Drift zwischen ORM-Modellen und migrierter DB (siehe `docs/schema.md`, Abschnitt "Bekannte Schema-Drift"). Eine dieser Ursachen (fehlender `notification.py`-Import in `orm_models/__init__.py`) wurde als Nebenfix behoben; der Rest bleibt bewusst offen für einen eigenen Reconciliation-Follow-up.
 
 ## 4. Backup/Restore-Automatisierung
 
