@@ -7,14 +7,13 @@
     <MatrixFilters
       :compact-mode="compactMode"
       :matrix-sort-mode="matrixSortMode"
-      :release-message="releaseMessage"
       @update:compact-mode="setCompactMode"
       @update:matrix-sort-mode="onSortModeChange"
       @release="showReleaseDialog = true"
     />
 
     <!-- Loading / Error -->
-    <div v-if="matrixStore.loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
+    <MatrixSkeleton v-if="matrixStore.loading" />
     <div v-else-if="matrixStore.error" class="text-sm text-red-600 dark:text-red-400">{{ matrixStore.error }}</div>
 
     <!-- Mobile hint: matrix stays a scrollable table, unlike other views -->
@@ -53,23 +52,24 @@ import MatrixFilters from '../components/MatrixFilters.vue'
 import MatrixTable from '../components/MatrixTable.vue'
 import AssignmentModal from '../components/AssignmentModal.vue'
 import MonthlyReleaseDialog from '../components/MonthlyReleaseDialog.vue'
+import MatrixSkeleton from '../components/MatrixSkeleton.vue'
 import ContextualHelp from '../components/ContextualHelp.vue'
+import { useToast } from '../composables/useToast'
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
 const leadersStore = useLeadersStore()
+const toast = useToast()
 
 const COMPACT_MODE_STORAGE_KEY = 'matrix.compactMode'
 const MATRIX_SORT_MODE_STORAGE_KEY = 'matrix.sortMode'
 const compactMode = ref(false)
 const matrixSortMode = ref<'default' | 'grouped'>('default')
 const showReleaseDialog = ref(false)
-const releaseMessage = ref('')
 
 function onReleaseComplete(count: number) {
   showReleaseDialog.value = false
-  releaseMessage.value = `${count} Termin${count === 1 ? '' : 'e'} bestätigt.`
-  setTimeout(() => { releaseMessage.value = '' }, 4000)
+  toast.success('Freigabe abgeschlossen', `${count} Termin${count === 1 ? '' : 'e'} bestätigt.`)
   matrixStore.fetch() // refresh matrix after release
 }
 
