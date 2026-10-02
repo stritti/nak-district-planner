@@ -30,25 +30,19 @@ async def test_submit_registration_paths() -> None:
     district_id = uuid.uuid4()
     db = AsyncMock()
 
-    with (
-        patch("app.adapters.api.routers.registrations.SqlDistrictRepository") as district_repo_cls,
-        patch(
-            "app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository"
-        ) as reg_repo_cls,
-        patch("app.adapters.api.routers.registrations.api_deps.get_oidc_adapter") as get_adapter,
-    ):
+    with patch("app.adapters.api.routers.registrations.api_deps.get_oidc_adapter") as get_adapter:
         district_repo = AsyncMock()
         district_repo.get.return_value = District.create(name="D")
-        district_repo_cls.return_value = district_repo
 
         reg_repo = AsyncMock()
-        reg_repo_cls.return_value = reg_repo
 
         out = await rr.submit_registration(
             district_id,
             RegistrationCreate(name="Max", email="max@example.com"),
             db,
             credentials=None,
+            district_repo=district_repo,
+            reg_repo=reg_repo,
         )
         assert out.name == "Max"
 
@@ -61,6 +55,8 @@ async def test_submit_registration_paths() -> None:
                 RegistrationCreate(name="Max", email="max@example.com"),
                 db,
                 credentials=type("Cred", (), {"credentials": "bad"})(),
+                district_repo=district_repo,
+                reg_repo=reg_repo,
             )
         assert exc.value.status_code == 401
 
@@ -72,25 +68,19 @@ async def test_list_registrations_and_pending_overview() -> None:
     db = AsyncMock()
     auth = _auth(is_superadmin=True)
 
-    with (
-        patch("app.adapters.api.routers.registrations.require_role_in_district"),
-        patch("app.adapters.api.routers.registrations.SqlDistrictRepository") as district_repo_cls,
-        patch(
-            "app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository"
-        ) as reg_repo_cls,
-    ):
+    with patch("app.adapters.api.routers.registrations.require_role_in_district"):
         district_repo = AsyncMock()
         district_repo.get.return_value = District.create(name="D")
         district_repo.list_all.return_value = [District.create(name="D")]
-        district_repo_cls.return_value = district_repo
 
         reg_repo = AsyncMock()
         reg_repo.list_by_district.return_value = [reg]
         reg_repo.count_by_district.return_value = 2
-        reg_repo_cls.return_value = reg_repo
 
-        rows = await rr.list_registrations(district_id, auth, db)
-        ov = await rr.get_pending_overview(auth, db)
+        rows = await rr.list_registrations(
+            district_id, auth, db, district_repo=district_repo, reg_repo=reg_repo
+        )
+        ov = await rr.get_pending_overview(auth, db, district_repo=district_repo, reg_repo=reg_repo)
 
     assert len(rows) == 1
     assert ov.total_pending == 2
@@ -111,26 +101,18 @@ async def test_approve_reject_delete_paths() -> None:
     with (
         patch("app.adapters.api.routers.registrations.require_role_in_district"),
         patch(
-            "app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository"
-        ) as reg_repo_cls,
-        patch("app.adapters.api.routers.registrations.SqlCongregationRepository") as cong_repo_cls,
-        patch("app.adapters.api.routers.registrations.SqlLeaderRepository") as leader_repo_cls,
-        patch("app.adapters.api.routers.registrations.SqlMembershipRepository") as mem_repo_cls,
-        patch(
             "app.adapters.api.routers.registrations.get_idp_provisioner",
             return_value=None,
         ),
     ):
         reg_repo = AsyncMock()
         reg_repo.get.return_value = reg
-        reg_repo_cls.return_value = reg_repo
 
         cong_repo = AsyncMock()
         cong_repo.get.return_value = Congregation.create(name="G", district_id=district_id)
-        cong_repo_cls.return_value = cong_repo
 
-        leader_repo_cls.return_value = AsyncMock()
-        mem_repo_cls.return_value = AsyncMock()
+        leader_repo = AsyncMock()
+        mem_repo = AsyncMock()
 
         approved = await rr.approve_registration(
             district_id,
@@ -143,6 +125,10 @@ async def test_approve_reject_delete_paths() -> None:
             ),
             auth,
             db,
+            reg_repo=reg_repo,
+            cong_repo=cong_repo,
+            leader_repo=leader_repo,
+            mem_repo=mem_repo,
         )
         assert approved.status == RegistrationStatus.APPROVED
 
@@ -154,6 +140,7 @@ async def test_approve_reject_delete_paths() -> None:
                 RegistrationReject(reason="x"),
                 auth,
                 db,
+                reg_repo=reg_repo,
             )
         assert exc.value.status_code == 409
 
@@ -165,11 +152,12 @@ async def test_approve_reject_delete_paths() -> None:
             RegistrationReject(reason="x"),
             auth,
             db,
+            reg_repo=reg_repo,
         )
         assert rejected.status == RegistrationStatus.REJECTED
 
         # delete existing
-        await rr.delete_registration(district_id, reg.id, auth, db)
+        await rr.delete_registration(district_id, reg.id, auth, db, reg_repo=reg_repo)
 
 
 @pytest.mark.asyncio
@@ -185,20 +173,14 @@ async def test_approve_provisioning_failure_sets_status() -> None:
     with (
         patch("app.adapters.api.routers.registrations.require_role_in_district"),
         patch(
-            "app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository"
-        ) as reg_repo_cls,
-        patch("app.adapters.api.routers.registrations.SqlLeaderRepository") as leader_repo_cls,
-        patch("app.adapters.api.routers.registrations.SqlMembershipRepository") as mem_repo_cls,
-        patch(
             "app.adapters.api.routers.registrations.get_idp_provisioner",
             return_value=provisioner,
         ),
     ):
         reg_repo = AsyncMock()
         reg_repo.get.return_value = reg
-        reg_repo_cls.return_value = reg_repo
-        leader_repo_cls.return_value = AsyncMock()
-        mem_repo_cls.return_value = AsyncMock()
+        leader_repo = AsyncMock()
+        mem_repo = AsyncMock()
 
         out = await rr.approve_registration(
             district_id,
@@ -210,6 +192,10 @@ async def test_approve_provisioning_failure_sets_status() -> None:
             ),
             auth,
             db,
+            reg_repo=reg_repo,
+            cong_repo=AsyncMock(),
+            leader_repo=leader_repo,
+            mem_repo=mem_repo,
         )
 
     assert out.idp_provision_status == "FAILED"

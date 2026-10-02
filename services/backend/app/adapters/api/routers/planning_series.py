@@ -6,10 +6,15 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_planning_series_repository,
+    get_planning_slot_repository,
+)
 from app.adapters.api.schemas.planning_series import (
     PlanningSeriesCreate,
     PlanningSeriesResponse,
@@ -74,6 +79,7 @@ async def create_planning_series(
     body: PlanningSeriesCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
 ) -> PlanningSeriesResponse:
     """Create a new PlanningSeries.
 
@@ -92,7 +98,6 @@ async def create_planning_series(
         is_active=body.is_active if body.is_active is not None else True,
     )
 
-    repo = SqlPlanningSeriesRepository(db)
     await repo.save(series)
     await db.commit()
 
@@ -104,12 +109,12 @@ async def get_planning_series(
     series_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
 ) -> PlanningSeriesResponse:
     """Get a PlanningSeries by ID.
 
     **RBAC:** Requires VIEWER role in the series' district.
     """
-    repo = SqlPlanningSeriesRepository(db)
     series = await repo.get(series_id)
 
     if not series:
@@ -129,12 +134,12 @@ async def update_planning_series(
     body: PlanningSeriesUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
 ) -> PlanningSeriesResponse:
     """Update a PlanningSeries.
 
     **RBAC:** Requires DISTRICT_ADMIN role in the series' district.
     """
-    repo = SqlPlanningSeriesRepository(db)
     series = await repo.get(series_id)
 
     if not series:
@@ -179,12 +184,13 @@ async def generate_slots_for_series(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     body: SlotGenerationRequest = SlotGenerationRequest(),
+    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> SlotGenerationResponse:
     """Generate PlanningSlots for a specific PlanningSeries.
 
     **RBAC:** Requires DISTRICT_ADMIN role in the series' district.
     """
-    repo = SqlPlanningSeriesRepository(db)
     series = await repo.get(series_id)
 
     if not series:
@@ -196,8 +202,8 @@ async def generate_slots_for_series(
     require_role_in_district(auth, Role.DISTRICT_ADMIN, series.district_id)
 
     service = PlanningSeriesSlotGenerationService(
-        series_repo=SqlPlanningSeriesRepository(db),
-        slot_repo=SqlPlanningSlotRepository(db),
+        series_repo=series_repo,
+        slot_repo=slot_repo,
     )
 
     result = await service.generate_slots_for_series(
@@ -222,6 +228,8 @@ async def generate_slots_for_district(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     body: SlotGenerationRequest = SlotGenerationRequest(),
+    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> SlotGenerationResponse:
     """Generate PlanningSlots for all active PlanningSeries in a district.
 
@@ -230,8 +238,8 @@ async def generate_slots_for_district(
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
     service = PlanningSeriesSlotGenerationService(
-        series_repo=SqlPlanningSeriesRepository(db),
-        slot_repo=SqlPlanningSlotRepository(db),
+        series_repo=series_repo,
+        slot_repo=slot_repo,
     )
 
     result = await service.generate_slots_for_district(
@@ -255,6 +263,8 @@ async def generate_all_slots(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     body: SlotGenerationRequest = SlotGenerationRequest(),
+    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> SlotGenerationResponse:
     """Generate PlanningSlots for all active PlanningSeries across all districts.
 
@@ -263,8 +273,8 @@ async def generate_all_slots(
     require_superadmin(auth.user, "Nur Superadmin darf Slots für alle Bezirke generieren")
 
     service = PlanningSeriesSlotGenerationService(
-        series_repo=SqlPlanningSeriesRepository(db),
-        slot_repo=SqlPlanningSlotRepository(db),
+        series_repo=series_repo,
+        slot_repo=slot_repo,
     )
 
     result = await service.generate_all_slots(

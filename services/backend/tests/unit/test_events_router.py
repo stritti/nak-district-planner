@@ -71,12 +71,10 @@ async def test_resolve_deviation_restores_planned_duration():
     instance_repo = AsyncMock()
     instance_repo.get.return_value = instance
     instance_repo.get_by_planning_slot.return_value = instance
-    with (
-        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
-        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
-        patch.object(events, "require_role_in_district") as require_role,
-    ):
-        result = await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+    with patch.object(events, "require_role_in_district") as require_role:
+        result = await events.resolve_event_deviation(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
     require_role.assert_called_once_with(_auth(), Role.PLANNER, slot.district_id)
     assert result.start_at == datetime(2026, 9, 26, 10, tzinfo=UTC)
     assert result.end_at - result.start_at == timedelta(minutes=90)
@@ -95,12 +93,12 @@ async def test_resolve_deviation_reports_no_active_deviation():
     instance_repo.get.return_value = instance
     instance_repo.get_by_planning_slot.return_value = instance
     with (
-        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
-        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
         patch.object(events, "require_role_in_district"),
         pytest.raises(HTTPException) as exc,
     ):
-        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+        await events.resolve_event_deviation(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
     assert exc.value.status_code == 409
     instance_repo.save.assert_not_awaited()
 
@@ -120,18 +118,17 @@ async def test_resolve_deviation_reports_provider_failure_and_remains_retryable(
     instance_repo = AsyncMock()
     instance_repo.get.return_value = instance
     instance_repo.get_by_planning_slot.return_value = instance
+    push = AsyncMock(side_effect=CalendarConnectorError("provider down"))
     with (
         patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
         patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
         patch.object(events, "require_role_in_district"),
-        patch.object(
-            events,
-            "push_deviation_resolution",
-            AsyncMock(side_effect=CalendarConnectorError("provider")),
-        ),
+        patch.object(events, "push_deviation_resolution", push),
         pytest.raises(HTTPException) as exc,
     ):
-        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+        await events.resolve_event_deviation(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
 
     assert exc.value.status_code == 502
     assert instance.deviation_flag is True
@@ -153,12 +150,12 @@ async def test_resolve_deviation_pushes_linked_instance():
     instance_repo.get_by_planning_slot.return_value = instance
     push = AsyncMock(return_value=True)
     with (
-        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
-        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
         patch.object(events, "require_role_in_district"),
         patch.object(events, "push_deviation_resolution", push),
     ):
-        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+        await events.resolve_event_deviation(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
 
     push.assert_awaited_once()
 
@@ -171,12 +168,12 @@ async def test_resolve_deviation_missing_entities(missing_slot):
     slot_repo.get.return_value = None if missing_slot else slot
     instance_repo.get_by_planning_slot.return_value = None
     with (
-        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
-        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
         patch.object(events, "require_role_in_district"),
         pytest.raises(HTTPException) as exc,
     ):
-        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+        await events.resolve_event_deviation(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
     assert exc.value.status_code == 404
 
 
@@ -185,15 +182,16 @@ async def test_resolve_deviation_enforces_district_permission():
     slot = _slot()
     slot_repo = AsyncMock()
     slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
     with (
-        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
         patch.object(events, "require_role_in_district", side_effect=HTTPException(403)),
-        patch.object(events, "SqlEventInstanceRepository") as instances,
         pytest.raises(HTTPException) as exc,
     ):
-        await events.resolve_event_deviation(slot.id, _auth(), AsyncMock())
+        await events.resolve_event_deviation(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
     assert exc.value.status_code == 403
-    instances.assert_not_called()
+    instance_repo.get_by_planning_slot.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -212,17 +210,9 @@ async def test_list_events_applies_filters_and_paginates() -> None:
         SimpleNamespace(id=congregation_id, group_id=group_id)
     ]
 
-    with (
-        patch("app.adapters.api.routers.events.require_role_in_district") as require_role,
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-        patch(
-            "app.adapters.api.routers.events.SqlCongregationRepository",
-            return_value=congregation_repo,
-        ),
-    ):
+    with patch(
+        "app.adapters.api.routers.events.require_role_in_district"
+    ) as require_role:
         result = await events.list_events(
             _auth(),
             AsyncMock(),
@@ -237,6 +227,9 @@ async def test_list_events_applies_filters_and_paginates() -> None:
             to_dt=None,
             limit=1,
             offset=0,
+            slot_repo=slot_repo,
+            cong_repo=congregation_repo,
+            inst_repo=instance_repo,
         )
 
     require_role.assert_called_once_with(_auth(), Role.VIEWER, district_id)
@@ -258,13 +251,7 @@ async def test_list_events_filters_district_slots_by_applicability() -> None:
     instance_repo = AsyncMock()
     instance_repo.list_by_planning_slots.return_value = []
 
-    with (
-        patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-    ):
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
         result = await events.list_events(
             _auth(),
             AsyncMock(),
@@ -279,6 +266,8 @@ async def test_list_events_filters_district_slots_by_applicability() -> None:
             to_dt=None,
             limit=50,
             offset=0,
+            slot_repo=slot_repo,
+            inst_repo=instance_repo,
         )
 
     assert [item.id for item in result.items] == [visible.id]
@@ -308,16 +297,7 @@ async def test_list_events_marks_and_filters_service_events() -> None:
     instance_repo.list_by_planning_slots.return_value = []
 
     async def call(is_service: bool | None):
-        with (
-            patch("app.adapters.api.routers.events.require_role_in_district"),
-            patch(
-                "app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo
-            ),
-            patch(
-                "app.adapters.api.routers.events.SqlEventInstanceRepository",
-                return_value=instance_repo,
-            ),
-        ):
+        with patch("app.adapters.api.routers.events.require_role_in_district"):
             return await events.list_events(
                 _auth(),
                 AsyncMock(),
@@ -332,6 +312,8 @@ async def test_list_events_marks_and_filters_service_events() -> None:
                 to_dt=None,
                 limit=50,
                 offset=0,
+                slot_repo=slot_repo,
+                inst_repo=instance_repo,
             )
 
     all_result = await call(None)
@@ -354,13 +336,7 @@ async def test_list_events_accepts_datetime_range_filters() -> None:
     slot_repo.list_for_date_range.return_value = []
     instance_repo = AsyncMock()
     instance_repo.list_by_planning_slots.return_value = []
-    with (
-        patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-    ):
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
         await events.list_events(
             _auth(),
             AsyncMock(),
@@ -375,6 +351,8 @@ async def test_list_events_accepts_datetime_range_filters() -> None:
             to_dt=datetime(2026, 10, 3, 21, 59, 59, tzinfo=UTC),
             limit=50,
             offset=0,
+            slot_repo=slot_repo,
+            inst_repo=instance_repo,
         )
 
     kwargs = slot_repo.list_for_date_range.await_args.kwargs
@@ -396,27 +374,23 @@ async def test_list_events_allows_superadmin_without_district() -> None:
     slot_repo.list_for_date_range.return_value = []
     instance_repo = AsyncMock()
     instance_repo.list_by_planning_slots.return_value = []
-    with (
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-    ):
-        result = await events.list_events(
-            _auth(is_superadmin=True),
-            AsyncMock(),
-            district_id=None,
-            congregation_id=None,
-            group_id=None,
-            only_district_level=False,
-            status_filter=None,
-            approval_status=None,
-            is_service=None,
-            from_dt=None,
-            to_dt=None,
-            limit=50,
-            offset=0,
-        )
+    result = await events.list_events(
+        _auth(is_superadmin=True),
+        AsyncMock(),
+        district_id=None,
+        congregation_id=None,
+        group_id=None,
+        only_district_level=False,
+        status_filter=None,
+        approval_status=None,
+        is_service=None,
+        from_dt=None,
+        to_dt=None,
+        limit=50,
+        offset=0,
+        slot_repo=slot_repo,
+        inst_repo=instance_repo,
+    )
 
     assert result.items == []
     assert slot_repo.list_for_date_range.await_args.kwargs["district_id"] == uuid.UUID(int=0)
@@ -433,13 +407,7 @@ async def test_update_event_persists_instance_and_slot_changes() -> None:
     instance_repo = AsyncMock()
     instance_repo.get_by_planning_slot.return_value = instance
 
-    with (
-        patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-    ):
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
         result = await events.update_event(
             slot.id,
             events.EventUpdate(
@@ -452,6 +420,8 @@ async def test_update_event_persists_instance_and_slot_changes() -> None:
             ),
             _auth(),
             AsyncMock(),
+            slot_repo=slot_repo,
+            inst_repo=instance_repo,
         )
 
     assert result.title == "Neuer Titel"
@@ -474,18 +444,14 @@ async def test_update_event_can_clear_congregation_and_description() -> None:
     instance_repo = AsyncMock()
     instance_repo.get_by_planning_slot.return_value = instance
 
-    with (
-        patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-    ):
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
         await events.update_event(
             slot.id,
             events.EventUpdate(congregation_id=None, description=None),
             _auth(),
             AsyncMock(),
+            slot_repo=slot_repo,
+            inst_repo=instance_repo,
         )
 
     assert slot.congregation_id is None
@@ -497,9 +463,14 @@ async def test_update_event_can_clear_congregation_and_description() -> None:
 async def test_update_event_rejects_missing_slot() -> None:
     slot_repo = AsyncMock()
     slot_repo.get.return_value = None
-    with patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo):
-        with pytest.raises(HTTPException) as error:
-            await events.update_event(uuid.uuid4(), events.EventUpdate(), _auth(), AsyncMock())
+    with pytest.raises(HTTPException) as error:
+        await events.update_event(
+            uuid.uuid4(),
+            events.EventUpdate(),
+            _auth(),
+            AsyncMock(),
+            slot_repo=slot_repo,
+        )
 
     assert error.value.status_code == 404
 
@@ -517,22 +488,17 @@ async def test_update_event_rejects_congregation_from_another_district() -> None
 
     with (
         patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-        patch(
-            "app.adapters.api.routers.events.SqlCongregationRepository",
-            return_value=congregation_repo,
-        ),
+        pytest.raises(HTTPException) as error,
     ):
-        with pytest.raises(HTTPException) as error:
-            await events.update_event(
-                slot.id,
-                events.EventUpdate(congregation_id=foreign_congregation.id),
-                _auth(),
-                AsyncMock(),
-            )
+        await events.update_event(
+            slot.id,
+            events.EventUpdate(congregation_id=foreign_congregation.id),
+            _auth(),
+            AsyncMock(),
+            slot_repo=slot_repo,
+            cong_repo=congregation_repo,
+            inst_repo=instance_repo,
+        )
 
     assert error.value.status_code == 400
     slot_repo.save.assert_not_awaited()
@@ -547,18 +513,14 @@ async def test_update_event_moves_slot_without_instance_and_rejects_invalid_rang
     instance_repo.get_by_planning_slot.return_value = None
     new_start = datetime(2026, 10, 1, 8, 30, tzinfo=UTC)
     new_end = new_start + timedelta(hours=1)
-    with (
-        patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-    ):
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
         result = await events.update_event(
             slot.id,
             events.EventUpdate(start_at=new_start, end_at=new_end),
             _auth(),
             AsyncMock(),
+            slot_repo=slot_repo,
+            inst_repo=instance_repo,
         )
         with pytest.raises(HTTPException) as range_error:
             await events.update_event(
@@ -569,6 +531,8 @@ async def test_update_event_moves_slot_without_instance_and_rejects_invalid_rang
                 ),
                 _auth(),
                 AsyncMock(),
+                slot_repo=slot_repo,
+                inst_repo=instance_repo,
             )
 
     assert range_error.value.status_code == 400
@@ -589,15 +553,16 @@ async def test_update_event_rejects_description_without_instance() -> None:
     instance_repo.get_by_planning_slot.return_value = None
     with (
         patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
+        pytest.raises(HTTPException) as error,
     ):
-        with pytest.raises(HTTPException) as error:
-            await events.update_event(
-                slot.id, events.EventUpdate(description="Text"), _auth(), AsyncMock()
-            )
+        await events.update_event(
+            slot.id,
+            events.EventUpdate(description="Text"),
+            _auth(),
+            AsyncMock(),
+            slot_repo=slot_repo,
+            inst_repo=instance_repo,
+        )
 
     assert error.value.status_code == 400
     slot_repo.save.assert_not_awaited()
@@ -620,12 +585,13 @@ async def test_bulk_approval_status_updates_month_slots() -> None:
         year=2026, month=12, approval_status=EventApprovalStatus.CONFIRMED
     )
 
-    with (
-        patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-    ):
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
         result = await events.bulk_update_approval_status(
-            request, _auth(), AsyncMock(), district_id=district_id
+            request,
+            _auth(),
+            AsyncMock(),
+            district_id=district_id,
+            slot_repo=slot_repo,
         )
 
     assert result.updated_count == 1
