@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+from app.adapters.db.transactional_events import publish_after_commit
+from app.domain.event_payloads import external_event_detected
 from app.domain.models.event_instance import EventInstance, SyncState
 from app.domain.models.external_event_candidate import CandidateStatus, ExternalEventCandidate
 from app.domain.models.external_event_link import ExternalEventLink
@@ -145,6 +147,15 @@ async def ingest_unlinked_event(
                 congregation_id=integration.congregation_id,
                 payload={"candidate_id": str(candidate.id)},
             )
+        )
+        publish_after_commit(
+            session,
+            external_event_detected(
+                integration.district_id,
+                event_title=raw.title,
+                event_date=raw.start_at.date(),
+                source=integration.name,
+            ),
         )
         logger.info("External candidate created candidate_id=%s", candidate.id)
     else:

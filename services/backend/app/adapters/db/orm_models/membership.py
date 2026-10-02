@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +19,12 @@ class MembershipORM(Base):
     """Membership ORM model."""
 
     __tablename__ = "memberships"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_sub", "role", "scope_type", "scope_id", name="uq_memberships_user_role_scope"
+        ),
+        Index("ix_memberships_scope", "scope_type", "scope_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # Foreign key to users.sub (OIDC subject)
@@ -28,9 +34,9 @@ class MembershipORM(Base):
     # Role assigned (DISTRICT_ADMIN, CONGREGATION_ADMIN, PLANNER, VIEWER)
     role: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     # Scope type (DISTRICT or CONGREGATION)
-    scope_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    scope_type: Mapped[str] = mapped_column(String(50), nullable=False)
     # ID of the scope (district_id or congregation_id)
-    scope_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    scope_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -1,27 +1,18 @@
 ## 1. TenantContext und TenantAwareRepository
 
-- [ ] 1.1 `TenantContext`-Klasse in `app/adapters/db/tenant_context.py` definieren
-  - `user_sub`, `effective_district_ids`, `effective_congregation_ids`, `is_superadmin`
-- [ ] 1.2 FastAPI-Dependency `get_tenant_context()` in `app/adapters/api/deps.py` ergänzen
-  - Ermittelt aus `CurrentUserWithMemberships` die effektiven district_ids/congregation_ids
-- [ ] 1.3 `TenantAwareRepository`-Mixin in `app/adapters/db/base.py`
-  - `_apply_tenant_filter(query)` für `list`, `get`, `update`, `delete`
-  - Superadmin-Bypass
-  - Explizite `bypass_tenant_filter()`-Contextmanager für Service-Accounts
-- [ ] 1.4 Mixin auf alle mandantenfähigen Repositories anwenden:
-  - `SqlEventRepository`
-  - `SqlLeaderRepository`
-  - `SqlServiceAssignmentRepository`
-  - `SqlCalendarIntegrationRepository`
-  - `SqlPlanningSlotRepository`
-  - `SqlPlanningSeriesRepository`
-  - `SqlExportTokenRepository`
-  - `SqlInvitationRepository`
-  - `SqlCongregationRepository`
-  - `SqlDistrictRepository`
-- [ ] 1.5 Bestehende manuelle `district_id`-Filter in Routern/Servern aufräumen (Duplikation entfernen)
-- [ ] 1.6 Unit-Tests: TenantContext-Ermittlung aus Memberships
-- [ ] 1.7 Integrationstests: TenantAwareRepository filtert korrekt
+> **Architekturentscheidung (2026-10-02):** Mandantentrennung wird in der Datenbank
+> durchgesetzt (PostgreSQL RLS mit verifiziertem Tenant-Kontext), nicht durch ein
+> `TenantAwareRepository`-Mixin. Begründung und Zuordnung in `design.md`, Decision 1 und 2
+> (überarbeitet). Die Tasks unten sind damit **anders gelöst**; die Spalte „Umsetzung“
+> nennt die Stelle im Code und den Test, der das Ziel belegt.
+
+- [x] ~1.1 `TenantContext`-Klasse in `app/adapters/db/tenant_context.py`~ *(anders gelöst: `app/tenant.py` hält Subject und Rollen request-lokal; die effektiven Bezirke/Gemeinden ermittelt die RLS-Policy aus `memberships`, statt sie in der Anwendung zu cachen)*
+- [x] ~1.2 FastAPI-Dependency `get_tenant_context()`~ *(anders gelöst: `TenantMiddleware` übernimmt nur das verifizierte Token-Subject; `_set_tenant_gucs` in `app/adapters/db/session.py` setzt `app.current_user_sub` bzw. `app.is_system_worker` pro Transaktion)*
+- [x] ~1.3 `TenantAwareRepository`-Mixin mit Superadmin-Bypass und `bypass_tenant_filter()`~ *(anders gelöst: RLS-Policies (Migrationen `0014`, `0022` und die RLS-Abschnitte späterer Migrationen) filtern **jede** Abfrage, auch Raw-SQL und Bulk-Statements, die ein Mixin nicht erreicht. Superadmin- und System-Worker-Zugriff sind Teil der Policy; die Anwendungsrolle `nak_app` ist `NOBYPASSRLS`)*
+- [x] ~1.4 Mixin auf alle mandantenfähigen Repositories anwenden~ *(anders gelöst: `test_every_tenant_table_has_rls_enabled` schlägt fehl, sobald eine Tabelle mit Tenant-Spalte ohne RLS existiert; neue Tabellen können also nicht vergessen werden)*
+- [x] ~1.5 Manuelle `district_id`-Filter in Routern/Services entfernen~ *(entfällt: die verbleibenden Prüfungen sind Autorisierung (`require_role_in_district`, 403 statt leerer Ergebnisse) und laut `CLAUDE.md` Pflicht. Sie sind die erste von drei Schichten (Middleware/RBAC, `TenantValidationService`, RLS), keine Duplikate)*
+- [x] ~1.6 Unit-Tests TenantContext aus Memberships~ *(anders gelöst: `tests/unit/test_tenant_context.py`, `test_tenant_middleware.py`, `test_tenant_validation.py`, `test_cross_tenant_isolation.py`)*
+- [x] ~1.7 Integrationstests TenantAwareRepository~ *(anders gelöst: `tests/integration/test_rls_postgres.py` (Lesen, Schreiben, Verschieben in fremde Bezirke, Superadmin, System-Worker, gefälschtes Subject) und `test_tenant_isolation_api.py` (Ende-zu-Ende über die API); laufen in CI auf frisch migrierter Datenbank)*
 
 ## 2. Exclusion Constraints
 
@@ -55,7 +46,7 @@
   - Seed-Daten via `make seed-dry-run`-Äquivalent (`seed_testdata.py --dry-run`) + Konsistenzprüfung: **neu ergänzt**
 - [x] 3.2 Migration-Check als erforderlichen Check in Branch-Protection-Regeln dokumentiert (`docs/production-runbook.md` Abschnitt 7.1). Das tatsächliche Setzen der GitHub-Branch-Protection-Regel erfordert Repo-Admin-Zugriff und wurde **nicht** automatisch vorgenommen.
 - [x] 3.3 Kritische Constraints dokumentiert (`docs/schema.md`: FK-Namenskonvention, Unique Constraints, Tenant-Scoping-FKs, bekannte Schema-Drift)
-- [x] 3.4 `alembic check` in CI aufgenommen — **informativ, nicht blockierend** (`continue-on-error: true`). Ein blockierender Gate würde CI sofort für alle PRs rot machen: es besteht bereits substanzielle, vorbestehende Drift zwischen ORM-Modellen und migrierter DB (siehe `docs/schema.md`, Abschnitt "Bekannte Schema-Drift"). Eine dieser Ursachen (fehlender `notification.py`-Import in `orm_models/__init__.py`) wurde als Nebenfix behoben; der Rest bleibt bewusst offen für einen eigenen Reconciliation-Follow-up.
+- [x] 3.4 `alembic check` in CI aufgenommen — seit 2026-10-01 **blockierend**, nachdem die vorbestehende Drift bereinigt wurde (`docs/schema.md`, Abschnitt „Abgleich ORM ↔ Datenbank“). Ursprünglich **informativ, nicht blockierend** (`continue-on-error: true`). Ein blockierender Gate würde CI sofort für alle PRs rot machen: es besteht bereits substanzielle, vorbestehende Drift zwischen ORM-Modellen und migrierter DB (siehe `docs/schema.md`, Abschnitt "Bekannte Schema-Drift"). Eine dieser Ursachen (fehlender `notification.py`-Import in `orm_models/__init__.py`) wurde als Nebenfix behoben; der Rest bleibt bewusst offen für einen eigenen Reconciliation-Follow-up.
 
 ## 4. Backup/Restore-Automatisierung
 

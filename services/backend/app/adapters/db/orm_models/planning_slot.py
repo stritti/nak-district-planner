@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, time
 
-from sqlalchemy import ARRAY, Date, DateTime, ForeignKey, String, Time
+from sqlalchemy import ARRAY, Date, DateTime, ForeignKey, Index, String, Time, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -14,6 +14,19 @@ from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlotSta
 
 class PlanningSlotORM(Base):
     __tablename__ = "planning_slots"
+    __table_args__ = (
+        Index("ix_planning_slots_district_date", "district_id", "planning_date"),
+        Index("ix_planning_slots_congregation_date", "congregation_id", "planning_date"),
+        # A congregation cannot hold two active slots at the same date and time.
+        Index(
+            "no_overlapping_planning_slots",
+            "congregation_id",
+            "planning_date",
+            "planning_time",
+            unique=True,
+            postgresql_where=text("congregation_id IS NOT NULL AND status = 'ACTIVE'"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     series_id: Mapped[uuid.UUID | None] = mapped_column(

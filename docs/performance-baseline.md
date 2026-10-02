@@ -53,4 +53,4 @@ Bei den heutigen Feed-Größen (einige hundert Termine) liegt der Sync im Minute
 
 ## CI
 
-Die Tests brauchen eine frisch migrierte Datenbank mit Anwendungsrolle. Den CI-Schritt dafür (`alembic upgrade head`, zur Laufzeit erzeugtes Rollenpasswort) bringt #384 mit, zusammen mit dem `0002`-Fix, ohne den sich eine leere Datenbank nicht migrieren lässt. Nach dem Merge von #384 werden `tests/performance` und `tests/integration/test_domain_audit_postgres.py` in diesen Schritt aufgenommen.
+Der CI-Schritt „PostgreSQL integration and performance tests with RLS“ migriert eine leere Datenbank (`alembic upgrade head`, Rollenpasswort zur Laufzeit erzeugt) und führt danach `tests/integration` und `tests/performance` vollständig aus. Übersprungene Tests lassen den Schritt fehlschlagen, weil ein Skip hier nur eine fehlende Datenbank-Einstellung bedeuten kann.
