@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
@@ -12,7 +13,9 @@ from app.application.sync_failure_alerts import (
     SyncFailure,
     SyncFailureAlerter,
 )
+from app.domain.events import EventType
 from app.domain.models.calendar_integration import CalendarIntegration, CalendarType
+from app.domain.models.event_mail_hook import EVENT_PLACEHOLDERS
 from app.domain.models.notification import Notification, NotificationType
 
 
@@ -147,3 +150,47 @@ async def test_missing_integration_is_skipped_without_alert(caplog) -> None:
 
     assert notifications.saved == []
     assert str(missing_id) in caplog.text
+
+
+async def test_alert_publishes_sync_error_event_with_template_placeholders(integration) -> None:
+    published = []
+    alerter = SyncFailureAlerter(
+        FakeIntegrations(integration),
+        FakeNotifications(),
+        publish=published.append,
+        clock=lambda: datetime(2030, 3, 1, 6, 15, 42, tzinfo=UTC),
+    )
+
+    await alerter.alert(_failure(integration.id))
+
+    [event] = published
+    assert event.event_type == EventType.SYNC_ERROR
+    assert event.district_id == integration.district_id
+    assert event.payload == {
+        "integration_name": "Gemeindekalender",
+        "error_message": "Die Synchronisation ist nach 5 Versuchen fehlgeschlagen (ConnectError)",
+        "timestamp": "2030-03-01T06:15+00:00",
+    }
+    # district_name is added by the dispatcher.
+    assert set(event.payload) | {"district_name"} == EVENT_PLACEHOLDERS[EventType.SYNC_ERROR]
+
+
+async def test_deduplicated_alert_publishes_no_second_event(integration) -> None:
+    published = []
+    alerter = SyncFailureAlerter(
+        FakeIntegrations(integration), FakeNotifications(), publish=published.append
+    )
+
+    await alerter.alert(_failure(integration.id))
+    assert await alerter.alert(_failure(integration.id)) is None
+
+    assert len(published) == 1
+
+
+async def test_missing_integration_publishes_no_event() -> None:
+    published = []
+    alerter = SyncFailureAlerter(FakeIntegrations(), FakeNotifications(), publish=published.append)
+
+    await alerter.alert(_failure(uuid.uuid4()))
+
+    assert published == []

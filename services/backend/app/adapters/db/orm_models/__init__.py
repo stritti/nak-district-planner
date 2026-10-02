@@ -9,6 +9,7 @@ from app.adapters.db.orm_models.district_reminder_config import (
     ReminderDeliveryORM,
 )
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
+from app.adapters.db.orm_models.event_mail_hook import EventMailHookORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
 from app.adapters.db.orm_models.external_event_candidate import ExternalEventCandidateORM
 from app.adapters.db.orm_models.external_event_link import ExternalEventLinkORM
@@ -24,4 +25,5 @@ from app.adapters.db.orm_models.notification import NotificationORM
 from app.adapters.db.orm_models.planning_series import PlanningSeriesORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
+from app.adapters.db.orm_models.slot_gap_alert import SlotGapAlertORM
 from app.adapters.db.orm_models.user import UserORM

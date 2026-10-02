@@ -74,12 +74,14 @@ async def _alert_sync_failure(integration_id: str, exc: BaseException, attempts:
     from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
     from app.adapters.db.repositories.notification import SqlNotificationRepository
     from app.adapters.db.session import AsyncSessionLocal
+    from app.adapters.db.transactional_events import publish_after_commit
     from app.application.sync_failure_alerts import SyncFailure, SyncFailureAlerter
 
     async with AsyncSessionLocal() as session:
         alerter = SyncFailureAlerter(
             integrations=SqlCalendarIntegrationRepository(session),
             notifications=SqlNotificationRepository(session),
+            publish=lambda event: publish_after_commit(session, event),
         )
         failure = SyncFailure(
             integration_id=uuid.UUID(integration_id),

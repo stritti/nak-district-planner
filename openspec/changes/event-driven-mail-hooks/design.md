@@ -130,9 +130,9 @@ Event emitted ──▶ HookEvaluator.on_event(event)
 
 | Service / Operation | Event Type | When to Emit |
 |---|---|---|
-| Calendar sync (ingestion task) → LÜCKE detection | `SLOT_UNASSIGNED` | After sync, when a `PlanningSlot` of category `Gottesdienst` has no `ServiceAssignment` |
+| Daily gap scan (Celery beat, 06:15) | `SLOT_UNASSIGNED` | For each gap (active `Gottesdienst` slot without `ServiceAssignment`, no invitation copy) in the next `SLOT_GAP_SCAN_DAYS` days (default 28) that was not reported while open |
 | Calendar sync → ExternalEventCandidate created | `EXTERNAL_EVENT_DETECTED` | After storing a new `ExternalEventCandidate` (not on update) |
-| Calendar sync job completion | `SYNC_ERROR` | On sync failure / exception |
+| Calendar sync job, retries exhausted (`SyncIntegrationTask.on_failure`) | `SYNC_ERROR` | When `SyncFailureAlerter` creates a new alert; while the alert for the integration is unread, further failures emit nothing. `error_message` contains attempts and error class only (exception texts may carry URLs or credentials) |
 | Leader registration approval | `REGISTRATION_RECEIVED` | When a leader registration is approved (or auto-approved) |
 | ServiceAssignment confirmation | `ASSIGNMENT_CONFIRMED` | When a leader confirms their assignment (status → CONFIRMED) |
 | Plan finalization action | `PLAN_FINALIZED` | When a district plan is explicitly finalized/released by an admin |
@@ -169,12 +169,26 @@ Same pattern as reminder config endpoints. Soft-delete via `is_active=false`.
 
 **Decision:** Reuse the same pattern and router structure as `DistrictReminderConfig` endpoints. This keeps the API consistent.
 
+### 8. Implementation note: after-commit publication and worker dispatch
+
+Two refinements over the original synchronous design, made during implementation:
+
+- **Publish after commit.** Emitters call `publish_after_commit(session, event)`.
+  Events reach the bus only when the outermost transaction commits; events from
+  a rolled-back transaction or savepoint are discarded. Otherwise a failed
+  request could still send mail about a change that never became visible.
+- **Dispatch in the Celery worker.** Bus handlers are synchronous, while hook
+  lookup is async and SMTP is slow. The registered handler only enqueues
+  `dispatch_event_mail_hooks`; the worker runs `EventMailHookDispatcher`. A
+  broker outage is logged and never fails the business operation. Delivery
+  stays at-most-once, like monthly reminders.
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |
 |---|---|
 | **Event loop / recursion** — a mail send could trigger another event, causing infinite loop | Ensure no mail-send event is ever emitted. Hook evaluator explicitly does not emit events. |
-| **Sync task flooding** — a sync with many LÜCKEs emits many `SLOT_UNASSIGNED` events | Acceptable for MVP — each LÜCKE is a separate legitimate notification. Future: add coalescing (one mail per district summarising all LÜCKEs). |
+| **Gap flooding** — the first scan of a district with many LÜCKEs emits many `SLOT_UNASSIGNED` events | Each gap is reported once while open (ledger `slot_gap_alerts`); later scans only report new gaps. Future: coalescing into one mail per district. |
 | **Performance** — hook evaluator queries DB synchronously for each event | Hook evaluator queries are simple indexed lookups (event_type + district_id × is_active). Expected to be fast (<5ms per event). |
 | **Stale hooks** — disabled hook still has events emitted for it | Hook evaluator filters `is_active=true`. Emission is fire-and-forget; evaluator silently ignores unmatchable events. |
 | **Dependency coupling** — this change depends on `configurable-email-reminders` being implemented first | Enforce via implementation order. The MailService ABC is the only dependency; this change adds no new external dependencies. |
@@ -184,3 +198,23 @@ Same pattern as reminder config endpoints. Soft-delete via `is_active=false`.
 - Should events be logged/persisted for audit trail? → Useful but deferred; initial version emits events in-memory only.
 - Should there be a dry-run/preview endpoint for event hooks? → Useful for admins to test templates without triggering real sends. Deferred.
 - Should `SYNC_ERROR` notify the integration owner specifically, or all planners in the district? → All planners initially; the integration-specific `EXTERNAL_EVENT_DETECTED` notification is for the relevant admin.
+
+## Decision: SLOT_UNASSIGNED via daily scan with a gap ledger
+
+A gap (LÜCKE) is not a stored state; the matrix derives it on every read. There
+is no state change to emit from, and emitting on every matrix read would mail on
+every page view. A daily Celery task (`scan_slot_gaps`, 06:15 Europe/Berlin,
+after the nightly slot generation) therefore compares the current gaps with a
+ledger of reported ones (`slot_gap_alerts`, one row per planning slot):
+
+- Identity of a gap is the business key `(district_id, service_date,
+  congregation_id, planning_slot_id)`.
+- New gaps are reported once and recorded; ledger rows and queued events commit
+  together (`publish_after_commit`).
+- Reports whose gap is gone (assignment created, slot cancelled, moved, or out
+  of the window) are deleted, so a gap that opens again is reported again.
+  Deleting the slot cascades its ledger row.
+- The gap rule is the matrix rule: active `Gottesdienst` slot, no assignment by
+  `planning_slot_id` or the legacy `event_id`, invitation copies excluded.
+- The ledger is written only by the system worker (RLS forced, system worker
+  and superadmin only).

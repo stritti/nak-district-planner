@@ -20,6 +20,8 @@ export const useMatrixStore = defineStore('matrix', () => {
   const groupId = ref<string>('')
   const fromDt = ref<string>('')
   const toDt = ref<string>('')
+  /** Client-side text filter on congregation names; not sent to the API. */
+  const congregationQuery = ref<string>('')
 
   async function fetch() {
     if (!districtId.value || !fromDt.value || !toDt.value) return
@@ -92,6 +94,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     groupId,
     fromDt,
     toDt,
+    congregationQuery,
     fetch,
     assign,
     clearAssignment,

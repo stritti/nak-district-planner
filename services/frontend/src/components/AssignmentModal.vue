@@ -58,7 +58,6 @@
           </button>
 
           <p v-if="invitation.error" class="text-xs text-red-600 dark:text-red-400">{{ invitation.error }}</p>
-          <p v-if="invitation.success" class="text-xs text-green-700 dark:text-green-400">{{ invitation.success }}</p>
 
           <div class="mt-2 border-t border-gray-200 dark:border-gray-700 pt-2">
             <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Bestehende Einladungen</p>
@@ -203,6 +202,7 @@ import type { MatrixCell } from '../api/matrix'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from './AutocompleteInput.vue'
 import ConflictBanner from './ConflictBanner.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import { useToast } from '../composables/useToast'
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
@@ -210,6 +210,7 @@ const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
 const leadersStore = useLeadersStore()
 const conflictStore = useConflictStore()
+const toast = useToast()
 
 // ── Assignment Modal ──────────────────────────────────────────────────────────
 
@@ -262,7 +263,6 @@ const invitation = reactive({
   loadingExisting: false,
   saving: false,
   error: '',
-  success: '',
 })
 
 const invitationTargetOptions = computed(() => {
@@ -327,7 +327,6 @@ function openModal(cell: MatrixCell, date: string, congregationName: string, con
   invitation.existing = []
   invitation.loadingExisting = false
   invitation.error = ''
-  invitation.success = ''
   // Ensure leaders are loaded for this district
   if (matrixStore.districtId && leadersStore.districtId !== matrixStore.districtId) {
     leadersStore.fetchLeaders(matrixStore.districtId)
@@ -380,7 +379,6 @@ async function loadEventInvitations() {
 async function submitInvitation() {
   invitation.saving = true
   invitation.error = ''
-  invitation.success = ''
   try {
     const payload =
       invitation.targetType === 'DISTRICT_CONGREGATION'
@@ -393,7 +391,7 @@ async function submitInvitation() {
             external_target_note: invitation.externalNote.trim(),
           }
     await createInvitations(modal.eventId, [payload])
-    invitation.success = 'Einladung gespeichert.'
+    toast.success('Einladung gespeichert')
     await Promise.all([matrixStore.fetch(), loadEventInvitations()])
   } catch (e) {
     invitation.error = e instanceof Error ? e.message : 'Einladung konnte nicht gespeichert werden'
@@ -405,10 +403,9 @@ async function submitInvitation() {
 async function removeInvitation(invitationId: string) {
   invitation.saving = true
   invitation.error = ''
-  invitation.success = ''
   try {
     await deleteInvitation(invitationId)
-    invitation.success = 'Einladung geloescht.'
+    toast.success('Einladung gelöscht')
     await Promise.all([matrixStore.fetch(), loadEventInvitations()])
   } catch (e) {
     invitation.error = e instanceof Error ? e.message : 'Einladung konnte nicht geloescht werden'
@@ -489,6 +486,7 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
     }
     if (!hasLeader && action === 'save') {
       await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
+      toast.success('Zuweisung entfernt', modal.eventTitle)
     } else {
       await matrixStore.assign(
         modal.eventId,
@@ -496,6 +494,7 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
         options,
         action === 'confirm' ? 'CONFIRMED' : undefined,
       )
+      toast.success(action === 'confirm' ? 'Zuweisung bestätigt' : 'Zuweisung gespeichert', leaderText || undefined)
     }
     dismissModal()
   } catch (e) {
@@ -531,6 +530,7 @@ async function removeAssignmentFromModal() {
   modal.error = ''
   try {
     await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
+    toast.success('Zuweisung entfernt', modal.eventTitle)
     dismissModal()
   } catch (e) {
     modal.error = e instanceof Error ? e.message : 'Fehler beim Entfernen'
@@ -565,6 +565,7 @@ async function moveServiceDateTime() {
       end_at: localEnd.toISOString(),
     })
     await matrixStore.fetch()
+    toast.success('Termin verschoben', modal.eventTitle)
     dismissModal()
   } catch (e) {
     modal.moveError = e instanceof Error ? e.message : 'Verschieben fehlgeschlagen'
