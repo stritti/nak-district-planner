@@ -15,7 +15,7 @@ from app.adapters.api.schemas.planning_series import (
     PlanningSeriesResponse,
     PlanningSeriesUpdate,
 )
-from app.adapters.auth.permissions import require_role_in_district
+from app.adapters.auth.permissions import require_role_in_district, require_superadmin
 from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.planning_series_service import PlanningSeriesSlotGenerationService
@@ -260,11 +260,7 @@ async def generate_all_slots(
 
     **RBAC:** Requires SUPERADMIN role.
     """
-    if not getattr(auth.user, "is_superadmin", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Nur Superadmin darf Slots für alle Bezirke generieren",
-        )
+    require_superadmin(auth.user, "Nur Superadmin darf Slots für alle Bezirke generieren")
 
     service = PlanningSeriesSlotGenerationService(
         series_repo=SqlPlanningSeriesRepository(db),

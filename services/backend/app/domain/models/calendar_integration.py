@@ -5,7 +5,11 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
+
+class SyncDeleteMode(StrEnum):
+    MARK_CANCELLED = "MARK_CANCELLED"
+    HARD_DELETE = "HARD_DELETE"
 
 
 class CalendarType(StrEnum):
@@ -46,6 +50,7 @@ class CalendarIntegration:
     congregation_id: uuid.UUID | None = None
     default_category: str | None = None
     last_sync_error: str | None = None
+    delete_behavior: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
 
     @classmethod
     def create(
@@ -59,6 +64,7 @@ class CalendarIntegration:
         capabilities: list[CalendarCapability] | None = None,
         congregation_id: uuid.UUID | None = None,
         default_category: str | None = None,
+        delete_behavior: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED,
     ) -> CalendarIntegration:
         now = datetime.now(UTC)
         return cls(
@@ -76,4 +82,5 @@ class CalendarIntegration:
             created_at=now,
             updated_at=now,
             default_category=default_category,
+            delete_behavior=delete_behavior,
         )

@@ -75,10 +75,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             return self._add_csrf_cookie(response, request)
 
-        # Skip CSRF for API-Key authentication
-        if request.headers.get("X-API-Key"):
-            response = await call_next(request)
-            return response
+        # No header-based exemption: an exemption must rest on an already
+        # verified authentication, and the API has no API-key authentication
+        # (removed with the OIDC migration). Any client could set such a header.
 
         # Validate CSRF token for state-changing requests
         try:

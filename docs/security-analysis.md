@@ -83,7 +83,7 @@ Verwendete Analysemethoden:
 
 | Massnahme | Implementierung | Status |
 |-----------|----------------|--------|
-| **API Key Auth** | `X-API-Key` Header für Service-to-Service | ✅ Implementiert |
+| **API Key Auth** | Entfernt mit der OIDC-Migration (`phase4b`); kein Endpoint wertet `X-API-Key` aus | ❌ Nicht vorhanden |
 | **JWT Bearer Auth** | `Authorization: Bearer` für User-Aktionen | ✅ Implementiert |
 | **Rate Limiting** | Geplant für öffentliche Endpunkte | ❌ Nicht implementiert |
 | **Input Validation** | Pydantic v2 Models | ✅ Implementiert |
@@ -97,7 +97,7 @@ Verwendete Analysemethoden:
 | ID | Bedrohung | Risiko | Betroffene Komponenten | Status | Massnahmen |
 |----|-----------|--------|----------------------|--------|------------|
 | **SEC-001** | Angreifer gibt sich als legitimer Benutzer aus | **Hoch** | OIDC Auth, API Endpunkte | ⚠️ Teilweise geschützt | JWT-Validierung, PKCE Flow |
-| **SEC-002** | API-Key Kompromittierung | **Hoch** | Service-to-Service Kommunikation | ⚠️ Teilweise geschützt | API-Key in `.env`, aber keine Rotation |
+| **SEC-002** | API-Key Kompromittierung | **Hoch** | Ausgehender IdP-Provisioning-Webhook (`IDP_PROVISIONING_API_KEY`); eingehende API-Keys gibt es nicht mehr | ⚠️ Teilweise geschützt | Schlüssel in `.env`, aber keine Rotation |
 | **SEC-003** | Session Hijacking | **Mittel** | Frontend Session Storage | ✅ Geschützt | PKCE Verifier in Session Storage (auto-cleared) |
 | **SEC-004** | CSRF-Angriffe | **Niedrig** | Formulare, State-changing Requests | ❌ Nicht geschützt | Kein CSRF-Token implementiert |
 

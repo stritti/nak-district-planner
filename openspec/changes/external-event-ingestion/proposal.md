@@ -5,24 +5,30 @@ When an external calendar creates a new event that has no corresponding Planning
 ## What Changes
 
 - Introduce `ExternalEventCandidate` entity for review-based ingestion of externally detected events
-- Implement auto-matching: if an external event matches an existing PlanningSlot exactly (congregation, date, time, category), it is mapped automatically without creating a candidate
-- Add review workflow: list candidates, accept (create mapping or PlanningSlot), or dismiss
+- Implement governance-safe auto-matching to existing `PlanningSlot` entries
+- Add backend review workflow: list candidates, accept (create mapping or PlanningSlot), or dismiss
+- Keep one problematic external event isolated so it cannot abort processing of later events in the same sync run
+- Use explicit domain errors and shared external-event mapping logic to keep sync and manual review behavior consistent
 
 ## Capabilities
 
 ### New Capabilities
 - `candidate-creation`: When an external event is detected with no existing mapping, create an ExternalEventCandidate
-- `auto-mapping`: Automatically map external events to existing PlanningSlots on exact match (congregation, date, time, category)
-- `candidate-review-workflow`: List, accept, or dismiss external event candidates
+- `auto-mapping`: Automatically map external events to existing PlanningSlots on exact congregation/date/time match and compatible category semantics
+- `candidate-review-workflow`: Backend API to list, accept, or dismiss external event candidates
 
 ### Modified Capabilities
-- *(none – purely additive)*
+- *(none - purely additive)*
+
+## Scope
+
+This PR implements the governed ingestion workflow in the backend only. A frontend review page, Pinia store, API client integration, and notification route are explicitly outside this change and require a separate OpenSpec change.
 
 ## Impact
 
-- **Domain Model** — New `ExternalEventCandidate` entity
-- **Database** — New migration for `external_event_candidates` table
-- **Sync Engine** — Detection logic triggers candidate creation or auto-mapping
-- **API** — New endpoints for candidate listing, acceptance, and dismissal
-- **Frontend** — Candidate review modal/UI openspec/changes/hybrid-calendar-sync/proposal.md openspec/changes/in-app-notifications/proposal.md openspec/changes/openspec-gap-analysis.md
-
+- **Domain Model** - New `ExternalEventCandidate` entity and explicit review errors
+- **Database** - New migration for `external_event_candidates` table
+- **Sync Engine** - Detection logic triggers candidate creation or auto-mapping without aborting the run for an unassignable slot
+- **Application Layer** - Shared mapping logic for automatic and reviewed assignments
+- **API** - New endpoints for candidate listing, acceptance, and dismissal
+- **Observability** - Review-relevant transitions can be logged with structured context

@@ -52,6 +52,7 @@ def _to_response(integration: CalendarIntegration) -> CalendarIntegrationRespons
         created_at=integration.created_at,
         updated_at=integration.updated_at,
         default_category=integration.default_category,
+        delete_behavior=integration.delete_behavior,
     )
 
 
@@ -153,6 +154,8 @@ async def trigger_sync(
         updated=summary.updated,
         cancelled=summary.cancelled,
         auto_matched=summary.auto_matched,
+        skipped=summary.skipped,
+        failed=summary.failed,
     )
 
 

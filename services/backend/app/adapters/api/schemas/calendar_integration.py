@@ -8,6 +8,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.domain.models.calendar_integration import CalendarCapability, CalendarType
+from app.domain.models.calendar_integration import SyncDeleteMode
 
 
 class CalendarIntegrationCreate(BaseModel):
@@ -23,6 +24,7 @@ class CalendarIntegrationCreate(BaseModel):
         default_factory=lambda: [CalendarCapability.READ]
     )
     default_category: str | None = None
+    delete_behavior: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
 
 
 class CalendarIntegrationResponse(BaseModel):
@@ -41,6 +43,7 @@ class CalendarIntegrationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     default_category: str | None = None
+    delete_behavior: SyncDeleteMode
     # credentials_enc is intentionally omitted from responses
 
     model_config = {"from_attributes": True}
@@ -54,6 +57,7 @@ class CalendarIntegrationUpdate(BaseModel):
     sync_interval: int | None = Field(None, ge=1, le=10080)
     capabilities: list[CalendarCapability] | None = None
     default_category: str | None = None
+    delete_behavior: SyncDeleteMode | None = None
 
 
 class CalendarIntegrationListResponse(BaseModel):
@@ -71,3 +75,5 @@ class SyncResult(BaseModel):
     updated: int
     cancelled: int
     auto_matched: int
+    skipped: int = 0
+    failed: int = 0
