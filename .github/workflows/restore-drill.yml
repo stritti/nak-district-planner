@@ -3,12 +3,6 @@ name: Restore Drill
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "scripts/backup.sh"
-      - "scripts/restore.sh"
-      - "scripts/restore-drill.sh"
-      - ".github/workflows/restore-drill.yml"
-      - "docker-compose.yml"
   push:
     branches: [main]
   schedule:
