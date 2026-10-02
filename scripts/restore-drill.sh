@@ -35,13 +35,16 @@ start_database() {
     "$POSTGRES_IMAGE" >/dev/null
 
   for _ in $(seq 1 30); do
-    if docker exec "$container" pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+    if docker exec "$container" psql \
+      -U "$POSTGRES_USER" \
+      -d "$POSTGRES_DB" \
+      -Atqc 'SELECT 1' >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
   done
 
-  log "database container ${container} did not become ready"
+  log "database ${POSTGRES_DB} in container ${container} did not become ready"
   docker logs "$container" >&2 || true
   return 1
 }
