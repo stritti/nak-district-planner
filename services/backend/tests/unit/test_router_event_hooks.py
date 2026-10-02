@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -58,19 +58,18 @@ def existing_hook(district_id: uuid.UUID = DISTRICT) -> EventMailHook:
 
 @pytest.fixture
 def db() -> AsyncMock:
-    db = AsyncMock()
-    db.get.return_value = object()  # district exists
-    return db
+    database = AsyncMock()
+    database.get.return_value = object()
+    return database
 
 
 @pytest.fixture
-def repo():
-    with patch.object(router, "SqlEventMailHookRepository") as factory:
-        repository = factory.return_value
-        repository.save = AsyncMock()
-        repository.get = AsyncMock(return_value=None)
-        repository.list_by_district = AsyncMock(return_value=[])
-        yield repository
+def repo() -> AsyncMock:
+    repository = AsyncMock()
+    repository.save = AsyncMock()
+    repository.get = AsyncMock(return_value=None)
+    repository.list_by_district = AsyncMock(return_value=[])
+    return repository
 
 
 class TestAuthorization:
@@ -81,27 +80,28 @@ class TestAuthorization:
     )
     async def test_non_admins_are_rejected_before_any_lookup(self, auth, db, repo) -> None:
         with pytest.raises(HTTPException) as error:
-            await router.list_event_hooks(DISTRICT, auth, db)
+            await router.list_event_hooks(DISTRICT, auth, db, repo)
         assert error.value.status_code == 403
         db.get.assert_not_awaited()
         repo.list_by_district.assert_not_awaited()
 
     async def test_superadmin_is_allowed(self, db, repo) -> None:
         assert (
-            await router.list_event_hooks(DISTRICT, auth_for(uuid.uuid4(), superadmin=True), db)
+            await router.list_event_hooks(DISTRICT, auth_for(uuid.uuid4(), superadmin=True), db, repo)
             == []
         )
 
     async def test_unknown_district_returns_404(self, db, repo) -> None:
         db.get.return_value = None
         with pytest.raises(HTTPException) as error:
-            await router.list_event_hooks(DISTRICT, auth_for(DISTRICT), db)
+            await router.list_event_hooks(DISTRICT, auth_for(DISTRICT), db, repo)
         assert error.value.status_code == 404
+        repo.list_by_district.assert_not_awaited()
 
 
 class TestCrud:
     async def test_create_persists_active_hook(self, db, repo) -> None:
-        hook = await router.create_event_hook(DISTRICT, create_body(), auth_for(DISTRICT), db)
+        hook = await router.create_event_hook(DISTRICT, create_body(), auth_for(DISTRICT), db, repo)
 
         assert hook.district_id == DISTRICT
         assert hook.is_active
@@ -111,7 +111,11 @@ class TestCrud:
     async def test_create_rejects_placeholder_of_other_event_type(self, db, repo) -> None:
         with pytest.raises(HTTPException) as error:
             await router.create_event_hook(
-                DISTRICT, create_body(body_template="{leader_name}"), auth_for(DISTRICT), db
+                DISTRICT,
+                create_body(body_template="{leader_name}"),
+                auth_for(DISTRICT),
+                db,
+                repo,
             )
         assert error.value.status_code == 422
         repo.save.assert_not_awaited()
@@ -119,7 +123,7 @@ class TestCrud:
     async def test_list_returns_district_hooks(self, db, repo) -> None:
         hooks = [existing_hook()]
         repo.list_by_district.return_value = hooks
-        assert await router.list_event_hooks(DISTRICT, auth_for(DISTRICT), db) == hooks
+        assert await router.list_event_hooks(DISTRICT, auth_for(DISTRICT), db, repo) == hooks
         repo.list_by_district.assert_awaited_once_with(DISTRICT)
 
     async def test_update_replaces_mutable_fields_and_keeps_identity(self, db, repo) -> None:
@@ -127,7 +131,7 @@ class TestCrud:
         repo.get.return_value = hook
 
         updated = await router.update_event_hook(
-            DISTRICT, hook.id, update_body(is_active=False), auth_for(DISTRICT), db
+            DISTRICT, hook.id, update_body(is_active=False), auth_for(DISTRICT), db, repo
         )
 
         assert updated.id == hook.id and updated.event_type == hook.event_type
@@ -145,19 +149,22 @@ class TestCrud:
                 update_body(subject_template="{x.__class__}"),
                 auth_for(DISTRICT),
                 db,
+                repo,
             )
         assert error.value.status_code == 422
 
     @pytest.mark.parametrize("operation", ["update", "delete"])
     async def test_hook_of_other_district_is_not_found(self, operation, db, repo) -> None:
-        repo.get.return_value = None  # repository filters by district
+        repo.get.return_value = None
         with pytest.raises(HTTPException) as error:
             if operation == "update":
                 await router.update_event_hook(
-                    DISTRICT, uuid.uuid4(), update_body(), auth_for(DISTRICT), db
+                    DISTRICT, uuid.uuid4(), update_body(), auth_for(DISTRICT), db, repo
                 )
             else:
-                await router.deactivate_event_hook(DISTRICT, uuid.uuid4(), auth_for(DISTRICT), db)
+                await router.deactivate_event_hook(
+                    DISTRICT, uuid.uuid4(), auth_for(DISTRICT), db, repo
+                )
         assert error.value.status_code == 404
         repo.save.assert_not_awaited()
 
@@ -165,7 +172,9 @@ class TestCrud:
         hook = existing_hook()
         repo.get.return_value = hook
 
-        response = await router.deactivate_event_hook(DISTRICT, hook.id, auth_for(DISTRICT), db)
+        response = await router.deactivate_event_hook(
+            DISTRICT, hook.id, auth_for(DISTRICT), db, repo
+        )
 
         assert response.status_code == 204
         saved = repo.save.await_args.args[0]
