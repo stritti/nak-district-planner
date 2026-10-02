@@ -76,12 +76,13 @@ create_encrypted_backup() {
   local recipient="$1"
 
   mkdir -p "$BACKUP_DIR"
-  BACKUP_DIR="$BACKUP_DIR" \
-  BACKUP_ENCRYPT_KEY="$recipient" \
-  BACKUP_RETENTION_DAYS=1 \
-  DB_CONTAINER="$SOURCE_CONTAINER" \
-  POSTGRES_USER="$POSTGRES_USER" \
-  POSTGRES_DB="$POSTGRES_DB" \
+  env \
+    BACKUP_DIR="$BACKUP_DIR" \
+    BACKUP_ENCRYPT_KEY="$recipient" \
+    BACKUP_RETENTION_DAYS=1 \
+    DB_CONTAINER="$SOURCE_CONTAINER" \
+    POSTGRES_USER="$POSTGRES_USER" \
+    POSTGRES_DB="$POSTGRES_DB" \
     bash ./scripts/backup.sh >/dev/null
 
   find "$BACKUP_DIR" -maxdepth 1 -type f -name '*.dump.gpg' -print -quit
@@ -104,14 +105,16 @@ SQL
 run_restore() {
   local backup_file="$1"
 
-  DB_CONTAINER="$TARGET_CONTAINER" \
-  POSTGRES_USER="$POSTGRES_USER" \
-  POSTGRES_DB="$POSTGRES_DB" \
+  env \
+    DB_CONTAINER="$TARGET_CONTAINER" \
+    POSTGRES_USER="$POSTGRES_USER" \
+    POSTGRES_DB="$POSTGRES_DB" \
     bash ./scripts/restore.sh "$backup_file" --dry-run --yes >/dev/null
 
-  DB_CONTAINER="$TARGET_CONTAINER" \
-  POSTGRES_USER="$POSTGRES_USER" \
-  POSTGRES_DB="$POSTGRES_DB" \
+  env \
+    DB_CONTAINER="$TARGET_CONTAINER" \
+    POSTGRES_USER="$POSTGRES_USER" \
+    POSTGRES_DB="$POSTGRES_DB" \
     bash ./scripts/restore.sh "$backup_file" --yes >/dev/null
 }
 
@@ -142,7 +145,8 @@ assert_corrupt_archive_is_rejected_without_changes() {
     -d "$POSTGRES_DB" \
     -Atc 'SELECT payload FROM restore_drill_probe WHERE id = 1')"
 
-  if DB_CONTAINER="$TARGET_CONTAINER" \
+  if env \
+    DB_CONTAINER="$TARGET_CONTAINER" \
     POSTGRES_USER="$POSTGRES_USER" \
     POSTGRES_DB="$POSTGRES_DB" \
       bash ./scripts/restore.sh "$corrupt_backup" --dry-run --yes >/dev/null 2>&1; then
