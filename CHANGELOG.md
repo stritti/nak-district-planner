@@ -36,6 +36,22 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
+## [0.34.0](https://github.com/stritti/nak-district-planner/compare/v0.33.0...v0.34.0) (2026-10-02)
+
+
+### Features
+
+* **events:** mark and filter worship services in event overview ([#370](https://github.com/stritti/nak-district-planner/issues/370)) ([aa5dfa0](https://github.com/stritti/nak-district-planner/commit/aa5dfa0afa363f7a1b52bcdc9285ac870abad0c4))
+* **frontend:** add role-based contextual help ([#380](https://github.com/stritti/nak-district-planner/issues/380)) ([683c23b](https://github.com/stritti/nak-district-planner/commit/683c23b1d7c1b6d27fa4680c0ce0c05a3c914a63))
+* **frontend:** finish UX improvements ([#381](https://github.com/stritti/nak-district-planner/issues/381)) ([e99139b](https://github.com/stritti/nak-district-planner/commit/e99139ba2641f9b2a439b9e8f612655d881a3d34))
+
+
+### Bug Fixes
+
+* [#383](https://github.com/stritti/nak-district-planner/issues/383) und [#390](https://github.com/stritti/nak-district-planner/issues/390) nach fehlerhaftem Merge in [#384](https://github.com/stritti/nak-district-planner/issues/384) wiederherstellen ([#400](https://github.com/stritti/nak-district-planner/issues/400)) ([4db84ea](https://github.com/stritti/nak-district-planner/commit/4db84ea056b24220df8f47d7b62f6a3b5993eeeb))
+* **backend:** bind lambda params and drop unused content hashes ([#405](https://github.com/stritti/nak-district-planner/issues/405)) ([83b9766](https://github.com/stritti/nak-district-planner/commit/83b976689ce8c8e54a4457aa9c33178b53b88914))
+* **ci:** resolve shared markdownlint baseline findings ([#389](https://github.com/stritti/nak-district-planner/issues/389)) ([41a5810](https://github.com/stritti/nak-district-planner/commit/41a5810ee1f4f52de052951058b66611f8fe0ef7))
+
 ## [0.33.0](https://github.com/stritti/nak-district-planner/compare/v0.32.0...v0.33.0) (2026-09-18)
 
 
