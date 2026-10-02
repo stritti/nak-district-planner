@@ -59,31 +59,27 @@ RLS-Policies, die auf diesen Spalten aufbauen):
 `congregation_invitations`, `calendar_integrations`, `memberships`,
 `planning_slots`, `planning_series`, `export_tokens`, `notifications`.
 
-## Bekannte Schema-Drift (Stand 2026-09-07)
+## Abgleich ORM ↔ Datenbank
 
-`alembic check` läuft in CI als **informativer, nicht blockierender** Schritt
-(`.github/workflows/alembic-check.yml`), weil aktuell echte Drift zwischen
-ORM-Modellen und der migrierten DB besteht — hier dokumentiert, damit sie
-nicht mit neuer, durch eine PR eingeführter Drift verwechselt wird:
+`alembic check` läuft in CI **blockierend** (`.github/workflows/alembic-check.yml`):
+Jede Abweichung zwischen ORM-Modellen und einer frisch migrierten Datenbank
+lässt den Migrations-Check fehlschlagen. Neue Indizes und Constraints gehören
+deshalb immer in Migration **und** Modell (`__table_args__`).
 
-- Mehrere Indizes existieren in der DB, aber nicht mehr im Modell (fehlendes
-  `index=True` bzw. `Index(...)`): `congregation_invitations`,
-  `external_event_links`, `invitation_overwrite_requests`,
-  `leader_registrations`, `planning_slots`.
-- `memberships`: DB hat noch die alte kombinierte
-  `uq_memberships_user_role_scope` + `ix_memberships_scope`; das Modell
-  definiert stattdessen zwei getrennte Indizes (`ix_memberships_scope_id`,
-  `ix_memberships_scope_type`). Die alte Unique-Constraint ist in der DB noch
-  aktiv (Verhalten unverändert), nur die Modell-Repräsentation weicht ab.
-- `service_assignments.event_id`: Modell verlangt `NOT NULL`, DB-Spalte ist
-  noch nullable. **Vor einer Migration prüfen, ob produktiv NULL-Werte
-  existieren** — sonst schlägt ein `ALTER COLUMN ... SET NOT NULL` fehl oder
-  verletzt Daten.
-- `users.ix_users_sub`: DB hat `uq_users_sub` (separate Unique-Constraint) +
-  einen nicht-eindeutigen Index gleichen Namens; das Modell erwartet einen
-  einzigen eindeutigen Index. Funktional gleichwertig (Eindeutigkeit ist in
-  der DB durchgesetzt), nur unterschiedlich repräsentiert.
+Die Datenbank ist dabei die Referenz, weil die Migrationen den tatsächlichen
+Stand festlegen. Die frühere Drift (Stand 2026-09-07) ist am 2026-10-01
+bereinigt worden:
 
-Reconciliation dieser Punkte ist ein eigener, nicht-trivialer Follow-up
-(insbesondere der `event_id`-NOT-NULL-Fall erfordert eine Datenprüfung vor der
-Migration) — bewusst nicht Teil dieser Änderung.
+- Indizes, die nur per Migration existierten, stehen jetzt auch im Modell:
+  `congregation_invitations`, `external_event_links` (eindeutig),
+  `invitation_overwrite_requests`, `leader_registrations`, `planning_slots`
+  (inklusive des partiellen Unique-Index `no_overlapping_planning_slots`).
+- `memberships`: Das Modell bildet `uq_memberships_user_role_scope` und den
+  kombinierten Index `ix_memberships_scope` ab, statt getrennter Indizes auf
+  `scope_type` und `scope_id`.
+- `service_assignments.event_id`: Die Spalte ist in der Datenbank `NOT NULL`,
+  das Modell jetzt ebenso (vorher fälschlich nullable).
+- `users.sub`: Eindeutigkeit über den Constraint `uq_users_sub`; der
+  redundante, nicht eindeutige Index `ix_users_sub` entfällt (Migration `0026`).
+- `app_superadmin_config` hat bewusst kein ORM-Modell (nur SQL-Funktionen aus
+  Migration `0017`) und ist in `alembic/env.py` von der Prüfung ausgenommen.

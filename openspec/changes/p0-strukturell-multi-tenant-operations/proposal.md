@@ -10,7 +10,7 @@ Diese Lücken betreffen nicht nur die Sicherheit, sondern die grundsätzliche Be
 
 ## What Changes
 
-- **Multi-Tenant-Enforcement-Layer:** Ein zentraler `tenant_context` (Request-scoped) mit automatischer `district_id`-Filterung in allen Repository-Queries. Ein Mixin/Base-Klasse für alle mandantenfähigen Repositories erzwingt die Filterung.
+- **Multi-Tenant-Enforcement-Layer:** Ein zentraler `tenant_context` (Request-scoped) mit automatischer `district_id`-Filterung in allen Repository-Queries. Ein Mixin/Base-Klasse für alle mandantenfähigen Repositories erzwingt die Filterung. *(Umgesetzt als PostgreSQL RLS mit verifiziertem Tenant-Kontext statt Repository-Mixin; siehe `design.md`, Decision 1 und 2, überarbeitet 2026-10-02.)*
 - **DB-Level Exclusion Constraints:** PostgreSQL-Exclusion-Constraints für Zeitüberschneidungen bei Events und PlanningSlots (gleiche congregation_id + überlappender Zeitraum).
 - **CI-Migration-Check:** Neuer CI-Job, der `alembic upgrade head` gegen eine frische PostgreSQL-Datenbank testet, Seed-Daten einspielt und `alembic downgrade -1` prüft.
 - **Backup/Restore-Automatisierung:** Backup-Skript (`pg_dump` + Verschlüsselung), Restore-Skript (`pg_restore` + Integritätsprüfung), Runbook-Erweiterung mit RPO/RTO-Definition.

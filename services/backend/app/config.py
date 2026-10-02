@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     email_from_address: str = ""
     email_footer: str = ""
 
+    # Daily SLOT_UNASSIGNED scan: how many days ahead open gaps are reported
+    slot_gap_scan_days: int = Field(default=28, ge=0, le=366)
+
     # Backup/Restore (scripts/backup.sh, scripts/restore.sh)
     backup_encrypt_key: str | None = None
 

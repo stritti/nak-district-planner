@@ -59,6 +59,19 @@
       </div>
 
       <div class="w-full sm:w-auto">
+        <label class="filter-label" for="matrix-congregation-filter">Gemeinde</label>
+        <input
+          id="matrix-congregation-filter"
+          v-model="matrixStore.congregationQuery"
+          type="search"
+          name="congregation-filter"
+          placeholder="Gemeinde suchen…"
+          autocomplete="off"
+          class="form-select"
+        />
+      </div>
+
+      <div class="w-full sm:w-auto">
         <label class="filter-label">Von</label>
         <input
           v-model="matrixStore.fromDt"
@@ -134,15 +147,6 @@
       </div>
     </div>
 
-    <p v-if="releaseMessage" class="mt-2 text-xs text-teal-700 dark:text-teal-400">
-      {{ releaseMessage }}
-    </p>
-    <p v-if="generationMessage" class="mt-2 text-xs text-green-700 dark:text-green-400">
-      {{ generationMessage }}
-    </p>
-    <p v-if="generationError" class="mt-2 text-xs text-red-600 dark:text-red-400">
-      {{ generationError }}
-    </p>
   </div>
 </template>
 
@@ -152,11 +156,11 @@ import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
 import { exportMatrixToExcel } from '../composables/useExcelExport'
+import { useToast } from '../composables/useToast'
 
 const props = defineProps<{
   compactMode: boolean
   matrixSortMode: 'default' | 'grouped'
-  releaseMessage: string
 }>()
 
 const emit = defineEmits<{
@@ -167,6 +171,7 @@ const emit = defineEmits<{
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
+const toast = useToast()
 
 function onSortModeChange(event: Event) {
   emit('update:matrixSortMode', (event.target as HTMLSelectElement).value as 'default' | 'grouped')
@@ -211,28 +216,29 @@ function setPreset(key: string) {
 
 const exporting = ref(false)
 const generatingDrafts = ref(false)
-const generationMessage = ref('')
-const generationError = ref('')
 
 async function triggerMatrixExport() {
   if (!matrixStore.matrix) return
   exporting.value = true
   try {
     await exportMatrixToExcel(matrixStore.matrix, matrixStore.fromDt, matrixStore.toDt)
+  } catch (e) {
+    toast.error('Excel-Export fehlgeschlagen', e)
   } finally {
     exporting.value = false
   }
 }
 
 async function triggerRangeDraftGeneration() {
-  generationMessage.value = ''
-  generationError.value = ''
   generatingDrafts.value = true
   try {
     const result = await matrixStore.generateDraftsForCurrentRange()
-    generationMessage.value = `Entwuerfe erzeugt: ${result.created}, bereits vorhanden: ${result.skipped_existing}, im Bereich vorhanden: ${result.generated_in_requested_range}`
+    toast.success(
+      'Entwürfe erzeugt',
+      `Neu: ${result.created}, bereits vorhanden: ${result.skipped_existing}, im Bereich vorhanden: ${result.generated_in_requested_range}`,
+    )
   } catch (e) {
-    generationError.value = e instanceof Error ? e.message : 'Entwurfsgenerierung fehlgeschlagen'
+    toast.error('Entwurfsgenerierung fehlgeschlagen', e)
   } finally {
     generatingDrafts.value = false
   }

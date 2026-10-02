@@ -20,8 +20,10 @@ from app.adapters.api.routers import (
     auth,
     calendar_integrations,
     districts,
+    event_hooks,
     events,
     export,
+    external_candidates,
     invitations,
     leader_unavailabilities,
     leaders,
@@ -32,7 +34,6 @@ from app.adapters.api.routers import (
     service_assignments,
     system,
 )
-from app.adapters.api.routers import external_candidates
 from app.adapters.api.routers import (
     health as health_router,
 )
@@ -43,6 +44,7 @@ from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
+from app.application.event_mail_hook_tasks import register_event_mail_hooks
 from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
@@ -76,6 +78,9 @@ async def lifespan(app: FastAPI):
 
     # Start audit service
     await audit_service.start()
+
+    # Domain events emitted by API requests trigger configured mail hooks.
+    register_event_mail_hooks()
 
     # Initialize OIDC adapter
     httpx_client = httpx.AsyncClient()
@@ -229,6 +234,7 @@ app.include_router(leaders.router)
 app.include_router(leader_unavailabilities.router)
 app.include_router(planning_series.router)
 app.include_router(reminder_configs.router)
+app.include_router(event_hooks.router)
 app.include_router(registrations.public_router)
 app.include_router(registrations.overview_router)
 app.include_router(registrations.router)

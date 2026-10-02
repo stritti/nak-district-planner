@@ -97,17 +97,31 @@ The system SHALL support event-type-specific placeholder substitution in email t
 ### Requirement: Event emission points in existing services
 The system SHALL emit domain events at specific points in existing service operations.
 
-#### Scenario: LÜCKE detection emits SLOT_UNASSIGNED
-- **WHEN** the sync or matrix service detects a planning slot of category `Gottesdienst` without a `ServiceAssignment`
+#### Scenario: Daily scan emits SLOT_UNASSIGNED for a new gap
+- **WHEN** the daily gap scan finds an active planning slot of category `Gottesdienst` without a `ServiceAssignment` (not an invitation copy) within the scan window
+- **AND** this gap, identified by district, date, congregation and slot, has not been reported while open
 - **THEN** the system SHALL emit a `SLOT_UNASSIGNED` event with the slot's congregation, date, and title
+
+#### Scenario: An open gap is reported only once
+- **WHEN** the daily scan finds a gap that was already reported and has stayed open
+- **THEN** the system SHALL NOT emit another `SLOT_UNASSIGNED` event for it
+
+#### Scenario: A reopened gap is reported again
+- **WHEN** a reported gap is closed (assignment created, slot cancelled, deleted or moved to another date or congregation)
+- **AND** a later scan finds the gap open again
+- **THEN** the system SHALL emit a new `SLOT_UNASSIGNED` event
 
 #### Scenario: ExternalEventCandidate creation emits EXTERNAL_EVENT_DETECTED
 - **WHEN** an `ExternalEventCandidate` is created by the calendar sync
 - **THEN** the system SHALL emit an `EXTERNAL_EVENT_DETECTED` event with the event title, date, and source
 
 #### Scenario: Sync job failure emits SYNC_ERROR
-- **WHEN** a calendar sync job fails with an exception
-- **THEN** the system SHALL emit a `SYNC_ERROR` event with the integration name and error message
+- **WHEN** a calendar sync job has exhausted all retries
+- **THEN** the system SHALL emit a `SYNC_ERROR` event with the integration name and a provider-neutral error message (attempts and error class, never the exception text)
+
+#### Scenario: Ongoing sync failure is not mailed repeatedly
+- **WHEN** a sync job fails again while the alert for the same integration is still unread
+- **THEN** the system SHALL NOT emit another `SYNC_ERROR` event
 
 #### Scenario: Leader registration approval emits REGISTRATION_RECEIVED
 - **WHEN** a leader registration is approved

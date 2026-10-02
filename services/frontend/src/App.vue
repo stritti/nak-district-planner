@@ -11,9 +11,11 @@
       </div>
     </div>
     <main :class="mainClass">
+      <ContextualHelp v-if="route.name === 'events'" context="events" />
       <RouterView />
     </main>
     <ToastContainer />
+    <ConfirmHost />
   </div>
 </template>
 
@@ -23,6 +25,8 @@ import { useRoute, useRouter } from 'vue-router'
 import AppNav from './components/AppNav.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
 import ToastContainer from './components/ToastContainer.vue'
+import ContextualHelp from './components/ContextualHelp.vue'
+import ConfirmHost from './components/ConfirmHost.vue'
 import { useOIDC } from './composables/useOIDC'
 import { useAuthStore } from './stores/auth'
 

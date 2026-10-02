@@ -115,7 +115,14 @@
       </div>
     </div>
 
-    <div v-else class="text-sm text-gray-500 dark:text-gray-400">Noch keine Integrationen angelegt.</div>
+    <EmptyState
+      v-else
+      message="Noch keine Integrationen angelegt."
+      hint="Verbinde einen Google-, Microsoft-, CalDAV- oder ICS-Kalender, um Termine zu importieren."
+      :icon="CalendarDaysIcon"
+      action-label="Integration anlegen"
+      @action="openForm"
+    />
 
     <!-- Feiertage Import -->
     <div class="mt-8 card">
@@ -523,8 +530,17 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ArrowDownTrayIcon, ArrowPathIcon, PencilSquareIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import {
+  ArrowDownTrayIcon,
+  ArrowPathIcon,
+  CalendarDaysIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  TrashIcon,
+  XMarkIcon,
+} from '@heroicons/vue/24/outline'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import EmptyState from '../components/EmptyState.vue'
 import { useDistrictsStore } from '../stores/districts'
 import { useToastStore } from '../stores/toast'
 import {
