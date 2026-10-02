@@ -60,7 +60,7 @@ def test_duplicate_all_sentinel_is_accepted() -> None:
     [
         (["all", str(CONGREGATION_A)], "nicht mit einzelnen Gemeinden"),
         (["not-a-uuid"], "Ungültige Gemeinde-ID"),
-        ([""], "Ungültige Gemeinde-ID"),
+        ([""], "Leere Gemeinde-IDs"),
         ([str(uuid.uuid4())], "gehört nicht zum Bezirk"),
     ],
     ids=["all-mixed", "malformed", "blank", "foreign-congregation"],
@@ -82,3 +82,10 @@ def test_congregation_level_event_may_clear_distribution() -> None:
     slot = _slot(congregation_id=CONGREGATION_A)
     slot.distribute_to([], DISTRICT_CONGREGATIONS)
     assert slot.applicability == []
+
+
+def test_blank_entries_are_rejected() -> None:
+    slot = _slot()
+    with pytest.raises(InvalidApplicabilityError, match="Leere Gemeinde-IDs"):
+        slot.distribute_to([str(CONGREGATION_A), "  "], DISTRICT_CONGREGATIONS)
+    assert slot.applicability == ["previous"]

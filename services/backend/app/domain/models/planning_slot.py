@@ -103,7 +103,10 @@ class PlanningSlot:
         distributed) or congregation IDs of this slot's district. IDs are stored
         canonically and de-duplicated in input order.
         """
-        requested = list(dict.fromkeys(entry.strip() for entry in entries))
+        requested = list(dict.fromkeys(entries))
+        if any(not entry.strip() for entry in requested):
+            raise InvalidApplicabilityError("Leere Gemeinde-IDs sind nicht erlaubt.")
+        requested = [entry.strip() for entry in requested]
         if requested and self.congregation_id is not None:
             raise InvalidApplicabilityError(
                 "Nur Bezirksveranstaltungen können an Gemeinden verteilt werden."
