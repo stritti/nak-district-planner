@@ -82,7 +82,7 @@ create_encrypted_backup() {
   DB_CONTAINER="$SOURCE_CONTAINER" \
   POSTGRES_USER="$POSTGRES_USER" \
   POSTGRES_DB="$POSTGRES_DB" \
-    ./scripts/backup.sh >/dev/null
+    bash ./scripts/backup.sh >/dev/null
 
   find "$BACKUP_DIR" -maxdepth 1 -type f -name '*.dump.gpg' -print -quit
 }
@@ -107,12 +107,12 @@ run_restore() {
   DB_CONTAINER="$TARGET_CONTAINER" \
   POSTGRES_USER="$POSTGRES_USER" \
   POSTGRES_DB="$POSTGRES_DB" \
-    ./scripts/restore.sh "$backup_file" --dry-run --yes --no-migrate >/dev/null
+    bash ./scripts/restore.sh "$backup_file" --dry-run --yes >/dev/null
 
   DB_CONTAINER="$TARGET_CONTAINER" \
   POSTGRES_USER="$POSTGRES_USER" \
   POSTGRES_DB="$POSTGRES_DB" \
-    ./scripts/restore.sh "$backup_file" --yes --no-migrate >/dev/null
+    bash ./scripts/restore.sh "$backup_file" --yes >/dev/null
 }
 
 assert_restored_data() {
@@ -145,7 +145,7 @@ assert_corrupt_archive_is_rejected_without_changes() {
   if DB_CONTAINER="$TARGET_CONTAINER" \
     POSTGRES_USER="$POSTGRES_USER" \
     POSTGRES_DB="$POSTGRES_DB" \
-      ./scripts/restore.sh "$corrupt_backup" --dry-run --yes --no-migrate >/dev/null 2>&1; then
+      bash ./scripts/restore.sh "$corrupt_backup" --dry-run --yes >/dev/null 2>&1; then
     log 'corrupt archive was unexpectedly accepted'
     return 1
   fi
@@ -164,11 +164,11 @@ assert_corrupt_archive_is_rejected_without_changes() {
 main() {
   local recipient backup_file
 
-  log "starting isolated source database"
+  log 'starting isolated source database'
   start_database "$SOURCE_CONTAINER"
   create_probe_data
 
-  log "creating encrypted backup"
+  log 'creating encrypted backup'
   recipient="$(generate_ephemeral_gpg_key)"
   backup_file="$(create_encrypted_backup "$recipient")"
   if [[ -z "$backup_file" || ! -f "$backup_file" ]]; then
@@ -176,18 +176,18 @@ main() {
     return 1
   fi
 
-  log "stopping source database before restore"
+  log 'stopping source database before restore'
   docker rm -f "$SOURCE_CONTAINER" >/dev/null
 
-  log "starting independent restore target"
+  log 'starting independent restore target'
   start_database "$TARGET_CONTAINER"
   seed_target_with_conflicting_data
 
-  log "validating and restoring backup"
+  log 'validating and restoring backup'
   run_restore "$backup_file"
   assert_restored_data
 
-  log "verifying corrupt archives fail before changing target data"
+  log 'verifying corrupt archives fail before changing target data'
   assert_corrupt_archive_is_rejected_without_changes "$backup_file"
 
   log 'restore drill completed successfully'
