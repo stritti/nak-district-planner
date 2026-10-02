@@ -63,7 +63,7 @@ class GoogleCalendarConnector(CalendarConnector):
             if page_token:
                 page_params["pageToken"] = page_token
             response = await resilient_request(
-                lambda: self._client.get(url, params=page_params, headers=headers),
+                lambda params=page_params: self._client.get(url, params=params, headers=headers),
                 provider="Google",
             )
             content_type = response.headers.get("content-type", "")

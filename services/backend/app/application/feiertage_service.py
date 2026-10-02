@@ -147,7 +147,6 @@ async def import_feiertage(
     for h in relevant:
         date_str: str = h["date"]
         name: str = h["localName"]
-        chash = _content_hash(date_str, name)
         holiday_date = date.fromisoformat(date_str)
         # For holidays, use midnight as the planning time
         planning_time = time(0, 0, 0)
@@ -214,8 +213,6 @@ async def import_kirchliche_festtage(
         festtage.append((name, _first_sunday(year, month)))
 
     for name, day in festtage:
-        date_str = day.isoformat()
-        chash = _content_hash(date_str, name)
         # For church holidays, use the actual date's time (midnight for all-day)
         planning_time = time(0, 0, 0)
 
