@@ -31,7 +31,7 @@
 - [x] 4.2 Implement outbound revision tracking
 - [x] 4.3 Implement inbound revision guard
 - [x] 4.4 Skip already acknowledged cancellation tombstones without DB writes
-- [ ] 4.5 Verify update and delete echo suppression for every writable provider
+- [x] 4.5 Verify update and delete echo suppression for every writable provider
 - [x] 4.6 Before outbound delete, compare provider state with last acknowledged hash/revision and route concurrent remote edits through field-aware conflict handling
 
 ## 5. Provider Deletion Reconciliation
