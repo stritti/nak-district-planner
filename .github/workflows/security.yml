@@ -19,7 +19,7 @@ permissions:
   actions: read
 
 env:
-  BUN_VERSION: "1.2"
+  BUN_VERSION: "1.3"
 
 jobs:
   codeql:
@@ -96,8 +96,8 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      # bun audit reads dependency data directly from bun.lock. Installing
-      # node_modules first is redundant and would only add network and I/O work.
+      # bun audit was introduced in Bun 1.3 and reads dependency data directly
+      # from bun.lock. Installing node_modules first is therefore redundant.
       - name: Audit frontend dependencies
-        run: bun audit --level moderate
+        run: bun audit --audit-level=moderate
         continue-on-error: true
