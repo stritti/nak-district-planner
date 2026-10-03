@@ -29,3 +29,12 @@
 - [x] 4.6 Security- und MegaLinter-Läufe verifizieren
 - [x] 4.7 Cache-Hits in einem Folgelauf dokumentieren
 - [x] 4.8 Alle offenen Review-Threads beantworten und auflösen
+
+## 5. MegaLinter-Laufzeit
+
+- [x] 5.1 Laufzeitprofil des bisherigen MegaLinter-Jobs aus Actions-Logs ermitteln
+- [x] 5.2 All-in-one-Image durch offizielle `python`-Flavor ersetzen
+- [x] 5.3 Frontend-ESLint in den bereits installierten Bun-CI-Job verschieben
+- [ ] 5.4 Frontend-ESLint auf dem PR-Head erfolgreich verifizieren
+- [ ] 5.5 MegaLinter-Flavor mit allen konfigurierten Lintern erfolgreich verifizieren
+- [ ] 5.6 Image-Pull- und Gesamtlaufzeit gegen den bisherigen Lauf vergleichen
