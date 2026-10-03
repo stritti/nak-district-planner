@@ -11,16 +11,20 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
-from app.adapters.auth.permissions import require_role_in_district
-from app.adapters.db.repositories import (
-    SqlCongregationRepository,
-    SqlEventInstanceRepository,
-    SqlPlanningSlotRepository,
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_congregation_repository,
+    get_event_instance_repository,
+    get_planning_slot_repository,
 )
+from app.adapters.auth.permissions import require_role_in_district
+from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
 from app.application.sync_service import push_deviation_resolution
@@ -48,9 +52,6 @@ SERVICE_CATEGORY = "Gottesdienst"
 
 def _to_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-
-
-# ── Pydantic schemas ─────────────────────────────────────────────────────────
 
 
 class EventResponse(BaseModel):
@@ -84,9 +85,7 @@ class EventListResponse(BaseModel):
 
 
 class EventUpdate(BaseModel):
-    """Patch fields for an event. All fields optional; unknown-to-domain
-    fields are not accepted (no silent drops).
-    """
+    """Patch fields for an event."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -116,15 +115,11 @@ class BulkApprovalStatusResponse(BaseModel):
     updated_count: int
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-
 def _slot_start_at(slot: PlanningSlot) -> datetime:
     return datetime.combine(slot.planning_date, slot.planning_time or time.min, tzinfo=UTC)
 
 
 def _slot_to_event(slot: PlanningSlot, instance: EventInstance | None) -> EventResponse:
-    """Convert a PlanningSlot (+ optional EventInstance) to an EventResponse."""
     return EventResponse(
         id=slot.id,
         title=instance.title if instance else (slot.title or ""),
@@ -147,14 +142,11 @@ def _slot_to_event(slot: PlanningSlot, instance: EventInstance | None) -> EventR
     )
 
 
-async def _load_instances(slot_ids: list[uuid.UUID], session) -> dict[uuid.UUID, EventInstance]:
-    """Batch load EventInstances for the given slot IDs."""
-    inst_repo = SqlEventInstanceRepository(session)
+async def _load_instances(
+    inst_repo: SqlEventInstanceRepository, slot_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, EventInstance]:
     instances = await inst_repo.list_by_planning_slots(slot_ids)
     return {inst.planning_slot_id: inst for inst in instances}
-
-
-# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
 @router.get("", response_model=EventListResponse)
@@ -172,8 +164,10 @@ async def list_events(
     to_dt: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
 ) -> EventListResponse:
-    """List events (PlanningSlots) for a district with optional filters."""
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -182,7 +176,6 @@ async def list_events(
     if district_id is not None:
         require_role_in_district(auth, Role.VIEWER, district_id)
 
-    slot_repo = SqlPlanningSlotRepository(session)
     now = datetime.now(UTC).date()
     from_date = _to_utc(from_dt).date() if from_dt is not None else now - timedelta(days=365)
     to_date = _to_utc(to_dt).date() if to_dt is not None else now + timedelta(days=365 * 2)
@@ -194,7 +187,6 @@ async def list_events(
     )
 
     if group_id is not None:
-        cong_repo = SqlCongregationRepository(session)
         congregations = await cong_repo.list_by_district(district_id or uuid.UUID(int=0))
         group_congregation_ids = {c.id for c in congregations if c.group_id == group_id}
         all_slots = [
@@ -206,8 +198,6 @@ async def list_events(
     if only_district_level:
         all_slots = [s for s in all_slots if s.congregation_id is None]
     elif congregation_id is not None:
-        # Congregation view: own slots + district-level slots distributed via
-        # applicability ("all" sentinel or explicit congregation ID).
         all_slots = [
             s
             for s in all_slots
@@ -221,17 +211,14 @@ async def list_events(
 
     if status_filter is not None:
         all_slots = [s for s in all_slots if s.status == status_filter]
-
     if approval_status is not None:
         all_slots = [s for s in all_slots if s.approval_status == approval_status]
-
     if is_service is not None:
         all_slots = [s for s in all_slots if (s.category == SERVICE_CATEGORY) == is_service]
 
     total = len(all_slots)
     page = all_slots[offset : offset + limit]
-    instances = await _load_instances([s.id for s in page], session)
-
+    instances = await _load_instances(inst_repo, [s.id for s in page])
     return EventListResponse(
         items=[_slot_to_event(s, instances.get(s.id)) for s in page],
         total=total,
@@ -246,23 +233,21 @@ async def update_event(
     body: EventUpdate,
     auth: CurrentUserWithMemberships,
     session: DbSession,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
 ) -> EventResponse:
-    """Update a PlanningSlot (and its EventInstance when present)."""
-    slot_repo = SqlPlanningSlotRepository(session)
     slot = await slot_repo.get(event_id)
     if slot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
 
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
-
-    inst_repo = SqlEventInstanceRepository(session)
     instance = await inst_repo.get_by_planning_slot(event_id)
 
     if "congregation_id" in body.model_fields_set:
         if body.congregation_id is None:
             slot.congregation_id = None
         elif body.congregation_id != slot.congregation_id:
-            cong_repo = SqlCongregationRepository(session)
             congregation = await cong_repo.get(body.congregation_id)
             if congregation is None or congregation.district_id != slot.district_id:
                 raise HTTPException(
@@ -306,9 +291,7 @@ async def update_event(
         new_start = _to_utc(
             body.start_at or (instance.actual_start_at if instance else _slot_start_at(slot))
         )
-        new_end = _to_utc(
-            body.end_at or (instance.actual_end_at if instance else new_start)
-        )
+        new_end = _to_utc(body.end_at or (instance.actual_end_at if instance else new_start))
         if new_end < new_start:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -329,7 +312,6 @@ async def update_event(
 
     slot.updated_at = datetime.now(UTC)
     await slot_repo.save(slot)
-
     return _slot_to_event(slot, instance)
 
 
@@ -338,13 +320,13 @@ async def resolve_event_deviation(
     event_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     session: DbSession,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
 ) -> EventResponse:
-    slot_repo = SqlPlanningSlotRepository(session)
     slot = await slot_repo.get(event_id)
     if slot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
-    instance_repo = SqlEventInstanceRepository(session)
     instance = await instance_repo.get_by_planning_slot(event_id)
     if instance is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
@@ -377,8 +359,8 @@ async def bulk_update_approval_status(
     auth: CurrentUserWithMemberships,
     session: DbSession,
     district_id: uuid.UUID | None = Query(None),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> BulkApprovalStatusResponse:
-    """Bulk-update approval_status for planning slots in a given month."""
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -387,7 +369,6 @@ async def bulk_update_approval_status(
     if district_id is not None:
         require_role_in_district(auth, Role.PLANNER, district_id)
 
-    slot_repo = SqlPlanningSlotRepository(session)
     from_date = date(body.year, body.month, 1)
     if body.month == 12:
         to_date = date(body.year + 1, 1, 1) - timedelta(days=1)
@@ -399,7 +380,6 @@ async def bulk_update_approval_status(
         from_date=from_date,
         to_date=to_date,
     )
-
     if body.congregation_id is not None:
         all_slots = [s for s in all_slots if s.congregation_id == body.congregation_id]
 
@@ -409,7 +389,6 @@ async def bulk_update_approval_status(
         slot.updated_at = now_dt
         await slot_repo.save(slot)
 
-    # Releasing the whole district's month is the plan finalisation.
     if (
         district_id is not None
         and body.congregation_id is None

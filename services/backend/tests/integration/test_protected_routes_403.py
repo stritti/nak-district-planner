@@ -23,10 +23,41 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
-from app.adapters.api.deps import get_calendar_integration_repository, get_notification_service
+from app.adapters.api.deps import (
+    get_calendar_integration_repository,
+    get_congregation_group_repository,
+    get_congregation_repository,
+    get_district_repository,
+    get_event_instance_repository,
+    get_export_token_repository,
+    get_invitation_overwrite_request_repository,
+    get_invitation_repository,
+    get_leader_registration_repository,
+    get_leader_repository,
+    get_notification_service,
+    get_planning_series_repository,
+    get_planning_slot_repository,
+    get_service_assignment_repository,
+)
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
 from app.main import app
+
+
+@contextmanager
+def _repository_overrides(repos: dict):
+    """Override repository dependencies by provider function.
+
+    The routers resolve repositories via Depends(...), so patching the
+    repository class in a router module no longer has any effect.
+    """
+    for dep, repo in repos.items():
+        app.dependency_overrides[dep] = lambda repo=repo: repo
+    try:
+        yield
+    finally:
+        for dep in repos:
+            app.dependency_overrides.pop(dep, None)
 
 
 @contextmanager
@@ -232,16 +263,13 @@ def test_viewer_state_change_in_own_district_returns_200(auth_client):
 
 def test_viewer_get_events_in_own_district_returns_200(auth_client):
     client, auth_headers, district1 = auth_client
-    with (
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository") as MockSlotRepo,
-        patch("app.adapters.api.routers.events.SqlEventInstanceRepository") as MockInstRepo,
+    slot_repo = AsyncMock()
+    slot_repo.list_for_date_range.return_value = []
+    inst_repo = AsyncMock()
+    inst_repo.list_by_planning_slots.return_value = []
+    with _repository_overrides(
+        {get_planning_slot_repository: slot_repo, get_event_instance_repository: inst_repo}
     ):
-        slot_repo = AsyncMock()
-        slot_repo.list_for_date_range.return_value = []
-        MockSlotRepo.return_value = slot_repo
-        inst_repo = AsyncMock()
-        inst_repo.list_by_planning_slots.return_value = []
-        MockInstRepo.return_value = inst_repo
         response = client.get(
             "/api/v1/events",
             params={"district_id": str(district1)},
@@ -260,11 +288,9 @@ def test_feiertage_states_returns_403_without_membership(auth_client_no_membersh
     client, auth_headers = auth_client_no_membership
     district_id = uuid.uuid4()
 
-    with patch("app.adapters.api.routers.districts.SqlDistrictRepository") as MockDistrictRepo:
-        district_repo = AsyncMock()
-        district_repo.get.return_value = _district_obj(district_id)
-        MockDistrictRepo.return_value = district_repo
-
+    district_repo = AsyncMock()
+    district_repo.get.return_value = _district_obj(district_id)
+    with _repository_overrides({get_district_repository: district_repo}):
         response = client.get(
             f"/api/v1/districts/{district_id}/feiertage/states",
             headers=auth_headers(),
@@ -332,27 +358,26 @@ def test_district_routes_return_403(auth_client, method, path_template, role, me
             kwargs["json"] = {"name": "X"}
     kwargs["headers"] = auth_headers()
 
-    with (
-        patch("app.adapters.api.routers.districts.SqlDistrictRepository") as MockDistrictRepo,
-        patch("app.adapters.api.routers.districts.SqlCongregationRepository") as MockCongRepo,
-        patch("app.adapters.api.routers.districts.SqlCongregationGroupRepository") as MockGroupRepo,
+    district_repo = AsyncMock()
+    district_repo.get.return_value = _district_obj(district_id)
+
+    cong_repo = AsyncMock()
+    cong_repo.get.return_value = SimpleNamespace(
+        id=congregation_id, district_id=district_id, group_id=None, name="C"
+    )
+
+    group_repo = AsyncMock()
+    group_repo.get.return_value = SimpleNamespace(
+        id=group_id, district_id=district_id, name="G"
+    )
+
+    with _repository_overrides(
+        {
+            get_district_repository: district_repo,
+            get_congregation_repository: cong_repo,
+            get_congregation_group_repository: group_repo,
+        }
     ):
-        district_repo = AsyncMock()
-        district_repo.get.return_value = _district_obj(district_id)
-        MockDistrictRepo.return_value = district_repo
-
-        cong_repo = AsyncMock()
-        cong_repo.get.return_value = SimpleNamespace(
-            id=congregation_id, district_id=district_id, group_id=None, name="C"
-        )
-        MockCongRepo.return_value = cong_repo
-
-        group_repo = AsyncMock()
-        group_repo.get.return_value = SimpleNamespace(
-            id=group_id, district_id=district_id, name="G"
-        )
-        MockGroupRepo.return_value = group_repo
-
         response = getattr(client, method)(path, **kwargs)
     assert response.status_code == 403
 
@@ -403,9 +428,7 @@ def test_calendar_and_export_routes_return_403(auth_client, method, path_templat
     # module-attribute patching never reaches the Depends(...) callable.
     app.dependency_overrides[get_calendar_integration_repository] = lambda: integration_repo
     try:
-        with patch("app.adapters.api.routers.export.SqlExportTokenRepository") as MockTokenRepo:
-            MockTokenRepo.return_value = token_repo
-
+        with _repository_overrides({get_export_token_repository: token_repo}):
             path = path_template.format(district_id=district1, resource_id=resource_id)
             kwargs = {}
             if body is not None:
@@ -504,27 +527,14 @@ def test_events_and_related_routes_return_403(
     overwrite_repo = AsyncMock()
     overwrite_repo.get.return_value = SimpleNamespace(id=assignment_id, target_event_id=resource_id)
 
-    with (
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository") as MockCompatSlot,
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
-        ) as MockAssignSlot,
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-        ) as MockAssignRepo,
-        patch("app.adapters.api.routers.invitations.SqlPlanningSlotRepository") as MockInvSlot,
-        patch("app.adapters.api.routers.invitations.SqlInvitationRepository") as MockInvRepo,
-        patch(
-            "app.adapters.api.routers.invitations.SqlInvitationOverwriteRequestRepository"
-        ) as MockOverwriteRepo,
+    with _repository_overrides(
+        {
+            get_planning_slot_repository: slot_repo,
+            get_service_assignment_repository: assignment_repo,
+            get_invitation_repository: invitation_repo,
+            get_invitation_overwrite_request_repository: overwrite_repo,
+        }
     ):
-        MockCompatSlot.return_value = slot_repo
-        MockAssignSlot.return_value = slot_repo
-        MockAssignRepo.return_value = assignment_repo
-        MockInvSlot.return_value = slot_repo
-        MockInvRepo.return_value = invitation_repo
-        MockOverwriteRepo.return_value = overwrite_repo
-
         path = path_template.format(resource_id=resource_id, assignment_id=assignment_id)
         kwargs = {}
         if body is not None:
@@ -576,13 +586,9 @@ def test_leader_routes_return_403(auth_client, method, path_template, body, memb
     leader_repo.get.return_value = _leader_obj(district_id)
     leader_repo.get_by_user_sub.return_value = None
 
-    with (
-        patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as MockDistrictRepo,
-        patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as MockLeaderRepo,
+    with _repository_overrides(
+        {get_district_repository: district_repo, get_leader_repository: leader_repo}
     ):
-        MockDistrictRepo.return_value = district_repo
-        MockLeaderRepo.return_value = leader_repo
-
         path = path_template.format(district_id=district_id, leader_id=leader_id)
         kwargs = {}
         if body is not None:
@@ -723,11 +729,7 @@ def test_planning_series_routes_return_403(
     series_repo = AsyncMock()
     series_repo.get.return_value = _series_obj(district_id)
 
-    with patch(
-        "app.adapters.api.routers.planning_series.SqlPlanningSeriesRepository"
-    ) as MockSeriesRepo:
-        MockSeriesRepo.return_value = series_repo
-
+    with _repository_overrides({get_planning_series_repository: series_repo}):
         path = path_template.format(district_id=district_id, series_id=series_id)
         kwargs = {}
         if body is not None:
@@ -776,20 +778,15 @@ def test_registration_routes_return_403(auth_client, method, path_template, body
 def test_pending_overview_returns_empty_for_non_admin(auth_client):
     client, auth_headers, _ = auth_client
 
-    with (
-        patch("app.adapters.api.routers.registrations.SqlDistrictRepository") as MockDistrictRepo,
-        patch(
-            "app.adapters.api.routers.registrations.SqlLeaderRegistrationRepository"
-        ) as MockRegRepo,
+    district_repo = AsyncMock()
+    district_repo.list_all.return_value = []
+
+    reg_repo = AsyncMock()
+    reg_repo.count_by_district.return_value = 0
+
+    with _repository_overrides(
+        {get_district_repository: district_repo, get_leader_registration_repository: reg_repo}
     ):
-        district_repo = AsyncMock()
-        district_repo.list_all.return_value = []
-        MockDistrictRepo.return_value = district_repo
-
-        reg_repo = AsyncMock()
-        reg_repo.count_by_district.return_value = 0
-        MockRegRepo.return_value = reg_repo
-
         response = client.get("/api/v1/registrations/pending-overview", headers=auth_headers())
 
     assert response.status_code == 200

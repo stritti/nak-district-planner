@@ -5,9 +5,13 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_district_reminder_config_repository,
+)
 from app.adapters.api.schemas.reminder_configs import (
     ReminderConfigCreate,
     ReminderConfigResponse,
@@ -15,7 +19,6 @@ from app.adapters.api.schemas.reminder_configs import (
 )
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.district import DistrictORM
-from app.adapters.db.repositories.district_reminder_config import SqlDistrictReminderConfigRepository
 from app.domain.models.district_reminder_config import DistrictReminderConfig
 from app.domain.models.role import Role
 
@@ -32,13 +35,16 @@ async def _require_district_admin(district_id: uuid.UUID, auth: CurrentUserWithM
 async def create_reminder_config(
     district_id: uuid.UUID, body: ReminderConfigCreate,
     auth: CurrentUserWithMemberships, db: DbSession,
+    repository: SqlDistrictReminderConfigRepository = Depends(
+        get_district_reminder_config_repository
+    ),
 ) -> ReminderConfigResponse:
     await _require_district_admin(district_id, auth, db)
     try:
         config = DistrictReminderConfig.create(district_id=district_id, **body.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    await SqlDistrictReminderConfigRepository(db).save(config)
+    await repository.save(config)
     await db.commit()
     return ReminderConfigResponse.model_validate(config)
 
@@ -46,9 +52,12 @@ async def create_reminder_config(
 @router.get("", response_model=list[ReminderConfigResponse])
 async def list_reminder_configs(
     district_id: uuid.UUID, auth: CurrentUserWithMemberships, db: DbSession,
+    repository: SqlDistrictReminderConfigRepository = Depends(
+        get_district_reminder_config_repository
+    ),
 ) -> list[ReminderConfigResponse]:
     await _require_district_admin(district_id, auth, db)
-    configs = await SqlDistrictReminderConfigRepository(db).list_by_district(district_id)
+    configs = await repository.list_by_district(district_id)
     return [ReminderConfigResponse.model_validate(config) for config in configs]
 
 
@@ -56,9 +65,11 @@ async def list_reminder_configs(
 async def update_reminder_config(
     district_id: uuid.UUID, config_id: uuid.UUID, body: ReminderConfigUpdate,
     auth: CurrentUserWithMemberships, db: DbSession,
+    repository: SqlDistrictReminderConfigRepository = Depends(
+        get_district_reminder_config_repository
+    ),
 ) -> ReminderConfigResponse:
     await _require_district_admin(district_id, auth, db)
-    repository = SqlDistrictReminderConfigRepository(db)
     config = await repository.get(district_id, config_id)
     if config is None:
         raise HTTPException(status_code=404, detail="Reminder configuration not found")
@@ -79,9 +90,11 @@ async def update_reminder_config(
 async def deactivate_reminder_config(
     district_id: uuid.UUID, config_id: uuid.UUID,
     auth: CurrentUserWithMemberships, db: DbSession,
+    repository: SqlDistrictReminderConfigRepository = Depends(
+        get_district_reminder_config_repository
+    ),
 ) -> Response:
     await _require_district_admin(district_id, auth, db)
-    repository = SqlDistrictReminderConfigRepository(db)
     config = await repository.get(district_id, config_id)
     if config is None:
         raise HTTPException(status_code=404, detail="Reminder configuration not found")

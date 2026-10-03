@@ -13,8 +13,8 @@
 ## 3. Backend: Dependency Injection Patterns
 
 - [x] 3.1 Audit all FastAPI routers for inconsistent session/service injection
-- [ ] 3.2 Standardize all routers to use `Depends(get_<service>)` pattern *(nur `calendar_integrations.py` und `notifications.py` nutzen es konsequent; districts/events/leaders/invitations/registrations/service_assignments/planning_series/leader_unavailabilities fehlen)*
-- [ ] 3.3 Add type annotations to all `Depends()` parameters
+- [x] 3.2 Standardize repository access in all current FastAPI routers via typed `Depends(get_<repository>)` providers, including the later-added `event_hooks.py` router
+- [x] 3.3 Add type annotations to all repository `Depends()` parameters
 
 ## 4. Backend: Health Check Endpoint
 

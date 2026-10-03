@@ -11,12 +11,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.db.repositories.congregation_group import SqlCongregationGroupRepository
+from app.adapters.db.repositories.district import SqlDistrictRepository
+from app.adapters.db.repositories.district_reminder_config import SqlDistrictReminderConfigRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+from app.adapters.db.repositories.event_mail_hook import SqlEventMailHookRepository
+from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.external_event_candidate import SqlExternalEventCandidateRepository
 from app.adapters.db.repositories.external_event_link import SqlExternalEventLinkRepository
-from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+from app.adapters.db.repositories.invitation import SqlInvitationRepository
+from app.adapters.db.repositories.invitation_overwrite_request import (
+    SqlInvitationOverwriteRequestRepository,
+)
+from app.adapters.db.repositories.leader import SqlLeaderRepository
+from app.adapters.db.repositories.leader_registration import SqlLeaderRegistrationRepository
+from app.adapters.db.repositories.leader_unavailability import SqlLeaderUnavailabilityRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.notification import SqlNotificationRepository
+from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
+from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.adapters.db.repositories.user import SqlUserRepository
 from app.adapters.db.session import get_db_session
 from app.application.candidate_review import CandidateReviewService
@@ -29,10 +44,7 @@ logger = logging.getLogger(__name__)
 
 RepositoryT = TypeVar("RepositoryT")
 
-# OIDC Bearer token security scheme
 _bearer_scheme = HTTPBearer(auto_error=False)
-
-# Global OIDC adapter instance (initialized in main.py)
 _oidc_adapter: OIDCAdapter | None = None
 
 
@@ -52,16 +64,7 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
     session: AsyncSession = Depends(get_db_session),
 ) -> User:
-    """Dependency to extract and validate current user from Bearer token.
-
-    - Validates JWT signature, issuer, expiration
-    - Auto-creates user on first login
-    - Returns authenticated User object
-    - Populates request.state.user for downstream middleware (e.g. audit logging)
-
-    Raises:
-        HTTPException: 401 if token is missing or invalid
-    """
+    """Extract and validate the current user from the bearer token."""
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -70,7 +73,6 @@ async def get_current_user(
         )
 
     token = credentials.credentials
-
     if _oidc_adapter is None:
         logger.error("OIDC adapter not initialized")
         raise HTTPException(
@@ -79,24 +81,12 @@ async def get_current_user(
         )
 
     try:
-        # Validate token and extract claims
         token_claims = await _oidc_adapter.validate_token(token)
         user_info = _oidc_adapter.extract_user_info(token_claims)
-
-        # Get or create user in database
         user_repo = SqlUserRepository(session)
         existing_user = await user_repo.get_by_sub(user_info["sub"])
 
-        # The superadmin flag is owner-controlled at the database level (the
-        # app role cannot write users.is_superadmin). A bounded SECURITY
-        # DEFINER function derives all eligibility facts from owner-controlled
-        # database state: the configured subject stored in app_superadmin_config
-        # (seeded from SUPERADMIN_SUB by the database owner) or the first login
-        # on an installation without any superadmin. It is called on every login
-        # so rotating the configured subject also revokes stale persisted
-        # grants. The session subject GUC is the authenticated identity.
         if existing_user:
-            # Update existing user with latest info from token
             existing_user.email = user_info["email"]
             existing_user.username = user_info["username"]
             existing_user.name = user_info["name"]
@@ -104,8 +94,6 @@ async def get_current_user(
             existing_user.family_name = user_info["family_name"]
             await user_repo.save(existing_user)
         else:
-            # Auto-create user on first login; the row must be flushed before
-            # the reconciliation function can update it.
             existing_user = User(
                 sub=user_info["sub"],
                 email=user_info["email"],
@@ -115,12 +103,9 @@ async def get_current_user(
                 family_name=user_info["family_name"],
             )
             await user_repo.save(existing_user)
-            logger.info(f"Auto-created user: {existing_user.sub} ({existing_user.email})")
+            logger.info("Auto-created user: %s (%s)", existing_user.sub, existing_user.email)
 
         try:
-            # Install the verified subject as the session GUC right before the
-            # reconciliation call: the function fails closed unless the
-            # authenticated-subject GUC matches the bound parameter.
             await session.execute(
                 text("SELECT set_config('app.current_user_sub', :user_sub, true)"),
                 {"user_sub": user_info["sub"]},
@@ -134,14 +119,11 @@ async def get_current_user(
             logger.exception("Bootstrap superadmin reconciliation failed")
             raise
 
-        # RLS trusts the stored owner-controlled flag; keep the in-memory
-        # view in sync with the database-reconciled state.
         existing_user.is_superadmin = granted
         request.state.user = existing_user
         return existing_user
-
     except TokenValidationError as e:
-        logger.warning(f"Token validation failed: {e}")
+        logger.warning("Token validation failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -161,7 +143,6 @@ class CurrentUserContext(NamedTuple):
     user: User
     memberships: list[Membership]
 
-    # Properties for easy access in authorization checks
     @property
     def user_sub(self) -> str:
         return self.user.sub
@@ -171,19 +152,10 @@ async def get_current_user_with_memberships(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ) -> CurrentUserContext:
-    """Dependency to get current user with their role memberships.
-
-    Used for endpoints that require role-based authorization.
-
-    Memberships are loaded from the local database so application RBAC and
-    PostgreSQL RLS use the same authorization source.
-    """
+    """Get the current user together with effective memberships."""
     membership_repo = SqlMembershipRepository(session)
     memberships = await membership_repo.get_all_by_user(user.sub)
 
-    # The SECURITY DEFINER function provides an RLS-safe, row-locked,
-    # single-candidate claim. A plain repository lookup cannot see first-time
-    # registrations under the production RLS policy and is race-prone.
     if user.email:
         result = await session.execute(
             text(
@@ -204,8 +176,6 @@ async def get_current_user_with_memberships(
                 user.email,
             )
 
-    # Update the active transaction after membership lookup/linking so RLS sees
-    # the verified application roles rather than unverified token payload data.
     from app.tenant import TenantContext
 
     user_roles = [membership.role.value for membership in memberships]
@@ -233,7 +203,7 @@ async def get_current_user_with_memberships(
 async def require_membership_access(
     auth: CurrentUserContext = Depends(get_current_user_with_memberships),
 ) -> CurrentUserContext:
-    """Require authenticated users to have effective memberships (except superadmin)."""
+    """Require authenticated users to have effective memberships except superadmin."""
     if auth.user.is_superadmin:
         return auth
     if not auth.memberships:
@@ -254,7 +224,7 @@ async def get_current_active_user(
 async def get_notification_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> NotificationService:
-    """Dependency that provides the notification service."""
+    """Provide the notification service."""
     repo = SqlNotificationRepository(session)
     return NotificationService(notification_repo=repo)
 
@@ -272,9 +242,27 @@ def make_repository_dependency(
     return get_repository
 
 
-get_calendar_integration_repository = make_repository_dependency(
-    SqlCalendarIntegrationRepository
+get_calendar_integration_repository = make_repository_dependency(SqlCalendarIntegrationRepository)
+get_congregation_group_repository = make_repository_dependency(SqlCongregationGroupRepository)
+get_congregation_repository = make_repository_dependency(SqlCongregationRepository)
+get_district_reminder_config_repository = make_repository_dependency(
+    SqlDistrictReminderConfigRepository
 )
+get_district_repository = make_repository_dependency(SqlDistrictRepository)
+get_event_instance_repository = make_repository_dependency(SqlEventInstanceRepository)
+get_event_mail_hook_repository = make_repository_dependency(SqlEventMailHookRepository)
+get_export_token_repository = make_repository_dependency(SqlExportTokenRepository)
+get_invitation_overwrite_request_repository = make_repository_dependency(
+    SqlInvitationOverwriteRequestRepository
+)
+get_invitation_repository = make_repository_dependency(SqlInvitationRepository)
+get_leader_registration_repository = make_repository_dependency(SqlLeaderRegistrationRepository)
+get_leader_repository = make_repository_dependency(SqlLeaderRepository)
+get_leader_unavailability_repository = make_repository_dependency(SqlLeaderUnavailabilityRepository)
+get_membership_repository = make_repository_dependency(SqlMembershipRepository)
+get_planning_series_repository = make_repository_dependency(SqlPlanningSeriesRepository)
+get_planning_slot_repository = make_repository_dependency(SqlPlanningSlotRepository)
+get_service_assignment_repository = make_repository_dependency(SqlServiceAssignmentRepository)
 get_external_event_candidate_repository = make_repository_dependency(
     SqlExternalEventCandidateRepository
 )
@@ -299,7 +287,6 @@ async def get_calendar_integration_service(
     return CalendarIntegrationService(repository)
 
 
-# Type aliases for dependency injection
 AuthenticatedUser = Annotated[User, Depends(get_current_user)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 RawCurrentUserWithMemberships = Annotated[
