@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.adapters.api.deps import (
@@ -26,10 +25,6 @@ from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.planning_series_service import PlanningSeriesSlotGenerationService
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.role import Role
-from app.domain.ports.repositories import (
-    PlanningSeriesRepository,
-    PlanningSlotRepository,
-)
 
 router = APIRouter(prefix="/api/v1/planning-series", tags=["planning-series"])
 
