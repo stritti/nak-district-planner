@@ -59,7 +59,7 @@ jobs:
             services/backend/uv.lock
 
       - name: Install Python dependencies
-        run: uv sync --group dev --frozen
+        run: uv sync --group dev --locked
 
       - name: Check for exactly one migration head
         run: |
