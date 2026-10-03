@@ -13,3 +13,20 @@ The system SHALL support PlanningSeries that generate PlanningSlots for recurrin
 #### Scenario: Rolling slot generation
 - **WHEN** a PlanningSeries is active
 - **THEN** the system SHALL generate PlanningSlots at least 6 months ahead
+
+### Requirement: Aggregate retention cleanup
+The system SHALL apply event retention to the PlanningSlot aggregate root and SHALL NOT leave orphaned EventInstance rows.
+
+#### Scenario: Slot older than retention cutoff
+- **WHEN** a PlanningSlot has a `planning_date` strictly before the 24-month retention cutoff
+- **THEN** the cleanup SHALL delete the PlanningSlot
+- **AND** its dependent EventInstance SHALL be deleted by the database cascade
+
+#### Scenario: Slot exactly on retention cutoff
+- **WHEN** a PlanningSlot has a `planning_date` equal to the retention cutoff
+- **THEN** the cleanup SHALL retain the PlanningSlot
+- **AND** its EventInstance SHALL remain intact
+
+#### Scenario: Cleanup transaction is audited
+- **WHEN** retention cleanup deletes one or more PlanningSlots
+- **THEN** the system SHALL persist one bulk-deletion audit entry in the same transaction

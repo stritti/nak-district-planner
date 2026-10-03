@@ -8,11 +8,13 @@ The current event model conflates planning structure with execution state, makin
 - Separate execution state into `EventInstance` to support Soll/Ist deviation tracking.
 - Matrix view renders from `PlanningSlot` as authoritative source.
 - Visible deviation indicators in matrix when planned and actual times differ.
+- Remove the legacy `events` persistence model after migrating existing data; compatibility APIs project from `PlanningSlot` + `EventInstance`.
+- Define retention cleanup at the `PlanningSlot` aggregate root so dependent `EventInstance` rows are removed by database cascade without leaving orphans.
 
 ## Capabilities
 
 ### New Capabilities
-- `planning-model`: Normative planning structure with PlanningSeries, PlanningSlot, EventInstance, and Soll/Ist separation.
+- `planning-model`: Normative planning structure with PlanningSeries, PlanningSlot, EventInstance, Soll/Ist separation, and aggregate lifecycle semantics.
 - `matrix-deviation-display`: Matrix rendering based on planning slots with visible time deviations.
 
 ### Modified Capabilities
@@ -23,5 +25,6 @@ None.
 
 - Backend domain model and database schema (PlanningSeries, PlanningSlot, EventInstance tables).
 - Matrix API rendering based on PlanningSlot.
-- Establish the PlanningSlot/EventInstance model as the default planning backbone for fresh
-  installations without rollout flags or historical migration requirements.
+- Event compatibility endpoints backed by the canonical planning model rather than a legacy `events` table.
+- Retention cleanup based on `PlanningSlot.planning_date`, including database-enforced cascade deletion of dependent EventInstances.
+- PostgreSQL regression coverage for retention cutoff boundaries and cascade behavior.

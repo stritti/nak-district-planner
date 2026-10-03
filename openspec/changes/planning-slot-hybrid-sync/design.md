@@ -57,24 +57,35 @@ PlanningSeries generates PlanningSlots rolling 6–12 months ahead.
 Generation occurs via background job or on-demand expansion.
 External changes never mutate series.
 
+### 7. Planning Retention and Aggregate Cleanup
+Retention is anchored to `PlanningSlot.planning_date`, because `PlanningSlot` is the aggregate root.
+The monthly cleanup removes slots whose planning date is strictly older than the 24-month cutoff.
+A slot exactly on the cutoff date remains. Dependent `EventInstance` rows and other aggregate-owned
+rows use database foreign keys with `ON DELETE CASCADE`, so cleanup cannot leave execution-state
+orphans. The bulk slot deletion and its audit record are committed in the same transaction.
+
 ## Risks / Trade-offs
 
 [Model Complexity] → Clear aggregate boundaries and phased implementation.
-[Bridge Complexity] → Keep the existing event write surface temporarily, but persist planning data
-unconditionally so matrix and assignments have a single backend source.
+[Bridge Complexity] → Keep the existing event API surface temporarily, but project it from the
+canonical planning model so matrix, assignments, cleanup, and compatibility reads share one backend
+source.
 [Sync Edge Cases] → Strict structural authority to prevent drift.
 [Notification Noise] → Auto-matching exact matches to reduce false alerts.
+[Retention Cascades] → Database-level cascade constraints plus PostgreSQL integration tests protect
+aggregate cleanup semantics from repository or ORM regressions.
 
 ## Implementation Shape
 
 1. Introduce `planning_series`, `planning_slots`, and `event_instances` as the canonical planning
    tables.
-2. Persist new or edited events into `PlanningSlot` + `EventInstance` unconditionally.
+2. Persist new or edited planning data into `PlanningSlot` + `EventInstance` unconditionally.
 3. Read matrix cells and assignment ownership from `PlanningSlot`.
-4. Omit historical migration support because the installation can be recreated from scratch.
-
-The legacy `events` table remains only as an API compatibility surface until dedicated planning
-write flows are added.
+4. Preserve legacy event data during the M3 migration, then remove the legacy `events` table.
+5. Keep compatibility endpoints such as `/api/v1/events` as projections over the canonical
+   `PlanningSlot` + `EventInstance` model rather than retaining a second persistence model.
+6. Run retention cleanup against `PlanningSlot`; rely on explicit database cascades for dependent
+   aggregate rows and verify the cutoff boundary and cascade behavior against PostgreSQL.
 
 ## Open Questions
 
