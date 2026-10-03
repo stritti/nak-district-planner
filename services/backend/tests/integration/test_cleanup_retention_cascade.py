@@ -83,6 +83,8 @@ async def test_retention_delete_cascades_instances_and_keeps_cutoff_boundary(ses
                             updated_at=now,
                         )
                     )
+                    await db.flush()
+
                     start_at = datetime.combine(planning_date, time(10, 0), tzinfo=UTC)
                     db.add(
                         EventInstanceORM(
