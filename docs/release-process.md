@@ -6,7 +6,7 @@ Der NAK District Planner verwendet eine vollautomatisierte **Semantic Versioning
 
 ## Versionierungsschema (SemVer)
 
-Versionen folgen dem Format **`MAJOR.MINOR.PATCH`** (z. B. `1.2.3`):
+Stabile Versionen folgen dem Format **`MAJOR.MINOR.PATCH`** (z. B. `1.2.3`):
 
 | Segment | Bedeutung | Auslöser |
 |---------|-----------|---------|
@@ -15,6 +15,8 @@ Versionen folgen dem Format **`MAJOR.MINOR.PATCH`** (z. B. `1.2.3`):
 | `PATCH` | Fehlerbehebungen | Commit mit Präfix `fix:` oder `perf:` |
 
 > **Hinweis:** Solange das Projekt die Version `0.x.y` hat, löst ein `feat:`-Commit einen Minor-Bump (z. B. `0.1.0 → 0.2.0`) und ein `BREAKING CHANGE` ebenfalls nur einen Minor-Bump aus, um die Vorab-Phase zu respektieren.
+
+Für die Stabilisierungsphase vor `v1.0.0` werden SemVer-Prereleases im Format **`1.0.0-rc.N`** verwendet, beginnend mit `v1.0.0-rc.1`. Diese Releases werden auf GitHub ausdrücklich als Prerelease markiert.
 
 ---
 
@@ -36,17 +38,17 @@ Alle Commits auf dem `main`-Branch **müssen** dem [Conventional Commits Standar
 
 | Typ | Wirkung auf Version | Sichtbar im CHANGELOG |
 |-----|--------------------|-----------------------|
-| `feat` | Minor-Bump | ✅ ja (Features) |
-| `fix` | Patch-Bump | ✅ ja (Bug Fixes) |
-| `perf` | Patch-Bump | ✅ ja (Performance) |
-| `revert` | Patch-Bump | ✅ ja (Reverts) |
-| `docs` | Patch-Bump | ✅ ja (Documentation) |
-| `refactor` | Patch-Bump | ✅ ja (Code Refactoring) |
-| `chore` | kein Bump | ❌ ausgeblendet |
-| `style` | kein Bump | ❌ ausgeblendet |
-| `test` | kein Bump | ❌ ausgeblendet |
-| `build` | kein Bump | ❌ ausgeblendet |
-| `ci` | kein Bump | ❌ ausgeblendet |
+| `feat` | Minor-Bump | ja (Features) |
+| `fix` | Patch-Bump | ja (Bug Fixes) |
+| `perf` | Patch-Bump | ja (Performance) |
+| `revert` | Patch-Bump | ja (Reverts) |
+| `docs` | Patch-Bump | ja (Documentation) |
+| `refactor` | Patch-Bump | ja (Code Refactoring) |
+| `chore` | kein Bump | ausgeblendet |
+| `style` | kein Bump | ausgeblendet |
+| `test` | kein Bump | ausgeblendet |
+| `build` | kein Bump | ausgeblendet |
+| `ci` | kein Bump | ausgeblendet |
 
 ### Beispiele
 
@@ -60,7 +62,8 @@ git commit -m "fix(api): Datumsformat bei ICS-Export korrigiert"
 # Breaking Change → Major-Bump (1.0.0 → 2.0.0)
 git commit -m "feat(auth)!: JWT-basiertes Auth erfordert Header-Änderung" -m "BREAKING CHANGE: X-API-Key Header wurde durch Authorization: Bearer ersetzt"
 
-# Nur Doku → Patch-Bump (kein Minor-/Major-Bump)
+# Nur Doku → Patch-Bump
+# Release-Auswirkung richtet sich nach der Release-Please-Konfiguration.
 git commit -m "docs: Release-Prozess dokumentiert"
 ```
 
@@ -68,12 +71,15 @@ git commit -m "docs: Release-Prozess dokumentiert"
 
 ## Wie die Pipeline funktioniert
 
-Die Release-Pipeline besteht aus zwei GitHub Actions Workflows:
+Die Release-Pipeline besteht aus mehreren GitHub Actions Workflows. Für die eigentliche Veröffentlichung sind `release.yml` und die Docker-Builds maßgeblich.
 
 ### 1. `release.yml` – Release Please + Docker-Veröffentlichung
 
 ```text
 Push auf main
+     │
+     ▼
+RELEASE_PLEASE_TOKEN prüfen
      │
      ▼
 googleapis/release-please-action
@@ -87,16 +93,22 @@ googleapis/release-please-action
                │         → Release-PR wird erstellt / aktualisiert
                │           (CHANGELOG.md + Versions-Bump in Dateien)
                │
-                 └─── Release-PR wird gemergt
-                           → GitHub Release + Git-Tag (z. B. v1.2.3)
-                           → docker-build im selben Workflow-Run
-                             (needs: release-please, releases_created == 'true')
-                           → Docker-Images mit Versions-Tag veröffentlicht
+               └─── Release-PR wird gemergt
+                         → GitHub Release + Git-Tag
+                         → docker-build im selben Workflow-Run
+                           (needs: release-please, releases_created == 'true')
+                         → Docker-Images mit erlaubten Versions-Tags veröffentlicht
 ```
+
+`release.yml` verwendet ausschließlich `RELEASE_PLEASE_TOKEN`. Ein Fallback auf `GITHUB_TOKEN` ist absichtlich nicht erlaubt, weil von `GITHUB_TOKEN` erzeugte Aktualisierungen des Release-PRs die für das Ruleset erforderlichen Pull-Request-Workflows unterdrücken können. Fehlt das Secret, bricht der Workflow mit einer expliziten Fehlermeldung ab.
 
 ### 2. `build.yml` – Kontinuierlicher Docker-Build
 
 Dieser Workflow wird bei jedem Push auf `main` oder `develop` sowie bei Pull Requests ausgeführt und veröffentlicht Docker-Images mit Branch- und SHA-Tags (z. B. `main`, `sha-abc1234`).
+
+### 3. `docs.yml` – Dokumentations-Build und Pages-Deployment
+
+Pull Requests gegen `main`, die `docs/**`, `openspec/**` oder den Dokumentations-Workflow ändern, müssen `Build documentation` erfolgreich durchlaufen. Ein Deployment nach GitHub Pages findet nur bei einem passenden Push auf `main` oder bei manuellem Workflow-Dispatch statt, niemals aus einem Pull Request.
 
 ---
 
@@ -104,21 +116,81 @@ Dieser Workflow wird bei jedem Push auf `main` oder `develop` sowie bei Pull Req
 
 1. Entwickler pushen Feature-Branches und erstellen Pull Requests auf `main`.
 2. Nach dem Merge in `main` analysiert **release-please** alle neuen Commits seit dem letzten Release.
-3. release-please erstellt oder aktualisiert automatisch einen **Release-PR** mit dem Titel z. B. `chore(main): release 1.2.0`.
+3. release-please erstellt oder aktualisiert automatisch einen **Release-PR**.
 4. Dieser PR enthält:
    - Aktualisiertes root-`CHANGELOG.md`
    - Versions-Bump in `package.json` (root + frontend)
    - Versions-Bump in `services/backend/pyproject.toml`
    - Versions-Bump in `services/backend/uv.lock`
-5. Ein Maintainer **prüft den Release-PR** und **mergt** ihn.
+5. Ein Maintainer prüft den Release-PR einschließlich aller Required Status Checks und mergt ihn erst nach bestandenem Gate.
 6. release-please erstellt automatisch:
-    - Einen Git-Tag (z. B. `v1.2.0`)
-    - Einen GitHub Release mit dem CHANGELOG als Beschreibung
-7. Der `docker-build`-Job im selben Workflow-Run (`needs: release-please`,
-   nur bei `releases_created == 'true'`) checkt den Release-Tag aus und baut
-   und veröffentlicht Docker-Images mit Versions-Tags. So funktioniert das
-   auch mit `GITHUB_TOKEN` — ein separater tag-getriggerter Run würde von
-   GitHub unterdrückt.
+   - Einen Git-Tag
+   - Einen GitHub Release mit dem CHANGELOG als Beschreibung
+7. Der `docker-build`-Job im selben Workflow-Run (`needs: release-please`, nur bei `releases_created == 'true'`) checkt den Release-Tag aus und baut und veröffentlicht Docker-Images mit den für den Release-Typ erlaubten Tags.
+
+---
+
+## v1.0 Release-Candidate-Phase
+
+Vor `v1.0.0` wird mindestens ein echter Release Candidate veröffentlicht. Während dieser Phase ist Release Please auf die Prerelease-Versionierungsstrategie mit `prerelease-type: rc` eingestellt.
+
+### Erster Candidate
+
+Der erste Candidate wird einmalig über einen `Release-As`-Footer im Merge-Commit des RC-Vorbereitungs-Changes angefordert:
+
+```text
+Release-As: 1.0.0-rc.1
+```
+
+`release-as` wird nicht dauerhaft in `release-please-config.json` hinterlegt. Damit kann Release Please nachfolgende Stabilisierungsversionen regulär als weitere RCs fortschreiben.
+
+### Feature Freeze
+
+Ab `v1.0.0-rc.1` gilt Feature Freeze für die v1.0-Linie. Zulässig sind ausschließlich:
+
+- Bugfixes mit gezielten Regressionstests
+- Security-Fixes
+- Testhärtung einschließlich relevanter Ausnahmefälle
+- notwendige Dokumentationskorrekturen
+- zwingende Betriebs- und Release-Fixes
+
+Neue fachliche Features werden nicht mehr in die v1.0-Stabilisierungslinie aufgenommen. Die Backend-Coverage-Grenze bleibt mindestens 80 Prozent.
+
+### Verbindliches RC-Gate
+
+Ein RC-Release-PR darf erst gemergt werden, wenn das aktive `main`-Ruleset aus Issue #403 Pull Requests und die Required Status Checks tatsächlich erzwingt. Mindestens folgende Checks gehören zum v1-Gate:
+
+- `Backend — Unit Tests & Coverage` mit Backend-Coverage >= 80 Prozent
+- vollständige Backend-Integration-/Performance-Suite ohne Skips
+- `Frontend — Unit Tests`
+- `Frontend — E2E Tests`
+- `Migration Graph & FK Names` inklusive blockierendem `alembic check`, Roundtrip und Drift-Prüfung
+- `Encrypted Backup & Isolated Restore`
+- `MegaLinter`
+- `Dependency Review`
+- `CodeQL Analysis (python)`
+- `CodeQL Analysis (javascript-typescript)`
+- `Python Dependency Audit (pip-audit)`
+- `Frontend Dependency Audit (bun audit)`
+- `Build Backend Image`
+- `Build Frontend Image`
+- `Build documentation` bei dokumentationsrelevanten Änderungen
+
+Ein Workflow mit `action_required`, der seine eigentlichen Jobs nicht ausgeführt hat, gilt nicht als bestanden.
+
+### Weitere Candidates
+
+Werden nach `v1.0.0-rc.1` releaserelevante Stabilisierungskorrekturen gemergt, erhöht die Prerelease-Strategie den Candidate-Zähler für den nächsten Release. Jeder Candidate durchläuft erneut das vollständige Gate.
+
+### Promotion auf `v1.0.0`
+
+Die finale Promotion ist ein eigener überprüfbarer Change:
+
+1. Prerelease-Versionierung in `release-please-config.json` deaktivieren und auf die normale Versionierung zurückstellen.
+2. Den vollständigen v1-Gate-Lauf auf diesem finalen Stand durchführen.
+3. Den Finalisierungs-Change mit dem einmaligen Footer `Release-As: 1.0.0` mergen.
+4. Den von Release Please erzeugten `v1.0.0`-Release-PR erst nach erneut vollständig grünem Gate mergen.
+5. Prüfen, dass `v1.0.0` als stabiler GitHub Release erscheint und die stabilen GHCR-Aliase aktualisiert werden.
 
 ---
 
@@ -133,13 +205,15 @@ release-please aktualisiert bei einem Release die Versions-Angaben in folgenden 
 | `services/backend/pyproject.toml` | `version = "1.2.0"` (unter `[project]`) |
 | `services/backend/uv.lock` | Paketversion von `nak-district-planner-backend` |
 | `.release-please-manifest.json` | Aktuelle Release-Please-Versionen pro Pfad |
-| `CHANGELOG.md` | Neuer Abschnitt mit allen Änderungen (einziges Changelog) |
+| `CHANGELOG.md` | Neuer Abschnitt mit allen Änderungen |
+
+Bei einem RC enthalten die Versionsdateien entsprechend eine Prerelease-Version wie `1.0.0-rc.1`.
 
 ---
 
 ## Docker-Image-Tags bei einem Release
 
-Nach einem erfolgreichen Release werden Docker-Images für Backend und Frontend mit folgenden Tags veröffentlicht:
+Stabile Releases veröffentlichen Backend- und Frontend-Images mit folgenden Tags:
 
 | Tag | Beispiel | Bedeutung |
 |-----|---------|-----------|
@@ -148,18 +222,20 @@ Nach einem erfolgreichen Release werden Docker-Images für Backend und Frontend 
 | `{{major}}` | `1` | Major-Stream |
 | `latest` | `latest` | Neueste stabile Version |
 
-Die Images werden in der **GitHub Container Registry (GHCR)** veröffentlicht:
+Release Candidates veröffentlichen ausschließlich den exakten Prerelease-Tag:
 
 ```text
-ghcr.io/stritti/nak-district-planner/backend:1.2.0
-ghcr.io/stritti/nak-district-planner/frontend:1.2.0
+ghcr.io/stritti/nak-district-planner/backend:1.0.0-rc.1
+ghcr.io/stritti/nak-district-planner/frontend:1.0.0-rc.1
 ```
+
+Die stabilen Aliase `1.0`, `1` und `latest` werden von einem RC nicht verändert. Erst `v1.0.0` aktualisiert sie wieder.
 
 ---
 
 ## Manuelles Auslösen
 
-Ein direktes Auslösen über die GitHub-UI ist derzeit nicht konfiguriert; Releases werden ausschließlich durch Pushes auf `main` gestartet, nicht über eine alte Shell-basierte Release-Logik.
+Ein direktes Auslösen der Release-Pipeline über die GitHub-UI ist derzeit nicht konfiguriert; Releases werden durch Pushes auf `main` gestartet. Der Dokumentations-Workflow unterstützt zusätzlich `workflow_dispatch`.
 
 ---
 
@@ -169,23 +245,26 @@ Die Release-Pipeline wird durch folgende Dateien konfiguriert:
 
 | Datei | Zweck |
 |-------|-------|
-| `release-please-config.json` | Ein Paket (Root, `simple`), Versionsdateien aller Services via `extra-files`, gemeinsame Tag-Konfiguration |
-| `.release-please-manifest.json` | Aktuelle Versions-Stände (nicht manuell bearbeiten) |
-| `.github/workflows/release.yml` | GitHub Actions Workflow |
+| `release-please-config.json` | Ein Paket (Root, `simple`), Versionsdateien aller Services via `extra-files`, gemeinsame Tag- und RC-Konfiguration |
+| `.release-please-manifest.json` | Aktuelle Versions-Stände, nicht manuell bearbeiten |
+| `.github/workflows/release.yml` | Release Please und Release-Docker-Images |
+| `.github/workflows/build.yml` | Kontinuierliche Docker-Builds |
+| `.github/workflows/docs.yml` | Dokumentations-Build und Pages-Deployment |
 
 ---
 
 ## Erforderliches GitHub Secret
 
-Der Workflow erwartet das Repository-Secret `RELEASE_PLEASE_TOKEN`.
+Der Workflow benötigt zwingend das Repository-Secret `RELEASE_PLEASE_TOKEN`.
 
-Empfohlen ist ein Fine-Grained Personal Access Token mit Schreibrechten für Contents, Pull Requests und Issues. Der normale `GITHUB_TOKEN` sollte nicht für Release Please verwendet werden, weil von ihm erzeugte Tags und Releases nachgelagerte Workflows nicht zuverlässig triggern.
+Verwendet werden muss ein Token, dessen mit Release Please erzeugte oder aktualisierte Pull Requests die normalen Pull-Request-Workflows auslösen können. Ein Fine-Grained Personal Access Token benötigt die für Contents, Pull Requests und Issues erforderlichen Schreibrechte. Der Release-Workflow fällt absichtlich nicht auf `GITHUB_TOKEN` zurück.
 
 Das Secret darf nicht in Dateien, Logs oder Commits gespeichert werden.
 
+---
+
 ## Weiterführende Links
 
-- [Conventional Commits Spezifikation (DE)](https://www.conventionalcommits.org/de/)
-- [Semantic Versioning 2.0.0](https://semver.org/lang/de/)
-- [release-please Dokumentation](https://github.com/googleapis/release-please)
-- [release-please-action](https://github.com/googleapis/release-please-action)
+- [Semantic Versioning 2.0.0](https://semver.org/)
+- [Conventional Commits](https://www.conventionalcommits.org/)
+- [release-please](https://github.com/googleapis/release-please)
