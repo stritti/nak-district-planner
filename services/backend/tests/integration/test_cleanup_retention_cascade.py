@@ -15,7 +15,7 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
-from sqlalchemy import delete, event, select
+from sqlalchemy import delete, event, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
@@ -54,12 +54,16 @@ async def test_retention_delete_cascades_instances_and_keeps_cutoff_boundary(ses
         try:
             async with sessions() as db:
                 await db.execute(
-                    PlanningSlotORM.__table__.metadata.tables["districts"].insert().values(
-                        id=district_id,
-                        name="Retention Test District",
-                        created_at=now,
-                        updated_at=now,
-                    )
+                    text(
+                        "INSERT INTO districts (id, name, created_at, updated_at) "
+                        "VALUES (:id, :name, :created_at, :updated_at)"
+                    ),
+                    {
+                        "id": district_id,
+                        "name": "Retention Test District",
+                        "created_at": now,
+                        "updated_at": now,
+                    },
                 )
 
                 for name, planning_date in slot_dates.items():
@@ -106,10 +110,26 @@ async def test_retention_delete_cascades_instances_and_keeps_cutoff_boundary(ses
 
             async with sessions() as db:
                 remaining_slots = set(
-                    (await db.execute(select(PlanningSlotORM.id))).scalars().all()
+                    (
+                        await db.execute(
+                            select(PlanningSlotORM.id).where(
+                                PlanningSlotORM.id.in_(list(slot_ids.values()))
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
                 )
                 remaining_instances = set(
-                    (await db.execute(select(EventInstanceORM.id))).scalars().all()
+                    (
+                        await db.execute(
+                            select(EventInstanceORM.id).where(
+                                EventInstanceORM.id.in_(list(instance_ids.values()))
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
                 )
 
                 assert slot_ids["expired"] not in remaining_slots
@@ -123,8 +143,7 @@ async def test_retention_delete_cascades_instances_and_keeps_cutoff_boundary(ses
                 await db.execute(
                     delete(PlanningSlotORM).where(PlanningSlotORM.district_id == district_id)
                 )
-                district_table = PlanningSlotORM.__table__.metadata.tables["districts"]
-                await db.execute(delete(district_table).where(district_table.c.id == district_id))
+                await db.execute(text("DELETE FROM districts WHERE id = :id"), {"id": district_id})
                 await db.commit()
 
     await _run_as_system_worker(scenario())
