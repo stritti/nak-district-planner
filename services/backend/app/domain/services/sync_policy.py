@@ -58,3 +58,14 @@ def internal_state(current: SyncState) -> SyncState:
         return SyncState.CONFLICT
     return SyncState.DIRTY_INTERNAL
 
+
+def resolve_conflict(current: SyncState) -> SyncState:
+    """Resolve a CONFLICT in favour of the internal planning data.
+
+    The resolution is a deliberate internal edit routed through the same
+    state machine; it SHALL NOT silently downgrade other states.
+    """
+    if current == SyncState.CONFLICT:
+        return SyncState.DIRTY_INTERNAL
+    raise ValueError(f"No conflict to resolve from state {current}")
+

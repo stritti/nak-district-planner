@@ -424,6 +424,52 @@ async def push_deviation_resolution(instance: EventInstance, session: AsyncSessi
     return pushed
 
 
+async def push_conflict_resolution(instance: EventInstance, session: AsyncSession) -> bool:
+    """Push the internally resolved payload to writable provider links.
+
+    After acknowledging the outbound push, the link baseline is advanced so
+    the echoed provider state is recognized as already-known and suppressed
+    on the next inbound sync run.
+    """
+    link_repo = SqlExternalEventLinkRepository(session)
+    integration_repo = SqlCalendarIntegrationRepository(session)
+    instance_repo = SqlEventInstanceRepository(session)
+    pushed = False
+    for link in await link_repo.list_by_event_instance(instance.id):
+        if link.state != ExternalEventLinkState.ACTIVE:
+            continue
+        integration = await integration_repo.get(link.calendar_integration_id)
+        if integration is None or CalendarCapability.WRITE not in integration.capabilities:
+            continue
+        raw = RawCalendarEvent(
+            uid=link.external_event_id,
+            title=instance.title,
+            start_at=instance.actual_start_at,
+            end_at=instance.actual_end_at,
+            description=instance.description,
+            content_hash="",
+            is_cancelled=False,
+            revision_marker=link.revision_marker,
+            resource_id=link.provider_resource_id,
+        )
+        connector = _get_connector(integration.type)
+        revision = await connector.update_event_times(
+            decrypt_credentials(integration.credentials_enc), raw,
+            start_at=instance.actual_start_at, end_at=instance.actual_end_at,
+        )
+        acknowledged = replace(raw, revision_marker=revision or raw.revision_marker)
+        link.last_synced_hash = _compute_content_hash(acknowledged)
+        link.last_synced_payload = _sync_payload(acknowledged)
+        link.revision_marker = acknowledged.revision_marker
+        link.updated_at = datetime.now(UTC)
+        await link_repo.save(link)
+        pushed = True
+    if pushed:
+        instance.sync_state = SyncState.CLEAN
+        await instance_repo.save(instance)
+    return pushed
+
+
 async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResult:
     """Sync one CalendarIntegration. Return successful, skipped and failed counts."""
     lock_key = int.from_bytes(integration_id.bytes[:8], "big", signed=True)
