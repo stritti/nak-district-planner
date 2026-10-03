@@ -14,7 +14,9 @@ from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegra
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.congregation_group import SqlCongregationGroupRepository
 from app.adapters.db.repositories.district import SqlDistrictRepository
-from app.adapters.db.repositories.district_reminder_config import SqlDistrictReminderConfigRepository
+from app.adapters.db.repositories.district_reminder_config import (
+    SqlDistrictReminderConfigRepository,
+)
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.event_mail_hook import SqlEventMailHookRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
