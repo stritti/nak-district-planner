@@ -10,8 +10,8 @@ from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
     get_event_instance_repository,
-    get_invitation_repository,
     get_invitation_overwrite_request_repository,
+    get_invitation_repository,
     get_planning_slot_repository,
 )
 from app.adapters.api.schemas.invitation import (

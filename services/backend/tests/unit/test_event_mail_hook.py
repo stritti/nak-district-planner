@@ -43,7 +43,7 @@ def test_none_payload_value_becomes_empty_string() -> None:
     ],
 )
 def test_unsafe_and_unknown_placeholders_rejected(template: str) -> None:
-    with pytest.raises(ValueError, match="Invalid|Unsupported"):
+    with pytest.raises(ValueError, match=r"Invalid|Unsupported"):
         render_event_template(EventType.SYNC_ERROR, template, {})
 
 

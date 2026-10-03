@@ -19,6 +19,8 @@ from app.adapters.api.schemas.leader_unavailability import (
     LeaderUnavailabilityUpdate,
 )
 from app.adapters.auth.permissions import require_role_in_district
+from app.adapters.db.repositories.leader import SqlLeaderRepository
+from app.adapters.db.repositories.leader_unavailability import SqlLeaderUnavailabilityRepository
 from app.domain.models.leader_unavailability import LeaderUnavailability
 from app.domain.models.role import Role
 
@@ -142,5 +144,5 @@ async def delete_unavailability(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Abwesenheit nicht gefunden"
         )
-    await _leader_for_district(db, district_id, item.leader_id)
+    await _leader_for_district(leaders, district_id, item.leader_id)
     await repo.delete(unavailability_id)

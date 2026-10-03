@@ -12,9 +12,9 @@ from app.domain.models.calendar_integration import (
     CalendarCapability,
     CalendarIntegration,
     CalendarType,
+    SyncDeleteMode,
 )
 from app.domain.ports.repositories import CalendarIntegrationRepository
-from app.domain.models.calendar_integration import SyncDeleteMode
 
 
 def _orm_to_domain(row: CalendarIntegrationORM) -> CalendarIntegration:

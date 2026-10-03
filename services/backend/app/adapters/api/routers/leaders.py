@@ -23,6 +23,8 @@ from app.adapters.api.schemas.leader import (
 from app.adapters.auth.permissions import (
     require_role_in_district,
 )
+from app.adapters.db.repositories.district import SqlDistrictRepository
+from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.domain.models.leader import Leader
 from app.domain.models.role import Role
 

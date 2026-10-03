@@ -14,8 +14,8 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urljoin, urlsplit
 
-import httpx
 import defusedxml.ElementTree as ET
+import httpx
 from icalendar import Calendar as ICalendar
 from icalendar import Event as ICalendarEvent
 

@@ -19,6 +19,9 @@ from app.adapters.api.schemas.reminder_configs import (
 )
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.district import DistrictORM
+from app.adapters.db.repositories.district_reminder_config import (
+    SqlDistrictReminderConfigRepository,
+)
 from app.domain.models.district_reminder_config import DistrictReminderConfig
 from app.domain.models.role import Role
 

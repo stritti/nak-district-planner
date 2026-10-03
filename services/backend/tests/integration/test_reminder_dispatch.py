@@ -17,7 +17,9 @@ from app.adapters.db.orm_models.district import DistrictORM
 from app.adapters.db.orm_models.district_reminder_config import ReminderDeliveryORM
 from app.adapters.db.orm_models.membership import MembershipORM
 from app.adapters.db.orm_models.user import UserORM
-from app.adapters.db.repositories.district_reminder_config import SqlDistrictReminderConfigRepository
+from app.adapters.db.repositories.district_reminder_config import (
+    SqlDistrictReminderConfigRepository,
+)
 from app.adapters.db.session import _set_tenant_gucs
 from app.adapters.mail.mock import MockMailService
 from app.application.reminder_service import dispatch_reminders
