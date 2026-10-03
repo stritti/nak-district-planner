@@ -4,12 +4,16 @@
 The CI pipeline SHALL use dependency caches only as optional accelerators and SHALL keep lockfiles authoritative for dependency installation.
 
 #### Scenario: Backend cache hit
-- **WHEN** a backend workflow runs with an unchanged `uv.lock`
-- **THEN** the `uv` cache SHALL be restored and `uv sync --frozen` SHALL install exactly the locked dependency set
+- **WHEN** a backend workflow runs with an unchanged and current `uv.lock`
+- **THEN** the `uv` cache SHALL be restored and `uv sync --locked` SHALL install exactly the locked dependency set
 
 #### Scenario: Backend cache miss
 - **WHEN** no matching `uv` cache exists
 - **THEN** the workflow SHALL still complete dependency installation from the lockfile without changing it
+
+#### Scenario: Backend lockfile is stale
+- **WHEN** `pyproject.toml` contains dependency changes not represented by `uv.lock`
+- **THEN** backend CI and Alembic validation SHALL fail instead of silently using or rewriting a stale lockfile
 
 #### Scenario: Frontend partial cache hit
 - **WHEN** the exact Bun cache key is unavailable but a cache for the same runner OS and Bun version exists
@@ -31,7 +35,9 @@ Security workflows SHALL preserve CodeQL and dependency-audit coverage while omi
 
 #### Scenario: Frontend dependency audit
 - **WHEN** `bun audit` runs with a valid `bun.lock`
-- **THEN** the workflow SHALL audit the lockfile without installing `node_modules` first
+- **THEN** the workflow SHALL use Bun 1.3 or newer
+- **AND** it SHALL audit the lockfile without installing `node_modules` first
+- **AND** it SHALL apply the configured moderate severity threshold with `--audit-level`
 
 #### Scenario: Interpreted-language CodeQL scan
 - **WHEN** CodeQL analyzes Python or JavaScript/TypeScript
@@ -42,7 +48,11 @@ MegaLinter SHALL validate changed files on pull requests and the complete codeba
 
 #### Scenario: Pull request validation
 - **WHEN** MegaLinter runs for a pull request
-- **THEN** only new or edited files SHALL be selected for linting against the default branch
+- **THEN** only new or edited files SHALL be selected for linting against that pull request's actual base branch
+
+#### Scenario: Pull request targets develop
+- **WHEN** a pull request targets `develop`
+- **THEN** MegaLinter SHALL compare the pull request against `develop`, not the repository default branch
 
 #### Scenario: Branch baseline validation
 - **WHEN** MegaLinter runs for a push to `main` or `develop`
