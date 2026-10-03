@@ -21,11 +21,11 @@
 
 ## 4. Qualitätssicherung
 
-- [ ] 4.1 Workflow-Syntax über GitHub Actions auf dem finalen Review-Fix-Head verifizieren
-- [ ] 4.2 Backend-Unit-Tests inklusive Coverage >= 80 % verifizieren
-- [ ] 4.3 Backend-Integration-/Performance-Tests ohne Skips verifizieren
-- [ ] 4.4 Frontend-Unit- und E2E-Tests verifizieren
-- [ ] 4.5 Alembic-Checks inklusive Roundtrip und Drift-Check verifizieren
-- [ ] 4.6 Security- und MegaLinter-Läufe verifizieren
-- [ ] 4.7 Cache-Hits in einem Folgelauf dokumentieren
-- [ ] 4.8 Alle offenen Review-Threads beantworten und auflösen
+- [x] 4.1 Workflow-Syntax über GitHub Actions auf dem finalen Review-Fix-Head verifizieren
+- [x] 4.2 Backend-Unit-Tests inklusive Coverage >= 80 % verifizieren
+- [x] 4.3 Backend-Integration-/Performance-Tests ohne Skips verifizieren
+- [x] 4.4 Frontend-Unit- und E2E-Tests verifizieren
+- [x] 4.5 Alembic-Checks inklusive Roundtrip und Drift-Check verifizieren
+- [x] 4.6 Security- und MegaLinter-Läufe verifizieren
+- [x] 4.7 Cache-Hits in einem Folgelauf dokumentieren
+- [x] 4.8 Alle offenen Review-Threads beantworten und auflösen
