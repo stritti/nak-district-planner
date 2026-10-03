@@ -6,13 +6,13 @@ Ziel ist eine kürzere Feedback-Zeit und weniger Runner-, Netzwerk- und Registry
 
 ## Was sich ändert
 
-- `uv`-Caching auch für den Alembic-Workflow aktivieren und CI-Installationen mit `--frozen` an den Lockfile-Stand binden.
+- `uv`-Caching auch für den Alembic-Workflow aktivieren und CI-Installationen mit `--locked` an einen aktuellen Lockfile-Stand binden.
 - Bun-Install-Cache mit versionsgebundenem Schlüssel und Restore-Key wiederverwenden; Installationen bevorzugen den lokalen Cache.
 - Playwright-Chromium anhand des Frontend-Lockfiles cachen und nur bei Cache-Miss herunterladen.
-- Den redundanten `bun install` vor `bun audit` entfernen.
+- Den redundanten `bun install` vor `bun audit` entfernen und den Audit mit Bun 1.3+ ausführen.
 - Den nicht benötigten CodeQL-Autobuild für Python und JavaScript/TypeScript entfernen.
 - Veraltete Security-Runs per Concurrency abbrechen.
-- MegaLinter auf Pull Requests nur für neue/geänderte Dateien ausführen; Pushes auf `main` und `develop` validieren weiterhin den gesamten Codebestand.
+- MegaLinter auf Pull Requests nur für neue/geänderte Dateien gegen den jeweiligen PR-Base-Branch ausführen; Pushes auf `main` und `develop` validieren weiterhin den gesamten Codebestand.
 - Bestehende Docker-BuildKit-GHA-Caches mit identischen `backend`-/`frontend`-Scopes in Build- und Release-Workflow unverändert weiterverwenden.
 
 ## Capabilities
@@ -31,5 +31,5 @@ Ziel ist eine kürzere Feedback-Zeit und weniger Runner-, Netzwerk- und Registry
 - **Qualität:** Backend-Unit-, Integrations- und Performance-Tests bleiben bestehen; Coverage muss weiterhin mindestens 80 % erreichen.
 - **Migrationen:** alle bestehenden Alembic-Prüfungen inklusive Downgrade/Upgrade-Roundtrip bleiben bestehen.
 - **Security:** CodeQL, `pip-audit` und `bun audit` bleiben aktiv; nur unnötige Build-/Installationsarbeit entfällt.
-- **Linting:** Pull Requests prüfen nur ihren Diff; Pushes auf `main` und `develop` bleiben Vollprüfungen.
+- **Linting:** Pull Requests prüfen nur ihren Diff gegen den korrekten Base-Branch; Pushes auf `main` und `develop` bleiben Vollprüfungen.
 - **Produktcode:** keine Änderungen.
