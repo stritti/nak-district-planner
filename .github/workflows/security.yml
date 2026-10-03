@@ -25,7 +25,6 @@ jobs:
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     strategy:
       fail-fast: false
@@ -100,4 +99,3 @@ jobs:
       # from bun.lock. Installing node_modules first is therefore redundant.
       - name: Audit frontend dependencies
         run: bun audit --audit-level=moderate
-        continue-on-error: true
