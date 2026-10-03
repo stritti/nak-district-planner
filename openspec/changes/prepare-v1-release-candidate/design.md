@@ -13,7 +13,7 @@ Die aktuelle Release-Automation hat zusätzlich einen Governance-Fehler: Release
 - GitHub Releases der RC-Phase ausdrücklich als Prerelease markieren.
 - Stabile GHCR-Aliase vor Prerelease-Versionen schützen.
 - Release-PR-Updates müssen normale Pull-Request-Checks auslösen können.
-- Dokumentationsänderungen müssen vor dem Merge einen VitePress-Build bestehen.
+- `Build documentation` muss auf jedem Pull Request gegen `main` existieren, damit der Check im Ruleset verpflichtend sein kann.
 - Den finalen v1.0-Gate-Lauf und den Übergang von RC auf `v1.0.0` eindeutig dokumentieren.
 - Bestehende Qualitätsgates unverändert beibehalten.
 
@@ -57,11 +57,11 @@ Die bereits veröffentlichten stabilen Aliase bleiben unverändert.
 
 Der bisherige Fallback auf `GITHUB_TOKEN` wird entfernt. Das verhindert einen scheinbar erfolgreichen Release-Please-Lauf, dessen erzeugter oder aktualisierter PR keine normalen Pull-Request-Workflows auslöst. Ein fehlendes Secret wird damit früh und eindeutig sichtbar.
 
-### 4. Dokumentations-Build wird ein PR-Gate
+### 4. Dokumentations-Build wird ein stabiler PR-Check
 
-`docs.yml` reagiert zusätzlich auf dokumentationsrelevante Pull Requests gegen `main`. Der Build-Job erhält den stabilen Namen `Build documentation` und führt `npm ci` sowie `npm run docs:build` aus.
+`docs.yml` reagiert auf jeden Pull Request gegen `main`. Der Build-Job erhält den stabilen Namen `Build documentation` und führt `npm ci` sowie `npm run docs:build` aus. Der Check existiert damit unabhängig von geänderten Pfaden und kann ohne Pending-Falle als Required Status Check im Ruleset verwendet werden.
 
-`configure-pages`, Artifact-Upload und Deployment laufen bei Pull Requests nicht. Der Deploy-Job wird nur für Push/Dispatch ausgeführt und erhält die notwendigen `pages: write`- und `id-token: write`-Berechtigungen job-lokal. Pull Requests benötigen nur `contents: read`.
+`configure-pages`, Artifact-Upload und Deployment laufen bei Pull Requests nicht. Der Deploy-Job wird nur für Push/Dispatch ausgeführt und erhält die notwendigen `pages: write`- und `id-token: write`-Berechtigungen job-lokal. Pull Requests benötigen nur `contents: read`. Für Pushes auf `main` bleiben die bestehenden Dokumentations-Pfadfilter erhalten, damit reine Produktcode-Änderungen kein unnötiges Pages-Deployment auslösen.
 
 ### 5. #403 ist ein hartes Release-Gate
 
@@ -83,7 +83,8 @@ Nach bestandenem RC-Gate wird die Release-Please-Konfiguration in einem separate
 - **Dauerhaft erzwungene RC-Version:** es wird kein `release-as` in der Konfigurationsdatei gespeichert; die Vorgabe lebt nur im Merge-Commit.
 - **Release ohne Branch-Gates:** #403 ist dokumentierte Merge-Vorbedingung des RC-Release-PRs.
 - **Release-Please-PR ohne ausführbare CI:** `RELEASE_PLEASE_TOKEN` ist zwingend; der Workflow scheitert explizit, wenn das Secret fehlt. Ein PR mit `action_required` erfüllt das RC-Gate nicht.
-- **Dokumentationsregression:** relevante PRs müssen `Build documentation` bestehen; PRs deployen nicht auf Pages.
+- **Required-Check bleibt bei nicht relevanten Pfaden pending:** `Build documentation` läuft auf jedem PR gegen `main`, nicht nur bei Dokumentationsänderungen.
+- **Dokumentationsregression:** jeder PR muss den VitePress-Build bestehen; PRs deployen nicht auf Pages.
 - **Feature-Creep nach RC:** die RC-Phase ist als Freeze definiert; releaserelevante Änderungen müssen Stabilisierung sein.
 - **Stable-Promotion bleibt Prerelease:** die Finalisierung erfordert explizit das Zurückstellen der Release-Please-Konfiguration vor `v1.0.0`.
 
@@ -92,7 +93,7 @@ Nach bestandenem RC-Gate wird die Release-Please-Konfiguration in einem separate
 - `release-please-config.json` muss valides JSON bleiben und die unterstützten Prerelease-Optionen verwenden.
 - `.github/workflows/release.yml` und `.github/workflows/docs.yml` müssen als gültige GitHub-Actions-Workflows geladen werden.
 - Ein PR-Lauf muss Backend-Unit/Coverage, Frontend-Unit/E2E, Alembic, Restore Drill, MegaLinter, Dependency Review, Security/CodeQL und Docker-Build unverändert bestehen.
-- `Build documentation` muss für diesen dokumentationsrelevanten PR erfolgreich laufen.
+- `Build documentation` muss auf diesem und auf nachfolgenden Pull Requests gegen `main` erfolgreich laufen.
 - Der erste durch Release Please aktualisierte Release-PR muss `1.0.0-rc.1` in Manifest, Root-Package, Backend, Frontend und Lockfile setzen.
 - Der erzeugte GitHub Release muss als Prerelease markiert sein.
 - Die veröffentlichten RC-Images dürfen nur den exakten RC-Versionstag erhalten; `latest`, `1` und `1.0` dürfen nicht auf einen RC zeigen.
