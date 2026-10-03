@@ -20,7 +20,7 @@ env:
   BUN_VERSION: "1.2"
 
 concurrency:
-  group: pages-${{ github.event_name }}-${{ github.ref }}
+  group: ${{ github.event_name == 'pull_request' && format('docs-pr-{0}', github.event.pull_request.number) || 'pages' }}
   cancel-in-progress: true
 
 jobs:
