@@ -42,11 +42,13 @@ Every pull request against `main` SHALL expose a stable `Build documentation` ch
 
 #### Scenario: Any pull request targets main
 - **WHEN** a pull request targets `main`
-- **THEN** `Build documentation` SHALL run `npm ci` and `npm run docs:build`
+- **THEN** `Build documentation` SHALL install dependencies with `bun install --frozen-lockfile --prefer-offline`
+- **AND** SHALL build VitePress with `bun run docs:build`
+- **AND** the root `bun.lock` SHALL remain authoritative
 - **AND** the pull request SHALL NOT configure, upload, or deploy GitHub Pages
 
 #### Scenario: Documentation change reaches main
-- **WHEN** a documentation-relevant change is pushed to `main`
+- **WHEN** a documentation, OpenSpec, root package, root lockfile, or documentation-workflow change is pushed to `main`
 - **THEN** the documentation SHALL be built
 - **AND** the existing GitHub Pages deployment SHALL run after a successful build
 
