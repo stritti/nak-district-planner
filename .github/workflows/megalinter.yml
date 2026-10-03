@@ -34,7 +34,7 @@ jobs:
           # PRs only need to validate changed files because main/develop are
           # fully validated after merge. Pushes keep the full-codebase gate.
           VALIDATE_ALL_CODEBASE: ${{ github.event_name == 'push' }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DEFAULT_BRANCH: ${{ github.base_ref || github.event.repository.default_branch }}
           # Do not auto-apply fixes — just report
           APPLY_FIXES: none
           # Post a summary comment on PRs
