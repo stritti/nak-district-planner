@@ -13,7 +13,7 @@ Die erneute Gate-Prüfung zeigt zwei weitere Release-Risiken: Der bestehende Rel
 - Der erste Candidate wird beim Merge dieses Changes einmalig über `Release-As: 1.0.0-rc.1` erzwungen; die Konfiguration enthält keinen dauerhaft erzwungenen Versionswert.
 - Release-Docker-Images eines RC erhalten nur den exakten Versions-Tag, z. B. `1.0.0-rc.1`. Die stabilen Alias-Tags `1.0`, `1` und `latest` werden ausschließlich für stabile Versionen veröffentlicht.
 - `release.yml` verlangt `RELEASE_PLEASE_TOKEN` explizit und fällt nicht mehr auf `GITHUB_TOKEN` zurück. Fehlt das Secret, scheitert der Workflow klar, statt einen Release-PR zu erzeugen, dessen Required Checks nicht laufen.
-- Der VitePress-Build läuft für dokumentationsrelevante Pull Requests als `Build documentation`; Pages-Deployment bleibt auf Push/Dispatch beschränkt.
+- Der VitePress-Build läuft auf jedem Pull Request gegen `main` mit dem stabilen Check-Namen `Build documentation`, damit er als Required Check konfiguriert werden kann; Pages-Deployment bleibt auf Push/Dispatch beschränkt.
 - Der Release-Prozess dokumentiert RC-Freeze, Gate-Anforderungen, weitere RCs und den Übergang auf `v1.0.0`.
 - Der eigentliche RC-Release-PR darf erst gemergt werden, nachdem Issue #403 vollständig umgesetzt und der tatsächliche `main`-Ruleset-Stand verifiziert wurde.
 
@@ -31,7 +31,7 @@ Die erneute Gate-Prüfung zeigt zwei weitere Release-Risiken: Der bestehende Rel
 
 - **Release-Automation:** Release Please erzeugt während der Stabilisierungsphase `rc`-Versionen und markiert die GitHub Releases als Prerelease; ein fehlendes `RELEASE_PLEASE_TOKEN` wird zum expliziten Konfigurationsfehler.
 - **Container-Veröffentlichung:** RC-Images können nicht versehentlich `latest`, den Major- oder den Minor-Alias überschreiben.
-- **Dokumentation:** VitePress wird bei relevanten Pull Requests gebaut, aber nur nach Merge/Dispatch veröffentlicht.
+- **Dokumentation:** VitePress wird als ruleset-tauglicher Check auf jedem Pull Request gegen `main` gebaut, aber nur nach passendem Merge/Dispatch veröffentlicht.
 - **Qualität:** Die bestehenden Test-, Coverage-, Migration-, Restore-, Lint- und Security-Gates werden nicht reduziert; der Dokumentations-Build kommt als zusätzliches Gate hinzu.
 - **Betrieb:** Das noch offene Ruleset-Hardening aus #403 bleibt eine zwingende Vorbedingung für das Mergen des RC-Release-PRs.
 - **Produktcode:** keine Laufzeitänderung.
