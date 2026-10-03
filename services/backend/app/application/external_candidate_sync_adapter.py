@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from app.adapters.db.repositories.external_event_candidate import SqlExternalEventCandidateRepository
+from app.adapters.db.repositories.external_event_candidate import (
+    SqlExternalEventCandidateRepository,
+)
 from app.adapters.db.repositories.notification import SqlNotificationRepository
 from app.application.external_candidate_ingestion import ingest_unlinked_event
 from app.domain.ports.calendar import CalendarConnectorError

@@ -112,6 +112,9 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --group dev
 
+      - name: Ruff lint (pinned version from uv.lock)
+        run: uv run ruff check .
+
       - name: Check RBAC guard pattern in routers
         run: uv run python scripts/check_rbac_guard_pattern.py
 

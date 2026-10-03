@@ -16,7 +16,9 @@ from app.adapters.db.orm_models.district import DistrictORM
 from app.adapters.db.orm_models.district_reminder_config import ReminderDeliveryORM
 from app.adapters.db.orm_models.membership import MembershipORM
 from app.adapters.db.orm_models.user import UserORM
-from app.adapters.db.repositories.district_reminder_config import SqlDistrictReminderConfigRepository
+from app.adapters.db.repositories.district_reminder_config import (
+    SqlDistrictReminderConfigRepository,
+)
 from app.domain.models.district_reminder_config import DistrictReminderConfig
 from app.domain.ports.mail import MailDeliveryError, MailService
 

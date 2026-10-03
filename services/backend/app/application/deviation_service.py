@@ -6,14 +6,13 @@ import uuid
 from datetime import UTC, datetime
 
 from app.config import settings
-
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.planning_slot import PlanningSlot
-from app.domain.services.sync_policy import internal_state
 from app.domain.ports.repositories import (
     EventInstanceRepository,
     PlanningSlotRepository,
 )
+from app.domain.services.sync_policy import internal_state
 
 
 class DeviationService:

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
+
 class SyncDeleteMode(StrEnum):
     MARK_CANCELLED = "MARK_CANCELLED"
     HARD_DELETE = "HARD_DELETE"

@@ -1,6 +1,7 @@
 """Persist external event candidates after the sync-policy migration."""
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0021"

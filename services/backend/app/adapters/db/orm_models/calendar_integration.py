@@ -11,8 +11,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.adapters.db.base import Base
-from app.domain.models.calendar_integration import CalendarType
-from app.domain.models.calendar_integration import SyncDeleteMode
+from app.domain.models.calendar_integration import CalendarType, SyncDeleteMode
 
 
 class CalendarIntegrationORM(Base):

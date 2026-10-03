@@ -24,6 +24,7 @@ class DistrictReminderConfig:
     updated_at: datetime
 
     def __post_init__(self) -> None:
+        """Validate scheduling fields."""
         if not 1 <= self.day_of_month <= 31:
             raise ValueError("day_of_month must be between 1 and 31")
         if self.time_of_day.tzinfo is not None:

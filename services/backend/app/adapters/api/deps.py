@@ -18,7 +18,9 @@ from app.adapters.db.repositories.district_reminder_config import SqlDistrictRem
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.event_mail_hook import SqlEventMailHookRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
-from app.adapters.db.repositories.external_event_candidate import SqlExternalEventCandidateRepository
+from app.adapters.db.repositories.external_event_candidate import (
+    SqlExternalEventCandidateRepository,
+)
 from app.adapters.db.repositories.external_event_link import SqlExternalEventLinkRepository
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
 from app.adapters.db.repositories.invitation_overwrite_request import (
