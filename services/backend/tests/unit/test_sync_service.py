@@ -18,6 +18,7 @@ from app.application.sync_service import (
     SyncResult,
     _get_connector,
     _has_significant_deviation,
+    push_conflict_resolution,
     run_sync,
 )
 from app.domain.models.calendar_integration import (
@@ -99,10 +100,13 @@ def _make_event_instance(**kw) -> EventInstance:
 def _make_link(**kw) -> ExternalEventLink:
     return ExternalEventLink.create(
         event_instance_id=kw.get("event_instance_id", uuid.uuid4()),
-        provider=CalendarType.ICS.value,
+        provider=kw.get("provider", CalendarType.ICS.value),
         external_event_id=kw.get("uid", "uid@test"),
-        calendar_integration_id=_INT_ID,
+        calendar_integration_id=kw.get("calendar_integration_id", _INT_ID),
         last_synced_hash=kw.get("last_synced_hash"),
+        revision_marker=kw.get("revision_marker"),
+        last_synced_payload=kw.get("last_synced_payload"),
+        provider_resource_id=kw.get("provider_resource_id"),
     )
 
 
@@ -511,3 +515,129 @@ async def test_partial_connector_failure_is_reported_separately(mocks):
     assert result.failed == 1
     assert result.skipped == 0
     assert integration.last_sync_error == "1 calendar event(s) failed during partial sync"
+
+
+class TestConflictResolutionPush:
+    @staticmethod
+    def _baseline() -> dict[str, str | None]:
+        return {
+            "title": "Gottesdienst",
+            "description": "Beschreibung",
+            "actual_start_at": _START.isoformat(),
+            "actual_end_at": _END.isoformat(),
+        }
+
+    async def test_time_conflict_pushes_without_stale_revision(self, mocks):
+        integration = _integration()
+        integration.type = CalendarType.GOOGLE
+        integration.capabilities = [CalendarCapability.READ, CalendarCapability.WRITE]
+        instance = _make_event_instance(
+            actual_start_at=_START + timedelta(hours=1),
+            actual_end_at=_END + timedelta(hours=1),
+        )
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(
+            event_instance_id=instance.id,
+            last_synced_payload=self._baseline(),
+            revision_marker="stale-revision",
+            provider_resource_id="provider-id",
+        )
+        mocks["link_repo"].list_by_event_instance.return_value = [link]
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].update_event_times = AsyncMock(return_value="rev-new")
+
+        assert await push_conflict_resolution(instance, mocks["session"]) is True
+
+        raw = mocks["connector"].update_event_times.await_args.args[1]
+        assert raw.revision_marker is None
+        assert raw.resource_id == "provider-id"
+        assert link.revision_marker == "rev-new"
+        assert link.last_synced_payload == {
+            "title": "Gottesdienst",
+            "description": "Beschreibung",
+            "actual_start_at": (_START + timedelta(hours=1)).isoformat(),
+            "actual_end_at": (_END + timedelta(hours=1)).isoformat(),
+        }
+        assert instance.sync_state == SyncState.CLEAN
+
+    async def test_text_conflict_is_not_falsely_acknowledged(self, mocks):
+        integration = _integration()
+        integration.type = CalendarType.MICROSOFT
+        integration.capabilities = [CalendarCapability.READ, CalendarCapability.WRITE]
+        instance = _make_event_instance(title="Interner Titel")
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(
+            event_instance_id=instance.id,
+            last_synced_payload=self._baseline(),
+            revision_marker="rev-old",
+        )
+        mocks["link_repo"].list_by_event_instance.return_value = [link]
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].update_event_times = AsyncMock()
+
+        with pytest.raises(CalendarConnectorError, match="title"):
+            await push_conflict_resolution(instance, mocks["session"])
+
+        mocks["connector"].update_event_times.assert_not_awaited()
+        mocks["link_repo"].save.assert_not_awaited()
+        mocks["instance_repo"].save.assert_not_awaited()
+        assert link.revision_marker == "rev-old"
+        assert instance.sync_state == SyncState.DIRTY_INTERNAL
+
+    async def test_missing_baseline_is_not_acknowledged(self, mocks):
+        integration = _integration()
+        integration.capabilities = [CalendarCapability.READ, CalendarCapability.WRITE]
+        instance = _make_event_instance()
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(event_instance_id=instance.id)
+        mocks["link_repo"].list_by_event_instance.return_value = [link]
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].update_event_times = AsyncMock()
+
+        with pytest.raises(CalendarConnectorError):
+            await push_conflict_resolution(instance, mocks["session"])
+
+        mocks["connector"].update_event_times.assert_not_awaited()
+        mocks["link_repo"].save.assert_not_awaited()
+
+    async def test_no_writable_link_leaves_instance_retryable(self, mocks):
+        integration = _integration()
+        instance = _make_event_instance()
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(event_instance_id=instance.id, last_synced_payload=self._baseline())
+        mocks["link_repo"].list_by_event_instance.return_value = [link]
+        mocks["integration_repo"].get.return_value = integration
+
+        assert await push_conflict_resolution(instance, mocks["session"]) is False
+        assert instance.sync_state == SyncState.DIRTY_INTERNAL
+        mocks["instance_repo"].save.assert_not_awaited()
+
+    async def test_provider_failure_does_not_advance_baseline(self, mocks):
+        integration = _integration()
+        integration.capabilities = [CalendarCapability.READ, CalendarCapability.WRITE]
+        instance = _make_event_instance(
+            actual_start_at=_START + timedelta(hours=1),
+            actual_end_at=_END + timedelta(hours=1),
+        )
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        baseline = self._baseline()
+        link = _make_link(
+            event_instance_id=instance.id,
+            last_synced_payload=baseline,
+            last_synced_hash="old-hash",
+            revision_marker="old-revision",
+        )
+        mocks["link_repo"].list_by_event_instance.return_value = [link]
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].update_event_times = AsyncMock(
+            side_effect=CalendarConnectorError("provider down")
+        )
+
+        with pytest.raises(CalendarConnectorError, match="provider down"):
+            await push_conflict_resolution(instance, mocks["session"])
+
+        assert link.last_synced_payload == baseline
+        assert link.last_synced_hash == "old-hash"
+        assert link.revision_marker == "old-revision"
+        mocks["link_repo"].save.assert_not_awaited()
+        mocks["instance_repo"].save.assert_not_awaited()
