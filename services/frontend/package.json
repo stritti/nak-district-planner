@@ -24,7 +24,7 @@
     "@playwright/test": "^1.63",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0",
-    "@vitest/coverage-v8": "^5.0.2",
+    "@vitest/coverage-v8": "^5.0.3",
     "@vue/test-utils": "^2.5",
     "@vue/tsconfig": "^0.9",
     "eslint": "^10",
