@@ -198,6 +198,7 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | PUT | `/api/v1/events/{event_id}/assignments/{assignment_id}` | `service_assignments.update_assignment` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/events/{event_id}/invitations` | `invitations.list_event_invitations` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/events/{event_id}/invitations` | `invitations.create_invitations` | 🔐 Auth | `require_role_in_district` |
+| POST | `/api/v1/events/{event_id}/resolve-conflict` | `events.resolve_event_conflict` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/events/{event_id}/resolve-deviation` | `events.resolve_event_deviation` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/export-tokens` | `export.list_export_tokens` | 🔐 Auth | `is_superadmin`, `require_role_in_district` |
 | POST | `/api/v1/export-tokens` | `export.create_export_token` | 🔐 Auth | `require_role_in_district` |
