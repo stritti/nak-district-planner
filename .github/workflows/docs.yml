@@ -3,10 +3,6 @@ name: docs
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'docs/**'
-      - 'openspec/**'
-      - '.github/workflows/docs.yml'
   push:
     branches: [main]
     paths:
