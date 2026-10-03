@@ -44,6 +44,12 @@ Pull Requests validieren nur neue/geänderte Dateien und vergleichen dabei mit d
 
 Frontend-Unit- und E2E-Tests bleiben parallel. Ein vorgeschalteter Build-Job mit anschließendem Artefakt-Download würde den E2E-Start serialisieren und kann die Gesamtzeit erhöhen. Build-Artefakte werden deshalb nicht künstlich zwischen diesen Jobs geteilt. Vorhandene Diagnose-Artefakte und die bereits workflowübergreifend nutzbaren BuildKit-Caches bleiben bestehen.
 
+### 7. MegaLinter-Image auf benötigte Flavor begrenzen
+
+Der allgemeine MegaLinter-Container enthält deutlich mehr Werkzeuge als dieses Repository benötigt und dominiert die Laufzeit durch den Image-Download. Der Workflow verwendet deshalb die offizielle `python`-Flavor. Diese enthält weiterhin die aktiv genutzten MegaLinter-Prüfungen für Bandit, JSON, Markdown, YAML und Dockerfiles, ist aber wesentlich kleiner als das vollständige Image.
+
+Frontend-ESLint wird nicht mehr über MegaLinter ausgeführt. Stattdessen läuft `bun run lint` direkt im bereits vorhandenen Frontend-Unit-Test-Job nach `bun install`. Dadurch werden keine zusätzlichen Dependencies installiert und ESLint verwendet sicher die projektspezifische `services/frontend/eslint.config.js`. Dies beseitigt zugleich die bisherige MegaLinter-Aktivierungsunschärfe bei der verschachtelten ESLint-Konfiguration.
+
 ## Risiken und Gegenmaßnahmen
 
 - **Veralteter Backend-Lockfile:** `uv sync --locked` bricht ab, wenn `pyproject.toml` und `uv.lock` nicht übereinstimmen.
@@ -51,6 +57,7 @@ Frontend-Unit- und E2E-Tests bleiben parallel. Ein vorgeschalteter Build-Job mit
 - **Teilweise Bun-Caches:** `--prefer-offline` fällt für fehlende Pakete automatisch auf die Registry zurück.
 - **Falsche MegaLinter-Basis:** PR-Läufe verwenden `github.base_ref`; Push-Läufe fallen auf den Repository-Default-Branch zurück.
 - **Lint-Fehler in unveränderten Dateien:** Vollprüfung auf jedem Push nach `main`/`develop` verhindert eine dauerhaft ungeprüfte Baseline.
+- **Fehlender Linter in kleiner Flavor:** `ENABLE_LINTERS` enthält nur Werkzeuge, die in der offiziellen `python`-Flavor verfügbar sind; Frontend-ESLint läuft separat im nativen Frontend-Job.
 - **Security-Regressions durch entfernten Autobuild:** Die Änderung betrifft nur interpretierte CodeQL-Sprachen; die Analyse selbst bleibt unverändert aktiv.
 - **Cache-Ausfall:** Alle Workflows funktionieren weiterhin ohne Cache-Hit.
 
@@ -60,7 +67,9 @@ Frontend-Unit- und E2E-Tests bleiben parallel. Ein vorgeschalteter Build-Job mit
 - Backend-Unit-Tests müssen weiterhin mindestens 80 % Coverage erreichen.
 - Backend-Integration- und Performance-Suites dürfen keine Skips enthalten.
 - Alembic muss Single-Head, FK-Namen, Offline-SQL, Upgrade, Roundtrip, Seed-Dry-Run und Drift-Check bestehen.
-- Frontend-Unit- und E2E-Tests müssen unverändert bestehen.
+- Frontend-ESLint, Unit- und E2E-Tests müssen bestehen.
 - Security- und MegaLinter-Workflows müssen erfolgreich bzw. gemäß bestehender `continue-on-error`-Semantik laufen.
 - `bun audit` muss mit einer Bun-Version laufen, die den Audit-Befehl und `--audit-level` unterstützt.
+- MegaLinter muss Bandit, JSONLint, Markdownlint, Yamllint und Hadolint weiterhin ausführen können.
+- Der MegaLinter-Image-Pull soll gegenüber dem vollständigen Image messbar sinken.
 - Ein Folgelauf mit unverändertem Lockfile soll Cache-Hits für `uv`, Bun und Playwright zeigen.
