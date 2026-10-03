@@ -24,14 +24,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history for accurate blame/diff info
+          # Full history is required when PRs validate only their diff.
           fetch-depth: 0
 
       - name: Run MegaLinter
         uses: oxsecurity/megalinter@v10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # VALIDATE_ALL_CODEBASE is now set in .mega-linter.yml
+          # PRs only need to validate changed files because main/develop are
+          # fully validated after merge. Pushes keep the full-codebase gate.
+          VALIDATE_ALL_CODEBASE: ${{ github.event_name == 'push' }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           # Do not auto-apply fixes — just report
           APPLY_FIXES: none
           # Post a summary comment on PRs
