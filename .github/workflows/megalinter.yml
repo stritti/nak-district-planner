@@ -28,7 +28,11 @@ jobs:
           fetch-depth: 0
 
       - name: Run MegaLinter
-        uses: oxsecurity/megalinter@v10
+        # The Python flavor still contains Bandit, JSONLint, Markdownlint,
+        # Yamllint and Hadolint, but its image is substantially smaller than
+        # the all-in-one MegaLinter image. Frontend ESLint runs in ci.yml using
+        # the project's own nested ESLint configuration and installed deps.
+        uses: oxsecurity/megalinter/flavors/python@v10.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # PRs only need to validate changed files because main/develop are
