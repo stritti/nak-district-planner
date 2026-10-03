@@ -10,7 +10,7 @@ export default defineConfig(
   withOpenSpec({
     lang: 'de-DE',
     title: 'NAK District Planner',
-    description: 'Dokumentation für den Bezirksplaner der Neuapostolischen Kirche',
+    description: 'Dokumentation f\u00fcr den Bezirksplaner der Neuapostolischen Kirche',
     ignoreDeadLinks: true,
     srcExclude: ['superpowers/**'],
     themeConfig: {
@@ -24,46 +24,49 @@ export default defineConfig(
         { text: 'Release', link: '/release-process' }
       ],
 
-      sidebar: [
-        {
-          text: 'Einführung',
-          items: [
-            { text: 'Dokumentationslandkarte', link: '/documentation-map' },
-            { text: 'Erste Schritte', link: '/getting-started' },
-            { text: 'Use Cases', link: '/use-cases' },
-            { text: 'Glossar', link: '/glossary' }
-          ]
-        },
-        {
-          text: 'Architektur & Standards',
-          items: [
-            { text: 'Architekturstatus', link: '/architecture-status' },
-            { text: 'Engineering Standards', link: '/engineering-standards' },
-            { text: 'Test- & Coverage-Strategie', link: '/coverage-strategy' }
-          ]
-        },
-        {
-          text: 'Sicherheit & Berechtigungen',
-          items: [
-            { text: 'Rollenkonzept', link: '/roles' },
-            { text: 'Security Baseline', link: '/security-baseline' }
-          ]
-        },
-        {
-          text: 'Betrieb & Entwicklung',
-          items: [
-            { text: 'Production Runbook', link: '/production-runbook' },
-            { text: 'Release-Prozess', link: '/release-process' },
-            { text: 'Verbesserungsvorschläge', link: '/improvement-proposals' }
-          ]
-        }
-      ],
+      sidebar: {
+        '/': [
+          {
+            text: 'Einf\u00fchrung',
+            items: [
+              { text: 'Dokumentationslandkarte', link: '/documentation-map' },
+              { text: 'Erste Schritte', link: '/getting-started' },
+              { text: 'Use Cases', link: '/use-cases' },
+              { text: 'Glossar', link: '/glossary' }
+            ]
+          },
+          {
+            text: 'Architektur & Standards',
+            items: [
+              { text: 'Architekturstatus', link: '/architecture-status' },
+              { text: 'Engineering Standards', link: '/engineering-standards' },
+              { text: 'Test- & Coverage-Strategie', link: '/coverage-strategy' }
+            ]
+          },
+          {
+            text: 'Sicherheit & Berechtigungen',
+            items: [
+              { text: 'Rollenkonzept', link: '/roles' },
+              { text: 'Security Baseline', link: '/security-baseline' }
+            ]
+          },
+          {
+            text: 'Betrieb & Entwicklung',
+            items: [
+              { text: 'Production Runbook', link: '/production-runbook' },
+              { text: 'Release-Prozess', link: '/release-process' },
+              { text: 'Verbesserungsvorschl\u00e4ge', link: '/improvement-proposals' }
+            ]
+          }
+        ]
+      },
 
       socialLinks: [
         { icon: 'github', link: 'https://github.com/stritti/nak-district-planner' }
       ]
     }
   }, {
-    specDir: resolve(repoRoot, 'openspec')
+    specDir: resolve(repoRoot, 'openspec'),
+    srcDir: docsDir
   })
 )
