@@ -264,6 +264,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --prefer-offline
 
+      - name: ESLint frontend
+        run: bun run lint
+
       - name: Run unit tests
         run: |
           set -o pipefail
