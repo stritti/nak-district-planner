@@ -37,16 +37,16 @@ Release Please SHALL use a token that allows its release-PR updates to trigger t
 - **THEN** the Release workflow SHALL fail before invoking Release Please
 - **AND** SHALL report that the token is required for the CI-gated release PR flow
 
-### Requirement: Documentation is validated before merge
-Documentation and OpenSpec changes SHALL be buildable before they can enter the v1 release line.
+### Requirement: Documentation check is always available for branch governance
+Every pull request against `main` SHALL expose a stable `Build documentation` check so the check can be required by the branch ruleset without path-filter deadlocks.
 
-#### Scenario: Documentation-relevant pull request
-- **WHEN** a pull request against `main` changes `docs/**`, `openspec/**`, or `.github/workflows/docs.yml`
+#### Scenario: Any pull request targets main
+- **WHEN** a pull request targets `main`
 - **THEN** `Build documentation` SHALL run `npm ci` and `npm run docs:build`
-- **AND** the pull request SHALL NOT deploy GitHub Pages
+- **AND** the pull request SHALL NOT configure, upload, or deploy GitHub Pages
 
 #### Scenario: Documentation change reaches main
-- **WHEN** a matching documentation change is pushed to `main`
+- **WHEN** a documentation-relevant change is pushed to `main`
 - **THEN** the documentation SHALL be built
 - **AND** the existing GitHub Pages deployment SHALL run after a successful build
 
@@ -64,7 +64,7 @@ A release candidate SHALL NOT be published unless the complete v1 quality gate h
 - **AND** Dependency Review SHALL succeed
 - **AND** both CodeQL analyses and both dependency audits SHALL succeed
 - **AND** Docker image builds SHALL succeed
-- **AND** Build documentation SHALL succeed when the candidate changes documentation-relevant paths
+- **AND** Build documentation SHALL succeed
 
 #### Scenario: Workflow requires manual action instead of running
 - **WHEN** a required workflow on the RC release PR has conclusion `action_required` and no successful job execution
