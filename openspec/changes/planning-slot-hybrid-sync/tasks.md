@@ -11,6 +11,9 @@
 - [x] 2.2 Create migration for planning_slots table
 - [x] 2.3 Create migration for event_instances table
 - [x] 2.4 Consolidate schema for fresh installs without legacy migration flags or backfill
+- [x] 2.5 Remove the legacy `events` persistence table after preserving existing data and serve compatibility APIs from `PlanningSlot` + `EventInstance`
+- [x] 2.6 Apply retention cleanup to `PlanningSlot` and enforce dependent `EventInstance` cleanup with `ON DELETE CASCADE`
+- [x] 2.7 Cover retention cutoff boundaries and database cascade behavior with a PostgreSQL integration regression test
 
 ## 3. Application Services
 
