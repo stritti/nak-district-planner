@@ -425,22 +425,38 @@ async def push_deviation_resolution(instance: EventInstance, session: AsyncSessi
 
 
 async def push_conflict_resolution(instance: EventInstance, session: AsyncSession) -> bool:
-    """Push the internally resolved payload to writable provider links.
+    """Push a resolvable conflict in favour of internal planning data.
 
-    After acknowledging the outbound push, the link baseline is advanced so
-    the echoed provider state is recognized as already-known and suppressed
-    on the next inbound sync run.
+    The connector port currently guarantees writes for event times only. Text
+    fields must therefore never be acknowledged as synchronized when they
+    changed internally. Explicit conflict resolution intentionally omits the
+    stale provider revision so a time conflict can be overwritten by the
+    planner's decision; the returned provider revision becomes the new
+    acknowledgement baseline.
     """
     link_repo = SqlExternalEventLinkRepository(session)
     integration_repo = SqlCalendarIntegrationRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
-    pushed = False
+    writable_links: list[tuple[ExternalEventLink, CalendarIntegration]] = []
+    internal_payload = _instance_payload(instance)
+
     for link in await link_repo.list_by_event_instance(instance.id):
         if link.state != ExternalEventLinkState.ACTIVE:
             continue
         integration = await integration_repo.get(link.calendar_integration_id)
         if integration is None or CalendarCapability.WRITE not in integration.capabilities:
             continue
+        changed_fields = _changed_fields(internal_payload, link.last_synced_payload)
+        unsupported_fields = changed_fields - {"actual_start_at", "actual_end_at"}
+        if unsupported_fields:
+            fields = ", ".join(sorted(unsupported_fields))
+            raise CalendarConnectorError(
+                f"Konflikt enthält nicht schreibbare Felder: {fields}"
+            )
+        writable_links.append((link, integration))
+
+    pushed = False
+    for link, integration in writable_links:
         raw = RawCalendarEvent(
             uid=link.external_event_id,
             title=instance.title,
@@ -449,7 +465,7 @@ async def push_conflict_resolution(instance: EventInstance, session: AsyncSessio
             description=instance.description,
             content_hash="",
             is_cancelled=False,
-            revision_marker=link.revision_marker,
+            revision_marker=None,
             resource_id=link.provider_resource_id,
         )
         connector = _get_connector(integration.type)
@@ -457,10 +473,10 @@ async def push_conflict_resolution(instance: EventInstance, session: AsyncSessio
             decrypt_credentials(integration.credentials_enc), raw,
             start_at=instance.actual_start_at, end_at=instance.actual_end_at,
         )
-        acknowledged = replace(raw, revision_marker=revision or raw.revision_marker)
+        acknowledged = replace(raw, revision_marker=revision)
         link.last_synced_hash = _compute_content_hash(acknowledged)
         link.last_synced_payload = _sync_payload(acknowledged)
-        link.revision_marker = acknowledged.revision_marker
+        link.revision_marker = revision
         link.updated_at = datetime.now(UTC)
         await link_repo.save(link)
         pushed = True

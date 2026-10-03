@@ -7,11 +7,15 @@ we'll focus on testing the basic structure and error handling.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
+import pytest
+from icalendar import Calendar as ICalendar
 
-from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash
+from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash, _to_utc
+from app.domain.models.raw_calendar_event import RawCalendarEvent
+from app.domain.ports.calendar import CalendarConnectorError
 
 CREDS = {
     "url": "https://example.com/calendars/user/default/",
@@ -95,6 +99,109 @@ class TestCalDAVConnectorBasics:
         assert formatted_naive == "20260405T103000Z"
 
 
-# We won't test the full fetch_events method here because it requires
-# complex XML mocking. The integration tests in test_sync_service.py
-# already cover the end-to-end flow with mocked connectors.
+_CURRENT_RESOURCE = b"""BEGIN:VCALENDAR\r
+VERSION:2.0\r
+PRODID:-//Provider//Calendar//EN\r
+BEGIN:VEVENT\r
+UID:uid@test\r
+SUMMARY:Remote title\r
+DESCRIPTION:Remote description\r
+DTSTART:20260410T090000Z\r
+DTEND:20260410T100000Z\r
+X-REMOTE-ONLY:keep-me\r
+END:VEVENT\r
+END:VCALENDAR\r
+"""
+
+
+def _raw_event(*, revision_marker: str | None = None) -> RawCalendarEvent:
+    return RawCalendarEvent(
+        uid="uid@test",
+        title="Stale internal title",
+        start_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+        end_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
+        description="Stale internal description",
+        content_hash="hash",
+        is_cancelled=False,
+        revision_marker=revision_marker,
+        resource_id="event.ics",
+    )
+
+
+def _response(method: str, status: int, *, content: bytes = b"", etag: str | None = None):
+    headers = {"etag": etag} if etag else None
+    return httpx.Response(
+        status,
+        content=content,
+        headers=headers,
+        request=httpx.Request(method, "https://example.com/calendars/user/default/event.ics"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_event_times_preserves_current_remote_fields() -> None:
+    client = AsyncMock()
+    client.get.return_value = _response(
+        "GET", 200, content=_CURRENT_RESOURCE, etag='"current-etag"'
+    )
+    client.put.return_value = _response("PUT", 204, etag='"new-etag"')
+    connector = CalDAVConnector(client=client)
+    new_start = datetime(2026, 4, 10, 11, tzinfo=UTC)
+    new_end = datetime(2026, 4, 10, 12, tzinfo=UTC)
+
+    revision = await connector.update_event_times(
+        CREDS,
+        _raw_event(),
+        start_at=new_start,
+        end_at=new_end,
+    )
+
+    assert revision == '"new-etag"'
+    put_kwargs = client.put.await_args.kwargs
+    assert put_kwargs["headers"]["If-Match"] == '"current-etag"'
+    updated = ICalendar.from_ical(put_kwargs["content"])
+    component = next(item for item in updated.walk() if item.name == "VEVENT")
+    assert str(component["SUMMARY"]) == "Remote title"
+    assert str(component["DESCRIPTION"]) == "Remote description"
+    assert str(component["X-REMOTE-ONLY"]) == "keep-me"
+    assert _to_utc(component["DTSTART"]) == new_start
+    assert _to_utc(component["DTEND"]) == new_end
+
+
+@pytest.mark.asyncio
+async def test_update_event_times_keeps_acknowledged_revision_for_normal_write() -> None:
+    client = AsyncMock()
+    client.get.return_value = _response(
+        "GET", 200, content=_CURRENT_RESOURCE, etag='"current-etag"'
+    )
+    client.put.return_value = _response("PUT", 204, etag='"new-etag"')
+    connector = CalDAVConnector(client=client)
+
+    await connector.update_event_times(
+        CREDS,
+        _raw_event(revision_marker='"acknowledged-etag"'),
+        start_at=datetime(2026, 4, 10, 11, tzinfo=UTC),
+        end_at=datetime(2026, 4, 10, 12, tzinfo=UTC),
+    )
+
+    assert client.put.await_args.kwargs["headers"]["If-Match"] == '"acknowledged-etag"'
+
+
+@pytest.mark.asyncio
+async def test_update_event_times_maps_resource_fetch_failure() -> None:
+    client = AsyncMock()
+    client.get.return_value = _response("GET", 503)
+    connector = CalDAVConnector(client=client)
+
+    with pytest.raises(CalendarConnectorError, match="Ressource konnte nicht geladen"):
+        await connector.update_event_times(
+            CREDS,
+            _raw_event(),
+            start_at=datetime(2026, 4, 10, 11, tzinfo=UTC),
+            end_at=datetime(2026, 4, 10, 12, tzinfo=UTC),
+        )
+
+    client.put.assert_not_awaited()
+
+
+# Full fetch_events parsing is covered by dedicated adapter/integration tests.

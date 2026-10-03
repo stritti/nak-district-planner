@@ -17,7 +17,6 @@ from urllib.parse import urljoin, urlsplit
 import defusedxml.ElementTree as ET
 import httpx
 from icalendar import Calendar as ICalendar
-from icalendar import Event as ICalendarEvent
 
 from app.adapters.calendar.deletion import delete_resource
 from app.domain.models.raw_calendar_event import RawCalendarEvent
@@ -27,7 +26,6 @@ from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:
     payload = f"{uid}|{start_at.isoformat()}|{end_at.isoformat()}|{title}"
     return hashlib.sha256(payload.encode()).hexdigest()
-
 
 
 def _to_utc(value) -> datetime:
@@ -199,6 +197,7 @@ class CalDAVConnector(CalendarConnector):
     async def update_event_times(
         self, credentials: dict, event: RawCalendarEvent, *, start_at: datetime, end_at: datetime
     ) -> str | None:
+        """Update only event times while preserving the provider's current resource fields."""
         if not event.resource_id or "url" not in credentials:
             raise CalendarConnectorError("CalDAV resource href oder Basis-URL fehlt")
         base = credentials["url"].rstrip("/") + "/"
@@ -206,32 +205,68 @@ class CalDAVConnector(CalendarConnector):
         source, target = urlsplit(base), urlsplit(url)
         if (source.scheme, source.netloc) != (target.scheme, target.netloc) or not target.path.startswith(source.path):
             raise CalendarConnectorError("CalDAV resource liegt außerhalb des Kalenders")
-        headers = {"Content-Type": "text/calendar; charset=utf-8"}
-        if event.revision_marker:
-            headers["If-Match"] = event.revision_marker
+
+        auth = (
+            (credentials["username"], credentials["password"])
+            if "username" in credentials and "password" in credentials
+            else None
+        )
+        request_headers: dict[str, str] = {}
         if "access_token" in credentials:
-            headers["Authorization"] = f"Bearer {credentials['access_token']}"
-        elif not ("username" in credentials and "password" in credentials):
+            request_headers["Authorization"] = f"Bearer {credentials['access_token']}"
+        elif auth is None:
             raise CalendarConnectorError("CalDAV Credentials fehlen")
-        calendar = ICalendar()
-        calendar.add("prodid", "-//NAK District Planner//Calendar Sync//")
-        calendar.add("version", "2.0")
-        component = ICalendarEvent()
-        component.add("uid", event.uid)
-        component.add("summary", event.title)
+
+        try:
+            current_response = await self._client.get(
+                url,
+                headers=request_headers,
+                auth=auth,
+            )
+            current_response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CalendarConnectorError("CalDAV Kalender-Ressource konnte nicht geladen werden") from exc
+
+        try:
+            calendar = ICalendar.from_ical(current_response.content)
+        except Exception as exc:
+            raise CalendarConnectorError("Ungültige CalDAV Kalender-Ressource") from exc
+
+        component = next(
+            (
+                candidate
+                for candidate in calendar.walk()
+                if candidate.name == "VEVENT" and str(candidate.get("UID", "")) == event.uid
+            ),
+            None,
+        )
+        if component is None:
+            raise CalendarConnectorError("CalDAV Ereignis wurde in der Ressource nicht gefunden")
+
+        if "DTSTART" in component:
+            del component["DTSTART"]
+        if "DTEND" in component:
+            del component["DTEND"]
+        if "DURATION" in component:
+            del component["DURATION"]
         component.add("dtstart", start_at)
         component.add("dtend", end_at)
-        if event.description:
-            component.add("description", event.description)
-        calendar.add_component(component)
+
+        headers = {"Content-Type": "text/calendar; charset=utf-8", **request_headers}
+        if event.revision_marker:
+            headers["If-Match"] = event.revision_marker
+        elif current_etag := current_response.headers.get("etag"):
+            # Explicit conflict resolution intentionally omits the stale revision.
+            # Use the freshly fetched revision so remote soft fields are preserved
+            # while still detecting a race between GET and PUT.
+            headers["If-Match"] = current_etag
+
         try:
             response = await self._client.put(
                 url,
                 content=calendar.to_ical(),
                 headers=headers,
-                auth=(credentials["username"], credentials["password"])
-                if "username" in credentials and "password" in credentials
-                else None,
+                auth=auth,
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
