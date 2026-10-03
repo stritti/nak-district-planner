@@ -511,3 +511,89 @@ async def test_partial_connector_failure_is_reported_separately(mocks):
     assert result.failed == 1
     assert result.skipped == 0
     assert integration.last_sync_error == "1 calendar event(s) failed during partial sync"
+
+
+class TestEchoSuppressionPerWritableProvider:
+    """Task 4.5: verify update and delete echo suppression for every writable provider.
+
+    After an outbound push (time update or internal delete), the provider echo
+    of the pushed state SHALL be recognized as already acknowledged and cause
+    no writes on the next inbound sync run — for every writable provider type.
+    """
+
+    @pytest.mark.parametrize("provider", [CalendarType.GOOGLE, CalendarType.MICROSOFT, CalendarType.CALDAV])
+    async def test_pushed_time_update_echo_is_suppressed(self, mocks, provider):
+        integration = _integration()
+        integration.type = provider
+        integration.capabilities = [CalendarCapability.READ, CalendarCapability.WRITE]
+        slot = _make_slot()
+        instance = _make_event_instance(
+            planning_slot_id=slot.id,
+            actual_start_at=_START + timedelta(hours=1),
+            actual_end_at=_END + timedelta(hours=1),
+        )
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(
+            event_instance_id=instance.id,
+            last_synced_hash=_hash("uid@test"),
+        )
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw()]
+        mocks["connector"].update_event_times = AsyncMock(return_value="rev-1")
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        first = await run_sync(_INT_ID, mocks["session"])
+        assert first.updated == 1
+        assert instance.sync_state == SyncState.CLEAN
+        acknowledged_hash = link.last_synced_hash
+
+        mocks["connector"].update_event_times.reset_mock()
+        mocks["instance_repo"].save.reset_mock()
+        mocks["link_repo"].save.reset_mock()
+        mocks["connector"].fetch_events.return_value = [
+            _raw(start_at=_START + timedelta(hours=1), end_at=_END + timedelta(hours=1))
+        ]
+        second = await run_sync(_INT_ID, mocks["session"])
+        assert second.skipped == 1
+        assert second.updated == 0
+        mocks["connector"].update_event_times.assert_not_awaited()
+        mocks["instance_repo"].save.assert_not_called()
+        assert link.last_synced_hash == acknowledged_hash
+
+    @pytest.mark.parametrize("provider", [CalendarType.GOOGLE, CalendarType.MICROSOFT, CalendarType.CALDAV])
+    async def test_pushed_delete_echo_is_suppressed(self, mocks, provider):
+        integration = _integration()
+        integration.type = provider
+        integration.capabilities = [CalendarCapability.READ, CalendarCapability.WRITE]
+        slot = _make_slot()
+        slot.status = PlanningSlotStatus.CANCELLED
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        instance.sync_state = SyncState.DIRTY_INTERNAL
+        link = _make_link(
+            event_instance_id=instance.id,
+            last_synced_hash=_hash("uid@test"),
+        )
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw()]
+        mocks["connector"].delete_event = AsyncMock()
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        first = await run_sync(_INT_ID, mocks["session"])
+        assert first.cancelled == 1
+        assert link.revision_marker == INTERNAL_DELETE_MARKER
+        assert link.state == ExternalEventLinkState.SYNC_TOMBSTONE
+
+        mocks["connector"].delete_event.reset_mock()
+        mocks["instance_repo"].save.reset_mock()
+        mocks["slot_repo"].delete.reset_mock()
+        second = await run_sync(_INT_ID, mocks["session"])
+        assert second.skipped == 1
+        assert second.cancelled == 0
+        mocks["connector"].delete_event.assert_not_awaited()
+        mocks["instance_repo"].save.assert_not_called()
+        mocks["slot_repo"].delete.assert_not_awaited()
+        assert link.state == ExternalEventLinkState.SYNC_TOMBSTONE
