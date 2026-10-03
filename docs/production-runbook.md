@@ -182,25 +182,41 @@ Kritische Secrets (SECRET_KEY, OIDC_CLIENT_SECRET, IDP_PROVISIONING_API_KEY) unt
 
 ### 7.1 Erforderliche Branch-Protection-Checks
 
-Für `main` muss ein aktives GitHub-Ruleset Pull Requests und aktuelle erfolgreiche
-Status-Checks erzwingen. Die Workflows sind so ausgelegt, dass insbesondere die beiden
-operativen Datenbank-Gates auf jedem Pull Request gegen `main` einen stabilen Check-Namen
-liefern:
+Für `main` muss das aktive GitHub-Ruleset Änderungen über Pull Requests erzwingen, aktuelle
+Required Status Checks verlangen, Branch-Löschung und Non-Fast-Forward-Updates verhindern
+und ohne regulären Bypass arbeiten. Für den v1-Release-Gate sind folgende stabilen
+Check-Namen verbindlich:
 
-- `Migration Graph & FK Names` aus `.github/workflows/alembic-check.yml`
-- `Encrypted Backup & Isolated Restore` aus `.github/workflows/restore-drill.yml`
-- Backend-Tests und Coverage inklusive vollständiger Integration-/Performance-Suite
-- Frontend-Unit- und E2E-Tests
-- MegaLinter
-- Dependency Review
-- Security Scans / CodeQL
+- `Backend — Unit Tests & Coverage`
+- `Frontend — Unit Tests`
+- `Frontend — E2E Tests`
+- `Migration Graph & FK Names`
+- `Encrypted Backup & Isolated Restore`
+- `MegaLinter`
+- `Dependency Review`
+- `CodeQL Analysis (python)`
+- `CodeQL Analysis (javascript-typescript)`
+- `Python Dependency Audit (pip-audit)`
+- `Frontend Dependency Audit (bun audit)`
+- `Build Backend Image`
+- `Build Frontend Image`
+- `Build documentation`
 
-Der Migrationsjob enthält Single-Head-Prüfung, FK-Namen, Offline-SQL, Migration auf einer
-frischen PostgreSQL-Datenbank, Downgrade/Upgrade-Roundtrip, Seed-Dry-Run und den blockierenden
+`Build documentation` läuft absichtlich auf jedem Pull Request gegen `main`, damit ein als
+Required Check konfigurierter Status nicht wegen eines Workflow-Pfadfilters dauerhaft
+`pending` bleibt. Die Docker-Build- und Frontend-Jobs dürfen bei nicht betroffenen Pfaden
+intern als `skipped` enden, ihre stabilen Check-Namen werden aber durch die übergeordneten
+PR-Workflows erzeugt.
+
+`Backend — Unit Tests & Coverage` enthält das Coverage-Gate von mindestens 80 Prozent sowie
+die unveränderte Integration-/Performance-Absicherung des CI-Workflows. Der Migrationsjob
+enthält Single-Head-Prüfung, FK-Namen, Offline-SQL, Migration auf einer frischen
+PostgreSQL-Datenbank, Downgrade/Upgrade-Roundtrip, Seed-Dry-Run und den blockierenden
 `alembic check`. Der Restore-Job prüft die Wiederherstellbarkeit eines verschlüsselten
 Backups in einer unabhängigen PostgreSQL-18-Zieldatenbank.
 
 Das aktuell vorhandene Ruleset schützt bereits vor Branch-Löschung und
 Non-Fast-Forward-Updates. Das Erzwingen von Pull Requests und Required Status Checks ist
 Repo-Admin-Konfiguration und wird in GitHub-Issue #403 nachverfolgt. Der Repository-Code
-allein kann diese Einstellung nicht erzwingen.
+allein kann diese Einstellung nicht erzwingen. Vor Veröffentlichung eines v1 Release
+Candidate muss der tatsächliche Ruleset-Stand erneut gegen diese Liste verifiziert werden.
