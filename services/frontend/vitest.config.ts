@@ -29,6 +29,7 @@ export default defineConfig({
         "src/stores/leaderUnavailabilities.ts",
         "src/components/LeaderUnavailabilityForm.vue",
         "src/components/LeaderUnavailabilityList.vue",
+        "src/components/ApplicabilitySelect.vue",
         "src/api/eventHooks.ts",
         "src/stores/eventHooks.ts",
         "src/components/EventHooksPanel.vue",

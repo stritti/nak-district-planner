@@ -56,6 +56,8 @@ export interface EventUpdate {
   status?: PlanningSlotStatus
   approval_status?: EventApprovalStatus
   category?: string | null
+  /** UC-04 distribution of a district event: `['all']`, congregation IDs or `[]`. */
+  applicability?: string[]
 }
 
 export function updateEvent(id: string, data: EventUpdate): Promise<EventResponse> {
