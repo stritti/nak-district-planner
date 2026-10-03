@@ -24,6 +24,32 @@ The release workflow SHALL publish prerelease images without changing stable GHC
 - **WHEN** a stable SemVer release is published
 - **THEN** the existing exact, minor, major, and `latest` image tags SHALL continue to be published
 
+### Requirement: Release PR updates execute normal pull-request CI
+Release Please SHALL use a token that allows its release-PR updates to trigger the repository's required pull-request workflows.
+
+#### Scenario: Release token is configured
+- **WHEN** the Release workflow starts with `RELEASE_PLEASE_TOKEN` configured
+- **THEN** Release Please SHALL use that token directly
+- **AND** SHALL NOT fall back to `GITHUB_TOKEN`
+
+#### Scenario: Release token is missing
+- **WHEN** `RELEASE_PLEASE_TOKEN` is empty or unavailable
+- **THEN** the Release workflow SHALL fail before invoking Release Please
+- **AND** SHALL report that the token is required for the CI-gated release PR flow
+
+### Requirement: Documentation is validated before merge
+Documentation and OpenSpec changes SHALL be buildable before they can enter the v1 release line.
+
+#### Scenario: Documentation-relevant pull request
+- **WHEN** a pull request against `main` changes `docs/**`, `openspec/**`, or `.github/workflows/docs.yml`
+- **THEN** `Build documentation` SHALL run `npm ci` and `npm run docs:build`
+- **AND** the pull request SHALL NOT deploy GitHub Pages
+
+#### Scenario: Documentation change reaches main
+- **WHEN** a matching documentation change is pushed to `main`
+- **THEN** the documentation SHALL be built
+- **AND** the existing GitHub Pages deployment SHALL run after a successful build
+
 ### Requirement: RC release requires the complete quality gate
 A release candidate SHALL NOT be published unless the complete v1 quality gate has succeeded for the candidate state.
 
@@ -38,6 +64,7 @@ A release candidate SHALL NOT be published unless the complete v1 quality gate h
 - **AND** Dependency Review SHALL succeed
 - **AND** both CodeQL analyses and both dependency audits SHALL succeed
 - **AND** Docker image builds SHALL succeed
+- **AND** Build documentation SHALL succeed when the candidate changes documentation-relevant paths
 
 #### Scenario: Workflow requires manual action instead of running
 - **WHEN** a required workflow on the RC release PR has conclusion `action_required` and no successful job execution
