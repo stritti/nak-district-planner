@@ -108,7 +108,7 @@ Dieser Workflow wird bei jedem Push auf `main` oder `develop` sowie bei Pull Req
 
 ### 3. `docs.yml` – Dokumentations-Build und Pages-Deployment
 
-Pull Requests gegen `main`, die `docs/**`, `openspec/**` oder den Dokumentations-Workflow ändern, müssen `Build documentation` erfolgreich durchlaufen. Ein Deployment nach GitHub Pages findet nur bei einem passenden Push auf `main` oder bei manuellem Workflow-Dispatch statt, niemals aus einem Pull Request.
+Jeder Pull Request gegen `main` muss den stabilen Check `Build documentation` erfolgreich durchlaufen. Dadurch kann der Check im `main`-Ruleset verpflichtend sein, ohne bei Pull Requests mit anderen Dateipfaden zu fehlen. Ein Deployment nach GitHub Pages findet nur bei einem dokumentationsrelevanten Push auf `main` oder bei manuellem Workflow-Dispatch statt, niemals aus einem Pull Request.
 
 ---
 
@@ -174,7 +174,7 @@ Ein RC-Release-PR darf erst gemergt werden, wenn das aktive `main`-Ruleset aus I
 - `Frontend Dependency Audit (bun audit)`
 - `Build Backend Image`
 - `Build Frontend Image`
-- `Build documentation` bei dokumentationsrelevanten Änderungen
+- `Build documentation`
 
 Ein Workflow mit `action_required`, der seine eigentlichen Jobs nicht ausgeführt hat, gilt nicht als bestanden.
 
