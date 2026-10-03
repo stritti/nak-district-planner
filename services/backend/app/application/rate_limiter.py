@@ -57,6 +57,7 @@ class RateLimitConfig:
     burst_window_seconds: int = 1
 
     def __post_init__(self):
+        """Apply defaults for mutable config fields."""
         if self.endpoint_limits is None:
             self.endpoint_limits = {}
 

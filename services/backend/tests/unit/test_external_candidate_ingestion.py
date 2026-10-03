@@ -36,10 +36,12 @@ def event(*, uid="ext", cancelled=False):
 
 
 def repos():
-    return dict(
-        candidate_repo=AsyncMock(), instance_repo=AsyncMock(),
-        link_repo=AsyncMock(), notification_repo=AsyncMock(),
-    )
+    return {
+        "candidate_repo": AsyncMock(),
+        "instance_repo": AsyncMock(),
+        "link_repo": AsyncMock(),
+        "notification_repo": AsyncMock(),
+    }
 
 
 async def test_unmatched_event_becomes_candidate_without_unapproved_slot():

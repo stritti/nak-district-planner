@@ -26,10 +26,13 @@ class Role(StrEnum):
         return hierarchy.index(self) > hierarchy.index(other)
 
     def __le__(self, other: "Role") -> bool:
+        """Return True if self has at most the privilege of other."""
         return self < other or self == other
 
     def __gt__(self, other: "Role") -> bool:
+        """Return True if self has higher privilege than other."""
         return other < self
 
     def __ge__(self, other: "Role") -> bool:
+        """Return True if self has at least the privilege of other."""
         return other <= self

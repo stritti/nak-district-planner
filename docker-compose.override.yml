@@ -1,11 +1,13 @@
 # Development overrides — automatically merged by docker compose
 #
-# ENV-Strategie:
-#   .env              → enthält localhost-URLs (für "uv run uvicorn" direkt auf dem Host)
-#   dieses Override   → überschreibt DATABASE_URL in den Containern mit
-#                       den Docker-internen Hostnamen (db)
+# ENV strategy:
+#   .env                    -> localhost URLs for running backend/worker on the host
+#   .env.docker             -> Docker-internal app URLs for backend/worker containers
+#   .env.docker.migrate     -> owner DB URL, loaded only by the migration container
+#   .env.docker.test        -> test database name, loaded only by db-test
 #
-# Ergebnis: nur eine .env-Datei, kein manuelles Umschalten.
+# Docker-specific values are loaded in docker-compose.yml. This override no longer
+# duplicates runtime environment variables.
 services:
   backend:
     command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -15,9 +17,6 @@ services:
       - ./services/backend/alembic:/app/alembic
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
-      VALKEY_URL: "valkey://valkey:6379/0"
 
   # Migrations run with owner credentials (POSTGRES_USER) for DDL operations
   # via `docker compose run --no-deps --rm migrate` — never inside the
@@ -31,9 +30,6 @@ services:
     command: uv run celery -A app.celery_app worker --loglevel=debug
     volumes:
       - ./services/backend/app:/app/app
-    environment:
-      DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
-      VALKEY_URL: "valkey://valkey:6379/0"
 
   # Uncomment this section to enable automatic self-update via Docker socket.
   # WARNING: Mounting the Docker socket gives the container root-equivalent access

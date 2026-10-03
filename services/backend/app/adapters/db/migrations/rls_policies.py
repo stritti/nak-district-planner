@@ -381,7 +381,7 @@ def invitation_overwrite_request_visibility_factory(
     planning_slot_permission_sql_factory,
 ):
     """Return a callable that generates invitation overwrite request visibility SQL.
-    
+
     Derives tenant access through invitation_id -> congregation_invitations relationship.
     """
     def _factory(alias: str) -> str:
