@@ -53,9 +53,13 @@ jobs:
         with:
           version: "latest"
           python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            services/backend/pyproject.toml
+            services/backend/uv.lock
 
       - name: Install Python dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --locked
 
       - name: Check for exactly one migration head
         run: |
