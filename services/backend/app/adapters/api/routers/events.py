@@ -27,7 +27,7 @@ from app.adapters.db.repositories.event_instance import SqlEventInstanceReposito
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
-from app.application.sync_service import push_deviation_resolution
+from app.application.sync_service import push_conflict_resolution, push_deviation_resolution
 from app.domain.event_payloads import plan_finalized
 from app.domain.models.event_instance import (
     EventInstance,
@@ -43,7 +43,7 @@ from app.domain.models.planning_slot import (
 )
 from app.domain.models.role import Role
 from app.domain.ports.calendar import CalendarConnectorError
-from app.domain.services.sync_policy import internal_state
+from app.domain.services.sync_policy import internal_state, resolve_conflict
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
@@ -73,6 +73,7 @@ class EventResponse(BaseModel):
     applicability: list[str]
     invitation_source_congregation_id: uuid.UUID | None = None
     invitation_source_event_id: uuid.UUID | None = None
+    sync_state: SyncState | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -137,6 +138,7 @@ def _slot_to_event(slot: PlanningSlot, instance: EventInstance | None) -> EventR
         applicability=list(slot.applicability or []),
         invitation_source_congregation_id=slot.invitation_source_congregation_id,
         invitation_source_event_id=slot.invitation_source_event_id,
+        sync_state=instance.sync_state if instance else None,
         created_at=slot.created_at,
         updated_at=slot.updated_at,
     )
@@ -349,6 +351,49 @@ async def resolve_event_deviation(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Abweichung lokal aufgelöst, Provider-Aktualisierung fehlgeschlagen.",
+        ) from exc
+    return _slot_to_event(slot, await instance_repo.get(instance.id))
+
+
+@router.post("/{event_id}/resolve-conflict", response_model=EventResponse)
+async def resolve_event_conflict(
+    event_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    session: DbSession,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+) -> EventResponse:
+    """Resolve a sync CONFLICT in favour of the internal planning data.
+
+    The internal payload is pushed to writable provider links. The link
+    baselines are advanced so the echoed provider state is suppressed on the
+    next inbound sync run instead of re-entering CONFLICT.
+    """
+    slot = await slot_repo.get(event_id)
+    if slot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    instance = await instance_repo.get_by_planning_slot(event_id)
+    if instance is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
+    if instance.sync_state != SyncState.CONFLICT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Kein aktiver Konflikt zum Auflösen vorhanden.",
+        )
+    instance.sync_state = resolve_conflict(instance.sync_state)
+    instance.updated_at = datetime.now(UTC)
+    instance.last_internal_modified_at = instance.updated_at
+    await instance_repo.save(instance)
+    try:
+        if instance.calendar_integration_id is not None:
+            await push_conflict_resolution(instance, session)
+    except CalendarConnectorError as exc:
+        instance.sync_state = SyncState.CONFLICT
+        await instance_repo.save(instance)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Konflikt lokal aufgelöst, Provider-Aktualisierung fehlgeschlagen.",
         ) from exc
     return _slot_to_event(slot, await instance_repo.get(instance.id))
 

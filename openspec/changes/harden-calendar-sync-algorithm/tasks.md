@@ -23,7 +23,7 @@
 - [x] 3.4 Compute changed fields before conflict transition
 - [x] 3.5 Merge non-overlapping SOFT changes while DIRTY_INTERNAL
 - [x] 3.6 Route deviation/conflict resolution through state-machine functions
-- [ ] 3.7 Expose CONFLICT state and resolution endpoint to PLANNER
+- [x] 3.7 Expose CONFLICT state and resolution endpoint to PLANNER
 
 ## 4. Idempotency and Loop Prevention
 

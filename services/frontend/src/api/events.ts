@@ -4,6 +4,7 @@ export type PlanningSlotStatus = 'ACTIVE' | 'CANCELLED'
 export type EventApprovalStatus = 'PLANNED' | 'CONFIRMED'
 export type EventSource = 'INTERNAL' | 'EXTERNAL'
 export type EventVisibility = 'INTERNAL' | 'PUBLIC'
+export type SyncState = 'CLEAN' | 'DIRTY_INTERNAL' | 'DIRTY_EXTERNAL' | 'CONFLICT'
 
 export interface EventResponse {
   id: string
@@ -22,6 +23,7 @@ export interface EventResponse {
   applicability: string[]
   invitation_source_congregation_id?: string | null
   invitation_source_event_id?: string | null
+  sync_state?: SyncState | null
   created_at: string
   updated_at: string
 }
@@ -64,6 +66,12 @@ export function updateEvent(id: string, data: EventUpdate): Promise<EventRespons
   return apiFetch(`/api/v1/events/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
+  })
+}
+
+export function resolveEventConflict(id: string): Promise<EventResponse> {
+  return apiFetch(`/api/v1/events/${id}/resolve-conflict`, {
+    method: 'POST',
   })
 }
 

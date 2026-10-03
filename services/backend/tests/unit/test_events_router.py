@@ -716,3 +716,101 @@ def test_bulk_approval_status_rejects_invalid_month_and_extra_fields() -> None:
         events.BulkApprovalStatusRequest.model_validate(
             {"year": 2026, "month": 9, "approval_status": "CONFIRMED", "unused": True}
         )
+
+
+@pytest.mark.asyncio
+async def test_resolve_conflict_routes_through_state_machine_and_pushes() -> None:
+    from app.domain.models.event_instance import SyncState
+
+    slot = _slot()
+    instance = _instance(slot)
+    instance.calendar_integration_id = uuid.uuid4()
+    instance.sync_state = SyncState.CONFLICT
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get_by_planning_slot.return_value = instance
+    instance_repo.get.return_value = instance
+    push = AsyncMock(return_value=True)
+    with (
+        patch.object(events, "require_role_in_district") as require_role,
+        patch.object(events, "push_conflict_resolution", push),
+    ):
+        result = await events.resolve_event_conflict(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
+    require_role.assert_called_once_with(_auth(), Role.PLANNER, slot.district_id)
+    push.assert_awaited_once()
+    assert result.sync_state == SyncState.DIRTY_INTERNAL
+    instance_repo.save.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_conflict_without_active_conflict_is_rejected() -> None:
+    from app.domain.models.event_instance import SyncState
+
+    slot = _slot()
+    instance = _instance(slot)
+    instance.sync_state = SyncState.DIRTY_EXTERNAL
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get_by_planning_slot.return_value = instance
+    with (
+        patch.object(events, "require_role_in_district"),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_conflict(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
+    assert exc.value.status_code == 409
+    assert instance.sync_state == SyncState.DIRTY_EXTERNAL
+
+
+@pytest.mark.asyncio
+async def test_resolve_conflict_provider_failure_restores_conflict() -> None:
+    from app.domain.models.event_instance import SyncState
+
+    slot = _slot()
+    instance = _instance(slot)
+    instance.calendar_integration_id = uuid.uuid4()
+    instance.sync_state = SyncState.CONFLICT
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get_by_planning_slot.return_value = instance
+    push = AsyncMock(side_effect=CalendarConnectorError("provider down"))
+    with (
+        patch.object(events, "require_role_in_district"),
+        patch.object(events, "push_conflict_resolution", push),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_conflict(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
+    assert exc.value.status_code == 502
+    assert instance.sync_state == SyncState.CONFLICT
+
+
+@pytest.mark.asyncio
+async def test_resolve_conflict_missing_entities() -> None:
+    slot_repo, instance_repo = AsyncMock(), AsyncMock()
+    slot_repo.get.return_value = None
+    with (
+        patch.object(events, "require_role_in_district"),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_conflict(
+            uuid.uuid4(), _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
+    assert exc.value.status_code == 404
+
+
+def test_resolve_conflict_policy_transition_only_from_conflict() -> None:
+    from app.domain.models.event_instance import SyncState
+    from app.domain.services.sync_policy import resolve_conflict
+
+    assert resolve_conflict(SyncState.CONFLICT) == SyncState.DIRTY_INTERNAL
+    for state in (SyncState.CLEAN, SyncState.DIRTY_INTERNAL, SyncState.DIRTY_EXTERNAL):
+        with pytest.raises(ValueError):
+            resolve_conflict(state)
