@@ -257,7 +257,7 @@ async def update_event(
             slot.congregation_id = body.congregation_id
 
     if "applicability" in body.model_fields_set:
-        congregations = await SqlCongregationRepository(session).list_by_district(slot.district_id)
+        congregations = await cong_repo.list_by_district(slot.district_id)
         try:
             slot.distribute_to(body.applicability or [], {c.id for c in congregations})
         except InvalidApplicabilityError as exc:
