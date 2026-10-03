@@ -13,7 +13,7 @@
 ## 3. Release-PR-CI und Dokumentation härten
 
 - [x] 3.1 `RELEASE_PLEASE_TOKEN` vor Release Please explizit verlangen und den `GITHUB_TOKEN`-Fallback entfernen.
-- [x] 3.2 `Build documentation` für relevante Pull Requests ergänzen; Pages-Deployment auf Push/Dispatch begrenzen.
+- [x] 3.2 `Build documentation` auf jedem Pull Request gegen `main` ausführen, damit der Check im Ruleset immer vorhanden ist; Pages-Deployment auf Push/Dispatch begrenzen.
 - [x] 3.3 SemVer-Prerelease-Schema `MAJOR.MINOR.PATCH-rc.N` dokumentieren.
 - [x] 3.4 RC-Freeze und zulässige Stabilisierungskategorien dokumentieren.
 - [x] 3.5 #403 als zwingendes Merge-Gate des RC-Release-PRs dokumentieren.
