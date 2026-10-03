@@ -593,7 +593,9 @@ async def _patch_event(slot: PlanningSlot, body: events.EventUpdate, congregatio
             return_value=congregation_repo,
         ),
     ):
-        result = await events.update_event(slot.id, body, _auth(), AsyncMock())
+        result = await events.update_event(
+            slot.id, body, _auth(), AsyncMock(), slot_repo, congregation_repo, instance_repo
+        )
     return result, slot_repo, congregation_repo
 
 
@@ -656,7 +658,13 @@ async def test_update_event_moving_to_congregation_drops_distribution() -> None:
         ),
     ):
         result = await events.update_event(
-            slot.id, events.EventUpdate(congregation_id=congregation.id), _auth(), AsyncMock()
+            slot.id,
+            events.EventUpdate(congregation_id=congregation.id),
+            _auth(),
+            AsyncMock(),
+            slot_repo,
+            congregation_repo,
+            instance_repo,
         )
 
     assert result.congregation_id == congregation.id
