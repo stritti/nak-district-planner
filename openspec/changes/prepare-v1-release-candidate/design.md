@@ -4,7 +4,7 @@
 
 Für die v1-Stabilisierung wird ein echter SemVer-Prerelease benötigt. GitHub soll den Release als Prerelease darstellen und GHCR darf durch einen RC keine stabilen Alias-Tags verlieren. Parallel ist Issue #403 weiterhin offen: Das aktive `main`-Ruleset erzwingt noch keine Pull Requests und keine Required Status Checks. Der RC kann technisch vorbereitet werden, darf aber erst nach diesem Admin-Gate veröffentlicht werden.
 
-Die aktuelle Release-Automation hat zusätzlich einen Governance-Fehler: Release-PR #409 wird durch `github-actions[bot]` aktualisiert und seine Pull-Request-Workflows werden mit `action_required` beendet, ohne Jobs auszuführen. `docs/release-process.md` verlangt bereits `RELEASE_PLEASE_TOKEN`, der Workflow fällt aber bisher auf `GITHUB_TOKEN` zurück. Dieser Fallback ist mit verpflichtenden PR-Gates nicht sicher. Der mit #414 eingeführte Dokumentations-Workflow baut VitePress außerdem nur nach Push auf `main`; ein fehlerhafter Dokumentations-PR kann deshalb derzeit ohne VitePress-Build gemergt werden.
+Die aktuelle Release-Automation hat zusätzlich einen Governance-Fehler: Release-PR #409 wird durch `github-actions[bot]` aktualisiert und seine Pull-Request-Workflows werden mit `action_required` beendet, ohne Jobs auszuführen. `docs/release-process.md` verlangt bereits `RELEASE_PLEASE_TOKEN`, der Workflow fällt aber bisher auf `GITHUB_TOKEN` zurück. Dieser Fallback ist mit verpflichtenden PR-Gates nicht sicher. Der mit #414 eingeführte Dokumentations-Workflow baut VitePress außerdem nur nach Push auf `main`; ein fehlerhafter Dokumentations-PR kann deshalb derzeit ohne VitePress-Build gemergt werden. Seine ursprüngliche `npm ci`-Konfiguration ist zusätzlich nicht lauffähig, weil das Repository keinen Root-`package-lock.json`, sondern einen autoritativen Root-`bun.lock` besitzt.
 
 ## Ziele
 
@@ -14,6 +14,7 @@ Die aktuelle Release-Automation hat zusätzlich einen Governance-Fehler: Release
 - Stabile GHCR-Aliase vor Prerelease-Versionen schützen.
 - Release-PR-Updates müssen normale Pull-Request-Checks auslösen können.
 - `Build documentation` muss auf jedem Pull Request gegen `main` existieren, damit der Check im Ruleset verpflichtend sein kann.
+- Der Dokumentations-Build muss deterministisch aus dem vorhandenen `bun.lock` installieren.
 - Den finalen v1.0-Gate-Lauf und den Übergang von RC auf `v1.0.0` eindeutig dokumentieren.
 - Bestehende Qualitätsgates unverändert beibehalten.
 
@@ -59,9 +60,16 @@ Der bisherige Fallback auf `GITHUB_TOKEN` wird entfernt. Das verhindert einen sc
 
 ### 4. Dokumentations-Build wird ein stabiler PR-Check
 
-`docs.yml` reagiert auf jeden Pull Request gegen `main`. Der Build-Job erhält den stabilen Namen `Build documentation` und führt `npm ci` sowie `npm run docs:build` aus. Der Check existiert damit unabhängig von geänderten Pfaden und kann ohne Pending-Falle als Required Status Check im Ruleset verwendet werden.
+`docs.yml` reagiert auf jeden Pull Request gegen `main`. Der Build-Job erhält den stabilen Namen `Build documentation` und installiert die Root-Abhängigkeiten mit Bun aus dem vorhandenen Lockfile:
 
-`configure-pages`, Artifact-Upload und Deployment laufen bei Pull Requests nicht. Der Deploy-Job wird nur für Push/Dispatch ausgeführt und erhält die notwendigen `pages: write`- und `id-token: write`-Berechtigungen job-lokal. Pull Requests benötigen nur `contents: read`. Für Pushes auf `main` bleiben die bestehenden Dokumentations-Pfadfilter erhalten, damit reine Produktcode-Änderungen kein unnötiges Pages-Deployment auslösen.
+```text
+bun install --frozen-lockfile --prefer-offline
+bun run docs:build
+```
+
+Der Bun-Paketcache wird anhand von Runner-OS, Bun-Version und `bun.lock` adressiert. Ein Cache-Miss ändert die Semantik nicht; der Lockfile bleibt autoritativ. Der Check existiert unabhängig von geänderten Pfaden und kann ohne Pending-Falle als Required Status Check im Ruleset verwendet werden.
+
+`configure-pages`, Artifact-Upload und Deployment laufen bei Pull Requests nicht. Der Deploy-Job wird nur für Push/Dispatch ausgeführt und erhält die notwendigen `pages: write`- und `id-token: write`-Berechtigungen job-lokal. Pull Requests benötigen nur `contents: read`. Für Pushes auf `main` bleiben Dokumentations-, OpenSpec-, Root-Package- und Root-Lockfile-Pfade als Trigger erhalten.
 
 ### 5. #403 ist ein hartes Release-Gate
 
@@ -84,6 +92,7 @@ Nach bestandenem RC-Gate wird die Release-Please-Konfiguration in einem separate
 - **Release ohne Branch-Gates:** #403 ist dokumentierte Merge-Vorbedingung des RC-Release-PRs.
 - **Release-Please-PR ohne ausführbare CI:** `RELEASE_PLEASE_TOKEN` ist zwingend; der Workflow scheitert explizit, wenn das Secret fehlt. Ein PR mit `action_required` erfüllt das RC-Gate nicht.
 - **Required-Check bleibt bei nicht relevanten Pfaden pending:** `Build documentation` läuft auf jedem PR gegen `main`, nicht nur bei Dokumentationsänderungen.
+- **Nicht deterministische Docs-Installation:** der vorhandene `bun.lock` wird mit `--frozen-lockfile` erzwungen; ein veralteter Lockfile-Stand lässt den Build fehlschlagen.
 - **Dokumentationsregression:** jeder PR muss den VitePress-Build bestehen; PRs deployen nicht auf Pages.
 - **Feature-Creep nach RC:** die RC-Phase ist als Freeze definiert; releaserelevante Änderungen müssen Stabilisierung sein.
 - **Stable-Promotion bleibt Prerelease:** die Finalisierung erfordert explizit das Zurückstellen der Release-Please-Konfiguration vor `v1.0.0`.
@@ -92,6 +101,7 @@ Nach bestandenem RC-Gate wird die Release-Please-Konfiguration in einem separate
 
 - `release-please-config.json` muss valides JSON bleiben und die unterstützten Prerelease-Optionen verwenden.
 - `.github/workflows/release.yml` und `.github/workflows/docs.yml` müssen als gültige GitHub-Actions-Workflows geladen werden.
+- `bun install --frozen-lockfile --prefer-offline` und `bun run docs:build` müssen im Dokumentationsjob erfolgreich sein.
 - Ein PR-Lauf muss Backend-Unit/Coverage, Frontend-Unit/E2E, Alembic, Restore Drill, MegaLinter, Dependency Review, Security/CodeQL und Docker-Build unverändert bestehen.
 - `Build documentation` muss auf diesem und auf nachfolgenden Pull Requests gegen `main` erfolgreich laufen.
 - Der erste durch Release Please aktualisierte Release-PR muss `1.0.0-rc.1` in Manifest, Root-Package, Backend, Frontend und Lockfile setzen.
