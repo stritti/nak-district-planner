@@ -58,6 +58,20 @@ MegaLinter SHALL validate changed files on pull requests and the complete codeba
 - **WHEN** MegaLinter runs for a push to `main` or `develop`
 - **THEN** the complete codebase SHALL be validated
 
+### Requirement: MegaLinter uses the smallest suitable official flavor
+The MegaLinter workflow SHALL use an official flavor that contains every enabled MegaLinter check without shipping unrelated language toolchains.
+
+#### Scenario: MegaLinter checks execute
+- **WHEN** MegaLinter runs
+- **THEN** Bandit, JSONLint, Markdownlint, Yamllint and Hadolint SHALL remain available
+- **AND** the workflow SHALL use the official `python` flavor rather than the all-in-one image
+
+#### Scenario: Frontend lint executes
+- **WHEN** frontend CI runs
+- **THEN** ESLint SHALL execute through `bun run lint` after dependency installation
+- **AND** it SHALL use the frontend project's own ESLint configuration
+- **AND** no extra frontend dependency installation SHALL be required solely for linting
+
 ### Requirement: Existing quality gates remain unchanged
 Pipeline performance changes SHALL NOT reduce the existing test, migration, coverage, or security requirements.
 
