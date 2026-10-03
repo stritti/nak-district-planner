@@ -52,6 +52,34 @@ Every pull request against `main` SHALL expose a stable `Build documentation` ch
 - **THEN** the documentation SHALL be built
 - **AND** the existing GitHub Pages deployment SHALL run after a successful build
 
+### Requirement: Pages deployments are serialized
+GitHub Pages deployments SHALL share one concurrency group while pull-request validation remains isolated.
+
+#### Scenario: Push and manual deployment overlap
+- **WHEN** a `main` push and `workflow_dispatch` documentation run overlap
+- **THEN** both deployment-capable runs SHALL use the same `pages` concurrency group
+- **AND** they SHALL NOT deploy concurrently
+
+#### Scenario: Pull request validation runs
+- **WHEN** a pull request documentation build runs
+- **THEN** it SHALL use a pull-request-specific concurrency group
+- **AND** it SHALL NOT cancel or race a Pages deployment
+
+### Requirement: Security and dependency gates fail closed
+Checks configured as required v1 release gates SHALL report failures instead of masking them with `continue-on-error`.
+
+#### Scenario: CodeQL fails
+- **WHEN** either CodeQL language analysis fails
+- **THEN** the corresponding `CodeQL Analysis` check SHALL fail
+
+#### Scenario: Frontend dependency audit fails
+- **WHEN** `bun audit --audit-level=moderate` exits unsuccessfully
+- **THEN** `Frontend Dependency Audit (bun audit)` SHALL fail
+
+#### Scenario: Dependency Review fails
+- **WHEN** Dependency Review detects a blocking finding or cannot complete successfully
+- **THEN** `Dependency Review` SHALL fail
+
 ### Requirement: RC release requires the complete quality gate
 A release candidate SHALL NOT be published unless the complete v1 quality gate has succeeded for the candidate state.
 
