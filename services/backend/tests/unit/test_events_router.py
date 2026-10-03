@@ -582,18 +582,16 @@ async def _patch_event(slot: PlanningSlot, body: events.EventUpdate, congregatio
     instance_repo.get_by_planning_slot.return_value = None
     congregation_repo = AsyncMock()
     congregation_repo.list_by_district.return_value = congregations
-    with (
-        patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-        patch(
-            "app.adapters.api.routers.events.SqlCongregationRepository",
-            return_value=congregation_repo,
-        ),
-    ):
-        result = await events.update_event(slot.id, body, _auth(), AsyncMock())
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
+        result = await events.update_event(
+            slot.id,
+            body,
+            _auth(),
+            AsyncMock(),
+            slot_repo=slot_repo,
+            cong_repo=congregation_repo,
+            inst_repo=instance_repo,
+        )
     return result, slot_repo, congregation_repo
 
 
@@ -644,19 +642,15 @@ async def test_update_event_moving_to_congregation_drops_distribution() -> None:
     congregation_repo = AsyncMock()
     congregation_repo.get.return_value = congregation
 
-    with (
-        patch("app.adapters.api.routers.events.require_role_in_district"),
-        patch("app.adapters.api.routers.events.SqlPlanningSlotRepository", return_value=slot_repo),
-        patch(
-            "app.adapters.api.routers.events.SqlEventInstanceRepository", return_value=instance_repo
-        ),
-        patch(
-            "app.adapters.api.routers.events.SqlCongregationRepository",
-            return_value=congregation_repo,
-        ),
-    ):
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
         result = await events.update_event(
-            slot.id, events.EventUpdate(congregation_id=congregation.id), _auth(), AsyncMock()
+            slot.id,
+            events.EventUpdate(congregation_id=congregation.id),
+            _auth(),
+            AsyncMock(),
+            slot_repo=slot_repo,
+            cong_repo=congregation_repo,
+            inst_repo=instance_repo,
         )
 
     assert result.congregation_id == congregation.id
