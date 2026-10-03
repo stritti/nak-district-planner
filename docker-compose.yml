@@ -1,7 +1,9 @@
 services:
   backend:
     build: ./services/backend
-    env_file: .env
+    env_file:
+      - .env
+      - .env.docker
     depends_on:
       db:
         condition: service_healthy
@@ -13,39 +15,35 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    environment:
-      # Use nak_app role for RLS enforcement in production
-      DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
 
   # One-shot migration runner. Alembic needs the database owner for DDL
   # (roles, tables, SECURITY DEFINER functions — see revisions 0016/0017).
-  # Owner credentials are deliberately NOT exposed to the long-running
-  # backend/worker services: run migrations explicitly via
-  # `docker compose run --no-deps --rm migrate`.
+  # Owner credentials are deliberately NOT exposed through the Docker-specific
+  # app override: only the migrate service loads .env.docker.migrate.
+  # Run migrations explicitly via `docker compose run --no-deps --rm migrate`.
   migrate:
     build: ./services/backend
-    env_file: .env
+    env_file:
+      - .env
+      - .env.docker.migrate
     command: uv run alembic upgrade head
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      MIGRATION_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
     profiles:
       - tools
 
   worker:
     build: ./services/backend
     command: uv run celery -A app.celery_app worker --loglevel=info
-    env_file: .env
+    env_file:
+      - .env
+      - .env.docker
     depends_on:
       db:
         condition: service_healthy
       valkey:
         condition: service_started
-    environment:
-      # Use nak_app role for RLS enforcement in production
-      DATABASE_URL: "postgresql+asyncpg://${APP_DB_USER}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}"
 
   frontend:
     build: ./services/frontend
@@ -70,9 +68,9 @@ services:
 
   db-test:
     image: postgres:18-alpine
-    env_file: .env
-    environment:
-      POSTGRES_DB: nak_planner_test
+    env_file:
+      - .env
+      - .env.docker.test
     volumes:
       - ./postgres_data_test:/var/lib/postgresql/data
     healthcheck:
