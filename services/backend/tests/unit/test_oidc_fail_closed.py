@@ -114,3 +114,16 @@ async def test_opaque_introspection_rejects_wrong_audience(
 
     with pytest.raises(TokenValidationError, match="Invalid audience"):
         await adapter.validate_token("opaque-token")
+
+
+@pytest.mark.asyncio
+async def test_unexpected_introspection_bug_is_not_hidden_as_invalid_token(
+    adapter: OIDCAdapter,
+) -> None:
+    adapter._fetch_userinfo_claims = AsyncMock(
+        side_effect=TokenValidationError("userinfo unavailable")
+    )
+    adapter._introspect_token = AsyncMock(side_effect=AttributeError("programming bug"))
+
+    with pytest.raises(AttributeError, match="programming bug"):
+        await adapter.validate_token("opaque-token")
