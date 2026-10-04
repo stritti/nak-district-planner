@@ -44,6 +44,9 @@ class OIDCAdapter:
     - Error handling: connection errors, invalid tokens, cache miss fallbacks
     """
 
+    DEFAULT_JWT_ALGORITHMS = ("RS256",)
+    DISCOVERY_CACHE_TTL_SECONDS = 3600
+
     def __init__(
         self,
         discovery_url: str,
@@ -99,7 +102,7 @@ class OIDCAdapter:
         """Fetch OIDC discovery configuration from /.well-known/openid-configuration."""
         if self._discovery_cache is not None and self._discovery_cache_time is not None:
             elapsed = (datetime.now(UTC) - self._discovery_cache_time).total_seconds()
-            if elapsed < 3600:
+            if elapsed < self.DISCOVERY_CACHE_TTL_SECONDS:
                 return self._discovery_cache
 
         try:
@@ -186,7 +189,7 @@ class OIDCAdapter:
         validation error. Only non-JWT (opaque) tokens use the provider's
         UserInfo/introspection endpoints.
         """
-        allowed_algorithms = algorithms or ["RS256"]
+        allowed_algorithms = algorithms or list(self.DEFAULT_JWT_ALGORITHMS)
         expected_audience = audience or self.audience or self.client_id
 
         if self._is_jwt_shaped(token):
@@ -222,8 +225,6 @@ class OIDCAdapter:
                 f"Opaque token validation failed: userinfo ({userinfo_error}); "
                 f"introspection ({e})"
             ) from e
-        except Exception as e:
-            raise TokenValidationError(f"Opaque token validation failed: {e}") from e
 
     @staticmethod
     def _is_jwt_shaped(token: str) -> bool:
@@ -233,6 +234,11 @@ class OIDCAdapter:
         such a token must fail closed rather than be reinterpreted as opaque.
         """
         return token.count(".") == 2
+
+    @staticmethod
+    def _find_signing_key(keys: list[dict[str, Any]], kid: str | None) -> dict[str, Any] | None:
+        """Return the JWKS entry matching ``kid`` without duplicating lookup logic."""
+        return next((key_data for key_data in keys if key_data.get("kid") == kid), None)
 
     def _validate_opaque_claims(
         self,
@@ -271,8 +277,11 @@ class OIDCAdapter:
             unverified = jwt.decode(token, options={"verify_signature": False})
             header = jwt.get_unverified_header(token)
 
-            logger.debug("Token header: %s", header)
-            logger.debug("Token claims: %s", unverified)
+            logger.debug(
+                "Validating JWT header: kid=%s alg=%s",
+                header.get("kid"),
+                header.get("alg"),
+            )
 
             if self.issuer and unverified.get("iss") != self.issuer:
                 raise TokenValidationError(
@@ -286,22 +295,12 @@ class OIDCAdapter:
                 raise TokenValidationError("No keys available in JWKS")
 
             kid = header.get("kid")
-            signing_key = None
-
-            for key_data in keys:
-                if key_data.get("kid") == kid:
-                    signing_key = key_data
-                    break
+            signing_key = self._find_signing_key(keys, kid)
 
             if not signing_key:
                 logger.warning("Key ID %s not found in JWKS, trying force refresh", kid)
                 jwks = await self.fetch_jwks(force_refresh=True)
-                keys = jwks.get("keys", [])
-
-                for key_data in keys:
-                    if key_data.get("kid") == kid:
-                        signing_key = key_data
-                        break
+                signing_key = self._find_signing_key(jwks.get("keys", []), kid)
 
             if not signing_key:
                 raise TokenValidationError(f"Signing key not found for kid: {kid}")
@@ -309,7 +308,7 @@ class OIDCAdapter:
             try:
                 pyjwk = PyJWK(signing_key, algorithm=header.get("alg"))
                 signing_key_obj = pyjwk.key
-            except Exception as e:
+            except (KeyError, TypeError, ValueError) as e:
                 raise TokenValidationError(f"Failed to build signing key from JWKS: {e}") from e
 
             decoded = jwt.decode(
@@ -340,8 +339,8 @@ class OIDCAdapter:
             raise TokenValidationError(f"Token expired: {e}") from e
         except jwt.InvalidTokenError as e:
             raise TokenValidationError(f"Invalid token: {e}") from e
-        except Exception as e:
-            raise TokenValidationError(f"Token validation failed: {e}") from e
+        except (OIDCDiscoveryError, JWKSFetchError) as e:
+            raise TokenValidationError(f"Token validation infrastructure failed: {e}") from e
 
     async def _fetch_userinfo_claims(self, token: str) -> dict[str, Any]:
         """Validate access token by calling the OIDC userinfo endpoint."""
