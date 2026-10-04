@@ -131,7 +131,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="NAK District Planner",
     description="Bezirksplanung für die Neuapostolische Kirche",
-    version="0.1.0",
+    version=settings.app_version,
     lifespan=lifespan,
 )
 
