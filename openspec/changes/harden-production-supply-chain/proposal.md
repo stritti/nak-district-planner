@@ -4,11 +4,13 @@ Der RC-1 baut Container teilweise mit breiten oder `latest`-Tags und installiert
 
 ## What Changes
 
-- Python-, uv- und Bun-Buildtoolchain werden auf die in CI verwendeten Versionen festgelegt.
+- Die bestehende Python-3.11-Runtime-Linie wird auf eine konkrete Patch-Version festgelegt; ein Python-Major-/Minor-Upgrade ist bewusst nicht Teil dieses Changes.
+- uv und Bun werden auf konkrete getestete Versionen festgelegt.
 - Frontend-Image nutzt `bun install --frozen-lockfile`.
 - PostgreSQL und Valkey werden auf konkrete getestete Patch-Versionen festgelegt.
+- Dependabot ueberwacht die gepinnten Docker-Basis- und Tool-Images.
 - Der interne Frontend-nginx wird standardmaessig nur an Loopback gebunden.
-- CSP, Referrer-Policy und Permissions-Policy werden am internen nginx gesetzt; HSTS bleibt Aufgabe der oeffentlichen TLS-Grenze.
+- CSP, Referrer-Policy und Permissions-Policy werden am internen nginx gesetzt; `connect-src` bleibt auf Same-Origin begrenzt und HSTS bleibt Aufgabe der oeffentlichen TLS-Grenze.
 
 ## Capabilities
 
@@ -19,4 +21,5 @@ Der RC-1 baut Container teilweise mit breiten oder `latest`-Tags und installiert
 ## Impact
 
 - Lokaler Zugriff erfolgt standardmaessig ueber `127.0.0.1:8080` oder den externen Reverse Proxy.
-- Abhaengigkeitsupdates erfordern bewusste Versionsanpassungen statt impliziter Tag-Updates.
+- Abhaengigkeitsupdates werden ueber Dependabot sichtbar und bleiben explizite, reviewbare Versionsaenderungen.
+- Ein spaeteres Python-3.13-Upgrade benoetigt einen separaten Change mit eigener Kompatibilitaetsverifikation.
