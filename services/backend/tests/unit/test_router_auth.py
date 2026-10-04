@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from fastapi import HTTPException, Response
 from starlette.requests import Request
@@ -27,13 +29,15 @@ def request_with_cookie(cookie: str | None = None) -> Request:
     )
 
 
-def adapter_for_response(payload: dict) -> SimpleNamespace:
-    provider_response = SimpleNamespace(
-        is_success=True,
-        json=lambda: payload,
-    )
+def adapter_for_response(payload: object) -> tuple[SimpleNamespace, SimpleNamespace, MagicMock]:
+    provider_response = MagicMock(spec=httpx.Response)
+    provider_response.is_success = True
+    provider_response.status_code = 200
+    provider_response.text = ""
+    provider_response.json.return_value = payload
+    provider_response.raise_for_status.return_value = None
     client = SimpleNamespace(post=AsyncMock(return_value=provider_response))
-    return SimpleNamespace(
+    adapter = SimpleNamespace(
         client_id="client-id",
         client_secret="client-secret",
         discover=AsyncMock(
@@ -43,15 +47,15 @@ def adapter_for_response(payload: dict) -> SimpleNamespace:
             }
         ),
         get_httpx_client=AsyncMock(return_value=client),
-        _client=client,
     )
+    return adapter, client, provider_response
 
 
 @pytest.mark.asyncio
 async def test_exchange_oidc_token_uses_http_only_cookie_for_refresh_grant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    adapter = adapter_for_response(
+    adapter, client, _ = adapter_for_response(
         {
             "access_token": "new-access",
             "refresh_token": "rotated-provider-refresh",
@@ -62,15 +66,12 @@ async def test_exchange_oidc_token_uses_http_only_cookie_for_refresh_grant(
 
     response = Response()
     payload = await r.exchange_oidc_token(
-        r.OIDCTokenExchangeRequest(
-            grant_type="refresh_token",
-            refresh_token=r.REFRESH_COORDINATION_MARKER,
-        ),
+        r.OIDCTokenExchangeRequest(grant_type="refresh_token"),
         request_with_cookie(f"{r.REFRESH_COOKIE_NAME}=provider-refresh"),
         response,
     )
 
-    adapter._client.post.assert_awaited_once_with(
+    client.post.assert_awaited_once_with(
         "https://issuer.example/token",
         data={
             "grant_type": "refresh_token",
@@ -81,7 +82,8 @@ async def test_exchange_oidc_token_uses_http_only_cookie_for_refresh_grant(
         timeout=15,
     )
     assert payload["access_token"] == "new-access"
-    assert payload["refresh_token"] == r.REFRESH_COORDINATION_MARKER
+    assert payload["refresh_session"] is True
+    assert "refresh_token" not in payload
     assert "rotated-provider-refresh" not in str(payload)
     cookie_header = response.headers["set-cookie"]
     assert r.REFRESH_COOKIE_NAME in cookie_header
@@ -93,7 +95,7 @@ async def test_exchange_oidc_token_uses_http_only_cookie_for_refresh_grant(
 async def test_authorization_code_exchange_hides_provider_refresh_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    adapter = adapter_for_response(
+    adapter, _, _ = adapter_for_response(
         {
             "access_token": "access",
             "id_token": "id-token",
@@ -115,7 +117,8 @@ async def test_authorization_code_exchange_hides_provider_refresh_token(
         response,
     )
 
-    assert payload["refresh_token"] == r.REFRESH_COORDINATION_MARKER
+    assert payload["refresh_session"] is True
+    assert "refresh_token" not in payload
     assert "provider-secret" not in str(payload)
     assert "provider-secret" in response.headers["set-cookie"]
     assert "HttpOnly" in response.headers["set-cookie"]
@@ -125,57 +128,76 @@ async def test_authorization_code_exchange_hides_provider_refresh_token(
 async def test_refresh_grant_without_cookie_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    adapter = adapter_for_response({"access_token": "unused"})
+    adapter, client, _ = adapter_for_response({"access_token": "unused"})
     monkeypatch.setattr(r, "get_oidc_adapter", lambda: adapter)
 
     with pytest.raises(HTTPException) as exc_info:
         await r.exchange_oidc_token(
-            r.OIDCTokenExchangeRequest(
-                grant_type="refresh_token",
-                refresh_token=r.REFRESH_COORDINATION_MARKER,
-            ),
+            r.OIDCTokenExchangeRequest(grant_type="refresh_token"),
             request_with_cookie(),
             Response(),
         )
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == {"error": "missing_refresh_cookie"}
-    adapter._client.post.assert_not_awaited()
+    client.post.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_non_rotating_provider_keeps_frontend_coordination_marker(
+async def test_non_rotating_provider_keeps_refresh_session_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    adapter = adapter_for_response({"access_token": "new-access", "expires_in": 3600})
+    adapter, _, _ = adapter_for_response({"access_token": "new-access", "expires_in": 3600})
     monkeypatch.setattr(r, "get_oidc_adapter", lambda: adapter)
 
     payload = await r.exchange_oidc_token(
-        r.OIDCTokenExchangeRequest(
-            grant_type="refresh_token",
-            refresh_token=r.REFRESH_COORDINATION_MARKER,
-        ),
+        r.OIDCTokenExchangeRequest(grant_type="refresh_token"),
         request_with_cookie(f"{r.REFRESH_COOKIE_NAME}=provider-refresh"),
         Response(),
     )
 
-    assert payload["refresh_token"] == r.REFRESH_COORDINATION_MARKER
+    assert payload["refresh_session"] is True
+    assert "refresh_token" not in payload
+
+
+@pytest.mark.asyncio
+async def test_invalid_provider_success_json_is_mapped_to_bad_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter, _, provider_response = adapter_for_response({})
+    provider_response.json.side_effect = ValueError("invalid json")
+    monkeypatch.setattr(r, "get_oidc_adapter", lambda: adapter)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await r.exchange_oidc_token(
+            r.OIDCTokenExchangeRequest(
+                grant_type="authorization_code",
+                code="code",
+                redirect_uri="https://planner.example/auth/callback",
+                code_verifier="verifier",
+            ),
+            request_with_cookie(),
+            Response(),
+        )
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == "OIDC token endpoint returned invalid JSON"
 
 
 @pytest.mark.asyncio
 async def test_revoke_uses_server_held_refresh_token_and_deletes_cookie(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    adapter = adapter_for_response({"access_token": "unused"})
+    adapter, client, _ = adapter_for_response({"access_token": "unused"})
     monkeypatch.setattr(r, "get_oidc_adapter", lambda: adapter)
 
-    response = Response()
+    response = Response(status_code=204)
     result = await r.revoke_oidc_refresh_token(
         request_with_cookie(f"{r.REFRESH_COOKIE_NAME}=provider-refresh"),
         response,
     )
 
-    adapter._client.post.assert_awaited_once_with(
+    client.post.assert_awaited_once_with(
         "https://issuer.example/revoke",
         data={
             "token": "provider-refresh",
@@ -189,6 +211,26 @@ async def test_revoke_uses_server_held_refresh_token_and_deletes_cookie(
     cookie_header = result.headers["set-cookie"]
     assert r.REFRESH_COOKIE_NAME in cookie_header
     assert "Max-Age=0" in cookie_header
+
+
+@pytest.mark.asyncio
+async def test_revoke_logs_provider_failure_but_still_deletes_cookie(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    adapter, _, provider_response = adapter_for_response({})
+    provider_response.raise_for_status.side_effect = httpx.ConnectError("provider offline")
+    monkeypatch.setattr(r, "get_oidc_adapter", lambda: adapter)
+
+    response = Response(status_code=204)
+    with caplog.at_level(logging.WARNING):
+        result = await r.revoke_oidc_refresh_token(
+            request_with_cookie(f"{r.REFRESH_COOKIE_NAME}=provider-refresh"),
+            response,
+        )
+
+    assert "revocation failed" in caplog.text
+    assert "Max-Age=0" in result.headers["set-cookie"]
 
 
 @pytest.mark.asyncio
