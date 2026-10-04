@@ -1,897 +1,367 @@
-/**
- * Tests for useOIDC composable
- */
-
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { __resetOIDCModuleState, useOIDC } from './useOIDC'
 import { useAuthStore } from '../stores/auth'
-import { MockBroadcastChannel, postedBroadcastMessages, resetBroadcastChannelMocks } from '../testing/broadcastChannel'
-import { stubWebLocks, stubNoWebLocks } from '../testing/webLocks'
+import {
+  MockBroadcastChannel,
+  postedBroadcastMessages,
+  resetBroadcastChannelMocks,
+} from '../testing/broadcastChannel'
+import { stubNoWebLocks, stubWebLocks } from '../testing/webLocks'
+import { REFRESH_SESSION_COORDINATION_ID } from './oidcToken'
+import { __resetOIDCModuleState, useOIDC } from './useOIDC'
 
-// Mock Vue Router
+const routerPush = vi.fn().mockResolvedValue(undefined)
+
 vi.mock('vue-router', () => ({
   createRouter: vi.fn(),
   createWebHistory: vi.fn(),
-  useRouter: () => ({
-    push: vi.fn(),
-  }),
+  useRouter: () => ({ push: routerPush }),
 }))
 
-describe('useOIDC', () => {
-  async function receiptKey(token: string): Promise<string> {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
-    const binary = Array.from(new Uint8Array(digest), (byte) => String.fromCharCode(byte)).join('')
-    return 'oidc-refresh-result:' + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
-  }
-  function createOidc() {
-    return useOIDC(undefined, {
-      redirectUri: 'http://localhost:5173/auth/callback',
-      scope: 'openid profile email',
-    })
-  }
+function jwt(claims: Record<string, unknown>): string {
+  const payload = btoa(JSON.stringify(claims))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+  return `header.${payload}.signature`
+}
 
-  const expiredToken = (refreshToken = 'refresh-token') => ({
-    accessToken: 'old-access-token',
+function discoveryResponse(): Response {
+  return new Response(JSON.stringify({
+    authorization_endpoint: 'https://idp.example/authorize',
+    token_endpoint: 'https://idp.example/token',
+    userinfo_endpoint: 'https://idp.example/userinfo',
+    revocation_endpoint: 'https://idp.example/revoke',
+    client_id: 'planner-client',
+  }), { status: 200 })
+}
+
+function refreshResponse(accessToken = 'next-access'): Response {
+  return new Response(JSON.stringify({
+    access_token: accessToken,
+    refresh_session: true,
+    expires_in: 3600,
+  }), { status: 200 })
+}
+
+function createOidc() {
+  return useOIDC(undefined, {
+    redirectUri: 'http://localhost:5173/auth/callback',
+    scope: 'openid profile email',
+  })
+}
+
+function activeToken(accessToken = 'current-access') {
+  return {
+    accessToken,
     idToken: '',
-    refreshToken,
-    expiresAt: Math.floor(Date.now() / 1000) - 1,
-  })
+    refreshToken: REFRESH_SESSION_COORDINATION_ID,
+    expiresAt: Math.floor(Date.now() / 1000) + 3600,
+  }
+}
 
-  beforeEach(() => {
-    __resetOIDCModuleState()
-    resetBroadcastChannelMocks()
-    stubWebLocks()
-    setActivePinia(createPinia())
-    sessionStorage.clear()
-    localStorage.clear()
-    vi.clearAllMocks()
-    createOidc().setToken(null)
-  })
+beforeEach(() => {
+  __resetOIDCModuleState()
+  resetBroadcastChannelMocks()
+  stubWebLocks()
+  setActivePinia(createPinia())
+  sessionStorage.clear()
+  localStorage.clear()
+  document.cookie = 'csrf_token=oidc-csrf; Path=/'
+  routerPush.mockClear()
+  vi.clearAllMocks()
+})
 
-  afterEach(() => {
-    createOidc().setToken(null)
-    vi.useRealTimers()
-    vi.restoreAllMocks()
-    vi.unstubAllGlobals()
-  })
+afterEach(() => {
+  document.cookie = 'csrf_token=; Max-Age=0; Path=/'
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
-  it('should generate valid PKCE code verifier and challenge', async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            authorization_endpoint: 'https://auth.example.com/authorize',
-            token_endpoint: 'https://auth.example.com/token',
-            userinfo_endpoint: 'https://auth.example.com/userinfo',
-            client_id: 'frontend-test-client',
-          }),
-          { status: 200 }
-        )
-      )
-    )
+describe('authorization', () => {
+  it('creates a PKCE authorization URL and keeps verifier/state tab-local', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(discoveryResponse()))
+    const oidc = createOidc()
 
-    const { getAuthorizationUrl } = createOidc()
-    const url = await getAuthorizationUrl()
+    const url = new URL(await oidc.getAuthorizationUrl())
 
-    expect(url).toContain('code_challenge=')
-    expect(url).toContain('code_challenge_method=S256')
-  })
-
-  it('should create authorization URL with PKCE parameters', async () => {
-    // Mock fetch for discovery
-    global.fetch = vi.fn(() =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            authorization_endpoint: 'https://auth.example.com/authorize',
-            token_endpoint: 'https://auth.example.com/token',
-            userinfo_endpoint: 'https://auth.example.com/userinfo',
-            client_id: 'frontend-test-client',
-          }),
-          { status: 200 }
-        )
-      )
-    )
-
-    const { getAuthorizationUrl } = createOidc()
-    const url = await getAuthorizationUrl()
-
-    expect(url).toContain('https://auth.example.com/authorize')
-    expect(url).toContain('code_challenge=')
-    expect(url).toContain('code_challenge_method=S256')
-    expect(url).toContain('client_id=')
-    expect(url).toContain('scope=openid')
-  })
-
-  it('should store code verifier and state in sessionStorage', async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            authorization_endpoint: 'https://auth.example.com/authorize',
-            token_endpoint: 'https://auth.example.com/token',
-            userinfo_endpoint: 'https://auth.example.com/userinfo',
-            client_id: 'frontend-test-client',
-          }),
-          { status: 200 }
-        )
-      )
-    )
-
-    const { getAuthorizationUrl } = createOidc()
-    await getAuthorizationUrl()
-
+    expect(url.origin + url.pathname).toBe('https://idp.example/authorize')
+    expect(url.searchParams.get('client_id')).toBe('planner-client')
+    expect(url.searchParams.get('response_type')).toBe('code')
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256')
+    expect(url.searchParams.get('code_challenge')).toBeTruthy()
+    expect(url.searchParams.get('state')).toBeTruthy()
     expect(sessionStorage.getItem('oidc_code_verifier')).toBeTruthy()
-    expect(sessionStorage.getItem('oidc_state')).toBeTruthy()
+    expect(sessionStorage.getItem('oidc_state')).toBe(url.searchParams.get('state'))
+    expect(localStorage.length).toBe(0)
   })
 
-  it('should parse JWT tokens correctly', () => {
-    // Test JWT parsing
-    const jwtWithEmail = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLWlkIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwibmFtZSI6IkpvaG4gRG9lIn0.1234'
-    
-    // We can't directly test parseJwt as it's internal, but we can test indirectly
-    // through exchangeCodeForToken behavior
-    expect(jwtWithEmail).toContain('.')
-  })
-
-  it('should throw error if code verifier not found', async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            authorization_endpoint: 'https://auth.example.com/authorize',
-            token_endpoint: 'https://auth.example.com/token',
-            userinfo_endpoint: 'https://auth.example.com/userinfo',
-            client_id: 'frontend-test-client',
-          }),
-          { status: 200 }
-        )
-      )
-    )
-
-    const { exchangeCodeForToken } = createOidc()
-
-    await expect(exchangeCodeForToken('auth_code_123')).rejects.toThrow()
-  })
-
-  it('should share an in-flight refresh across composable instances', async () => {
-    const resolveFetch = vi.fn()
-    global.fetch = vi.fn(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveFetch.mockImplementationOnce(() => resolve(
-            new Response(
-              JSON.stringify({ access_token: 'new-access-token', expires_in: 3600 }),
-              { status: 200 }
-            )
-          ))
-        })
-    )
-
-    const first = createOidc()
-    const second = createOidc()
-    first.setToken(
-      {
-        accessToken: 'old-access-token',
-        idToken: '',
-        refreshToken: 'refresh-token',
-        expiresAt: Math.floor(Date.now() / 1000) - 1,
-      },
-      { sub: 'user-sub' }
-    )
-
-    const firstRefresh = first.refreshToken()
-    const secondRefresh = second.refreshToken()
-    // Web Lock dispatch the callback asynchronously; wait for the coalesced
-    // fetch to start before resolving it.
-    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
-
-    resolveFetch()
-    await Promise.all([firstRefresh, secondRefresh])
-  })
-
-  it('should discard a refresh result that resolves after logout', async () => {
-    let resolveFetch!: (response: Response) => void
-    global.fetch = vi.fn(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveFetch = resolve
-        })
-    )
-
+  it('rejects a code exchange when the PKCE verifier is missing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(discoveryResponse()))
     const oidc = createOidc()
-    const authStore = useAuthStore()
-    oidc.setToken(
-      {
-        accessToken: 'old-access-token',
-        idToken: '',
-        refreshToken: 'refresh-token',
-        expiresAt: Math.floor(Date.now() / 1000) - 1,
-      },
-      { sub: 'user-sub' }
-    )
 
-    const refresh = oidc.refreshToken()
-    // Web Lock dispatch is asynchronous; wait for the request to start
-    // before simulating the logout.
-    await vi.waitFor(() => expect(resolveFetch).toBeTypeOf('function'))
-    oidc.setToken(null)
-    resolveFetch(
-      new Response(
-        JSON.stringify({
-          access_token: 'new-access-token',
-          id_token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLXN1YiJ9.signature',
-          expires_in: 3600,
-        }),
-        { status: 200 }
-      )
-    )
-    await refresh
-
-    expect(authStore.token).toBeNull()
+    await expect(oidc.exchangeCodeForToken('code')).rejects.toThrow('Code verifier not found')
   })
 
-  it('should not clear a newer session when a stale refresh response is rejected', async () => {
-    let resolveFetch!: (response: Response) => void
-    global.fetch = vi.fn(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveFetch = resolve
-        })
-    )
-
-    const oidc = createOidc()
-    const authStore = useAuthStore()
-    oidc.setToken(
-      {
-        accessToken: 'old-access-token',
-        idToken: '',
-        refreshToken: 'old-refresh-token',
-        expiresAt: Math.floor(Date.now() / 1000) - 1,
-      },
-      { sub: 'old-user-sub' }
-    )
-
-    const refresh = oidc.refreshToken()
-    // Web Lock dispatch is asynchronous; wait for the request to start
-    // before installing the newer session.
-    await vi.waitFor(() => expect(resolveFetch).toBeTypeOf('function'))
-    oidc.setToken(
-      {
-        accessToken: 'new-access-token',
-        idToken: '',
-        refreshToken: 'new-refresh-token',
-        expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      },
-      { sub: 'new-user-sub' }
-    )
-
-    resolveFetch(new Response('', { status: 401 }))
-    await refresh
-
-    expect(authStore.token?.accessToken).toBe('new-access-token')
-    expect(authStore.user?.sub).toBe('new-user-sub')
-  })
-
-  it('should not clear a newer session when a stale refresh request throws', async () => {
-    let rejectFetch!: (error: Error) => void
-    global.fetch = vi.fn(
-      () =>
-        new Promise<Response>((_resolve, reject) => {
-          rejectFetch = reject
-        })
-    )
-
-    const oidc = createOidc()
-    const authStore = useAuthStore()
-    oidc.setToken(
-      {
-        accessToken: 'old-access-token',
-        idToken: '',
-        refreshToken: 'old-refresh-token',
-        expiresAt: Math.floor(Date.now() / 1000) - 1,
-      },
-      { sub: 'old-user-sub' }
-    )
-
-    const refresh = oidc.refreshToken()
-    // Web Locks dispatch the callback asynchronously; wait for the fetch
-    // to start before resolving the simulated network failure.
-    await vi.waitFor(() => expect(rejectFetch).toBeTypeOf('function'))
-    oidc.setToken(
-      {
-        accessToken: 'new-access-token',
-        idToken: '',
-        refreshToken: 'new-refresh-token',
-        expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      },
-      { sub: 'new-user-sub' }
-    )
-
-    rejectFetch(new Error('network failed'))
-    await refresh
-
-    expect(authStore.token?.accessToken).toBe('new-access-token')
-    expect(authStore.user?.sub).toBe('new-user-sub')
-  })
-
-  it('should keep one shared refresh timer across composable instances', async () => {
-    vi.useFakeTimers()
-    const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
-    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
-    global.fetch = vi.fn()
-
-    const first = createOidc()
-    const second = createOidc()
-
-    first.setToken(
-      {
-        accessToken: 'first-access-token',
-        idToken: '',
-        refreshToken: 'first-refresh-token',
-        expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      },
-      { sub: 'user-sub' }
-    )
-    second.setToken(
-      {
-        accessToken: 'second-access-token',
-        idToken: '',
-        refreshToken: 'second-refresh-token',
-        expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      },
-      { sub: 'user-sub' }
-    )
-
-    expect(setTimeoutSpy).toHaveBeenCalledTimes(2)
-    expect(clearTimeoutSpy).toHaveBeenCalledTimes(1)
-
-    // The shared timer triggers refreshToken(), which acquires the Web Lock
-    // and hashes the receipt key asynchronously before fetching.
-    await vi.advanceTimersByTimeAsync(3_400_000)
-    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
-  })
-
-  it('keeps the session on a definitive pre-provider rate limit', async () => {
-    global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 429 })))
-    const oidc = createOidc()
-    const authStore = useAuthStore()
-    oidc.setToken(expiredToken(), { sub: 'user-sub' })
-
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-
-    expect(authStore.token?.accessToken).toBe('old-access-token')
-    expect(authStore.user?.sub).toBe('user-sub')
-  })
-
-  it('logs out on invalid_grant refresh failure', async () => {
-    global.fetch = vi.fn((input: RequestInfo | URL) => {
-      if (String(input) === '/api/v1/auth/oidc/token') {
-        return Promise.resolve(new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }))
+  it('installs a memory-only session from a successful code exchange', async () => {
+    const idToken = jwt({ sub: 'user-1', email: 'u@example.org' })
+    sessionStorage.setItem('oidc_code_verifier', 'verifier')
+    sessionStorage.setItem('oidc_state', 'state')
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/auth/oidc/discovery') {
+        return Promise.resolve(discoveryResponse())
       }
-      return Promise.resolve(new Response(JSON.stringify({ client_id: 'client' }), { status: 200 }))
-    })
+      return Promise.resolve(new Response(JSON.stringify({
+        access_token: 'access-from-code',
+        id_token: idToken,
+        refresh_session: true,
+        expires_in: 1800,
+      }), { status: 200 }))
+    }))
     const oidc = createOidc()
-    const authStore = useAuthStore()
-    oidc.setToken(expiredToken(), { sub: 'user-sub' })
 
-    await expect(oidc.refreshToken()).resolves.toBe(false)
+    await oidc.exchangeCodeForToken('code')
 
-    expect(authStore.token).toBeNull()
+    const auth = useAuthStore()
+    expect(auth.token).toEqual(expect.objectContaining({
+      accessToken: 'access-from-code',
+      refreshToken: REFRESH_SESSION_COORDINATION_ID,
+    }))
+    expect(auth.user).toEqual(expect.objectContaining({ sub: 'user-1', email: 'u@example.org' }))
+    expect(sessionStorage.getItem('oidc_code_verifier')).toBeNull()
+    expect(sessionStorage.getItem('oidc_state')).toBeNull()
+    expect(localStorage.length).toBe(0)
   })
+})
 
-  it('logs out on nested invalid_grant refresh failure from proxy', async () => {
-    global.fetch = vi.fn((input: RequestInfo | URL) => {
-      if (String(input) === '/api/v1/auth/oidc/token') {
-        return Promise.resolve(new Response(JSON.stringify({ detail: { error: 'invalid_grant' } }), { status: 400 }))
-      }
-      return Promise.resolve(new Response(JSON.stringify({ client_id: 'client' }), { status: 200 }))
-    })
+describe('refresh coordination', () => {
+  it('shares one in-flight refresh across callers in the same tab', async () => {
+    let resolveRefresh!: (response: Response) => void
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+      resolveRefresh = resolve
+    }))
+    vi.stubGlobal('fetch', fetchMock)
     const oidc = createOidc()
-    const authStore = useAuthStore()
-    oidc.setToken(expiredToken(), { sub: 'user-sub' })
-
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-
-    expect(authStore.token).toBeNull()
-  })
-
-  it('fails closed after an ambiguous refresh timeout without replaying the token', async () => {
-    vi.useFakeTimers()
-    // crypto.subtle.digest (receipt key) runs as a real async step outside the
-    // virtual clock; wait for the fetch to start so the abort timer is
-    // guaranteed to be registered before virtual time advances.
-    let signalFetchStarted!: () => void
-    const fetchStarted = new Promise<void>((resolve) => { signalFetchStarted = resolve })
-    global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === '/api/v1/auth/oidc/token') {
-        signalFetchStarted()
-        return new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
-        })
-      }
-      return Promise.resolve(new Response('', { status: 200 }))
-    })
-    const oidc = createOidc()
-    oidc.setToken(expiredToken(), { sub: 'user-sub' })
+    oidc.setToken(activeToken(), { sub: 'user-1' })
 
     const first = oidc.refreshToken()
-    await fetchStarted
-    // The abort timer fires at the 35s deadline; advancing beyond it lets the
-    // rejection propagate through the async refresh pipeline.
-    await vi.advanceTimersByTimeAsync(36_000)
-    await expect(first).resolves.toBe(false)
+    const second = oidc.refreshToken()
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    resolveRefresh(refreshResponse())
 
-    expect(localStorage.getItem(await receiptKey('refresh-token'))).toBe('')
-    expect(useAuthStore().token).toBeNull()
-    expect(fetch).toHaveBeenCalledTimes(1)
-  }, 20_000)
-
-  it('adopts a cross-tab rotated token and coalesces while another tab refreshes', async () => {
-    global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 500 })))
-
-    const oidc = createOidc()
-    const authStore = useAuthStore()
-    oidc.setToken(expiredToken('shared-refresh-token'), { sub: 'user-sub' })
-    const channel = MockBroadcastChannel.instances[0]
-
-    channel.onmessage?.({ data: { type: 'refresh-started', refreshToken: 'shared-refresh-token' } } as MessageEvent)
-    const coalesced = oidc.refreshToken()
-    expect(fetch).not.toHaveBeenCalled()
-
-    const rotated = {
-      accessToken: 'rotated-access-token',
-      idToken: '',
-      refreshToken: 'rotated-refresh-token',
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-    }
-    channel.onmessage?.({
-      data: {
-        type: 'refresh-complete',
-        ok: true,
-        refreshToken: 'shared-refresh-token',
-        token: rotated,
-        user: { sub: 'user-sub' },
-      },
-    } as MessageEvent)
-
-    await expect(coalesced).resolves.toBe(true)
-    expect(authStore.token?.accessToken).toBe('rotated-access-token')
-    expect(postedBroadcastMessages).toEqual([])
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true])
+    expect(useAuthStore().token?.accessToken).toBe('next-access')
   })
 
-  it('rejects a stale same-token refresh broadcast that predates the newest completion', async () => {
-    global.fetch = vi.fn(() => Promise.resolve(new Response('', { status: 500 })))
-    const oidc = createOidc()
-    const authStore = useAuthStore()
-    oidc.setToken(expiredToken('stable-refresh-token'), { sub: 'user-sub' })
-    const channel = MockBroadcastChannel.instances[0]
-    const newest = {
-      accessToken: 'newest-access-token',
-      idToken: '',
-      refreshToken: 'stable-refresh-token',
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-    }
-    channel.onmessage?.({
-      data: {
-        type: 'refresh-complete',
-        ok: true,
-        refreshToken: 'stable-refresh-token',
-        token: newest,
-        user: { sub: 'user-sub' },
-        completedAt: Date.now(),
-      },
-    } as MessageEvent)
-    expect(authStore.token?.accessToken).toBe('newest-access-token')
-
-    const stale = {
-      accessToken: 'stale-access-token',
-      idToken: '',
-      refreshToken: 'stable-refresh-token',
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-    }
-    channel.onmessage?.({
-      data: {
-        type: 'refresh-complete',
-        ok: true,
-        refreshToken: 'stable-refresh-token',
-        token: stale,
-        user: { sub: 'user-sub' },
-        completedAt: Date.now() - 5_000,
-      },
-    } as MessageEvent)
-
-    expect(authStore.token?.accessToken).toBe('newest-access-token')
-  })
-
-  it('does not send a rotating refresh token without Web Locks', async () => {
-    stubNoWebLocks()
-    global.fetch = vi.fn()
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('unsafe-fallback-token'), { sub: 'user-sub' })
-
-    const result = await oidc.refreshToken()
-
-    expect(result).toBe(false)
-    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
-    expect(useAuthStore().token).toBeNull()
-  })
-
-  it('adopts a completed rotation under the Web Lock before fetching', async () => {
-    const old = expiredToken('already-rotated-refresh')
-    const rotated = { ...old, accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-    global.fetch = vi.fn()
-    const oidc = createOidc()
-    oidc.setToken(old, { sub: 'user-sub' })
-    localStorage.setItem(await receiptKey('already-rotated-refresh'), JSON.stringify({
-      token: rotated, user: { sub: 'user-sub' }, recordedAt: Date.now(),
-    }))
-
-    await expect(oidc.refreshToken()).resolves.toBe(true)
-    expect(global.fetch).not.toHaveBeenCalled()
-    expect(useAuthStore().token?.refreshToken).toBe('new-refresh')
-    localStorage.removeItem(await receiptKey('already-rotated-refresh'))
-  })
-
-  it('fails closed and clears the local session on a stranded pending receipt', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('stranded-token'), { sub: 'user-sub' })
-    localStorage.setItem(await receiptKey('stranded-token'), '')
-    global.fetch = vi.fn()
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
-    expect(useAuthStore().token).toBeNull()
-  })
-
-  it('follows multiple rotation receipts before reporting success', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('first-token'), { sub: 'user-sub' })
-    const middle = { ...expiredToken('second-token'), accessToken: 'expired-middle' }
-    const latest = { ...middle, refreshToken: 'third-token', accessToken: 'latest-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem(await receiptKey('first-token'), JSON.stringify({ token: middle, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
-    localStorage.setItem(await receiptKey('second-token'), JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
-    global.fetch = vi.fn()
-    await expect(oidc.refreshToken()).resolves.toBe(true)
-    expect(useAuthStore().token?.refreshToken).toBe('third-token')
-    expect(global.fetch).not.toHaveBeenCalled()
-  })
-
-  it('refreshes the latest expired successor synchronously without replaying predecessors', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('old-chain-token'), { sub: 'user-sub' })
-    const middle = { ...expiredToken('middle-chain-token'), accessToken: 'expired-middle' }
-    const latest = { ...expiredToken('latest-chain-token'), accessToken: 'expired-latest' }
-    localStorage.setItem(await receiptKey('old-chain-token'), JSON.stringify({ token: middle, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
-    localStorage.setItem(await receiptKey('middle-chain-token'), JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
-    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ access_token: 'recovered-access', refresh_token: 'recovered-refresh', expires_in: 3600 }), { status: 200 }))
-    await expect(oidc.refreshToken()).resolves.toBe(true)
-    expect(useAuthStore().token?.accessToken).toBe('recovered-access')
-    expect(global.fetch).toHaveBeenCalledTimes(1)
-    expect(JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body).refresh_token).toBe('latest-chain-token')
-  })
-
-  it('retains replay tombstones across logout and blocks a resumed stale tab', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('active-token'), { sub: 'user-sub' })
-    localStorage.setItem(await receiptKey('stale-token'), JSON.stringify({
-      token: { ...expiredToken('active-token'), accessToken: 'rotated-access' },
-      user: { sub: 'user-sub' }, recordedAt: Date.now(),
-    }))
-    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      authorization_endpoint: 'https://idp.example/auth', token_endpoint: 'https://idp.example/token', client_id: 'test-client',
-    }), { status: 200 }))
-    await oidc.logout()
-    expect(localStorage.getItem(await receiptKey('stale-token'))).toBe('consumed')
-    oidc.setToken(expiredToken('stale-token'), { sub: 'user-sub' })
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(useAuthStore().token).toBeNull()
-    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
-  })
-
-  it('recovers a missed cross-tab completion from the persisted receipt', async () => {
-    vi.useFakeTimers()
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('missed-token'), { sub: 'user-sub' })
-    vi.stubGlobal('navigator', {
-      ...navigator,
-      locks: { request: async (_name: string, _opts: unknown, callback: (lock: Lock | null) => Promise<boolean>) => callback(null) },
-    })
-    const pending = oidc.refreshToken()
-    await vi.advanceTimersByTimeAsync(1)
-    const latest = { ...expiredToken('next-token'), accessToken: 'next-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem(await receiptKey('missed-token'), JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
-    await vi.advanceTimersByTimeAsync(40_000)
-    await expect(pending).resolves.toBe(true)
-    expect(useAuthStore().token?.refreshToken).toBe('next-token')
-  })
-
-  it('preserves a pending marker after a transport failure to prevent token replay', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('ambiguous-token'), { sub: 'user-sub' })
-    global.fetch = vi.fn().mockRejectedValueOnce(new Error('connection lost'))
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(localStorage.getItem(await receiptKey('ambiguous-token'))).toBe('')
-    expect(useAuthStore().token).toBeNull()
-    expect(global.fetch).toHaveBeenCalledTimes(1)
-  })
-
-  it('adopts a same-refresh-token receipt from a non-rotating provider', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('stable-refresh'), { sub: 'user-sub' })
-    const latest = { ...expiredToken('stable-refresh'), accessToken: 'new-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem(await receiptKey('stable-refresh'), JSON.stringify({ token: latest, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
-    global.fetch = vi.fn()
-    await expect(oidc.refreshToken()).resolves.toBe(true)
-    expect(useAuthStore().token?.accessToken).toBe('new-access')
-    expect(global.fetch).not.toHaveBeenCalled()
-  })
-
-  it('clears an expired session when Web Locks are unavailable', async () => {
-    stubNoWebLocks()
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('unsupported-browser'), { sub: 'user-sub' })
-    global.fetch = vi.fn().mockResolvedValue(new Response('', { status: 200 }))
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(useAuthStore().token).toBeNull()
-    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
-  })
-
-  it('fails closed for a compacted receipt rather than replaying a consumed token', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('old-consumed-token'), { sub: 'user-sub' })
-    localStorage.setItem(await receiptKey('old-consumed-token'), 'consumed')
-    global.fetch = vi.fn()
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(useAuthStore().token).toBeNull()
-    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
-  })
-
-  it('refreshes again after consuming a same-token receipt', async () => {
-    const oidc = createOidc()
-    const current = { ...expiredToken('stable-token'), accessToken: 'previous-access' }
-    oidc.setToken(current, { sub: 'user-sub' })
-    localStorage.setItem(await receiptKey('stable-token'), JSON.stringify({ token: current, user: { sub: 'user-sub' }, recordedAt: Date.now() }))
-    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ access_token: 'fresh-access', expires_in: 3600 }), { status: 200 }))
-    await expect(oidc.refreshToken()).resolves.toBe(true)
-    expect(useAuthStore().token?.accessToken).toBe('fresh-access')
-    expect(global.fetch).toHaveBeenCalledTimes(1)
-  })
-
-  it('clears the session if the stored receipt is malformed', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('malformed-token'), { sub: 'user-sub' })
-    localStorage.setItem(await receiptKey('malformed-token'), '{broken')
-    global.fetch = vi.fn()
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(useAuthStore().token).toBeNull()
-    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
-  })
-
-  it.each(['not-a-timestamp', null])('fails closed for a receipt with invalid recordedAt %s', async (recordedAt) => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('invalid-recorded-at'), { sub: 'user-sub' })
-    localStorage.setItem(await receiptKey('invalid-recorded-at'), JSON.stringify({
-      token: expiredToken('next-token'),
-      user: { sub: 'user-sub' },
-      recordedAt,
-    }))
-    global.fetch = vi.fn()
-
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-
-    expect(useAuthStore().token).toBeNull()
-    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
-  })
-
-  it('scrubs credential receipts when an ambiguous refresh fails closed', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('scrub-token'), { sub: 'user-sub' })
-    const rotated = { ...expiredToken('scrub-token'), accessToken: 'scrub-access', expiresAt: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem(
-      await receiptKey('predecessor-token'),
-      JSON.stringify({ token: rotated, user: { sub: 'user-sub' }, recordedAt: Date.now() }),
-    )
-    global.fetch = vi.fn(() => Promise.reject(new Error('connection lost')))
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(useAuthStore().token).toBeNull()
-    // The raw refresh token persisted in the predecessor receipt must not
-    // outlive the forced logout; the pending marker is retained for replay
-    // protection.
-    expect(localStorage.getItem(await receiptKey('predecessor-token'))).toBe('consumed')
-    expect(localStorage.getItem(await receiptKey('scrub-token'))).toBe('')
-  })
-
-  it('retries a transient failure after removing its pending receipt', async () => {
-    const oidc = createOidc()
-    oidc.setToken(expiredToken('retry-receipt-token'), { sub: 'user-sub' })
-    global.fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 429 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        access_token: 'retry-access', refresh_token: 'retry-rotated', expires_in: 3600,
-      }), { status: 200 }))
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(localStorage.getItem(await receiptKey('retry-receipt-token'))).toBeNull()
-    await expect(oidc.refreshToken()).resolves.toBe(true)
-    expect(global.fetch).toHaveBeenCalledTimes(2)
-  })
-
-  it('serializes simultaneous cross-tab refreshes with web locks', async () => {
-    const activeLocks = new Set<string>()
-    const locksRequest = vi.fn(
-      async (
-        name: string,
-        _options: { ifAvailable: boolean },
-        callback: (lock: Lock | null) => Promise<boolean>,
-      ) => {
-        if (activeLocks.has(name)) return callback(null)
-        activeLocks.add(name)
-        try {
-          return await callback({ name, mode: 'exclusive' } as Lock)
-        } finally {
-          activeLocks.delete(name)
-        }
-      },
-    )
-    vi.stubGlobal('navigator', { ...navigator, locks: { request: locksRequest } })
-
-    let resolveFetch!: (response: Response) => void
-    global.fetch = vi.fn(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveFetch = resolve
-        }),
-    )
-
-    const first = createOidc()
-    const second = createOidc()
-    const authStore = useAuthStore()
-    first.setToken(expiredToken('locked-refresh-token'), { sub: 'user-sub' })
-
-    const firstRefresh = first.refreshToken()
-    const secondRefresh = second.refreshToken()
-
-    // Lock acquisition dispatches asynchronously; wait for the owner's
-    // request to start before resolving it.
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
-    expect(locksRequest).toHaveBeenCalledTimes(1)
-
-    resolveFetch(
-      new Response(
-        JSON.stringify({
-          access_token: 'locked-rotated-access-token',
-          id_token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLXN1YiJ9.signature',
-          refresh_token: 'locked-rotated-refresh-token',
-          expires_in: 3600,
-        }),
-        { status: 200 },
-      ),
-    )
-
-    await expect(Promise.all([firstRefresh, secondRefresh])).resolves.toEqual([true, true])
-    expect(authStore.token?.accessToken).toBe('locked-rotated-access-token')
-    expect(second.token.value?.accessToken).toBe('locked-rotated-access-token')
-  })
-
-  it('adopts a rotated token instead of logging out after invalid_grant', async () => {
-    global.fetch = vi.fn((input: RequestInfo | URL) => {
-      if (String(input) === '/api/v1/auth/oidc/token') {
-        return Promise.resolve(new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }))
+  it('does not let a stale refresh overwrite a logout', async () => {
+    let resolveRefresh!: (response: Response) => void
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/auth/oidc/revoke') {
+        return Promise.resolve(new Response('', { status: 204 }))
       }
-      return Promise.resolve(new Response(JSON.stringify({ client_id: 'client' }), { status: 200 }))
+      return new Promise<Response>((resolve) => { resolveRefresh = resolve })
     })
-
+    vi.stubGlobal('fetch', fetchMock)
     const oidc = createOidc()
-    const authStore = useAuthStore()
-    oidc.setToken(expiredToken('racing-refresh-token'), { sub: 'user-sub' })
-    const channel = (globalThis.BroadcastChannel as unknown as { instances: { onmessage: ((event: MessageEvent) => void) | null }[] })
-      .instances[0]
-    const rotated = {
-      accessToken: 'rotated-access-token',
-      idToken: '',
-      refreshToken: 'rotated-refresh-token',
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-    }
+    oidc.setToken(activeToken(), { sub: 'user-1' })
+
+    const pending = oidc.refreshToken()
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/auth/oidc/token',
+      expect.anything(),
+    ))
+    await oidc.logout()
+    resolveRefresh(refreshResponse('stale-access'))
+
+    await expect(pending).resolves.toBe(false)
+    expect(useAuthStore().token).toBeNull()
+  })
+
+  it('does not let a stale refresh overwrite a replacement identity', async () => {
+    let resolveRefresh!: (response: Response) => void
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
+      resolveRefresh = resolve
+    })))
+    const oidc = createOidc()
+    oidc.setToken(activeToken(), { sub: 'old-user' })
+
+    const pending = oidc.refreshToken()
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+    oidc.setToken(activeToken('replacement-access'), { sub: 'new-user' })
+    resolveRefresh(refreshResponse('stale-access'))
+
+    await expect(pending).resolves.toBe(false)
+    expect(useAuthStore().token?.accessToken).toBe('replacement-access')
+    expect(useAuthStore().user?.sub).toBe('new-user')
+  })
+
+  it('adopts a successful refresh broadcast for the same in-memory session', () => {
+    const oidc = createOidc()
+    oidc.setToken(activeToken(), { sub: 'user-1' })
+    const channel = MockBroadcastChannel.instances[0]
+
     channel.onmessage?.({
       data: {
         type: 'refresh-complete',
         ok: true,
-        refreshToken: 'racing-refresh-token',
-        token: rotated,
-        user: { sub: 'user-sub' },
+        sessionId: REFRESH_SESSION_COORDINATION_ID,
+        token: activeToken('broadcast-access'),
+        user: { sub: 'user-1' },
+        completedAt: 200,
       },
     } as MessageEvent)
-    oidc.setToken(expiredToken('racing-refresh-token'), { sub: 'user-sub' })
 
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-
-    expect(authStore.token?.accessToken).toBe('rotated-access-token')
+    expect(useAuthStore().token?.accessToken).toBe('broadcast-access')
   })
-  it('does not submit a refresh token when another tab owns the Web Lock', async () => {
-    let signalLockRequested!: () => void
-    const lockRequested = new Promise<void>((resolve) => { signalLockRequested = resolve })
-    vi.stubGlobal('navigator', {
-      ...navigator,
-      locks: { request: async (_name: string, _options: unknown, callback: (lock: Lock | null) => Promise<boolean>) => {
-        signalLockRequested()
-        return callback(null)
-      } },
-    })
+
+  it('ignores broadcasts for another session and older completions', () => {
     const oidc = createOidc()
-    oidc.setToken(expiredToken('busy-lock-token'), { sub: 'user-sub' })
-    global.fetch = vi.fn()
-    const pending = oidc.refreshToken()
-    await lockRequested
+    oidc.setToken(activeToken(), { sub: 'user-1' })
     const channel = MockBroadcastChannel.instances[0]
-    const rotated = {
-      accessToken: 'adopted-access',
-      idToken: '',
-      refreshToken: 'adopted-refresh',
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-    }
-    // The other tab finishes while this tab is waiting for the lock owner.
+
     channel.onmessage?.({
       data: {
         type: 'refresh-complete',
         ok: true,
-        refreshToken: 'busy-lock-token',
-        token: rotated,
-        user: { sub: 'user-sub' },
+        sessionId: REFRESH_SESSION_COORDINATION_ID,
+        token: activeToken('newest'),
+        completedAt: 200,
+      },
+    } as MessageEvent)
+    channel.onmessage?.({
+      data: {
+        type: 'refresh-complete',
+        ok: true,
+        sessionId: REFRESH_SESSION_COORDINATION_ID,
+        token: activeToken('older'),
+        completedAt: 100,
+      },
+    } as MessageEvent)
+    channel.onmessage?.({
+      data: {
+        type: 'refresh-complete',
+        ok: true,
+        sessionId: 'other-session',
+        token: activeToken('other'),
+        completedAt: 300,
+      },
+    } as MessageEvent)
+
+    expect(useAuthStore().token?.accessToken).toBe('newest')
+  })
+
+  it('waits for a peer tab after a refresh-started broadcast', async () => {
+    const oidc = createOidc()
+    oidc.setToken(activeToken(), { sub: 'user-1' })
+    const channel = MockBroadcastChannel.instances[0]
+
+    channel.onmessage?.({
+      data: {
+        type: 'refresh-started',
+        sessionId: REFRESH_SESSION_COORDINATION_ID,
+      },
+    } as MessageEvent)
+    const waiting = oidc.refreshToken()
+    channel.onmessage?.({
+      data: {
+        type: 'refresh-complete',
+        ok: true,
+        sessionId: REFRESH_SESSION_COORDINATION_ID,
+        token: activeToken('peer-access'),
+        user: { sub: 'user-1' },
         completedAt: Date.now(),
       },
     } as MessageEvent)
-    await expect(pending).resolves.toBe(true)
-    expect(useAuthStore().token?.accessToken).toBe('adopted-access')
-    expect(global.fetch).not.toHaveBeenCalled()
+
+    await expect(waiting).resolves.toBe(true)
+    expect(useAuthStore().token?.accessToken).toBe('peer-access')
   })
 
-  it('does not submit a token after the session changes before lock acquisition', async () => {
+  it('publishes only a non-secret session identifier during refresh', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(refreshResponse()))
     const oidc = createOidc()
-    oidc.setToken(expiredToken('stale-lock-token'), { sub: 'old-user' })
-    vi.stubGlobal('navigator', {
-      ...navigator,
-      locks: {
-        request: async (_name: string, _options: unknown, callback: (lock: Lock | null) => Promise<boolean>) => {
-          oidc.setToken({
-            accessToken: 'replacement-access',
-            idToken: '',
-            refreshToken: 'replacement-refresh',
-            expiresAt: Math.floor(Date.now() / 1000) + 3600,
-          }, { sub: 'new-user' })
-          return callback({ name: 'test-lock', mode: 'exclusive' } as Lock)
-        },
-      },
+    oidc.setToken(activeToken(), { sub: 'user-1' })
+
+    await expect(oidc.refreshToken()).resolves.toBe(true)
+
+    expect(postedBroadcastMessages).toContainEqual({
+      type: 'refresh-started',
+      sessionId: REFRESH_SESSION_COORDINATION_ID,
     })
-    global.fetch = vi.fn()
-    await expect(oidc.refreshToken()).resolves.toBe(false)
-    expect(global.fetch).not.toHaveBeenCalled()
-    expect(useAuthStore().token?.accessToken).toBe('replacement-access')
+    expect(JSON.stringify(postedBroadcastMessages)).not.toContain('provider-refresh')
+    expect(localStorage.length).toBe(0)
+    expect(sessionStorage.length).toBe(0)
   })
 
-  it('fails closed when persisting a successful refresh receipt fails', async () => {
+  it('fails closed after expiry when Web Locks are unavailable', async () => {
+    stubNoWebLocks()
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/auth/oidc/revoke') {
+        return Promise.resolve(new Response('', { status: 204 }))
+      }
+      return Promise.resolve(refreshResponse())
+    }))
     const oidc = createOidc()
-    oidc.setToken(expiredToken('storage-error-token'), { sub: 'user-sub' })
-    const key = await receiptKey('storage-error-token')
-    const backing = localStorage
-    const setItem = vi.fn((name: string, value: string) => {
-      if (name === key && value.startsWith('{')) throw new Error('storage quota exceeded')
-      backing.setItem(name, value)
-    })
-    vi.stubGlobal('localStorage', {
-      getItem: (name: string) => backing.getItem(name),
-      setItem,
-      removeItem: (name: string) => backing.removeItem(name),
-      key: (index: number) => backing.key(index),
-      clear: () => backing.clear(),
-      get length() { return backing.length },
-    })
-    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      access_token: 'rotated-access',
-      refresh_token: 'rotated-refresh',
-      expires_in: 3600,
-    }), { status: 200 }))
+    oidc.setToken({
+      ...activeToken(),
+      expiresAt: Math.floor(Date.now() / 1000) - 1,
+    }, { sub: 'user-1' })
+
     await expect(oidc.refreshToken()).resolves.toBe(false)
+    await vi.waitFor(() => expect(useAuthStore().token).toBeNull())
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.anything())
+  })
+})
+
+describe('session lifecycle', () => {
+  it('logs out locally and revokes the server-held refresh cookie through the backend', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const oidc = createOidc()
+    oidc.setToken(activeToken(), { sub: 'user-1' })
+
+    await oidc.logout()
+
     expect(useAuthStore().token).toBeNull()
-    expect(setItem).toHaveBeenCalled()
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/auth/oidc/revoke',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'X-CSRF-Token': 'oidc-csrf' },
+      }),
+    )
+    expect(routerPush).toHaveBeenCalledWith('/login')
+  })
+
+  it('restores a memory-only session during initialize when the HttpOnly cookie is valid', async () => {
+    const restoredIdToken = jwt({ sub: 'restored-user' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      access_token: 'restored-access',
+      id_token: restoredIdToken,
+      refresh_session: true,
+      expires_in: 3600,
+    }), { status: 200 })))
+    const oidc = createOidc()
+
+    oidc.initialize()
+
+    await vi.waitFor(() => expect(useAuthStore().token?.accessToken).toBe('restored-access'))
+    expect(useAuthStore().user?.sub).toBe('restored-user')
+    expect(useAuthStore().token?.refreshToken).toBe(REFRESH_SESSION_COORDINATION_ID)
+    expect(localStorage.length).toBe(0)
+  })
+
+  it('keeps computed auth state synchronized with the in-memory store', () => {
+    const oidc = createOidc()
+    expect(oidc.isAuthenticated.value).toBe(false)
+    expect(oidc.isTokenExpired.value).toBe(true)
+
+    oidc.setToken(activeToken(), { sub: 'user-1' })
+
+    expect(oidc.isAuthenticated.value).toBe(true)
+    expect(oidc.isTokenExpired.value).toBe(false)
+    expect(oidc.token.value?.accessToken).toBe('current-access')
+    expect(oidc.user.value?.sub).toBe('user-1')
   })
 })
