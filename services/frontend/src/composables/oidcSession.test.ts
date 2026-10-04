@@ -26,7 +26,7 @@ import {
 describe('refreshScheduler', () => {
   beforeEach(() => {
     __resetSchedulerState()
-    localStorage.clear()
+    sessionStorage.clear()
   })
 
   afterEach(() => {
@@ -165,14 +165,14 @@ describe('oidcSession', () => {
     expect(isLatestRefreshOperation(first)).toBe(false)
   })
 
-  it('ends the local session with replay protection and navigation', () => {
-    localStorage.setItem('oidc-refresh-result:x', JSON.stringify({ token: {}, user: null, recordedAt: 1 }))
+  it('ends the local session with tab-scoped replay protection and navigation', () => {
+    sessionStorage.setItem('oidc-refresh-result:x', JSON.stringify({ token: {}, user: null, recordedAt: 1 }))
     const clearAuth = vi.fn()
     const navigate = vi.fn()
     endLocalSession(clearAuth, navigate)
     expect(clearAuth).toHaveBeenCalled()
     expect(navigate).toHaveBeenCalled()
-    expect(localStorage.getItem('oidc-refresh-result:x')).toBe('consumed')
+    expect(sessionStorage.getItem('oidc-refresh-result:x')).toBe('consumed')
   })
 
   it('installs a token and schedules its refresh', () => {
