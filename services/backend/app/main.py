@@ -6,11 +6,9 @@ import traceback
 from contextlib import asynccontextmanager
 
 import httpx
-from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from alembic import command
 from app.adapters.api import deps
 from app.adapters.api.middleware.audit import AuditMiddleware
 from app.adapters.api.middleware.csrf import CSRFMiddleware
@@ -60,21 +58,16 @@ def configure_logging() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
-
     configure_logging()
 
-    # Production guard — fail fast on unsafe config
+    # Production guard — fail fast on unsafe config. Database migrations are a
+    # deployment concern and are completed by the one-shot migrate service
+    # before backend/worker processes start.
     try:
         production_guard(settings)
     except RuntimeError as e:
         print("🚨", str(e))
         sys.exit(1)
-
-    # Run migrations
-    cfg = Config("alembic.ini")
-    # env.py uses asyncio.run() internally — must run in a thread without an active loop
-    await asyncio.to_thread(command.upgrade, cfg, "head")
 
     # Start audit service
     await audit_service.start()
