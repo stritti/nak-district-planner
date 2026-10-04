@@ -26,6 +26,15 @@ _UUID_SEGMENT = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
 
 
 @dataclass(frozen=True)
+class SensitiveFallbackConfig:
+    """Local fallback limits used only while the shared Valkey limiter is unavailable."""
+
+    auth_token_limit: int = 30
+    public_registration_limit: int = 10
+    window_seconds: int = 60
+
+
+@dataclass(frozen=True)
 class SensitiveEndpointRule:
     """Declarative description of a route that needs a local fail-open fallback."""
 
@@ -41,12 +50,12 @@ SENSITIVE_ENDPOINT_RULES = (
     SensitiveEndpointRule(
         method="POST",
         pattern=re.compile(r"/api/v1/auth/oidc/token"),
-        limit_attribute="auth_fallback_limit",
+        limit_attribute="auth_token_limit",
     ),
     SensitiveEndpointRule(
         method="POST",
         pattern=re.compile(rf"/api/v1/districts/{_UUID_SEGMENT}/registrations"),
-        limit_attribute="registration_fallback_limit",
+        limit_attribute="public_registration_limit",
     ),
 )
 
@@ -62,6 +71,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         exempt_paths: set[str] | None = None,
         exempt_methods: set[str] | None = None,
         local_fallback_limiter: LocalFallbackRateLimiter | None = None,
+        sensitive_fallback_config: SensitiveFallbackConfig | None = None,
     ) -> None:
         super().__init__(app)
         self.rate_limiter = rate_limiter
@@ -69,6 +79,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.exempt_paths = exempt_paths or {"/api/health"}
         self.exempt_methods = exempt_methods or {"OPTIONS"}
         self.local_fallback_limiter = local_fallback_limiter or LocalFallbackRateLimiter()
+        self.sensitive_fallback_config = sensitive_fallback_config or SensitiveFallbackConfig()
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.url.path in self.exempt_paths or request.method in self.exempt_methods:
@@ -147,8 +158,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         for rule in SENSITIVE_ENDPOINT_RULES:
             if rule.matches(method, path):
                 return (
-                    int(getattr(self.config, rule.limit_attribute)),
-                    self.config.sensitive_fallback_window_seconds,
+                    int(getattr(self.sensitive_fallback_config, rule.limit_attribute)),
+                    self.sensitive_fallback_config.window_seconds,
                 )
         return None
 
