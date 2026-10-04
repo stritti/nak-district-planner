@@ -14,6 +14,7 @@ RBAC Notes:
 - /access: VIEWER - Requires VIEWER role in at least one district
 """
 
+import logging
 from typing import Literal
 
 import httpx
@@ -31,34 +32,32 @@ from app.adapters.auth.permissions import get_districts_where_user_has_role
 from app.config import settings
 from app.domain.models.role import Role
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 REFRESH_COOKIE_NAME = "oidc_refresh_token"
 REFRESH_COOKIE_PATH = "/api/v1/auth/oidc"
-REFRESH_COORDINATION_MARKER = "http-only-session"
 
 
 class OIDCTokenExchangeRequest(BaseModel):
-    """Parameters forwarded from frontend to OIDC provider token endpoint.
+    """Browser-safe parameters for an OIDC authorization-code or refresh grant.
 
-    The browser never receives the provider refresh token. For refresh grants,
-    the request body's `refresh_token` is only a non-secret coordination marker;
-    the actual provider credential is read from an HttpOnly cookie.
+    Provider refresh credentials never cross the JavaScript boundary. A refresh
+    grant therefore needs only its grant type; the credential is read from the
+    HttpOnly refresh-session cookie.
     """
 
     grant_type: Literal["authorization_code", "refresh_token"] = "authorization_code"
     code: str | None = None
     redirect_uri: str | None = None
     code_verifier: str | None = None
-    refresh_token: str | None = None
 
     @model_validator(mode="after")
     def validate_grant_parameters(self) -> "OIDCTokenExchangeRequest":
-        if self.grant_type == "authorization_code":
-            if not self.code or not self.redirect_uri or not self.code_verifier:
-                raise ValueError("Authorization-code grant requires code, redirect_uri, and code_verifier")
-        elif not self.refresh_token:
-            raise ValueError("Refresh-token grant requires refresh coordination marker")
+        if self.grant_type == "authorization_code" and (
+            not self.code or not self.redirect_uri or not self.code_verifier
+        ):
+            raise ValueError("Authorization-code grant requires code, redirect_uri, and code_verifier")
         return self
 
 
@@ -75,11 +74,12 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 
 
 def _clear_refresh_cookie(response: Response) -> None:
+    """Expire the server-held browser refresh session."""
     response.delete_cookie(key=REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH)
 
 
-def _sanitize_token_payload(payload: object, response: Response) -> dict:
-    """Remove provider refresh credentials before returning JSON to the SPA."""
+def _split_token_payload(payload: object) -> tuple[dict, str | None]:
+    """Return a browser-safe token payload and an optional provider refresh credential."""
     if not isinstance(payload, dict):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -88,16 +88,23 @@ def _sanitize_token_payload(payload: object, response: Response) -> dict:
 
     sanitized = dict(payload)
     refresh_token = sanitized.pop("refresh_token", None)
-    if refresh_token is not None:
-        if not isinstance(refresh_token, str) or not refresh_token:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="OIDC token endpoint returned an invalid refresh token",
-            )
-        _set_refresh_cookie(response, refresh_token)
-        sanitized["refresh_token"] = REFRESH_COORDINATION_MARKER
+    if refresh_token is not None and (not isinstance(refresh_token, str) or not refresh_token):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OIDC token endpoint returned an invalid refresh token",
+        )
+    return sanitized, refresh_token
 
-    return sanitized
+
+def _provider_json(response: httpx.Response) -> object:
+    """Parse provider JSON and map malformed success responses to a gateway error."""
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OIDC token endpoint returned invalid JSON",
+        ) from exc
 
 
 @router.get("/oidc/discovery")
@@ -147,6 +154,7 @@ async def exchange_oidc_token(
             detail="OIDC discovery missing token_endpoint",
         )
 
+    provider_refresh_token: str | None = None
     data: dict[str, str] = {
         "grant_type": body.grant_type,
         "client_id": adapter.client_id,
@@ -170,27 +178,31 @@ async def exchange_oidc_token(
     client = await adapter.get_httpx_client()
     try:
         provider_response = await client.post(token_endpoint, data=data, timeout=15)
-        if not provider_response.is_success:
-            detail: dict | str = {"error": "token_exchange_failed"}
-            try:
-                detail = provider_response.json()
-            except Exception:
-                detail = provider_response.text
-            raise HTTPException(
-                status_code=provider_response.status_code,
-                detail=detail,
-            )
-
-        payload = _sanitize_token_payload(provider_response.json(), response)
-        if body.grant_type == "refresh_token" and "refresh_token" not in payload:
-            # Providers may keep the current refresh credential instead of rotating it.
-            payload["refresh_token"] = REFRESH_COORDINATION_MARKER
-        return payload
     except httpx.HTTPError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Token exchange failed: {e}",
         ) from e
+
+    if not provider_response.is_success:
+        try:
+            provider_detail: dict | str = provider_response.json()
+        except ValueError:
+            provider_detail = provider_response.text
+        raise HTTPException(
+            status_code=provider_response.status_code,
+            detail=provider_detail or {"error": "token_exchange_failed"},
+        )
+
+    payload, rotated_refresh_token = _split_token_payload(_provider_json(provider_response))
+    if rotated_refresh_token:
+        _set_refresh_cookie(response, rotated_refresh_token)
+
+    # This is session metadata, not a credential or coordination token. During
+    # a refresh grant an existing cookie remains valid when the provider does
+    # not rotate it.
+    payload["refresh_session"] = bool(rotated_refresh_token or provider_refresh_token)
+    return payload
 
 
 @router.post("/oidc/revoke", status_code=status.HTTP_204_NO_CONTENT)
@@ -205,7 +217,7 @@ async def revoke_oidc_refresh_token(request: Request, response: Response) -> Res
             revocation_endpoint = discovery.get("revocation_endpoint")
             if revocation_endpoint:
                 client = await adapter.get_httpx_client()
-                await client.post(
+                provider_response = await client.post(
                     revocation_endpoint,
                     data={
                         "token": refresh_token,
@@ -215,13 +227,14 @@ async def revoke_oidc_refresh_token(request: Request, response: Response) -> Res
                     },
                     timeout=10,
                 )
-    except (httpx.HTTPError, OIDCDiscoveryError):
-        # Local logout must remain available when the provider is unavailable.
-        pass
+                provider_response.raise_for_status()
+    except (httpx.HTTPError, OIDCDiscoveryError) as exc:
+        # Local logout must remain available when the provider is unavailable,
+        # but failed provider revocation must stay operationally visible.
+        logger.warning("OIDC provider refresh-token revocation failed: %s", exc)
     finally:
         _clear_refresh_cookie(response)
 
-    response.status_code = status.HTTP_204_NO_CONTENT
     return response
 
 
