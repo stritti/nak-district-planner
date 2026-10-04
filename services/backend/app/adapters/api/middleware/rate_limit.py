@@ -1,6 +1,11 @@
 """Rate limiting middleware for FastAPI."""
 
+from __future__ import annotations
+
 import logging
+import re
+from dataclasses import dataclass
+from re import Pattern
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -16,6 +21,34 @@ from app.application.rate_limiter import (
 )
 
 logger = logging.getLogger(__name__)
+
+_UUID_SEGMENT = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+
+
+@dataclass(frozen=True)
+class SensitiveEndpointRule:
+    """Declarative description of a route that needs a local fail-open fallback."""
+
+    method: str
+    pattern: Pattern[str]
+    limit_attribute: str
+
+    def matches(self, method: str, path: str) -> bool:
+        return method.upper() == self.method and self.pattern.fullmatch(path) is not None
+
+
+SENSITIVE_ENDPOINT_RULES = (
+    SensitiveEndpointRule(
+        method="POST",
+        pattern=re.compile(r"/api/v1/auth/oidc/token"),
+        limit_attribute="auth_fallback_limit",
+    ),
+    SensitiveEndpointRule(
+        method="POST",
+        pattern=re.compile(rf"/api/v1/districts/{_UUID_SEGMENT}/registrations"),
+        limit_attribute="registration_fallback_limit",
+    ),
+)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -66,11 +99,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await self._rate_limited_response(request, identifier, burst_result, "burst")
 
         header_result = result
-        if (result.fail_open or burst_result.fail_open) and self._is_sensitive_path(
-            request.method,
-            request.url.path,
-        ):
-            fallback_limit, fallback_window = self._sensitive_fallback_config(request.url.path)
+        fallback_config = self._sensitive_fallback_config(request.method, request.url.path)
+        if (result.fail_open or burst_result.fail_open) and fallback_config is not None:
+            fallback_limit, fallback_window = fallback_config
             local_result = await self.local_fallback_limiter.check(
                 identifier=identifier,
                 endpoint=request.url.path,
@@ -111,24 +142,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             headers=await self.rate_limiter.get_rate_limit_headers(result),
         )
 
-    @staticmethod
-    def _is_sensitive_path(method: str, path: str) -> bool:
-        if method.upper() != "POST":
-            return False
-        if path == "/api/v1/auth/oidc/token":
-            return True
-        if not path.startswith("/api/v1/districts/") or not path.endswith("/registrations"):
-            return False
-        # Public self-registration has exactly one resource id between
-        # `districts` and `registrations`; admin actions append more segments.
-        parts = [part for part in path.split("/") if part]
-        return len(parts) == 5 and parts[:3] == ["api", "v1", "districts"]
-
-    @staticmethod
-    def _sensitive_fallback_config(path: str) -> tuple[int, int]:
-        if path == "/api/v1/auth/oidc/token":
-            return 30, 60
-        return 10, 60
+    def _sensitive_fallback_config(self, method: str, path: str) -> tuple[int, int] | None:
+        """Return the configured local fallback limit for a declared sensitive route."""
+        for rule in SENSITIVE_ENDPOINT_RULES:
+            if rule.matches(method, path):
+                return (
+                    int(getattr(self.config, rule.limit_attribute)),
+                    self.config.sensitive_fallback_window_seconds,
+                )
+        return None
 
     def _get_identifier(self, request: Request) -> str:
         """Use a verified principal when available, otherwise the client IP."""
