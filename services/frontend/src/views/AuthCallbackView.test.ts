@@ -11,10 +11,14 @@ const mocks = vi.hoisted(() => ({
   user: { value: null as null | Record<string, unknown> },
 }))
 
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: mocks.push }),
-  useRoute: () => ({ query: mocks.routeQuery }),
-}))
+vi.mock('vue-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-router')>()
+  return {
+    ...actual,
+    useRouter: () => ({ push: mocks.push }),
+    useRoute: () => ({ query: mocks.routeQuery }),
+  }
+})
 vi.mock('../composables/useOIDC', () => ({
   useOIDC: () => ({
     exchangeCodeForToken: mocks.exchangeCodeForToken,
@@ -35,6 +39,7 @@ function mountView() {
 
 describe('AuthCallbackView', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     Object.keys(mocks.routeQuery).forEach((key) => delete mocks.routeQuery[key])
     mocks.token.value = null
@@ -100,14 +105,12 @@ describe('AuthCallbackView', () => {
       mocks.user.value = { sub: 'user-1' }
     })
     const { wrapper, auth } = mountView()
-    await flushPromises()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(wrapper.text()).toContain('Erfolgreich angemeldet')
     expect(auth.refreshCurrentUserFlags).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(500)
-    await flushPromises()
     expect(mocks.push).toHaveBeenCalledWith('/events')
-    vi.useRealTimers()
   })
 
   it('shows token exchange exceptions and offers navigation back to login', async () => {
