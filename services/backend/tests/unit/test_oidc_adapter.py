@@ -246,7 +246,7 @@ class TestTokenClassificationAndFallback:
         oidc_adapter._validate_jwt_token.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_generic_introspection_failure_is_wrapped(
+    async def test_unexpected_introspection_failure_is_not_wrapped(
         self,
         oidc_adapter: OIDCAdapter,
     ) -> None:
@@ -255,7 +255,7 @@ class TestTokenClassificationAndFallback:
         )
         oidc_adapter._introspect_token = AsyncMock(side_effect=RuntimeError("boom"))
 
-        with pytest.raises(TokenValidationError, match="boom"):
+        with pytest.raises(RuntimeError, match="boom"):
             await oidc_adapter.validate_token("opaque-token")
 
 
@@ -380,10 +380,9 @@ class TestJWTValidationInternal:
             (jwt.DecodeError("bad"), "decode"),
             (jwt.ExpiredSignatureError("expired"), "expired"),
             (jwt.InvalidTokenError("invalid"), "Invalid token"),
-            (ValueError("unexpected"), "unexpected"),
         ],
     )
-    async def test_maps_decode_errors(
+    async def test_maps_token_decode_errors(
         self,
         oidc_adapter: OIDCAdapter,
         error: Exception,
@@ -401,6 +400,26 @@ class TestJWTValidationInternal:
             return_value={"alg": "RS256", "kid": "test-key-id"},
         ):
             with pytest.raises(TokenValidationError, match=message):
+                await oidc_adapter._validate_jwt_token(
+                    self.fake_token,
+                    audience="test-client",
+                    algorithms=["RS256"],
+                )
+
+    @pytest.mark.asyncio
+    async def test_unexpected_decode_failure_is_not_wrapped(self, oidc_adapter: OIDCAdapter) -> None:
+        oidc_adapter.fetch_jwks = AsyncMock(return_value=MOCK_JWKS)
+
+        def decode(token: str, key: object = None, **kwargs: object) -> dict:
+            if kwargs.get("options") == {"verify_signature": False}:
+                return {"iss": "https://oidc.example.com", "sub": "user"}
+            raise ValueError("unexpected")
+
+        with patch("app.adapters.auth.oidc.jwt.decode", side_effect=decode), patch(
+            "app.adapters.auth.oidc.jwt.get_unverified_header",
+            return_value={"alg": "RS256", "kid": "test-key-id"},
+        ):
+            with pytest.raises(ValueError, match="unexpected"):
                 await oidc_adapter._validate_jwt_token(
                     self.fake_token,
                     audience="test-client",
