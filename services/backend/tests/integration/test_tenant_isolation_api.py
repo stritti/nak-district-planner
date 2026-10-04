@@ -48,7 +48,7 @@ def _async_url(**overrides):
 
 
 def _token(sub: str) -> str:
-    """JWT-shaped token: middleware reads the unverified subject, OIDC is mocked."""
+    """JWT-shaped token whose subject is trusted only by the mocked OIDC validator."""
 
     def part(data: dict) -> str:
         return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
@@ -185,14 +185,12 @@ async def api(world: World) -> AsyncIterator[httpx.AsyncClient]:
             patch("app.adapters.db.session.AsyncSessionLocal", factory),
             patch.object(audit_module, "AsyncSessionLocal", factory),
         ):
-            # The global service outlives the per-test event loop; its queue
-            # must belong to the current loop or the writer spins on errors.
             audit_module.audit_service._queue = asyncio.Queue()
             await audit_module.audit_service.start()
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 yield client
-            await audit_module.audit_service.stop()  # flushes queued audit entries
+            await audit_module.audit_service.stop()
     finally:
         app.dependency_overrides.pop(get_db_session, None)
         deps.set_oidc_adapter(None)
@@ -231,7 +229,6 @@ async def test_planner_manages_leaders_in_own_district(api, owner, world) -> Non
         == 0
     )
 
-    # The request-level audit trail records every successful write.
     await audit_module.audit_service.stop()
     async with owner.connect() as conn:
         trail = (
@@ -282,11 +279,9 @@ async def test_foreign_rows_are_invisible_even_via_own_district_path(api, owner,
         f"/api/v1/events/{world.b.slot_id}", json={"title": "Gekapert"}, headers=headers
     )
 
-    # Foreign ids under the own district and foreign events are hidden by RLS
-    # (404, existence is not even confirmed); a write under the foreign
-    # district path is already refused by the tenant validation middleware.
-    assert (patched.status_code, event_patch.status_code) == (404, 404)
-    assert deleted.status_code == 403
+    # Foreign resources are hidden by RLS even when their identifiers are
+    # supplied under a route the caller can otherwise address.
+    assert (patched.status_code, deleted.status_code, event_patch.status_code) == (404, 404, 404)
     name = await _scalar(owner, "SELECT name FROM leaders WHERE id = :id", id=world.b.leader_id)
     title = await _scalar(
         owner, "SELECT title FROM planning_slots WHERE id = :id", id=world.b.slot_id
@@ -312,7 +307,7 @@ async def test_denied_read_is_audited_for_the_probed_district(api, owner, world)
     headers = await _headers(api, world.a.planner_sub)
     response = await api.get(f"/api/v1/districts/{world.b.district_id}/matrix", headers=headers)
     assert response.status_code == 403
-    await audit_module.audit_service.stop()  # flush before inspecting
+    await audit_module.audit_service.stop()
 
     async with owner.connect() as conn:
         rows = (
@@ -332,5 +327,5 @@ async def test_denied_read_is_audited_for_the_probed_district(api, owner, world)
     assert rows[0]["status"] == "FAILED"
     assert rows[0]["district_id"] == world.b.district_id
     assert rows[0]["extra_metadata"]["http_method"] == "GET"
-    # Rejected before authentication: the subject is recorded as an unverified claim.
-    assert rows[0]["extra_metadata"]["claimed_sub"] == world.a.planner_sub
+    # Middleware must not persist identity claims extracted from an unverified bearer payload.
+    assert "claimed_sub" not in rows[0]["extra_metadata"]
