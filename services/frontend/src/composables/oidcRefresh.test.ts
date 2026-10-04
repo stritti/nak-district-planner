@@ -39,6 +39,7 @@ function state(): CrossTabRefreshState {
 }
 
 beforeEach(() => {
+  sessionStorage.clear()
   localStorage.clear()
 })
 
@@ -72,39 +73,48 @@ describe('parseStoredReceipt', () => {
   })
 })
 
-describe('rotation receipts in localStorage', () => {
-  it('hashes the refresh token before using it in the storage key', async () => {
-    const key = await rotationReceiptKey('secret-refresh-value')
+describe('rotation receipts in sessionStorage', () => {
+  it('hashes the coordination marker before using it in the storage key', async () => {
+    const key = await rotationReceiptKey('http-only-session')
 
     expect(key).toMatch(/^oidc-refresh-result:[A-Za-z0-9_-]+$/)
-    expect(key).not.toContain('secret-refresh-value')
-    expect(await rotationReceiptKey('secret-refresh-value')).toBe(key)
+    expect(key).not.toContain('http-only-session')
+    expect(await rotationReceiptKey('http-only-session')).toBe(key)
   })
 
-  it('scrubs completed receipts into tombstones and retains replay-protection markers', () => {
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}pending`, '')
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}consumed`, RECEIPT_STATE_CONSUMED)
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}complete`, JSON.stringify(receipt()))
-    localStorage.setItem('unrelated', 'preserve')
+  it('never writes credential-bearing receipts to localStorage', () => {
+    sessionStorage.setItem(`${RECEIPT_KEY_PREFIX}complete`, JSON.stringify(receipt()))
 
     clearRotationReceipts()
 
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}pending`)).toBe('')
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}consumed`)).toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}complete`)).toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem('unrelated')).toBe('preserve')
+    expect(localStorage.length).toBe(0)
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}complete`)).toBe(RECEIPT_STATE_CONSUMED)
+  })
+
+  it('scrubs completed receipts into tombstones and retains replay-protection markers', () => {
+    sessionStorage.setItem(`${RECEIPT_KEY_PREFIX}pending`, '')
+    sessionStorage.setItem(`${RECEIPT_KEY_PREFIX}consumed`, RECEIPT_STATE_CONSUMED)
+    sessionStorage.setItem(`${RECEIPT_KEY_PREFIX}complete`, JSON.stringify(receipt()))
+    sessionStorage.setItem('unrelated', 'preserve')
+
+    clearRotationReceipts()
+
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}pending`)).toBe('')
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}consumed`)).toBe(RECEIPT_STATE_CONSUMED)
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}complete`)).toBe(RECEIPT_STATE_CONSUMED)
+    expect(sessionStorage.getItem('unrelated')).toBe('preserve')
   })
 
   it('expires invalid or stale receipts and bounds retained completed receipts', () => {
     vi.useFakeTimers()
     const now = new Date('2026-09-26T12:00:00Z')
     vi.setSystemTime(now)
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}pending`, '')
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}expired`, JSON.stringify(receipt({ recordedAt: now.getTime() - 25 * 60 * 60 * 1000 })))
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}future`, JSON.stringify(receipt({ recordedAt: now.getTime() + 1 })))
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}malformed`, '{broken')
+    sessionStorage.setItem(`${RECEIPT_KEY_PREFIX}pending`, '')
+    sessionStorage.setItem(`${RECEIPT_KEY_PREFIX}expired`, JSON.stringify(receipt({ recordedAt: now.getTime() - 25 * 60 * 60 * 1000 })))
+    sessionStorage.setItem(`${RECEIPT_KEY_PREFIX}future`, JSON.stringify(receipt({ recordedAt: now.getTime() + 1 })))
+    sessionStorage.setItem(`${RECEIPT_KEY_PREFIX}malformed`, '{broken')
     for (let index = 0; index <= MAX_PERSISTED_RECEIPTS; index += 1) {
-      localStorage.setItem(
+      sessionStorage.setItem(
         `${RECEIPT_KEY_PREFIX}receipt-${index}`,
         JSON.stringify(receipt({ recordedAt: now.getTime() - index })),
       )
@@ -112,12 +122,12 @@ describe('rotation receipts in localStorage', () => {
 
     prunePersistedReceipts()
 
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}pending`)).toBe('')
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}expired`)).toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}future`)).toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}malformed`)).toBe('{broken')
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}receipt-0`)).not.toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}receipt-${MAX_PERSISTED_RECEIPTS}`))
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}pending`)).toBe('')
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}expired`)).toBe(RECEIPT_STATE_CONSUMED)
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}future`)).toBe(RECEIPT_STATE_CONSUMED)
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}malformed`)).toBe('{broken')
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}receipt-0`)).not.toBe(RECEIPT_STATE_CONSUMED)
+    expect(sessionStorage.getItem(`${RECEIPT_KEY_PREFIX}receipt-${MAX_PERSISTED_RECEIPTS}`))
       .toBe(RECEIPT_STATE_CONSUMED)
   })
 })
@@ -192,7 +202,7 @@ describe('cross-tab wait state', () => {
     const key = await rotationReceiptKey('refresh')
     expect(ok).toBe(false)
     expect(fetchSpy).not.toHaveBeenCalled()
-    expect(localStorage.getItem(key)).toBeNull()
+    expect(sessionStorage.getItem(key)).toBeNull()
     expect(endLocalSession).not.toHaveBeenCalled()
   })
 
@@ -228,7 +238,7 @@ describe('cross-tab wait state', () => {
 
     expect(ok).toBe(false)
     expect(endLocalSession).toHaveBeenCalledOnce()
-    expect(localStorage.getItem(await rotationReceiptKey('refresh'))).toBe('')
+    expect(sessionStorage.getItem(await rotationReceiptKey('refresh'))).toBe('')
     expect(postRefreshMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'refresh-complete',
       ok: false,
