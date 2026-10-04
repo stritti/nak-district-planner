@@ -45,6 +45,7 @@ import {
   getAuthorizationUrl as buildAuthorizationUrl,
 } from './oidcAuthorization'
 import { restoreRefreshSession } from './oidcSessionRestore'
+import { getCurrentCSRFHeaders } from './useCSRF'
 
 export type { OIDCConfig, OIDCDiscovery, OIDCToken, OIDCUser } from './oidcTypes'
 
@@ -168,6 +169,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     try {
       await fetch('/api/v1/auth/oidc/revoke', {
         method: 'POST',
+        headers: getCurrentCSRFHeaders(),
         signal: AbortSignal.timeout(2_000),
       }).catch(() => {
         // ignore remote logout errors
