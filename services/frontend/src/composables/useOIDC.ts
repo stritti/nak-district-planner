@@ -44,6 +44,7 @@ import {
   exchangeCodeForToken as runCodeExchange,
   getAuthorizationUrl as buildAuthorizationUrl,
 } from './oidcAuthorization'
+import { restoreRefreshSession } from './oidcSessionRestore'
 
 export type { OIDCConfig, OIDCDiscovery, OIDCToken, OIDCUser } from './oidcTypes'
 
@@ -54,16 +55,18 @@ const envConfig: OIDCConfig = {
 
 // Module-level guards: the cross-tab protocol and the rotated-token memory
 // are shared by all composable instances by design — one browser profile
-// performs exactly one refresh per token.
+// performs exactly one refresh per server-held refresh session.
 let lastAdoptedBroadcastAt = 0
 const rotatedTokens = new Map<string, RotationReceipt>()
 const crossTabState: CrossTabRefreshState = { inFlight: null, waiter: null }
+let restoreInFlight: Promise<boolean> | null = null
 
 /** @internal — resets module-level state; used by tests */
 export function __resetOIDCModuleState(): void {
   crossTabState.inFlight = null
   if (crossTabState.waiter) clearTimeout(crossTabState.waiter.timeoutId)
   crossTabState.waiter = null
+  restoreInFlight = null
   rotatedTokens.clear()
   lastAdoptedBroadcastAt = 0
   __resetSchedulerState()
@@ -111,9 +114,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     onActivityRefresh: () => {
       const current = authStore.token
       if (!current || crossTabState.inFlight) return
-      // Refresh eagerly if user activity is detected while the token is
-      // within ACTIVITY_REFRESH_LEAD_SECONDS of expiry — this catches
-      // throttled or paused timers in backgrounded tabs.
       const secondsUntilExpiry = current.expiresAt - Date.now() / 1000
       if (secondsUntilExpiry < ACTIVITY_REFRESH_LEAD_SECONDS) void refreshToken()
     },
@@ -158,35 +158,20 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   }
 
   async function logout(): Promise<void> {
-    const current = authStore.token
     advanceSessionGeneration()
     clearRotationReceipts()
     clearLocalArtifacts()
     authStore.clearAuth()
-    // Local logout is immediate. Discovery/revocation are best effort and
-    // must never hold the shared refresh promise hostage.
 
+    // Local logout is immediate. The backend owns the provider refresh token,
+    // so revocation is a cookie-based best-effort call without a browser token.
     try {
-      await Promise.race([loadDiscovery(), new Promise<void>((resolve) => setTimeout(resolve, 2_000))]).catch(() => {
-        // best effort
+      await fetch('/api/v1/auth/oidc/revoke', {
+        method: 'POST',
+        signal: AbortSignal.timeout(2_000),
+      }).catch(() => {
+        // ignore remote logout errors
       })
-
-      const revocationEndpoint = discovery.value?.revocation_endpoint
-      if (current && revocationEndpoint) {
-        const body = new URLSearchParams({
-          client_id: clientId.value,
-          token: current.refreshToken || current.accessToken,
-        })
-
-        await fetch(revocationEndpoint, {
-          method: 'POST',
-          signal: AbortSignal.timeout(2_000),
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString(),
-        }).catch(() => {
-          // ignore remote logout errors
-        })
-      }
     } finally {
       try {
         await getRouter().push('/login')
@@ -219,10 +204,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
           crossTabState.inFlight = null
           return
         }
-        // BroadcastChannel does not totally order messages across senders.
-        // With a non-rotating refresh token every completion carries the same
-        // refreshToken, so a delayed older completion must not roll the
-        // session back to an expired or revoked bearer.
         const completedAt = typeof message.completedAt === 'number' ? message.completedAt : Date.now()
         if (completedAt < lastAdoptedBroadcastAt) return
         lastAdoptedBroadcastAt = completedAt
@@ -255,8 +236,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   async function refreshToken(): Promise<boolean> {
     if (crossTabState.inFlight) return crossTabState.inFlight
 
-    // An expired successor is adopted first, then refreshed in a new locked
-    // operation after the current operation has released its lock.
     const followUp: { expiredSuccessor?: { token: OIDCToken; generation: number } } = {}
     const operation: Promise<boolean> = (async () => {
       const current = authStore.token
@@ -275,13 +254,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         )
       }
 
-      // localStorage read/write is not atomic across tabs, so no lease or
-      // ownership check can safely serialize rotating refresh tokens.
       if (typeof navigator === 'undefined' || !navigator.locks) {
-        // Fail closed when Web Locks is unavailable rather than risk token
-        // reuse (and possible revocation of the entire token family).
-        // Do not retry automatically: this browser cannot acquire a safe lock.
-        // Keep a still-valid access token until expiry, then clear auth.
         if (current.expiresAt <= Date.now() / 1000 && isRefreshStillCurrent()) {
           void logout()
         } else if (isRefreshStillCurrent()) {
@@ -334,8 +307,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     } finally {
       if (isLatestRefreshOperation(operationId)) crossTabState.inFlight = null
     }
-    // The successor owns a different refresh token and therefore must acquire
-    // its own Web Lock. Abort the follow-up if login/logout replaced it.
     const successor = followUp.expiredSuccessor
     if (successor && getSessionGeneration() === successor.generation &&
         authStore.token?.refreshToken === successor.token.refreshToken &&
@@ -348,7 +319,19 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   function initialize(): void {
     setupActivityRefresh()
 
-    if (!authStore.token) return
+    if (!authStore.token) {
+      if (!restoreInFlight) {
+        restoreInFlight = restoreRefreshSession({
+          ensureDiscovery: loadDiscovery,
+          fetchUserInfo,
+          installSession: (nextToken, nextUser) => setToken(nextToken, nextUser),
+        }).finally(() => {
+          restoreInFlight = null
+        })
+      }
+      void restoreInFlight
+      return
+    }
 
     if (Date.now() / 1000 >= authStore.token.expiresAt) {
       void refreshToken()
