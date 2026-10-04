@@ -4,6 +4,7 @@ import {
   isValidTokenExchangeResponse,
   isValidTokenShape,
 } from './oidcToken'
+import { getCurrentCSRFHeaders } from './useCSRF'
 
 export const REFRESH_TIMEOUT_MS = 35_000
 export const CROSS_TAB_WAIT_TIMEOUT_MS = 40_000
@@ -206,7 +207,10 @@ export async function runRefreshOperation(options: {
       postRefreshMessage({ type: 'refresh-started', refreshToken: refreshTokenUsed })
       const response = await fetch('/api/v1/auth/oidc/token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCurrentCSRFHeaders(),
+        },
         signal: controller.signal,
         body: JSON.stringify({ grant_type: 'refresh_token' }),
       })
