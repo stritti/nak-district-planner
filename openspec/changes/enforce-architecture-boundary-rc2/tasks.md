@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add an AST-based regression test for `app.application -> app.adapters` dependencies.
 - [x] 1.2 Record the RC-2 legacy adapter-import files with explicit rationales.
-- [ ] 1.3 Verify the architecture test against the full backend unit suite.
+- [x] 1.3 Verify the architecture test against the full backend unit suite.
 
 ## 2. Release metadata
 
@@ -18,6 +18,6 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Backend tests pass with coverage >80%.
-- [ ] 4.2 Architecture regression tests pass for both allowed legacy debt and rejected new dependencies.
-- [ ] 4.3 MegaLinter/OpenSpec checks pass.
+- [x] 4.1 Backend tests pass with coverage >80%.
+- [x] 4.2 Architecture regression tests pass for both allowed legacy debt and rejected new dependencies.
+- [x] 4.3 MegaLinter/OpenSpec checks pass.
