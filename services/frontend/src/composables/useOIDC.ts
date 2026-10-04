@@ -5,11 +5,8 @@ import type { OIDCConfig, OIDCToken, OIDCUser } from './oidcTypes'
 import { isValidTokenShape } from './oidcToken'
 import {
   clearCrossTabWaiter as clearWaiter,
-  clearRotationReceipts,
   type CrossTabRefreshState,
   type RefreshChannelMessage,
-  type RotationReceipt,
-  pruneRotatedTokens,
   runRefreshOperation,
   TRANSIENT_RETRY_DELAY_MS,
   waitForCrossTabRefresh,
@@ -54,11 +51,9 @@ const envConfig: OIDCConfig = {
   scope: import.meta.env.VITE_OIDC_SCOPE || 'openid profile email',
 }
 
-// Module-level guards: the cross-tab protocol and the rotated-token memory
-// are shared by all composable instances by design — one browser profile
-// performs exactly one refresh per server-held refresh session.
+// Module-level refresh coordination is shared by all composable instances.
+// It contains no provider credential and is never persisted.
 let lastAdoptedBroadcastAt = 0
-const rotatedTokens = new Map<string, RotationReceipt>()
 const crossTabState: CrossTabRefreshState = { inFlight: null, waiter: null }
 let restoreInFlight: Promise<boolean> | null = null
 
@@ -68,7 +63,6 @@ export function __resetOIDCModuleState(): void {
   if (crossTabState.waiter) clearTimeout(crossTabState.waiter.timeoutId)
   crossTabState.waiter = null
   restoreInFlight = null
-  rotatedTokens.clear()
   lastAdoptedBroadcastAt = 0
   __resetSchedulerState()
   __resetDiscoveryState()
@@ -94,8 +88,8 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     return injectedRouter
   }
 
-  function scheduleRefreshFor(token: OIDCToken | null): void {
-    if (token) scheduleRefreshTimer(token.expiresAt)
+  function scheduleRefreshFor(currentToken: OIDCToken | null): void {
+    if (currentToken) scheduleRefreshTimer(currentToken.expiresAt)
   }
 
   bindSessionLifecycle({
@@ -127,7 +121,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     const response = await fetch(endpoint, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-
     if (!response.ok) return null
 
     const data: unknown = await response.json()
@@ -143,10 +136,10 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     }
   }
 
-  function adoptRotatedToken(token: OIDCToken, nextUser: OIDCUser | null): void {
+  function adoptRefreshedToken(nextToken: OIDCToken, nextUser: OIDCUser | null): void {
     clearTransientRetryTimer()
-    authStore.setToken(token, nextUser ?? authStore.user)
-    scheduleRefreshTimer(token.expiresAt)
+    authStore.setToken(nextToken, nextUser ?? authStore.user)
+    scheduleRefreshTimer(nextToken.expiresAt)
   }
 
   function navigateToLogin(): void {
@@ -155,30 +148,29 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
   function setToken(nextToken: OIDCToken | null, nextUser: OIDCUser | null = null): void {
     advanceSessionGeneration()
-    installSessionToken((t, u) => authStore.setToken(t, u), nextToken, nextUser)
+    installSessionToken((next, nextIdentity) => authStore.setToken(next, nextIdentity), nextToken, nextUser)
   }
 
   async function logout(): Promise<void> {
     advanceSessionGeneration()
-    clearRotationReceipts()
     clearLocalArtifacts()
     authStore.clearAuth()
 
-    // Local logout is immediate. The backend owns the provider refresh token,
-    // so revocation is a cookie-based best-effort call without a browser token.
+    // Local logout is immediate. Provider revocation is a cookie-backed,
+    // CSRF-protected best-effort backend operation.
     try {
       await fetch('/api/v1/auth/oidc/revoke', {
         method: 'POST',
         headers: getCurrentCSRFHeaders(),
         signal: AbortSignal.timeout(2_000),
       }).catch(() => {
-        // ignore remote logout errors
+        // Remote logout failure must not resurrect local authentication.
       })
     } finally {
       try {
         await getRouter().push('/login')
       } catch {
-        // router can be unavailable during startup/tests
+        // Router can be unavailable during startup/tests.
       }
     }
   }
@@ -191,12 +183,12 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
     channel.onmessage = (event: MessageEvent<RefreshChannelMessage>) => {
       const message = event.data
-      const currentRefreshToken = authStore.token?.refreshToken
-      if (!currentRefreshToken || message.refreshToken !== currentRefreshToken) return
+      const currentSessionId = authStore.token?.refreshToken
+      if (!currentSessionId || message.sessionId !== currentSessionId) return
 
       if (message.type === 'refresh-started') {
         if (crossTabState.inFlight) return
-        crossTabState.inFlight = waitForCrossTabRefresh(crossTabState, message.refreshToken)
+        crossTabState.inFlight = waitForCrossTabRefresh(crossTabState, message.sessionId)
         return
       }
 
@@ -209,13 +201,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         const completedAt = typeof message.completedAt === 'number' ? message.completedAt : Date.now()
         if (completedAt < lastAdoptedBroadcastAt) return
         lastAdoptedBroadcastAt = completedAt
-        rotatedTokens.set(message.refreshToken, {
-          token: message.token,
-          user: message.user ?? authStore.user,
-          recordedAt: completedAt,
-        })
-        pruneRotatedTokens(rotatedTokens)
-        adoptRotatedToken(message.token, message.user ?? authStore.user)
+        adoptRefreshedToken(message.token, message.user ?? authStore.user)
         clearWaiter(crossTabState, true)
       } else {
         clearWaiter(crossTabState, false)
@@ -238,24 +224,27 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
   async function refreshToken(): Promise<boolean> {
     if (crossTabState.inFlight) return crossTabState.inFlight
 
-    const followUp: { expiredSuccessor?: { token: OIDCToken; generation: number } } = {}
     const operation: Promise<boolean> = (async () => {
       const current = authStore.token
       if (!current?.refreshToken) {
         await logout()
         return false
       }
+
       const refreshGeneration = getSessionGeneration()
-      const refreshTokenUsed = current.refreshToken
+      const sessionId = current.refreshToken
       const isRefreshStillCurrent = (): boolean => {
         const latest = authStore.token
         return (
           refreshGeneration === getSessionGeneration() &&
           Boolean(latest) &&
-          latest?.refreshToken === refreshTokenUsed
+          latest?.refreshToken === sessionId
         )
       }
 
+      // Without Web Locks two tabs could send the same rotating provider
+      // credential concurrently before the browser receives the updated
+      // HttpOnly cookie. Keep a valid access token until expiry, then log out.
       if (typeof navigator === 'undefined' || !navigator.locks) {
         if (current.expiresAt <= Date.now() / 1000 && isRefreshStillCurrent()) {
           void logout()
@@ -269,25 +258,17 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
       return runRefreshOperation({
         currentToken: current,
-        refreshTokenUsed,
-        authStoreToken: () => authStore.token,
+        sessionId,
         authStoreUser: () => authStore.user,
         fetchUserInfo,
         isRefreshStillCurrent,
         logout,
-        adoptRotatedToken: (token, nextUser) => {
-          authStore.setToken(token, nextUser ?? authStore.user)
-          clearTransientRetryTimer()
-          scheduleRefreshTimer(token.expiresAt)
-        },
-        onExpiredSuccessor: (token) => {
-          followUp.expiredSuccessor = { token, generation: getSessionGeneration() }
-        },
+        adoptRefreshedToken,
         scheduleTransientRefreshRetry: () => {
-          const currentToken = authStore.token
-          if (!currentToken) return
-          if (Date.now() / 1000 < currentToken.expiresAt) {
-            scheduleRefreshTimer(currentToken.expiresAt)
+          const latest = authStore.token
+          if (!latest) return
+          if (Date.now() / 1000 < latest.expiresAt) {
+            scheduleRefreshTimer(latest.expiresAt)
             return
           }
           scheduleTransientRetry(TRANSIENT_RETRY_DELAY_MS)
@@ -295,7 +276,6 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
         endLocalSession: () => {
           endLocalSession(() => authStore.clearAuth(), navigateToLogin)
         },
-        rotatedTokens,
         crossTabState,
         postRefreshMessage,
       })
@@ -303,19 +283,11 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
     const operationId = nextRefreshOperationId()
     crossTabState.inFlight = operation
-    let result: boolean
     try {
-      result = await operation
+      return await operation
     } finally {
       if (isLatestRefreshOperation(operationId)) crossTabState.inFlight = null
     }
-    const successor = followUp.expiredSuccessor
-    if (successor && getSessionGeneration() === successor.generation &&
-        authStore.token?.refreshToken === successor.token.refreshToken &&
-        authStore.token?.accessToken === successor.token.accessToken) {
-      return refreshToken()
-    }
-    return result
   }
 
   function initialize(): void {
