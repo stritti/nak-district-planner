@@ -52,7 +52,7 @@ class OIDCAdapter:
         issuer: str | None = None,
         audience: str | None = None,
         httpx_client: httpx.AsyncClient | None = None,
-        jwks_cache_ttl: int = 3600,  # 1 hour
+        jwks_cache_ttl: int = 3600,
         clock_skew_seconds: int = 120,
     ):
         """Initialize the OIDC adapter.
@@ -96,18 +96,10 @@ class OIDCAdapter:
             self._httpx_client = None
 
     async def discover(self) -> dict[str, Any]:
-        """Fetch OIDC discovery configuration from /.well-known/openid-configuration.
-
-        Returns:
-            Discovery configuration dict with endpoints and metadata
-
-        Raises:
-            OIDCDiscoveryError: If discovery fails
-        """
-        # Return cached discovery if fresh
+        """Fetch OIDC discovery configuration from /.well-known/openid-configuration."""
         if self._discovery_cache is not None and self._discovery_cache_time is not None:
             elapsed = (datetime.now(UTC) - self._discovery_cache_time).total_seconds()
-            if elapsed < 3600:  # Cache for 1 hour
+            if elapsed < 3600:
                 return self._discovery_cache
 
         try:
@@ -118,11 +110,10 @@ class OIDCAdapter:
             self._discovery_cache = response.json()
             self._discovery_cache_time = datetime.now(UTC)
 
-            # Auto-discover issuer if not provided
             if self.issuer is None and "issuer" in self._discovery_cache:
                 self.issuer = self._discovery_cache["issuer"]
 
-            logger.info(f"OIDC discovery successful: issuer={self.issuer}")
+            logger.info("OIDC discovery successful: issuer=%s", self.issuer)
             return self._discovery_cache
 
         except httpx.HTTPError as e:
@@ -135,15 +126,7 @@ class OIDCAdapter:
             raise OIDCDiscoveryError(msg) from e
 
     async def fetch_jwks(self, force_refresh: bool = False) -> dict[str, Any]:
-        """Fetch and cache JWKS (JSON Web Key Set) from the OIDC provider.
-
-        Returns:
-            JWKS dict with 'keys' array
-
-        Raises:
-            JWKSFetchError: If fetch fails and no cached keys available
-        """
-        # Return cached JWKS if fresh and not forcing refresh
+        """Fetch and cache JWKS (JSON Web Key Set) from the OIDC provider."""
         if not force_refresh and self._jwks_cache is not None and self._jwks_cache_time is not None:
             elapsed = (datetime.now(UTC) - self._jwks_cache_time).total_seconds()
             if elapsed < self.jwks_cache_ttl:
@@ -164,7 +147,10 @@ class OIDCAdapter:
             self._jwks_cache_time = datetime.now(UTC)
             self._jwks_fetch_error = None
 
-            logger.info(f"JWKS fetched successfully, {len(self._jwks_cache.get('keys', []))} keys")
+            logger.info(
+                "JWKS fetched successfully, %s keys",
+                len(self._jwks_cache.get("keys", [])),
+            )
             return self._jwks_cache
 
         except httpx.HTTPError as e:
@@ -172,9 +158,8 @@ class OIDCAdapter:
             logger.error(msg)
             self._jwks_fetch_error = e
 
-            # Fallback: return cached JWKS if available, even if stale
             if self._jwks_cache is not None:
-                logger.warning(f"Using stale JWKS cache (last updated: {self._jwks_cache_time})")
+                logger.warning("Using stale JWKS cache (last updated: %s)", self._jwks_cache_time)
                 return self._jwks_cache
 
             raise JWKSFetchError(msg) from e
@@ -183,7 +168,6 @@ class OIDCAdapter:
             logger.error(msg)
             self._jwks_fetch_error = e
 
-            # Fallback: return cached JWKS if available
             if self._jwks_cache is not None:
                 logger.warning("Using stale JWKS cache due to parse error")
                 return self._jwks_cache
@@ -196,72 +180,85 @@ class OIDCAdapter:
         audience: str | None = None,
         algorithms: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Validate JWT token: signature, issuer, expiration, audience.
+        """Validate an access token without weakening JWT validation.
 
-        Args:
-            token: JWT token to validate
-            audience: Expected audience claim (typically client_id)
-            algorithms: Allowed signing algorithms (default: ['RS256', 'HS256'])
-
-        Returns:
-            Decoded token claims dict
-
-        Raises:
-            TokenValidationError: If token is invalid or expired
+        JWT-shaped tokens are always validated as JWTs and fail closed on every
+        validation error. Only non-JWT (opaque) tokens use the provider's
+        UserInfo/introspection endpoints.
         """
-        if algorithms is None:
-            algorithms = ["RS256", "HS256"]
+        allowed_algorithms = algorithms or ["RS256"]
+        expected_audience = audience or self.audience or self.client_id
 
-        jwt_validation_error: TokenValidationError | None = None
-
-        try:
+        if self._is_jwt_shaped(token):
             return await self._validate_jwt_token(
                 token=token,
-                audience=audience,
-                algorithms=algorithms,
+                audience=expected_audience,
+                algorithms=allowed_algorithms,
             )
-        except TokenValidationError as e:
-            jwt_validation_error = e
-            logger.info(f"JWT token validation failed, trying userinfo fallback: {e}")
 
-        # Standards-compatible fallback for opaque access tokens:
-        # validate token by calling provider's userinfo endpoint.
+        userinfo_error: TokenValidationError | None = None
         try:
             userinfo_claims = await self._fetch_userinfo_claims(token)
+            self._validate_opaque_claims(userinfo_claims, expected_audience)
             logger.info(
-                "Token validated through userinfo endpoint for user: %s",
+                "Opaque token validated through userinfo endpoint for user: %s",
                 userinfo_claims.get("sub"),
             )
             return userinfo_claims
         except TokenValidationError as e:
-            logger.info(f"userinfo validation failed, trying introspection fallback: {e}")
-            userinfo_validation_error = e
+            userinfo_error = e
+            logger.info("userinfo validation failed, trying introspection fallback: %s", e)
 
-        # RFC 7662 fallback for opaque tokens:
-        # validate token by using provider introspection endpoint.
         try:
             introspection_claims = await self._introspect_token(token)
+            self._validate_opaque_claims(introspection_claims, expected_audience)
             logger.info(
-                "Token validated through introspection endpoint for user: %s",
+                "Opaque token validated through introspection endpoint for user: %s",
                 introspection_claims.get("sub"),
             )
             return introspection_claims
         except TokenValidationError as e:
-            if jwt_validation_error:
-                raise TokenValidationError(
-                    "JWT validation failed "
-                    f"({jwt_validation_error}); userinfo validation failed ({userinfo_validation_error}); "
-                    f"introspection validation failed ({e})"
-                ) from e
-            raise
+            raise TokenValidationError(
+                f"Opaque token validation failed: userinfo ({userinfo_error}); "
+                f"introspection ({e})"
+            ) from e
         except Exception as e:
-            if jwt_validation_error:
-                raise TokenValidationError(
-                    "JWT validation failed "
-                    f"({jwt_validation_error}); userinfo validation failed ({userinfo_validation_error}); "
-                    f"introspection validation failed ({e})"
-                ) from e
-            raise TokenValidationError(f"Token validation failed: {e}") from e
+            raise TokenValidationError(f"Opaque token validation failed: {e}") from e
+
+    @staticmethod
+    def _is_jwt_shaped(token: str) -> bool:
+        """Return whether a token has the compact JWS three-segment shape.
+
+        Treating malformed three-segment values as JWT-like is intentional:
+        such a token must fail closed rather than be reinterpreted as opaque.
+        """
+        return token.count(".") == 2
+
+    def _validate_opaque_claims(
+        self,
+        token_claims: dict[str, Any],
+        expected_audience: str,
+    ) -> None:
+        """Validate security-relevant claims returned for opaque tokens.
+
+        UserInfo responses commonly only carry identity claims. Introspection
+        responses can additionally expose issuer, client_id and audience. When
+        those claims are present they must match this application.
+        """
+        issuer = token_claims.get("iss")
+        if issuer is not None and self.issuer and issuer != self.issuer:
+            raise TokenValidationError(
+                f"Invalid issuer: {issuer!r} (expected {self.issuer!r})"
+            )
+
+        client_id = token_claims.get("client_id")
+        if client_id is not None and client_id != self.client_id:
+            raise TokenValidationError(
+                f"Invalid client_id: {client_id!r} (expected {self.client_id!r})"
+            )
+
+        if "aud" in token_claims or "azp" in token_claims:
+            self._validate_audience_claims(token_claims, expected_audience)
 
     async def _validate_jwt_token(
         self,
@@ -271,27 +268,23 @@ class OIDCAdapter:
     ) -> dict[str, Any]:
         """Validate JWT token via JWKS (signature + standard claims)."""
         try:
-            # Decode header to get kid (key ID) without verifying first
             unverified = jwt.decode(token, options={"verify_signature": False})
             header = jwt.get_unverified_header(token)
 
-            logger.debug(f"Token header: {header}")
-            logger.debug(f"Token claims: {unverified}")
+            logger.debug("Token header: %s", header)
+            logger.debug("Token claims: %s", unverified)
 
-            # Validate issuer
             if self.issuer and unverified.get("iss") != self.issuer:
                 raise TokenValidationError(
                     f"Invalid issuer: {unverified.get('iss')} (expected {self.issuer})"
                 )
 
-            # Fetch JWKS to get the signing key
             jwks = await self.fetch_jwks()
             keys = jwks.get("keys", [])
 
             if not keys:
                 raise TokenValidationError("No keys available in JWKS")
 
-            # Find the key by kid
             kid = header.get("kid")
             signing_key = None
 
@@ -301,8 +294,7 @@ class OIDCAdapter:
                     break
 
             if not signing_key:
-                logger.warning(f"Key ID {kid} not found in JWKS, trying force refresh")
-                # Try refreshing JWKS in case keys were rotated
+                logger.warning("Key ID %s not found in JWKS, trying force refresh", kid)
                 jwks = await self.fetch_jwks(force_refresh=True)
                 keys = jwks.get("keys", [])
 
@@ -314,14 +306,12 @@ class OIDCAdapter:
             if not signing_key:
                 raise TokenValidationError(f"Signing key not found for kid: {kid}")
 
-            # Build the public key from JWKS entry using PyJWK
             try:
                 pyjwk = PyJWK(signing_key, algorithm=header.get("alg"))
                 signing_key_obj = pyjwk.key
             except Exception as e:
                 raise TokenValidationError(f"Failed to build signing key from JWKS: {e}") from e
 
-            # Verify signature and claims
             decoded = jwt.decode(
                 token,
                 signing_key_obj,
@@ -339,9 +329,11 @@ class OIDCAdapter:
             expected_audience = audience or self.audience or self.client_id
             self._validate_audience_claims(decoded, expected_audience)
 
-            logger.info(f"Token validated successfully for user: {decoded.get('sub')}")
+            logger.info("Token validated successfully for user: %s", decoded.get("sub"))
             return decoded
 
+        except TokenValidationError:
+            raise
         except jwt.DecodeError as e:
             raise TokenValidationError(f"Token decode error: {e}") from e
         except jwt.ExpiredSignatureError as e:
@@ -349,7 +341,6 @@ class OIDCAdapter:
         except jwt.InvalidTokenError as e:
             raise TokenValidationError(f"Invalid token: {e}") from e
         except Exception as e:
-            # Catch-all for unexpected errors
             raise TokenValidationError(f"Token validation failed: {e}") from e
 
     async def _fetch_userinfo_claims(self, token: str) -> dict[str, Any]:
@@ -431,16 +422,7 @@ class OIDCAdapter:
         return claims
 
     def _validate_audience_claims(self, token_claims: dict[str, Any], expected: str) -> None:
-        """Validate token audience in a provider-compatible way.
-
-        Standards background:
-        - access token audience is usually checked via `aud`
-        - ID Tokens can include multiple audiences and use `azp` as authorized party
-
-        We accept the token if either:
-        - `aud` contains the expected audience (string or list)
-        - `azp` matches the expected audience
-        """
+        """Validate token audience in a provider-compatible way."""
         aud_claim = token_claims.get("aud")
         azp_claim = token_claims.get("azp")
 
@@ -458,20 +440,7 @@ class OIDCAdapter:
             )
 
     def extract_user_info(self, token_claims: dict[str, Any]) -> dict[str, Any]:
-        """Extract user information from validated token claims.
-
-        Extracts standard OIDC claims:
-        - sub: Subject (user ID)
-        - email: Email address
-        - preferred_username: Username (falls back to email)
-        - given_name, family_name: User name components
-
-        Args:
-            token_claims: Decoded JWT claims dict
-
-        Returns:
-            User info dict with keys: sub, email, username, name, ...
-        """
+        """Extract user information from validated token claims."""
         sub = token_claims.get("sub")
         if not isinstance(sub, str) or not sub.strip():
             raise TokenValidationError("Token missing required subject (sub)")
