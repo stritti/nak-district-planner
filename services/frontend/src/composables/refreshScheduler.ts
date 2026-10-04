@@ -1,4 +1,4 @@
-import type { CrossTabRefreshState, RefreshChannelMessage, RotationReceipt } from './oidcRefresh'
+import type { CrossTabRefreshState, RefreshChannelMessage } from './oidcRefresh'
 
 export const ACTIVITY_REFRESH_LEAD_SECONDS = 120
 export const ACTIVITY_CHECK_THROTTLE_MS = 15_000
@@ -25,10 +25,8 @@ let shouldTriggerActivityRefresh: (() => void) | null = null
 
 /**
  * Binds the scheduler callbacks for the whole page. The scheduler is an
- * app-wide singleton (one browser profile performs one refresh per token),
- * so the first binding wins: a second `useOIDC()` instance must not
- * silently rewire timers and activity listeners that are already armed by
- * the first instance — that would be last-writer-wins on live timers.
+ * app-wide singleton, so the first binding wins and later composable
+ * instances cannot rewire live timers or activity listeners.
  */
 export function bindRefreshScheduler(options: {
   onScheduledRefresh: () => void
@@ -62,17 +60,13 @@ export function markRefreshChannelListenerAttached(): void {
 }
 
 /**
- * Schedules a proactive token refresh at ~80 % of the token lifetime so the
- * session is extended before the access token expires. Browsers throttle
- * setTimeout in background tabs; the activity listener is the second trigger.
+ * Schedules a proactive token refresh before access-token expiry. Browsers
+ * may throttle timers in background tabs, so activity is a second trigger.
  */
 export function scheduleRefreshTimer(expiresAtSeconds: number): void {
   clearRefreshTimer()
   const nowSeconds = Date.now() / 1000
   const ttlSeconds = Math.max(expiresAtSeconds - nowSeconds, 0)
-
-  // Avoid refresh loops for short-lived tokens.
-  // Refresh at ~80% of lifetime with sane bounds.
   const refreshLeadSeconds = Math.min(300, Math.max(5, Math.floor(ttlSeconds * 0.2)))
   const delay = Math.max((ttlSeconds - refreshLeadSeconds) * 1000, 1000)
 
@@ -107,11 +101,7 @@ function handleUserActivity(): void {
   shouldTriggerActivityRefresh?.()
 }
 
-/**
- * Attach once, app-wide: browsers throttle/suspend setTimeout in background
- * tabs, so user interaction is used as a second trigger to keep the session
- * alive whenever the token is close to (or past) expiry.
- */
+/** Attach activity listeners once as a fallback for throttled browser timers. */
 export function setupActivityRefresh(): void {
   if (activity.listenersAttached) return
   activity.listenersAttached = true
@@ -139,5 +129,4 @@ export function __resetSchedulerState(): void {
   shouldTriggerActivityRefresh = null
 }
 
-// Re-exported so cross-tab state stays adjacent to its scheduler plumbing.
-export type { CrossTabRefreshState, RotationReceipt }
+export type { CrossTabRefreshState }
