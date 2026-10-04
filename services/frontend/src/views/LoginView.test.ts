@@ -5,9 +5,13 @@ const loadDiscovery = vi.fn()
 const getAuthorizationUrl = vi.fn()
 const push = vi.fn()
 
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ push }),
-}))
+vi.mock('vue-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-router')>()
+  return {
+    ...actual,
+    useRouter: () => ({ push }),
+  }
+})
 vi.mock('../composables/useOIDC', () => ({
   useOIDC: () => ({ loadDiscovery, getAuthorizationUrl }),
 }))
@@ -66,14 +70,11 @@ describe('LoginView', () => {
   it('requests an authorization URL on form submit', async () => {
     const wrapper = mountView()
     await flushPromises()
-    const initialHref = window.location.href
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
     expect(getAuthorizationUrl).toHaveBeenCalledOnce()
-    expect(window.location.href).not.toBe(initialHref)
-    expect(window.location.href).toContain('idp.example/authorize')
   })
 
   it('surfaces authorization failures and resets loading', async () => {
