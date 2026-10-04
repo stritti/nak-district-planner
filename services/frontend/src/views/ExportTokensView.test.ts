@@ -7,6 +7,7 @@ vi.mock('../api/districts')
 
 import * as exportApi from '../api/exportTokens'
 import * as districtApi from '../api/districts'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useDistrictsStore } from '../stores/districts'
 import { useToastStore } from '../stores/toast'
 import ExportTokensView from './ExportTokensView.vue'
@@ -163,9 +164,9 @@ describe('ExportTokensView', () => {
     await wrapper.get('button[title="Token löschen"]').trigger('click')
     await wrapper.vm.$nextTick()
 
-    const confirm = wrapper.findAll('button').find((button) => button.text().includes('Endgültig löschen'))
-    expect(confirm).toBeTruthy()
-    await confirm!.trigger('click')
+    const dialog = wrapper.getComponent(ConfirmDialog)
+    expect(dialog.props('open')).toBe(true)
+    dialog.vm.$emit('confirm')
     await flushPromises()
 
     expect(exportApi.deleteExportToken).toHaveBeenCalledWith('token-1')
@@ -180,8 +181,7 @@ describe('ExportTokensView', () => {
     await flushPromises()
     await wrapper.get('button[title="Token löschen"]').trigger('click')
     await wrapper.vm.$nextTick()
-    const confirm = wrapper.findAll('button').find((button) => button.text().includes('Endgültig löschen'))!
-    await confirm.trigger('click')
+    wrapper.getComponent(ConfirmDialog).vm.$emit('confirm')
     await flushPromises()
 
     expect(toast.error).toHaveBeenCalledWith('Löschen fehlgeschlagen', 'Provider nicht erreichbar')
