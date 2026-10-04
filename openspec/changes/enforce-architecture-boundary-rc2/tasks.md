@@ -6,15 +6,15 @@
 
 ## 2. Release metadata
 
-- [ ] 2.1 Use `settings.app_version` for FastAPI metadata.
-- [ ] 2.2 Add a regression test for the single version source of truth.
+- [x] 2.1 Use `settings.app_version` for FastAPI metadata.
+- [x] 2.2 Add a regression test for the single version source of truth.
 
 ## 3. Documentation and OpenSpec
 
-- [ ] 3.1 Update the production runbook for the current owner-controlled superadmin bootstrap.
-- [ ] 3.2 Update the runbook/release documentation for the current required CI checks.
-- [ ] 3.3 Align architecture/security status documents with the RC-2 dependency and trust boundaries.
-- [ ] 3.4 Archive completed OpenSpec changes whose behavior is represented by the baseline specs.
+- [x] 3.1 Update the production runbook for the current owner-controlled superadmin bootstrap.
+- [x] 3.2 Update the runbook/release documentation for the current required CI checks.
+- [x] 3.3 Align architecture/security status documents with the RC-2 dependency and trust boundaries.
+- [x] 3.4 Archive completed OpenSpec changes and consolidate their implemented capability specs into the baseline.
 
 ## 4. Verification
 
