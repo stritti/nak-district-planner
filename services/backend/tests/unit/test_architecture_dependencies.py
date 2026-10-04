@@ -16,6 +16,7 @@ APPLICATION_ROOT = Path(__file__).resolve().parents[2] / "app" / "application"
 # port under app.domain.ports and inject the concrete adapter at a composition
 # boundary instead. Entries may only disappear as legacy code is refactored.
 LEGACY_APPLICATION_ADAPTER_FILES: dict[str, str] = {
+    "audit_service.py": "legacy audit writer still constructs SQL repository and session adapters",
     "event_mail_hook_tasks.py": "Celery composition still constructs persistence adapters",
     "external_candidate_ingestion.py": "legacy ingestion orchestration still uses DB adapters",
     "external_candidate_sync_adapter.py": "legacy sync bridge still reaches adapter implementations",
@@ -24,6 +25,7 @@ LEGACY_APPLICATION_ADAPTER_FILES: dict[str, str] = {
     "reminder_service.py": "legacy reminder orchestration still uses ORM/repository adapters",
     "reminder_tasks.py": "Celery composition currently lives in the application package",
     "service_assignment_conflict.py": "legacy conflict orchestration still uses persistence adapters",
+    "services/calendar_integration_service.py": "legacy application service consumes API request schemas directly",
     "slot_gap_tasks.py": "Celery composition currently lives in the application package",
     "sync_service.py": "legacy sync orchestration still reaches persistence adapters",
     "tasks.py": "legacy Celery composition currently lives in the application package",
