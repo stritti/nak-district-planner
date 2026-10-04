@@ -18,7 +18,7 @@ export const RECEIPT_KEY_PREFIX = 'oidc-refresh-result:'
 /**
  * Receipt states are kept in sessionStorage, scoped to the current tab.
  * Cross-tab coordination is provided by Web Locks and BroadcastChannel; no
- * credential-bearing refresh receipt survives a browser tab session.
+ * provider refresh credential is ever present in JavaScript.
  */
 export const RECEIPT_STATE_PENDING = ''
 export const RECEIPT_STATE_CONSUMED = 'consumed'
@@ -71,7 +71,7 @@ export async function rotationReceiptKey(refreshToken: string): Promise<string> 
   return RECEIPT_KEY_PREFIX + toBase64Url(new Uint8Array(digest))
 }
 
-/** Scrub tab-local credential receipts while retaining replay markers. */
+/** Scrub tab-local refresh receipts while retaining replay markers. */
 export function clearRotationReceipts(): void {
   try {
     const keys: string[] = []
@@ -208,10 +208,7 @@ export async function runRefreshOperation(options: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({
-          grant_type: 'refresh_token',
-          refresh_token: refreshTokenUsed,
-        }),
+        body: JSON.stringify({ grant_type: 'refresh_token' }),
       })
 
       if (!response.ok) {
