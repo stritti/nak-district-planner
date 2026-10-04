@@ -24,12 +24,24 @@ The backend SHALL retain provider refresh tokens in a Secure, HttpOnly, SameSite
 - **WHEN** the provider responds successfully but the token response cannot be parsed as valid JSON
 - **THEN** the backend returns HTTP 502 instead of exposing an internal server error
 
-### Requirement: Frontend auth credentials are memory-scoped
-The SPA SHALL NOT persist its auth token state in localStorage. Temporary refresh coordination receipts MAY use sessionStorage for the lifetime of one tab and SHALL NOT contain a provider refresh credential.
+### Requirement: Frontend auth credentials and refresh coordination are memory-scoped
+The SPA SHALL NOT persist access, ID, provider refresh, or refresh-coordination token state in localStorage or sessionStorage. Cross-tab refresh coordination SHALL use ephemeral Web Locks and BroadcastChannel state. SessionStorage MAY contain only the short-lived PKCE verifier and OAuth state required during an authorization-code login.
 
-#### Scenario: Browser localStorage is inspected
+#### Scenario: Browser storage is inspected after authentication or refresh
 - **WHEN** the user is authenticated or refresh coordination has occurred
-- **THEN** no access, ID, or provider refresh token is stored in localStorage
+- **THEN** no access token, ID token, provider refresh token, refresh receipt, or rotation chain is stored in localStorage or sessionStorage
+
+#### Scenario: Multiple tabs refresh concurrently
+- **WHEN** multiple tabs attempt to refresh the same server-held session
+- **THEN** Web Locks serialize the cookie-backed provider refresh operation
+- **AND** BroadcastChannel distributes only the short-lived in-memory session result and a non-secret coordination identifier
+- **AND** no provider refresh credential is exposed to either mechanism
+
+#### Scenario: Web Locks are unavailable
+- **WHEN** the browser cannot safely serialize refresh operations across tabs
+- **THEN** the SPA does not issue a potentially concurrent provider refresh
+- **AND** retains a still-valid access session only until expiry
+- **AND** fails closed when that session expires
 
 ### Requirement: Browser session can be restored from the server-held refresh session
 The SPA SHALL be able to rebuild its memory-only access session after a page reload by using the HttpOnly refresh cookie without reading that credential in JavaScript.
@@ -43,6 +55,15 @@ The SPA SHALL be able to rebuild its memory-only access session after a page rel
 #### Scenario: Reload without a usable refresh session
 - **WHEN** the cookie is missing, expired, the provider response is malformed, or the refresh request fails
 - **THEN** no partial authenticated session is installed
+
+### Requirement: Cookie-backed OIDC state changes remain CSRF protected
+Every browser POST that uses or mutates the server-held refresh session SHALL submit the current double-submit CSRF token in the configured request header.
+
+#### Scenario: Token exchange, refresh, restore, or revoke is submitted
+- **WHEN** the SPA sends a state-changing OIDC request to the backend
+- **THEN** it reads the current CSRF cookie at request time
+- **AND** sends that value in the CSRF request header
+- **AND** does not rely on a value captured before server-side CSRF rotation
 
 ### Requirement: Logout clears the server-held refresh credential
 The backend SHALL delete the refresh cookie on logout/revocation even if the upstream provider cannot be reached. Upstream revocation failures SHALL be logged for operational visibility.
