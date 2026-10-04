@@ -1,18 +1,22 @@
-"""Tenant isolation middleware for FastAPI.
+"""Tenant routing context middleware for FastAPI.
 
 Tenant routing information may be derived from request paths, query parameters,
-or explicit tenant headers. User identity is different: it is security-sensitive
-and therefore only comes from a previously verified principal on request state.
-Bearer payloads are never decoded in middleware for authorization decisions.
+or explicit tenant headers. User identity is security-sensitive and therefore
+only comes from a previously verified principal on request state. Bearer
+payloads are never decoded in middleware for authorization decisions.
+
+Authorization itself belongs to authenticated FastAPI dependencies/application
+RBAC and PostgreSQL RLS. ASGI middleware runs before those dependencies and must
+not pretend to make user/tenant authorization decisions from unverified data.
 """
 
 import logging
+import re
 import uuid
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
-from starlette.status import HTTP_403_FORBIDDEN
+from starlette.responses import Response
 
 from app.tenant import TenantContext
 
@@ -22,7 +26,9 @@ logger = logging.getLogger(__name__)
 class TenantMiddleware(BaseHTTPMiddleware):
     """Extract non-authentication tenant routing context from a request."""
 
-    UUID_PATTERN = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    UUID_PATTERN = re.compile(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    )
 
     def __init__(
         self,
@@ -126,10 +132,8 @@ class TenantMiddleware(BaseHTTPMiddleware):
             context["tenant_id"] = value
             context["tenant_type"] = tenant_type
 
-    @staticmethod
-    def _extract_tenant_from_path(path: str, context: dict) -> None:
-        import re
-
+    @classmethod
+    def _extract_tenant_from_path(cls, path: str, context: dict) -> None:
         clean = path.lstrip("/")
         if clean.startswith("api/v1/"):
             clean = clean[7:]
@@ -139,8 +143,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             if index + 1 >= len(parts):
                 continue
             candidate = parts[index + 1]
-            match = re.fullmatch(TenantMiddleware.UUID_PATTERN, candidate)
-            if not match:
+            if cls.UUID_PATTERN.fullmatch(candidate) is None:
                 continue
 
             if part == "districts":
@@ -154,69 +157,3 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 if "tenant_id" not in context:
                     context["tenant_id"] = congregation_id
                     context["tenant_type"] = "congregation"
-
-
-class TenantValidationMiddleware(BaseHTTPMiddleware):
-    """Pre-validate tenant access only when a verified principal is available.
-
-    FastAPI dependencies normally perform authentication after ASGI middleware.
-    In that common case this middleware deliberately defers authorization to the
-    route/application RBAC checks and PostgreSQL RLS rather than trusting an
-    unverified bearer payload.
-    """
-
-    def __init__(
-        self,
-        app,
-        exempt_paths: set[str] | None = None,
-        exempt_methods: set[str] | None = None,
-    ) -> None:
-        super().__init__(app)
-        self.exempt_paths = exempt_paths or {"/api/health", "/api/v1/auth"}
-        self.exempt_methods = exempt_methods or {"GET", "HEAD", "OPTIONS"}
-
-    async def dispatch(self, request: Request, call_next) -> Response:
-        if any(request.url.path.startswith(path) for path in self.exempt_paths):
-            return await call_next(request)
-        if request.method in self.exempt_methods:
-            return await call_next(request)
-
-        user = getattr(request.state, "user", None)
-        user_sub = getattr(user, "sub", None) if user else None
-        if not isinstance(user_sub, str) or not user_sub:
-            return await call_next(request)
-
-        tenant_context = getattr(request.state, "tenant_context", {})
-        tenant_id = tenant_context.get("tenant_id")
-        tenant_type = tenant_context.get("tenant_type")
-        if not tenant_id or not tenant_type:
-            return await call_next(request)
-
-        from app.adapters.db.session import AsyncSessionLocal
-        from app.application.tenant_validation import (
-            TenantValidationError,
-            TenantValidationService,
-        )
-
-        async with AsyncSessionLocal() as session:
-            validation_service = TenantValidationService(session)
-            try:
-                await validation_service.validate_user_in_tenant(
-                    user_sub=user_sub,
-                    tenant_id=(uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id),
-                    tenant_type=tenant_type,
-                )
-            except TenantValidationError as exc:
-                logger.warning(
-                    "Tenant validation denied for verified user=%s tenant=%s type=%s: %s",
-                    user_sub,
-                    tenant_id,
-                    tenant_type,
-                    exc,
-                )
-                return JSONResponse(
-                    status_code=HTTP_403_FORBIDDEN,
-                    content={"detail": str(exc)},
-                )
-
-        return await call_next(request)
