@@ -19,12 +19,16 @@ from app.application.rate_limiter import RateLimitResult
 class LocalFallbackRateLimiter:
     """Small process-local sliding-window limiter with bounded memory."""
 
-    def __init__(self, max_buckets: int = 4096) -> None:
+    def __init__(self, max_buckets: int = 4096, cleanup_every: int = 128) -> None:
         if max_buckets < 1:
             raise ValueError("max_buckets must be positive")
+        if cleanup_every < 1:
+            raise ValueError("cleanup_every must be positive")
         self.max_buckets = max_buckets
+        self.cleanup_every = cleanup_every
         self._buckets: OrderedDict[str, deque[float]] = OrderedDict()
         self._lock = asyncio.Lock()
+        self._checks_since_cleanup = 0
 
     async def check(
         self,
@@ -49,12 +53,15 @@ class LocalFallbackRateLimiter:
             bucket.append(now)
             self._buckets[key] = bucket
 
-            self._evict_empty_or_old_buckets(cutoff, protected_key=key)
+            self._checks_since_cleanup += 1
+            if self._checks_since_cleanup >= self.cleanup_every:
+                self._evict_stale_buckets(cutoff, protected_key=key)
+                self._checks_since_cleanup = 0
+
+            # OrderedDict provides an O(1) LRU-style hard cap. The current key
+            # was reinserted above and is therefore never the oldest bucket.
             while len(self._buckets) > self.max_buckets:
-                oldest_key, _ = self._buckets.popitem(last=False)
-                if oldest_key == key:
-                    self._buckets[oldest_key] = bucket
-                    break
+                self._buckets.popitem(last=False)
 
             count = len(bucket)
             allowed = count <= limit
@@ -70,8 +77,8 @@ class LocalFallbackRateLimiter:
                 retry_after=retry_after,
             )
 
-    def _evict_empty_or_old_buckets(self, cutoff: float, *, protected_key: str) -> None:
-        """Discard stale buckets before applying the hard bucket cap."""
+    def _evict_stale_buckets(self, cutoff: float, *, protected_key: str) -> None:
+        """Discard stale buckets during amortized cleanup, not on every request."""
         stale_keys: list[str] = []
         for key, bucket in self._buckets.items():
             if key == protected_key:
