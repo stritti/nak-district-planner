@@ -1,5 +1,6 @@
 import type { OIDCToken, OIDCUser } from './oidcTypes'
 import { identityFromTokenExchange, isValidTokenExchangeResponse } from './oidcToken'
+import { getCurrentCSRFHeaders } from './useCSRF'
 
 const EMPTY_TOKEN: OIDCToken = {
   accessToken: '',
@@ -24,7 +25,10 @@ export async function restoreRefreshSession(
   try {
     response = await fetch('/api/v1/auth/oidc/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCurrentCSRFHeaders(),
+      },
       body: JSON.stringify({ grant_type: 'refresh_token' }),
     })
   } catch {
