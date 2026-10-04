@@ -18,7 +18,10 @@ export default defineConfig({
       exclude: [
         "src/**/*.test.ts",
         "src/**/__tests__/**",
+        // Test doubles import Vitest and are not shipped as application code.
+        "src/testing/**",
         "src/**/*.d.ts",
+        // Bootstrap wiring is exercised by build/E2E checks rather than unit tests.
         "src/main.ts",
       ],
       thresholds: {
