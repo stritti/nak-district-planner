@@ -15,7 +15,7 @@ from app.adapters.api import deps
 from app.adapters.api.middleware.audit import AuditMiddleware
 from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
-from app.adapters.api.middleware.tenant import TenantMiddleware, TenantValidationMiddleware
+from app.adapters.api.middleware.tenant import TenantMiddleware
 from app.adapters.api.routers import (
     auth,
     calendar_integrations,
@@ -161,15 +161,8 @@ app.add_middleware(
     exempt_methods={"OPTIONS"},
 )
 
-# Initialize Tenant Isolation
-# NOTE: registration order matters — Starlette runs the LAST-added middleware
-# first (outermost). TenantMiddleware must run BEFORE TenantValidationMiddleware
-# so that tenant context (incl. user_sub) is already extracted when validation runs.
-app.add_middleware(
-    TenantValidationMiddleware,
-    exempt_paths={"/health", "/api/health", "/api/v1/auth"},
-    exempt_methods={"OPTIONS"},
-)
+# TenantMiddleware only extracts routing context. Authorization is performed
+# after OIDC validation by FastAPI RBAC dependencies and PostgreSQL RLS.
 app.add_middleware(
     TenantMiddleware,
     exempt_paths={"/health", "/api/health", "/api/v1/auth"},
