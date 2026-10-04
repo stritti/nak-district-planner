@@ -11,9 +11,10 @@
 
 - [x] 2.1 Pinia Auth-State nicht mehr in localStorage persistieren.
 - [x] 2.2 Server-held Refresh-Session nur als nicht sensitive Metadaten modellieren.
-- [x] 2.3 Credential-freie Refresh-Koordination tabgebunden in sessionStorage halten.
+- [x] 2.3 Refresh-Koordination ausschliesslich fluechtig ueber Web Locks und BroadcastChannel halten; keine Refresh-Receipts persistieren.
 - [x] 2.4 Memory-only Session nach Reload aus HttpOnly-Refresh-Session wiederherstellen.
 - [x] 2.5 Logout ohne Browser-Refresh-Credential ueber Cookie-Revoke ausfuehren.
+- [x] 2.6 Token-, Refresh-, Restore- und Revoke-POSTs mit dem aktuellen CSRF-Cookie im Request-Header senden.
 
 ## 3. Tests
 
@@ -22,9 +23,11 @@
 - [x] 3.3 Fehlender Refresh-Cookie wird mit 401 abgewiesen.
 - [x] 3.4 Provider ohne Rotation behaelt die serverseitige Refresh-Session.
 - [x] 3.5 Logout/Revoke verwendet Cookie, loggt Provider-Fehler und loescht ihn lokal.
-- [x] 3.6 Frontend-Receipts schreiben keine Credentials in localStorage.
+- [x] 3.6 Frontend-Refresh schreibt weder Credentials noch Receipts in localStorage/sessionStorage.
 - [x] 3.7 Reload-Restore installiert nur vollstaendige, validierte Memory-Sessions.
 - [x] 3.8 Ungueltige Provider-JSON-Antwort wird mit 502 abgewiesen.
+- [x] 3.9 Cross-Tab-Races, stale Sessions, fehlende Web Locks und Rate-Limit-Ausnahmefaelle sind abgedeckt.
+- [x] 3.10 CSRF-Header werden aus dem aktuellen Cookie gelesen und fuer direkte OIDC-POSTs verwendet.
 
 ## 4. Verifikation
 
