@@ -5,8 +5,8 @@ services:
       - .env
       - .env.docker
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       valkey:
         condition: service_started
     healthcheck:
@@ -18,20 +18,18 @@ services:
 
   # One-shot migration runner. Alembic needs the database owner for DDL
   # (roles, tables, SECURITY DEFINER functions — see revisions 0016/0017).
-  # Owner credentials are deliberately NOT exposed through the Docker-specific
-  # app override: only the migrate service loads .env.docker.migrate.
-  # Run migrations explicitly via `docker compose run --no-deps --rm migrate`.
+  # Owner credentials are deliberately NOT exposed to backend/worker. The
+  # runtime services start only after this one-shot deployment step completed.
   migrate:
     build: ./services/backend
     env_file:
       - .env
       - .env.docker.migrate
     command: uv run alembic upgrade head
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
-    profiles:
-      - tools
 
   worker:
     build: ./services/backend
@@ -40,8 +38,8 @@ services:
       - .env
       - .env.docker
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       valkey:
         condition: service_started
 
