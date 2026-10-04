@@ -36,6 +36,31 @@
 * build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
 * build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
+## [1.0.0-rc.1](https://github.com/stritti/nak-district-planner/compare/v0.34.0...v1.0.0-rc.1) (2026-10-03)
+
+
+### Features
+
+* **sync:** expose CONFLICT state and resolve-conflict endpoint (Roadmap-Task 3.7) ([#412](https://github.com/stritti/nak-district-planner/issues/412)) ([09d7da2](https://github.com/stritti/nak-district-planner/commit/09d7da25a3cd7d8695c62ca7bb5ec9b19251f250))
+
+
+### Bug Fixes
+
+* **backend:** resolve remaining ruff findings ([#406](https://github.com/stritti/nak-district-planner/issues/406)) ([a1a064d](https://github.com/stritti/nak-district-planner/commit/a1a064da3be20f470bb443dcc7ebdbafa5b80f24))
+* **ci:** serialize Pages deployments ([529fa44](https://github.com/stritti/nak-district-planner/commit/529fa44e6871451bb773ca7904ae501ac323523c))
+* **ci:** use locked Bun install for docs build ([7766f31](https://github.com/stritti/nak-district-planner/commit/7766f315ed9dfdf5a5287560d9abe1142a738fde))
+* **sync:** follow up review findings from [#412](https://github.com/stritti/nak-district-planner/issues/412) and [#413](https://github.com/stritti/nak-district-planner/issues/413) ([#415](https://github.com/stritti/nak-district-planner/issues/415)) ([5e4cfd8](https://github.com/stritti/nak-district-planner/commit/5e4cfd81493551c9b93928c0df2a6e17e99b2976))
+
+
+### Performance Improvements
+
+* **ci:** optimize GitHub Actions caching and redundant work ([#410](https://github.com/stritti/nak-district-planner/issues/410)) ([58e76e2](https://github.com/stritti/nak-district-planner/commit/58e76e20f9b281aaaa5c63968358b190d1e5f9f9))
+
+
+### Miscellaneous Chores
+
+* **release:** prepare v1.0.0 release candidate ([#416](https://github.com/stritti/nak-district-planner/issues/416)) ([c4ac86e](https://github.com/stritti/nak-district-planner/commit/c4ac86e69b9fa19d4c0770bda44064c8124e9a6c))
+
 ## [0.34.0](https://github.com/stritti/nak-district-planner/compare/v0.33.0...v0.34.0) (2026-10-02)
 
 
