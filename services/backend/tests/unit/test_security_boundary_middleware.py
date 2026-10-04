@@ -1,14 +1,18 @@
 """Regression tests for security boundaries enforced before route dependencies."""
 
 from datetime import timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.testclient import TestClient
 
-from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
+from app.adapters.api.middleware.rate_limit import (
+    RateLimitMiddleware,
+    SensitiveFallbackConfig,
+)
 from app.adapters.api.middleware.tenant import TenantMiddleware
 from app.application.local_rate_limiter import LocalFallbackRateLimiter
 from app.application.rate_limiter import RateLimitResult
@@ -58,7 +62,6 @@ def fake_failed_primary_limiter() -> AsyncMock:
 
 def test_tenant_context_does_not_extract_unverified_bearer_subject() -> None:
     district_id = "11111111-1111-1111-1111-111111111111"
-    # The payload encodes {"sub":"victim"}; its contents must be irrelevant to middleware.
     forged = "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ2aWN0aW0ifQ."
     middleware = TenantMiddleware(FastAPI())
 
@@ -76,23 +79,36 @@ def test_bearer_header_alone_is_not_authenticated_for_rate_multiplier() -> None:
     assert RateLimitMiddleware._is_authenticated(req) is False
 
 
-def test_sensitive_path_detection_is_narrow() -> None:
+def test_sensitive_route_registry_is_narrow_and_configurable() -> None:
     district = "11111111-1111-1111-1111-111111111111"
+    middleware = RateLimitMiddleware(
+        FastAPI(),
+        sensitive_fallback_config=SensitiveFallbackConfig(
+            auth_token_limit=7,
+            public_registration_limit=3,
+            window_seconds=45,
+        ),
+    )
 
-    assert RateLimitMiddleware._is_sensitive_path("POST", "/api/v1/auth/oidc/token")
-    assert RateLimitMiddleware._is_sensitive_path(
+    assert middleware._sensitive_fallback_config("POST", "/api/v1/auth/oidc/token") == (7, 45)
+    assert middleware._sensitive_fallback_config(
         "POST", f"/api/v1/districts/{district}/registrations"
+    ) == (3, 45)
+    assert (
+        middleware._sensitive_fallback_config(
+            "POST", f"/api/v1/districts/{district}/registrations/abc/approve"
+        )
+        is None
     )
-    assert not RateLimitMiddleware._is_sensitive_path(
-        "POST", f"/api/v1/districts/{district}/registrations/abc/approve"
-    )
-    assert not RateLimitMiddleware._is_sensitive_path("GET", "/api/v1/auth/oidc/token")
+    assert middleware._sensitive_fallback_config("GET", "/api/v1/auth/oidc/token") is None
+    assert middleware._sensitive_fallback_config(
+        "POST", "/api/v1/districts/not-a-uuid/registrations"
+    ) is None
 
 
 def test_auth_token_endpoint_uses_local_limit_when_primary_fails_open() -> None:
     app = FastAPI()
     primary = fake_failed_primary_limiter()
-    local = LocalFallbackRateLimiter()
 
     @app.post("/api/v1/auth/oidc/token")
     async def token_endpoint() -> Response:
@@ -101,7 +117,7 @@ def test_auth_token_endpoint_uses_local_limit_when_primary_fails_open() -> None:
     app.add_middleware(
         RateLimitMiddleware,
         rate_limiter=primary,
-        local_fallback_limiter=local,
+        local_fallback_limiter=LocalFallbackRateLimiter(),
     )
 
     with TestClient(app) as client:
@@ -151,3 +167,40 @@ def test_normal_business_endpoint_keeps_documented_fail_open_behavior() -> None:
     with TestClient(app) as client:
         for _ in range(40):
             assert client.post("/api/v1/events").status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_local_fallback_cleanup_is_amortized() -> None:
+    limiter = LocalFallbackRateLimiter(max_buckets=8, cleanup_every=2)
+
+    with patch("app.application.local_rate_limiter.time.monotonic", side_effect=[0.0, 2.0]):
+        await limiter.check(
+            identifier="ip:a",
+            endpoint="/sensitive",
+            limit=10,
+            window_seconds=1,
+        )
+        await limiter.check(
+            identifier="ip:b",
+            endpoint="/sensitive",
+            limit=10,
+            window_seconds=1,
+        )
+
+    assert list(limiter._buckets) == ["ip:b:/sensitive"]
+
+
+@pytest.mark.asyncio
+async def test_local_fallback_bucket_cap_is_enforced_without_global_scan() -> None:
+    limiter = LocalFallbackRateLimiter(max_buckets=2, cleanup_every=100)
+
+    for identifier in ("ip:a", "ip:b", "ip:c"):
+        await limiter.check(
+            identifier=identifier,
+            endpoint="/sensitive",
+            limit=10,
+            window_seconds=60,
+        )
+
+    assert len(limiter._buckets) == 2
+    assert "ip:a:/sensitive" not in limiter._buckets
