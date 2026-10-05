@@ -88,9 +88,9 @@ describe('RegistrationView', () => {
     await wrapper.get('input[type="email"]').setValue('erika@example.org')
     await wrapper.get('input[type="tel"]').setValue('+49 1234')
     await wrapper.get('textarea').setValue('Bitte freischalten')
-    await wrapper.findAll('select')[1].setValue('PRIEST')
+    await wrapper.findAll('select')[1].setValue('Pr.')
     await wrapper.findAll('select')[2].setValue('cong-1')
-    await wrapper.findAll('select')[3].setValue('YOUTH_LEADER')
+    await wrapper.findAll('select')[3].setValue('Gemeindevorsteher')
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -98,9 +98,9 @@ describe('RegistrationView', () => {
     expect(registrationsApi.submitRegistration).toHaveBeenCalledWith('district-1', {
       name: 'Erika Beispiel',
       email: 'erika@example.org',
-      rank: 'PRIEST',
+      rank: 'Pr.',
       congregation_id: 'cong-1',
-      special_role: 'YOUTH_LEADER',
+      special_role: 'Gemeindevorsteher',
       phone: '+49 1234',
       notes: 'Bitte freischalten',
     })
