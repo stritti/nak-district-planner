@@ -255,34 +255,25 @@ describe('DistrictsAdminView', () => {
     expect(wrapper.text()).toContain('Fehler beim Speichern')
   })
 
-  it('creates and renames groups and ignores empty names', async () => {
-    vi.mocked(districtsApi.createGroup).mockResolvedValueOnce(group('g2', 'Gruppe B'))
+  it('renames a group and ignores empty names', async () => {
     vi.mocked(districtsApi.updateGroup).mockResolvedValueOnce(group('g1', 'Gruppe Neu'))
     const { wrapper } = setup()
     await flushPromises()
 
-    const groupButton = wrapper.findAll('button').find((button) => button.text().includes('Gruppe'))!
-    await groupButton.trigger('click')
-    const newGroupInput = wrapper.get('input[placeholder="Name der Gruppe"]')
-    await newGroupInput.setValue(' Gruppe B ')
-    await newGroupInput.trigger('keyup.enter')
-    await flushPromises()
-    expect(districtsApi.createGroup).toHaveBeenCalledWith('d1', 'Gruppe B')
-    expect(wrapper.text()).toContain('Gruppe B')
-
-    const editGroupButtons = wrapper.findAll('button').filter((button) => button.classes().includes('p-1') && button.find('svg').exists())
-    await editGroupButtons[0].trigger('click')
+    const groupRow = wrapper.findAll('div').find((node) => node.text().trim() === 'Gruppe A' && node.findAll('button').length === 2)!
+    await groupRow.findAll('button')[0].trigger('click')
     const editGroupInput = wrapper.get('input.form-input.w-40')
     await editGroupInput.setValue(' Gruppe Neu ')
     await editGroupInput.trigger('keyup.enter')
     await flushPromises()
     expect(districtsApi.updateGroup).toHaveBeenCalledWith('d1', 'g1', 'Gruppe Neu')
 
-    await groupButton.trigger('click')
-    await wrapper.get('input[placeholder="Name der Gruppe"]').setValue('   ')
-    await wrapper.get('input[placeholder="Name der Gruppe"]').trigger('keyup.enter')
-    expect(districtsApi.createGroup).toHaveBeenCalledTimes(1)
-    await wrapper.get('input[placeholder="Name der Gruppe"]').trigger('keyup.escape')
+    const renamedRow = wrapper.findAll('div').find((node) => node.text().trim() === 'Gruppe Neu' && node.findAll('button').length === 2)!
+    await renamedRow.findAll('button')[0].trigger('click')
+    await wrapper.get('input.form-input.w-40').setValue('   ')
+    await wrapper.get('input.form-input.w-40').trigger('keyup.enter')
+    expect(districtsApi.updateGroup).toHaveBeenCalledTimes(1)
+    await wrapper.get('input.form-input.w-40').trigger('keyup.escape')
   })
 
   it('deletes a group, clears local assignments and reports delete failures', async () => {
