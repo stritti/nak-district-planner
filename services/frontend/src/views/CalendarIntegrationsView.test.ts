@@ -99,7 +99,6 @@ describe('CalendarIntegrationsView', () => {
     vi.mocked(calendarApi.listIntegrations).mockRejectedValueOnce(new Error('Kalender kaputt'))
 
     await wrapper.get('select.form-select').setValue('d2')
-    await wrapper.get('select.form-select').trigger('change')
     await flushPromises()
 
     expect(districts.selectedDistrictId).toBe('d2')
@@ -124,9 +123,8 @@ describe('CalendarIntegrationsView', () => {
     })
     const { wrapper } = setup()
     await flushPromises()
-    const syncButton = wrapper.get('button[title="Jetzt synchronisieren"]')
 
-    await syncButton.trigger('click')
+    await wrapper.get('button[title="Jetzt synchronisieren"]').trigger('click')
     await flushPromises()
 
     expect(calendarApi.triggerSync).toHaveBeenCalledWith('integration-1')
@@ -134,7 +132,7 @@ describe('CalendarIntegrationsView', () => {
     expect(wrapper.text()).toContain('↔3 zugeordnet')
 
     vi.mocked(calendarApi.triggerSync).mockRejectedValueOnce(new Error('Provider down'))
-    await syncButton.trigger('click')
+    await wrapper.get('button[title="Jetzt synchronisieren"]').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Provider down')
   })
