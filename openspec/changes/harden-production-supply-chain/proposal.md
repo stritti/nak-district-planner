@@ -15,8 +15,7 @@ Der RC-1 baut Container teilweise mit breiten oder `latest`-Tags und installiert
 ## Capabilities
 
 ### Modified Capabilities
-- `production-deployment`: Reproduzierbare Container-Builds und eindeutige TLS-Grenze.
-- `security-baseline`: Browser-Security-Header und kein unbeabsichtigter HTTP-Bypass.
+- `production-deployment`: Reproduzierbare Container-Builds, Browser-Security-Header und eindeutige TLS-Grenze ohne unbeabsichtigten HTTP-Bypass.
 
 ## Impact
 
