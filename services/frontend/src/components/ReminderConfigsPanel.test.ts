@@ -20,8 +20,10 @@ const existing: ReminderConfig = {
   updated_at: '2026-01-01T00:00:00Z',
 }
 
-function setup(items: ReminderConfig[] = []) {
-  vi.mocked(reminderApi.listReminderConfigs).mockResolvedValue(items)
+function setup(items: ReminderConfig[] = [], configureListMock = true) {
+  if (configureListMock) {
+    vi.mocked(reminderApi.listReminderConfigs).mockResolvedValue(items)
+  }
   const pinia = createPinia()
   setActivePinia(pinia)
   const wrapper = mount(ReminderConfigsPanel, {
@@ -128,7 +130,7 @@ describe('ReminderConfigsPanel', () => {
 
   it('keeps store errors visible when load/create/toggle fail', async () => {
     vi.mocked(reminderApi.listReminderConfigs).mockRejectedValue(new Error('Laden fehlgeschlagen'))
-    const { wrapper } = setup()
+    const { wrapper } = setup([], false)
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('Laden fehlgeschlagen')
 
