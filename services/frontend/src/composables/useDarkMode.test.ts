@@ -13,16 +13,25 @@ afterEach(() => {
 })
 
 describe('useDarkMode', () => {
-  it('initializes from persisted preference and toggles DOM plus storage', async () => {
+  it.each([
+    ['dark', true],
+    ['light', false],
+  ] as const)('initializes from persisted %s preference', async (stored, expected) => {
+    localStorage.setItem('nak-planer-theme', stored)
+    const { useDarkMode } = await import('./useDarkMode')
+
+    expect(useDarkMode().isDark.value).toBe(expected)
+    expect(document.documentElement.classList.contains('dark')).toBe(expected)
+  })
+
+  it('toggles DOM plus storage', async () => {
     localStorage.setItem('nak-planer-theme', 'dark')
     const { useDarkMode } = await import('./useDarkMode')
     const { isDark, toggle } = useDarkMode()
 
-    expect(isDark.value).toBe(true)
-    expect(document.documentElement.classList.contains('dark')).toBe(true)
-
     toggle()
     await Promise.resolve()
+
     expect(isDark.value).toBe(false)
     expect(document.documentElement.classList.contains('dark')).toBe(false)
     expect(localStorage.getItem('nak-planer-theme')).toBe('light')
