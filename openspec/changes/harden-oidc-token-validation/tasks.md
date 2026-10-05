@@ -17,5 +17,5 @@
 
 ## 3. Verifikation
 
-- [ ] 3.1 Backend Unit Tests und Coverage in CI erfolgreich.
-- [ ] 3.2 CodeQL und Dependency Audits erfolgreich.
+- [x] 3.1 Backend Unit Tests und Coverage in CI erfolgreich.
+- [x] 3.2 CodeQL und Dependency Audits erfolgreich.
