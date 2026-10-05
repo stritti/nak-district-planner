@@ -20,6 +20,6 @@ Der RC-1 baut Container teilweise mit breiten oder `latest`-Tags und installiert
 
 ## Impact
 
-- Lokaler Zugriff erfolgt standardmaessig ueber `127.0.0.1:8080` oder den externen Reverse Proxy.
+- Lokaler Zugriff bleibt ueber den dokumentierten Reverse-Proxy-Zielport `127.0.0.1:80` erreichbar, wird aber nicht mehr an oeffentliche Host-Interfaces gebunden.
 - Abhaengigkeitsupdates werden ueber Dependabot sichtbar und bleiben explizite, reviewbare Versionsaenderungen.
 - Ein spaeteres Python-3.13-Upgrade benoetigt einen separaten Change mit eigener Kompatibilitaetsverifikation.
