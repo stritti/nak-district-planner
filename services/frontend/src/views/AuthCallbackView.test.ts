@@ -105,12 +105,13 @@ describe('AuthCallbackView', () => {
       mocks.user.value = { sub: 'user-1' }
     })
     const { wrapper, auth } = mountView()
-    await vi.advanceTimersByTimeAsync(0)
 
-    expect(wrapper.text()).toContain('Erfolgreich angemeldet')
-    expect(auth.refreshCurrentUserFlags).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+
+    expect(auth.refreshCurrentUserFlags).toHaveBeenCalledOnce()
     expect(mocks.push).toHaveBeenCalledWith('/events')
+    expect(wrapper.text()).toContain('Erfolgreich angemeldet')
   })
 
   it('shows token exchange exceptions and offers navigation back to login', async () => {
