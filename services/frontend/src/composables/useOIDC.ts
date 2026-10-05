@@ -151,6 +151,21 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     installSessionToken((next, nextIdentity) => authStore.setToken(next, nextIdentity), nextToken, nextUser)
   }
 
+  /** Restore the memory-only session once before protected navigation is decided. */
+  async function ensureSession(): Promise<boolean> {
+    if (authStore.token) return true
+    if (!restoreInFlight) {
+      restoreInFlight = restoreRefreshSession({
+        ensureDiscovery: loadDiscovery,
+        fetchUserInfo,
+        installSession: (nextToken, nextUser) => setToken(nextToken, nextUser),
+      }).finally(() => {
+        restoreInFlight = null
+      })
+    }
+    return await restoreInFlight
+  }
+
   async function logout(): Promise<void> {
     advanceSessionGeneration()
     clearLocalArtifacts()
@@ -294,16 +309,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     setupActivityRefresh()
 
     if (!authStore.token) {
-      if (!restoreInFlight) {
-        restoreInFlight = restoreRefreshSession({
-          ensureDiscovery: loadDiscovery,
-          fetchUserInfo,
-          installSession: (nextToken, nextUser) => setToken(nextToken, nextUser),
-        }).finally(() => {
-          restoreInFlight = null
-        })
-      }
-      void restoreInFlight
+      void ensureSession()
       return
     }
 
@@ -330,6 +336,7 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
     refreshToken,
     logout,
     setToken,
+    ensureSession,
     getSessionGeneration,
     initialize,
   }
