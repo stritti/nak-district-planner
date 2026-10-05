@@ -11,6 +11,7 @@ import ReminderConfigsView from '../views/ReminderConfigsView.vue'
 import AuthCallbackView from '../views/AuthCallbackView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegistrationView from '../views/RegistrationView.vue'
+import { useOIDC } from '../composables/useOIDC'
 import { useAuthStore } from '../stores/auth'
 
 // Create a standalone pinia instance for router guards (not using the app instance)
@@ -25,10 +26,10 @@ function getPinia() {
   return pinia
 }
 
-function requireAuth(
+async function requireAuth(
   to: RouteLocationNormalized,
   from: RouteLocationNormalized,
-  next: NavigationGuardNext
+  next: NavigationGuardNext,
 ) {
   try {
     const piniaInstance = getPinia()
@@ -36,11 +37,17 @@ function requireAuth(
 
     if (authStore.isAuthenticated) {
       next()
-    } else {
-      next('/login')
+      return
     }
+
+    // The access token is memory-only. On a direct reload of a protected
+    // route, rebuild it from the server-held HttpOnly refresh session before
+    // deciding whether the user is logged out.
+    const restored = await useOIDC(router).ensureSession()
+    next(restored && authStore.isAuthenticated ? undefined : '/login')
   } catch {
-    // If pinia isn't available, redirect to login to be safe
+    // Restore errors fail closed; protected navigation never proceeds without
+    // an established in-memory session.
     next('/login')
   }
 }
