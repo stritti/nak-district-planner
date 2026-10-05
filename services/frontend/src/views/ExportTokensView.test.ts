@@ -100,6 +100,21 @@ describe('ExportTokensView', () => {
     expect(wrapper.html()).toContain('/api/v1/export/secret-path-token/calendar.ics')
   })
 
+  it('switches approval filters and updates the generated calendar URL', async () => {
+    vi.mocked(exportApi.listExportTokens).mockResolvedValue([token()])
+    const { wrapper } = mountView()
+    await flushPromises()
+
+    expect(wrapper.html()).toContain('/api/v1/export/secret-path-token/calendar.ics')
+    expect(wrapper.html()).not.toContain('approval_status=')
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Nur Bestätigte')!.trigger('click')
+    expect(wrapper.html()).toContain('approval_status=confirmed_only')
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Inkl. Geplante')!.trigger('click')
+    expect(wrapper.html()).toContain('approval_status=include_planned')
+  })
+
   it('opens and resets the create form', async () => {
     const { wrapper } = mountView()
     await flushPromises()
@@ -139,6 +154,22 @@ describe('ExportTokensView', () => {
     })
     expect(toast.success).toHaveBeenCalledWith('Export-Token erstellt', 'Bezirk öffentlich')
     expect(wrapper.text()).not.toContain('Neuer Export-Token')
+  })
+
+  it('clears congregation choices when the district selection is reset', async () => {
+    const { wrapper } = mountView()
+    await flushPromises()
+    await wrapper.get('button.btn-primary').trigger('click')
+    const fields = wrapper.findAll('.form-input')
+    await fields[2].setValue('district-1')
+    await fields[2].trigger('change')
+    await flushPromises()
+    expect(fields[3].attributes('disabled')).toBeUndefined()
+
+    await fields[2].setValue('')
+    await fields[2].trigger('change')
+    await flushPromises()
+    expect(fields[3].attributes('disabled')).toBeDefined()
   })
 
   it('keeps the create dialog open and displays creation errors', async () => {
