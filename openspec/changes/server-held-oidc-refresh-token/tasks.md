@@ -15,6 +15,8 @@
 - [x] 2.4 Memory-only Session nach Reload aus HttpOnly-Refresh-Session wiederherstellen.
 - [x] 2.5 Logout ohne Browser-Refresh-Credential ueber Cookie-Revoke ausfuehren.
 - [x] 2.6 Token-, Refresh-, Restore- und Revoke-POSTs mit dem aktuellen CSRF-Cookie im Request-Header senden.
+- [x] 2.7 Geschuetzte Navigation wartet auf einen deduplizierten Session-Restore und laedt danach Rollen-/Scope-Fakten.
+- [x] 2.8 Restore bootstrapt Discovery/CSRF vor dem cookie-basierten POST und faellt bei Bootstrap-Fehlern geschlossen aus.
 
 ## 3. Tests
 
@@ -28,6 +30,9 @@
 - [x] 3.8 Ungueltige Provider-JSON-Antwort wird mit 502 abgewiesen.
 - [x] 3.9 Cross-Tab-Races, stale Sessions, fehlende Web Locks und Rate-Limit-Ausnahmefaelle sind abgedeckt.
 - [x] 3.10 CSRF-Header werden aus dem aktuellen Cookie gelesen und fuer direkte OIDC-POSTs verwendet.
+- [x] 3.11 Discovery-/CSRF-Bootstrap und deduplizierter Restore sind als Unit-Tests abgedeckt.
+- [x] 3.12 E2E-Auth-Fixtures verwenden den produktiven HttpOnly-Restore-Vertrag statt persistierter Auth-Credentials.
+- [x] 3.13 Direkte Reloads geschuetzter Routen werden durch die Restore-basierten E2E-Flows abgedeckt.
 
 ## 4. Verifikation
 
