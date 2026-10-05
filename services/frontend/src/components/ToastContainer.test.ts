@@ -28,12 +28,17 @@ afterEach(() => {
 describe('ToastContainer and toast store', () => {
   it('renders every semantic toast type with message, action and progress styling', async () => {
     const { store, wrapper } = setup()
-    const action = vi.fn()
+    const actions = {
+      success: vi.fn(),
+      error: vi.fn(),
+      warning: vi.fn(),
+      info: vi.fn(),
+    }
 
-    store.addToast({ type: 'success', title: 'Success', message: 'Done', duration: 1000, action: { label: 'Undo', onClick: action } })
-    store.addToast({ type: 'error', title: 'Error', duration: 0 })
-    store.addToast({ type: 'warning', title: 'Warning', duration: 0 })
-    store.addToast({ type: 'info', title: 'Info', duration: 0 })
+    store.addToast({ type: 'success', title: 'Success', message: 'Done', duration: 1000, action: { label: 'Undo success', onClick: actions.success } })
+    store.addToast({ type: 'error', title: 'Error', duration: 0, action: { label: 'Undo error', onClick: actions.error } })
+    store.addToast({ type: 'warning', title: 'Warning', duration: 0, action: { label: 'Undo warning', onClick: actions.warning } })
+    store.addToast({ type: 'info', title: 'Info', duration: 0, action: { label: 'Undo info', onClick: actions.info } })
     await wrapper.vm.$nextTick()
 
     const alerts = document.body.querySelectorAll('[role="alert"]')
@@ -44,9 +49,13 @@ describe('ToastContainer and toast store', () => {
     expect(document.body.textContent).toContain('i')
     expect(document.body.textContent).toContain('Done')
 
-    const actionButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.includes('Undo')) as HTMLButtonElement
-    actionButton.click()
-    expect(action).toHaveBeenCalledOnce()
+    for (const [type, action] of Object.entries(actions)) {
+      const actionButton = Array.from(document.body.querySelectorAll('button')).find(
+        (button) => button.textContent?.includes(`Undo ${type}`),
+      ) as HTMLButtonElement
+      actionButton.click()
+      expect(action).toHaveBeenCalledOnce()
+    }
 
     expect(document.body.querySelector('.animate-progress')).not.toBeNull()
   })
