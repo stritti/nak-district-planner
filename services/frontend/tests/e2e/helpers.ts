@@ -34,7 +34,10 @@ const DEFAULT_IDENTITY: MockOIDCIdentity = {
 }
 
 function jwt(claims: Record<string, unknown>): string {
-  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url')
+  const payload = btoa(JSON.stringify(claims))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
   return `eyJhbGciOiJub25lIn0.${payload}.signature`
 }
 
