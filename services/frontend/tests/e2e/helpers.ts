@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 
 export const FRONTEND_URL = 'http://localhost:5173'
 
@@ -19,6 +19,62 @@ export interface MatrixResponseOptions {
   leaderName?: string
   assignmentId?: string | null
   assignmentStatus?: string | null
+}
+
+export interface MockOIDCIdentity {
+  sub: string
+  email: string
+  name: string
+}
+
+const DEFAULT_IDENTITY: MockOIDCIdentity = {
+  sub: 'planner-user',
+  email: 'planner@example.com',
+  name: 'Planner User',
+}
+
+function jwt(claims: Record<string, unknown>): string {
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url')
+  return `eyJhbGciOiJub25lIn0.${payload}.signature`
+}
+
+/**
+ * Model an authenticated browser exactly like production: the SPA starts with
+ * no persisted token and restores its memory-only identity from the backend's
+ * HttpOnly refresh session.
+ */
+export async function mockAuthenticatedSession(
+  page: Page,
+  identity: MockOIDCIdentity = DEFAULT_IDENTITY,
+): Promise<void> {
+  await page.route('**/api/v1/auth/oidc/discovery', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'set-cookie': 'csrf_token=e2e-csrf; Path=/; SameSite=Strict' },
+      body: JSON.stringify({
+        authorization_endpoint: 'https://idp.example/authorize',
+        token_endpoint: 'https://idp.example/token',
+        userinfo_endpoint: 'https://idp.example/userinfo',
+        client_id: 'planner-client',
+      }),
+    })
+  })
+
+  await page.route('**/api/v1/auth/oidc/token', async (route) => {
+    expect(route.request().method()).toBe('POST')
+    expect(route.request().postDataJSON()).toEqual({ grant_type: 'refresh_token' })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        access_token: 'fake-access-token',
+        id_token: jwt(identity),
+        expires_in: 3600,
+        refresh_session: true,
+      }),
+    })
+  })
 }
 
 /**
@@ -61,8 +117,7 @@ export function matrixResponse(options: MatrixResponseOptions) {
 }
 
 /**
- * Seeds a PLANNER session in localStorage and installs the standard
- * API route mocks (auth, districts, congregations, leaders, matrix).
+ * Installs the standard planner session and matrix API route mocks.
  * Test-specific routes registered afterwards override these defaults.
  */
 export async function setupAuthAndMatrix(
@@ -70,24 +125,6 @@ export async function setupAuthAndMatrix(
   matrix: ReturnType<typeof matrixResponse>,
 ): Promise<void> {
   await page.addInitScript(() => {
-    localStorage.setItem(
-      'auth',
-      JSON.stringify({
-        token: {
-          accessToken: 'fake-access-token',
-          idToken: 'fake-id-token',
-          expiresAt: Math.floor(Date.now() / 1000) + 3600,
-        },
-        user: {
-          sub: 'planner-user',
-          email: 'planner@example.com',
-          name: 'Planner User',
-        },
-        isSuperadmin: false,
-        accessStatus: 'ACTIVE',
-        memberships: [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'district-1' }],
-      }),
-    )
     localStorage.setItem(
       'matrix',
       JSON.stringify({
@@ -170,4 +207,7 @@ export async function setupAuthAndMatrix(
       body: JSON.stringify(matrix),
     })
   })
+
+  // Register auth restore routes last so they take precedence over the generic API mock.
+  await mockAuthenticatedSession(page)
 }
