@@ -28,6 +28,6 @@
 
 ## 4. Verifikation
 
-- [ ] 4.1 Backend Unit-/Integrationstests erfolgreich.
-- [ ] 4.2 Backend Coverage >80 Prozent.
-- [ ] 4.3 CodeQL und Security Scans erfolgreich.
+- [x] 4.1 Backend Unit-/Integrationstests erfolgreich.
+- [x] 4.2 Backend Coverage >80 Prozent.
+- [x] 4.3 CodeQL und Security Scans erfolgreich.
