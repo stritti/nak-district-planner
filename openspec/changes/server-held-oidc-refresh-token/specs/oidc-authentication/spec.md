@@ -49,12 +49,29 @@ The SPA SHALL be able to rebuild its memory-only access session after a page rel
 #### Scenario: Reload with a valid refresh cookie
 - **WHEN** no in-memory access token exists after application startup
 - **AND** the backend refresh-session cookie is still valid
-- **THEN** the SPA requests a refresh grant without a browser-held refresh credential
+- **THEN** the SPA bootstraps OIDC discovery so the current CSRF cookie is available
+- **AND** requests a refresh grant without a browser-held refresh credential
 - **AND** installs the returned access session only after a valid token response and user identity are available
 
 #### Scenario: Reload without a usable refresh session
-- **WHEN** the cookie is missing, expired, the provider response is malformed, or the refresh request fails
+- **WHEN** discovery bootstrap fails, the cookie is missing or expired, the provider response is malformed, or the refresh request fails
 - **THEN** no partial authenticated session is installed
+
+### Requirement: Protected navigation waits for session restoration
+A route that requires authentication SHALL NOT decide that a user is logged out until a possible server-held refresh session has been restored or rejected.
+
+#### Scenario: Direct reload of a protected route with a valid refresh session
+- **WHEN** the browser loads a protected route with no in-memory access token
+- **AND** a valid server-held refresh session exists
+- **THEN** the route guard waits for the deduplicated session restore
+- **AND** refreshes current-user authorization facts after the bearer is restored
+- **AND** allows the requested protected navigation without an intermediate redirect to `/login`
+
+#### Scenario: Protected route restore fails
+- **WHEN** a protected route is loaded without an in-memory access token
+- **AND** the server-held session cannot be restored
+- **THEN** the route guard fails closed and redirects to `/login`
+- **AND** does not install partial authentication or privileged authorization facts
 
 ### Requirement: Cookie-backed OIDC state changes remain CSRF protected
 Every browser POST that uses or mutates the server-held refresh session SHALL submit the current double-submit CSRF token in the configured request header.
