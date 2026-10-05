@@ -62,20 +62,20 @@ async def test_opaque_token_can_use_userinfo(adapter: OIDCAdapter) -> None:
 
 
 @pytest.mark.asyncio
-async def test_opaque_userinfo_with_wrong_issuer_falls_through_and_fails(
+async def test_opaque_userinfo_claim_mismatch_is_terminal(
     adapter: OIDCAdapter,
 ) -> None:
     adapter._fetch_userinfo_claims = AsyncMock(
         return_value={"sub": "opaque-user", "iss": "https://evil.example.com"}
     )
     adapter._introspect_token = AsyncMock(
-        side_effect=TokenValidationError("introspection unavailable")
+        return_value={"active": True, "sub": "opaque-user"}
     )
 
-    with pytest.raises(TokenValidationError, match="Opaque token validation failed"):
+    with pytest.raises(TokenValidationError, match="Invalid issuer"):
         await adapter.validate_token("opaque-token")
 
-    adapter._introspect_token.assert_awaited_once()
+    adapter._introspect_token.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -109,6 +109,26 @@ async def test_opaque_introspection_rejects_wrong_audience(
             "active": True,
             "sub": "opaque-user",
             "aud": ["some-other-api"],
+        }
+    )
+
+    with pytest.raises(TokenValidationError, match="Invalid audience"):
+        await adapter.validate_token("opaque-token")
+
+
+@pytest.mark.asyncio
+async def test_opaque_audience_cannot_be_replaced_by_matching_azp(
+    adapter: OIDCAdapter,
+) -> None:
+    adapter._fetch_userinfo_claims = AsyncMock(
+        side_effect=TokenValidationError("userinfo unavailable")
+    )
+    adapter._introspect_token = AsyncMock(
+        return_value={
+            "active": True,
+            "sub": "opaque-user",
+            "aud": ["some-other-api"],
+            "azp": "planner-client",
         }
     )
 
