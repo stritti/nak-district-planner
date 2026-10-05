@@ -44,7 +44,15 @@ async function requireAuth(
     // route, rebuild it from the server-held HttpOnly refresh session before
     // deciding whether the user is logged out.
     const restored = await useOIDC(router).ensureSession()
-    next(restored && authStore.isAuthenticated ? undefined : '/login')
+    if (!restored || !authStore.isAuthenticated) {
+      next('/login')
+      return
+    }
+
+    // Rehydrate authorization facts once the bearer exists. The store handles
+    // transient API failures fail-closed by resetting privileged flags.
+    await authStore.refreshCurrentUserFlags()
+    next()
   } catch {
     // Restore errors fail closed; protected navigation never proceeds without
     // an established in-memory session.
