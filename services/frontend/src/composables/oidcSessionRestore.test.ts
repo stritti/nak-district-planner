@@ -15,7 +15,8 @@ afterEach(() => {
 })
 
 describe('restoreRefreshSession', () => {
-  it('restores an in-memory session without exposing a provider refresh token', async () => {
+  it('bootstraps discovery before the CSRF-protected restore request', async () => {
+    const ensureDiscovery = vi.fn().mockResolvedValue(undefined)
     const installSession = vi.fn()
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       access_token: 'access',
@@ -25,12 +26,16 @@ describe('restoreRefreshSession', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
 
     const restored = await restoreRefreshSession({
-      ensureDiscovery: vi.fn(),
+      ensureDiscovery,
       fetchUserInfo: vi.fn(),
       installSession,
     })
 
     expect(restored).toBe(true)
+    expect(ensureDiscovery).toHaveBeenCalledOnce()
+    expect(ensureDiscovery.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(globalThis.fetch).mock.invocationCallOrder[0],
+    )
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/auth/oidc/token', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ grant_type: 'refresh_token' }),
@@ -42,6 +47,19 @@ describe('restoreRefreshSession', () => {
       }),
       expect.objectContaining({ sub: 'user-1' }),
     )
+  })
+
+  it('does not submit a cookie-backed POST when discovery bootstrap fails', async () => {
+    const installSession = vi.fn()
+    globalThis.fetch = vi.fn()
+
+    expect(await restoreRefreshSession({
+      ensureDiscovery: vi.fn().mockRejectedValue(new Error('discovery unavailable')),
+      fetchUserInfo: vi.fn(),
+      installSession,
+    })).toBe(false)
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(installSession).not.toHaveBeenCalled()
   })
 
   it('uses userinfo when token claims do not contain a subject', async () => {
@@ -71,7 +89,7 @@ describe('restoreRefreshSession', () => {
     globalThis.fetch = vi.fn().mockResolvedValue(response)
 
     expect(await restoreRefreshSession({
-      ensureDiscovery: vi.fn(),
+      ensureDiscovery: vi.fn().mockResolvedValue(undefined),
       fetchUserInfo: vi.fn(),
       installSession,
     })).toBe(false)
@@ -82,7 +100,7 @@ describe('restoreRefreshSession', () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('offline'))
 
     expect(await restoreRefreshSession({
-      ensureDiscovery: vi.fn(),
+      ensureDiscovery: vi.fn().mockResolvedValue(undefined),
       fetchUserInfo: vi.fn(),
       installSession: vi.fn(),
     })).toBe(false)
