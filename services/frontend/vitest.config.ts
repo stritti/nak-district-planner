@@ -25,6 +25,7 @@ export default defineConfig({
         "src/main.ts",
       ],
       thresholds: {
+        perFile: true,
         statements: 80,
         branches: 80,
         functions: 80,
