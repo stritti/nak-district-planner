@@ -12,7 +12,7 @@ Die bisherige Frontend-Coverage misst nur eine explizite Allowlist einzelner Dat
 
 ## Capabilities
 
-### Modified Capabilities
+### New Capabilities
 - `quality-gates`: Frontend-Coverage bezieht sich auf den vollstaendigen Production-Code-Scope und erzwingt 80 Prozent pro gemessener Datei.
 
 ## Impact
