@@ -36,6 +36,6 @@
 
 ## 4. Verifikation
 
-- [ ] 4.1 Backend Tests und Coverage >80 % erfolgreich.
-- [ ] 4.2 Frontend Unit/E2E Tests und Coverage >80 % erfolgreich.
-- [ ] 4.3 CodeQL und Dependency Audits erfolgreich.
+- [x] 4.1 Backend Tests und Coverage >80 % erfolgreich.
+- [x] 4.2 Frontend Unit/E2E Tests und Coverage >80 % erfolgreich.
+- [x] 4.3 CodeQL und Dependency Audits erfolgreich.
