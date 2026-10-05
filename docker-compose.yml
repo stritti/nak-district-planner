@@ -49,9 +49,10 @@ services:
     build: ./services/frontend
     # The application-facing nginx is intentionally reachable only from the
     # host loopback interface. Public TLS termination belongs to the external
-    # reverse proxy; this prevents bypassing HTTPS via the server IP.
+    # reverse proxy; this prevents bypassing HTTPS via the server IP while
+    # preserving the documented reverse-proxy target on 127.0.0.1:80.
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:80:80"
     depends_on:
       - backend
 
