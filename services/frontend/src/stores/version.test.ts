@@ -1,142 +1,154 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { setActivePinia, createPinia } from "pinia";
-import { useVersionStore } from "./version";
-import * as systemApi from "@/api/system";
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { useVersionStore } from './version'
+import * as systemApi from '@/api/system'
 
-vi.mock("@/api/system", () => ({
+vi.mock('@/api/system', () => ({
   getVersion: vi.fn(),
   triggerUpdate: vi.fn(),
-}));
+}))
 
-describe("useVersionStore", () => {
+const versionResponse = (overrides = {}) => ({
+  current_version: '0.4.5',
+  latest_version: '0.5.0',
+  update_available: true,
+  last_checked: 123,
+  release_url: 'https://example.test/releases/0.5.0',
+  ...overrides,
+})
+
+describe('useVersionStore', () => {
   beforeEach(() => {
-    setActivePinia(createPinia());
-    vi.clearAllMocks();
-    localStorage.clear();
-  });
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
 
-  it("starts with idle state and no version", () => {
-    const store = useVersionStore();
-    expect(store.currentVersion).toBe("");
-    expect(store.latestVersion).toBeNull();
-    expect(store.loading).toBe(false);
-    expect(store.hasUpdate).toBe(false);
-  });
+  it('starts with idle state and no version', () => {
+    const store = useVersionStore()
+    expect(store.currentVersion).toBe('')
+    expect(store.latestVersion).toBeNull()
+    expect(store.loading).toBe(false)
+    expect(store.hasUpdate).toBe(false)
+  })
 
-  it("checkVersion sets state on success with update", async () => {
-    vi.mocked(systemApi.getVersion).mockResolvedValue({
-      current_version: "0.4.5",
-      latest_version: "0.5.0",
-      update_available: true,
-      last_checked: Date.now(),
-      release_url: "https://github.com/test/test/releases/tag/v0.5.0",
-    });
+  it('loads version metadata and forwards refresh', async () => {
+    vi.mocked(systemApi.getVersion).mockResolvedValue(versionResponse())
+    const store = useVersionStore()
 
-    const store = useVersionStore();
-    await store.checkVersion();
+    await store.checkVersion(true)
 
-    expect(store.currentVersion).toBe("0.4.5");
-    expect(store.latestVersion).toBe("0.5.0");
-    expect(store.hasUpdate).toBe(true);
-    expect(store.loading).toBe(false);
-  });
+    expect(systemApi.getVersion).toHaveBeenCalledWith(true)
+    expect(store.currentVersion).toBe('0.4.5')
+    expect(store.latestVersion).toBe('0.5.0')
+    expect(store.lastChecked).toBe(123)
+    expect(store.releaseUrl).toContain('/0.5.0')
+    expect(store.hasUpdate).toBe(true)
+    expect(store.loading).toBe(false)
+  })
 
-  it("checkVersion sets state when no update available", async () => {
-    vi.mocked(systemApi.getVersion).mockResolvedValue({
-      current_version: "0.5.0",
-      latest_version: "0.5.0",
-      update_available: false,
-      last_checked: Date.now(),
-      release_url: null,
-    });
+  it('clears hasUpdate when versions match or no latest version exists', async () => {
+    const store = useVersionStore()
+    store.hasUpdate = true
+    vi.mocked(systemApi.getVersion).mockResolvedValueOnce(
+      versionResponse({ current_version: '0.5.0', latest_version: '0.5.0' }),
+    )
+    await store.checkVersion()
+    expect(store.hasUpdate).toBe(false)
 
-    const store = useVersionStore();
-    await store.checkVersion();
+    store.hasUpdate = true
+    vi.mocked(systemApi.getVersion).mockResolvedValueOnce(
+      versionResponse({ latest_version: null }),
+    )
+    await store.checkVersion()
+    expect(store.hasUpdate).toBe(false)
+  })
 
-    expect(store.currentVersion).toBe("0.5.0");
-    expect(store.latestVersion).toBe("0.5.0");
-    expect(store.hasUpdate).toBe(false);
-  });
+  it('handles version lookup errors silently', async () => {
+    vi.mocked(systemApi.getVersion).mockRejectedValue(new Error('Network error'))
+    const store = useVersionStore()
+    store.hasUpdate = true
 
-  it("checkVersion handles errors silently", async () => {
-    vi.mocked(systemApi.getVersion).mockRejectedValue(new Error("Network error"));
+    await store.checkVersion()
 
-    const store = useVersionStore();
-    await store.checkVersion();
+    expect(store.loading).toBe(false)
+    expect(store.hasUpdate).toBe(false)
+  })
 
-    // Errors are swallowed silently per design
-    expect(store.loading).toBe(false);
-    expect(store.hasUpdate).toBe(false);
-  });
+  it('dismisses a known latest version and ignores dismiss without one', async () => {
+    const store = useVersionStore()
+    store.dismiss()
+    expect(localStorage.getItem('dismissedVersion')).toBeNull()
 
-  it("dismiss stores version in localStorage", async () => {
-    vi.mocked(systemApi.getVersion).mockResolvedValue({
-      current_version: "0.4.5",
-      latest_version: "0.5.0",
-      update_available: true,
-      last_checked: Date.now(),
-      release_url: null,
-    });
+    vi.mocked(systemApi.getVersion).mockResolvedValue(versionResponse())
+    await store.checkVersion()
+    store.dismiss()
 
-    const store = useVersionStore();
-    await store.checkVersion();
-    expect(store.hasUpdate).toBe(true);
+    expect(store.dismissedVersion).toBe('0.5.0')
+    expect(localStorage.getItem('dismissedVersion')).toBe('0.5.0')
+    expect(store.hasUpdate).toBe(false)
+  })
 
-    store.dismiss();
-    expect(localStorage.getItem("dismissedVersion")).toBe("0.5.0");
-    expect(store.hasUpdate).toBe(false);
-  });
+  it('respects a dismissed version and re-shows a newer version', async () => {
+    vi.mocked(systemApi.getVersion)
+      .mockResolvedValueOnce(versionResponse())
+      .mockResolvedValueOnce(versionResponse())
+      .mockResolvedValueOnce(versionResponse({ latest_version: '0.6.0' }))
 
-  it("respects dismissed version on next checkVersion call", async () => {
-    // First check: version 0.5.0 available
-    vi.mocked(systemApi.getVersion).mockResolvedValueOnce({
-      current_version: "0.4.5",
-      latest_version: "0.5.0",
-      update_available: true,
-      last_checked: Date.now(),
-      release_url: null,
-    });
+    const store = useVersionStore()
+    await store.checkVersion()
+    store.dismiss()
+    await store.checkVersion()
+    expect(store.hasUpdate).toBe(false)
 
-    const store = useVersionStore();
-    await store.checkVersion();
-    expect(store.hasUpdate).toBe(true);
-    store.dismiss();
+    await store.checkVersion()
+    expect(store.hasUpdate).toBe(true)
+  })
 
-    // Second check: same 0.5.0 still the latest — should stay dismissed
-    vi.mocked(systemApi.getVersion).mockResolvedValueOnce({
-      current_version: "0.4.5",
-      latest_version: "0.5.0",
-      update_available: true,
-      last_checked: Date.now(),
-      release_url: null,
-    });
-    await store.checkVersion();
-    expect(store.hasUpdate).toBe(false);
-  });
+  it('triggers an update and records a successful result and mode', async () => {
+    const result = {
+      status: 'started' as const,
+      mode: 'docker-socket' as const,
+      instructions: null,
+    }
+    vi.mocked(systemApi.triggerUpdate).mockResolvedValue(result)
+    const store = useVersionStore()
 
-  it("re-shows banner when a newer version appears after dismiss", async () => {
-    // First check: version 0.5.0 available, user dismisses
-    vi.mocked(systemApi.getVersion).mockResolvedValueOnce({
-      current_version: "0.4.5",
-      latest_version: "0.5.0",
-      update_available: true,
-      last_checked: Date.now(),
-      release_url: null,
-    });
+    await expect(store.trigger()).resolves.toEqual(result)
 
-    const store = useVersionStore();
-    await store.checkVersion();
-    store.dismiss();
+    expect(store.updateResult).toEqual(result)
+    expect(store.updateMode).toBe('docker-socket')
+    expect(store.updating).toBe(false)
+  })
 
-    // Second check: 0.6.0 now available — should re-appear
-    vi.mocked(systemApi.getVersion).mockResolvedValueOnce({
-      current_version: "0.4.5",
-      latest_version: "0.6.0",
-      update_available: true,
-      last_checked: Date.now(),
-      release_url: null,
-    });
-    await store.checkVersion();
-    expect(store.hasUpdate).toBe(true);
-  });
-});
+  it('records a safe manual result and rethrows when update triggering fails', async () => {
+    const error = new Error('update unavailable')
+    vi.mocked(systemApi.triggerUpdate).mockRejectedValue(error)
+    const store = useVersionStore()
+
+    await expect(store.trigger()).rejects.toThrow('update unavailable')
+
+    expect(store.updateResult).toEqual({
+      status: 'error',
+      mode: 'manual',
+      instructions: null,
+    })
+    expect(store.updating).toBe(false)
+  })
+
+  it('resets mutable version state', async () => {
+    vi.mocked(systemApi.getVersion).mockResolvedValue(versionResponse())
+    const store = useVersionStore()
+    await store.checkVersion()
+    store.updateResult = { status: 'manual', mode: 'manual', instructions: 'run it' }
+
+    store.$reset()
+
+    expect(store.currentVersion).toBe('')
+    expect(store.latestVersion).toBeNull()
+    expect(store.lastChecked).toBeNull()
+    expect(store.releaseUrl).toBeNull()
+    expect(store.hasUpdate).toBe(false)
+    expect(store.updateResult).toBeNull()
+  })
+})
