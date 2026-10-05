@@ -303,9 +303,9 @@ class TestAudienceValidation:
             "test-client",
         )
 
-    def test_accepts_azp(self, oidc_adapter: OIDCAdapter) -> None:
+    def test_accepts_azp_when_aud_is_absent(self, oidc_adapter: OIDCAdapter) -> None:
         oidc_adapter._validate_audience_claims(
-            {"aud": ["api"], "azp": "test-client"},
+            {"azp": "test-client"},
             "test-client",
         )
 
