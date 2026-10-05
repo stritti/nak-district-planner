@@ -38,6 +38,7 @@ from app.adapters.api.routers import (
 from app.adapters.api.routers.health import _build_health_response
 from app.adapters.auth.oidc import OIDCAdapter
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.db.schema_version import SchemaVersionError, assert_database_schema_current
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
@@ -68,6 +69,13 @@ async def lifespan(app: FastAPI):
     except RuntimeError as e:
         print("🚨", str(e))
         sys.exit(1)
+
+    # Verify the deployment migration completed without applying DDL at runtime.
+    try:
+        await assert_database_schema_current(engine)
+    except SchemaVersionError as e:
+        logging.getLogger(__name__).critical("Database schema check failed: %s", e)
+        raise
 
     # Start audit service
     await audit_service.start()
