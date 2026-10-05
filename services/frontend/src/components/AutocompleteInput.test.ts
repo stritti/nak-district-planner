@@ -66,7 +66,7 @@ describe('AutocompleteInput', () => {
     await input.trigger('keydown', { key: 'Enter' })
 
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([
-      { id: '1', text: 'Anna Beispiel' },
+      { id: '3', text: 'Clara Test' },
     ])
   })
 
