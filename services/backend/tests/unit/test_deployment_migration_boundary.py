@@ -16,6 +16,13 @@ def test_runtime_application_does_not_execute_alembic_upgrade() -> None:
     assert "alembic.config" not in source
 
 
+def test_runtime_application_fails_fast_on_schema_mismatch_without_migrating() -> None:
+    source = (BACKEND_ROOT / "app" / "main.py").read_text(encoding="utf-8")
+
+    assert "await assert_database_schema_current(engine)" in source
+    assert "except SchemaVersionError" in source
+
+
 def test_runtime_services_wait_for_one_shot_migration() -> None:
     compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]
@@ -29,3 +36,11 @@ def test_runtime_services_wait_for_one_shot_migration() -> None:
         dependency = services[service_name]["depends_on"]["migrate"]
         assert dependency["condition"] == "service_completed_successfully"
         assert ".env.docker.migrate" not in services[service_name]["env_file"]
+
+
+def test_deployment_migration_runbook_documents_explicit_commands() -> None:
+    runbook = (REPO_ROOT / "docs" / "deployment-migrations.md").read_text(encoding="utf-8")
+
+    assert "docker compose run --no-deps --rm migrate" in runbook
+    assert "docker compose run --no-deps --rm --build migrate" in runbook
+    assert "uv run alembic upgrade head" in runbook
