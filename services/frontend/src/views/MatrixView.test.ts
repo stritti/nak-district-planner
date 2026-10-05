@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, flushPromises, h } from 'vue'
-import { mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import type { MatrixCell } from '../api/matrix'
 import { useDistrictsStore } from '../stores/districts'
@@ -11,6 +11,10 @@ import MatrixView from './MatrixView.vue'
 const assignmentOpen = vi.fn()
 
 const MatrixFiltersStub = defineComponent({
+  props: {
+    compactMode: Boolean,
+    matrixSortMode: String,
+  },
   emits: ['update:compact-mode', 'update:matrix-sort-mode', 'release'],
   setup(_, { emit }) {
     return () => h('div', [
