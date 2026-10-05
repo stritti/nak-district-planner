@@ -202,29 +202,31 @@ class OIDCAdapter:
         userinfo_error: TokenValidationError | None = None
         try:
             userinfo_claims = await self._fetch_userinfo_claims(token)
+        except TokenValidationError as e:
+            userinfo_error = e
+            logger.info("userinfo validation failed, trying introspection fallback: %s", e)
+        else:
             self._validate_opaque_claims(userinfo_claims, expected_audience)
             logger.info(
                 "Opaque token validated through userinfo endpoint for user: %s",
                 userinfo_claims.get("sub"),
             )
             return userinfo_claims
-        except TokenValidationError as e:
-            userinfo_error = e
-            logger.info("userinfo validation failed, trying introspection fallback: %s", e)
 
         try:
             introspection_claims = await self._introspect_token(token)
-            self._validate_opaque_claims(introspection_claims, expected_audience)
-            logger.info(
-                "Opaque token validated through introspection endpoint for user: %s",
-                introspection_claims.get("sub"),
-            )
-            return introspection_claims
         except TokenValidationError as e:
             raise TokenValidationError(
                 f"Opaque token validation failed: userinfo ({userinfo_error}); "
                 f"introspection ({e})"
             ) from e
+
+        self._validate_opaque_claims(introspection_claims, expected_audience)
+        logger.info(
+            "Opaque token validated through introspection endpoint for user: %s",
+            introspection_claims.get("sub"),
+        )
+        return introspection_claims
 
     @staticmethod
     def _is_jwt_shaped(token: str) -> bool:
@@ -421,7 +423,7 @@ class OIDCAdapter:
         return claims
 
     def _validate_audience_claims(self, token_claims: dict[str, Any], expected: str) -> None:
-        """Validate token audience in a provider-compatible way."""
+        """Validate resource audience, falling back to azp only when aud is absent."""
         aud_claim = token_claims.get("aud")
         azp_claim = token_claims.get("azp")
 
@@ -431,11 +433,19 @@ class OIDCAdapter:
         elif isinstance(aud_claim, list):
             aud_matches = expected in aud_claim
 
-        azp_matches = isinstance(azp_claim, str) and azp_claim == expected
+        if "aud" in token_claims:
+            if not aud_matches:
+                raise TokenValidationError(
+                    f"Invalid audience: aud={aud_claim!r}, azp={azp_claim!r} "
+                    f"(expected {expected!r})"
+                )
+            return
 
-        if not aud_matches and not azp_matches:
+        azp_matches = isinstance(azp_claim, str) and azp_claim == expected
+        if not azp_matches:
             raise TokenValidationError(
-                f"Invalid audience: aud={aud_claim!r}, azp={azp_claim!r} (expected {expected!r})"
+                f"Invalid audience: aud={aud_claim!r}, azp={azp_claim!r} "
+                f"(expected {expected!r})"
             )
 
     def extract_user_info(self, token_claims: dict[str, Any]) -> dict[str, Any]:
