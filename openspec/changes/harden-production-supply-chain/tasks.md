@@ -16,6 +16,6 @@
 
 ## 3. Verifikation
 
-- [ ] 3.1 Docker-Builds fuer Backend und Frontend erfolgreich.
+- [x] 3.1 Docker-Builds fuer Backend und Frontend erfolgreich.
 - [ ] 3.2 Compose-Konfiguration erfolgreich validiert.
-- [ ] 3.3 Frontend-E2E unter CSP erfolgreich.
+- [x] 3.3 Frontend-E2E unter CSP erfolgreich.
