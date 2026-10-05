@@ -20,7 +20,10 @@ export default defineConfig({
         "src/**/__tests__/**",
         // Test doubles import Vitest and are not shipped as application code.
         "src/testing/**",
+        // Type-only modules have no emitted runtime behavior to cover.
         "src/**/*.d.ts",
+        "src/types/**",
+        "src/composables/oidcTypes.ts",
         // Bootstrap wiring is exercised by build/E2E checks rather than unit tests.
         "src/main.ts",
       ],
