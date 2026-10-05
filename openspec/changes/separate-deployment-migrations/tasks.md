@@ -17,6 +17,6 @@
 ## 3. Verifikation
 
 - [x] 3.1 Backend Unit Tests und Coverage erfolgreich.
-- [ ] 3.2 Compose-Konfiguration erfolgreich.
+- [x] 3.2 Compose-Konfiguration erfolgreich.
 - [x] 3.3 Migration Graph & FK Names erfolgreich.
 - [x] 3.4 Encrypted Backup & Isolated Restore erfolgreich.
