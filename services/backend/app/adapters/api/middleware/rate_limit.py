@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from re import Pattern
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -39,7 +38,7 @@ class SensitiveEndpointRule:
     """Declarative description of a route that needs a local fail-open fallback."""
 
     method: str
-    pattern: Pattern[str]
+    pattern: re.Pattern[str]
     limit_attribute: str
 
     def matches(self, method: str, path: str) -> bool:
