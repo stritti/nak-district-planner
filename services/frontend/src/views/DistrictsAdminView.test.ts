@@ -289,7 +289,6 @@ describe('DistrictsAdminView', () => {
     vi.mocked(districtsApi.deleteGroup).mockResolvedValue(undefined)
     const { wrapper, toastStore } = setup()
     const success = vi.spyOn(toastStore, 'success')
-    const error = vi.spyOn(toastStore, 'error')
     await flushPromises()
 
     const groupRow = wrapper.findAll('div').find((node) => node.text().trim() === 'Gruppe A' && node.find('button').exists())!
@@ -305,12 +304,14 @@ describe('DistrictsAdminView', () => {
     vi.mocked(districtsApi.listGroups).mockResolvedValueOnce([group('g3', 'Gruppe C')])
     vi.mocked(districtsApi.listCongregations).mockResolvedValueOnce([])
     vi.mocked(districtsApi.listDistricts).mockResolvedValueOnce([district('d1', 'Bezirk Eins')])
-    const second = setup().wrapper
+    const secondSetup = setup()
+    const secondError = vi.spyOn(secondSetup.toastStore, 'error')
+    const second = secondSetup.wrapper
     await flushPromises()
     const secondRow = second.findAll('div').find((node) => node.text().trim() === 'Gruppe C' && node.find('button').exists())!
     await secondRow.findAll('button')[1].trigger('click')
     await second.get('[data-test="confirm-delete"]').trigger('click')
     await flushPromises()
-    expect(error).toHaveBeenCalledWith('Löschen fehlgeschlagen', 'Nicht erlaubt')
+    expect(secondError).toHaveBeenCalledWith('Löschen fehlgeschlagen', 'Nicht erlaubt')
   })
 })
