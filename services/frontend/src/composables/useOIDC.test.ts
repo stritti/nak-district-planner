@@ -336,12 +336,17 @@ describe('session lifecycle', () => {
 
   it('restores a memory-only session during initialize when the HttpOnly cookie is valid', async () => {
     const restoredIdToken = jwt({ sub: 'restored-user' })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      access_token: 'restored-access',
-      id_token: restoredIdToken,
-      refresh_session: true,
-      expires_in: 3600,
-    }), { status: 200 })))
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/auth/oidc/discovery') {
+        return Promise.resolve(discoveryResponse())
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        access_token: 'restored-access',
+        id_token: restoredIdToken,
+        refresh_session: true,
+        expires_in: 3600,
+      }), { status: 200 }))
+    }))
     const oidc = createOidc()
 
     oidc.initialize()
@@ -350,6 +355,37 @@ describe('session lifecycle', () => {
     expect(useAuthStore().user?.sub).toBe('restored-user')
     expect(useAuthStore().token?.refreshToken).toBe(REFRESH_SESSION_COORDINATION_ID)
     expect(localStorage.length).toBe(0)
+  })
+
+  it('deduplicates concurrent session restoration attempts', async () => {
+    const restoredIdToken = jwt({ sub: 'restored-user' })
+    let resolveToken!: (response: Response) => void
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/v1/auth/oidc/discovery') {
+        return Promise.resolve(discoveryResponse())
+      }
+      return new Promise<Response>((resolve) => {
+        resolveToken = resolve
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const firstOidc = createOidc()
+    const secondOidc = createOidc()
+
+    const first = firstOidc.ensureSession()
+    const second = secondOidc.ensureSession()
+    await vi.waitFor(() => expect(resolveToken).toBeTypeOf('function'))
+    resolveToken(new Response(JSON.stringify({
+      access_token: 'restored-access',
+      id_token: restoredIdToken,
+      refresh_session: true,
+      expires_in: 3600,
+    }), { status: 200 }))
+
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(useAuthStore().token?.accessToken).toBe('restored-access')
   })
 
   it('keeps computed auth state synchronized with the in-memory store', () => {
