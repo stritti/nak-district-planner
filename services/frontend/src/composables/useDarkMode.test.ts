@@ -24,7 +24,7 @@ describe('useDarkMode', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(expected)
   })
 
-  it('toggles DOM plus storage', async () => {
+  it('toggles DOM plus storage off', async () => {
     localStorage.setItem('nak-planer-theme', 'dark')
     const { useDarkMode } = await import('./useDarkMode')
     const { isDark, toggle } = useDarkMode()
@@ -35,6 +35,19 @@ describe('useDarkMode', () => {
     expect(isDark.value).toBe(false)
     expect(document.documentElement.classList.contains('dark')).toBe(false)
     expect(localStorage.getItem('nak-planer-theme')).toBe('light')
+  })
+
+  it('toggles DOM plus storage on', async () => {
+    localStorage.setItem('nak-planer-theme', 'light')
+    const { useDarkMode } = await import('./useDarkMode')
+    const { isDark, toggle } = useDarkMode()
+
+    toggle()
+    await Promise.resolve()
+
+    expect(isDark.value).toBe(true)
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(localStorage.getItem('nak-planer-theme')).toBe('dark')
   })
 
   it('falls back to the OS preference when nothing is persisted', async () => {
