@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, flushPromises, h } from 'vue'
-import { mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import * as calendarApi from '../api/calendarIntegrations'
 import * as districtsApi from '../api/districts'
