@@ -17,10 +17,19 @@ export interface RefreshSessionRestoreDeps {
 /**
  * Rebuild an in-memory browser session from the server-held HttpOnly refresh cookie.
  * Missing/invalid sessions are treated as a normal logged-out state.
+ *
+ * Discovery is loaded first because its safe GET response also refreshes the
+ * double-submit CSRF cookie needed by the subsequent cookie-backed POST.
  */
 export async function restoreRefreshSession(
   deps: RefreshSessionRestoreDeps,
 ): Promise<boolean> {
+  try {
+    await deps.ensureDiscovery()
+  } catch {
+    return false
+  }
+
   let response: Response
   try {
     response = await fetch('/api/v1/auth/oidc/token', {
@@ -49,7 +58,6 @@ export async function restoreRefreshSession(
   let user = derivedUser
   if (!user?.sub) {
     try {
-      await deps.ensureDiscovery()
       user = await deps.fetchUserInfo(token.accessToken)
     } catch {
       return false
