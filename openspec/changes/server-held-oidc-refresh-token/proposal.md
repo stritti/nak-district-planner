@@ -9,6 +9,8 @@ RC-1 persistiert den vollstaendigen OIDC-Tokenzustand inklusive Provider-Refresh
 - Die SPA erhaelt mit `refresh_session: true` nur Metadaten darueber, dass eine serverseitige Refresh-Session existiert, aber keinen Refresh-Token oder Pseudo-Credential.
 - Rotierte Refresh-Tokens ersetzen das Cookie serverseitig und werden nie an Frontend-JavaScript ausgegeben.
 - Nach einem Reload kann die SPA ihren in-memory Access-Token ueber die serverseitige Refresh-Session wiederherstellen.
+- Geschuetzte Routen warten auf diesen Restore und laden danach die aktuellen Rollen-/Scope-Fakten, bevor sie die Navigation freigeben; ein fehlgeschlagener Restore leitet fail-closed auf `/login` um.
+- Vor einem cookie-basierten Restore wird die sichere OIDC-Discovery geladen, damit der aktuelle Double-Submit-CSRF-Cookie fuer den nachfolgenden POST vorliegt.
 - Logout widerruft die serverseitig gehaltene Credential best-effort beim Provider, protokolliert Provider-Fehler und loescht das Cookie immer lokal.
 - Der Pinia-Auth-State wird nicht mehr persistent gespeichert.
 - Refresh-Koordination zwischen Tabs erfolgt nur fluechtig ueber Web Locks und BroadcastChannel; es werden keine Refresh-Receipts in Browser-Storage persistiert.
@@ -24,5 +26,6 @@ RC-1 persistiert den vollstaendigen OIDC-Tokenzustand inklusive Provider-Refresh
 ## Impact
 
 - Ein kompletter Seiten-Reload kann die Browser-Session aus dem HttpOnly-Refresh-Cookie wiederherstellen, ohne langlebige Credentials in JavaScript-Speicher zu legen.
+- Direkte Aufrufe geschuetzter URLs bleiben nach einem Reload nutzbar, weil der Route-Guard den Restore vor seiner Login-Entscheidung abwartet.
 - Der Provider-Refresh-Token verlaesst nach dem initialen Provider-Response den Backend-Kontext nicht mehr.
 - Die bisherige Receipt-/Rotationskettenlogik im Browser entfaellt, weil der Browser die rotierende Provider-Credential nicht mehr besitzt.
