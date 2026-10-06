@@ -6,8 +6,9 @@ import { useAuthStore } from '../stores/auth'
 import { __resetOIDCModuleState, useOIDC } from '../composables/useOIDC'
 import { stubWebLocks } from '../testing/webLocks'
 
-// Mock useCSRF composable
+// Mock both CSRF APIs used by apiFetch and the OIDC refresh flow.
 vi.mock('../composables/useCSRF', () => ({
+  getCurrentCSRFHeaders: () => ({ 'X-CSRF-Token': 'mock-csrf-token' }),
   useCSRF: () => ({
     getCSRFHeaders: () => ({ 'X-CSRF-Token': 'mock-csrf-token' }),
   }),

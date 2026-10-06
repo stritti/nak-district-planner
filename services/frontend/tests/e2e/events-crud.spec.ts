@@ -1,35 +1,15 @@
 import { expect, test } from '@playwright/test'
+import { mockAuthenticatedSession } from './helpers'
 
 const FRONTEND_URL = 'http://localhost:5173'
 
-const AUTH = {
-  token: {
-    accessToken: 'fake-access-token',
-    idToken: 'fake-id-token',
-    expiresAt: Math.floor(Date.now() / 1000) + 3600,
-  },
-  user: { sub: 'planner-1', email: 'planner@example.com', name: 'Planner' },
-  isSuperadmin: false,
-  accessStatus: 'ACTIVE' as const,
-  memberships: [
-    { role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'district-1' },
-  ],
-}
-
 test.describe('Event list CRUD', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript((auth) => {
-      localStorage.setItem('auth', JSON.stringify(auth))
-    }, AUTH)
-  })
-
   test('renders event list with mocked data', async ({ page }) => {
     // Catch-all registered FIRST → lowest priority (runs last in Playwright's reverse order)
     await page.route('**/api/v1/**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
 
-    // Auth endpoints must return proper objects (the catch-all returns [] which causes errors)
     await page.route('**/api/v1/auth/me', async (route) => {
       await route.fulfill({
         status: 200,
@@ -88,6 +68,11 @@ test.describe('Event list CRUD', () => {
         contentType: 'application/json',
         body: JSON.stringify([{ id: 'district-1', name: 'Bezirk Test' }]),
       })
+    })
+    await mockAuthenticatedSession(page, {
+      sub: 'planner-1',
+      email: 'planner@example.com',
+      name: 'Planner',
     })
 
     await page.goto(`${FRONTEND_URL}/events`)

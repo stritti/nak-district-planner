@@ -1,10 +1,13 @@
 import type { OIDCToken, OIDCUser } from './oidcTypes'
 import { parseJwt } from './jwt'
 
+/** Internal, non-secret identifier for one browser refresh session. */
+export const REFRESH_SESSION_COORDINATION_ID = 'server-held-refresh-session'
+
 export interface TokenExchangeResponse {
   access_token: string
   id_token?: string
-  refresh_token?: string
+  refresh_session?: boolean
   expires_in?: number
 }
 
@@ -14,8 +17,7 @@ export function isValidTokenExchangeResponse(value: unknown): value is TokenExch
   const response = value as Partial<TokenExchangeResponse>
   if (typeof response.access_token !== 'string' || response.access_token.length === 0) return false
   if (response.id_token !== undefined && typeof response.id_token !== 'string') return false
-  if (response.refresh_token !== undefined &&
-      (typeof response.refresh_token !== 'string' || response.refresh_token.length === 0)) return false
+  if (response.refresh_session !== undefined && typeof response.refresh_session !== 'boolean') return false
   if (response.expires_in !== undefined &&
       (typeof response.expires_in !== 'number' || !Number.isFinite(response.expires_in) || response.expires_in <= 0)) {
     return false
@@ -23,7 +25,7 @@ export function isValidTokenExchangeResponse(value: unknown): value is TokenExch
   return true
 }
 
-/** Validates an untrusted parsed token object. */
+/** Validates an untrusted parsed token object used by tab-local refresh receipts. */
 export function isValidTokenShape(value: unknown): value is OIDCToken {
   if (!value || typeof value !== 'object') return false
   const token = value as Partial<OIDCToken>
@@ -38,7 +40,7 @@ export interface OIDCIdentity {
   user: OIDCUser | null
 }
 
-/** Derives the next session identity from a token exchange response. */
+/** Derives the next in-memory session identity from a token exchange response. */
 export function identityFromTokenExchange(
   data: TokenExchangeResponse,
   currentToken: OIDCToken,
@@ -48,7 +50,9 @@ export function identityFromTokenExchange(
   const token: OIDCToken = {
     accessToken: data.access_token,
     idToken: data.id_token || currentToken.idToken,
-    refreshToken: data.refresh_token || currentToken.refreshToken,
+    refreshToken: data.refresh_session
+      ? REFRESH_SESSION_COORDINATION_ID
+      : currentToken.refreshToken,
     expiresAt: Math.floor(Date.now() / 1000) + Number(data.expires_in || 3600),
   }
 

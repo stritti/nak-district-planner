@@ -26,7 +26,7 @@ import {
 describe('refreshScheduler', () => {
   beforeEach(() => {
     __resetSchedulerState()
-    localStorage.clear()
+    sessionStorage.clear()
   })
 
   afterEach(() => {
@@ -50,7 +50,7 @@ describe('refreshScheduler', () => {
   it('returns null when BroadcastChannel is unavailable', () => {
     vi.stubGlobal('BroadcastChannel', undefined)
     expect(getRefreshChannel()).toBeNull()
-    expect(() => postRefreshMessage({ type: 'refresh-started', refreshToken: 'r' })).not.toThrow()
+    expect(() => postRefreshMessage({ type: 'refresh-started', sessionId: 'session' })).not.toThrow()
   })
 
   it('invokes the bound callback when the refresh timer fires', async () => {
@@ -165,21 +165,20 @@ describe('oidcSession', () => {
     expect(isLatestRefreshOperation(first)).toBe(false)
   })
 
-  it('ends the local session with replay protection and navigation', () => {
-    localStorage.setItem('oidc-refresh-result:x', JSON.stringify({ token: {}, user: null, recordedAt: 1 }))
+  it('ends the local session without persisting refresh state', () => {
     const clearAuth = vi.fn()
     const navigate = vi.fn()
     endLocalSession(clearAuth, navigate)
     expect(clearAuth).toHaveBeenCalled()
     expect(navigate).toHaveBeenCalled()
-    expect(localStorage.getItem('oidc-refresh-result:x')).toBe('consumed')
+    expect(sessionStorage.length).toBe(0)
   })
 
   it('installs a token and schedules its refresh', () => {
     const host = { invalidateCrossTabState: vi.fn(), clearTimers: vi.fn(), scheduleRefresh: vi.fn() }
     bindSessionLifecycle(host)
     const setAuth = vi.fn()
-    const token = { accessToken: 'a', idToken: '', refreshToken: 'r', expiresAt: 1 }
+    const token = { accessToken: 'a', idToken: '', refreshToken: 'session', expiresAt: 1 }
     installSessionToken(setAuth, token, { sub: 's' })
     expect(setAuth).toHaveBeenCalledWith(token, { sub: 's' })
     expect(host.scheduleRefresh).toHaveBeenCalledWith(token)
