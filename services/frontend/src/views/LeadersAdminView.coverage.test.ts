@@ -20,33 +20,36 @@ vi.mock('../api/districts', () => ({
   listCongregations: vi.fn(),
   listGroups: vi.fn(),
 }))
-vi.mock('../api/leaders', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/leaders')>()
-  return {
-    ...actual,
-    createLeader: vi.fn(),
-    deleteLeader: vi.fn(),
-    getSelfLeaderLink: vi.fn(),
-    linkSelfToLeader: vi.fn(),
-    listLeaders: vi.fn(),
-    unlinkSelfFromLeader: vi.fn(),
-    updateLeader: vi.fn(),
-  }
-})
-vi.mock('../api/registrations', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/registrations')>()
-  return {
-    ...actual,
-    approveRegistration: vi.fn(),
-    deleteRegistration: vi.fn(),
-    listRegistrations: vi.fn(),
-    rejectRegistration: vi.fn(),
-  }
-})
-vi.mock('../api/exportTokens', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/exportTokens')>()
-  return { ...actual, createExportToken: vi.fn() }
-})
+vi.mock('../api/leaders', () => ({
+  LEADER_RANKS: [
+    { value: 'Di.', label: 'Di. – Diakon' },
+    { value: 'Pr.', label: 'Pr. – Priester' },
+  ],
+  SPECIAL_ROLES: [
+    { value: 'Gemeindevorsteher', label: 'Gemeindevorsteher' },
+    { value: 'Bezirksvorsteher', label: 'Bezirksvorsteher' },
+  ],
+  leaderNameFromId: (leaderId: string, values: Array<{ id: string; name: string; rank: string | null }>) => {
+    const value = values.find((candidate) => candidate.id === leaderId)
+    return value ? `${value.rank ? `${value.rank} ` : ''}${value.name}` : '—'
+  },
+  createLeader: vi.fn(),
+  deleteLeader: vi.fn(),
+  getSelfLeaderLink: vi.fn(),
+  linkSelfToLeader: vi.fn(),
+  listLeaders: vi.fn(),
+  unlinkSelfFromLeader: vi.fn(),
+  updateLeader: vi.fn(),
+}))
+vi.mock('../api/registrations', () => ({
+  approveRegistration: vi.fn(),
+  deleteRegistration: vi.fn(),
+  listRegistrations: vi.fn(),
+  rejectRegistration: vi.fn(),
+}))
+vi.mock('../api/exportTokens', () => ({
+  createExportToken: vi.fn(),
+}))
 
 const now = '2026-10-06T08:00:00Z'
 
