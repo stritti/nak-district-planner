@@ -2,6 +2,7 @@ import type { OIDCConfig, OIDCDiscovery, OIDCUser } from './oidcTypes'
 import { generateCodeChallenge, generateCodeVerifier, generateState } from './pkce'
 import { identityFromTokenExchange, isValidTokenExchangeResponse } from './oidcToken'
 import { SESSION_CODE_VERIFIER_KEY, SESSION_STATE_KEY, clearLocalArtifacts } from './oidcSession'
+import { getCurrentCSRFHeaders } from './useCSRF'
 
 export interface AuthorizationDeps {
   config: OIDCConfig
@@ -47,53 +48,52 @@ export async function exchangeCodeForToken(
   const codeVerifier = sessionStorage.getItem(SESSION_CODE_VERIFIER_KEY)
   if (!codeVerifier) throw new Error('Code verifier not found in session storage')
 
-  try {
-    // Send code + PKCE verifier to backend proxy; backend adds client_secret
-    const response = await fetch('/api/v1/auth/oidc/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: deps.config.redirectUri,
-        code_verifier: codeVerifier,
-      }),
-    })
+  // Send code + PKCE verifier to backend proxy; backend adds client_secret.
+  const response = await fetch('/api/v1/auth/oidc/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getCurrentCSRFHeaders(),
+    },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: deps.config.redirectUri,
+      code_verifier: codeVerifier,
+    }),
+  })
 
-    if (!response.ok) {
-      const raw = await response.text()
-      let parsed: unknown = raw
-      try {
-        parsed = JSON.parse(raw)
-      } catch {
-        // keep raw text
-      }
-      throw new Error(`Token exchange failed (${response.status}): ${JSON.stringify(parsed)}`)
+  if (!response.ok) {
+    const raw = await response.text()
+    let parsed: unknown = raw
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      // Keep the provider/backend response as plain text.
     }
-
-    const data: unknown = await response.json()
-    if (!isValidTokenExchangeResponse(data)) {
-      throw new Error('Token response missing or malformed access_token')
-    }
-
-    const { token: nextToken, user: derivedUser } = identityFromTokenExchange(
-      data,
-      { accessToken: '', idToken: '', refreshToken: undefined, expiresAt: 0 },
-      null,
-    )
-
-    let nextUser: OIDCUser | null = derivedUser
-    if (!nextUser?.sub) {
-      nextUser = await deps.fetchUserInfo(nextToken.accessToken)
-    }
-
-    if (!nextUser?.sub) {
-      throw new Error('OIDC identity missing: no sub in id_token/access_token or userinfo response')
-    }
-
-    deps.onSessionInstalled(nextToken, nextUser)
-    clearLocalArtifacts()
-  } catch (err) {
-    throw err
+    throw new Error(`Token exchange failed (${response.status}): ${JSON.stringify(parsed)}`)
   }
+
+  const data: unknown = await response.json()
+  if (!isValidTokenExchangeResponse(data)) {
+    throw new Error('Token response missing or malformed access_token')
+  }
+
+  const { token: nextToken, user: derivedUser } = identityFromTokenExchange(
+    data,
+    { accessToken: '', idToken: '', refreshToken: undefined, expiresAt: 0 },
+    null,
+  )
+
+  let nextUser: OIDCUser | null = derivedUser
+  if (!nextUser?.sub) {
+    nextUser = await deps.fetchUserInfo(nextToken.accessToken)
+  }
+
+  if (!nextUser?.sub) {
+    throw new Error('OIDC identity missing: no sub in id_token/access_token or userinfo response')
+  }
+
+  deps.onSessionInstalled(nextToken, nextUser)
+  clearLocalArtifacts()
 }

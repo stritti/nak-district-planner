@@ -1,132 +1,96 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clearCrossTabWaiter,
-  clearRotationReceipts,
   CROSS_TAB_WAIT_TIMEOUT_MS,
-  MAX_PERSISTED_RECEIPTS,
-  parseStoredReceipt,
-  prunePersistedReceipts,
-  pruneRotatedTokens,
-  RECEIPT_KEY_PREFIX,
-  RECEIPT_STATE_CONSUMED,
-  ROTATED_TOKEN_TTL_MS,
-  rotationReceiptKey,
   runRefreshOperation,
   waitForCrossTabRefresh,
   type CrossTabRefreshState,
-  type RotationReceipt,
 } from './oidcRefresh'
-import type { OIDCToken } from './oidcTypes'
+import { REFRESH_SESSION_COORDINATION_ID } from './oidcToken'
+import type { OIDCToken, OIDCUser } from './oidcTypes'
 
-const validToken: OIDCToken = {
-  accessToken: 'access',
-  idToken: 'id',
-  refreshToken: 'refresh',
+const currentToken: OIDCToken = {
+  accessToken: 'current-access',
+  idToken: '',
+  refreshToken: REFRESH_SESSION_COORDINATION_ID,
   expiresAt: 1_800_000_000,
 }
 
-function receipt(overrides: Partial<RotationReceipt> = {}): RotationReceipt {
+const currentUser: OIDCUser = { sub: 'user-sub', email: 'user@example.org' }
+
+function state(): CrossTabRefreshState {
+  return { inFlight: null, waiter: null }
+}
+
+function grantLock(): void {
+  vi.stubGlobal('navigator', {
+    ...navigator,
+    locks: {
+      request: async (
+        _name: string,
+        _options: { ifAvailable: boolean },
+        callback: (lock: Lock | null) => Promise<boolean>,
+      ) => callback({ name: _name, mode: 'exclusive' } as Lock),
+    },
+  })
+}
+
+function denyLock(): void {
+  vi.stubGlobal('navigator', {
+    ...navigator,
+    locks: {
+      request: async (
+        _name: string,
+        _options: { ifAvailable: boolean },
+        callback: (lock: Lock | null) => Promise<boolean>,
+      ) => callback(null),
+    },
+  })
+}
+
+function response(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function options(overrides: Partial<Parameters<typeof runRefreshOperation>[0]> = {}) {
   return {
-    token: validToken,
-    user: { sub: 'user' },
-    recordedAt: Date.now(),
+    currentToken,
+    sessionId: REFRESH_SESSION_COORDINATION_ID,
+    authStoreUser: () => currentUser,
+    fetchUserInfo: vi.fn(async () => null),
+    isRefreshStillCurrent: () => true,
+    logout: vi.fn(),
+    adoptRefreshedToken: vi.fn(),
+    scheduleTransientRefreshRetry: vi.fn(),
+    endLocalSession: vi.fn(),
+    crossTabState: state(),
+    postRefreshMessage: vi.fn(),
     ...overrides,
   }
 }
 
-function state(): CrossTabRefreshState {
-  return { inFlight: Promise.resolve(true), waiter: null }
-}
-
 beforeEach(() => {
+  sessionStorage.clear()
   localStorage.clear()
+  document.cookie = 'csrf_token=refresh-csrf; Path=/'
+  grantLock()
 })
 
 afterEach(() => {
+  document.cookie = 'csrf_token=; Max-Age=0; Path=/'
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
-})
-
-describe('parseStoredReceipt', () => {
-  it('distinguishes absent, pending, and consumed markers', () => {
-    expect(parseStoredReceipt(null)).toEqual({ state: 'absent' })
-    expect(parseStoredReceipt('')).toEqual({ state: 'pending' })
-    expect(parseStoredReceipt(RECEIPT_STATE_CONSUMED)).toEqual({ state: 'consumed' })
-  })
-
-  it('accepts a complete rotation receipt', () => {
-    const value = receipt()
-    expect(parseStoredReceipt(JSON.stringify(value))).toEqual({ state: 'rotation', receipt: value })
-  })
-
-  it.each([
-    '{broken',
-    'null',
-    JSON.stringify({ token: validToken, user: { sub: '' }, recordedAt: Date.now() }),
-    JSON.stringify({ token: validToken, user: null }),
-    JSON.stringify({ token: { ...validToken, refreshToken: '' }, user: { sub: 'user' }, recordedAt: Date.now() }),
-    JSON.stringify({ token: validToken, user: { sub: 'user' }, recordedAt: Number.NaN }),
-  ])('fails closed for invalid data %s', (raw) => {
-    expect(parseStoredReceipt(raw)).toEqual({ state: 'invalid' })
-  })
-})
-
-describe('rotation receipts in localStorage', () => {
-  it('hashes the refresh token before using it in the storage key', async () => {
-    const key = await rotationReceiptKey('secret-refresh-value')
-
-    expect(key).toMatch(/^oidc-refresh-result:[A-Za-z0-9_-]+$/)
-    expect(key).not.toContain('secret-refresh-value')
-    expect(await rotationReceiptKey('secret-refresh-value')).toBe(key)
-  })
-
-  it('scrubs completed receipts into tombstones and retains replay-protection markers', () => {
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}pending`, '')
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}consumed`, RECEIPT_STATE_CONSUMED)
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}complete`, JSON.stringify(receipt()))
-    localStorage.setItem('unrelated', 'preserve')
-
-    clearRotationReceipts()
-
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}pending`)).toBe('')
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}consumed`)).toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}complete`)).toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem('unrelated')).toBe('preserve')
-  })
-
-  it('expires invalid or stale receipts and bounds retained completed receipts', () => {
-    vi.useFakeTimers()
-    const now = new Date('2026-09-26T12:00:00Z')
-    vi.setSystemTime(now)
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}pending`, '')
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}expired`, JSON.stringify(receipt({ recordedAt: now.getTime() - 25 * 60 * 60 * 1000 })))
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}future`, JSON.stringify(receipt({ recordedAt: now.getTime() + 1 })))
-    localStorage.setItem(`${RECEIPT_KEY_PREFIX}malformed`, '{broken')
-    for (let index = 0; index <= MAX_PERSISTED_RECEIPTS; index += 1) {
-      localStorage.setItem(
-        `${RECEIPT_KEY_PREFIX}receipt-${index}`,
-        JSON.stringify(receipt({ recordedAt: now.getTime() - index })),
-      )
-    }
-
-    prunePersistedReceipts()
-
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}pending`)).toBe('')
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}expired`)).toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}future`)).toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}malformed`)).toBe('{broken')
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}receipt-0`)).not.toBe(RECEIPT_STATE_CONSUMED)
-    expect(localStorage.getItem(`${RECEIPT_KEY_PREFIX}receipt-${MAX_PERSISTED_RECEIPTS}`))
-      .toBe(RECEIPT_STATE_CONSUMED)
-  })
 })
 
 describe('cross-tab wait state', () => {
   it('clears an active waiter and resolves it with the requested result', async () => {
     vi.useFakeTimers()
     const currentState = state()
-    const pending = waitForCrossTabRefresh(currentState, 'refresh')
+    const pending = waitForCrossTabRefresh(currentState, 'session')
 
     clearCrossTabWaiter(currentState, true)
 
@@ -137,7 +101,8 @@ describe('cross-tab wait state', () => {
   it('resolves false and clears stale state after the wait deadline', async () => {
     vi.useFakeTimers()
     const currentState = state()
-    const pending = waitForCrossTabRefresh(currentState, 'refresh')
+    currentState.inFlight = Promise.resolve(true)
+    const pending = waitForCrossTabRefresh(currentState, 'session')
 
     await vi.advanceTimersByTimeAsync(CROSS_TAB_WAIT_TIMEOUT_MS)
 
@@ -145,93 +110,179 @@ describe('cross-tab wait state', () => {
     expect(currentState.waiter).toBeNull()
     expect(currentState.inFlight).toBeNull()
   })
+})
 
-  it('prunes expired in-memory rotations without removing current ones', () => {
-    vi.useFakeTimers()
-    const now = new Date('2026-09-26T12:00:00Z')
-    vi.setSystemTime(now)
-    const rotations = new Map<string, RotationReceipt>([
-      ['fresh', receipt({ recordedAt: now.getTime() })],
-      ['expired', receipt({ recordedAt: now.getTime() - ROTATED_TOKEN_TTL_MS - 1 })],
-    ])
+describe('runRefreshOperation', () => {
+  it('refreshes through the server-held cookie and never sends a provider credential', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      access_token: 'next-access',
+      refresh_session: true,
+      expires_in: 3600,
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const adoptRefreshedToken = vi.fn()
+    const postRefreshMessage = vi.fn()
 
-    pruneRotatedTokens(rotations)
+    const ok = await runRefreshOperation(options({ adoptRefreshedToken, postRefreshMessage }))
 
-    expect([...rotations.keys()]).toEqual(['fresh'])
+    expect(ok).toBe(true)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [, request] = fetchMock.mock.calls[0]
+    expect(request).toEqual(expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': 'refresh-csrf',
+      }),
+      body: JSON.stringify({ grant_type: 'refresh_token' }),
+    }))
+    expect(String(request.body)).not.toContain('refresh_token":"server-held')
+    expect(adoptRefreshedToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessToken: 'next-access',
+        refreshToken: REFRESH_SESSION_COORDINATION_ID,
+      }),
+      currentUser,
+    )
+    expect(postRefreshMessage).toHaveBeenCalledWith({
+      type: 'refresh-started',
+      sessionId: REFRESH_SESSION_COORDINATION_ID,
+    })
+    expect(postRefreshMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: 'refresh-complete',
+      ok: true,
+      sessionId: REFRESH_SESSION_COORDINATION_ID,
+    }))
+    expect(localStorage.length).toBe(0)
+    expect(sessionStorage.length).toBe(0)
   })
 
-  it('removes a pending marker when the session becomes stale before the fetch', async () => {
-    const fetchSpy = vi.fn()
+  it('derives the user from userinfo when no current identity is available', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({
+      access_token: 'opaque-access',
+      refresh_session: true,
+    })))
+    const fetchUserInfo = vi.fn(async () => ({ sub: 'userinfo-user' }))
+    const adoptRefreshedToken = vi.fn()
+
+    await expect(runRefreshOperation(options({
+      authStoreUser: () => null,
+      fetchUserInfo,
+      adoptRefreshedToken,
+    }))).resolves.toBe(true)
+
+    expect(fetchUserInfo).toHaveBeenCalledWith('opaque-access')
+    expect(adoptRefreshedToken).toHaveBeenCalledWith(
+      expect.objectContaining({ accessToken: 'opaque-access' }),
+      { sub: 'userinfo-user' },
+    )
+  })
+
+  it('does not call the backend after the session was replaced before lock acquisition', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     const endLocalSession = vi.fn()
-    const currentState: CrossTabRefreshState = { inFlight: null, waiter: null }
-    vi.stubGlobal('fetch', fetchSpy)
-    vi.stubGlobal('navigator', {
-      locks: {
-        request: async (_name: string, _options: unknown, callback: (lock: object) => Promise<boolean>) =>
-          callback({ name: 'refresh-lock' }),
-      },
-    })
 
-    const ok = await runRefreshOperation({
-      currentToken: validToken,
-      refreshTokenUsed: 'refresh',
-      authStoreToken: () => validToken,
-      authStoreUser: () => ({ sub: 'user' }),
-      fetchUserInfo: async () => null,
+    const ok = await runRefreshOperation(options({
       isRefreshStillCurrent: () => false,
-      logout: vi.fn(),
-      adoptRotatedToken: vi.fn(),
-      onExpiredSuccessor: vi.fn(),
-      scheduleTransientRefreshRetry: vi.fn(),
       endLocalSession,
-      rotatedTokens: new Map(),
-      crossTabState: currentState,
-      postRefreshMessage: vi.fn(),
-    })
+    }))
 
-    const key = await rotationReceiptKey('refresh')
     expect(ok).toBe(false)
-    expect(fetchSpy).not.toHaveBeenCalled()
-    expect(localStorage.getItem(key)).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
     expect(endLocalSession).not.toHaveBeenCalled()
   })
 
-  it('fails closed when the token endpoint returns an invalid access token shape', async () => {
+  it.each([
+    [{ access_token: '' }, 'malformed token'],
+    [{ access_token: 'next-access', refresh_session: false }, 'missing server session'],
+    [{ access_token: 'next-access' }, 'missing refresh_session marker'],
+  ])('fails closed for %s (%s)', async (body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(body)))
+    const endLocalSession = vi.fn()
+
+    await expect(runRefreshOperation(options({ endLocalSession }))).resolves.toBe(false)
+
+    expect(endLocalSession).toHaveBeenCalledOnce()
+  })
+
+  it.each(['invalid_grant', 'missing_refresh_cookie'])('logs out on %s', async (error) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ detail: { error } }, 401)))
+    const logout = vi.fn()
+    const endLocalSession = vi.fn()
+
+    await expect(runRefreshOperation(options({ logout, endLocalSession }))).resolves.toBe(false)
+
+    expect(logout).toHaveBeenCalledOnce()
+    expect(endLocalSession).not.toHaveBeenCalled()
+  })
+
+  it('keeps the current session and schedules a retry on rate limiting', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ detail: 'slow down' }, 429)))
+    const scheduleTransientRefreshRetry = vi.fn()
+    const endLocalSession = vi.fn()
+
+    await expect(runRefreshOperation(options({
+      scheduleTransientRefreshRetry,
+      endLocalSession,
+    }))).resolves.toBe(false)
+
+    expect(scheduleTransientRefreshRetry).toHaveBeenCalledOnce()
+    expect(endLocalSession).not.toHaveBeenCalled()
+  })
+
+  it('fails closed for an ambiguous upstream failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ detail: 'provider failure' }, 502)))
+    const endLocalSession = vi.fn()
+
+    await expect(runRefreshOperation(options({ endLocalSession }))).resolves.toBe(false)
+
+    expect(endLocalSession).toHaveBeenCalledOnce()
+  })
+
+  it('fails closed for network errors and still broadcasts completion', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const endLocalSession = vi.fn()
     const postRefreshMessage = vi.fn()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ access_token: { unexpected: true } }), { status: 200 }),
-    ))
-    vi.stubGlobal('navigator', {
-      locks: {
-        request: async (_name: string, _options: unknown, callback: (lock: object) => Promise<boolean>) =>
-          callback({ name: 'refresh-lock' }),
-      },
-    })
 
-    const ok = await runRefreshOperation({
-      currentToken: validToken,
-      refreshTokenUsed: 'refresh',
-      authStoreToken: () => validToken,
-      authStoreUser: () => ({ sub: 'user' }),
-      fetchUserInfo: async () => null,
-      isRefreshStillCurrent: () => true,
-      logout: vi.fn(),
-      adoptRotatedToken: vi.fn(),
-      onExpiredSuccessor: vi.fn(),
-      scheduleTransientRefreshRetry: vi.fn(),
-      endLocalSession,
-      rotatedTokens: new Map(),
-      crossTabState: { inFlight: null, waiter: null },
-      postRefreshMessage,
-    })
+    await expect(runRefreshOperation(options({ endLocalSession, postRefreshMessage })))
+      .resolves.toBe(false)
 
-    expect(ok).toBe(false)
     expect(endLocalSession).toHaveBeenCalledOnce()
-    expect(localStorage.getItem(await rotationReceiptKey('refresh'))).toBe('')
-    expect(postRefreshMessage).toHaveBeenCalledWith(expect.objectContaining({
+    expect(postRefreshMessage).toHaveBeenLastCalledWith(expect.objectContaining({
       type: 'refresh-complete',
       ok: false,
     }))
+  })
+
+  it('logs out when refresh succeeds but no identity can be established', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({
+      access_token: 'opaque-access',
+      refresh_session: true,
+    })))
+    const logout = vi.fn()
+
+    await expect(runRefreshOperation(options({
+      authStoreUser: () => null,
+      fetchUserInfo: vi.fn(async () => null),
+      logout,
+    }))).resolves.toBe(false)
+
+    expect(logout).toHaveBeenCalledOnce()
+  })
+
+  it('waits for the other tab when the Web Lock is unavailable', async () => {
+    vi.useFakeTimers()
+    denyLock()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const currentState = state()
+    const pending = runRefreshOperation(options({ crossTabState: currentState }))
+
+    await vi.advanceTimersByTimeAsync(CROSS_TAB_WAIT_TIMEOUT_MS)
+
+    await expect(pending).resolves.toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

@@ -1,28 +1,36 @@
 import { test, expect } from '@playwright/test'
+import { mockAuthenticatedSession } from './helpers'
 
 const FRONTEND_URL = 'http://localhost:5173'
 
 test.describe('Pending approval and scoped access UX', () => {
   test('shows pending approval banner when authenticated user has no memberships', async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        'auth',
-        JSON.stringify({
-          token: {
-            accessToken: 'fake-access-token',
-            idToken: 'fake-id-token',
-            expiresAt: Math.floor(Date.now() / 1000) + 3600,
-          },
-          user: {
-            sub: 'pending-user',
-            email: 'pending@example.com',
-            name: 'Pending User',
-          },
-          isSuperadmin: false,
-          accessStatus: 'PENDING_APPROVAL',
-          memberships: [],
+    await page.route('**/api/v1/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sub: 'pending-user',
+          email: 'pending@example.com',
+          name: 'Pending User',
+          is_superadmin: false,
         }),
-      )
+      })
+    })
+    await page.route('**/api/v1/auth/access', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'PENDING_APPROVAL', memberships: [] }),
+      })
+    })
+    await mockAuthenticatedSession(page, {
+      sub: 'pending-user',
+      email: 'pending@example.com',
+      name: 'Pending User',
     })
 
     await page.goto(`${FRONTEND_URL}/events`)
