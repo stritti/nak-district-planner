@@ -6,7 +6,7 @@ on:
       - fix/source-map-js-1.2.2
 
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 jobs:
@@ -23,11 +23,26 @@ jobs:
       - name: Update vulnerable transitive dependency
         run: |
           bun update source-map-js --lockfile-only
-          bun --cwd services/frontend update source-map-js --lockfile-only
-          bun --cwd docs update source-map-js --lockfile-only
+          (cd services/frontend && bun update source-map-js --lockfile-only)
+          (cd docs && bun update source-map-js --lockfile-only)
 
-      - name: Verify dependency audit
-        run: bun audit --audit-level=moderate
+      - name: Verify dependency audits
+        run: |
+          bun audit --audit-level=moderate
+          (cd services/frontend && bun audit --audit-level=moderate)
+          (cd docs && bun audit --audit-level=moderate)
+
+      - name: Commit regenerated lockfiles
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bun.lock services/frontend/bun.lock docs/bun.lock
+          if git diff --cached --quiet; then
+            echo "No lockfile changes"
+          else
+            git commit -m "fix(deps): update source-map-js to 1.2.2"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
 
       - name: Upload regenerated lockfiles
         uses: actions/upload-artifact@v4.6.2
