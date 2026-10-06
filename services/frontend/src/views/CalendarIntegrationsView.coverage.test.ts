@@ -70,7 +70,7 @@ describe('CalendarIntegrationsView coverage gaps', () => {
     await modal.get('input[placeholder="z. B. Gemeinde-Kalender Nord"]').setValue(' CalDAV Neu ')
     await modal.get('input[placeholder="https://caldav.example.com/calendar/"]').setValue(' https://cal.example.org/path ')
     const textInputs = modal.findAll('input[type="text"]')
-    await textInputs[textInputs.length - 1].setValue(' alice ')
+    await textInputs[1].setValue(' alice ')
     await modal.get('input[type="password"]').setValue('secret')
     await modal.findAll('button').find((button) => button.text() === 'Anlegen')!.trigger('click')
     await flushPromises()
@@ -96,7 +96,7 @@ describe('CalendarIntegrationsView coverage gaps', () => {
     let modal = wrapper.findAll('.modal-panel').find((node) => node.text().includes('Integration bearbeiten'))!
     await modal.get('input[type="url"]').setValue(' https://cal.example.org/new ')
     const caldavTextInputs = modal.findAll('input[type="text"]')
-    await caldavTextInputs[caldavTextInputs.length - 1].setValue(' bob ')
+    await caldavTextInputs[1].setValue(' bob ')
     await modal.get('input[type="password"]').setValue('pw')
     await modal.findAll('button').find((button) => button.text() === 'Speichern')!.trigger('click')
     await flushPromises()
