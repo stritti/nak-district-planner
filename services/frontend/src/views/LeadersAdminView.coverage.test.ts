@@ -15,10 +15,11 @@ import { useLeaderUnavailabilitiesStore } from '../stores/leaderUnavailabilities
 import { useToastStore } from '../stores/toast'
 import LeadersAdminView from './LeadersAdminView.vue'
 
-vi.mock('../api/districts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/districts')>()
-  return { ...actual, listDistricts: vi.fn(), listCongregations: vi.fn() }
-})
+vi.mock('../api/districts', () => ({
+  listDistricts: vi.fn(),
+  listCongregations: vi.fn(),
+  listGroups: vi.fn(),
+}))
 vi.mock('../api/leaders', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/leaders')>()
   return {
@@ -221,7 +222,7 @@ function setup() {
   const toastStore = useToastStore()
 
   districtsStore.districts = [{ id: 'd1', name: 'Bezirk Eins' }] as typeof districtsStore.districts
-  districtsStore.selectedDistrictId = 'd1'
+  districtsStore.selectedDistrictId = ''
   vi.spyOn(districtsStore, 'fetchDistricts').mockResolvedValue(undefined)
   vi.spyOn(unavailabilitiesStore, 'fetchUnavailabilities').mockResolvedValue(undefined)
   vi.spyOn(unavailabilitiesStore, 'addUnavailability').mockResolvedValue(unavailability)
@@ -245,6 +246,8 @@ function setup() {
 }
 
 async function loadView(vm: LeadersBindings) {
+  await flushPromises()
+  vm.selectedDistrictId = 'd1'
   await vm.onDistrictChange()
   await flushPromises()
 }
