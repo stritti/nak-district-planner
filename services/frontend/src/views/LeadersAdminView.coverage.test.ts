@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { defineComponent } from 'vue'
 import * as districtsApi from '../api/districts'
 import * as leadersApi from '../api/leaders'
 import * as registrationsApi from '../api/registrations'
@@ -125,6 +126,14 @@ const unavailability: LeaderUnavailabilityResponse = {
   updated_at: now,
 }
 
+const LeaderUnavailabilityFormStub = defineComponent({
+  name: 'LeaderUnavailabilityFormStub',
+  setup(_, { expose }) {
+    expose({ reset: vi.fn() })
+    return () => null
+  },
+})
+
 interface LeadersBindings {
   activeTab: 'leaders' | 'registrations' | 'unavailabilities'
   selectedDistrictId: string
@@ -239,7 +248,7 @@ function setup() {
         ConfirmDialog: true,
         CopyButton: true,
         EmptyState: true,
-        LeaderUnavailabilityForm: true,
+        LeaderUnavailabilityForm: LeaderUnavailabilityFormStub,
         LeaderUnavailabilityList: true,
       },
     },
