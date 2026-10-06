@@ -23,8 +23,8 @@ jobs:
       - name: Update vulnerable transitive dependency
         run: |
           bun update source-map-js --lockfile-only
-          bun update source-map-js --lockfile-only --cwd services/frontend
-          bun update source-map-js --lockfile-only --cwd docs
+          bun --cwd services/frontend update source-map-js --lockfile-only
+          bun --cwd docs update source-map-js --lockfile-only
 
       - name: Verify dependency audit
         run: bun audit --audit-level=moderate
