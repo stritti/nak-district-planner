@@ -20,4 +20,13 @@ describe('useDarkMode coverage gaps', () => {
     expect(useDarkMode().isDark.value).toBe(false)
     expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
+
+  it('can be evaluated without browser globals during SSR', async () => {
+    vi.stubGlobal('window', undefined)
+    vi.stubGlobal('document', undefined)
+
+    const { useDarkMode } = await import('./useDarkMode')
+
+    expect(useDarkMode().isDark.value).toBe(false)
+  })
 })
