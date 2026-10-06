@@ -1,6 +1,17 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NavigationGuard } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+
+const { ensureSessionMock } = vi.hoisted(() => ({
+  ensureSessionMock: vi.fn(),
+}))
+
+vi.mock('../composables/useOIDC', () => ({
+  useOIDC: () => ({
+    ensureSession: ensureSessionMock,
+  }),
+}))
+
 import { getRouterPinia, router } from './index'
 
 function authGuard(): NavigationGuard {
@@ -23,6 +34,7 @@ async function invokeGuard(): Promise<unknown> {
 describe('router', () => {
   beforeEach(() => {
     useAuthStore(getRouterPinia()).clearAuth()
+    ensureSessionMock.mockReset().mockResolvedValue(false)
   })
 
   it('registers the authenticated external candidate review route', () => {
@@ -39,11 +51,39 @@ describe('router', () => {
     expect(getRouterPinia()).toBe(getRouterPinia())
   })
 
-  it('redirects unauthenticated guarded navigation to login', async () => {
+  it('redirects when session restore reports no session', async () => {
+    await expect(invokeGuard()).resolves.toBe('/login')
+    expect(ensureSessionMock).toHaveBeenCalledOnce()
+  })
+
+  it('redirects when restore reports success without establishing authentication', async () => {
+    ensureSessionMock.mockResolvedValueOnce(true)
+
     await expect(invokeGuard()).resolves.toBe('/login')
   })
 
-  it('allows authenticated guarded navigation', async () => {
+  it('rehydrates authorization facts after restoring an authenticated session', async () => {
+    const auth = useAuthStore(getRouterPinia())
+    const refreshFlags = vi.spyOn(auth, 'refreshCurrentUserFlags').mockResolvedValue(undefined)
+    ensureSessionMock.mockImplementationOnce(async () => {
+      auth.setToken(
+        { accessToken: 'restored-access', idToken: 'id', expiresAt: Math.floor(Date.now() / 1000) + 3600 },
+        { sub: 'restored-user' },
+      )
+      return true
+    })
+
+    await expect(invokeGuard()).resolves.toBeUndefined()
+    expect(refreshFlags).toHaveBeenCalledOnce()
+  })
+
+  it('fails closed when session restore throws', async () => {
+    ensureSessionMock.mockRejectedValueOnce(new Error('restore failed'))
+
+    await expect(invokeGuard()).resolves.toBe('/login')
+  })
+
+  it('allows authenticated guarded navigation without restoring the session', async () => {
     const auth = useAuthStore(getRouterPinia())
     auth.setToken(
       { accessToken: 'access', idToken: 'id', expiresAt: Math.floor(Date.now() / 1000) + 3600 },
@@ -51,6 +91,7 @@ describe('router', () => {
     )
 
     await expect(invokeGuard()).resolves.toBeUndefined()
+    expect(ensureSessionMock).not.toHaveBeenCalled()
   })
 
   it('loads the external-candidates view lazily', async () => {
