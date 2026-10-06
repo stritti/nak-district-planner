@@ -7,9 +7,9 @@
 
 ## 2. Verifikation
 
-- [ ] 2.1 Frontend Unit Tests erfolgreich.
-- [ ] 2.2 Vollstaendige Frontend-Coverage liegt fuer jede gemessene Production-Datei in allen vier Metriken bei mindestens 80 Prozent.
-- [ ] 2.3 Falls die neue Messung reale Luecken aufdeckt, gezielte Tests ergaenzen statt den Scope zu verkleinern.
+- [x] 2.1 Frontend Unit Tests erfolgreich.
+- [x] 2.2 Vollstaendige Frontend-Coverage liegt fuer jede gemessene Production-Datei in allen vier Metriken bei mindestens 80 Prozent.
+- [x] 2.3 Falls die neue Messung reale Luecken aufdeckt, gezielte Tests ergaenzen statt den Scope zu verkleinern.
 
 ## 3. Async-Testhygiene
 
