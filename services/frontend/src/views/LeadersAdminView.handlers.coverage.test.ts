@@ -6,6 +6,7 @@ import * as districtsApi from '../api/districts'
 import * as leadersApi from '../api/leaders'
 import * as registrationsApi from '../api/registrations'
 import * as exportTokensApi from '../api/exportTokens'
+import type { LeaderUnavailabilityResponse } from '../api/leaderUnavailabilities'
 import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
 import { useLeaderUnavailabilitiesStore } from '../stores/leaderUnavailabilities'
@@ -77,6 +78,16 @@ const registration: registrationsApi.RegistrationResponse = {
   created_at: now,
   updated_at: now,
 }
+const unavailability: LeaderUnavailabilityResponse = {
+  id: 'u1',
+  leader_id: 'l1',
+  start_at: '2026-10-10T00:00:00Z',
+  end_at: '2026-10-11T00:00:00Z',
+  reason: 'URLAUB',
+  note: null,
+  created_at: now,
+  updated_at: now,
+}
 
 const ConfirmDialogStub = defineComponent({
   name: 'ConfirmDialog',
@@ -110,6 +121,42 @@ function modalByTitle(wrapper: VueWrapper, title: string) {
   const modal = wrapper.findAll('.modal-backdrop').find((candidate) => candidate.text().includes(title))
   if (!modal) throw new Error(`Modal not found: ${title}`)
   return modal
+}
+
+function registrationDialogByTitle(wrapper: VueWrapper, title: string) {
+  const dialog = wrapper
+    .findAll('div.fixed.inset-0')
+    .find((candidate) => candidate.text().includes(title))
+  if (!dialog) throw new Error(`Registration dialog not found: ${title}`)
+  return dialog
+}
+
+async function mountView() {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const districtsStore = useDistrictsStore()
+  const authStore = useAuthStore()
+  const unavailabilitiesStore = useLeaderUnavailabilitiesStore()
+  districtsStore.districts = [{ id: 'd1', name: 'Bezirk Eins' }] as typeof districtsStore.districts
+  districtsStore.selectedDistrictId = 'd1'
+  authStore.isSuperadmin = true
+  vi.spyOn(districtsStore, 'fetchDistricts').mockResolvedValue(undefined)
+  vi.spyOn(unavailabilitiesStore, 'fetchUnavailabilities').mockResolvedValue(undefined)
+
+  const wrapper = mount(LeadersAdminView, {
+    global: {
+      plugins: [pinia],
+      stubs: {
+        ConfirmDialog: ConfirmDialogStub,
+        CopyButton: true,
+        EmptyState: true,
+        LeaderUnavailabilityForm: UnavailabilityFormStub,
+        LeaderUnavailabilityList: true,
+      },
+    },
+  })
+  await flushPromises()
+  return { wrapper, unavailabilitiesStore }
 }
 
 beforeEach(() => {
@@ -147,32 +194,9 @@ beforeEach(() => {
 
 describe('LeadersAdminView rendered handlers', () => {
   it('executes native and component event handlers across all tabs and dialogs', async () => {
-    const pinia = createPinia()
-    setActivePinia(pinia)
-    const districtsStore = useDistrictsStore()
-    const authStore = useAuthStore()
-    const unavailabilitiesStore = useLeaderUnavailabilitiesStore()
-    districtsStore.districts = [{ id: 'd1', name: 'Bezirk Eins' }] as typeof districtsStore.districts
-    districtsStore.selectedDistrictId = 'd1'
-    authStore.isSuperadmin = true
-    vi.spyOn(districtsStore, 'fetchDistricts').mockResolvedValue(undefined)
-    vi.spyOn(unavailabilitiesStore, 'fetchUnavailabilities').mockResolvedValue(undefined)
+    const { wrapper, unavailabilitiesStore } = await mountView()
 
-    const wrapper = mount(LeadersAdminView, {
-      global: {
-        plugins: [pinia],
-        stubs: {
-          ConfirmDialog: ConfirmDialogStub,
-          CopyButton: true,
-          EmptyState: true,
-          LeaderUnavailabilityForm: UnavailabilityFormStub,
-          LeaderUnavailabilityList: true,
-        },
-      },
-    })
-    await flushPromises()
-
-    await wrapper.get('select.form-select').trigger('change')
+    await wrapper.get('select.form-select').setValue('d1')
     await flushPromises()
 
     const add = wrapper.findAll('button').find((candidate) => candidate.text().includes('Hinzufügen'))
@@ -211,6 +235,110 @@ describe('LeadersAdminView rendered handlers', () => {
     await wrapper.get('[data-testid="unavailability-tab"]').trigger('click')
     await flushPromises()
     expect(unavailabilitiesStore.fetchUnavailabilities).toHaveBeenCalledWith('d1')
+
+    wrapper.unmount()
+  })
+
+  it('executes generated v-model, backdrop, duplicate action and cancel handlers', async () => {
+    const { wrapper } = await mountView()
+
+    const addButton = wrapper.findAll('button').find((candidate) => candidate.text().includes('Hinzufügen'))
+    expect(addButton).toBeDefined()
+    await addButton!.trigger('click')
+    let modal = modalByTitle(wrapper, 'Amtstragende:n hinzufügen')
+    const addInputs = modal.findAll('input')
+    const addSelects = modal.findAll('select')
+    await addInputs[0]!.setValue('Neue Person')
+    await addSelects[0]!.setValue('Pr.')
+    await addSelects[1]!.setValue('Gemeindevorsteher')
+    await addInputs[1]!.setValue('neu@example.org')
+    await addInputs[2]!.setValue('456')
+    await modal.trigger('click')
+
+    await addButton!.trigger('click')
+    modal = modalByTitle(wrapper, 'Amtstragende:n hinzufügen')
+    await buttonByText(modal as unknown as VueWrapper, 'Abbrechen').trigger('click')
+
+    const editButtons = wrapper.findAll('button[title="Bearbeiten"]')
+    expect(editButtons.length).toBeGreaterThanOrEqual(2)
+    await editButtons[0]!.trigger('click')
+    modal = modalByTitle(wrapper, 'Amtstragende:n bearbeiten')
+    const editInputs = modal.findAll('input')
+    const editSelects = modal.findAll('select')
+    await editInputs[0]!.setValue('Bearbeitet')
+    await editSelects[0]!.setValue('Pr.')
+    await editSelects[1]!.setValue('Gemeindevorsteher')
+    await editSelects[2]!.setValue('c1')
+    await editInputs[1]!.setValue('edit@example.org')
+    await editInputs[2]!.setValue('789')
+    await modal.get('textarea').setValue('Notiz')
+    await editInputs[3]!.setValue(false)
+    await modal.trigger('click')
+
+    await editButtons[1]!.trigger('click')
+    modal = modalByTitle(wrapper, 'Amtstragende:n bearbeiten')
+    const cancelEdit = modal.findAll('button').find((candidate) => candidate.text() === 'Abbrechen')
+    expect(cancelEdit).toBeDefined()
+    await cancelEdit!.trigger('click')
+
+    const exportButtons = wrapper.findAll('button[title="ICS-Export-Token erstellen"]')
+    expect(exportButtons.length).toBeGreaterThanOrEqual(2)
+    await exportButtons[1]!.trigger('click')
+    modal = modalByTitle(wrapper, 'ICS-Export')
+    await modal.trigger('click')
+
+    const deleteButtons = wrapper.findAll('button[title="Löschen"]')
+    expect(deleteButtons.length).toBeGreaterThanOrEqual(2)
+    await deleteButtons[1]!.trigger('click')
+    await wrapper.get('[data-testid="confirm-dialog-cancel"]').trigger('click')
+
+    const unavailabilityButtons = wrapper.findAll('button[title="Abwesenheiten verwalten"]')
+    expect(unavailabilityButtons.length).toBeGreaterThanOrEqual(2)
+    await unavailabilityButtons[1]!.trigger('click')
+    await flushPromises()
+    await buttonByText(wrapper, 'Amtstragende').trigger('click')
+
+    await buttonByText(wrapper, 'Registrierungen').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('button[title="Genehmigen"]').trigger('click')
+    let dialog = registrationDialogByTitle(wrapper, 'Registrierung genehmigen')
+    const approveSelects = dialog.findAll('select')
+    await approveSelects[0]!.setValue('DISTRICT_ADMIN')
+    await approveSelects[1]!.setValue('CONGREGATION')
+    await approveSelects[2]!.setValue('Pr.')
+    await approveSelects[3]!.setValue('c1')
+    await approveSelects[4]!.setValue('Gemeindevorsteher')
+    await dialog.trigger('click')
+
+    await wrapper.get('button[title="Genehmigen"]').trigger('click')
+    dialog = registrationDialogByTitle(wrapper, 'Registrierung genehmigen')
+    const approveCancel = dialog.findAll('button').find((candidate) => candidate.text() === 'Abbrechen')
+    expect(approveCancel).toBeDefined()
+    await approveCancel!.trigger('click')
+
+    await wrapper.get('button[title="Ablehnen"]').trigger('click')
+    dialog = registrationDialogByTitle(wrapper, 'Registrierung ablehnen')
+    await dialog.get('textarea').setValue('Nicht passend')
+    await dialog.trigger('click')
+
+    await wrapper.get('button[title="Ablehnen"]').trigger('click')
+    dialog = registrationDialogByTitle(wrapper, 'Registrierung ablehnen')
+    const rejectCancel = dialog.findAll('button').find((candidate) => candidate.text() === 'Abbrechen')
+    expect(rejectCancel).toBeDefined()
+    await rejectCancel!.trigger('click')
+
+    await wrapper.get('button[title="Löschen"]').trigger('click')
+    await wrapper.get('[data-testid="confirm-dialog-cancel"]').trigger('click')
+
+    await buttonByText(wrapper, 'Amtstragende').trigger('click')
+    const setupState = wrapper.vm.$.setupState as {
+      pendingDeleteUnavailability: LeaderUnavailabilityResponse | null
+    }
+    setupState.pendingDeleteUnavailability = unavailability
+    await wrapper.vm.$nextTick()
+    await wrapper.get('[data-testid="confirm-dialog-cancel"]').trigger('click')
+    expect(setupState.pendingDeleteUnavailability).toBeNull()
 
     wrapper.unmount()
   })
