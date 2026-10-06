@@ -1,11 +1,9 @@
 /**
  * Pinia Auth Store
- * 
- * Manages:
- * - User authentication state
- * - Token storage (persistent via localStorage)
- * - Auto-token-refresh logic
- * - getToken() for API calls
+ *
+ * Authentication tokens are intentionally kept in memory only. The provider
+ * refresh token is held by the backend in an HttpOnly cookie and must never be
+ * persisted in JavaScript-accessible browser storage.
  */
 
 import { defineStore } from 'pinia'
@@ -17,7 +15,6 @@ import { getPendingRegistrationsOverview } from '../api/registrations'
 export const useAuthStore = defineStore(
   'auth',
   () => {
-    // State
     const token = ref<OIDCToken | null>(null)
     const user = ref<OIDCUser | null>(null)
     const isSuperadmin = ref(false)
@@ -25,14 +22,12 @@ export const useAuthStore = defineStore(
     const memberships = ref<MembershipAccess[]>([])
     const pendingRegistrationsCount = ref(0)
 
-    // Computed
     const isAuthenticated = computed(() => token.value !== null)
     const isTokenExpired = computed(() => {
       if (!token.value) return true
       return Date.now() / 1000 >= token.value.expiresAt
     })
 
-    // Actions
     function setToken(newToken: OIDCToken | null, newUser: OIDCUser | null = null) {
       token.value = newToken
       user.value = newUser
@@ -50,7 +45,6 @@ export const useAuthStore = defineStore(
         accessStatus.value = access.status
         memberships.value = access.memberships
 
-        // Show prominent pending-registration hint for superadmins and district admins.
         const canSeePendingRegistrations =
           isSuperadmin.value ||
           access.memberships.some((m) => m.role === 'DISTRICT_ADMIN')
@@ -62,7 +56,6 @@ export const useAuthStore = defineStore(
           pendingRegistrationsCount.value = 0
         }
       } catch (error) {
-        // Non-blocking: auth/session stays valid even if profile flags endpoint fails.
         isSuperadmin.value = false
         accessStatus.value = 'PENDING_APPROVAL'
         memberships.value = []
@@ -74,7 +67,6 @@ export const useAuthStore = defineStore(
     function getToken(): string | null {
       if (!token.value) return null
       if (isTokenExpired.value) return null
-      // Backend API expects OAuth access token as Bearer token.
       return token.value.accessToken || token.value.idToken
     }
 
@@ -88,7 +80,6 @@ export const useAuthStore = defineStore(
     }
 
     return {
-      // State - return refs directly for proper reactivity
       token,
       user,
       isSuperadmin,
@@ -97,15 +88,10 @@ export const useAuthStore = defineStore(
       pendingRegistrationsCount,
       isAuthenticated,
       isTokenExpired,
-
-      // Actions
       setToken,
       refreshCurrentUserFlags,
       getToken,
       clearAuth,
     }
   },
-  {
-    persist: true,
-  }
 )

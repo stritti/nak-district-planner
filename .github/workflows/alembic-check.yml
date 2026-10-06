@@ -19,7 +19,7 @@ permissions:
   pull-requests: write
 
 env:
-  PYTHON_VERSION: "3.13"
+  PYTHON_VERSION: "3.11.17"
   DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18-alpine
+        image: postgres:18.6-alpine
         env:
           POSTGRES_USER: nak
           POSTGRES_PASSWORD: changeme
@@ -51,7 +51,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          version: "latest"
+          version: "0.12.23"
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
           cache-dependency-glob: |

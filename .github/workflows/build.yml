@@ -44,6 +44,19 @@ jobs:
               - 'docker-compose.override.yml'
               - '.github/workflows/build.yml'
 
+  validate-compose:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare Compose environment
+        run: cp .env.example .env
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config --quiet
+
   build-backend:
     name: Build Backend Image
     runs-on: ubuntu-latest

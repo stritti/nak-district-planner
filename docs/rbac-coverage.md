@@ -29,6 +29,7 @@ Legende:
 |---|---|---|---|---|---|
 | **auth** | `/api/v1/auth/oidc/discovery` | GET | 🔓 Public | – | RL |
 | | `/api/v1/auth/oidc/token` | POST | 🔓 Public | AUDIT | RL |
+| | `/api/v1/auth/oidc/revoke` | POST | 🔓 Public (CSRF-geschützter Cookie-Logout) | AUDIT | RL |
 | | `/api/v1/auth/me` | GET | 🔐 Auth | – | RL |
 | | `/api/v1/auth/access` | GET | 🔐 Auth + Membership-Check | – | RL |
 | **calendar_integrations** | `/api/v1/calendar-integrations` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | RL |
@@ -143,6 +144,7 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | GET | `/api/v1/auth/access` | `auth.get_access_context` | 🔐 Auth | `get_districts_where_user_has_role`, `is_superadmin` |
 | GET | `/api/v1/auth/me` | `auth.get_current_user_info` | 🔐 Auth | `is_superadmin` |
 | GET | `/api/v1/auth/oidc/discovery` | `auth.get_oidc_discovery` | 🔓 Public | – |
+| POST | `/api/v1/auth/oidc/revoke` | `auth.revoke_oidc_refresh_token` | 🔓 Public | – |
 | POST | `/api/v1/auth/oidc/token` | `auth.exchange_oidc_token` | 🔓 Public | – |
 | GET | `/api/v1/calendar-integrations` | `calendar_integrations.list_calendar_integrations` | 🔐 Auth | `assert_has_role_in_congregation`, `is_superadmin`, `require_role_in_district` |
 | POST | `/api/v1/calendar-integrations` | `calendar_integrations.create_calendar_integration` | 🔐 Auth | `assert_has_role_in_congregation`, `require_role_in_district` |
