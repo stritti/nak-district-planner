@@ -3,19 +3,22 @@
 - GET /api/v1/auth/me — Get current authenticated user info
 - GET /api/v1/auth/oidc/discovery — Get OIDC discovery document (proxied from provider)
 - POST /api/v1/auth/oidc/token — Proxy token exchange to OIDC provider
+- POST /api/v1/auth/oidc/revoke — Revoke the server-held refresh token
 - GET /api/v1/auth/access — Get user access context and memberships
 
 RBAC Notes:
 - /oidc/discovery: PUBLIC - No auth required (frontend needs before login)
-- /oidc/token: PUBLIC - No auth required (OIDC callback flow)
+- /oidc/token: PUBLIC - No auth required (OIDC callback / refresh flow)
+- /oidc/revoke: PUBLIC but CSRF-protected - clears the browser refresh session
 - /me: AUTHENTICATED - Any valid token, no role requirement
 - /access: VIEWER - Requires VIEWER role in at least one district
 """
 
+import logging
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, model_validator
 
 from app.adapters.api.deps import (
@@ -25,50 +28,88 @@ from app.adapters.api.deps import (
 )
 from app.adapters.api.schemas.user import AccessContextOut, MembershipOut, UserOut
 from app.adapters.auth.oidc import OIDCDiscoveryError
-from app.adapters.auth.permissions import (
-    get_districts_where_user_has_role,
-)
+from app.adapters.auth.permissions import get_districts_where_user_has_role
+from app.config import settings
 from app.domain.models.role import Role
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+REFRESH_COOKIE_NAME = "oidc_refresh_token"
+REFRESH_COOKIE_PATH = "/api/v1/auth/oidc"
 
 
 class OIDCTokenExchangeRequest(BaseModel):
-    """Parameters forwarded from frontend to OIDC provider token endpoint.
+    """Browser-safe parameters for an OIDC authorization-code or refresh grant.
 
-    The backend adds client_id and client_secret server-side so the secret
-    is never exposed to the browser.
+    Provider refresh credentials never cross the JavaScript boundary. A refresh
+    grant therefore needs only its grant type; the credential is read from the
+    HttpOnly refresh-session cookie.
     """
 
     grant_type: Literal["authorization_code", "refresh_token"] = "authorization_code"
     code: str | None = None
     redirect_uri: str | None = None
     code_verifier: str | None = None
-    refresh_token: str | None = None
 
     @model_validator(mode="after")
     def validate_grant_parameters(self) -> "OIDCTokenExchangeRequest":
-        if self.grant_type == "authorization_code":
-            if not self.code or not self.redirect_uri or not self.code_verifier:
-                raise ValueError("Authorization-code grant requires code, redirect_uri, and code_verifier")
-        elif not self.refresh_token:
-            raise ValueError("Refresh-token grant requires refresh_token")
+        if self.grant_type == "authorization_code" and (
+            not self.code or not self.redirect_uri or not self.code_verifier
+        ):
+            raise ValueError("Authorization-code grant requires code, redirect_uri, and code_verifier")
         return self
+
+
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    """Store a provider refresh token where frontend JavaScript cannot read it."""
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        httponly=True,
+        secure=settings.app_env == "production",
+        samesite="strict",
+        path=REFRESH_COOKIE_PATH,
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    """Expire the server-held browser refresh session."""
+    response.delete_cookie(key=REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH)
+
+
+def _split_token_payload(payload: object) -> tuple[dict, str | None]:
+    """Return a browser-safe token payload and an optional provider refresh credential."""
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OIDC token endpoint returned an invalid response",
+        )
+
+    sanitized = dict(payload)
+    refresh_token = sanitized.pop("refresh_token", None)
+    if refresh_token is not None and (not isinstance(refresh_token, str) or not refresh_token):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OIDC token endpoint returned an invalid refresh token",
+        )
+    return sanitized, refresh_token
+
+
+def _provider_json(response: httpx.Response) -> object:
+    """Parse provider JSON and map malformed success responses to a gateway error."""
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OIDC token endpoint returned invalid JSON",
+        ) from exc
 
 
 @router.get("/oidc/discovery")
 async def get_oidc_discovery() -> dict:
-    """Return the OIDC discovery document.
-
-    Proxies the provider's .well-known/openid-configuration through the backend.
-    The backend caches the result for 1 hour.
-
-    Includes additional frontend-facing config (client_id) so the frontend
-    can obtain all OIDC parameters at runtime without build-time env vars.
-
-    This endpoint is intentionally **unauthenticated** — the frontend needs
-    it *before* it can initiate the OIDC login flow.
-    """
+    """Return the OIDC discovery document with frontend-facing proxy endpoints."""
     adapter = get_oidc_adapter()
     if adapter is None:
         raise HTTPException(
@@ -77,12 +118,13 @@ async def get_oidc_discovery() -> dict:
         )
     try:
         discovery = await adapter.discover()
-        return {
+        frontend_discovery = {
             **discovery,
-            # Extra frontend config — not part of the OIDC spec but needed
-            # by the SPA to initiate the authorization flow.
             "client_id": adapter.client_id,
         }
+        if discovery.get("revocation_endpoint"):
+            frontend_discovery["revocation_endpoint"] = "/api/v1/auth/oidc/revoke"
+        return frontend_discovery
     except OIDCDiscoveryError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -91,16 +133,12 @@ async def get_oidc_discovery() -> dict:
 
 
 @router.post("/oidc/token")
-async def exchange_oidc_token(body: OIDCTokenExchangeRequest) -> dict:
-    """Proxy token exchange to the OIDC provider's token endpoint.
-
-    The frontend sends the authorization code + PKCE verifier.
-    The backend adds client_id and client_secret (never exposed to the browser)
-    and forwards the request to the provider.
-
-    This endpoint is intentionally **unauthenticated** — it is called during
-    the OIDC callback flow when no session exists yet.
-    """
+async def exchange_oidc_token(
+    body: OIDCTokenExchangeRequest,
+    request: Request,
+    response: Response,
+) -> dict:
+    """Proxy token exchange while retaining refresh credentials server-side."""
     adapter = get_oidc_adapter()
     if adapter is None:
         raise HTTPException(
@@ -116,8 +154,7 @@ async def exchange_oidc_token(body: OIDCTokenExchangeRequest) -> dict:
             detail="OIDC discovery missing token_endpoint",
         )
 
-    # Forward to the OIDC provider with server-side credentials
-    client = await adapter.get_httpx_client()
+    provider_refresh_token: str | None = None
     data: dict[str, str] = {
         "grant_type": body.grant_type,
         "client_id": adapter.client_id,
@@ -128,38 +165,82 @@ async def exchange_oidc_token(body: OIDCTokenExchangeRequest) -> dict:
             code=body.code,
             redirect_uri=body.redirect_uri,
             code_verifier=body.code_verifier,
-        )  # Fields are guaranteed non-None by OIDCTokenExchangeRequest validators.
+        )
     else:
-        data["refresh_token"] = body.refresh_token
-
-    try:
-        response = await client.post(token_endpoint, data=data, timeout=15)
-        if not response.is_success:
-            detail: dict | str = {"error": "token_exchange_failed"}
-            try:
-                detail = response.json()
-            except Exception:
-                detail = response.text
+        provider_refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+        if not provider_refresh_token:
             raise HTTPException(
-                status_code=response.status_code,
-                detail=detail,
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"error": "missing_refresh_cookie"},
             )
-        return response.json()
+        data["refresh_token"] = provider_refresh_token
+
+    client = await adapter.get_httpx_client()
+    try:
+        provider_response = await client.post(token_endpoint, data=data, timeout=15)
     except httpx.HTTPError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Token exchange failed: {e}",
         ) from e
 
+    if not provider_response.is_success:
+        try:
+            provider_detail: dict | str = provider_response.json()
+        except ValueError:
+            provider_detail = provider_response.text
+        raise HTTPException(
+            status_code=provider_response.status_code,
+            detail=provider_detail or {"error": "token_exchange_failed"},
+        )
+
+    payload, rotated_refresh_token = _split_token_payload(_provider_json(provider_response))
+    if rotated_refresh_token:
+        _set_refresh_cookie(response, rotated_refresh_token)
+
+    # This is session metadata, not a credential or coordination token. During
+    # a refresh grant an existing cookie remains valid when the provider does
+    # not rotate it.
+    payload["refresh_session"] = bool(rotated_refresh_token or provider_refresh_token)
+    return payload
+
+
+@router.post("/oidc/revoke", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_oidc_refresh_token(request: Request, response: Response) -> Response:
+    """Best-effort provider revocation followed by unconditional local logout."""
+    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    adapter = get_oidc_adapter()
+
+    try:
+        if refresh_token and adapter is not None:
+            discovery = await adapter.discover()
+            revocation_endpoint = discovery.get("revocation_endpoint")
+            if revocation_endpoint:
+                client = await adapter.get_httpx_client()
+                provider_response = await client.post(
+                    revocation_endpoint,
+                    data={
+                        "token": refresh_token,
+                        "token_type_hint": "refresh_token",
+                        "client_id": adapter.client_id,
+                        "client_secret": adapter.client_secret,
+                    },
+                    timeout=10,
+                )
+                provider_response.raise_for_status()
+    except (httpx.HTTPError, OIDCDiscoveryError) as exc:
+        # Local logout must remain available when the provider is unavailable,
+        # but failed provider revocation must stay operationally visible.
+        logger.warning("OIDC provider refresh-token revocation failed: %s", exc)
+    finally:
+        _clear_refresh_cookie(response)
+
+    return response
+
 
 @router.get("/me", response_model=UserOut)
 async def get_current_user_info(user: AuthenticatedUser) -> UserOut:
-    """Get current authenticated user info.
-
-    Returns the authenticated user's information extracted from the JWT token.
-
-    **Security:** Requires valid Bearer token in Authorization header.
-    """
+    """Get current authenticated user info."""
     return UserOut(
         sub=user.sub,
         email=user.email,
@@ -173,12 +254,7 @@ async def get_current_user_info(user: AuthenticatedUser) -> UserOut:
 
 @router.get("/access", response_model=AccessContextOut)
 async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessContextOut:
-    """Return effective memberships for access-aware frontend UX.
-
-    **Security:** Requires valid Bearer token.
-    **RBAC:** Users with memberships require VIEWER role in at least one district.
-    Users without memberships (PENDING_APPROVAL) can access to check their status.
-    """
+    """Return effective memberships for access-aware frontend UX."""
     memberships = [
         MembershipOut(
             role=m.role.value,
@@ -188,7 +264,6 @@ async def get_access_context(auth: RawCurrentUserWithMemberships) -> AccessConte
         for m in auth.memberships
     ]
 
-    # RBAC Guard: If user has memberships, they must have VIEWER role in at least one district
     if memberships:
         districts_with_viewer = get_districts_where_user_has_role(auth, Role.VIEWER)
         if not districts_with_viewer and not auth.user.is_superadmin:

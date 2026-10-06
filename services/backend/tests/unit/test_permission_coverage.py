@@ -26,7 +26,8 @@ from app.adapters.auth.permissions import require_superadmin
 PUBLIC_ENDPOINTS: dict[str, str] = {
     "health.health": "Liveness/Readiness-Probe für Orchestrierung",
     "auth.get_oidc_discovery": "OIDC-Konfiguration wird vor dem Login benötigt",
-    "auth.exchange_oidc_token": "Authorization-Code-Tausch ist der Login selbst",
+    "auth.exchange_oidc_token": "Authorization-Code-Tausch und Refresh-Session benötigen keinen Access Token",
+    "auth.revoke_oidc_refresh_token": "Logout muss auch mit abgelaufenem Access Token möglich bleiben; CSRF schützt den Cookie-POST",
     "export.export_calendar_ics": "Token-basierter ICS-Feed; das Export-Token ist das Geheimnis",
     "registrations.list_districts_public": "Bezirksauswahl im Selbstregistrierungsformular",
     "registrations.list_congregations_public": "Gemeindeauswahl im Selbstregistrierungsformular",

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { mockAuthenticatedSession } from './helpers'
 
 const API = '**/api/v1/**'
 const BASE = 'http://localhost:5173'
@@ -10,24 +11,20 @@ async function mockReadOnlyApi(page: Page): Promise<void> {
 }
 
 async function signIn(page: Page, role: 'VIEWER' | 'PLANNER', user: string): Promise<void> {
-  await page.addInitScript(({ role, user }) => {
-    localStorage.setItem('auth', JSON.stringify({
-      token: { accessToken: 'test-token', idToken: 'test-id', expiresAt: Math.floor(Date.now() / 1000) + 3600 },
-      user: { sub: user, email: `${user}@example.com`, name: user },
-      isSuperadmin: false,
-      accessStatus: 'ACTIVE',
-      memberships: [{ role, scope_type: 'DISTRICT', scope_id: 'district-1' }],
-    }))
-  }, { role, user })
   await mockReadOnlyApi(page)
   await page.route('**/api/v1/auth/me', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
-    body: JSON.stringify({ sub: user, is_superadmin: false }),
+    body: JSON.stringify({ sub: user, email: `${user}@example.com`, name: user, is_superadmin: false }),
   }))
   await page.route('**/api/v1/auth/access', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ status: 'ACTIVE', memberships: [{ role, scope_type: 'DISTRICT', scope_id: 'district-1' }] }),
   }))
+  await mockAuthenticatedSession(page, {
+    sub: user,
+    email: `${user}@example.com`,
+    name: user,
+  })
 }
 
 test.describe('contextual help', () => {

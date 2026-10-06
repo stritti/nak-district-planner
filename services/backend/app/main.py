@@ -61,29 +61,21 @@ def configure_logging() -> None:
 async def lifespan(app: FastAPI):
     configure_logging()
 
-    # Production guard — fail fast on unsafe config. Database migrations are a
-    # deployment concern and are completed by the one-shot migrate service
-    # before backend/worker processes start.
     try:
         production_guard(settings)
     except RuntimeError as e:
         print("🚨", str(e))
         sys.exit(1)
 
-    # Verify the deployment migration completed without applying DDL at runtime.
     try:
         await assert_database_schema_current(engine)
     except SchemaVersionError as e:
         logging.getLogger(__name__).critical("Database schema check failed: %s", e)
         raise
 
-    # Start audit service
     await audit_service.start()
-
-    # Domain events emitted by API requests trigger configured mail hooks.
     register_event_mail_hooks()
 
-    # Initialize OIDC adapter
     httpx_client = httpx.AsyncClient()
     oidc_adapter = OIDCAdapter(
         discovery_url=settings.oidc_discovery_url,
@@ -94,19 +86,14 @@ async def lifespan(app: FastAPI):
         httpx_client=httpx_client,
     )
 
-    # Perform OIDC discovery early to ensure provider is reachable
     try:
         await oidc_adapter.discover()
         print(f"✓ OIDC discovery successful: {oidc_adapter.issuer}")
     except Exception as e:
         print(f"⚠ OIDC discovery failed: {e}")
-        # Continue anyway, it might work at runtime
 
-    # Set global OIDC adapter for use in dependencies
     deps.set_oidc_adapter(oidc_adapter)
 
-    # Start rate limiter — fail-open: if Redis is unavailable, requests proceed without
-    # rate limiting until Redis comes back (check_rate_limit already returns allowed=True on error).
     try:
         await rate_limiter.connect()
         logger = logging.getLogger(__name__)
@@ -120,13 +107,12 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Cleanup
     await oidc_adapter.close()
     await audit_service.stop()
     try:
         await rate_limiter.close()
     except Exception:
-        pass  # Shutting down — Redis connection may already be gone, safe to ignore
+        pass
 
 
 app = FastAPI(
@@ -138,7 +124,6 @@ app = FastAPI(
 
 setup_telemetry(fastapi_app=app, sqlalchemy_engine=engine)
 
-# Initialize Rate Limiting
 rate_limit_config = RateLimitConfig(
     default_limit=200,
     default_window_seconds=60,
@@ -162,10 +147,6 @@ app.add_middleware(
     exempt_methods={"OPTIONS"},
 )
 
-# Initialize Tenant Isolation
-# NOTE: registration order matters — Starlette runs the LAST-added middleware
-# first (outermost). TenantMiddleware must run BEFORE TenantValidationMiddleware
-# so that tenant context (incl. user_sub) is already extracted when validation runs.
 app.add_middleware(
     TenantValidationMiddleware,
     exempt_paths={"/health", "/api/health", "/api/v1/auth"},
@@ -177,7 +158,6 @@ app.add_middleware(
     exempt_methods={"OPTIONS"},
 )
 
-# Initialize CSRF protection
 csrf_service = CSRFTokenService()
 app.add_middleware(
     CSRFMiddleware,
@@ -188,13 +168,10 @@ app.add_middleware(
         "/health",
         "/api/health",
         "/api/v1/auth/oidc/discovery",
-        "/api/v1/auth/oidc/token",
     },
     exempt_methods={"GET", "HEAD", "OPTIONS"},
 )
 
-# Initialize Audit Logging (registered last = outermost, catches all requests
-# including those that fail CSRF or other inner middleware)
 app.add_middleware(
     AuditMiddleware,
     audit_service=audit_service,
@@ -223,7 +200,6 @@ async def health() -> JSONResponse:
     return JSONResponse(status_code=response.status_code, content=legacy_payload)
 
 
-# Register routers
 app.include_router(health_router.router)
 app.include_router(auth.router)
 app.include_router(events.router)

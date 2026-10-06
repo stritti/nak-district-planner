@@ -17,8 +17,16 @@ updates:
     directory: "/services/backend" # Location of package manifests
     schedule:
       interval: "weekly"
-  - package-ecosystem: "docker" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/services/backend"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/services/frontend"
     schedule:
       interval: "weekly"
   - package-ecosystem: "docker-compose" # See documentation for possible values
