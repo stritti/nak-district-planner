@@ -95,7 +95,8 @@ describe('CalendarIntegrationsView coverage gaps', () => {
     await editButtons[0].trigger('click')
     let modal = wrapper.findAll('.modal-panel').find((node) => node.text().includes('Integration bearbeiten'))!
     await modal.get('input[type="url"]').setValue(' https://cal.example.org/new ')
-    await modal.get('input[type="text"]').setValue(' bob ')
+    const caldavTextInputs = modal.findAll('input[type="text"]')
+    await caldavTextInputs[caldavTextInputs.length - 1].setValue(' bob ')
     await modal.get('input[type="password"]').setValue('pw')
     await modal.findAll('button').find((button) => button.text() === 'Speichern')!.trigger('click')
     await flushPromises()
