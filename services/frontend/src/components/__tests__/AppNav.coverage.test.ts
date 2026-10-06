@@ -104,7 +104,7 @@ describe('AppNav coverage gaps', () => {
 
     expect(reset).toHaveBeenCalled()
     expect(wrapper.text()).toContain('Anmelden')
-    await wrapper.get('button[aria-label="Dark Mode aktivieren"]').trigger('click')
+    await wrapper.get('button[title="Light Mode aktivieren"]').trigger('click')
     expect(mocks.toggle).toHaveBeenCalledTimes(1)
   })
 
