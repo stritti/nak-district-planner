@@ -181,7 +181,7 @@ describe('LeadersAdminView rendered handlers', () => {
     await modalByTitle(wrapper, 'Amtstragende:n hinzufügen').get('button.modal-close').trigger('click')
 
     await wrapper.get('button[title="Bearbeiten"]').trigger('click')
-    await modalByTitle(wrapper, 'Amtsträger:in bearbeiten').get('button.modal-close').trigger('click')
+    await modalByTitle(wrapper, 'Amtstragende:n bearbeiten').get('button.modal-close').trigger('click')
 
     await wrapper.get('button[title="ICS-Export-Token erstellen"]').trigger('click')
     await modalByTitle(wrapper, 'ICS-Export').get('button.modal-close').trigger('click')
