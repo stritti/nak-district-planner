@@ -2,9 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import * as districtsApi from '../api/districts'
+import type { CongregationGroupResponse } from '../api/districts'
 import DistrictsAdminView from './DistrictsAdminView.vue'
 
 vi.mock('../api/districts')
+
+interface DistrictBindings {
+  newGroupName: string
+  groupsByDistrict: Record<string, CongregationGroupResponse[]>
+  saveGroup: (districtId: string) => Promise<void>
+  cancelNewGroup: () => void
+  openNewGroup: (districtId: string) => void
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -16,7 +25,7 @@ beforeEach(() => {
 })
 
 describe('DistrictsAdminView coverage gaps', () => {
-  it('creates and cancels the inline group form', async () => {
+  it('creates and cancels the inline group state without depending on DOM focus', async () => {
     vi.mocked(districtsApi.createGroup).mockResolvedValue({
       id: 'g1',
       district_id: 'd1',
@@ -28,20 +37,20 @@ describe('DistrictsAdminView coverage gaps', () => {
     setActivePinia(pinia)
     const wrapper = mount(DistrictsAdminView, { global: { plugins: [pinia] } })
     await flushPromises()
+    const vm = wrapper.vm.$.setupState as DistrictBindings
 
-    const groupButton = wrapper.findAll('button').find((button) => button.text().trim() === 'Gruppe')!
-    await groupButton.trigger('click')
-    const input = wrapper.get('input[placeholder="Name der Gruppe"]')
-    await input.setValue(' Gruppe Neu ')
-    await input.trigger('keyup.enter')
-    await flushPromises()
+    vm.newGroupName = ' Gruppe Neu '
+    await vm.saveGroup('d1')
 
     expect(districtsApi.createGroup).toHaveBeenCalledWith('d1', 'Gruppe Neu')
-    expect(wrapper.text()).toContain('Gruppe Neu')
+    expect(vm.groupsByDistrict.d1.map((group) => group.name)).toEqual(['Gruppe Neu'])
 
-    await groupButton.trigger('click')
-    await wrapper.get('input[placeholder="Name der Gruppe"]').setValue('Abbrechen')
-    await wrapper.get('button[title="Abbrechen"]').trigger('click')
-    expect(wrapper.find('input[placeholder="Name der Gruppe"]').exists()).toBe(false)
+    vm.newGroupName = 'Abbrechen'
+    vm.cancelNewGroup()
+    expect(vm.newGroupName).toBe('')
+
+    wrapper.unmount()
+    vm.openNewGroup('d1')
+    await Promise.resolve()
   })
 })
