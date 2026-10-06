@@ -21,12 +21,18 @@ describe('useDarkMode coverage gaps', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
 
-  it('can be evaluated without browser globals during SSR', async () => {
+  it('can be evaluated and toggled without browser DOM globals during SSR', async () => {
     vi.stubGlobal('window', undefined)
     vi.stubGlobal('document', undefined)
 
     const { useDarkMode } = await import('./useDarkMode')
+    const { isDark, toggle } = useDarkMode()
 
-    expect(useDarkMode().isDark.value).toBe(false)
+    expect(isDark.value).toBe(false)
+
+    toggle()
+    await Promise.resolve()
+
+    expect(isDark.value).toBe(true)
   })
 })
