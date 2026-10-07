@@ -39,34 +39,35 @@ Die Allowlist ist kein Zielzustand und darf fuer neue Features nicht erweitert w
 
 - OIDC Authorization Code + PKCE: ✅
 - JWT-Signatur/Issuer/Audience/Expiry: ✅
-- Ungueltige JWTs ohne unsicheren UserInfo-/Introspection-Fallback: ✅ im RC-2-Security-Workstream
-- Provider-Refresh-Credential ausserhalb JavaScript-persistenter Speicherung: ✅ im RC-2-Security-Workstream
+- Ungueltige JWTs ohne unsicheren UserInfo-/Introspection-Fallback: ✅ (PR #438)
+- Provider-Refresh-Credential ausserhalb JavaScript-persistenter Speicherung: ✅ (PR #442)
 - RBAC/Membership-Guards: ✅
 - PostgreSQL RLS als letzte Tenant-Grenze: ✅
-- Tenant-Autorisierung auf verifiziertem Principal/RBAC statt unverifiziertem JWT-Decode: ✅ im RC-2-Security-Workstream
+- Tenant-Autorisierung auf verifiziertem Principal/RBAC statt unverifiziertem JWT-Decode: 🟡 offen, PR #443
 - Owner-controlled Superadmin-Bootstrap: ✅
 - CSRF-Schutz fuer state-changing Browser-Requests: ✅
 - Audit-Logging: ✅
-- Rate-Limiting: ✅; sensitive Pfade besitzen im RC-2-Workstream einen lokalen Fallback bei Valkey-Ausfall
+- Rate-Limiting: ✅
+- Lokaler Fallback-Limiter fuer sensitive Pfade bei Valkey-Ausfall: 🟡 offen, PR #443
 
 ## 4. Deployment und Datenbank
 
 - Getrennte Runtime- und Migration-DB-Rollen: ✅
 - Dedizierter `migrate`-Deployment-Schritt: ✅
-- API-Runtime ohne automatische Schema-Migration: ✅ im RC-2-Deployment-Workstream
-- Read-only Schema-Readiness vor Traffic: ✅ im RC-2-Deployment-Workstream
+- API-Runtime ohne automatische Schema-Migration: 🟡 offen, PR #441
+- Read-only Schema-Readiness vor Traffic: 🟡 offen, PR #441
 - Migration Graph/FK/Offline-SQL/Roundtrip CI: ✅
 - Verschluesselter Backup-/Restore-Drill: ✅
 - PostgreSQL RLS-Integrationstests: ✅
 
 ## 5. Frontend-Sicherheits- und Testgrenzen
 
-- Access-/ID-Sessiondaten nicht persistent in `localStorage`: ✅ im RC-2-Security-Workstream
-- Provider-Refresh-Token serverseitig/HttpOnly: ✅ im RC-2-Security-Workstream
-- CSP und Produktions-Network-Boundary gehaertet: ✅ im RC-2-Deployment-Workstream
+- Access-/ID-Sessiondaten nicht persistent in `localStorage`: ✅ (PR #442)
+- Provider-Refresh-Token serverseitig/HttpOnly: ✅ (PR #442)
+- CSP und Produktions-Network-Boundary gehaertet: ✅ (PR #440)
 - Unit-Tests: ✅
 - E2E-Tests: ✅
-- Coverage ueber reale Production-Sources mit >80% fuer Statements/Branches/Functions/Lines: 🟡 RC-2-Gate; bisherige selektive Allowlist wird ersetzt und fehlende Tests werden ergaenzt
+- Frontend-Coverage ueber reale Production-Sources mit >80% fuer Statements/Branches/Functions/Lines: 🟡 offen, PR #439
 
 Production-Code darf nicht breit ausgeschlossen werden, um das Coverage-Gate kuenstlich zu erreichen. Bootstrap-only Wiring darf nur mit dokumentierter Begruendung ausserhalb der Messung bleiben; fachliche Startup-Logik gehoert in testbare Module.
 
@@ -76,8 +77,8 @@ Production-Code darf nicht breit ausgeschlossen werden, um das Coverage-Gate kue
 - CodeQL Python + JavaScript/TypeScript: ✅
 - Dependency Review: ✅
 - MegaLinter: ✅
-- reproduzierbare Lockfile-basierte Builds: ✅ im RC-2-Deployment-Workstream
-- Container-/Action-Pinning: 🟡 wird im RC-2-Hardening konsolidiert
+- reproduzierbare Lockfile-basierte Builds: ✅
+- Container-/Action-Pinning: 🟡 teilweise (Runtime-Images per Version gepinnt in PR #440; Digest-/SHA-Pinning offen)
 - aktives `main`-Ruleset mit strict Required Checks und ohne Bypass: ✅
 - verpflichtende menschliche Approval: ❌ (Ruleset aktuell 0 Approvals; Governance-Haertung vor finalem 1.0.0 empfohlen)
 
@@ -86,7 +87,7 @@ Production-Code darf nicht breit ausgeschlossen werden, um das Coverage-Gate kue
 - Paketversion als zentrale Backend-Version: ✅
 - FastAPI-Metadaten verwenden dieselbe Paketversion: ✅ (RC-2)
 - OpenSpec fuer neue RC-2-Sicherheits-/Architekturgrenzen: ✅
-- erledigte Changes archiviert und Baseline konsolidiert: 🟡 Bestandteil des RC-2-Abschlusses
+- erledigte Changes archiviert und Baseline konsolidiert: 🟡 teilweise (`approved-idp-login-scoped-access` archiviert; weitere folgen in separatem OpenSpec-Sync-PR)
 
 ## 8. Prioritaet nach RC-2
 

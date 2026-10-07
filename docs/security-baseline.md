@@ -6,16 +6,16 @@
 
 Dieses Dokument beschreibt die verbindlichen Sicherheitsgrenzen des NAK District Planner. Detail- und Betriebsdokumente sind unter `docs/security/` und im `docs/production-runbook.md` verlinkt.
 
-Legende: ✅ aktiv im RC-1-Stand · 🟡 RC-2-Workstream / Release-Gate · ❌ offen
+Legende: ✅ aktiv auf `main` · 🟡 offener RC-2-Workstream / Release-Gate · ❌ offen
 
 ## 1. Authentifizierung und Token-Vertrauen
 
 - OIDC Authorization Code Flow mit PKCE: ✅
 - JWT-Signaturpruefung ueber JWKS: ✅
 - Issuer-, Audience-/`azp`- und Expiry-Pruefung: ✅
-- Ungueltige JWTs duerfen **nicht** auf UserInfo/Introspection ausweichen: 🟡 RC-2, PR #438
-- Opaque Access Tokens duerfen kontrolliert ueber UserInfo/Introspection validiert werden: 🟡 RC-2, PR #438
-- Opaque-Token-Ergebnisse muessen fuer den konfigurierten Client/Issuer geeignet sein: 🟡 RC-2, PR #438
+- Ungueltige JWTs duerfen **nicht** auf UserInfo/Introspection ausweichen: ✅ (PR #438)
+- Opaque Access Tokens duerfen kontrolliert ueber UserInfo/Introspection validiert werden: ✅ (PR #438)
+- Opaque-Token-Ergebnisse muessen fuer den konfigurierten Client/Issuer geeignet sein: ✅ (PR #438)
 
 ### 1.1 Fail-closed-Regel fuer JWTs
 
@@ -25,16 +25,16 @@ UserInfo/Introspection ist nur fuer Tokenformen vorgesehen, die nicht als JWT lo
 
 ## 2. Browser-Session und Credential-Speicherung
 
-RC-1 persistiert noch zu viel OIDC-Tokenzustand im Browser. RC-2 schliesst diese Grenze ueber PR #442.
+Die Provider-Refresh-Credential bleibt serverseitig; der Browser haelt nur kurzlebige Session-Daten im Memory (PR #442).
 
-RC-2-Anforderungen:
+Anforderungen:
 
-- Provider-Refresh-Token bleibt serverseitig in einem `Secure`, `HttpOnly`, `SameSite`-Cookie: 🟡
-- Provider-Refresh-Token wird nie in JSON an Browser-JavaScript zurueckgegeben: 🟡
-- Access-/ID-Token werden nur in Memory gehalten, nicht in `localStorage`: 🟡
-- ein Reload kann die Memory-Session ueber die serverseitige Refresh-Session wiederherstellen: 🟡
-- Logout widerruft die serverseitig gehaltene Refresh-Credential best-effort und loescht das Cookie immer lokal: 🟡
-- state-changing Cookie-Endpunkte bleiben CSRF-geschuetzt: 🟡
+- Provider-Refresh-Token bleibt serverseitig in einem `Secure`, `HttpOnly`, `SameSite`-Cookie: ✅ (PR #442)
+- Provider-Refresh-Token wird nie in JSON an Browser-JavaScript zurueckgegeben: ✅ (PR #442)
+- Access-/ID-Token werden nur in Memory gehalten, nicht in `localStorage`: ✅ (PR #442)
+- ein Reload kann die Memory-Session ueber die serverseitige Refresh-Session wiederherstellen: ✅ (PR #442)
+- Logout widerruft die serverseitig gehaltene Refresh-Credential best-effort und loescht das Cookie immer lokal: ✅ (PR #442)
+- state-changing Cookie-Endpunkte bleiben CSRF-geschuetzt: ✅ (PR #442)
 
 Tabgebundene Koordinationsdaten duerfen `sessionStorage` verwenden, sofern sie keine Provider-Credential enthalten.
 
@@ -86,7 +86,7 @@ Eine Route darf nur dann ohne Bearer-Authentifizierung erreichbar sein, wenn sie
 | Datenklasse | Schutzbedarf | Mindestmassnahmen |
 |---|---|---|
 | Secrets / Provider-Credentials | kritisch | Secret-Management, keine Logs, keine Browser-Persistenz |
-| Access-/ID-Tokens | hoch | HTTPS, kurze Lebensdauer, memory-only im RC-2-Ziel |
+| Access-/ID-Tokens | hoch | HTTPS, kurze Lebensdauer, memory-only (PR #442) |
 | Benutzer-/Membership-Daten | hoch | RBAC, RLS, Audit |
 | Kalender-/Planungsdaten | mittel | Tenant-Isolation, RBAC, RLS |
 | Logs/Metriken | mittel | keine Secrets, begrenzte Metadaten, Retention |
@@ -95,8 +95,8 @@ Eine Route darf nur dann ohne Bearer-Authentifizierung erreichbar sein, wenn sie
 
 - Produktion nur hinter TLS-Termination: ✅
 - Datenbank und Valkey/Redis nicht oeffentlich exponiert: ✅
-- Anwendungseinstieg darf den vorgesehenen TLS-Proxy nicht ueber einen oeffentlichen Host-Port umgehen: 🟡 RC-2, PR #440
-- CSP und Security Header sind restriktiv; externe `connect-src`-Ziele muessen begruendet sein: 🟡 RC-2, PR #440
+- Anwendungseinstieg darf den vorgesehenen TLS-Proxy nicht ueber einen oeffentlichen Host-Port umgehen: ✅ (PR #440)
+- CSP und Security Header sind restriktiv; externe `connect-src`-Ziele muessen begruendet sein: ✅ (PR #440)
 - Runtime und Migration verwenden getrennte DB-Verantwortlichkeiten: ✅
 - Schema-Migration gehoert in den Deployment-Schritt, nicht in den API-Lifespan: 🟡 RC-2, PR #441
 
