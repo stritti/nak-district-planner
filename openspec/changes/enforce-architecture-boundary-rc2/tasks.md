@@ -1,7 +1,7 @@
 ## 1. Architecture boundary
 
 - [x] 1.1 Add an AST-based regression test for `app.application -> app.adapters` dependencies.
-- [x] 1.2 Record the RC-2 legacy adapter-import files with explicit rationales.
+- [x] 1.2 Record the RC-2 legacy adapter imports per file (exact imported modules) with explicit rationales; reject stale entries.
 - [x] 1.3 Verify the architecture test against the full backend unit suite.
 
 ## 2. Release metadata
@@ -14,7 +14,7 @@
 - [x] 3.1 Update the production runbook for the current owner-controlled superadmin bootstrap.
 - [x] 3.2 Update the runbook/release documentation for the current required CI checks.
 - [x] 3.3 Align architecture/security status documents with the RC-2 dependency and trust boundaries.
-- [x] 3.4 Archive completed OpenSpec changes and consolidate their implemented capability specs into the baseline.
+- [x] 3.4 Archive the completed `approved-idp-login-scoped-access` change; archiving the remaining finished changes is deferred to a separate OpenSpec sync PR.
 
 ## 4. Verification
 

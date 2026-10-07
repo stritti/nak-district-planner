@@ -10,7 +10,7 @@ Release metadata and operational documentation also contain RC-1 inconsistencies
 - Reject adapter dependencies from new application modules so new use cases must depend on domain ports/interfaces.
 - Report the FastAPI application version from the same package metadata used by health and system endpoints.
 - Align architecture, security, operations, and release documentation with the RC-2 trust and deployment boundaries.
-- Archive completed OpenSpec changes once their requirements are represented by the active baseline.
+- Archive the completed `approved-idp-login-scoped-access` change; the remaining finished changes are archived in a separate OpenSpec sync PR.
 
 ## Capabilities
 

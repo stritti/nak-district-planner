@@ -16,6 +16,10 @@ Existing RC-2 violations MAY remain temporarily only when they are named in an e
 - **THEN** the architecture check fails
 - **AND** the dependency must be inverted instead of allowlisted
 
+#### Scenario: Legacy module gains a new adapter import
+- **WHEN** an allowlisted application module imports an `app.adapters...` module that is not listed for it in the legacy allowlist
+- **THEN** the architecture check fails
+
 #### Scenario: Legacy debt is removed
 - **WHEN** an allowlisted application module no longer requires a concrete adapter
 - **THEN** its legacy allowlist entry is removed in the same change
