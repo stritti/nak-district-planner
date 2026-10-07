@@ -90,10 +90,14 @@ def test_sensitive_route_registry_is_narrow_and_configurable() -> None:
         ),
     )
 
-    assert middleware._sensitive_fallback_config("POST", "/api/v1/auth/oidc/token") == (7, 45)
+    assert middleware._sensitive_fallback_config("POST", "/api/v1/auth/oidc/token") == (
+        "auth_token_limit",
+        7,
+        45,
+    )
     assert middleware._sensitive_fallback_config(
         "POST", f"/api/v1/districts/{district}/registrations"
-    ) == (3, 45)
+    ) == ("public_registration_limit", 3, 45)
     assert (
         middleware._sensitive_fallback_config(
             "POST", f"/api/v1/districts/{district}/registrations/abc/approve"
@@ -204,3 +208,74 @@ async def test_local_fallback_bucket_cap_is_enforced_without_global_scan() -> No
 
     assert len(limiter._buckets) == 2
     assert "ip:a:/sensitive" not in limiter._buckets
+
+
+def registration_app(limiter: LocalFallbackRateLimiter, primary: AsyncMock | None = None) -> FastAPI:
+    app = FastAPI()
+
+    @app.post("/api/v1/districts/{district_id}/registrations")
+    async def registration_endpoint(district_id: str) -> Response:
+        return Response("ok")
+
+    app.add_middleware(
+        RateLimitMiddleware,
+        rate_limiter=primary or fake_failed_primary_limiter(),
+        local_fallback_limiter=limiter,
+    )
+    return app
+
+
+def test_registration_fallback_cannot_be_reset_by_evicting_own_bucket() -> None:
+    """Random district UUIDs must share one bucket, so LRU eviction is no bypass."""
+    import uuid
+
+    app = registration_app(LocalFallbackRateLimiter(max_buckets=8))
+    target = "/api/v1/districts/11111111-1111-1111-1111-111111111111/registrations"
+
+    with TestClient(app) as client:
+        for _ in range(10):
+            assert client.post(target).status_code == 200
+        for _ in range(20):
+            client.post(f"/api/v1/districts/{uuid.uuid4()}/registrations")
+        blocked = client.post(target)
+
+    assert blocked.status_code == 429
+
+
+def test_local_fallback_applies_when_only_burst_check_fails_open() -> None:
+    primary = fake_failed_primary_limiter()
+    primary.check_rate_limit.return_value = RateLimitResult(
+        allowed=True, remaining=99, limit=100, reset_in=timedelta(seconds=60)
+    )
+    app = registration_app(LocalFallbackRateLimiter(), primary)
+    path = "/api/v1/districts/11111111-1111-1111-1111-111111111111/registrations"
+
+    with TestClient(app) as client:
+        for _ in range(10):
+            assert client.post(path).status_code == 200
+        assert client.post(path).status_code == 429
+
+
+def test_local_fallback_buckets_are_separated_by_identifier() -> None:
+    app = registration_app(LocalFallbackRateLimiter())
+    path = "/api/v1/districts/11111111-1111-1111-1111-111111111111/registrations"
+
+    with TestClient(app) as client:
+        for _ in range(10):
+            client.post(path, headers={"X-Real-IP": "198.51.100.1"})
+        assert client.post(path, headers={"X-Real-IP": "198.51.100.1"}).status_code == 429
+        assert client.post(path, headers={"X-Real-IP": "198.51.100.2"}).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_single_key_flood_keeps_bucket_bounded_by_limit() -> None:
+    limiter = LocalFallbackRateLimiter()
+
+    results = [
+        await limiter.check(identifier="ip:a", endpoint="rule", limit=3, window_seconds=60)
+        for _ in range(1000)
+    ]
+
+    assert [r.allowed for r in results[:4]] == [True, True, True, False]
+    assert not any(r.allowed for r in results[3:])
+    assert len(limiter._buckets["ip:a:rule"]) == 3

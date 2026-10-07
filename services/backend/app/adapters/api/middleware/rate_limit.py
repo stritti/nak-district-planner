@@ -111,10 +111,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         header_result = result
         fallback_config = self._sensitive_fallback_config(request.method, request.url.path)
         if (result.fail_open or burst_result.fail_open) and fallback_config is not None:
-            fallback_limit, fallback_window = fallback_config
+            rule_name, fallback_limit, fallback_window = fallback_config
+            # Bucket per rule, not per raw path: otherwise every random district
+            # UUID would open a new bucket and LRU eviction could reset the limit.
             local_result = await self.local_fallback_limiter.check(
                 identifier=identifier,
-                endpoint=request.url.path,
+                endpoint=rule_name,
                 limit=fallback_limit,
                 window_seconds=fallback_window,
             )
@@ -152,11 +154,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             headers=await self.rate_limiter.get_rate_limit_headers(result),
         )
 
-    def _sensitive_fallback_config(self, method: str, path: str) -> tuple[int, int] | None:
-        """Return the configured local fallback limit for a declared sensitive route."""
+    def _sensitive_fallback_config(self, method: str, path: str) -> tuple[str, int, int] | None:
+        """Return (bucket name, limit, window) for a declared sensitive route."""
         for rule in SENSITIVE_ENDPOINT_RULES:
             if rule.matches(method, path):
                 return (
+                    rule.limit_attribute,
                     int(getattr(self.sensitive_fallback_config, rule.limit_attribute)),
                     self.sensitive_fallback_config.window_seconds,
                 )

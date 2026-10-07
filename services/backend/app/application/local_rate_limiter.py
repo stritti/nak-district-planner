@@ -50,7 +50,10 @@ class LocalFallbackRateLimiter:
             bucket = self._buckets.pop(key, deque())
             while bucket and bucket[0] <= cutoff:
                 bucket.popleft()
-            bucket.append(now)
+            # Denied requests are not recorded, so a bucket never exceeds `limit`.
+            allowed = len(bucket) < limit
+            if allowed:
+                bucket.append(now)
             self._buckets[key] = bucket
 
             self._checks_since_cleanup += 1
@@ -64,7 +67,6 @@ class LocalFallbackRateLimiter:
                 self._buckets.popitem(last=False)
 
             count = len(bucket)
-            allowed = count <= limit
             oldest = bucket[0]
             reset_seconds = max(0.0, oldest + window_seconds - now)
             retry_after = max(1, int(reset_seconds)) if not allowed else None
