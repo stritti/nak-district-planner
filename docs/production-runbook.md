@@ -4,7 +4,7 @@ Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deploymen
 
 ## 1. Voraussetzungen
 
-- Gueltige `.env` fuer Produktion (keine Dev-Secrets)
+- Gueltige `.env` fuer Produktion (keine Dev-Secrets) und `.env.db` mit dem PostgreSQL-Owner-Passwort (nur fuer `db`/`migrate`, siehe `docs/deployment-migrations.md`)
 - Laufende Infrastruktur: Reverse Proxy, Datenbank, Redis
 - Backup-Strategie fuer PostgreSQL vorhanden
 
@@ -33,14 +33,14 @@ Der Production Guard verhindert den Start, wenn kritische Werte nicht gesetzt si
 
 1. Aktuellen Code bereitstellen (`main`/Release-Tag)
 2. Images bauen: `docker compose -f docker-compose.yml build`
-3. Migrationen ausfuehren: `docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head`
+3. Migrationen ausfuehren: `docker compose -f docker-compose.yml run --no-deps --rm migrate` (verwendet das in Schritt 2 gebaute Image, Details in `docs/deployment-migrations.md`)
 4. Stack starten/aktualisieren: `docker compose -f docker-compose.yml up -d`
 5. Health pruefen: `curl http://localhost/api/health`
 
 ## 3. Rollback (Basisverfahren)
 
 1. Vor Deployment DB-Backup erstellen.
-2. Bei Fehlern auf letztes stabiles Release zurueckgehen.
+2. Bei Fehlern auf letztes stabiles Release zurueckgehen. Hat das fehlerhafte Release bereits migriert, startet das aeltere Image nicht (Schema-Guard, fail closed): zuerst Backup einspielen oder mit dem neueren Image `alembic downgrade <revision>` ausfuehren.
 3. Wenn noetig DB-Restore aus validiertem Backup.
 4. Post-Rollback Smoke-Test (Login, Eventliste, Matrix, Export).
 
