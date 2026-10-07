@@ -211,3 +211,13 @@ def test_production_guard_oidc_client_id_default() -> None:
     settings.app_env = "production"
     with pytest.raises(RuntimeError, match="OIDC_CLIENT_ID"):
         production_guard(settings)
+
+
+def test_production_guard_rejects_insecure_calendar_urls() -> None:
+    settings = _valid_prod_settings(calendar_allow_insecure_urls=True)
+    with pytest.raises(RuntimeError, match="CALENDAR_ALLOW_INSECURE_URLS"):
+        production_guard(settings)
+
+
+def test_calendar_insecure_urls_default_off() -> None:
+    assert _valid_prod_settings().calendar_allow_insecure_urls is False

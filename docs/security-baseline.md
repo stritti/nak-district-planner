@@ -386,7 +386,7 @@ server {
 | A07 | Identification and Auth Failures | ⚠️ Teilweise | OIDC gut, MFA fehlt |
 | A08 | Software and Data Integrity | ✅ Gut | Hash-basierte Deduplizierung |
 | A09 | Security Logging Failures | ❌ Kritisch | Audit-Logging fehlt |
-| A10 | SSRF | ✅ Gut | Kein direktes URL-Fetching |
+| A10 | SSRF | ✅ Gut | Kalender-URLs (ICS/CalDAV): nur HTTPS, nur öffentliche Adressen (Prüfung + IP-Pinning je Anfrage), keine Redirects, max. 10 MB, generische Fehler (#463) |
 
 ### 9.2 CIS Controls v8
 

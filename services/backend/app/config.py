@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     sync_delete_mode: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
     sync_expected_duration_minutes: int = Field(default=90, ge=1)
     min_travel_minutes: int = Field(default=30, ge=0)
+    # Dev only: allow http:// and private/loopback calendar URLs (local test
+    # servers). Rejected by production_guard — SSRF protection, see #463.
+    calendar_allow_insecure_urls: bool = False
 
     # Version check & self-update
     ghcr_owner: str = "stritti"
@@ -154,6 +157,11 @@ def production_guard(settings: Settings) -> None:
         "",
     ):
         errors.append("OIDC_CLIENT_ID must be changed from the default value")
+
+    if settings.calendar_allow_insecure_urls:
+        errors.append(
+            "CALENDAR_ALLOW_INSECURE_URLS must be false in production (SSRF protection)"
+        )
 
     # Outbound mail must never silently fall back to logging in production.
     if not settings.smtp_host:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 
 import httpx
@@ -13,6 +14,8 @@ from tenacity import (
 )
 
 from app.domain.ports.calendar import CalendarConnectorError
+
+logger = logging.getLogger(__name__)
 
 _RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
@@ -40,14 +43,15 @@ async def resilient_request(
                 response = await request()
                 response.raise_for_status()
                 return response
-    except httpx.HTTPStatusError as exc:
-        raise CalendarConnectorError(
-            f"HTTP {exc.response.status_code} beim Laden des {provider} Kalenders"
-        ) from exc
-    except httpx.RequestError as exc:
-        raise CalendarConnectorError(
-            f"Transportfehler beim Laden des {provider} Kalenders"
-        ) from exc
+    except httpx.HTTPError as exc:
+        # One generic message for status and transport failures: distinct texts
+        # would act as a port/service oracle (#463). Details stay in the log,
+        # without URL or credentials.
+        status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        logger.warning(
+            "%s calendar request failed (%s, HTTP status %s)", provider, type(exc).__name__, status
+        )
+        raise CalendarConnectorError(f"{provider} Kalender konnte nicht geladen werden") from exc
     raise CalendarConnectorError(
         f"Unbekannter Fehler beim Laden des {provider} Kalenders"
     )
