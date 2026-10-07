@@ -28,8 +28,9 @@ from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.crypto import decrypt_credentials
 from app.application.external_candidate_sync_adapter import import_candidate_or_match
 from app.config import settings
-from app.domain.errors import IntegrationNotFoundError
+from app.domain.errors import IntegrationNotFoundError, UnsupportedCalendarTypeError
 from app.domain.models.calendar_integration import (
+    SUPPORTED_CALENDAR_TYPES,
     CalendarCapability,
     CalendarIntegration,
     CalendarType,
@@ -497,6 +498,8 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
     integration = await integration_repo.get(integration_id)
     if integration is None:
         raise IntegrationNotFoundError(f"CalendarIntegration {integration_id} not found")
+    if integration.type not in SUPPORTED_CALENDAR_TYPES:
+        raise UnsupportedCalendarTypeError(integration.type)
     counters: Counter[SyncOutcome] = Counter()
     try:
         credentials = decrypt_credentials(integration.credentials_enc)

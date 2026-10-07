@@ -140,3 +140,29 @@ class TestGenerateDraftServicesWindowTask:
         assert result["created"] == 16
         assert result["skipped_existing"] == 30
         mock_asyncio_run.assert_called_once()
+
+
+class TestSyncAllSkipsUnsupportedProviders:
+    """#467: automatic sync skips GOOGLE/MICROSOFT integrations with a clear log."""
+
+    def test_due_integration_ids_skips_google_and_microsoft(self, caplog):
+        from datetime import UTC, datetime
+        from types import SimpleNamespace
+
+        from app.application.tasks import _due_integration_ids
+        from app.domain.models.calendar_integration import CalendarType
+
+        def item(cal_type):
+            return SimpleNamespace(
+                id=uuid.uuid4(), type=cal_type, last_synced_at=None, sync_interval=60
+            )
+
+        ics, caldav = item(CalendarType.ICS), item(CalendarType.CALDAV)
+        google, microsoft = item(CalendarType.GOOGLE), item(CalendarType.MICROSOFT)
+
+        with caplog.at_level("WARNING", logger="app.application.tasks"):
+            ids = _due_integration_ids([ics, google, caldav, microsoft], datetime.now(UTC))
+
+        assert ids == [str(ics.id), str(caldav.id)]
+        assert str(google.id) in caplog.text and str(microsoft.id) in caplog.text
+        assert "nicht unterstützt" in caplog.text
