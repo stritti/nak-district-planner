@@ -1,26 +1,9 @@
 import { expect, test } from '@playwright/test'
 
-import { FRONTEND_URL } from './helpers'
-
-const ADMIN_AUTH = {
-  token: {
-    accessToken: 'admin-token',
-    idToken: 'admin-id-token',
-    expiresAt: Math.floor(Date.now() / 1000) + 3600,
-  },
-  user: { sub: 'admin-1', email: 'admin@example.com', name: 'Admin' },
-  isSuperadmin: true,
-  accessStatus: 'ACTIVE' as const,
-  memberships: [
-    { role: 'DISTRICT_ADMIN', scope_type: 'DISTRICT', scope_id: 'district-1' },
-  ],
-}
+import { FRONTEND_URL, mockAuthenticatedSession } from './helpers'
 
 test.describe('Leader unavailabilities admin', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript((auth) => {
-      localStorage.setItem('auth', JSON.stringify(auth))
-    }, ADMIN_AUTH)
     await page.route('**/api/v1/auth/me', async (route) => {
       await route.fulfill({
         status: 200,
@@ -52,6 +35,11 @@ test.describe('Leader unavailabilities admin', () => {
         contentType: 'application/json',
         body: JSON.stringify({ total_pending: 0 }),
       })
+    })
+    await mockAuthenticatedSession(page, {
+      sub: 'admin-1',
+      email: 'admin@example.com',
+      name: 'Admin',
     })
   })
 

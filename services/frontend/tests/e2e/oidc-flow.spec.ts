@@ -1,146 +1,120 @@
-/**
- * End-to-End Test: OIDC Authentication Flow
- * 
- * Tests the complete OIDC login → token → API call → logout flow
- * This test validates Phase 4b implementation (OIDC with PKCE)
- * 
- * Note: Tests that require a real OIDC provider are skipped in CI.
- */
+import { expect, test, type Page } from '@playwright/test'
+import { FRONTEND_URL, mockAuthenticatedSession } from './helpers'
 
-import { test, expect } from '@playwright/test'
-
-// Configuration from environment
-const FRONTEND_URL = 'http://localhost:5173'
-const isCI = process.env.CI === 'true'
-
-/**
- * Mock OIDC discovery so the login form renders (no real backend needed).
- */
-async function mockOidcDiscovery(page: import('@playwright/test').Page) {
+async function mockLoggedOutSession(page: Page): Promise<void> {
   await page.route('**/api/v1/auth/oidc/discovery', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
+      headers: { 'set-cookie': 'csrf_token=e2e-csrf; Path=/; SameSite=Strict' },
       body: JSON.stringify({
-        authorization_endpoint: 'http://localhost:9999/authorize',
-        token_endpoint: 'http://localhost:9999/token',
-        userinfo_endpoint: 'http://localhost:9999/userinfo',
-        client_id: 'test-client-id',
+        authorization_endpoint: 'https://idp.example/authorize',
+        token_endpoint: 'https://idp.example/token',
+        userinfo_endpoint: 'https://idp.example/userinfo',
+        client_id: 'planner-client',
       }),
     })
+  })
+  await page.route('**/api/v1/auth/oidc/token', async (route) => {
+    expect(route.request().method()).toBe('POST')
+    await route.fulfill({ status: 401, contentType: 'application/json', body: '{}' })
+  })
+}
+
+async function mockAuthenticatedApi(page: Page): Promise<void> {
+  // Register the broad fallback first so the specific routes below win.
+  await page.route('**/api/v1/**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+  })
+  await page.route('**/api/v1/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        sub: 'e2e-user',
+        email: 'e2e@example.com',
+        username: 'e2e-user',
+        name: 'E2E User',
+        is_superadmin: false,
+      }),
+    })
+  })
+  await page.route('**/api/v1/auth/access', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ACTIVE',
+        memberships: [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'district-1' }],
+      }),
+    })
+  })
+  await page.route('**/api/v1/system/version', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ version: 'e2e' }),
+    })
+  })
+  await mockAuthenticatedSession(page, {
+    sub: 'e2e-user',
+    email: 'e2e@example.com',
+    name: 'E2E User',
   })
 }
 
 test.describe('OIDC Authentication Flow', () => {
-  test('01: Should navigate to login page', async ({ page }) => {
-    await mockOidcDiscovery(page)
-    await page.goto(`${FRONTEND_URL}/login`)
-    await expect(page).toHaveTitle(/Login|NAK/)
-    // The login page shows "Mit Single Sign-on anmelden" (German), not "Login"
-    const loginButton = page.locator('button:has-text("Mit Single Sign-on anmelden")')
-    await expect(loginButton).toBeVisible()
-  })
+  test('shows the login page while no refresh session exists', async ({ page }) => {
+    await mockLoggedOutSession(page)
 
-  test('02: Should store access token after successful login', async ({ page }) => {
-    test.skip(isCI, 'Requires a real OIDC provider – cannot run in CI')
-
-    await mockOidcDiscovery(page)
     await page.goto(`${FRONTEND_URL}/login`)
 
-    const loginButton = page.locator('button:has-text("Mit Single Sign-on anmelden")')
-    await loginButton.click()
-
-    // Wait for redirect to OIDC provider
-    await page.waitForURL('http://localhost:9999/**', { timeout: 15000 })
-
-    // Simulate successful OIDC callback (redirect back with code)
-    await page.goto(`${FRONTEND_URL}/auth/callback?code=mock-code&state=mock-state`)
-
-    // Wait for token to be stored
-    await page.waitForTimeout(500)
-
-    const token = await page.evaluate(() => {
-      const authStore = localStorage.getItem('auth')
-      return authStore ? JSON.parse(authStore).token : null
-    })
-
-    expect(token).toBeTruthy()
+    await expect(page.getByRole('button', { name: 'Mit Single Sign-on anmelden' })).toBeVisible()
   })
 
-  test('03: Should prevent access to protected routes without token', async ({ page }) => {
-    // Clear localStorage before navigating (use goto to establish an origin first)
-    await page.goto(`${FRONTEND_URL}/login`)
-    await page.evaluate(() => localStorage.clear())
-
-    // Try to access protected route
-    await page.goto(`${FRONTEND_URL}/events`)
-
-    // Should redirect to login
-    expect(page.url()).toContain('/login')
-  })
-
-  test('04: Should allow access to protected routes with valid token', async ({ page }) => {
-    test.skip(isCI, 'Requires a real OIDC provider – cannot run in CI')
-
-    // Set up authenticated state via localStorage
-    await page.addInitScript(() => {
-      localStorage.setItem('auth', JSON.stringify({
-        token: { accessToken: 'e2e-token', idToken: 'e2e-id', expiresAt: Math.floor(Date.now() / 1000) + 3600 },
-        user: { sub: 'e2e-user', email: 'e2e@example.com', name: 'E2E User' },
-        isSuperadmin: false,
-        accessStatus: 'ACTIVE',
-        memberships: [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'district-1' }],
-      }))
-    })
+  test('restores access in memory without persisting browser auth credentials', async ({ page }) => {
+    await mockAuthenticatedApi(page)
 
     await page.goto(`${FRONTEND_URL}/events`)
 
-    // Should NOT redirect to login
-    expect(page.url()).not.toContain('/login')
-    expect(page.url()).toContain('/events')
+    await expect(page).toHaveURL(/\/events$/)
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('auth'))).toBeNull()
   })
 
-  test('05: Should successfully logout', async ({ page }) => {
-    test.skip(isCI, 'Requires a real OIDC provider – cannot run in CI')
-
-    // Set up authenticated state
-    await page.addInitScript(() => {
-      localStorage.setItem('auth', JSON.stringify({
-        token: { accessToken: 'e2e-token', idToken: 'e2e-id', expiresAt: Math.floor(Date.now() / 1000) + 3600 },
-        user: { sub: 'e2e-user', email: 'e2e@example.com', name: 'E2E User' },
-        isSuperadmin: false,
-        accessStatus: 'ACTIVE',
-        memberships: [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'district-1' }],
-      }))
-    })
-
-    // Mock API calls
-    await page.route('**/api/v1/**', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
-    })
+  test('redirects protected routes to login when the server has no refresh session', async ({ page }) => {
+    await mockLoggedOutSession(page)
 
     await page.goto(`${FRONTEND_URL}/events`)
 
-    // Find logout button in user menu
-    const userMenu = page.locator('[data-testid="user-menu"], .user-menu')
-    if (await userMenu.isVisible()) {
-      await userMenu.click()
-    }
+    await expect(page).toHaveURL(/\/login$/)
+  })
 
-    const logoutButton = page.locator(
-      'button:has-text("Logout"), button:has-text("Sign Out"), button:has-text("Abmelden")',
-    )
+  test('allows protected navigation after a valid server-side session restore', async ({ page }) => {
+    await mockAuthenticatedApi(page)
 
-    if (await logoutButton.isVisible()) {
-      await logoutButton.click()
-      await page.waitForURL(`**/login**`, { timeout: 10000 })
+    await page.goto(`${FRONTEND_URL}/events`)
 
-      const token = await page.evaluate(() => {
-        const authStore = localStorage.getItem('auth')
-        return authStore ? JSON.parse(authStore).token : null
-      })
+    await expect(page).toHaveURL(/\/events$/)
+    await expect(page.getByText('E2E User', { exact: true }).first()).toBeVisible()
+  })
 
-      expect(token).toBeFalsy()
-    }
+  test('logs out locally and revokes the server-held refresh session', async ({ page }) => {
+    await mockAuthenticatedApi(page)
+    let revokeCalls = 0
+    await page.route('**/api/v1/auth/oidc/revoke', async (route) => {
+      revokeCalls += 1
+      expect(route.request().method()).toBe('POST')
+      expect(route.request().headers()['x-csrf-token']).toBe('e2e-csrf')
+      await route.fulfill({ status: 204, body: '' })
+    })
+
+    await page.goto(`${FRONTEND_URL}/events`)
+    await expect(page).toHaveURL(/\/events$/)
+    await page.getByRole('button', { name: /E2E User/ }).click()
+    await page.getByRole('button', { name: 'Abmelden' }).click()
+
+    await expect(page).toHaveURL(/\/login$/)
+    expect(revokeCalls).toBe(1)
+    expect(await page.evaluate(() => localStorage.getItem('auth'))).toBeNull()
   })
 })

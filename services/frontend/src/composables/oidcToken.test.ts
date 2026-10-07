@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { identityFromTokenExchange, isValidTokenExchangeResponse, isValidTokenShape } from './oidcToken'
+import {
+  REFRESH_SESSION_COORDINATION_ID,
+  identityFromTokenExchange,
+  isValidTokenExchangeResponse,
+  isValidTokenShape,
+} from './oidcToken'
 import type { OIDCToken, OIDCUser } from './oidcTypes'
 
 const currentToken: OIDCToken = {
   accessToken: 'old-access',
   idToken: 'old-id',
-  refreshToken: 'old-refresh',
+  refreshToken: REFRESH_SESSION_COORDINATION_ID,
   expiresAt: 1,
 }
 
@@ -33,7 +38,7 @@ describe('isValidTokenExchangeResponse', () => {
     {},
     { access_token: '' },
     { access_token: 3 },
-    { access_token: 'access', refresh_token: '' },
+    { access_token: 'access', refresh_session: 'yes' },
     { access_token: 'access', id_token: 3 },
     { access_token: 'access', expires_in: Number.NaN },
     { access_token: 'access', expires_in: 0 },
@@ -61,7 +66,7 @@ describe('isValidTokenShape', () => {
 })
 
 describe('identityFromTokenExchange', () => {
-  it('maps new token values and identity claims', () => {
+  it('maps a server-held refresh session without exposing a provider credential', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-26T12:00:00Z'))
     const idToken = tokenWithClaims({ sub: 'next-user', email: 'next@example.com', name: 'Next' })
@@ -69,7 +74,7 @@ describe('identityFromTokenExchange', () => {
       {
         access_token: 'new-access',
         id_token: idToken,
-        refresh_token: 'new-refresh',
+        refresh_session: true,
         expires_in: 1800,
       },
       currentToken,
@@ -79,7 +84,7 @@ describe('identityFromTokenExchange', () => {
     expect(result.token).toEqual({
       accessToken: 'new-access',
       idToken,
-      refreshToken: 'new-refresh',
+      refreshToken: REFRESH_SESSION_COORDINATION_ID,
       expiresAt: 1790425800,
     })
     expect(result.user).toEqual({
@@ -90,7 +95,7 @@ describe('identityFromTokenExchange', () => {
     })
   })
 
-  it('preserves current token identity values when the response omits them', () => {
+  it('preserves the current coordination id when metadata is omitted', () => {
     const result = identityFromTokenExchange({ access_token: 'not-a-jwt' }, currentToken, currentUser)
 
     expect(result.token.idToken).toBe(currentToken.idToken)

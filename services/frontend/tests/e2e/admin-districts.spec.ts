@@ -1,35 +1,15 @@
 import { expect, test } from '@playwright/test'
+import { mockAuthenticatedSession } from './helpers'
 
 const FRONTEND_URL = 'http://localhost:5173'
 
-const ADMIN_AUTH = {
-  token: {
-    accessToken: 'admin-token',
-    idToken: 'admin-id-token',
-    expiresAt: Math.floor(Date.now() / 1000) + 3600,
-  },
-  user: { sub: 'admin-1', email: 'admin@example.com', name: 'Bezirksvorsteher' },
-  isSuperadmin: true,
-  accessStatus: 'ACTIVE' as const,
-  memberships: [
-    { role: 'DISTRICT_ADMIN', scope_type: 'DISTRICT', scope_id: 'district-1' },
-  ],
-}
-
 test.describe('Districts admin view', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript((auth) => {
-      localStorage.setItem('auth', JSON.stringify(auth))
-    }, ADMIN_AUTH)
-  })
-
   test('renders districts list', async ({ page }) => {
     // Catch-all registered FIRST → lowest priority (runs last in Playwright's reverse order)
     await page.route('**/api/v1/**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
 
-    // Auth endpoints must return proper objects (the catch-all returns [] which causes errors)
     await page.route('**/api/v1/auth/me', async (route) => {
       await route.fulfill({
         status: 200,
@@ -57,7 +37,6 @@ test.describe('Districts admin view', () => {
         }),
       })
     })
-    // Registration overview for district admins
     await page.route('**/api/v1/registrations/pending/overview', async (route) => {
       await route.fulfill({
         status: 200,
@@ -93,6 +72,11 @@ test.describe('Districts admin view', () => {
     })
     await page.route('**/api/v1/districts/*/groups', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await mockAuthenticatedSession(page, {
+      sub: 'admin-1',
+      email: 'admin@example.com',
+      name: 'Bezirksvorsteher',
     })
 
     await page.goto(`${FRONTEND_URL}/admin/districts`)

@@ -1,72 +1,59 @@
 /**
- * CSRF Token Management Composable for Vue 3
- * 
- * Provides CSRF token handling for protection against Cross-Site Request Forgery.
- * Uses the Double-Submit Pattern with cookies and custom headers.
+ * CSRF token helpers for the frontend double-submit flow.
  */
 
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 
 export interface CSRFConfig {
   cookieName?: string
   headerName?: string
 }
 
-/**
- * Get cookie value by name from document.cookie
- */
-function getCookie(name: string): string | null {
+const DEFAULT_COOKIE_NAME = 'csrf_token'
+const DEFAULT_HEADER_NAME = 'X-CSRF-Token'
+
+/** Read a cookie value without introducing another browser dependency. */
+export function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`
   const parts = value.split(`; ${name}=`)
   if (parts.length === 2) return parts.pop()?.split(';').shift() || null
   return null
 }
 
-export function useCSRF(config: CSRFConfig = {}) {
-  const {
-    cookieName = 'csrf_token',
-    headerName = 'X-CSRF-Token',
-  } = config
+/**
+ * Read the current CSRF cookie at request time.
+ *
+ * OIDC token/refresh/revoke calls bypass apiFetch and therefore use this
+ * helper directly. Reading lazily also picks up middleware token rotation.
+ */
+export function getCurrentCSRFHeaders(config: CSRFConfig = {}): Record<string, string> {
+  const cookieName = config.cookieName ?? DEFAULT_COOKIE_NAME
+  const headerName = config.headerName ?? DEFAULT_HEADER_NAME
+  const token = getCookie(cookieName)
+  return token ? { [headerName]: token } : {}
+}
 
+export function useCSRF(config: CSRFConfig = {}) {
+  const cookieName = config.cookieName ?? DEFAULT_COOKIE_NAME
+  const headerName = config.headerName ?? DEFAULT_HEADER_NAME
   const csrfToken = ref<string>('')
 
-  /**
-   * Load CSRF token from cookie
-   */
   const loadCSRFToken = () => {
     csrfToken.value = getCookie(cookieName) || ''
   }
 
-  /**
-   * Get CSRF headers for API requests
-   */
   const getCSRFHeaders = () => {
-    return {
-      [headerName]: csrfToken.value,
-    }
+    // Prefer the current cookie so request headers follow server-side token
+    // rotation instead of a potentially stale value captured on mount.
+    const current = getCurrentCSRFHeaders({ cookieName, headerName })
+    if (current[headerName]) csrfToken.value = current[headerName]
+    return current
   }
 
-  /**
-   * Check if CSRF token is available
-   */
-  const hasCSRFToken = () => {
-    return !!csrfToken.value
-  }
+  const hasCSRFToken = () => Boolean(getCookie(cookieName) || csrfToken.value)
+  const getToken = () => getCookie(cookieName) || csrfToken.value
 
-  /**
-   * Get the raw CSRF token value
-   */
-  const getToken = () => {
-    return csrfToken.value
-  }
-
-  /**
-   * Initialize CSRF token from cookie
-   * Called automatically on component mount
-   */
-  onMounted(() => {
-    loadCSRFToken()
-  })
+  onMounted(loadCSRFToken)
 
   return {
     csrfToken,
