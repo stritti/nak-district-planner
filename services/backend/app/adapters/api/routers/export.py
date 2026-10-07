@@ -31,7 +31,11 @@ from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.export_token import ExportToken, TokenType
-from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
+from app.domain.models.planning_slot import (
+    EventApprovalStatus,
+    PlanningSlot,
+    PlanningSlotStatus,
+)
 from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1")
@@ -132,6 +136,11 @@ def _synthesize_datetime(slot: PlanningSlot, default_time: time = time(0, 0, 0))
     return dt
 
 
+def _sequence(last_modified: datetime) -> int:
+    """Return the iCal SEQUENCE: epoch seconds of the last revision (monotonic)."""
+    return int(last_modified.timestamp())
+
+
 @router.get("/export/{token_str}/calendar.ics", include_in_schema=False)
 async def export_calendar_ics(
     token_str: str,
@@ -166,9 +175,15 @@ async def export_calendar_ics(
         to_date=to_date,
     )
 
-    # Narrow by congregation if token is congregation-scoped
-    if export_token.congregation_id:
-        all_slots = [s for s in all_slots if s.congregation_id == export_token.congregation_id]
+    # Congregation feed: own slots plus district slots released to it (UC-04).
+    # CANCELLED slots stay in and are emitted as STATUS:CANCELLED so subscribed
+    # calendars remove previously synced events.
+    if congregation_id := export_token.congregation_id:
+        all_slots = [
+            s
+            for s in all_slots
+            if s.congregation_id == congregation_id or s.is_distributed_to(congregation_id)
+        ]
 
     # Load all EventInstances for these slots
     slot_ids = [s.id for s in all_slots]
@@ -179,28 +194,19 @@ async def export_calendar_ics(
         inst.planning_slot_id: inst for inst in instances
     }
 
-    # Apply approval_status filter
-    if approval_status is None:
-        if export_token.token_type == TokenType.PUBLIC and export_token.leader_id is None:
-            approval_status = "confirmed_only"
-        else:
-            approval_status = "include_planned"
-
-    if approval_status == "confirmed_only":
-        all_slots = [s for s in all_slots if s.approval_status == EventApprovalStatus.CONFIRMED]
-    elif approval_status != "include_planned":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ungültiger approval_status-Filter: {approval_status}. "
-            f"Erlaubte Werte: confirmed_only, include_planned",
-        )
+    # PUBLIC tokens always export CONFIRMED slots only; the query parameter can
+    # only narrow INTERNAL feeds (ExportToken.confirmed_only).
+    if export_token.confirmed_only(approval_status):
+        all_slots = [s for s in all_slots if s.is_confirmed]
 
     # Load assignments in one batch query (keyed by planning_slot_id via event_id)
     assignments = await sa_repo.list_by_planning_slots(slot_ids)
 
-    # For leader tokens: keep only assignments for this specific leader
+    # Personal leader feed: only this leader's assignments and their slots
     if export_token.leader_id:
         assignments = [a for a in assignments if a.leader_id == export_token.leader_id]
+        leader_slot_ids = {a.event_id for a in assignments}  # event_id == planning_slot_id
+        all_slots = [s for s in all_slots if s.id in leader_slot_ids]
 
     # Batch-load leaders so leader_id-only assignments can be resolved to a display name
     if export_token.district_id:
@@ -257,16 +263,22 @@ async def export_calendar_ics(
         if instance:
             vevent.add("dtstart", instance.actual_start_at)
             vevent.add("dtend", instance.actual_end_at)
-            vevent.add("dtstamp", instance.created_at)
         else:
             # Synthesize from PlanningSlot when no EventInstance exists
             vt = _synthesize_datetime(slot)
             vevent.add("dtstart", vt)
             vevent.add("dtend", vt + _SYNTHESIZED_EVENT_DURATION)
-            vevent.add("dtstamp", slot.created_at)
 
-        # Mark PLANNED events as tentative in the calendar
-        if slot.approval_status == EventApprovalStatus.PLANNED:
+        # Change metadata from the last revision so clients pick up updates
+        last_modified = max(slot.updated_at, instance.updated_at) if instance else slot.updated_at
+        vevent.add("dtstamp", last_modified)
+        vevent.add("last-modified", last_modified)
+        vevent.add("sequence", _sequence(last_modified))
+
+        if slot.status == PlanningSlotStatus.CANCELLED:
+            vevent.add("status", "CANCELLED")
+        elif slot.approval_status == EventApprovalStatus.PLANNED:
+            # Mark PLANNED events as tentative in the calendar
             vevent.add("status", "TENTATIVE")
             vevent.add("x-nak-approval-status", "PLANNED")
 
