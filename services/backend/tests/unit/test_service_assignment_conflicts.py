@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -14,8 +14,7 @@ from app.config import Settings
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.leader import Leader
 from app.domain.models.planning_slot import PlanningSlot
-from app.domain.models.service_assignment import ServiceAssignment
-from app.domain.planning.conflict_result import ConflictResult, Severity
+from app.domain.planning.conflict_result import ConflictResult, ScheduledService, Severity
 
 
 def _conflict(severity: Severity) -> ConflictResult:
@@ -69,18 +68,11 @@ def test_conflict_response_schema_serializes_stable_error_shape() -> None:
 
 
 @pytest.mark.asyncio
-async def test_conflict_adapter_returns_no_conflicts_for_missing_event_data() -> None:
+async def test_conflict_adapter_returns_no_conflicts_without_planning_slot() -> None:
+    """Without a slot there is nothing to compare; the router already answered 404."""
     session = AsyncMock()
-    with (
-        patch("app.application.service_assignment_conflict.SqlPlanningSlotRepository") as slot_cls,
-        patch(
-            "app.application.service_assignment_conflict.SqlEventInstanceRepository"
-        ) as instance_cls,
-        patch("app.application.service_assignment_conflict.SqlLeaderRepository") as leader_cls,
-    ):
+    with patch("app.application.service_assignment_conflict.SqlPlanningSlotRepository") as slot_cls:
         slot_cls.return_value.get = AsyncMock(return_value=None)
-        instance_cls.return_value.get_by_planning_slot = AsyncMock(return_value=None)
-        leader_cls.return_value.get = AsyncMock(return_value=None)
 
         result = await check_service_assignment_conflicts(
             session,
@@ -116,77 +108,143 @@ def test_conflict_settings_have_safe_defaults_and_validate_travel_minutes() -> N
         Settings(min_travel_minutes=-1)
 
 
-@pytest.mark.asyncio
-async def test_conflict_adapter_builds_context_from_planning_data() -> None:
-    leader_id = uuid.uuid4()
-    target_event_id = uuid.uuid4()
-    existing_event_id = uuid.uuid4()
-    target_start = datetime(2026, 6, 15, 10, 0, tzinfo=UTC)
-    target_slot = PlanningSlot.create(
-        district_id=uuid.uuid4(),
-        planning_date=target_start.date(),
-        planning_time=target_start.time(),
-        congregation_id=uuid.uuid4(),
-        slot_id=target_event_id,
-    )
-    existing_slot = PlanningSlot.create(
-        district_id=target_slot.district_id,
-        planning_date=target_start.date(),
-        planning_time=target_start.time(),
-        congregation_id=uuid.uuid4(),
-        slot_id=existing_event_id,
-    )
-    target_instance = EventInstance.create(
-        planning_slot_id=target_event_id,
-        title="Ziel",
-        actual_start_at=target_start,
-        actual_end_at=datetime(2026, 6, 15, 12, 0, tzinfo=UTC),
-        source=EventSource.INTERNAL,
-        visibility=EventVisibility.PUBLIC,
-    )
-    existing_instance = EventInstance.create(
-        planning_slot_id=existing_event_id,
-        title="Bestehend",
-        actual_start_at=datetime(2026, 6, 15, 9, 0, tzinfo=UTC),
-        actual_end_at=datetime(2026, 6, 15, 10, 30, tzinfo=UTC),
-        source=EventSource.INTERNAL,
-        visibility=EventVisibility.PUBLIC,
-    )
-    existing_assignment = ServiceAssignment.create(
-        event_id=existing_event_id,
-        planning_slot_id=existing_event_id,
-        leader_id=leader_id,
-    )
-    leader = Leader.create(name="Leader", district_id=target_slot.district_id)
-    leader.id = leader_id
-    session = AsyncMock()
+_PATCH = "app.application.service_assignment_conflict."
+_START = datetime(2026, 6, 15, 10, 0, tzinfo=UTC)
 
+
+def _slot(slot_id: uuid.UUID | None = None, *, start: datetime = _START) -> PlanningSlot:
+    return PlanningSlot.create(
+        district_id=uuid.uuid4(),
+        planning_date=start.date(),
+        planning_time=start.time().replace(tzinfo=None),
+        congregation_id=uuid.uuid4(),
+        slot_id=slot_id,
+    )
+
+
+async def _check(
+    *,
+    target_slot: PlanningSlot,
+    target_instance: EventInstance | None,
+    schedule: list[ScheduledService],
+    leader: Leader | None,
+    exclude_assignment_id: uuid.UUID | None = None,
+):
+    session = AsyncMock()
     with (
-        patch("app.application.service_assignment_conflict.SqlPlanningSlotRepository") as slot_cls,
-        patch(
-            "app.application.service_assignment_conflict.SqlEventInstanceRepository"
-        ) as instance_cls,
-        patch(
-            "app.application.service_assignment_conflict.SqlServiceAssignmentRepository"
-        ) as assignment_cls,
-        patch("app.application.service_assignment_conflict.SqlLeaderRepository") as leader_cls,
-        patch(
-            "app.application.service_assignment_conflict.SqlLeaderUnavailabilityRepository"
-        ) as absence_cls,
+        patch(_PATCH + "SqlPlanningSlotRepository") as slot_cls,
+        patch(_PATCH + "SqlEventInstanceRepository") as instance_cls,
+        patch(_PATCH + "SqlServiceAssignmentRepository") as assignment_cls,
+        patch(_PATCH + "SqlLeaderRepository") as leader_cls,
+        patch(_PATCH + "SqlLeaderUnavailabilityRepository") as absence_cls,
     ):
-        slot_cls.return_value.get = AsyncMock(side_effect=[target_slot, existing_slot])
-        instance_cls.return_value.get_by_planning_slot = AsyncMock(
-            side_effect=[target_instance, existing_instance]
+        slot_cls.return_value.get = AsyncMock(return_value=target_slot)
+        instance_cls.return_value.get_by_planning_slot = AsyncMock(return_value=target_instance)
+        schedule_query = AsyncMock(return_value=schedule)
+        assignment_cls.return_value.list_leader_schedule = schedule_query
+        assignment_cls.return_value.list_by_leader = AsyncMock(
+            side_effect=AssertionError("N+1: must not load the leader's whole history")
         )
-        assignment_cls.return_value.list_by_leader = AsyncMock(return_value=[existing_assignment])
         leader_cls.return_value.get = AsyncMock(return_value=leader)
         absence_cls.return_value.list_overlapping = AsyncMock(return_value=[])
 
         result = await check_service_assignment_conflicts(
             session,
-            event_id=target_event_id,
-            leader_id=leader_id,
+            event_id=target_slot.id,
+            leader_id=uuid.uuid4(),
+            exclude_assignment_id=exclude_assignment_id,
         )
+    return result, schedule_query
+
+
+def _instance(slot: PlanningSlot, start: datetime, end: datetime) -> EventInstance:
+    return EventInstance.create(
+        planning_slot_id=slot.id,
+        title="Gottesdienst",
+        actual_start_at=start,
+        actual_end_at=end,
+        source=EventSource.INTERNAL,
+        visibility=EventVisibility.PUBLIC,
+    )
+
+
+@pytest.mark.asyncio
+async def test_conflict_adapter_builds_context_from_one_windowed_query() -> None:
+    target = _slot()
+    existing = ScheduledService(
+        congregation_id=uuid.uuid4(),
+        planning_date=_START.date(),
+        planning_time=time(9, 0),
+        actual_start_at=datetime(2026, 6, 15, 9, 0, tzinfo=UTC),
+        actual_end_at=datetime(2026, 6, 15, 10, 30, tzinfo=UTC),
+    )
+    exclude = uuid.uuid4()
+
+    result, query = await _check(
+        target_slot=target,
+        target_instance=_instance(target, _START, _START + timedelta(hours=2)),
+        schedule=[existing],
+        leader=Leader.create(name="Leader", district_id=target.district_id),
+        exclude_assignment_id=exclude,
+    )
 
     assert result[0].rule_id == "no_double_booking"
     assert result[0].severity is Severity.BLOCK
+    query.assert_awaited_once()
+    kwargs = query.await_args.kwargs
+    assert kwargs["exclude_assignment_id"] == exclude
+    assert kwargs["window_start"] < _START
+    assert kwargs["window_end"] > _START + timedelta(hours=2)
+
+
+@pytest.mark.asyncio
+async def test_conflict_check_fails_closed_when_target_has_no_instance() -> None:
+    """A slot without EventInstance is checked against its own planning time."""
+    target = _slot()
+    existing = ScheduledService(
+        congregation_id=uuid.uuid4(), planning_date=_START.date(), planning_time=time(10, 30)
+    )
+
+    result, _ = await _check(
+        target_slot=target, target_instance=None, schedule=[existing], leader=None
+    )
+
+    assert [c.rule_id for c in result] == ["no_double_booking"]
+
+
+@pytest.mark.asyncio
+async def test_conflict_check_passes_for_distant_services_without_instances() -> None:
+    target = _slot()
+    existing = ScheduledService(
+        congregation_id=target.congregation_id, planning_date=_START.date(), planning_time=time(16)
+    )
+
+    result, _ = await _check(
+        target_slot=target, target_instance=None, schedule=[existing], leader=None
+    )
+
+    assert result == []
+
+
+def test_scheduled_service_window_prefers_actual_times() -> None:
+    service = ScheduledService(
+        congregation_id=None,
+        planning_date=_START.date(),
+        planning_time=time(10),
+        actual_start_at=datetime(2026, 6, 15, 11, tzinfo=UTC),
+        actual_end_at=datetime(2026, 6, 15, 12, tzinfo=UTC),
+    )
+
+    assert service.window(timedelta(minutes=90)) == (
+        datetime(2026, 6, 15, 11, tzinfo=UTC),
+        datetime(2026, 6, 15, 12, tzinfo=UTC),
+    )
+
+
+def test_scheduled_service_window_falls_back_to_planning_time_in_utc() -> None:
+    service = ScheduledService(congregation_id=None, planning_date=_START.date(), planning_time=time(10))
+
+    assert service.window(timedelta(minutes=90)) == (
+        datetime(2026, 6, 15, 10, tzinfo=UTC),
+        datetime(2026, 6, 15, 11, 30, tzinfo=UTC),
+    )
