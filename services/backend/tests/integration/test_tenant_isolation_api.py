@@ -334,3 +334,62 @@ async def test_denied_read_is_audited_for_the_probed_district(api, owner, world)
     assert rows[0]["extra_metadata"]["http_method"] == "GET"
     # Rejected before authentication: the subject is recorded as an unverified claim.
     assert rows[0]["extra_metadata"]["claimed_sub"] == world.a.planner_sub
+
+
+async def test_congregation_export_feed_contains_distributed_district_slots(
+    api, owner, world
+) -> None:
+    """RLS lets a congregation token read applicable district slots only (#466)."""
+    congregation_id = uuid.uuid4()
+    token = f"e2e-{world.run}-{uuid.uuid4().hex}"
+    applicable, to_all, not_applicable, foreign = (uuid.uuid4() for _ in range(4))
+    slots = [
+        (applicable, world.a.district_id, [str(congregation_id)]),
+        (to_all, world.a.district_id, ["all"]),
+        (not_applicable, world.a.district_id, [str(uuid.uuid4())]),
+        (foreign, world.b.district_id, ["all", str(congregation_id)]),
+    ]
+    async with owner.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO congregations (id, name, district_id, created_at, updated_at) "
+                "VALUES (:id, 'Gemeinde A', :d, now(), now())"
+            ),
+            {"id": congregation_id, "d": world.a.district_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO export_tokens (id, token, label, token_type, district_id, "
+                "congregation_id) VALUES (:id, :t, 'Gemeinde A', 'PUBLIC', :d, :c)"
+            ),
+            {"id": uuid.uuid4(), "t": token, "d": world.a.district_id, "c": congregation_id},
+        )
+        for slot_id, district_id, applicability in slots:
+            await conn.execute(
+                text(
+                    "INSERT INTO planning_slots (id, district_id, title, category, planning_date, "
+                    "planning_time, status, approval_status, applicability, created_at, "
+                    "updated_at) VALUES (:id, :d, 'Bezirksgottesdienst', 'Gottesdienst', "
+                    "'2027-01-10', '10:00', 'ACTIVE', 'CONFIRMED', :a, now(), now())"
+                ),
+                {"id": slot_id, "d": district_id, "a": applicability},
+            )
+    try:
+        response = await api.get(f"/api/v1/export/{token}/calendar.ics")
+    finally:
+        async with owner.begin() as conn:
+            await conn.execute(text("DELETE FROM export_tokens WHERE token = :t"), {"t": token})
+            await conn.execute(
+                text("DELETE FROM planning_slots WHERE id = ANY(:ids)"),
+                {"ids": [slot_id for slot_id, _, _ in slots]},
+            )
+            await conn.execute(
+                text("DELETE FROM congregations WHERE id = :id"), {"id": congregation_id}
+            )
+
+    assert response.status_code == 200, response.text
+    body = response.text
+    assert f"UID:{applicable}@nak-bezirksplaner" in body
+    assert f"UID:{to_all}@nak-bezirksplaner" in body
+    assert str(not_applicable) not in body
+    assert str(foreign) not in body
