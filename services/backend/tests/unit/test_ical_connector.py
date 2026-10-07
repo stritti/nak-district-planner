@@ -11,7 +11,9 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from app.adapters.calendar.ical_connector import ICalConnector, _content_hash, _to_utc
+from app.adapters.calendar.ical_connector import ICalConnector
+from app.adapters.calendar.ical_events import content_hash as _content_hash
+from app.adapters.calendar.ical_events import to_utc as _to_utc
 from app.domain.ports.calendar import CalendarConnectorError
 
 # ── ICS helpers ───────────────────────────────────────────────────────────────
@@ -118,12 +120,12 @@ class TestToUtc:
         aware = datetime(2026, 3, 1, 11, 0, tzinfo=cet)
         assert _to_utc(aware) == datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
 
-    def test_naive_datetime_treated_as_utc(self):
-        naive = datetime(2026, 3, 1, 10, 0)
-        assert _to_utc(naive) == datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    def test_naive_datetime_is_local_to_district_timezone(self):
+        naive = datetime(2026, 3, 1, 10, 0)  # floating, Europe/Berlin (CET)
+        assert _to_utc(naive) == datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
 
-    def test_date_becomes_midnight_utc(self):
-        assert _to_utc(date(2026, 3, 15)) == datetime(2026, 3, 15, 0, 0, tzinfo=UTC)
+    def test_date_becomes_local_midnight(self):
+        assert _to_utc(date(2026, 3, 15)) == datetime(2026, 3, 14, 23, 0, tzinfo=UTC)
 
 
 # ── _content_hash ─────────────────────────────────────────────────────────────
@@ -172,11 +174,11 @@ class TestFetchEvents:
         assert len(events) == 1
         assert events[0].is_cancelled is True
 
-    async def test_all_day_event_becomes_midnight_utc(self):
+    async def test_all_day_event_starts_at_local_midnight(self):
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_ALLDAY)))
         events = await connector.fetch_events(CREDS)
         assert len(events) == 1
-        assert events[0].start_at == datetime(2026, 3, 15, 0, 0, tzinfo=UTC)
+        assert events[0].start_at == datetime(2026, 3, 14, 23, 0, tzinfo=UTC)  # 00:00 CET
 
     async def test_event_without_uid_is_skipped(self):
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_NO_UID)))

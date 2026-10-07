@@ -597,3 +597,95 @@ class TestEchoSuppressionPerWritableProvider:
         mocks["instance_repo"].save.assert_not_called()
         mocks["slot_repo"].delete.assert_not_awaited()
         assert link.state == ExternalEventLinkState.SYNC_TOMBSTONE
+
+
+class TestSyncWindow:
+    """#465: the provider query is bounded and reconciliation stays inside it."""
+
+    async def test_fetch_uses_bounded_configurable_window(self, mocks, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "sync_window_past_days", 62)
+        monkeypatch.setattr(settings, "sync_window_future_months", 24)
+        mocks["integration_repo"].get.return_value = _integration()
+        await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        kwargs = mocks["connector"].fetch_events.await_args.kwargs
+        assert kwargs["from_dt"] == _NOW - timedelta(days=62)
+        assert kwargs["to_dt"] == datetime(2028, 3, 6, 12, tzinfo=UTC)
+
+    @pytest.mark.parametrize(
+        ("start", "cancelled"),
+        [
+            (_NOW + timedelta(days=30), 1),  # inside window, missing from feed
+            (datetime(2028, 3, 7, tzinfo=UTC), 0),  # after window end
+            (_NOW - timedelta(days=63), 0),  # before window start
+        ],
+    )
+    async def test_reconcile_only_inside_window(self, mocks, start, cancelled):
+        slot = _make_slot()
+        instance = _make_event_instance(
+            planning_slot_id=slot.id, actual_start_at=start,
+            actual_end_at=start + timedelta(minutes=90),
+        )
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].authoritative_snapshot = True
+        mocks["link_repo"].list_active_by_integration.return_value = [
+            _make_link(event_instance_id=instance.id)
+        ]
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+        result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert result.cancelled == cancelled
+        expected = PlanningSlotStatus.CANCELLED if cancelled else PlanningSlotStatus.ACTIVE
+        assert slot.status == expected
+
+    async def test_legacy_series_link_is_rekeyed_to_matching_occurrence(self, mocks):
+        """Pre-#465 rows store a series master under its plain UID."""
+        slot = _make_slot()
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        legacy = _make_link(event_instance_id=instance.id, uid="uid@test", last_synced_hash="old")
+        occurrence = _raw(uid="uid@test::20260410T090000Z")
+
+        async def by_external_event(*, provider, external_event_id, calendar_integration_id):
+            return legacy if external_event_id == legacy.external_event_id else None
+
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].authoritative_snapshot = True
+        mocks["connector"].fetch_events.return_value = [occurrence]
+        mocks["link_repo"].get_by_external_event.side_effect = by_external_event
+        mocks["link_repo"].list_active_by_integration.return_value = [legacy]
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+        result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert legacy.external_event_id == occurrence.uid
+        assert (result.updated, result.cancelled) == (1, 0)
+        assert slot.status == PlanningSlotStatus.ACTIVE
+
+    async def test_legacy_link_with_other_start_is_not_rekeyed(self, mocks):
+        instance = _make_event_instance()
+        legacy = _make_link(event_instance_id=instance.id, uid="uid@test")
+        occurrence = _raw(uid="uid@test::20260417T090000Z", start_at=_START + timedelta(days=7),
+                          end_at=_END + timedelta(days=7))
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [occurrence]
+        mocks["link_repo"].get_by_external_event.side_effect = (
+            lambda **kw: legacy if kw["external_event_id"] == "uid@test" else None
+        )
+        mocks["instance_repo"].get.return_value = instance
+        with patch(
+            "app.application.sync_service.import_candidate_or_match", AsyncMock(return_value=False)
+        ) as ingest:
+            await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert legacy.external_event_id == "uid@test"
+        ingest.assert_awaited_once()
+
+
+class TestAuthoritativeConnectors:
+    @pytest.mark.parametrize(
+        "calendar_type",
+        [CalendarType.ICS, CalendarType.CALDAV, CalendarType.MICROSOFT],
+    )
+    def test_bounded_window_connectors_are_authoritative(self, calendar_type):
+        from app.application.sync_service import _CONNECTOR_MAP
+
+        assert _CONNECTOR_MAP[calendar_type].authoritative_snapshot is True

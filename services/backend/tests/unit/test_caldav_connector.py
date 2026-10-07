@@ -13,7 +13,9 @@ import httpx
 import pytest
 from icalendar import Calendar as ICalendar
 
-from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash, _to_utc
+from app.adapters.calendar.caldav_connector import CalDAVConnector
+from app.adapters.calendar.ical_events import content_hash as _content_hash
+from app.adapters.calendar.ical_events import to_utc as _to_utc
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnectorError
 

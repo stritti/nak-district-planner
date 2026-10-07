@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from dateutil.relativedelta import relativedelta
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +39,7 @@ from app.domain.models.calendar_integration import (
 from app.domain.models.event_instance import EventInstance, EventSource, SyncState
 from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
-from app.domain.models.raw_calendar_event import RawCalendarEvent
+from app.domain.models.raw_calendar_event import RawCalendarEvent, series_uid_of
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 from app.domain.services.sync_policy import (
     INTERNAL_DELETE_MARKER,
@@ -98,6 +99,14 @@ def _compute_content_hash(raw_event: RawCalendarEvent) -> str:
         f"|{raw_event.title}|{raw_event.description}|{raw_event.is_cancelled}"
     )
     return hashlib.sha256(raw_str.encode()).hexdigest()
+
+
+def _sync_window(now: datetime) -> tuple[datetime, datetime]:
+    """Bounded provider window; reconciliation never reaches beyond it."""
+    return (
+        now - timedelta(days=settings.sync_window_past_days),
+        now + relativedelta(months=settings.sync_window_future_months),
+    )
 
 
 def _has_significant_deviation(
@@ -345,16 +354,60 @@ async def _process_existing_event(
     )
 
 
+async def _find_link(context: SyncContext, raw: RawCalendarEvent) -> ExternalEventLink | None:
+    """Look up the link for ``raw``, adopting a pre-#465 series link if it matches.
+
+    Before #465 a recurring series was stored once under its plain UID (the
+    master). The occurrence starting exactly at the master's linked instance
+    takes over that link, so its slot is updated rather than cancelled.
+    """
+    link = await context.link_repo.get_by_external_event(
+        provider=context.integration.type.value,
+        external_event_id=raw.uid,
+        calendar_integration_id=context.integration_id,
+    )
+    series_uid = series_uid_of(raw.uid)
+    if link is not None or series_uid is None:
+        return link
+    legacy = await context.link_repo.get_by_external_event(
+        provider=context.integration.type.value,
+        external_event_id=series_uid,
+        calendar_integration_id=context.integration_id,
+    )
+    if (
+        legacy is None
+        or legacy.state != ExternalEventLinkState.ACTIVE
+        or legacy.event_instance_id is None
+    ):
+        return None
+    instance = await context.instance_repo.get(legacy.event_instance_id)
+    if instance is None or instance.actual_start_at != raw.start_at:
+        return None
+    legacy.external_event_id = raw.uid
+    legacy.updated_at = datetime.now(UTC)
+    await context.link_repo.save(legacy)
+    return legacy
+
+
 async def _reconcile_missing_provider_events(
-    *, context: SyncContext, seen_uids: set[str], cutoff: datetime
+    *, context: SyncContext, seen_uids: set[str], window: tuple[datetime, datetime]
 ) -> Counter[SyncOutcome]:
-    """Reconcile links absent from a complete authoritative provider window."""
+    """Reconcile links absent from a complete authoritative provider window.
+
+    Only events inside the queried window can be judged missing; anything
+    outside it was simply not asked for and stays untouched.
+    """
+    window_start, window_end = window
     outcomes: Counter[SyncOutcome] = Counter()
     for link in await context.link_repo.list_active_by_integration(context.integration_id):
         if link.external_event_id in seen_uids or link.event_instance_id is None:
             continue
         instance = await context.instance_repo.get(link.event_instance_id)
-        if instance is None or instance.actual_end_at < cutoff:
+        if (
+            instance is None
+            or instance.actual_end_at < window_start
+            or instance.actual_start_at > window_end
+        ):
             continue
         slot = await context.slot_repo.get(instance.planning_slot_id)
         if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
@@ -486,8 +539,13 @@ async def push_conflict_resolution(instance: EventInstance, session: AsyncSessio
     return pushed
 
 
-async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResult:
-    """Sync one CalendarIntegration. Return successful, skipped and failed counts."""
+async def run_sync(
+    integration_id: uuid.UUID, session: AsyncSession, *, now: datetime | None = None
+) -> SyncResult:
+    """Sync one CalendarIntegration. Return successful, skipped and failed counts.
+
+    ``now`` anchors the sync window (tests pin it; production uses the clock).
+    """
     lock_key = int.from_bytes(integration_id.bytes[:8], "big", signed=True)
     await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
     integration_repo = SqlCalendarIntegrationRepository(session)
@@ -506,16 +564,14 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
             connector=connector, credentials=credentials,
             instance_repo=instance_repo, slot_repo=slot_repo, link_repo=link_repo,
         )
-        cutoff = datetime.now(UTC) - timedelta(days=62)
-        raw_events = await connector.fetch_events(credentials, from_dt=cutoff)
+        window = _sync_window(now or datetime.now(UTC))
+        raw_events = await connector.fetch_events(
+            credentials, from_dt=window[0], to_dt=window[1]
+        )
         seen_uids: set[str] = set()
         for raw in raw_events:
             seen_uids.add(raw.uid)
-            existing_link = await link_repo.get_by_external_event(
-                provider=context.integration.type.value,
-                external_event_id=raw.uid,
-                calendar_integration_id=context.integration_id,
-            )
+            existing_link = await _find_link(context, raw)
             new_content_hash = _compute_content_hash(raw)
             try:
                 if existing_link is None:
@@ -536,7 +592,7 @@ async def run_sync(integration_id: uuid.UUID, session: AsyncSession) -> SyncResu
         if connector.authoritative_snapshot:
             counters.update(
                 await _reconcile_missing_provider_events(
-                    context=context, seen_uids=seen_uids, cutoff=cutoff,
+                    context=context, seen_uids=seen_uids, window=window,
                 )
             )
         integration.last_synced_at = datetime.now(UTC)

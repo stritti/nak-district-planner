@@ -11,7 +11,8 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from app.adapters.calendar.caldav_connector import CalDAVConnector, _content_hash
+from app.adapters.calendar.caldav_connector import CalDAVConnector
+from app.adapters.calendar.ical_events import content_hash as _content_hash
 from app.domain.ports.calendar import CalendarConnectorError
 
 CREDS_BASIC = {"url": "https://caldav.example.com/cal/", "username": "user", "password": "pass"}
@@ -280,7 +281,7 @@ class TestFetchEvents:
         connector = CalDAVConnector(client=_mock_xml_response(MULTISTATUS_ALLDAY))
         events = await connector.fetch_events(CREDS_BASIC)
         assert len(events) == 1
-        assert events[0].start_at == datetime(2026, 3, 15, 0, tzinfo=UTC)
+        assert events[0].start_at == datetime(2026, 3, 14, 23, tzinfo=UTC)  # 00:00 CET
 
     async def test_event_without_uid_skipped(self):
         connector = CalDAVConnector(client=_mock_xml_response(MULTISTATUS_NO_UID))
