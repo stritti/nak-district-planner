@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**v0.29.3 — production-facing application, all four MVP phases complete.** OIDC authentication, RBAC, tenant isolation (middleware + PostgreSQL RLS), audit logging, rate limiting, and CSRF protection are implemented and wired into `main.py` (see `docs/security/`). 30 Alembic migrations applied. Matrix planning view (UC-03), calendar sync (UC-01/UC-02), and event export (UC-04/05/06) are implemented. See `openspec/security-roadmap.md` and `openspec/changes/` for the current backlog — notably `p0-strukturell-multi-tenant-operations` (backup/restore, exclusion constraints) and `p1-domain-conflict-quality` (double-booking detection) are the highest-priority open gaps.
+**v1.0.0-rc.1 — release candidate in feature freeze.** OIDC authentication (server-held refresh cookie), RBAC, tenant isolation (middleware + PostgreSQL RLS), audit logging, rate limiting and CSRF protection are implemented and wired into `main.py` (see `docs/security/`). 48 Alembic migration files. Planning model (PlanningSlot/EventInstance), matrix planning (UC-03), calendar connectors and hybrid sync (UC-01/UC-02), governed external-event ingestion, distribution and ICS export (UC-04/05/06), notifications and mail hooks are implemented.
+
+**Source of truth:** `openspec/specs/` describes what is implemented (baseline, 2026-10-07); active work lives in `openspec/changes/`, delivered changes in `openspec/changes/archive/`. The v1.0 release backlog is tracked in GitHub issue #476 (see `docs/reviews/2026-10-07-release-1.0-review.md`).
 
 The spec is written in German (NAK = Neuapostolische Kirche / New Apostolic Church).
 
@@ -12,7 +14,7 @@ The spec is written in German (NAK = Neuapostolische Kirche / New Apostolic Chur
 
 ```text
 nak-district-planner/
-├── docker-compose.yml              # 5 Services: backend, worker, frontend, db, valkey
+├── docker-compose.yml              # backend, worker, frontend, db (PostgreSQL 18), valkey, db-test; migrate (profile tools)
 ├── docker-compose.override.yml     # Dev-Overrides (Hot-Reload, exposed ports)
 ├── .env.example                    # Template — copy to .env and fill in values
 ├── services/
@@ -49,9 +51,9 @@ nak-district-planner/
 
 ## Tech Stack
 
-**Backend:** Python 3.11+, FastAPI (async), SQLAlchemy 2.0, PostgreSQL 15+, Redis + Celery — managed with **uv**
+**Backend:** Python 3.11+, FastAPI (async), SQLAlchemy 2.0, PostgreSQL 18, Celery (PostgreSQL broker/result backend), Valkey (rate limiting) — managed with **uv**
 **Frontend:** Vue.js 3 (Composition API), Vite, Tailwind CSS, Pinia — built with **bun**
-**Infrastructure:** Docker & Docker Compose (5 containers)
+**Infrastructure:** Docker & Docker Compose (backend, worker, frontend, db, valkey; one-shot `migrate` service for Alembic with owner credentials)
 
 ## Commands
 
@@ -60,7 +62,8 @@ nak-district-planner/
 cp .env.example .env               # Fill in values
 
 # Run everything
-docker compose up -d               # Start all 5 services
+docker compose up -d               # Start the stack
+docker compose run --no-deps --rm migrate  # Apply Alembic migrations (owner credentials)
 docker compose build               # Rebuild images after dependency changes
 docker compose ps                  # Check service status
 docker compose logs -f backend     # Follow backend logs
@@ -84,7 +87,7 @@ Business logic must **not** depend on FastAPI or SQLAlchemy directly. Use Abstra
 ```text
 app/
   domain/        # Pure Python — no framework imports
-    models/      # Domain entities (Event, ServiceAssignment, etc.)
+    models/      # Domain entities (PlanningSlot, EventInstance, ServiceAssignment, etc.)
     ports/       # Abstract interfaces (repositories, CalendarConnector)
   application/   # Use case orchestration (depends only on domain ports)
   adapters/
@@ -97,29 +100,37 @@ app/
 
 ## Domain Model
 
+Authoritative descriptions live in `openspec/specs/` (notably `planning-model`, `calendar-sync`, `service-assignment-matrix`). Summary:
+
 **Tenants:**
-- `District` (Bezirk) — root tenant
-- `Congregation` (Gemeinde) — belongs to a district
+- `District` (Bezirk) — root tenant (optional `state_code` for holidays)
+- `Congregation` (Gemeinde) — belongs to a district, optional `CongregationGroup`, `service_times`
+- `Membership` — user `sub` + `Role` (DISTRICT_ADMIN > CONGREGATION_ADMIN > PLANNER > VIEWER) + scope (DISTRICT | CONGREGATION)
+
+**PlanningSlot** — planned structure (aggregate root; replaced the dropped `events` table):
+- `planning_date`, `planning_time`, `category` (e.g. "Gottesdienst", "Feiertag"), `title`, optional `congregation_id`/`series_id`
+- `status`: ACTIVE | CANCELLED
+- `approval_status` (`EventApprovalStatus`): PLANNED | CONFIRMED
+- `applicability`: ARRAY of congregation IDs or `["all"]` for district-level distribution (UC-04)
+
+**EventInstance** — concrete occurrence of a slot:
+- `actual_start_at`/`actual_end_at`, `title`, `description`, `deviation_flag`
+- `source`: INTERNAL | EXTERNAL; `visibility`: INTERNAL | PUBLIC
+- `sync_state`: CLEAN | DIRTY_INTERNAL | DIRTY_EXTERNAL | CONFLICT (+ `ExternalEventLink` per provider event)
 
 **CalendarIntegration** — external calendar source:
-- `type`: GOOGLE | MICROSOFT | CALDAV | ICS
-- `credentials`: encrypted JSON (OAuth tokens or URL/auth)
-- `sync_interval`: minutes
-- `capabilities`: READ | WRITE | WEBHOOK
+- `type`: GOOGLE | MICROSOFT | CALDAV | ICS; `credentials_enc`: Fernet-encrypted JSON
+- `sync_interval` (minutes), `capabilities`: READ | WRITE | WEBHOOK
+- `delete_behavior`: MARK_CANCELLED | HARD_DELETE; optional `default_category`
+- `ExternalEventCandidate` — unmatched external event awaiting review (PENDING | ACCEPTED | DISMISSED)
 
-**Event** — core calendar object:
-- `source`: INTERNAL (created in tool) | EXTERNAL (imported)
-- `status`: DRAFT | PUBLISHED
-- `visibility`: INTERNAL | PUBLIC
-- `audiences`: list of tags (e.g. "Amtsträger", "Jugend")
-
-**ServiceAssignment** — links a service event to a leader:
-- `event_id`, `leader_name` (or person ID)
+**ServiceAssignment** — links a planning slot to a leader:
+- `event_id` (= planning slot ID), `leader_id` or `leader_name`
 - `status`: OPEN | ASSIGNED | CONFIRMED
 
 ## Key Implementation Rules
 
-**Sync idempotency:** Calendar sync jobs must use hash comparison to prevent duplicates. On conflict: Neu→Create, Geändert→Update, Gelöscht→mark "cancelled" (configurable).
+**Sync idempotency:** Calendar sync jobs must use hash comparison to prevent duplicates. New unmatched events become review candidates (never slots without review); changes follow field authority and the sync state machine; deletions follow `delete_behavior` (MARK_CANCELLED default). See `openspec/specs/calendar-sync`.
 
 **iCal stability:** UIDs in exported ICS feeds must be stable over time so calendar apps don't treat them as new events.
 
@@ -136,7 +147,7 @@ app/
 - **UC-01:** Calendar ingestion via Strategy pattern (OAuth flow → encrypted credentials)
 - **UC-02:** Celery background sync with hash-based deduplication
 - **UC-03:** District matrix view for service assignment with gap visualization
-- **UC-04:** District events distributed to congregations (only `status=PUBLISHED`, via `applicability` list)
+- **UC-04:** District-level planning slots distributed to congregations via the `applicability` list (active slots only)
 - **UC-05:** `/api/v1/export/{token}/calendar.ics` — public tokens anonymize `ServiceAssignment` names; internal tokens show full names
 
 ## Development Phases
@@ -146,7 +157,7 @@ app/
 3. **Phase 3:** ✅ Vue 3 + Tailwind + Pinia scaffolding; event list dashboard; matrix planning view (`MatrixTable.vue`)
 4. **Phase 4:** ✅ OIDC authentication (`OIDCAdapter`); RBAC; API key encryption in DB (service layer decorator)
 
-Current work is tracked via OpenSpec (`openspec/changes/`) rather than these phases — see `openspec/security-roadmap.md` for the security backlog and the `p0-`/`p1-` prefixed changes for the production-readiness backlog.
+Current work is tracked via OpenSpec (`openspec/changes/`) rather than these phases. The release backlog for v1.0 is tracker issue #476; `openspec/specs/` is the source of truth for implemented behaviour and `openspec/security-roadmap.md` summarises the security status. Run `npx -y @fission-ai/openspec@1.14.1 validate --all` before opening a PR that touches `openspec/`.
 
 ---
 

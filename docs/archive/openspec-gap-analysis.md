@@ -1,8 +1,8 @@
 # OpenSpec Gap Analysis - NAK District Planner
 
 > **Generated:** 2026-06-19  
-> **Status:** ⚠️ HISTORISCH — Siehe `docs/architecture-status.md` und
-> `docs/improvement-proposals.md` für den aktuellen Architekturstand
+> **Status:** ⚠️ HISTORISCH (archiviert 2026-10-07, #475) — Der aktuelle Ist-Stand steht in den
+> Baseline-Specs unter `openspec/specs/`; siehe auch `docs/architecture-status.md`
 > **Scope:** All active OpenSpec changes vs. current implementation  
 >
 > **Hinweis:** Dieses Dokument ist in wesentlichen Punkten veraltet. Aussagen zu "0 RBAC-Checks in
