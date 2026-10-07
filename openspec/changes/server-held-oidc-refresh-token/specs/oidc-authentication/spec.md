@@ -99,3 +99,8 @@ The backend SHALL validate state-changing requests (POST, PUT, PATCH, DELETE) on
 
 ### Requirement: Logout clears the server-held refresh credential
 The backend SHALL delete the refresh cookie on logout/revocation even if the upstream provider cannot be reached. Upstream revocation failures SHALL be logged for operational visibility.
+
+#### Scenario: Provider revocation fails
+- **WHEN** the user logs out and the upstream revocation request fails or times out
+- **THEN** the backend still deletes the refresh cookie
+- **AND** logs the revocation failure without the token value
