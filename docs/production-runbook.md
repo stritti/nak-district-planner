@@ -29,6 +29,34 @@ Vor jedem Deployment in Produktion pruefen:
 
 Der Production Guard verhindert den Start, wenn kritische Werte nicht gesetzt sind.
 
+### 1.2 Reverse Proxy und Client-IP
+
+Rate Limiting und Audit-Log verwenden dieselbe Client-IP. Die Vertrauenskette ist:
+
+```text
+Client -> externer TLS-Proxy -> 127.0.0.1:80 -> frontend-nginx -> backend:8000
+```
+
+- **Externer TLS-Proxy** muss die Client-IP anhaengen und das Schema setzen:
+  `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` und
+  `proxy_set_header X-Forwarded-Proto https;`
+- **frontend-nginx** uebernimmt die Client-IP aus `X-Forwarded-For` nur von Peers in
+  `NGINX_REAL_IP_FROM` (Default `127.0.0.1/32 172.16.0.0/12`: Loopback und Docker-Bridge,
+  weil der Proxy ueber den Docker-Port-Proxy auf `127.0.0.1:80` ankommt). Erreicht der
+  Proxy nginx von einer anderen Adresse (z. B. eigener Host oder Container-Netz
+  ausserhalb `172.16.0.0/12`), muss diese ergaenzt werden — sonst sehen alle Nutzer die
+  Proxy-IP und teilen sich einen Rate-Limit-Bucket.
+- nginx gibt an das Backend nur `X-Real-IP` und ein bereinigtes `X-Forwarded-For`
+  (jeweils die ermittelte Client-IP) weiter; eine vom Client gelieferte Kette wird nie
+  durchgereicht.
+- **Backend** vertraut `X-Real-IP` nur, wenn der TCP-Peer in `TRUSTED_PROXIES` liegt
+  (Default `127.0.0.0/8,::1/128,172.16.0.0/12`, also der frontend-nginx-Container);
+  sonst gilt die Peer-Adresse. `X-Forwarded-For` wird im Backend nie ausgewertet.
+  uvicorn laeuft mit `--no-proxy-headers`, damit die IP nicht doppelt umgeschrieben wird.
+- Pruefen: Zwei Clients von verschiedenen IPs erscheinen im Audit-Log mit
+  unterschiedlicher `ip_address`; ein mitgeschicktes `X-Forwarded-For: 1.2.3.4` taucht
+  dort nicht auf.
+
 ## 2. Standard-Deployment
 
 1. Aktuellen Code bereitstellen (`main`/Release-Tag)
