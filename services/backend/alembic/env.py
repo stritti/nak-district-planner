@@ -16,8 +16,17 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Tables managed by migrations alone, without an ORM model. app_superadmin_config
-# holds the bootstrap superadmin and is only touched through SQL functions (0017).
-_SQL_ONLY_TABLES = frozenset({"app_superadmin_config"})
+# holds the bootstrap superadmin and is only touched through SQL functions (0017);
+# the kombu_*/celery_* tables belong to the Celery broker and result backend.
+_SQL_ONLY_TABLES = frozenset(
+    {
+        "app_superadmin_config",
+        "kombu_queue",
+        "kombu_message",
+        "celery_taskmeta",
+        "celery_tasksetmeta",
+    }
+)
 
 
 # Fixed pg_advisory_lock key ("nakmigr" in ASCII): concurrent `migrate` runs
