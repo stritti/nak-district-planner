@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
@@ -20,7 +21,9 @@ from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentResponse,
     ServiceAssignmentUpdate,
 )
+from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import require_role_in_district
+from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
@@ -60,6 +63,41 @@ def _raise_blocking_conflicts(conflicts: list, *, confirm_warnings: bool) -> Non
         )
 
 
+async def _check_leader(
+    db: DbSession,
+    *,
+    district_id: uuid.UUID,
+    event_id: uuid.UUID,
+    leader_id: uuid.UUID,
+    confirm_warnings: bool,
+    exclude_assignment_id: uuid.UUID | None = None,
+) -> None:
+    """Validate the leader reference and run the conflict check under a per-leader lock.
+
+    The transaction-scoped advisory lock serializes concurrent assignments of the
+    same leader, so check-then-insert cannot double-book; it is released on commit.
+    """
+    await ensure_leader_in_district(db, district_id, leader_id)
+    await acquire_advisory_xact_lock(db, leader_id)
+    conflicts = await check_service_assignment_conflicts(
+        db, event_id=event_id, leader_id=leader_id, exclude_assignment_id=exclude_assignment_id
+    )
+    _raise_blocking_conflicts(conflicts, confirm_warnings=confirm_warnings)
+
+
+async def _save(
+    assignments_repo: SqlServiceAssignmentRepository, assignment: ServiceAssignment
+) -> None:
+    """Persist; the unique index allows one assignment per planning slot."""
+    try:
+        await assignments_repo.save(assignment)
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Planungseintrag hat bereits eine Zuweisung",
+        ) from exc
+
+
 def _assignment_response(assignment: ServiceAssignment) -> ServiceAssignmentResponse:
     return ServiceAssignmentResponse(
         id=assignment.id,
@@ -90,12 +128,13 @@ async def create_assignment(
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     if body.leader_id is not None:
-        conflicts = await check_service_assignment_conflicts(
+        await _check_leader(
             db,
+            district_id=planning_slot.district_id,
             event_id=event_id,
             leader_id=body.leader_id,
+            confirm_warnings=body.confirm_warnings,
         )
-        _raise_blocking_conflicts(conflicts, confirm_warnings=body.confirm_warnings)
 
     assignment = ServiceAssignment.create(
         event_id=event_id,
@@ -103,7 +142,7 @@ async def create_assignment(
         leader_name=body.leader_name,
         status=body.status,
     )
-    await assignments_repo.save(assignment)
+    await _save(assignments_repo, assignment)
     return _assignment_response(assignment)
 
 
@@ -155,13 +194,14 @@ async def update_assignment(
     fields = body.model_fields_set
     if "leader_id" in fields:
         if body.leader_id is not None:
-            conflicts = await check_service_assignment_conflicts(
+            await _check_leader(
                 db,
+                district_id=planning_slot.district_id,
                 event_id=event_id,
                 leader_id=body.leader_id,
+                confirm_warnings=body.confirm_warnings,
                 exclude_assignment_id=assignment.id,
             )
-            _raise_blocking_conflicts(conflicts, confirm_warnings=body.confirm_warnings)
         assignment.leader_id = body.leader_id
     if "leader_name" in fields:
         assignment.leader_name = body.leader_name

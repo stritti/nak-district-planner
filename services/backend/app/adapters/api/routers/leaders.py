@@ -20,6 +20,7 @@ from app.adapters.api.schemas.leader import (
     LeaderSelfLinkResponse,
     LeaderUpdate,
 )
+from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import (
     require_role_in_district,
 )
@@ -76,6 +77,7 @@ async def create_leader(
     if not await districts.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.PLANNER, district_id)
+    await ensure_congregation_in_district(db, district_id, body.congregation_id)
     leader = Leader.create(
         name=body.name,
         district_id=district_id,
@@ -114,6 +116,7 @@ async def update_leader(
     if "rank" in fields:
         leader.rank = body.rank
     if "congregation_id" in fields:
+        await ensure_congregation_in_district(db, district_id, body.congregation_id)
         leader.congregation_id = body.congregation_id
     if "special_role" in fields:
         leader.special_role = body.special_role
