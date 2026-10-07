@@ -23,6 +23,7 @@ cd nak-district-planner
 ### 1.2 Umgebungskopie erstellen
 ```bash
 cp .env.example .env
+cp .env.db.example .env.db   # nur PostgreSQL-Owner-Passwort, nur fuer db/migrate
 ```
 
 ### 1.3 .env Datei konfigurieren
@@ -31,8 +32,8 @@ cp .env.example .env
 ```dotenv
 # PostgreSQL
 POSTGRES_USER=nak
-POSTGRES_PASSWORD=<sicheres-passwort-hier-eintragen>
 POSTGRES_DB=nak_planner
+# POSTGRES_PASSWORD gehoert in .env.db (wird nicht an Backend/Worker uebergeben)
 
 # SQLAlchemy async connection string
 # Für lokale Entwicklung (uv run uvicorn) auf localhost zeigen
@@ -101,7 +102,7 @@ docker compose logs -f frontend
 ### 3.1 Migrationen ausführen
 Beim ersten Start und nach jeder neuen Migrationsdatei:
 ```bash
-docker compose run --no-deps --rm backend alembic upgrade head
+docker compose run --no-deps --rm --build migrate
 ```
 
 ### 3.2 Neue Migration erstellen
