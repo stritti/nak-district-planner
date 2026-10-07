@@ -34,6 +34,15 @@ def _repo(value: object = None) -> AsyncMock:
     return repo
 
 
+def _integrity_error(constraint_name: str) -> IntegrityError:
+    """IntegrityError as SQLAlchemy raises it: the asyncpg error is the cause of ``orig``."""
+    orig = Exception("integrity violation")
+    cause = Exception("asyncpg error")
+    cause.constraint_name = constraint_name  # type: ignore[attr-defined]
+    orig.__cause__ = cause
+    return IntegrityError("INSERT", {}, orig)
+
+
 def _patches(order: AsyncMock):
     """Allow the request, record lock + conflict check in call order."""
     return (
@@ -100,7 +109,7 @@ async def test_second_assignment_for_slot_returns_409() -> None:
     """The unique index on planning_slot_id surfaces as 409, not 500."""
     slot = _slot()
     sa_repo = _repo()
-    sa_repo.save.side_effect = IntegrityError("INSERT", {}, Exception("duplicate key"))
+    sa_repo.save.side_effect = _integrity_error("ix_service_assignments_planning_slot_id")
     with patch(_ROUTER + "require_role_in_district"):
         with pytest.raises(HTTPException) as exc:
             await sa_router.create_assignment(
@@ -109,6 +118,20 @@ async def test_second_assignment_for_slot_returns_409() -> None:
             )
 
     assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_other_integrity_errors_are_not_reported_as_duplicate() -> None:
+    """E.g. the slot was deleted concurrently (FK violation): no misleading 409."""
+    slot = _slot()
+    sa_repo = _repo()
+    sa_repo.save.side_effect = _integrity_error("service_assignments_planning_slot_id_fkey")
+    with patch(_ROUTER + "require_role_in_district"):
+        with pytest.raises(IntegrityError):
+            await sa_router.create_assignment(
+                slot.id, ServiceAssignmentCreate(leader_name="Gast"), object(), AsyncMock(),
+                _repo(slot), sa_repo,
+            )
 
 
 def test_orm_declares_one_assignment_per_planning_slot() -> None:

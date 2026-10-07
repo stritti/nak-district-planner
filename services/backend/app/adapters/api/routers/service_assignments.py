@@ -85,6 +85,15 @@ async def _check_leader(
     _raise_blocking_conflicts(conflicts, confirm_warnings=confirm_warnings)
 
 
+_ONE_ASSIGNMENT_PER_SLOT = "ix_service_assignments_planning_slot_id"
+
+
+def _violated_constraint(exc: IntegrityError) -> str | None:
+    """Constraint name of the driver error (asyncpg: cause of SQLAlchemy's ``orig``)."""
+    driver_error = exc.orig.__cause__ or exc.orig
+    return getattr(driver_error, "constraint_name", None)
+
+
 async def _save(
     assignments_repo: SqlServiceAssignmentRepository, assignment: ServiceAssignment
 ) -> None:
@@ -92,6 +101,8 @@ async def _save(
     try:
         await assignments_repo.save(assignment)
     except IntegrityError as exc:
+        if _violated_constraint(exc) != _ONE_ASSIGNMENT_PER_SLOT:
+            raise
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Planungseintrag hat bereits eine Zuweisung",
