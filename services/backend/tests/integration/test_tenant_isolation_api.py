@@ -280,8 +280,9 @@ async def test_foreign_rows_are_invisible_even_via_own_district_path(api, owner,
     )
 
     # Foreign resources are hidden by RLS even when their identifiers are
-    # supplied under a route the caller can otherwise address.
-    assert (patched.status_code, deleted.status_code, event_patch.status_code) == (404, 404, 404)
+    # supplied under a route the caller can otherwise address. A foreign
+    # district path is rejected by the role guard first (403, audited).
+    assert (patched.status_code, deleted.status_code, event_patch.status_code) == (404, 403, 404)
     name = await _scalar(owner, "SELECT name FROM leaders WHERE id = :id", id=world.b.leader_id)
     title = await _scalar(
         owner, "SELECT title FROM planning_slots WHERE id = :id", id=world.b.slot_id
