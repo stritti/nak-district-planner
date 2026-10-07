@@ -19,3 +19,7 @@
 
 ## 5. Frontend
 - [x] 5.1 Show approval filter toggle only for INTERNAL export tokens
+
+## 6. Holidays
+- [x] 6.1 Regression test: imported holiday distributed to a congregation appears in its event view
+- [x] 6.2 Create imported holidays as CONFIRMED; data migration for existing holiday slots

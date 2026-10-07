@@ -50,6 +50,9 @@ This change supersedes the outdated event-distribution wording of
 - Frontend: `ExportTokensView.vue`.
 - No schema migration; response shapes unchanged.
 - Behaviour change: district slots without `applicability` no longer appear in
-  matrix rows; district slots without `approval_status=CONFIRMED` (including
-  imported holidays, whose approval status is unset) are not distributed to
-  congregation views or congregation feeds.
+  matrix rows; district slots without `approval_status=CONFIRMED` are not
+  distributed to congregation views or congregation feeds.
+- Imported holidays (`category=Feiertag`) are reference data: `feiertage_service`
+  creates them with `approval_status=CONFIRMED`, and data migration
+  `20261007_confirm_holidays` sets CONFIRMED on existing holiday slots (downgrade
+  is a documented no-op), so referenced holidays stay visible to congregations.
