@@ -22,7 +22,7 @@ from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.membership import Membership, ScopeType
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 from app.main import app
@@ -52,7 +52,7 @@ def mock_oidc_adapter():
 
 def _make_client_for(
     district_id: uuid.UUID,
-    congregation: Congregation,
+    congregation: Congregation | list[Congregation],
     slots: list[PlanningSlot],
     instances: list[EventInstance],
     assignments: list[ServiceAssignment],
@@ -83,7 +83,9 @@ def _make_client_for(
     district_repo.get.return_value = District.create(name="Bezirk")
 
     cong_repo = AsyncMock()
-    cong_repo.list_by_district.return_value = [congregation]
+    cong_repo.list_by_district.return_value = (
+        congregation if isinstance(congregation, list) else [congregation]
+    )
     cong_repo.list_by_ids.return_value = []
 
     slot_repo = AsyncMock()
@@ -266,3 +268,94 @@ def test_matrix_endpoint_requires_viewer_role(mock_oidc_adapter) -> None:
                 },
             )
         assert response.status_code == 403
+
+
+# ── Issue #466: shared slot visibility in the matrix ─────────────────────────
+
+_SUNDAY = date(2026, 4, 5)
+_MATRIX_PARAMS = {"from_dt": "2026-04-05T00:00:00Z", "to_dt": "2026-04-05T23:59:59Z"}
+
+
+def _sunday_congregation(district_id: uuid.UUID, name: str = "Gemeinde A") -> Congregation:
+    return Congregation.create(
+        name=name, district_id=district_id, service_times=[{"weekday": 6, "time": "09:30"}]
+    )
+
+
+def _service_slot(
+    district_id: uuid.UUID,
+    *,
+    congregation_id: uuid.UUID | None,
+    planning_time: time = time(9, 30),
+    status: PlanningSlotStatus = PlanningSlotStatus.ACTIVE,
+    applicability: list[str] | None = None,
+) -> PlanningSlot:
+    return PlanningSlot.create(
+        district_id=district_id,
+        congregation_id=congregation_id,
+        planning_date=_SUNDAY,
+        planning_time=planning_time,
+        category="Gottesdienst",
+        status=status,
+        applicability=applicability,
+    )
+
+
+def _matrix_rows(mock_oidc_adapter, district_id, congregations, slots, assignments=()):
+    for client in _make_client_for(district_id, congregations, slots, [], list(assignments)):
+        response = client.get(
+            f"/api/v1/districts/{district_id}/matrix",
+            headers={"Authorization": "Bearer valid_token"},
+            params=_MATRIX_PARAMS,
+        )
+        assert response.status_code == 200
+        return {row["congregation_id"]: row["cells"] for row in response.json()["rows"]}
+
+
+def test_matrix_ignores_cancelled_slot_instead_of_showing_gap(mock_oidc_adapter) -> None:
+    district_id = uuid.uuid4()
+    congregation = _sunday_congregation(district_id)
+    cancelled = _service_slot(
+        district_id, congregation_id=congregation.id, status=PlanningSlotStatus.CANCELLED
+    )
+
+    rows = _matrix_rows(mock_oidc_adapter, district_id, [congregation], [cancelled])
+
+    cell = rows[str(congregation.id)][_SUNDAY.isoformat()]
+    assert cell["event_id"] is None
+    assert cell["is_gap"] is False
+
+
+def test_matrix_cancelled_earlier_slot_does_not_hide_active_slot(mock_oidc_adapter) -> None:
+    district_id = uuid.uuid4()
+    congregation = _sunday_congregation(district_id)
+    cancelled = _service_slot(
+        district_id, congregation_id=congregation.id, status=PlanningSlotStatus.CANCELLED
+    )
+    active = _service_slot(district_id, congregation_id=congregation.id, planning_time=time(10))
+    assignment = ServiceAssignment.create(
+        event_id=active.id, planning_slot_id=active.id, leader_name="Pr. Beispiel"
+    )
+
+    rows = _matrix_rows(
+        mock_oidc_adapter, district_id, [congregation], [cancelled, active], [assignment]
+    )
+
+    cell = rows[str(congregation.id)][_SUNDAY.isoformat()]
+    assert cell["event_id"] == str(active.id)
+    assert cell["leader_name"] == "Pr. Beispiel"
+    assert cell["is_gap"] is False
+
+
+def test_matrix_district_slot_only_in_applicable_congregation_rows(mock_oidc_adapter) -> None:
+    district_id = uuid.uuid4()
+    applicable = _sunday_congregation(district_id, "Gemeinde A")
+    other = _sunday_congregation(district_id, "Gemeinde B")
+    district_slot = _service_slot(
+        district_id, congregation_id=None, applicability=[str(applicable.id)]
+    )
+
+    rows = _matrix_rows(mock_oidc_adapter, district_id, [applicable, other], [district_slot])
+
+    assert rows[str(applicable.id)][_SUNDAY.isoformat()]["event_id"] == str(district_slot.id)
+    assert rows[str(other.id)][_SUNDAY.isoformat()]["event_id"] is None
