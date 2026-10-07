@@ -10,7 +10,7 @@
 # duplicates runtime environment variables.
 services:
   backend:
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --no-proxy-headers
     volumes:
       - ./services/backend/app:/app/app
       - ./services/backend/tests:/app/tests
