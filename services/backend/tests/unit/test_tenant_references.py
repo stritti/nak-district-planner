@@ -15,12 +15,14 @@ import pytest
 from fastapi import HTTPException
 
 from app.adapters.api import tenant_references
+from app.adapters.api.routers import calendar_integrations as calendar_router
 from app.adapters.api.routers import districts as districts_router
 from app.adapters.api.routers import export as export_router
 from app.adapters.api.routers import leaders as leaders_router
 from app.adapters.api.routers import planning_series as series_router
 from app.adapters.api.routers import registrations as registrations_router
 from app.adapters.api.routers import service_assignments as sa_router
+from app.adapters.api.schemas.calendar_integration import CalendarIntegrationCreate
 from app.adapters.api.schemas.district import CongregationCreate, CongregationUpdate
 from app.adapters.api.schemas.export_token import ExportTokenCreate
 from app.adapters.api.schemas.leader import LeaderCreate, LeaderUpdate
@@ -30,6 +32,8 @@ from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentCreate,
     ServiceAssignmentUpdate,
 )
+from app.adapters.auth.permissions import PermissionError
+from app.domain.models.calendar_integration import CalendarType
 from app.domain.models.congregation import Congregation
 from app.domain.models.district import District
 from app.domain.models.export_token import TokenType
@@ -114,6 +118,36 @@ async def test_export_token_rejects_foreign_reference(field: str) -> None:
 
     _assert_rejected(exc, field)
     repo.save.assert_not_awaited()
+
+
+# ── calendar integrations ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_calendar_integration_rejects_foreign_congregation_for_district_admin() -> None:
+    """District admin of DISTRICT (no congregation role) must not attach a foreign congregation."""
+    service = AsyncMock()
+    body = CalendarIntegrationCreate(
+        district_id=DISTRICT,
+        congregation_id=FOREIGN_ID,
+        name="Kalender",
+        type=CalendarType.ICS,
+        credentials={"url": "https://example.org/cal.ics"},
+    )
+    with (
+        patch(
+            "app.adapters.api.routers.calendar_integrations.assert_has_role_in_congregation",
+            side_effect=PermissionError("no congregation role"),
+        ),
+        patch("app.adapters.api.routers.calendar_integrations.require_role_in_district"),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await calendar_router.create_calendar_integration(
+                body, object(), _db(), service=service, cong_repo=AsyncMock()
+            )
+
+    _assert_rejected(exc, "congregation_id")
+    service.create_integration.assert_not_awaited()
 
 
 # ── registrations ───────────────────────────────────────────────────────────
