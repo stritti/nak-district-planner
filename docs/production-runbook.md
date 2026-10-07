@@ -5,6 +5,7 @@ Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deploymen
 ## 1. Voraussetzungen
 
 - Gueltige `.env` fuer Produktion (keine Dev-Secrets) und `.env.db` mit dem PostgreSQL-Owner-Passwort (nur fuer `db`/`migrate`, siehe `docs/deployment-migrations.md`)
+  - Beim Upgrade einer bestehenden Installation `POSTGRES_PASSWORD` (und ggf. `MIGRATION_DATABASE_URL`) aus `.env` entfernen und nach `.env.db` verschieben. Mit `APP_ENV=production` verweigern API und Worker sonst den Start (`production_guard`).
 - Laufende Infrastruktur: Reverse Proxy, Datenbank, Redis
 - Backup-Strategie fuer PostgreSQL vorhanden
 
