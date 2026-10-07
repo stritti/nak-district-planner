@@ -1,8 +1,14 @@
 """app/celery_app.py: Module."""
 
-from celery import Celery
-from celery.schedules import crontab, timedelta
+import asyncio
+import logging
 
+from celery import Celery, signals
+from celery.schedules import crontab, timedelta
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
+
+from app.adapters.db.schema_version import SchemaVersionError, assert_database_schema_current
 from app.adapters.db.session import engine
 from app.config import settings
 from app.telemetry import setup_telemetry
@@ -81,3 +87,25 @@ celery.conf.update(
 
 setup_telemetry(sqlalchemy_engine=engine)
 
+
+@signals.worker_init.connect
+def assert_schema_current_on_startup(**_kwargs) -> None:
+    """Refuse to start against a database that is not at the shipped Alembic head.
+
+    Celery logs and swallows ordinary exceptions from signal handlers, so a
+    mismatch is raised as ``SystemExit`` to actually stop the process. A
+    throwaway engine keeps pooled connections out of the forked pool workers.
+    """
+
+    async def _check() -> None:
+        check_engine = create_async_engine(settings.database_url, poolclass=NullPool)
+        try:
+            await assert_database_schema_current(check_engine)
+        finally:
+            await check_engine.dispose()
+
+    try:
+        asyncio.run(_check())
+    except SchemaVersionError as exc:
+        logging.getLogger(__name__).critical("Database schema check failed: %s", exc)
+        raise SystemExit(1) from exc
