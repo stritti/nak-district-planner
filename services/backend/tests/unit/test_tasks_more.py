@@ -12,7 +12,6 @@ from app.application.tasks import (
     auto_import_feiertage,
     check_version,
     cleanup_old_events,
-    trigger_docker_update,
 )
 
 
@@ -58,71 +57,8 @@ class TestCheckVersionTask:
             result = check_version()
 
             assert result["latest"] == "v0.9.0"
-            mock_fetcher.fetch_latest_version.assert_called_once_with("backend")
+            mock_fetcher.fetch_latest_version.assert_called_once_with("backend", "v0.8.0")
             mock_cache.set.assert_called_once_with("v0.9.0")
-
-
-class TestTriggerDockerUpdate:
-    """Tests for trigger_docker_update Celery task."""
-
-    def test_no_compose_dir_returns_error(self):
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.docker_compose_dir = ""
-
-            result = trigger_docker_update()
-
-            assert result["status"] == "error"
-            assert "not configured" in result["message"]
-
-    def test_success_path(self):
-        with (
-            patch("app.config.settings") as mock_settings,
-            patch("subprocess.run") as mock_run,
-            patch("pathlib.Path.exists", return_value=True),
-        ):
-            mock_settings.docker_compose_dir = "/app"
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
-
-            result = trigger_docker_update()
-
-            assert result["status"] == "ok"
-            assert mock_run.call_count == 2  # pull + up
-
-    def test_pull_failure(self):
-        with (
-            patch("app.config.settings") as mock_settings,
-            patch("subprocess.run") as mock_run,
-            patch("pathlib.Path.exists", return_value=True),
-        ):
-            mock_settings.docker_compose_dir = "/app"
-            mock_run.return_value = MagicMock(returncode=1, stderr="pull failed")
-
-            result = trigger_docker_update()
-
-            assert result["status"] == "error"
-            assert "failed" in str(result["details"])
-
-    def test_pull_timeout(self):
-        with (
-            patch("app.config.settings") as mock_settings,
-            patch("subprocess.run") as mock_run,
-            patch("pathlib.Path.exists", return_value=True),
-        ):
-            mock_settings.docker_compose_dir = "/app"
-            mock_run.side_effect = TimeoutError("timeout")
-
-            result = trigger_docker_update()
-
-            assert result["status"] == "error"
-
-    def test_directory_not_found(self):
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.docker_compose_dir = "/nonexistent"
-            with patch("pathlib.Path.exists", return_value=False):
-                result = trigger_docker_update()
-
-                assert result["status"] == "error"
-                assert "not found" in result["message"]
 
 
 class TestAutoImportFeiertage:

@@ -1,12 +1,12 @@
-"""Unit tests for version check and self-update functionality."""
+"""Unit tests for version check (no in-app update execution, see #469)."""
 
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from app.adapters.version_check.cache import VersionCache
-from app.adapters.version_check.ghcr import SemVer, latest_semver, parse_semver_tags
+from app.adapters.version_check.ghcr import SemVer, is_newer, latest_semver, parse_semver_tags
 
 
 class TestSemVer:
@@ -31,6 +31,10 @@ class TestSemVer:
         assert SemVer.parse("0.4") is None
         assert SemVer.parse("abc") is None
         assert SemVer.parse("0.4.5.6") is None
+        assert SemVer.parse("1.0.0-") is None
+        assert SemVer.parse("1.0.0-rc..1") is None
+        assert SemVer.parse("1.0.0-rc.01") is None
+        assert SemVer.parse("sha-abc123") is None
 
     def test_ordering(self):
         v1 = SemVer(0, 4, 5)
@@ -42,6 +46,22 @@ class TestSemVer:
 
     def test_str(self):
         assert str(SemVer(0, 4, 5)) == "0.4.5"
+        assert str(SemVer.parse("v1.0.0-rc.1")) == "1.0.0-rc.1"
+
+    def test_prerelease_precedence(self):
+        p = SemVer.parse
+        assert p("1.0.0-rc.1") < p("1.0.0-rc.2")
+        assert p("1.0.0-rc.2") < p("1.0.0")
+        assert p("1.0.0-rc.2") < p("1.0.0-rc.10")  # numeric, not lexical
+        assert p("1.0.0-alpha") < p("1.0.0-alpha.1") < p("1.0.0-beta") < p("1.0.0-rc.1")
+        assert p("1.0.0-rc.1") < p("1.0.0-rc.a")  # numeric < alphanumeric
+        assert p("0.29.3") < p("1.0.0-rc.1")
+
+    def test_pep440_normalized(self):
+        assert SemVer.parse("1.0.0rc1") == SemVer.parse("1.0.0-rc.1")
+        assert str(SemVer.parse("1.0.0rc1")) == "1.0.0-rc.1"
+        assert SemVer.parse("1.2.0a3") == SemVer.parse("1.2.0-alpha.3")
+        assert SemVer.parse("1.2.0b2") == SemVer.parse("1.2.0-beta.2")
 
 
 class TestParseSemverTags:
@@ -77,6 +97,42 @@ class TestLatestSemver:
 
     def test_empty_list(self):
         assert latest_semver([]) is None
+
+    def test_stable_ignores_prereleases_by_default(self):
+        assert latest_semver(["0.29.3", "1.0.0-rc.1"]) == "0.29.3"
+
+    def test_rc_not_offered_to_stable_0x(self):
+        assert latest_semver(["0.29.3", "1.0.0-rc.1", "1.0.0-rc.2"], current="0.29.3") == "0.29.3"
+
+    def test_stable_1_0_not_offered_1_1_rc(self):
+        latest = latest_semver(["1.0.0", "1.1.0-rc.1"], current="1.0.0")
+        assert latest == "1.0.0"
+        assert not is_newer(latest, "1.0.0")
+
+    def test_prerelease_line_gets_newer_rc_and_final(self):
+        tags = ["0.29.3", "1.0.0-rc.1", "1.0.0-rc.2", "latest"]
+        assert latest_semver(tags, current="1.0.0rc1") == "1.0.0-rc.2"
+        assert latest_semver([*tags, "1.0.0"], current="1.0.0rc1") == "1.0.0"
+
+
+class TestIsNewer:
+    """Update availability: never point to an older (or equal) version."""
+
+    def test_older_0x_not_offered_to_rc(self):
+        assert not is_newer("0.29.3", "1.0.0rc1")
+
+    def test_same_version_pep440_vs_semver(self):
+        assert not is_newer("1.0.0-rc.1", "1.0.0rc1")
+
+    def test_newer(self):
+        assert is_newer("1.0.0-rc.2", "1.0.0rc1")
+        assert is_newer("1.0.0", "1.0.0-rc.2")
+        assert is_newer("0.30.0", "0.29.3")
+
+    def test_unparseable(self):
+        assert not is_newer(None, "1.0.0")
+        assert not is_newer("latest", "1.0.0")
+        assert is_newer("1.0.0", "dev")
 
 
 class TestVersionCache:
@@ -188,7 +244,7 @@ class TestCheckVersionTask:
             result = check_version()
 
         assert result == {"latest": "0.5.0"}
-        mock_fetch.assert_called_once_with("backend")
+        mock_fetch.assert_called_once_with("backend", ANY)
         mock_set.assert_called_once_with("0.5.0")
 
     def test_check_version_no_newer(self):
@@ -205,52 +261,3 @@ class TestCheckVersionTask:
 
         assert result == {"latest": None}
         mock_set.assert_called_once_with(None)
-
-
-class TestTriggerDockerUpdateTask:
-    """Tests for trigger_docker_update Celery task."""
-
-    def test_no_compose_dir(self):
-        from app.application.tasks import trigger_docker_update
-
-        with patch("app.config.settings.docker_compose_dir", ""):
-            result = trigger_docker_update()
-
-        assert result["status"] == "error"
-
-    def test_compose_dir_not_found(self):
-        from app.application.tasks import trigger_docker_update
-
-        with patch("app.config.settings.docker_compose_dir", "/nonexistent/path"):
-            result = trigger_docker_update()
-
-        assert result["status"] == "error"
-
-    @patch("subprocess.run")
-    def test_update_success(self, mock_run):
-        from app.application.tasks import trigger_docker_update
-
-        mock_run.return_value.returncode = 0
-        mock_run.return_value.stderr = ""
-
-        with patch("app.config.settings.docker_compose_dir", "/tmp"):
-            result = trigger_docker_update()
-
-        assert result["status"] == "ok"
-        assert result["details"]["pull"] == "ok"
-        assert result["details"]["up"] == "ok"
-
-    @patch("subprocess.run")
-    def test_update_pull_fails(self, mock_run):
-        from app.application.tasks import trigger_docker_update
-
-        # First call (pull) fails, second call shouldn't be reached
-        mock_run.side_effect = [
-            MagicMock(returncode=1, stderr="network error"),
-        ]
-
-        with patch("app.config.settings.docker_compose_dir", "/tmp"):
-            result = trigger_docker_update()
-
-        assert result["status"] == "error"
-        assert "failed" in result["details"]["pull"]
