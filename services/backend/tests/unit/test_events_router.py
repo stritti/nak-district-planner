@@ -244,8 +244,14 @@ async def test_list_events_applies_filters_and_paginates() -> None:
 async def test_list_events_filters_district_slots_by_applicability() -> None:
     district_id = uuid.uuid4()
     congregation_id = uuid.uuid4()
-    visible = _slot(district_id=district_id, applicability=["all"])
-    invisible = _slot(district_id=district_id, applicability=[])
+    visible = _slot(
+        district_id=district_id,
+        applicability=["all"],
+        approval_status=EventApprovalStatus.CONFIRMED,
+    )
+    invisible = _slot(
+        district_id=district_id, applicability=[], approval_status=EventApprovalStatus.CONFIRMED
+    )
     slot_repo = AsyncMock()
     slot_repo.list_for_date_range.return_value = [visible, invisible]
     instance_repo = AsyncMock()
