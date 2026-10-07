@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-10-07, #475):** Dieser Change wurde nie umgesetzt und widerspricht der heutigen Architektur (Tokens im `localStorage`, Keycloak-spezifische Konfiguration statt IdP-agnostischer OIDC-Discovery). Ersetzt durch `phase4b-oidc-auth-idp-agnostic`, `approved-idp-login-scoped-access`, `introduce-rbac-permissions-model` und `server-held-oidc-refresh-token`. Die Specs dieses Changes wurden bewusst **nicht** in `openspec/specs/` übernommen; maßgeblich sind `oidc-authentication`, `rbac-model`, `approved-user-onboarding` und `scoped-membership-enforcement`.
+
 ## Why
 
 Der NAK Bezirksplaner ist bisher nur über einen einzelnen gemeinsamen API-Key gesichert — für einen Produktionsbetrieb mit mehreren Bezirken und Benutzern mit unterschiedlichen Verantwortlichkeiten ist das unzureichend. Persönliche Benutzerkonten, granulare Rollen und sofort wirksame Berechtigungsänderungen sind Voraussetzung für einen sicheren Mehrmandanten-Betrieb.

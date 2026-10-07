@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-10-07, #475):** Dieser Change wurde nie umgesetzt und widerspricht der heutigen Architektur (Tokens im `localStorage`, Keycloak-spezifische Konfiguration statt IdP-agnostischer OIDC-Discovery). Ersetzt durch `phase4b-oidc-auth-idp-agnostic`, `approved-idp-login-scoped-access`, `introduce-rbac-permissions-model` und `server-held-oidc-refresh-token`. Die Specs dieses Changes wurden bewusst **nicht** in `openspec/specs/` übernommen; maßgeblich sind `oidc-authentication`, `rbac-model`, `approved-user-onboarding` und `scoped-membership-enforcement`.
+
 ## Why
 
 Die aktuelle API-Key-Authentifizierung (`X-API-Key` Header) ist unsicher für einen Multi-Tenant-Betrieb mit mehreren Nutzern und Bezirken. JWT-basierte Authentifizierung mit Keycloak ermöglicht benutzerbasierte Zugriffskontrolle und ist Standard für produktive Web-APIs. Dies ist Voraussetzung für Deployment auf der produktiven Domain 5tritti.de.

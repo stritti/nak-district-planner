@@ -12,7 +12,7 @@
 #### Tenant Middleware
 - [x] TenantMiddleware implementieren (`app/adapters/api/middleware/tenant.py`)
 - [x] Extraktion aus JWT Token implementieren
-- [ ] ~Extraktion aus API Key implementieren~ *(entfällt — die API-Key-Authentifizierung wurde mit der OIDC-Migration entfernt (`phase4b`, Tasks 4.2/4.3); `idp_provisioning_api_key` ist ein ausgehender Webhook-Schlüssel. Befund behoben: `CSRFMiddleware` übersprang die Prüfung allein wegen eines `X-API-Key`-Headers; die Ausnahme ist entfernt, die Security-Doku korrigiert)*
+- [x] ~Extraktion aus API Key implementieren~ *(entfällt — die API-Key-Authentifizierung wurde mit der OIDC-Migration entfernt (`phase4b`, Tasks 4.2/4.3); `idp_provisioning_api_key` ist ein ausgehender Webhook-Schlüssel. Befund behoben: `CSRFMiddleware` übersprang die Prüfung allein wegen eines `X-API-Key`-Headers; die Ausnahme ist entfernt, die Security-Doku korrigiert)*
 - [x] Kontext für Request-Lifecycle setzen
 - [x] Middleware in FastAPI registrieren (`TenantMiddleware` + `TenantValidationMiddleware` in `main.py`)
 
@@ -21,10 +21,10 @@
 - [x] Policies für PlanningSlots und EventInstances erstellt
 - [x] Policies für ServiceAssignments Tabelle erstellt
 - [x] Policies für CalendarIntegrations Tabelle erstellt
-- [ ] ~Policies für Districts Tabelle~ *(entfällt — District ist die Root-Tenant-Grenze selbst, Zugriff wird über Membership-Checks in `TenantValidationService` statt RLS gesteuert)*
-- [ ] ~Policies für Congregations Tabelle~ *(entfällt — analog zu Districts, Zugriff über Membership statt RLS)*
+- [x] ~Policies für Districts Tabelle~ *(entfällt — District ist die Root-Tenant-Grenze selbst, Zugriff wird über Membership-Checks in `TenantValidationService` statt RLS gesteuert)*
+- [x] ~Policies für Congregations Tabelle~ *(entfällt — analog zu Districts, Zugriff über Membership statt RLS)*
 - [x] Policies für Leaders Tabelle erstellt
-- [ ] ~Policies für ExportTokens Tabelle~ *(entfällt — Export-Zugriff ist absichtlich token-scoped statt membership-scoped, siehe UC-05 in CLAUDE.md)*
+- [x] ~Policies für ExportTokens Tabelle~ *(entfällt — Export-Zugriff ist absichtlich token-scoped statt membership-scoped, siehe UC-05 in CLAUDE.md)*
 
 #### RLS Middleware
 - [x] SQLAlchemy Event Listener für RLS Settings implementieren (`app/adapters/db/session.py::_set_tenant_gucs`)
@@ -34,11 +34,11 @@
 ### Phase 2: Tenant-Aware Repositories (3 Tage)
 
 #### Basis-Klasse
-- [ ] ~TenantAwareRepository Basis-Klasse erstellen~ *(architektonisch anders gelöst: Tenant-Filterung läuft über PostgreSQL RLS + `TenantValidationService`, nicht über eine Repository-Basisklasse)*
-- [ ] ~Generische list()/get()/save()/delete() Methoden mit Tenant-Filter~ *(entfällt aus demselben Grund — Filterung passiert transparent auf DB-Ebene)*
+- [x] ~TenantAwareRepository Basis-Klasse erstellen~ *(architektonisch anders gelöst: Tenant-Filterung läuft über PostgreSQL RLS + `TenantValidationService`, nicht über eine Repository-Basisklasse)*
+- [x] ~Generische list()/get()/save()/delete() Methoden mit Tenant-Filter~ *(entfällt aus demselben Grund — Filterung passiert transparent auf DB-Ebene)*
 
 #### Repository Anpassungen
-- [ ] ~Repositories von TenantAwareRepository ableiten~ *(entfällt — kein Basisklassen-Pattern verwendet, siehe oben)*
+- [x] ~Repositories von TenantAwareRepository ableiten~ *(entfällt — kein Basisklassen-Pattern verwendet, siehe oben)*
 
 ### Phase 3: Tenant Validation Service (2 Tage)
 
@@ -60,7 +60,7 @@
 - [x] Unit Tests für TenantMiddleware erstellt (`tests/unit/test_tenant_middleware.py`)
 - [x] Unit Tests für TenantValidationService erstellt (`tests/unit/test_tenant_validation.py`)
 - [x] Cross-Tenant-Isolation Unit-Tests erstellt (`tests/unit/test_cross_tenant_isolation.py`)
-- [ ] ~Unit Tests für TenantAwareRepository~ *(entfällt, da Basisklasse nicht existiert)*
+- [x] ~Unit Tests für TenantAwareRepository~ *(entfällt, da Basisklasse nicht existiert)*
 
 #### Integration Tests
 - [x] Integration Tests für RLS Policies gegen echte PostgreSQL-Instanz *(`tests/integration/test_rls_postgres.py`, läuft in CI im Job `backend-tests` gegen frisch migriertes PostgreSQL als NOBYPASSRLS-Rolle `nak_app`; Strukturtest verlangt RLS für jede Tabelle mit Tenant-Schlüssel)*
@@ -78,7 +78,7 @@
 ### Phase 5: Rollout (1 Tag)
 
 #### Vorbereitung
-- [ ] ~Feature-Flag für Tenant-Isolation~ *(entfällt — Feature ist bereits fest verdrahtet in Produktion, kein Flag gefunden)*
+- [x] ~Feature-Flag für Tenant-Isolation~ *(entfällt — Feature ist bereits fest verdrahtet in Produktion, kein Flag gefunden)*
 - [x] Dokumentation aktualisiert (`docs/security/tenant-isolation.md`)
 - [x] Rollback-Plan erstellen *(Abschnitt „Rollback Plan“ in `docs/security/tenant-isolation.md`)*
 

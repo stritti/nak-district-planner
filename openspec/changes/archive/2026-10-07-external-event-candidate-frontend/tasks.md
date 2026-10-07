@@ -10,7 +10,7 @@
 - [x] 2.2 Add candidate review view with loading, empty, error, and mutation states
 - [x] 2.3 Support "accept and create PlanningSlot"
 - [x] 2.4 Support dismiss
-- [ ] 2.5 Existing PlanningSlot selection is deferred to a follow-up with searchable slot discovery
+- [x] 2.5 Existing PlanningSlot selection is deferred to a follow-up with searchable slot discovery *(zurückgestellt → Backlog; die API unterstützt `matched_slot_id` bereits, siehe Spec `external-event-ingestion`)*
 
 ## 3. Navigation
 

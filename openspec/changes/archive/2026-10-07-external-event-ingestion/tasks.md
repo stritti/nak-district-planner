@@ -38,7 +38,7 @@
 
 ## 5. Frontend
 
-- [ ] 5.1 Frontend review UI is intentionally out of scope for this PR and tracked in PR #390
+- [x] 5.1 Frontend review UI is intentionally out of scope for this PR and tracked in PR #390 *(geliefert durch den Change `external-event-candidate-frontend`)*
 
 ## 6. Tests
 

@@ -57,5 +57,5 @@
 - [x] 8.4 Test short months, leap years and the scheduled-time boundary
 - [x] 8.5 Unit-test scheduler dispatch, duplicate claims, absent recipients and per-recipient SMTP failures
 - [x] 8.6 Unit-test API CRUD and district authorization; unit-test frontend API and store success/error paths
-- [ ] 8.7 Add a database-backed integration test covering the full recipient-resolution, claim and send flow
-- [ ] 8.8 Confirm the final commit's backend coverage, frontend tests, E2E, migrations, lint and security CI checks
+- [x] 8.7 Add a database-backed integration test covering the full recipient-resolution, claim and send flow *(`tests/integration/test_reminder_dispatch.py::test_full_monthly_reminder_flow`)*
+- [x] 8.8 Confirm the final commit's backend coverage, frontend tests, E2E, migrations, lint and security CI checks *(bestätigt im Release-Review `docs/reviews/2026-10-07-release-1.0-review.md`; offener `bun audit`-Befund ist unabhängig von diesem Change)*

@@ -69,3 +69,7 @@ The system SHALL persist a unique claim for each reminder ID, calendar month and
 
 ### Requirement: Scheduler SHALL log outcomes
 The system SHALL log a summary with evaluated, sent, skipped and failed counts after each run.
+
+#### Scenario: Run completes
+- **WHEN** a scheduler run finishes
+- **THEN** the system SHALL log the evaluated, sent, skipped and failed counts

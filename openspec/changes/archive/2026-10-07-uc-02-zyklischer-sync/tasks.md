@@ -19,7 +19,7 @@
 - [x] 3.4 Retry-Konfiguration: `max_retries=3`, `default_retry_delay=60s`
       ⚠️ **Abweichung:** Backoff-Staffelung (60/300/900s) nicht implementiert — alle Retries mit festem 60s Delay
 - [x] 3.5 `last_sync_at` wird nach Sync-Lauf aktualisiert
-- [x] 3.5 `last_sync_error` speichern nach Fehlschlag → fehlt (kein DB-Feld vorhanden, siehe 1.2)
+- [x] 3.6 `last_sync_error` speichern nach Fehlschlag → fehlt (kein DB-Feld vorhanden, siehe 1.2)
 
 ## 4. Unit-Tests
 
