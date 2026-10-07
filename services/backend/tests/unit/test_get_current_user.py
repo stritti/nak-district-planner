@@ -321,6 +321,32 @@ class TestGetCurrentUserAutoCreation:
             mock_repo_instance.save.assert_called_once()
 
 
+class TestEmailVerifiedPropagation:
+    """Issue #461: the verified flag from the token reaches the request user."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("info_verified,expected", [(True, True), (False, False), (None, False)])
+    async def test_email_verified_propagated(
+        self, mock_oidc_adapter, mock_session, mock_credentials, mock_request,
+        info_verified, expected,
+    ):
+        info = {
+            "sub": "u", "email": "u@example.com", "username": "u", "name": "U",
+            "given_name": None, "family_name": None,
+        }
+        if info_verified is not None:
+            info["email_verified"] = info_verified
+        mock_oidc_adapter.validate_token.return_value = {"sub": "u"}
+        mock_oidc_adapter.extract_user_info.return_value = info
+        existing = User(sub="u", email="u@example.com", username="u", email_verified=True)
+        with patch("app.adapters.api.deps.SqlUserRepository") as MockRepo:
+            repo = AsyncMock()
+            repo.get_by_sub.return_value = existing
+            MockRepo.return_value = repo
+            user = await get_current_user(mock_request, mock_credentials, mock_session)
+        assert user.email_verified is expected
+
+
 class TestBootstrapReconciliation:
     """Negative-path tests for the superadmin reconciliation dependency flow."""
 
@@ -524,7 +550,9 @@ class TestGetCurrentUserWithMemberships:
     async def test_links_single_approved_unlinked_registration_by_email(self):
         from app.adapters.api.deps import get_current_user_with_memberships
 
-        user = User(sub="oidc|u1", email="link@example.com", username="link")
+        user = User(
+            sub="oidc|u1", email="link@example.com", username="link", email_verified=True
+        )
         session = AsyncMock()
         link_result = MagicMock()
         link_result.mappings.return_value.one_or_none.return_value = {
@@ -556,6 +584,27 @@ class TestGetCurrentUserWithMemberships:
             assert len(ctx.memberships) == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("email_verified", [False, None])
+    async def test_unverified_email_skips_registration_link(self, email_verified):
+        """Issue #461: an unverified (or missing email_verified) email must
+        never bind an approved registration to the caller.
+        """
+        from app.adapters.api.deps import get_current_user_with_memberships
+
+        user = User(sub="oidc|attacker", email="victim@example.com", username="attacker")
+        if email_verified is not None:
+            user.email_verified = email_verified
+        session = AsyncMock()
+        with patch("app.adapters.api.deps.SqlMembershipRepository") as MemRepo:
+            mem_repo = AsyncMock()
+            mem_repo.get_all_by_user.return_value = []
+            MemRepo.return_value = mem_repo
+            ctx = await get_current_user_with_memberships(user=user, session=session)
+        for call in session.execute.await_args_list:
+            assert "link_approved_registration" not in str(call.args[0])
+        assert ctx.memberships == []
+
+    @pytest.mark.asyncio
     async def test_user_without_email_skips_registration_link(self):
         """Users without an email claim must not invoke the linking function."""
         from app.adapters.api.deps import get_current_user_with_memberships
@@ -578,7 +627,9 @@ class TestGetCurrentUserWithMemberships:
         """
         from app.adapters.api.deps import get_current_user_with_memberships
 
-        user = User(sub="oidc|amb", email="amb@example.com", username="amb")
+        user = User(
+            sub="oidc|amb", email="amb@example.com", username="amb", email_verified=True
+        )
         session = AsyncMock()
         link_result = MagicMock()
         link_result.mappings.return_value.one_or_none.return_value = {
