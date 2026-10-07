@@ -22,10 +22,6 @@ from app.domain.planning.conflict_result import (
 )
 from app.domain.planning.conflict_service import ConflictService
 
-# Margin around the target service when loading the leader's schedule: covers the
-# travel-time rule plus services without EventInstance that start on the previous day.
-_SCHEDULE_MARGIN = timedelta(days=1)
-
 
 async def check_service_assignment_conflicts(
     session: AsyncSession,
@@ -57,7 +53,9 @@ async def check_service_assignment_conflicts(
         actual_end_at=instance.actual_end_at if instance else None,
     ).window(default_duration)
 
-    margin = _SCHEDULE_MARGIN + timedelta(minutes=settings.min_travel_minutes)
+    # A service without EventInstance lasts default_duration, so one starting up to
+    # that long before the target can still overlap it; add the travel-time margin.
+    margin = default_duration + timedelta(minutes=settings.min_travel_minutes)
     schedule = await SqlServiceAssignmentRepository(session).list_leader_schedule(
         leader_id,
         window_start=start - margin,

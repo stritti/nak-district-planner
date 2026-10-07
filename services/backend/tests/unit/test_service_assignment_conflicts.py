@@ -248,3 +248,20 @@ def test_scheduled_service_window_falls_back_to_planning_time_in_utc() -> None:
         datetime(2026, 6, 15, 10, tzinfo=UTC),
         datetime(2026, 6, 15, 11, 30, tzinfo=UTC),
     )
+
+
+@pytest.mark.asyncio
+async def test_schedule_window_covers_default_duration_longer_than_a_day() -> None:
+    """An instance-less service starting before the target overlaps it if the default
+    duration is long; the look-back must not be capped at one day (fail-closed).
+    """
+    target = _slot()
+    with (
+        patch(_PATCH + "settings.sync_expected_duration_minutes", 3 * 24 * 60),
+        patch(_PATCH + "settings.min_travel_minutes", 30),
+    ):
+        _, query = await _check(target_slot=target, target_instance=None, schedule=[], leader=None)
+
+    kwargs = query.await_args.kwargs
+    assert kwargs["window_start"] <= _START - timedelta(days=3, minutes=30)
+    assert kwargs["window_end"] >= _START + timedelta(days=3, minutes=30)
