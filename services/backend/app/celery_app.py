@@ -89,6 +89,7 @@ setup_telemetry(sqlalchemy_engine=engine)
 
 
 @signals.worker_init.connect
+@signals.beat_init.connect
 def assert_schema_current_on_startup(**_kwargs) -> None:
     """Refuse to start against a database that is not at the shipped Alembic head.
 

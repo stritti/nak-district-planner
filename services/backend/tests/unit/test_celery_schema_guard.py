@@ -9,8 +9,9 @@ from app import celery_app
 from app.adapters.db.schema_version import SchemaVersionError
 
 
-def test_worker_init_runs_schema_guard() -> None:
-    receivers = [ref() for _, ref in signals.worker_init.receivers]
+@pytest.mark.parametrize("signal", [signals.worker_init, signals.beat_init])
+def test_worker_and_beat_init_run_schema_guard(signal) -> None:
+    receivers = [ref() for _, ref in signal.receivers]
     assert celery_app.assert_schema_current_on_startup in receivers
 
 
