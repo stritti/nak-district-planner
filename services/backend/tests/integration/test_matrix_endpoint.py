@@ -308,8 +308,9 @@ def _matrix_rows(mock_oidc_adapter, district_id, congregations, slots, assignmen
             headers={"Authorization": "Bearer valid_token"},
             params=_MATRIX_PARAMS,
         )
-        assert response.status_code == 200
-        return {row["congregation_id"]: row["cells"] for row in response.json()["rows"]}
+    # Exhaust the generator (no early return) so dependency overrides are cleaned up.
+    assert response.status_code == 200
+    return {row["congregation_id"]: row["cells"] for row in response.json()["rows"]}
 
 
 def test_matrix_ignores_cancelled_slot_instead_of_showing_gap(mock_oidc_adapter) -> None:
