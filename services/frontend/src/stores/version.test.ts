@@ -5,7 +5,6 @@ import * as systemApi from "@/api/system";
 
 vi.mock("@/api/system", () => ({
   getVersion: vi.fn(),
-  triggerUpdate: vi.fn(),
 }));
 
 describe("useVersionStore", () => {
@@ -56,6 +55,25 @@ describe("useVersionStore", () => {
     expect(store.currentVersion).toBe("0.5.0");
     expect(store.latestVersion).toBe("0.5.0");
     expect(store.hasUpdate).toBe(false);
+  });
+
+  it("trusts backend update_available (no banner for older/equal versions)", async () => {
+    vi.mocked(systemApi.getVersion).mockResolvedValue({
+      current_version: "1.0.0rc1",
+      latest_version: "0.29.3",
+      update_available: false,
+      last_checked: Date.now(),
+      release_url: null,
+    });
+
+    const store = useVersionStore();
+    await store.checkVersion();
+    expect(store.hasUpdate).toBe(false);
+  });
+
+  it("does not expose an update trigger", () => {
+    const store = useVersionStore();
+    expect("trigger" in store).toBe(false);
   });
 
   it("checkVersion handles errors silently", async () => {
