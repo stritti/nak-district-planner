@@ -17,6 +17,12 @@ Middleware SHALL NOT decode an unverified Bearer payload to derive a user subjec
 ### Requirement: Bearer presence does not grant authenticated rate limits
 The rate limiter SHALL consider a request authenticated only when a verified principal is already available. An arbitrary Authorization header SHALL NOT receive an authenticated-user multiplier.
 
+#### Scenario: Unverified bearer header on a business endpoint
+- **WHEN** a request carries an `Authorization: Bearer` header
+- **AND** no verified principal is available on the request
+- **THEN** the rate limiter applies the anonymous limit keyed by client IP
+- **AND** no authenticated-user multiplier is granted
+
 ### Requirement: Sensitive public endpoints retain fallback abuse protection
 When the distributed Valkey limiter fails open, the application SHALL apply a bounded process-local rate limit to explicitly declared security-sensitive public POST endpoints. Fallback limits SHALL be named configuration rather than route-specific numeric literals embedded in request dispatch logic.
 
@@ -36,7 +42,19 @@ When the distributed Valkey limiter fails open, the application SHALL apply a bo
 - **THEN** the documented availability-first fail-open behaviour remains unchanged
 
 ### Requirement: Local fallback remains bounded under outage load
-The in-process fallback limiter SHALL cap the number of buckets and SHALL NOT scan the complete bucket set on every sensitive request.
+The in-process fallback limiter SHALL cap the number of buckets and SHALL NOT scan the complete bucket set on every sensitive request. Buckets SHALL be keyed by client identity and matched rule, not by raw request path, and a single bucket SHALL NOT hold more entries than its limit.
+
+The fallback limiter is process-local: the effective limit is `limit × worker processes × replicas`, and counters reset on process restart. It is an outage safeguard, not a replacement for the distributed limiter.
+
+#### Scenario: Path variation cannot evict an exhausted bucket
+- **WHEN** a client has exhausted the self-registration fallback limit
+- **AND** it sends requests to many different district UUIDs on the same route
+- **THEN** all those requests share the client's single rule bucket
+- **AND** the client remains limited
+
+#### Scenario: Single client floods one endpoint
+- **WHEN** one client sends far more requests than the limit within the window
+- **THEN** denied requests are not recorded and the bucket size stays at the limit
 
 #### Scenario: Many identifiers arrive during a Valkey outage
 - **WHEN** requests create more local buckets than the configured maximum

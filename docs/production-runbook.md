@@ -123,6 +123,14 @@ Der Counter wird erhöht, wenn Redis bei einer Rate-Limit-Prüfung nicht erreich
 ist oder einen Fehler liefert. Das System lässt den Request in diesem Fall bewusst
 zu, damit ein Redis-Ausfall nicht den gesamten Dienst blockiert.
 
+Ausnahme: OIDC-Token-Exchange (`POST /api/v1/auth/oidc/token`, 30/min) und
+oeffentliche Selbstregistrierung (`POST /api/v1/districts/{id}/registrations`,
+10/min) werden waehrend eines Fail-Open durch einen lokalen Fallback-Limiter je
+Client-Identitaet begrenzt. Dieser Limiter ist **pro Prozess**: Die effektive
+Grenze betraegt `Limit × Worker-Prozesse × Backend-Replikas`, und der Zaehler
+beginnt bei jedem Neustart wieder bei null. Er ist eine Notbremse, kein Ersatz
+fuer den Redis-Limiter.
+
 - **Voraussetzung:** `OTEL_ENABLED=true` setzen und `OTEL_ENDPOINT` auf einen
   erreichbaren OTLP-Collector mit Metrics-Export konfigurieren. Die Metriken des
   Backends im Monitoring-Backend verfügbar machen und den Alert dort einrichten.

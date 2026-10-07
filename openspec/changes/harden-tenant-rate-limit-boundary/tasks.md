@@ -14,6 +14,9 @@
 - [x] 2.5 Oeffentliche Selbstregistrierung bei Valkey-Fail-Open lokal strenger begrenzen.
 - [x] 2.6 Globale Bucket-Bereinigung amortisiert ausfuehren.
 - [x] 2.7 Normale Business-Endpunkte weiterhin fail-open behandeln.
+- [x] 2.8 Fallback-Buckets pro Regel statt pro Rohpfad fuehren (kein Eviction-Bypass ueber zufaellige District-UUIDs).
+- [x] 2.9 Abgelehnte Requests nicht speichern; Bucket-Groesse bleibt <= Limit.
+- [x] 2.10 Per-Prozess-Semantik (Limit x Prozesse x Replikas, Reset bei Neustart) in Spec und Runbook dokumentieren.
 
 ## 3. Tests
 
@@ -24,7 +27,9 @@
 - [x] 3.5 Selbstregistrierung wird nach lokalem Limit mit 429 blockiert.
 - [x] 3.6 Normaler Business-Endpunkt bleibt bei Redis-Ausfall verfuegbar.
 - [x] 3.7 Lokaler Limiter bleibt speicherbegrenzt und bereinigt amortisiert.
-- [x] 3.8 Tenant-Integrationstests erwarten keine unvalidierten `claimed_sub`-Metadaten.
+- [x] 3.8 Tenant-Integrationstests erwarten keine unvalidierten `claimed_sub`-Metadaten; toter `claimed_sub`-Audit-Helfer entfernt.
+- [x] 3.9 Regressionstests: Eviction-Bypass, Single-Key-Flood, nur Burst-Check fail-open, Trennung nach Identifier.
+- [x] 3.10 Leader-Routen pruefen die Rolle vor dem Laden fremder Zeilen (403 statt 404, ACCESS_DENIED-Audit).
 
 ## 4. Verifikation
 
