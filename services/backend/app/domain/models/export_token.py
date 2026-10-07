@@ -27,6 +27,16 @@ class ExportToken:
     leader_id: uuid.UUID | None
     created_at: datetime
 
+    def confirmed_only(self, requested: str | None) -> bool:
+        """Whether the ICS feed may contain only CONFIRMED slots (UC-05).
+
+        PUBLIC tokens are shared outside the planning team, so they never expose
+        PLANNED drafts, whatever the caller requests. INTERNAL tokens (including
+        personal leader feeds) include drafts unless ``"confirmed_only"`` is
+        requested.
+        """
+        return self.token_type == TokenType.PUBLIC or requested == "confirmed_only"
+
     @staticmethod
     def create(
         label: str,
