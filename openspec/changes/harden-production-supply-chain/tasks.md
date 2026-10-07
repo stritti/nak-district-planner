@@ -19,9 +19,3 @@
 - [x] 3.1 Docker-Builds fuer Backend und Frontend erfolgreich.
 - [x] 3.2 Compose-Konfiguration erfolgreich validiert.
 - [x] 3.3 Frontend-E2E unter CSP erfolgreich.
-
-## 4. Advisory-Remediation (#456)
-
-- [x] 4.1 `source-map-js` 1.2.1 → 1.2.2 (GHSA-68fv-2mgg-jv7q) in `services/frontend/bun.lock`, `bun.lock` und `docs/bun.lock` gezielt aktualisiert; keine weiteren Pakete veraendert.
-- [x] 4.2 Frozen Install, Frontend-Tests (377), Build und `bun audit` (Frontend: keine Befunde) mit Bun 1.2.23 verifiziert.
-- [ ] 4.3 Docs-Toolchain (`vitepress` 1.x → vite 5/postcss/nanoid/js-yaml) separat behandeln: nur Build-Zeit, nicht im ausgelieferten Image; eigenes Issue.

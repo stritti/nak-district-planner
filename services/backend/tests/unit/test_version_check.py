@@ -132,7 +132,13 @@ class TestIsNewer:
     def test_unparseable(self):
         assert not is_newer(None, "1.0.0")
         assert not is_newer("latest", "1.0.0")
-        assert is_newer("1.0.0", "dev")
+        assert not is_newer("1.0.0", "dev")  # fail safe: unknown runtime → no offer
+
+    def test_build_and_local_metadata_ignored(self):
+        assert not is_newer("1.1.0", "1.2.0+vendor.1")
+        assert is_newer("1.0.0", "1.0.0rc1+local")
+        assert SemVer.parse("1.2.0+vendor.1") == SemVer.parse("1.2.0")
+        assert SemVer.parse("1.0.0-rc.1+build.5") == SemVer.parse("1.0.0-rc.1")
 
 
 class TestVersionCache:

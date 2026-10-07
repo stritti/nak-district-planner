@@ -21,11 +21,3 @@ The default production Compose configuration SHALL NOT publish the internal HTTP
 
 ### Requirement: Browser security headers are applied
 The application nginx SHALL emit a restrictive Content-Security-Policy and baseline browser security headers. Browser API connections SHALL be restricted to the application origin unless an explicitly reviewed external endpoint is required. HSTS SHALL be configured at the public TLS termination layer, not on the internal HTTP hop.
-
-### Requirement: Shipped JavaScript dependency graph has no known high advisories
-The release SHALL NOT ship a frontend dependency graph with known high or critical advisories. Remediation SHALL update the affected locked package to a patched compatible version in every committed Bun lockfile that contains it, without audit exceptions or a lowered audit threshold.
-
-#### Scenario: Advisory in a transitive package
-- **WHEN** `bun audit --audit-level=moderate` reports an advisory for a transitive package in `services/frontend/bun.lock`
-- **THEN** the locked version is raised to the patched release in all Bun lockfiles that pin it
-- **AND** `bun install --frozen-lockfile`, frontend tests and build pass unchanged

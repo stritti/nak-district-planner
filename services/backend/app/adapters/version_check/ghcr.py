@@ -15,12 +15,12 @@ logger = logging.getLogger(__name__)
 
 # SemVer 2.0 core + optional prerelease (``1.0.0-rc.1``), or a PEP 440
 # pre-release suffix (``1.0.0rc1``) as reported by Python package metadata.
-# Build metadata (``+...``) is not a valid Docker tag and therefore rejected.
+# SemVer build metadata / PEP 440 local versions (``+...``) are ignored for precedence.
 SEMVER_PATTERN = re.compile(
     r"^v?(\d+)\.(\d+)\.(\d+)"
     r"(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
     r"(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)"
-    r"|(a|b|rc)(\d+))?$"
+    r"|(a|b|rc)(\d+))?(?:\+[0-9A-Za-z.-]+)?$"
 )
 _PEP440_PRE = {"a": "alpha", "b": "beta", "rc": "rc"}
 
@@ -87,13 +87,13 @@ def latest_semver(tags: Sequence[str], current: str | None = None) -> str | None
 def is_newer(latest: str | None, current: str) -> bool:
     """True only if ``latest`` is strictly newer than ``current`` (never a downgrade).
 
-    An unparseable ``current`` (e.g. a dev build) counts as older than any release.
+    Fails safe: an unparseable ``current`` never gets an update offer.
     """
     new = SemVer.parse(latest) if latest else None
     if new is None:
         return False
     cur = SemVer.parse(current)
-    return cur is None or cur < new
+    return cur is not None and cur < new
 
 
 class GhcrTagFetcher:
