@@ -10,7 +10,7 @@ from sqlalchemy.pool import NullPool
 
 from app.adapters.db.schema_version import SchemaVersionError, assert_database_schema_current
 from app.adapters.db.session import engine
-from app.config import settings
+from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
 
 
@@ -91,12 +91,18 @@ setup_telemetry(sqlalchemy_engine=engine)
 @signals.worker_init.connect
 @signals.beat_init.connect
 def assert_schema_current_on_startup(**_kwargs) -> None:
-    """Refuse to start against a database that is not at the shipped Alembic head.
+    """Refuse to start with an unsafe production config or a stale database schema.
 
     Celery logs and swallows ordinary exceptions from signal handlers, so a
     mismatch is raised as ``SystemExit`` to actually stop the process. A
     throwaway engine keeps pooled connections out of the forked pool workers.
     """
+
+    try:
+        production_guard(settings)
+    except RuntimeError as exc:
+        logging.getLogger(__name__).critical("Unsafe production configuration: %s", exc)
+        raise SystemExit(1) from exc
 
     async def _check() -> None:
         check_engine = create_async_engine(settings.database_url, poolclass=NullPool)

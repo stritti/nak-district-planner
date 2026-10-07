@@ -27,3 +27,13 @@ def test_schema_guard_exits_on_mismatch() -> None:
         with pytest.raises(SystemExit) as excinfo:
             celery_app.assert_schema_current_on_startup()
     assert excinfo.value.code == 1
+
+
+def test_worker_refuses_to_start_on_unsafe_production_config() -> None:
+    """Workers run the same production guard as the API (e.g. owner credentials)."""
+    unsafe = patch.object(celery_app, "production_guard", side_effect=RuntimeError("unsafe"))
+    with unsafe, patch.object(celery_app, "assert_database_schema_current", AsyncMock()) as check:
+        with pytest.raises(SystemExit) as excinfo:
+            celery_app.assert_schema_current_on_startup()
+    assert excinfo.value.code == 1
+    check.assert_not_awaited()
