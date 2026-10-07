@@ -132,7 +132,7 @@ async def world(owner: AsyncEngine) -> AsyncIterator[World]:
     districts = [seeded.a.district_id, seeded.b.district_id]
     async with owner.begin() as conn:
         for statement in (
-            "DELETE FROM audit_logs WHERE user_sub LIKE :p OR extra_metadata->>'claimed_sub' LIKE :p",
+            "DELETE FROM audit_logs WHERE user_sub LIKE :p",
             "DELETE FROM memberships WHERE user_sub LIKE :p",
             "DELETE FROM users WHERE sub LIKE :p",
         ):

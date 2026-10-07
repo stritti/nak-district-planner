@@ -300,7 +300,6 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     "status_code": response.status_code if response else None,
                     "duration_ms": round(duration * 1000, 2),
                     "user_agent": context.user_agent,
-                    **_claimed_identity(request, context),
                 },
             )
 
@@ -440,16 +439,3 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
 def _is_denied(response: Response | None) -> bool:
     return response is not None and response.status_code == HTTP_403_FORBIDDEN
-
-
-def _claimed_identity(request: Request, context: AuditContext) -> dict[str, str]:
-    """Unverified subject of requests rejected before authentication.
-
-    Kept apart from ``user_sub`` because the token was never verified, but it
-    is the only trace of who probed a foreign tenant.
-    """
-    if context.user_sub:
-        return {}
-    tenant_context = getattr(request.state, "tenant_context", None) or {}
-    claimed = tenant_context.get("user_sub")
-    return {"claimed_sub": claimed} if claimed else {}
