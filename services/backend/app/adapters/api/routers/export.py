@@ -37,6 +37,7 @@ from app.domain.models.planning_slot import (
     PlanningSlotStatus,
 )
 from app.domain.models.role import Role
+from app.domain.models.service_assignment import ServiceAssignment
 
 router = APIRouter(prefix="/api/v1")
 
@@ -136,6 +137,11 @@ def _synthesize_datetime(slot: PlanningSlot, default_time: time = time(0, 0, 0))
     return dt
 
 
+def _slot_key(assignment: ServiceAssignment) -> uuid.UUID:
+    """Canonical slot key; ``event_id`` is the legacy compatibility fallback."""
+    return assignment.planning_slot_id or assignment.event_id
+
+
 def _sequence(last_modified: datetime) -> int:
     """Return the iCal SEQUENCE: epoch seconds of the last revision (monotonic)."""
     return int(last_modified.timestamp())
@@ -205,7 +211,7 @@ async def export_calendar_ics(
     # Personal leader feed: only this leader's assignments and their slots
     if export_token.leader_id:
         assignments = [a for a in assignments if a.leader_id == export_token.leader_id]
-        leader_slot_ids = {a.event_id for a in assignments}  # event_id == planning_slot_id
+        leader_slot_ids = {_slot_key(a) for a in assignments}
         all_slots = [s for s in all_slots if s.id in leader_slot_ids]
 
     # Batch-load leaders so leader_id-only assignments can be resolved to a display name
@@ -228,7 +234,7 @@ async def export_calendar_ics(
             display_name = f"{rank_prefix}{ldr.name}"
 
         # For each slot keep the best name (non-None wins over None)
-        slot_key = a.event_id  # event_id is now the planning_slot_id
+        slot_key = _slot_key(a)
         existing = assignment_map.get(slot_key)
         if slot_key not in assignment_map or (display_name is not None and existing is None):
             assignment_map[slot_key] = display_name

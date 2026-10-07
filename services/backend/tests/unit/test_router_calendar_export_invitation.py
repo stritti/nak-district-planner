@@ -1162,3 +1162,26 @@ async def test_export_leader_feed_contains_only_that_leaders_slots() -> None:
 
     [vevent] = _vevents(response.body)
     assert str(mine.id) in vevent
+
+
+@pytest.mark.asyncio
+async def test_export_leader_feed_uses_canonical_planning_slot_key() -> None:
+    """Legacy rows whose event_id differs from planning_slot_id still match (#466)."""
+    district_id = uuid.uuid4()
+    leader_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    legacy = _assignment_stub(slot.id, "Ev. Ich", leader_id=leader_id)
+    legacy.event_id = uuid.uuid4()
+    token = ExportToken.create(
+        label="Leader",
+        token_type=TokenType.INTERNAL,
+        district_id=district_id,
+        congregation_id=None,
+        leader_id=leader_id,
+    )
+
+    response = await _export(token, [slot], assignments=[legacy])
+
+    [vevent] = _vevents(response.body)
+    assert str(slot.id) in vevent
+    assert "Dienstleiter: Ev. Ich" in vevent
