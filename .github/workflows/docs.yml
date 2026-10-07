@@ -43,6 +43,11 @@ jobs:
           restore-keys: |
             docs-bun-${{ runner.os }}-${{ env.BUN_VERSION }}-
 
+      # Baseline specs must stay strictly valid. `validate --all` becomes the
+      # gate once the active changes with open PRs are fixed (see #475/#476).
+      - name: Validate OpenSpec baseline
+        run: npx -y @fission-ai/openspec@1.14.1 validate --specs --strict --no-interactive
+
       - name: Install dependencies
         run: bun install --frozen-lockfile --prefer-offline
 
