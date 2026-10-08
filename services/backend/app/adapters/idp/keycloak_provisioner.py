@@ -80,7 +80,8 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
                 return entry
         return None
 
-    async def _create_user(self, *, token: str, email: str, name: str) -> str:
+    async def _create_user(self, *, token: str, email: str, name: str) -> str | None:
+        """Create a Keycloak user; return its id, or None on 409 (already exists)."""
         users_url = f"{self._base_url}/admin/realms/{self._realm}/users"
         headers = {
             "Authorization": f"Bearer {token}",
@@ -110,10 +111,7 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
             )
 
         if response.status_code == 409:
-            existing = await self._find_user_by_email(token=token, email=email)
-            if existing and isinstance(existing.get("id"), str):
-                return existing["id"]
-            raise IdpProvisioningError("Keycloak returned 409 but user lookup by email failed")
+            return None
 
         location = response.headers.get("Location")
         if location:
@@ -169,22 +167,31 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
         del district_id, registration_id, role, scope_type, scope_id
         token = await self._get_admin_token()
         existing = await self._find_user_by_email(token=token, email=email)
-        created = False
-        if existing is not None:
-            user_id = str(existing["id"])
+        created_id = None
+        if existing is None:
+            created_id = await self._create_user(token=token, email=email, name=name)
+        if existing is None and created_id is None:
+            # 409: the account was created concurrently by someone else.
+            existing = await self._find_user_by_email(token=token, email=email)
+            if existing is None:
+                raise IdpProvisioningError("Keycloak returned 409 but user lookup by email failed")
+
+        if existing is None:
+            user_id = str(created_id)
+            status, bound = "CREATED", user_id
         else:
-            user_id = await self._create_user(token=token, email=email, name=name)
-            created = True
+            user_id = str(existing["id"])
+            # Bind only to accounts whose email Keycloak has verified (#461).
+            # Otherwise whoever registered that address unverified would get
+            # the approved role. The registration then stays unlinked and is
+            # linked on the first login with a verified email claim.
+            if existing.get("emailVerified") is True:
+                status, bound = "EXISTING", user_id
+            else:
+                status, bound = "EXISTING_UNVERIFIED", None
 
         if self._invite_on_approval:
             await self._trigger_invite(token=token, user_id=user_id)
+            status += "_INVITED"
 
-        if created and self._invite_on_approval:
-            status = "CREATED_INVITED"
-        elif created:
-            status = "CREATED"
-        elif self._invite_on_approval:
-            status = "EXISTING_INVITED"
-        else:
-            status = "EXISTING"
-        return IdpProvisionResult(status=status, user_sub=user_id)
+        return IdpProvisionResult(status=status, user_sub=bound)
