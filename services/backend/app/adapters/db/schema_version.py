@@ -37,7 +37,9 @@ async def assert_database_schema_current(
         async with engine.connect() as connection:
             result = await connection.execute(text("SELECT version_num FROM alembic_version"))
             actual = {str(row[0]) for row in result}
-    except SQLAlchemyError as exc:
+    # OSError covers driver-level connection failures (refused, DNS, timeout)
+    # that asyncpg raises without a SQLAlchemy wrapper.
+    except (SQLAlchemyError, OSError) as exc:
         raise SchemaVersionError(
             "Could not read database schema version from alembic_version"
         ) from exc
