@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Prepare Compose environment
-        run: cp .env.example .env
+        run: cp .env.example .env && cp .env.db.example .env.db
 
       - name: Validate Docker Compose configuration
         run: docker compose config --quiet

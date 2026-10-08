@@ -43,19 +43,19 @@ Die Allowlist ist kein Zielzustand und darf fuer neue Features nicht erweitert w
 - Provider-Refresh-Credential ausserhalb JavaScript-persistenter Speicherung: ✅ (PR #442)
 - RBAC/Membership-Guards: ✅
 - PostgreSQL RLS als letzte Tenant-Grenze: ✅
-- Tenant-Autorisierung auf verifiziertem Principal/RBAC statt unverifiziertem JWT-Decode: 🟡 offen, PR #443
+- Tenant-Autorisierung auf verifiziertem Principal/RBAC statt unverifiziertem JWT-Decode: ✅ (PR #443)
 - Owner-controlled Superadmin-Bootstrap: ✅
 - CSRF-Schutz fuer state-changing Browser-Requests: ✅
 - Audit-Logging: ✅
 - Rate-Limiting: ✅
-- Lokaler Fallback-Limiter fuer sensitive Pfade bei Valkey-Ausfall: 🟡 offen, PR #443
+- Lokaler Fallback-Limiter fuer sensitive Pfade bei Valkey-Ausfall: ✅ (PR #443)
 
 ## 4. Deployment und Datenbank
 
 - Getrennte Runtime- und Migration-DB-Rollen: ✅
 - Dedizierter `migrate`-Deployment-Schritt: ✅
-- API-Runtime ohne automatische Schema-Migration: 🟡 offen, PR #441
-- Read-only Schema-Readiness vor Traffic: 🟡 offen, PR #441
+- API-Runtime ohne automatische Schema-Migration: ✅ (PR #441)
+- Read-only Schema-Readiness vor Traffic: ✅ (PR #441)
 - Migration Graph/FK/Offline-SQL/Roundtrip CI: ✅
 - Verschluesselter Backup-/Restore-Drill: ✅
 - PostgreSQL RLS-Integrationstests: ✅
@@ -69,7 +69,7 @@ Die Allowlist ist kein Zielzustand und darf fuer neue Features nicht erweitert w
 - CSP und Produktions-Network-Boundary gehaertet: ✅ (PR #440)
 - Unit-Tests: ✅
 - E2E-Tests: ✅
-- Frontend-Coverage ueber reale Production-Sources mit >80% fuer Statements/Branches/Functions/Lines: 🟡 offen, PR #439
+- Frontend-Coverage ueber reale Production-Sources mit >80% fuer Statements/Branches/Functions/Lines: ✅ (PR #439)
 
 Production-Code darf nicht breit ausgeschlossen werden, um das Coverage-Gate kuenstlich zu erreichen. Bootstrap-only Wiring darf nur mit dokumentierter Begruendung ausserhalb der Messung bleiben; fachliche Startup-Logik gehoert in testbare Module.
 

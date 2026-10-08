@@ -57,9 +57,9 @@ async def list_leaders(
     districts: SqlDistrictRepository = Depends(get_district_repository),
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> list[LeaderResponse]:
+    require_role_in_district(auth, Role.VIEWER, district_id)
     if not await districts.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-    require_role_in_district(auth, Role.VIEWER, district_id)
     leaders = await leaders_repo.list_by_district(district_id)
     return [_leader_response(leader) for leader in leaders]
 
@@ -73,9 +73,9 @@ async def create_leader(
     districts: SqlDistrictRepository = Depends(get_district_repository),
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> LeaderResponse:
+    require_role_in_district(auth, Role.PLANNER, district_id)
     if not await districts.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-    require_role_in_district(auth, Role.PLANNER, district_id)
     leader = Leader.create(
         name=body.name,
         district_id=district_id,
@@ -101,13 +101,13 @@ async def update_leader(
     db: DbSession,
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> LeaderResponse:
+    require_role_in_district(auth, Role.PLANNER, district_id)
     repo = leaders_repo
     leader = await repo.get(leader_id)
     if not leader or leader.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
-    require_role_in_district(auth, Role.PLANNER, district_id)
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
         leader.name = body.name
@@ -219,11 +219,11 @@ async def delete_leader(
     db: DbSession,
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> None:
+    require_role_in_district(auth, Role.PLANNER, district_id)
     repo = leaders_repo
     leader = await repo.get(leader_id)
     if not leader or leader.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
-    require_role_in_district(auth, Role.PLANNER, district_id)
     await repo.delete(leader_id)

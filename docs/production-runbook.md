@@ -4,7 +4,8 @@ Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deploymen
 
 ## 1. Voraussetzungen
 
-- Gueltige Produktionskonfiguration ohne Development-Secrets
+- Gueltige Produktionskonfiguration ohne Development-Secrets: `.env` fuer die Anwendung und `.env.db` mit dem PostgreSQL-Owner-Passwort (nur fuer `db`/`migrate`, siehe `docs/deployment-migrations.md`)
+  - Beim Upgrade einer bestehenden Installation `POSTGRES_PASSWORD` (und ggf. `MIGRATION_DATABASE_URL`) aus `.env` entfernen und nach `.env.db` verschieben. Mit `APP_ENV=production` verweigern API und Worker sonst den Start (`production_guard`).
 - TLS-Termination am Reverse Proxy; der Anwendungseinstieg ist nicht direkt oeffentlich exponiert
 - PostgreSQL und Valkey/Redis nur im internen Netz erreichbar
 - Verschluesselte PostgreSQL-Backups und ein getesteter Restore-Pfad
@@ -49,13 +50,15 @@ Wenn beim Upgrade kein `SUPERADMIN_SUB` gesetzt ist, pinnt die Migration determi
 ## 3. Standard-Deployment
 
 1. Release-Tag bzw. freigegebenen `main`-Stand bereitstellen.
-2. Images reproduzierbar mit den committed Lockfiles bauen.
+2. Images reproduzierbar mit den committed Lockfiles bauen: `docker compose -f docker-compose.yml build`
 3. Vor jeder Schemaaenderung ein Backup erstellen.
 4. Migrationen ueber den dedizierten Deployment-/`migrate`-Schritt ausfuehren:
 
    ```bash
-   docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head
+   docker compose -f docker-compose.yml run --no-deps --rm migrate
    ```
+
+   Der Schritt verwendet das in Schritt 2 gebaute Image (Details in `docs/deployment-migrations.md`).
 
 5. Erst nach erfolgreicher Migration API/Worker aktualisieren:
 
@@ -78,7 +81,7 @@ sieht nur stabile Releases. Ältere Versionen werden nie als Update angezeigt.
 ## 4. Rollback
 
 1. Fehlerbild und betroffene Version dokumentieren.
-2. Auf das letzte stabile Release zurueckrollen.
+2. Auf das letzte stabile Release zurueckrollen. Hat das fehlerhafte Release bereits migriert, startet das aeltere Image nicht (Schema-Guard, fail closed): zuerst Backup einspielen oder mit dem neueren Image `alembic downgrade <revision>` ausfuehren.
 3. Datenbank nur dann zurueckrollen/restaurieren, wenn die Migration nicht vorwaertskompatibel ist und ein validiertes Backup vorliegt.
 4. Health- und Smoke-Tests wiederholen.
 5. Ursache und Folgemassnahmen dokumentieren.
@@ -123,7 +126,7 @@ Mindestens ueberwachen:
 
 ### 6.1 Rate-Limiter-Fallback
 
-Normale Routen koennen bei Valkey-Ausfall gemaess Betriebsstrategie weiterlaufen; sicherheitssensitive Auth-/Registrierungs-/Provisioning-Pfade besitzen einen lokalen Fallback-Limiter. Jeder Fallback muss operational sichtbar sein und als Degradation beobachtet werden.
+Normale Routen koennen bei Valkey-Ausfall gemaess Betriebsstrategie weiterlaufen; der OIDC-Token-Exchange (`POST /api/v1/auth/oidc/token`, 30/min) und die oeffentliche Selbstregistrierung (`POST /api/v1/districts/{id}/registrations`, 10/min) werden waehrend eines Fail-Open durch einen lokalen Fallback-Limiter je Client-Identitaet begrenzt. Dieser Limiter ist **pro Prozess**: Die effektive Grenze betraegt `Limit × Worker-Prozesse × Backend-Replikas`, und der Zaehler beginnt bei jedem Neustart wieder bei null. Er ist eine Notbremse, kein Ersatz fuer den Valkey-Limiter. Jeder Fallback muss operational sichtbar sein und als Degradation beobachtet werden.
 
 Bei einem Fallback-Ereignis:
 
