@@ -12,6 +12,19 @@ class CalendarConnectorError(Exception):
     """Raised when a calendar connector cannot fetch or parse events."""
 
 
+class OccurrenceWriteBackError(CalendarConnectorError):
+    """A single occurrence of a recurring series cannot be written back.
+
+    The series is one provider resource; writing one occurrence would rewrite
+    or delete all of them.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Einzeltermine wiederkehrender Serien können nicht zurückgeschrieben werden"
+        )
+
+
 class CalendarConnector(ABC):
     """Port: fetch events from an external calendar source.
 
@@ -19,7 +32,20 @@ class CalendarConnector(ABC):
     *decrypted* credentials (a plain dict) so it stays framework-free.
     """
 
+    # A complete result lists every event in the queried window, so missing
+    # events were deleted at the source.
     authoritative_snapshot: bool = False
+    # Set by ``fetch_events`` per run: False when part of the source could not
+    # be loaded or parsed. Deletions are then not reconciled for that run.
+    snapshot_complete: bool = True
+    # The provider filters by the queried window and omits whole resources that
+    # moved outside it; an omitted resource is only deleted once
+    # ``resource_exists`` says so.
+    window_bounded_snapshot: bool = False
+
+    async def resource_exists(self, credentials: dict, resource_id: str) -> bool:
+        """Whether a provider resource still exists (window-bounded connectors)."""
+        raise NotImplementedError
 
     async def update_event_times(
         self,
