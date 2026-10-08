@@ -37,14 +37,14 @@ Legende: ✅ umgesetzt · 🟡 teilweise · ❌ offen
 - ExternalEventLink/Sync-Metadata: ✅
 - Gehärtete Sync-State-Machine: ✅ (SyncState: CLEAN/DIRTY_INTERNAL/DIRTY_EXTERNAL/CONFLICT)
 
-## 5. Self-Update (Automatic Version Update)
+## 5. Versionshinweis (Update-Anzeige, keine Ausführung)
 
 - SemVer-Parsing + GHCR-Tag-Abfrage: ✅
 - In-Memory-Versionscache mit TTL: ✅
 - Periodischer Celery-Task `check_version` (alle 6h): ✅
 - `GET /api/v1/system/version` mit RBAC (admin): ✅
-- `POST /api/v1/system/update` im `manual`-Modus: ✅
-- `POST /api/v1/system/update` im `docker-socket`-Modus: ✅
+- SemVer-Vergleich inkl. Prereleases / PEP-440-Normalisierung, `update_available` im Version-Endpoint: ✅
+- In-App-Update-Ausführung (`POST /api/v1/system/update`, Docker-Socket-Modus): ❌ entfernt (#469) — Updates nur per Runbook
 - Update-Frontend-Banner mit Dismiss-Logik: ✅
 - Release-Notes-Link: ✅
 

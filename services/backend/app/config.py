@@ -94,11 +94,9 @@ class Settings(BaseSettings):
     # inside them are unwrapped and the embedded IPv4 is checked (SSRF, #463).
     calendar_nat64_prefixes: str = ""
 
-    # Version check & self-update
+    # Version check (display only — the app never executes updates, see #469)
     ghcr_owner: str = "stritti"
     ghcr_repo: str = "nak-district-planner"
-    update_mode: str = "manual"
-    docker_compose_dir: str = ""
 
     @field_validator("calendar_nat64_prefixes")
     @classmethod

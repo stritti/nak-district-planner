@@ -56,3 +56,7 @@
 - [x] 7.5 Unit tests for `/api/v1/system/update` in both modes *(Update-Endpoint-Tests)*
 - [x] 7.6 Unit tests for Celery task `trigger_docker_update` (mocked subprocess) *(`tests/unit/test_tasks_more.py`)*
 - [x] 7.7 Unit tests for frontend `UpdateBanner.vue` component (visible/hidden for admin/non-admin, dismiss, version comparison) *(`src/components/__tests__/UpdateBanner.test.ts` + `src/stores/version.test.ts`)*
+
+## 8. Superseded (#469)
+
+- [x] 8.1 Update execution removed (section 3, task 4.3, 6.1/6.2 `UPDATE_MODE`/`DOCKER_COMPOSE_DIR`, tests 7.5/7.6): see change `remove-inapp-update-execution`. The app only displays available updates; operators update per `docs/production-runbook.md`.
