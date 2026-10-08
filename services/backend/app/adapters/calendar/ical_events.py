@@ -113,7 +113,11 @@ _OPEN_END = "X-NAK-OPEN-END"
 def _raw_event(component, key: str, tz: ZoneInfo, **extra) -> RawCalendarEvent:
     start_at = to_utc(component["DTSTART"], tz)
     if component.get(_OPEN_END):
-        end_at = start_at + timedelta(days=1)  # legacy default for events without an end
+        # Legacy default: one calendar day, counted in the event's zone so a DST
+        # day (23/25 h) still ends at the next local midnight.
+        dtstart = component["DTSTART"].dt
+        zone = dtstart.tzinfo if isinstance(dtstart, datetime) and dtstart.tzinfo else tz
+        end_at = (start_at.astimezone(zone) + timedelta(days=1)).astimezone(UTC)
     elif "DTEND" in component:
         end_at = to_utc(component["DTEND"], tz)
     elif "DURATION" in component:
@@ -171,10 +175,11 @@ def expand_events(
     tz = _local_zone()
     start = from_dt or _UNBOUNDED_START
     end = to_dt or (from_dt or datetime.now(UTC)) + _UNBOUNDED_SPAN
-    # A VEVENT without UID can never have been linked and is ignored. One that
-    # is broken or lacks DTSTART is dropped and makes the snapshot incomplete.
-    vevents = [c for c in calendar.subcomponents if c.name == "VEVENT" and c.get("UID")]
-    usable = [c for c in vevents if _usable(c)]
+    # A VEVENT without UID, broken or without DTSTART is dropped and makes the
+    # snapshot incomplete: a linked event that arrives without its UID once must
+    # not be reconciled as deleted.
+    vevents = [c for c in calendar.subcomponents if c.name == "VEVENT"]
+    usable = [c for c in vevents if c.get("UID") and _usable(c)]
     complete = len(usable) == len(vevents)
     calendar.subcomponents = [c for c in calendar.subcomponents if c.name != "VEVENT"] + usable
     for component in usable:

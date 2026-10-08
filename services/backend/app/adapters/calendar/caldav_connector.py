@@ -40,6 +40,7 @@ class CalDAVConnector(CalendarConnector):
     """Adapter for CalDAV servers."""
 
     authoritative_snapshot = True
+    window_bounded_snapshot = True
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client or httpx.AsyncClient(timeout=30.0)
@@ -262,6 +263,32 @@ class CalDAVConnector(CalendarConnector):
             self._client, url, headers=headers,
             auth=(credentials["username"], credentials["password"]) if "username" in credentials else None,
         )
+
+    async def resource_exists(self, credentials: dict, resource_id: str) -> bool:
+        """GET the resource href; 404/410 means deleted, other failures raise."""
+        if "url" not in credentials:
+            raise CalendarConnectorError("CalDAV Basis-URL fehlt in den Credentials")
+        base = credentials["url"].rstrip("/") + "/"
+        url = urljoin(base, resource_id)
+        source, target = urlsplit(base), urlsplit(url)
+        if (source.scheme, source.netloc) != (target.scheme, target.netloc) or not target.path.startswith(source.path):
+            raise CalendarConnectorError("CalDAV resource liegt außerhalb des Kalenders")
+        headers = {}
+        if "access_token" in credentials:
+            headers["Authorization"] = f"Bearer {credentials['access_token']}"
+        auth = (
+            (credentials["username"], credentials["password"])
+            if "username" in credentials and "password" in credentials
+            else None
+        )
+        try:
+            response = await self._client.get(url, headers=headers, auth=auth)
+            if response.status_code in (404, 410):
+                return False
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CalendarConnectorError("CalDAV Ressource konnte nicht geprüft werden") from exc
+        return True
 
     def _format_datetime(self, dt: datetime | None) -> str:
         """Format datetime for CalDAV time-range format."""

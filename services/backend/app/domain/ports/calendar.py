@@ -38,6 +38,14 @@ class CalendarConnector(ABC):
     # Set by ``fetch_events`` per run: False when part of the source could not
     # be loaded or parsed. Deletions are then not reconciled for that run.
     snapshot_complete: bool = True
+    # The provider filters by the queried window and omits whole resources that
+    # moved outside it; an omitted resource is only deleted once
+    # ``resource_exists`` says so.
+    window_bounded_snapshot: bool = False
+
+    async def resource_exists(self, credentials: dict, resource_id: str) -> bool:
+        """Whether a provider resource still exists (window-bounded connectors)."""
+        raise NotImplementedError
 
     async def update_event_times(
         self,

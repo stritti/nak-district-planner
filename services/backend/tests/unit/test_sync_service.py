@@ -126,6 +126,7 @@ def mocks():
     connector = MagicMock()
     connector.fetch_events = AsyncMock(return_value=[])
     connector.authoritative_snapshot = False
+    connector.window_bounded_snapshot = False  # full-feed semantics like ICS
     patchers = [
         patch("app.application.sync_service.SqlExternalEventLinkRepository", return_value=link_repo),
         patch("app.application.sync_service.SqlEventInstanceRepository", return_value=instance_repo),
@@ -690,13 +691,19 @@ class TestSyncWindow:
 
 class TestAuthoritativeConnectors:
     @pytest.mark.parametrize(
-        "calendar_type",
-        [CalendarType.ICS, CalendarType.CALDAV, CalendarType.MICROSOFT],
+        ("calendar_type", "authoritative", "bounded"),
+        [
+            (CalendarType.ICS, True, False),
+            (CalendarType.CALDAV, True, True),
+            (CalendarType.MICROSOFT, False, False),
+        ],
     )
-    def test_bounded_window_connectors_are_authoritative(self, calendar_type):
+    def test_snapshot_semantics_per_connector(self, calendar_type, authoritative, bounded):
         from app.application.sync_service import _CONNECTOR_MAP
 
-        assert _CONNECTOR_MAP[calendar_type].authoritative_snapshot is True
+        connector = _CONNECTOR_MAP[calendar_type]
+        assert connector.authoritative_snapshot is authoritative
+        assert connector.window_bounded_snapshot is bounded
 
 
 class TestCodexReviewFindings:
@@ -860,6 +867,62 @@ class TestCodexReviewFindingsRound2:
         mocks["connector"].fetch_events.return_value = [replace(raw, title="Wieder da")]
         await run_sync(_INT_ID, mocks["session"], now=_NOW)
         assert slot.status == PlanningSlotStatus.CANCELLED
+
+
+class TestWindowBoundedProvider:
+    """CalDAV omits resources moved outside the window; only a confirmed 404 deletes."""
+
+    def _setup(self, mocks, *, resource_id="/cal/gd.ics"):
+        slot = _make_slot()
+        start = _NOW + timedelta(days=30)
+        instance = _make_event_instance(
+            planning_slot_id=slot.id, actual_start_at=start, actual_end_at=start + timedelta(hours=1)
+        )
+        link = _make_link(event_instance_id=instance.id)
+        link.provider_resource_id = resource_id
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].authoritative_snapshot = True
+        mocks["connector"].window_bounded_snapshot = True
+        mocks["connector"].resource_exists = AsyncMock(return_value=True)
+        mocks["link_repo"].list_active_by_integration.return_value = [link]
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+        return slot
+
+    async def test_resource_moved_outside_window_is_not_cancelled(self, mocks):
+        slot = self._setup(mocks)
+        result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert (result.cancelled, slot.status) == (0, PlanningSlotStatus.ACTIVE)
+        mocks["connector"].resource_exists.assert_awaited_once()
+
+    async def test_deleted_resource_is_cancelled(self, mocks):
+        slot = self._setup(mocks)
+        mocks["connector"].resource_exists.return_value = False
+        result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert (result.cancelled, slot.status) == (1, PlanningSlotStatus.CANCELLED)
+
+    @pytest.mark.parametrize("failure", ["error", "no_href"])
+    async def test_unconfirmed_absence_never_deletes(self, mocks, failure):
+        from app.domain.ports.calendar import CalendarConnectorError
+
+        slot = self._setup(mocks, resource_id=None if failure == "no_href" else "/cal/gd.ics")
+        mocks["connector"].resource_exists.side_effect = CalendarConnectorError("down")
+        result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert (result.cancelled, slot.status) == (0, PlanningSlotStatus.ACTIVE)
+
+    async def test_missing_occurrence_of_returned_resource_is_cancelled_without_check(self, mocks):
+        from dataclasses import replace
+
+        slot = self._setup(mocks)
+        sibling = replace(_occurrence("20260601T090000Z"), resource_id="/cal/gd.ics")
+        mocks["connector"].fetch_events.return_value = [sibling]
+        mocks["link_repo"].get_by_external_event.return_value = None
+        with patch(
+            "app.application.sync_service.import_candidate_or_match", AsyncMock(return_value=False)
+        ):
+            result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert (result.cancelled, slot.status) == (1, PlanningSlotStatus.CANCELLED)
+        mocks["connector"].resource_exists.assert_not_awaited()
 
 
 async def test_incomplete_snapshot_skips_deletion_reconciliation(mocks):

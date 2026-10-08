@@ -12,10 +12,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector
 from app.adapters.calendar.ical_connector import ICalConnector
+from app.domain.ports.calendar import CalendarConnectorError
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "ics"
 SERIES = "gd-sonntag-0001@gemeinde-mitte.example"
@@ -372,3 +374,50 @@ async def test_events_without_end_default_to_one_day():
     )
     events = await _fetch_body(body)
     assert [event.end_at - event.start_at for event in events] == [timedelta(days=1)] * 2
+
+
+# ── Codex review of PR #483 (20a3887d) ───────────────────────────────────────
+
+
+async def test_open_ended_all_day_event_ends_at_next_local_midnight_on_dst_day():
+    body = _feed(
+        "BEGIN:VEVENT\r\nUID:dst@example\r\nSUMMARY:Zeitumstellung\r\n"
+        "DTSTART;VALUE=DATE:20260329\r\nEND:VEVENT"
+    )
+    (event,) = await _fetch_body(body)
+    # Europe/Berlin: 2026-03-29 has 23 hours (CET -> CEST)
+    assert event.start_at == datetime(2026, 3, 28, 23, tzinfo=UTC)
+    assert event.end_at == datetime(2026, 3, 29, 22, tzinfo=UTC)
+
+
+async def test_vevent_without_uid_makes_the_snapshot_incomplete():
+    body = _feed(
+        "BEGIN:VEVENT\r\nUID:ok@example\r\nSUMMARY:Ok\r\nDTSTART:20260310T090000Z\r\n"
+        "DTEND:20260310T100000Z\r\nEND:VEVENT",
+        "BEGIN:VEVENT\r\nSUMMARY:Ohne UID\r\nDTSTART:20260311T090000Z\r\n"
+        "DTEND:20260311T100000Z\r\nEND:VEVENT",
+    )
+    connector = ICalConnector(client=_client(body))
+    events = await connector.fetch_events({"url": "https://example.com/cal.ics"}, **WINDOW)
+    assert [event.uid for event in events] == ["ok@example"]
+    assert connector.snapshot_complete is False
+
+
+@pytest.mark.parametrize(("status", "exists"), [(200, True), (404, False), (410, False)])
+async def test_caldav_resource_exists_by_href(status, exists):
+    url = "https://dav.example.com/calendars/gemeinde/gd.ics"
+    client = AsyncMock(get=AsyncMock(return_value=httpx.Response(status, request=httpx.Request("GET", url))))
+    connector = CalDAVConnector(client=client)
+
+    assert await connector.resource_exists(CALDAV_CREDS, "/calendars/gemeinde/gd.ics") is exists
+    assert client.get.await_args.args[0] == url
+
+
+async def test_caldav_resource_check_fails_closed():
+    url = "https://dav.example.com/calendars/gemeinde/gd.ics"
+    client = AsyncMock(get=AsyncMock(return_value=httpx.Response(500, request=httpx.Request("GET", url))))
+    connector = CalDAVConnector(client=client)
+    with pytest.raises(CalendarConnectorError):
+        await connector.resource_exists(CALDAV_CREDS, "/calendars/gemeinde/gd.ics")
+    with pytest.raises(CalendarConnectorError, match="außerhalb"):
+        await connector.resource_exists(CALDAV_CREDS, "https://evil.example/x.ics")

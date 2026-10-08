@@ -424,8 +424,33 @@ async def _find_link(context: SyncContext, raw: RawCalendarEvent) -> ExternalEve
     return legacy
 
 
+async def _gone_at_provider(
+    context: SyncContext, link: ExternalEventLink, seen_resources: set[str]
+) -> bool:
+    """Whether a link missing from a window-bounded result was really deleted.
+
+    A returned resource was expanded completely, so a missing occurrence of it
+    is authoritative. A resource missing as a whole may have moved outside the
+    window: only a confirmed 404/410 counts; no href or an error never deletes.
+    """
+    resource_id = link.provider_resource_id
+    if resource_id in seen_resources:
+        return True
+    if not resource_id:
+        return False
+    try:
+        return not await context.connector.resource_exists(context.credentials, resource_id)
+    except CalendarConnectorError:
+        logger.warning("Calendar presence check failed; deletion skipped")
+        return False
+
+
 async def _reconcile_missing_provider_events(
-    *, context: SyncContext, seen_uids: set[str], window: tuple[datetime, datetime]
+    *,
+    context: SyncContext,
+    seen_uids: set[str],
+    seen_resources: set[str],
+    window: tuple[datetime, datetime],
 ) -> Counter[SyncOutcome]:
     """Reconcile links absent from a complete authoritative provider window.
 
@@ -444,6 +469,10 @@ async def _reconcile_missing_provider_events(
             # starting at the end is not part of the response (RFC 4791 9.9).
             or instance.actual_end_at <= window_start
             or instance.actual_start_at >= window_end
+        ):
+            continue
+        if context.connector.window_bounded_snapshot and not await _gone_at_provider(
+            context, link, seen_resources
         ):
             continue
         slot = await context.slot_repo.get(instance.planning_slot_id)
@@ -670,7 +699,10 @@ async def run_sync(
         elif connector.authoritative_snapshot:
             counters.update(
                 await _reconcile_missing_provider_events(
-                    context=context, seen_uids=seen_uids, window=window,
+                    context=context,
+                    seen_uids=seen_uids,
+                    seen_resources={raw.resource_id for raw in raw_events if raw.resource_id},
+                    window=window,
                 )
             )
         integration.last_synced_at = datetime.now(UTC)

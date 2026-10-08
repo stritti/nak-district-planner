@@ -43,3 +43,9 @@
 - [x] 7.1 Half-open window bounds for deletion reconciliation (`<=`/`>=`)
 - [x] 7.2 Last sync error keeps the incomplete-snapshot note when events also failed
 - [x] 7.3 Provider STATUS:CANCELLED replaces the snapshot-gap marker
+
+## 8. Review hardening (20a3887d)
+
+- [x] 8.1 CalDAV: confirm a missing resource via GET on its href before cancelling; Microsoft no longer authoritative
+- [x] 8.2 VEVENT without UID makes the snapshot incomplete
+- [x] 8.3 Open-ended events end one calendar day later in the event's time zone (DST-safe)

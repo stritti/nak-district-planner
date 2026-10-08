@@ -28,8 +28,9 @@ one occurrence flip the hash of the whole series on every run, times shift by
   is budgeted and in-window occurrences are capped (`SYNC_MAX_OCCURRENCES`, 5000).
 - ICS events outside the window are reported as presence-only, so an event the
   provider moved out of the window is updated instead of cancelled. CalDAV filters
-  server-side and cannot report them; there, an event moved beyond the window
-  boundaries (>24 months ahead, >62 days back) is still reconciled as missing.
+  server-side; a linked resource missing from its result is only cancelled after a
+  GET on its href confirms 404/410 (moved resources stay, errors never delete).
+  Microsoft Graph has no such check and is not reconciled for deletions.
 - A slot cancelled only because its event was missing from a snapshot is marked
   on the link (`deletion_reason`) and reactivated when the event reappears;
   manual and provider (STATUS:CANCELLED) cancellations are never undone.

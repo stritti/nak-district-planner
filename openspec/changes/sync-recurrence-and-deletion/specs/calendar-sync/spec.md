@@ -62,7 +62,7 @@ An event without DTEND and DURATION SHALL last one day; an explicit zero-length 
 
 #### Scenario: Open-ended event
 - **WHEN** a VEVENT has neither DTEND nor DURATION
-- **THEN** each of its occurrences ends one day after it starts
+- **THEN** each of its occurrences ends one calendar day after it starts, counted in the event's time zone (an all-day event on a DST change day ends at the next local midnight)
 
 #### Scenario: Explicit zero length
 - **WHEN** a VEVENT has DTEND equal to DTSTART or DURATION:PT0S
@@ -94,7 +94,7 @@ Floating date-times and all-day dates SHALL be interpreted in `SYNC_DEFAULT_TIME
 ICS and CalDAV results SHALL be treated as authoritative snapshots: a linked event missing from the result SHALL be cancelled according to the integration's `delete_behavior` only when its instance lies inside the queried window. The window is half-open like the provider query: an instance ending exactly at the window start or starting exactly at the window end is outside.
 
 #### Scenario: Incomplete snapshot
-- **WHEN** a CalDAV resource in the window has missing, empty or unparseable calendar data, or an ICS feed contains an unparseable VEVENT
+- **WHEN** a CalDAV resource in the window has missing, empty or unparseable calendar data, or an ICS feed contains an unparseable VEVENT or a VEVENT without UID
 - **THEN** the remaining events are processed, no deletion reconciliation runs for that sync, a warning without provider identifiers is logged and the integration's last sync error states that reconciliation was skipped, also when individual events failed in the same sync
 
 #### Scenario: Removed feed event
@@ -112,6 +112,11 @@ ICS and CalDAV results SHALL be treated as authoritative snapshots: a linked eve
 #### Scenario: Event moved outside the window
 - **WHEN** a linked single event or override is moved by the provider to a time outside the window
 - **THEN** the ICS connector reports it as present outside the window, the linked instance is updated and the slot is not cancelled
+
+#### Scenario: CalDAV resource missing from the window result
+- **WHEN** a linked CalDAV resource is absent from the time-range result
+- **THEN** the slot is cancelled only if a GET on the stored resource href returns 404 or 410; if the resource still exists, has no stored href or the check fails, nothing is cancelled
+- **AND** a missing occurrence of a resource that was returned is reconciled without a check
 
 #### Scenario: Event restored after a snapshot gap
 - **WHEN** a slot was cancelled because its event was missing from a snapshot and the event reappears uncancelled
