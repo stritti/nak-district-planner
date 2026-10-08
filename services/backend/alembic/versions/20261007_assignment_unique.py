@@ -20,7 +20,7 @@ without planning_slot_id (unresolvable legacy rows) stay outside it because
 NULLs are distinct.
 
 Revision ID: 20261007_assignment_unique
-Revises: 20261001_slot_gaps
+Revises: 20261007_celery_tables
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261007_assignment_unique"
-down_revision = "20261001_slot_gaps"
+down_revision = "20261007_celery_tables"
 branch_labels = None
 depends_on = None
 
