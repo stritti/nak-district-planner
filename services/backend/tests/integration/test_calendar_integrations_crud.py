@@ -187,6 +187,9 @@ UNSAFE_URLS = [
     "https://[fd00::1]/feed.ics",
     "https://[::ffff:10.0.0.1]/feed.ics",
     "https://localhost/feed.ics",
+    "https://localhost./feed.ics",
+    "https://foo.localhost./feed.ics",
+    "https://LOCALHOST./feed.ics",
     "https://user:pw@calendar.example.com/feed.ics",  # ggignore - fake test credentials
     "file:///etc/passwd",
 ]

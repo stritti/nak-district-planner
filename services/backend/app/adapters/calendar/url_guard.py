@@ -93,8 +93,11 @@ def _check_url(url: httpx.URL, allow_insecure: bool) -> None:
         )
     if allow_insecure:
         return
-    literal = _ip_literal(url.host)
-    if url.host == "localhost" or url.host.endswith(".localhost") or (
+    # httpx already lowercases and IDNA-encodes the host; strip trailing dots
+    # so "localhost." (FQDN form) cannot bypass the name check.
+    host = url.host.lower().rstrip(".")
+    literal = _ip_literal(host)
+    if host == "localhost" or host.endswith(".localhost") or (
         literal is not None and not _is_public(literal)
     ):
         raise UnsafeCalendarUrlError("Kalender-URL zeigt auf ein nicht erlaubtes Netz")
