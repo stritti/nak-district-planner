@@ -70,8 +70,6 @@ interface Props {
   compact?: boolean
 }
 
-const props = defineProps<Props>()
-
 const {
   hasDeviation = false,
   plannedTime = '',
@@ -79,7 +77,7 @@ const {
   startDiffMinutes = null,
   endDiffMinutes = null,
   compact = false,
-} = props
+} = defineProps<Props>()
 </script>
 
 <style scoped>

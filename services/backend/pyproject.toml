@@ -57,6 +57,14 @@ testpaths = ["tests"]
 markers = [
     "postgres: requires a migrated PostgreSQL database (see tests/integration/test_rls_postgres.py)",
 ]
+# Un-awaited coroutines hide real bugs (lost writes, skipped side effects) and
+# usually mean a mock is not modelled as awaitable.  Fail the run instead of
+# warning (#435).  The warning is emitted during garbage collection, so pytest
+# reports it via its unraisable-exception hook -> also escalate that.
+filterwarnings = [
+    "error:coroutine .* was never awaited:RuntimeWarning",
+    "error:(?s).*coroutine .* was never awaited:pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.ruff]
 line-length = 100
