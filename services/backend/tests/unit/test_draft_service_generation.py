@@ -39,6 +39,9 @@ class InMemoryCongregationRepo:
 class InMemoryPlanningSlotRepo(PlanningSlotRepository):
     def __init__(self) -> None:
         self._slots: dict[uuid.UUID, PlanningSlot] = {}
+        # Tenant of each slot as last persisted, to mirror the SQL repository's save().
+        self._stored: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID | None]] = {}
+        self.locked_districts: list[uuid.UUID] = []
 
     async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None:
         return self._slots.get(slot_id)
@@ -94,7 +97,16 @@ class InMemoryPlanningSlotRepo(PlanningSlotRepository):
         self._slots.pop(slot_id, None)
 
     async def save(self, slot: PlanningSlot) -> None:
+        stored = self._stored.get(slot.id)
+        if stored is not None:
+            slot.forget_generation_key_if_reassigned(
+                district_id=stored[0], congregation_id=stored[1]
+            )
+        self._stored[slot.id] = (slot.district_id, slot.congregation_id)
         self._slots[slot.id] = slot
+
+    async def lock_district_for_generation(self, district_id: uuid.UUID) -> None:
+        self.locked_districts.append(district_id)
 
     async def add_if_absent(self, slot: PlanningSlot) -> bool:
         """Mirror the two partial unique indexes of planning_slots."""
@@ -113,6 +125,7 @@ class InMemoryPlanningSlotRepo(PlanningSlotRepository):
             if same_key or same_active_time:
                 return False
         self._slots[slot.id] = slot
+        self._stored[slot.id] = (slot.district_id, slot.congregation_id)
         return True
 
 
@@ -504,6 +517,8 @@ async def test_legacy_slot_without_key_is_adopted_and_backfilled() -> None:
     first = await use_case.run_for_window(**ONE_WEEK)
 
     assert (first["created"], first["adopted_existing"]) == (0, 1)
+    # Adopted is a sub-category of "already existed": skipped keeps its meaning.
+    assert first["skipped_existing"] == 1
     assert legacy.generation_key == draft_service_generation_key(congregation.id, date(2026, 4, 1))
     # Converged: once moved, the backfilled legacy slot is still recognised.
     legacy.planning_time = time(17, 30)
@@ -533,6 +548,7 @@ async def test_cancelled_legacy_slot_is_adopted_not_resurrected() -> None:
 
     assert result["created"] == 0
     assert result["adopted_existing"] == 1
+    assert result["skipped_existing"] == 1
     assert len(slot_repo._slots) == 1
 
 
@@ -566,3 +582,55 @@ async def test_insert_rejected_by_unique_rule_is_skipped_without_instance() -> N
     assert result["skipped_existing"] == 1
     assert len(slot_repo._slots) == 1
     assert instance_repo._instances == {}
+
+
+async def test_slot_reassigned_to_other_congregation_loses_key_and_is_regenerated() -> None:
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    other = _make_congregation(district.id, service_times=[])
+    slot_repo = InMemoryPlanningSlotRepo()
+    use_case = _use_case(district, congregation, slot_repo, InMemoryEventInstanceRepo())
+    await use_case.run_for_window(**ONE_WEEK)
+    (moved,) = slot_repo._slots.values()
+
+    moved.congregation_id = other.id  # planner reassigns via PATCH
+    await slot_repo.save(moved)
+    second = await use_case.run_for_window(**ONE_WEEK)
+
+    assert moved.generation_key is None
+    assert second["created"] == 1
+    (regenerated,) = (s for s in slot_repo._slots.values() if s.congregation_id == congregation.id)
+    assert regenerated.generation_key == draft_service_generation_key(
+        congregation.id, date(2026, 4, 1)
+    )
+
+
+def test_forget_generation_key_only_when_tenant_changes() -> None:
+    district_id, congregation_id = uuid.uuid4(), uuid.uuid4()
+    slot = PlanningSlot.create(
+        district_id=district_id,
+        congregation_id=congregation_id,
+        planning_date=date(2026, 4, 1),
+        planning_time=time(18, 0),
+        generation_key="draft-service:x:2026-04-01",
+    )
+
+    slot.forget_generation_key_if_reassigned(
+        district_id=district_id, congregation_id=congregation_id
+    )
+    assert slot.generation_key == "draft-service:x:2026-04-01"
+
+    slot.forget_generation_key_if_reassigned(district_id=district_id, congregation_id=None)
+    assert slot.generation_key is None
+
+
+async def test_generation_locks_each_district_before_writing() -> None:
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+
+    await _use_case(district, congregation, slot_repo, InMemoryEventInstanceRepo()).run_for_window(
+        **ONE_WEEK
+    )
+
+    assert slot_repo.locked_districts == [district.id]

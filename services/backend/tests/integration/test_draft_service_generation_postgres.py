@@ -197,3 +197,118 @@ async def test_duplicate_generation_key_insert_is_skipped_idempotently(sessions)
         await _run_as_system_worker(scenario())
     finally:
         await _run_as_system_worker(cleanup())
+
+
+async def _seed_district(sessions, district_id: uuid.UUID, congregation_ids: list[uuid.UUID]):
+    now = datetime.now(UTC)
+    async with sessions() as db:
+        await db.execute(
+            text(
+                "INSERT INTO districts (id, name, created_at, updated_at) VALUES (:d, 'B', :n, :n)"
+            ),
+            {"d": district_id, "n": now},
+        )
+        for number, congregation_id in enumerate(congregation_ids):
+            await db.execute(
+                text(
+                    "INSERT INTO congregations (id, name, district_id, service_times, created_at, "
+                    "updated_at) VALUES (:c, :name, :d, CAST(:st AS json), :n, :n)"
+                ),
+                {
+                    "c": congregation_id,
+                    "name": f"Gemeinde {number}",
+                    "d": district_id,
+                    "st": json.dumps([{"weekday": 2, "time": "20:00"}]),
+                    "n": now,
+                },
+            )
+        await db.commit()
+
+
+async def _cleanup_district(sessions, district_id: uuid.UUID) -> None:
+    async with sessions() as db:
+        for sql in (
+            "DELETE FROM event_instances WHERE planning_slot_id IN "
+            "(SELECT id FROM planning_slots WHERE district_id = :d)",
+            "DELETE FROM planning_slots WHERE district_id = :d",
+            "DELETE FROM congregations WHERE district_id = :d",
+            "DELETE FROM districts WHERE id = :d",
+        ):
+            await db.execute(text(sql), {"d": district_id})
+        await db.commit()
+
+
+async def test_reassigned_slot_loses_key_and_original_draft_is_regenerated(sessions) -> None:
+    district_id = uuid.uuid4()
+    original, other = uuid.uuid4(), uuid.uuid4()
+
+    async def scenario() -> None:
+        await _seed_district(sessions, district_id, [original, other])
+        await _generate(sessions, district_id)
+        key = draft_service_generation_key(original, date(2030, 3, 6))
+
+        async with sessions() as db:
+            repo = SqlPlanningSlotRepository(db)
+            (slot,) = await repo.list_by_generation_keys(
+                district_id=district_id, generation_keys=[key]
+            )
+            slot.congregation_id = other  # what PATCH /events/{id} does
+            slot.planning_time = time(9, 0)  # keep clear of the other congregation's draft
+            await repo.save(slot)
+            await db.commit()
+            moved_id = slot.id
+
+        second = await _generate(sessions, district_id)
+
+        assert second["created"] == 1
+        async with sessions() as db:
+            moved = await SqlPlanningSlotRepository(db).get(moved_id)
+            (regenerated,) = await SqlPlanningSlotRepository(db).list_by_generation_keys(
+                district_id=district_id, generation_keys=[key]
+            )
+        assert moved is not None and moved.generation_key is None
+        assert regenerated.congregation_id == original
+        assert regenerated.id != moved_id
+
+    try:
+        await _run_as_system_worker(scenario())
+    finally:
+        await _run_as_system_worker(_cleanup_district(sessions, district_id))
+
+
+class _ReversedCongregations(SqlCongregationRepository):
+    async def list_by_district(self, district_id, group_id=None):
+        return list(reversed(await super().list_by_district(district_id, group_id)))
+
+
+async def test_concurrent_runs_in_opposite_order_do_not_deadlock(sessions) -> None:
+    district_id = uuid.uuid4()
+    congregation_ids = [uuid.uuid4() for _ in range(4)]
+
+    async def run(congregation_repo_cls) -> dict[str, int]:
+        async with sessions() as db:
+            result = await GenerateDraftServicesUseCase(
+                district_repo=SqlDistrictRepository(db),
+                congregation_repo=congregation_repo_cls(db),
+                slot_repo=SqlPlanningSlotRepository(db),
+                instance_repo=SqlEventInstanceRepository(db),
+            ).run_for_window(**WINDOW, district_ids={district_id})
+            await asyncio.sleep(0.2)  # keep the transaction open across the race
+            await db.commit()
+            return result
+
+    async def scenario() -> None:
+        await _seed_district(sessions, district_id, congregation_ids)
+        results = await asyncio.gather(run(SqlCongregationRepository), run(_ReversedCongregations))
+        assert sum(r["created"] for r in results) == 8  # 4 congregations x 2 Wednesdays
+        async with sessions() as db:
+            count = await db.execute(
+                text("SELECT count(*) FROM planning_slots WHERE district_id = :d"),
+                {"d": district_id},
+            )
+            assert count.scalar_one() == 8
+
+    try:
+        await _run_as_system_worker(scenario())
+    finally:
+        await _run_as_system_worker(_cleanup_district(sessions, district_id))

@@ -8,11 +8,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.repositories import PlanningSlotRepository
 
 _UNIQUE_VIOLATION = "23505"
+# Namespaces the per-district generator lock apart from other advisory locks
+# that are keyed by plain entity UUIDs.
+_GENERATION_LOCK_NAMESPACE = uuid.UUID("5d0c2f4e-4b8a-4c63-9a57-2b1f0e8d4c11")
 
 
 def _sqlstate(exc: IntegrityError) -> str | None:
@@ -115,11 +119,20 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
 
     async def save(self, slot: PlanningSlot) -> None:
         existing = await self._session.get(PlanningSlotORM, slot.id)
+        if existing is not None:
+            slot.forget_generation_key_if_reassigned(
+                district_id=existing.district_id, congregation_id=existing.congregation_id
+            )
         row = existing or PlanningSlotORM()
         self._apply(row, slot)
         if existing is None:
             self._session.add(row)
         await self._session.flush()
+
+    async def lock_district_for_generation(self, district_id: uuid.UUID) -> None:
+        await acquire_advisory_xact_lock(
+            self._session, uuid.uuid5(_GENERATION_LOCK_NAMESPACE, str(district_id))
+        )
 
     async def add_if_absent(self, slot: PlanningSlot) -> bool:
         """Insert inside a SAVEPOINT; a unique violation only rolls back the savepoint.

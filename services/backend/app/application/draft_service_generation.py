@@ -140,6 +140,8 @@ class GenerateDraftServicesUseCase:
         districts = await self._district_repo.list_all()
         if district_ids is not None:
             districts = [district for district in districts if district.id in district_ids]
+        # Fixed lock order: two runs over several districts cannot deadlock.
+        districts.sort(key=lambda district: district.id)
         created = 0
         skipped_existing = 0
         adopted_existing = 0
@@ -147,6 +149,9 @@ class GenerateDraftServicesUseCase:
         congregations_seen = 0
 
         for district in districts:
+            # Serializes concurrent runs (nightly task, manual trigger) per district
+            # until commit, so they never race on the unique indexes.
+            await self._slot_repo.lock_district_for_generation(district.id)
             congregations = await self._congregation_repo.list_by_district(district.id)
             for congregation in congregations:
                 congregations_seen += 1
@@ -200,7 +205,8 @@ class GenerateDraftServicesUseCase:
         1. A slot carries its generation key — whatever its date, time or status
            (moved or CANCELLED by a planner).
         2. Legacy slot without key at the generated date/time (data from before
-           the key existed): adopted and backfilled with the key.
+           the key existed): adopted and backfilled with the key. Counted in
+           ``adopted_existing`` and, as a sub-category, in ``skipped_existing``.
         3. The insert hits a unique index (concurrent run, or another ACTIVE
            slot already occupies that date/time).
         """
@@ -238,6 +244,7 @@ class GenerateDraftServicesUseCase:
                 legacy.generation_key = key
                 await self._slot_repo.save(legacy)
                 counts["adopted_existing"] += 1
+                counts["skipped_existing"] += 1
                 continue
 
             planning_slot = PlanningSlot.create(

@@ -99,6 +99,19 @@ class PlanningSlot:
             updated_at=now,
         )
 
+    def forget_generation_key_if_reassigned(
+        self, *, district_id: uuid.UUID, congregation_id: uuid.UUID | None
+    ) -> None:
+        """Drop the generator identity once the slot leaves the tenant it was generated for.
+
+        The key names the congregation's occurrence (district-unique). A slot moved
+        to another congregation no longer represents it; keeping the key would make
+        the generator treat the original service as existing, and the unique index
+        would block re-creating it. Pass the district/congregation as last persisted.
+        """
+        if (self.district_id, self.congregation_id) != (district_id, congregation_id):
+            self.generation_key = None
+
     def distribute_to(
         self,
         entries: Iterable[str],

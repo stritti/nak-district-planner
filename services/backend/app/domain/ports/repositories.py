@@ -153,6 +153,12 @@ class PlanningSlotRepository(ABC):
 
     @abstractmethod
     async def save(self, slot: PlanningSlot) -> None:
+        """Insert or update; clears ``generation_key`` when the slot changed tenant."""
+        pass
+
+    @abstractmethod
+    async def lock_district_for_generation(self, district_id: uuid.UUID) -> None:
+        """Serialize slot generators of one district until the transaction ends."""
         pass
 
     @abstractmethod
