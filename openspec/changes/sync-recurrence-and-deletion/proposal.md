@@ -33,6 +33,11 @@ one occurrence flip the hash of the whole series on every run, times shift by
 - A slot cancelled only because its event was missing from a snapshot is marked
   on the link (`deletion_reason`) and reactivated when the event reappears;
   manual and provider (STATUS:CANCELLED) cancellations are never undone.
+- A snapshot with an unusable CalDAV resource or unparseable ICS VEVENT is not
+  authoritative for that run: deletion reconciliation is skipped (warning, last sync error).
+- Write-back (deviation/conflict resolution, internal delete) is refused for series
+  occurrences before any provider call (HTTP 409). Links are recognized by their stored
+  key shape; no migration.
 - Occurrences carry `series_uid`/`recurrence_id` explicitly; the composed key is
   never parsed; overlong UIDs are hashed to keep keys within 500 characters.
 - CalDAV refuses write-back (time update / delete) of a single occurrence,

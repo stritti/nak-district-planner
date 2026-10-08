@@ -8,6 +8,7 @@ Credentials format: {"url": "https://example.com/feed.ics"}
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 import httpx
@@ -17,6 +18,8 @@ from app.adapters.calendar.http_policy import resilient_request
 from app.adapters.calendar.ical_events import expand_events
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
+
+logger = logging.getLogger(__name__)
 
 
 class ICalConnector(CalendarConnector):
@@ -54,6 +57,10 @@ class ICalConnector(CalendarConnector):
 
         try:
             cal = ICalendar.from_ical(response.content.decode("utf-8"))
-            return expand_events(cal, from_dt=from_dt, to_dt=to_dt)
+            expanded = expand_events(cal, from_dt=from_dt, to_dt=to_dt)
         except Exception as exc:
             raise CalendarConnectorError(f"Ungültiges iCal-Format: {exc}") from exc
+        self.snapshot_complete = expanded.complete
+        if not expanded.complete:
+            logger.warning("iCal feed contains unparseable events; snapshot is incomplete")
+        return expanded.events

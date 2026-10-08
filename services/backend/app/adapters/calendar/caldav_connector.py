@@ -10,6 +10,7 @@ or with bearer token: {"url": "...", "access_token": "token"}
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from urllib.parse import urljoin, urlsplit
 
@@ -19,16 +20,20 @@ from icalendar import Calendar as ICalendar
 
 from app.adapters.calendar.deletion import delete_resource
 from app.adapters.calendar.ical_events import expand_events
-from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
+from app.domain.models.raw_calendar_event import RawCalendarEvent, is_occurrence_key
+from app.domain.ports.calendar import (
+    CalendarConnector,
+    CalendarConnectorError,
+    OccurrenceWriteBackError,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def _refuse_occurrence_write(event: RawCalendarEvent) -> None:
     """A series is one resource: writing one occurrence would rewrite or delete all."""
-    if event.recurrence_id is not None:
-        raise CalendarConnectorError(
-            "Einzeltermine wiederkehrender CalDAV-Serien können nicht zurückgeschrieben werden"
-        )
+    if event.recurrence_id is not None or is_occurrence_key(event.uid):
+        raise OccurrenceWriteBackError()
 
 
 class CalDAVConnector(CalendarConnector):
@@ -122,40 +127,39 @@ class CalDAVConnector(CalendarConnector):
 
         events: list[RawCalendarEvent] = []
 
-        # Find all response elements
+        # A resource that is missing, empty or unparseable is skipped, but the
+        # result then no longer proves deletions (snapshot_complete=False).
+        unusable = 0
         for resp in root.findall(".//D:response", namespaces):
-            # Get calendar-data element
-            cal_data_elem = resp.find(".//C:calendar-data", namespaces)
-            if cal_data_elem is None or cal_data_elem.text is None:
-                continue
-
-            cal_data = cal_data_elem.text
-            if not cal_data.strip():
-                continue
-
-            # Parse the iCalendar data
+            cal_data = resp.findtext(".//C:calendar-data", namespaces=namespaces) or ""
             try:
-                cal = ICalendar.from_ical(cal_data)
+                cal = ICalendar.from_ical(cal_data) if cal_data.strip() else None
             except Exception:
-                # Skip invalid iCalendar data
+                cal = None
+            if cal is None:
+                unusable += 1
                 continue
 
             try:
-                events.extend(
-                    expand_events(
-                        cal,
-                        from_dt=from_dt,
-                        to_dt=to_dt,
-                        revision_marker=resp.findtext("D:getetag", namespaces=namespaces)
-                        or resp.findtext(".//D:getetag", namespaces=namespaces),
-                        resource_id=resp.findtext("D:href", namespaces=namespaces),
-                    )
+                expanded = expand_events(
+                    cal,
+                    from_dt=from_dt,
+                    to_dt=to_dt,
+                    revision_marker=resp.findtext("D:getetag", namespaces=namespaces)
+                    or resp.findtext(".//D:getetag", namespaces=namespaces),
+                    resource_id=resp.findtext("D:href", namespaces=namespaces),
                 )
             except Exception as exc:
                 # Fail the snapshot instead of silently dropping (and then
                 # reconciling away) every occurrence of this resource.
                 raise CalendarConnectorError("CalDAV Serie konnte nicht expandiert werden") from exc
+            events.extend(expanded.events)
+            unusable += not expanded.complete
 
+        self.snapshot_complete = unusable == 0
+        if unusable:
+            # Count only: hrefs and payloads are provider-controlled.
+            logger.warning("CalDAV snapshot incomplete: %d unusable resource(s)", unusable)
         return events
 
     async def update_event_times(

@@ -49,9 +49,35 @@ Expansion of external feeds SHALL be bounded: rules with FREQ SECONDLY, MINUTELY
 - **WHEN** a feed contains `RRULE:FREQ=SECONDLY`
 - **THEN** the fetch fails within seconds with a connector error and nothing is reconciled
 
+#### Scenario: Expired dense series
+- **WHEN** a series with many occurrences per day ended (UNTIL) years before the window
+- **THEN** UNTIL bounds the budgeted iteration (normalized to naive UTC for aware and floating starts) and the feed is accepted
+
 #### Scenario: Too many occurrences
 - **WHEN** a feed expands into more in-window occurrences than `SYNC_MAX_OCCURRENCES`
 - **THEN** the fetch fails with a connector error
+
+### Requirement: Event duration
+An event without DTEND and DURATION SHALL last one day; an explicit zero-length event (DTEND equal to DTSTART or DURATION:PT0S) SHALL stay zero-length.
+
+#### Scenario: Open-ended event
+- **WHEN** a VEVENT has neither DTEND nor DURATION
+- **THEN** each of its occurrences ends one day after it starts
+
+#### Scenario: Explicit zero length
+- **WHEN** a VEVENT has DTEND equal to DTSTART or DURATION:PT0S
+- **THEN** its end equals its start
+
+### Requirement: No write-back of series occurrences
+Time updates and deletions SHALL be refused for links that identify a single occurrence of a recurring series, before any provider call. Because links store only the composed key, a stored key ending in `::YYYYMMDD` or `::YYYYMMDDTHHMMSSZ` SHALL be treated as an occurrence (fail-safe: a plain UID of that shape only loses write-back). The API SHALL answer such a refusal with HTTP 409.
+
+#### Scenario: Resolving a deviation of an occurrence
+- **WHEN** a planner resolves a deviation or conflict on an instance linked to a series occurrence of a writable integration
+- **THEN** no provider write happens, the local state stays retryable and the API responds 409
+
+#### Scenario: Single events stay writable
+- **WHEN** the linked event is a single event
+- **THEN** the times are written back as before
 
 ### Requirement: Floating and all-day times
 Floating date-times and all-day dates SHALL be interpreted in `SYNC_DEFAULT_TIMEZONE` (default Europe/Berlin).
@@ -66,6 +92,10 @@ Floating date-times and all-day dates SHALL be interpreted in `SYNC_DEFAULT_TIME
 
 ### Requirement: Window-bounded deletion detection
 ICS and CalDAV results SHALL be treated as authoritative snapshots: a linked event missing from the result SHALL be cancelled according to the integration's `delete_behavior` only when its instance lies inside the queried window.
+
+#### Scenario: Incomplete snapshot
+- **WHEN** a CalDAV resource in the window has missing, empty or unparseable calendar data, or an ICS feed contains an unparseable VEVENT
+- **THEN** the remaining events are processed, no deletion reconciliation runs for that sync, a warning without provider identifiers is logged and the integration's last sync error states that reconciliation was skipped
 
 #### Scenario: Removed feed event
 - **WHEN** a previously linked event inside the window disappears from the ICS feed

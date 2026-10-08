@@ -39,8 +39,12 @@ from app.domain.models.calendar_integration import (
 from app.domain.models.event_instance import EventInstance, EventSource, SyncState
 from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
-from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
+from app.domain.models.raw_calendar_event import RawCalendarEvent, is_occurrence_key
+from app.domain.ports.calendar import (
+    CalendarConnector,
+    CalendarConnectorError,
+    OccurrenceWriteBackError,
+)
 from app.domain.services.sync_policy import (
     INTERNAL_DELETE_MARKER,
     SyncFieldAuthority,
@@ -287,6 +291,7 @@ async def _apply_external_update(
     return SyncOutcome.UPDATED
 
 
+_INCOMPLETE_SNAPSHOT = "Kalender unvollständig geladen; Löschabgleich übersprungen"
 SNAPSHOT_GAP_REASON = "missing-from-authoritative-snapshot"
 
 
@@ -466,18 +471,37 @@ async def _reconcile_missing_provider_events(
     return outcomes
 
 
-async def push_deviation_resolution(instance: EventInstance, session: AsyncSession) -> bool:
-    """Push resolved times immediately to writable provider links."""
-    link_repo = SqlExternalEventLinkRepository(session)
-    integration_repo = SqlCalendarIntegrationRepository(session)
-    instance_repo = SqlEventInstanceRepository(session)
-    pushed = False
+async def _writable_links(
+    instance: EventInstance,
+    link_repo: SqlExternalEventLinkRepository,
+    integration_repo: SqlCalendarIntegrationRepository,
+) -> list[tuple[ExternalEventLink, CalendarIntegration]]:
+    """Active links of writable integrations; refuses series occurrences up front.
+
+    Links do not persist ``recurrence_id``, so occurrences are recognized by
+    their stored key before any provider write happens.
+    """
+    writable: list[tuple[ExternalEventLink, CalendarIntegration]] = []
     for link in await link_repo.list_by_event_instance(instance.id):
         if link.state != ExternalEventLinkState.ACTIVE:
             continue
         integration = await integration_repo.get(link.calendar_integration_id)
         if integration is None or CalendarCapability.WRITE not in integration.capabilities:
             continue
+        if is_occurrence_key(link.external_event_id):
+            raise OccurrenceWriteBackError()
+        writable.append((link, integration))
+    return writable
+
+
+async def push_deviation_resolution(instance: EventInstance, session: AsyncSession) -> bool:
+    """Push resolved times immediately to writable provider links."""
+    link_repo = SqlExternalEventLinkRepository(session)
+    integration_repo = SqlCalendarIntegrationRepository(session)
+    instance_repo = SqlEventInstanceRepository(session)
+    writable_links = await _writable_links(instance, link_repo, integration_repo)
+    pushed = False
+    for link, integration in writable_links:
         raw = RawCalendarEvent(
             uid=link.external_event_id,
             title=instance.title,
@@ -520,15 +544,9 @@ async def push_conflict_resolution(instance: EventInstance, session: AsyncSessio
     link_repo = SqlExternalEventLinkRepository(session)
     integration_repo = SqlCalendarIntegrationRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
-    writable_links: list[tuple[ExternalEventLink, CalendarIntegration]] = []
     internal_payload = _instance_payload(instance)
-
-    for link in await link_repo.list_by_event_instance(instance.id):
-        if link.state != ExternalEventLinkState.ACTIVE:
-            continue
-        integration = await integration_repo.get(link.calendar_integration_id)
-        if integration is None or CalendarCapability.WRITE not in integration.capabilities:
-            continue
+    writable_links = await _writable_links(instance, link_repo, integration_repo)
+    for link, _ in writable_links:
         changed_fields = _changed_fields(internal_payload, link.last_synced_payload)
         unsupported_fields = changed_fields - {"actual_start_at", "actual_end_at"}
         if unsupported_fields:
@@ -536,7 +554,6 @@ async def push_conflict_resolution(instance: EventInstance, session: AsyncSessio
             raise CalendarConnectorError(
                 f"Konflikt enthält nicht schreibbare Felder: {fields}"
             )
-        writable_links.append((link, integration))
 
     pushed = False
     for link, integration in writable_links:
@@ -641,7 +658,10 @@ async def run_sync(
             for raw in outside_window:
                 if raw.uid in active:
                     counters[await _sync_one(context, raw, active[raw.uid])] += 1
-        if connector.authoritative_snapshot:
+        incomplete = connector.authoritative_snapshot and not connector.snapshot_complete
+        if incomplete:
+            logger.warning("Calendar snapshot incomplete; deletion reconciliation skipped")
+        elif connector.authoritative_snapshot:
             counters.update(
                 await _reconcile_missing_provider_events(
                     context=context, seen_uids=seen_uids, window=window,
@@ -650,7 +670,8 @@ async def run_sync(
         integration.last_synced_at = datetime.now(UTC)
         failed = counters[SyncOutcome.FAILED]
         integration.last_sync_error = (
-            f"{failed} calendar event(s) failed during partial sync" if failed else None
+            f"{failed} calendar event(s) failed during partial sync" if failed
+            else _INCOMPLETE_SNAPSHOT if incomplete else None
         )
         await integration_repo.save(integration)
     except Exception as exc:

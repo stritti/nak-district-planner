@@ -30,3 +30,10 @@
 - [x] 5.3 Report ICS events outside the window as presence; update linked ones, never import or cancel them
 - [x] 5.4 Hash overlong UIDs in occurrence keys (≤ 500 characters)
 - [x] 5.5 Carry `series_uid`/`recurrence_id` explicitly; never parse the storage key; skip duplicate keys
+
+## 6. Review hardening (0d600122)
+
+- [x] 6.1 Incomplete CalDAV/ICS snapshots skip deletion reconciliation (`snapshot_complete`), with a warning and last sync error
+- [x] 6.2 Refuse occurrence write-back in push paths before any connector call (409); no migration
+- [x] 6.3 Keep UNTIL in the expansion budget, normalized to naive UTC
+- [x] 6.4 One-day default only without DTEND and DURATION; explicit zero length stays

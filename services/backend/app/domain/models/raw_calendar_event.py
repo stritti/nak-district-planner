@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -50,3 +51,17 @@ def occurrence_key(series_uid: str, recurrence_id: str) -> str:
         return key
     digest = hashlib.sha256(series_uid.encode()).hexdigest()
     return f"sha256:{digest}::{recurrence_id}"
+
+
+_OCCURRENCE_KEY = re.compile(r".::\d{8}(T\d{6}Z)?\Z", re.DOTALL)
+
+
+def is_occurrence_key(external_event_id: str) -> bool:
+    """Fail-safe check whether a stored key may identify a series occurrence.
+
+    Only used to refuse write-back on links (which do not persist
+    ``recurrence_id``), never to derive identity. A plain UID that happens to
+    end like an occurrence key is treated as an occurrence: the only effect is
+    that its write-back is refused.
+    """
+    return _OCCURRENCE_KEY.search(external_event_id) is not None

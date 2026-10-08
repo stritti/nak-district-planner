@@ -8,7 +8,7 @@ crosses the 2026 DST change, has one EXDATE and one moved occurrence
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -280,3 +280,95 @@ async def test_events_outside_window_are_reported_as_presence_only():
     assert far.outside_window is True
     assert far.start_at == datetime(2028, 6, 4, 8, tzinfo=UTC)
     assert not any(e.outside_window for uid, e in events.items() if uid != far.uid)
+
+
+# ── Codex review of 0d600122 ─────────────────────────────────────────────────
+
+
+def _multistatus_many(*bodies: str | None) -> bytes:
+    responses = []
+    for index, body in enumerate(bodies):
+        data = "" if body is None else f"<C:calendar-data>{body}</C:calendar-data>"
+        responses.append(
+            f"<D:response><D:href>/calendars/gemeinde/{index}.ics</D:href><D:propstat><D:prop>"
+            f'<D:getetag>"e{index}"</D:getetag>{data}</D:prop>'
+            "<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>"
+        )
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+        + "".join(responses) + "</D:multistatus>"
+    ).encode()
+
+
+SINGLE = _feed(
+    "BEGIN:VEVENT\r\nUID:ok@example\r\nSUMMARY:Ok\r\nDTSTART:20260310T090000Z\r\n"
+    "DTEND:20260310T100000Z\r\nEND:VEVENT"
+).decode()
+
+
+@pytest.mark.parametrize(
+    ("broken", "complete"),
+    [(SINGLE, True), (None, False), ("   ", False), ("BEGIN:VCALENDAR\r\nnot ical", False)],
+)
+async def test_caldav_incomplete_snapshot_is_not_authoritative(broken, complete):
+    connector, _ = _caldav(_multistatus_many(SINGLE, broken))
+    events = await connector.fetch_events(CALDAV_CREDS, **WINDOW)
+    assert "ok@example" in {event.uid for event in events}
+    assert connector.snapshot_complete is complete
+
+
+async def test_ics_feed_with_unparseable_vevent_is_not_authoritative():
+    body = _feed(
+        "BEGIN:VEVENT\r\nUID:ok@example\r\nSUMMARY:Ok\r\nDTSTART:20260310T090000Z\r\n"
+        "DTEND:20260310T100000Z\r\nEND:VEVENT",
+        "BEGIN:VEVENT\r\nUID:broken@example\r\nSUMMARY:Kaputt\r\nDTSTART:20260311T1000ZZ\r\n"
+        "DTEND:20260311T110000Z\r\nEND:VEVENT",
+    )
+    connector = ICalConnector(client=_client(body))
+    events = await connector.fetch_events({"url": "https://example.com/cal.ics"}, **WINDOW)
+    assert [event.uid for event in events] == ["ok@example"]
+    assert connector.snapshot_complete is False
+
+    healthy = ICalConnector(client=_client((FIXTURES / "gemeinde_mitte.ics").read_bytes()))
+    await healthy.fetch_events({"url": "https://example.com/cal.ics"}, **WINDOW)
+    assert healthy.snapshot_complete is True
+
+
+async def test_expired_dense_series_with_until_does_not_exhaust_budget():
+    """UNTIL bounds the series: 2000-2001 hourly via BYHOUR is ~17.5k steps; without UNTIL it would be ~250k."""
+    rule = "FREQ=DAILY;BYHOUR=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23;UNTIL=20011231T235959Z"
+    events = await _fetch_body(
+        _feed(
+            _series("expired@example", "20000101T080000Z", rule),
+            "BEGIN:VEVENT\r\nUID:ok@example\r\nSUMMARY:Ok\r\nDTSTART:20260310T090000Z\r\n"
+            "DTEND:20260310T100000Z\r\nEND:VEVENT",
+        )
+    )
+    assert [event.uid for event in events if not event.outside_window] == ["ok@example"]
+
+
+async def test_floating_until_is_normalized_for_budget():
+    rule = "FREQ=DAILY;BYHOUR=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23;UNTIL=20011231T235959"
+    events = await _fetch_body(_feed(_series("floating@example", "20000101T080000", rule)))
+    assert [event for event in events if not event.outside_window] == []
+
+
+@pytest.mark.parametrize(
+    "end", ["DTEND:20260310T090000Z", "DURATION:PT0S"]
+)
+async def test_explicit_zero_length_events_stay_zero_length(end):
+    body = _feed(
+        f"BEGIN:VEVENT\r\nUID:zero@example\r\nSUMMARY:Null\r\nDTSTART:20260310T090000Z\r\n{end}\r\nEND:VEVENT"
+    )
+    (event,) = await _fetch_body(body)
+    assert event.end_at == event.start_at == datetime(2026, 3, 10, 9, tzinfo=UTC)
+
+
+async def test_events_without_end_default_to_one_day():
+    body = _feed(
+        "BEGIN:VEVENT\r\nUID:open@example\r\nSUMMARY:Offen\r\nDTSTART:20260310T090000Z\r\n"
+        "RRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT"
+    )
+    events = await _fetch_body(body)
+    assert [event.end_at - event.start_at for event in events] == [timedelta(days=1)] * 2

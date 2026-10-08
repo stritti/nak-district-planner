@@ -786,3 +786,27 @@ class TestCodexReviewFindings:
             result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
         ingest.assert_awaited_once()
         assert result.failed == 1
+
+
+async def test_incomplete_snapshot_skips_deletion_reconciliation(mocks):
+    """Codex 0d600122: a resource that failed to load is not a provider deletion."""
+    slot = _make_slot()
+    start = _NOW + timedelta(days=30)
+    instance = _make_event_instance(
+        planning_slot_id=slot.id, actual_start_at=start, actual_end_at=start + timedelta(hours=1)
+    )
+    integration = _integration()
+    mocks["integration_repo"].get.return_value = integration
+    mocks["connector"].authoritative_snapshot = True
+    mocks["connector"].snapshot_complete = False
+    mocks["link_repo"].list_active_by_integration.return_value = [
+        _make_link(event_instance_id=instance.id)
+    ]
+    mocks["instance_repo"].get.return_value = instance
+    mocks["slot_repo"].get.return_value = slot
+    result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+    assert result.cancelled == 0
+    assert slot.status == PlanningSlotStatus.ACTIVE
+    assert integration.last_sync_error == (
+        "Kalender unvollständig geladen; Löschabgleich übersprungen"
+    )

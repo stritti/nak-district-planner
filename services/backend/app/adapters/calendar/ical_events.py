@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, date, datetime, timedelta
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 import recurring_ical_events
@@ -90,10 +91,12 @@ def _guard_recurrences(calendar: Calendar, start: datetime, end: datetime) -> No
         for rule in rules if isinstance(rules, list) else [rules]:
             if str((rule.get("FREQ") or [""])[0]).upper() in _SUB_DAILY:
                 raise RecurrenceLimitError()
-            # UNTIL only shortens a series; dropping it avoids tz mismatches.
-            bounded = vRecur({k: v for k, v in rule.items() if k != "UNTIL"})
+            # dateutil needs DTSTART and UNTIL in the same form: both naive UTC.
+            params = dict(rule)
+            if params.get("UNTIL"):
+                params["UNTIL"] = [_naive(params["UNTIL"][0])]
             dtstart = _naive(component["DTSTART"].dt)
-            for occurrence in rrulestr(bounded.to_ical().decode(), dtstart=dtstart):
+            for occurrence in rrulestr(vRecur(params).to_ical().decode(), dtstart=dtstart):
                 budget -= 1
                 if occurrence > window_end:
                     break
@@ -102,16 +105,21 @@ def _guard_recurrences(calendar: Calendar, start: datetime, end: datetime) -> No
                     raise RecurrenceLimitError()
 
 
+# Marks source VEVENTs without DTEND and DURATION; the expansion library copies
+# it into every occurrence (it fills in DTEND itself, hiding the difference).
+_OPEN_END = "X-NAK-OPEN-END"
+
+
 def _raw_event(component, key: str, tz: ZoneInfo, **extra) -> RawCalendarEvent:
     start_at = to_utc(component["DTSTART"], tz)
-    if "DTEND" in component:
+    if component.get(_OPEN_END):
+        end_at = start_at + timedelta(days=1)  # legacy default for events without an end
+    elif "DTEND" in component:
         end_at = to_utc(component["DTEND"], tz)
     elif "DURATION" in component:
         end_at = start_at + component["DURATION"].dt
     else:
         end_at = start_at
-    if end_at <= start_at:
-        end_at = start_at + timedelta(days=1)  # legacy default for events without an end
     title = str(component.get("SUMMARY") or "") or "(kein Titel)"
     description = component.get("DESCRIPTION")
     return RawCalendarEvent(
@@ -134,6 +142,17 @@ def _identity(component, recurring: set[str], tz: ZoneInfo) -> tuple[str, dict]:
     return occurrence_key(uid, recurrence_id), {"series_uid": uid, "recurrence_id": recurrence_id}
 
 
+class ExpandedCalendar(NamedTuple):
+    events: list[RawCalendarEvent]
+    # False when a VEVENT had to be dropped (broken property, no DTSTART):
+    # its absence must not be mistaken for a deletion at the source.
+    complete: bool
+
+
+def _usable(component) -> bool:
+    return "DTSTART" in component and not getattr(component, "errors", None)
+
+
 def expand_events(
     calendar: Calendar,
     *,
@@ -141,7 +160,7 @@ def expand_events(
     to_dt: datetime | None,
     revision_marker: str | None = None,
     resource_id: str | None = None,
-) -> list[RawCalendarEvent]:
+) -> ExpandedCalendar:
     """Return every occurrence overlapping [from_dt, to_dt], plus presence markers.
 
     Single events and RECURRENCE-ID overrides outside the window are returned
@@ -152,11 +171,15 @@ def expand_events(
     tz = _local_zone()
     start = from_dt or _UNBOUNDED_START
     end = to_dt or (from_dt or datetime.now(UTC)) + _UNBOUNDED_SPAN
-    # A VEVENT without UID or DTSTART cannot be identified or placed in time.
-    calendar.subcomponents = [
-        c for c in calendar.subcomponents
-        if c.name != "VEVENT" or ("DTSTART" in c and c.get("UID"))
-    ]
+    # A VEVENT without UID can never have been linked and is ignored. One that
+    # is broken or lacks DTSTART is dropped and makes the snapshot incomplete.
+    vevents = [c for c in calendar.subcomponents if c.name == "VEVENT" and c.get("UID")]
+    usable = [c for c in vevents if _usable(c)]
+    complete = len(usable) == len(vevents)
+    calendar.subcomponents = [c for c in calendar.subcomponents if c.name != "VEVENT"] + usable
+    for component in usable:
+        if "DTEND" not in component and "DURATION" not in component:
+            component[_OPEN_END] = "1"
     _guard_recurrences(calendar, start, end)
     recurring = _recurring_uids(calendar)
     source = {"revision_marker": revision_marker, "resource_id": resource_id}
@@ -174,4 +197,4 @@ def expand_events(
         if key not in seen:
             seen.add(key)
             events.append(_raw_event(component, key, tz, outside_window=True, **identity, **source))
-    return events
+    return ExpandedCalendar(events, complete)
