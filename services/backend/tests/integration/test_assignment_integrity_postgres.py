@@ -9,7 +9,7 @@ import asyncio
 import importlib.util
 import os
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -140,6 +140,45 @@ async def test_concurrent_assignments_to_one_slot_keep_one(sessions, tenant) -> 
 
 
 @pytest.mark.asyncio
+async def test_multi_day_service_blocks_leader_days_after_it_started(sessions, tenant) -> None:
+    """Look-back is not limited to the default duration: a 52 h instance that began two
+    days earlier still overlaps the target service and must block the leader.
+    """
+    retreat = uuid.uuid4()
+    begin = datetime(DAY.year, DAY.month, DAY.day, 7, 30, tzinfo=UTC) - timedelta(days=2)
+    async with sessions() as db:
+        await db.execute(
+            text(
+                "INSERT INTO planning_slots (id, district_id, congregation_id, category, "
+                "planning_date, planning_time, status, applicability, created_at, updated_at) "
+                "VALUES (:id, :d, :c, 'Jugendtage', :day, '07:30', 'ACTIVE', '{}', :n, :n)"
+            ),
+            {"id": retreat, "d": tenant["district"], "c": tenant["c2"], "day": begin.date(), "n": begin},
+        )
+        await db.execute(
+            text(
+                "INSERT INTO event_instances (id, planning_slot_id, title, actual_start_at, actual_end_at, "
+                "source, visibility, created_at, updated_at) VALUES (gen_random_uuid(), :s, 'Jugendtage', "
+                ":start, :end, 'INTERNAL', 'INTERNAL', :start, :start)"
+            ),
+            {"s": retreat, "start": begin, "end": begin + timedelta(hours=52)},
+        )
+        await db.commit()
+
+    body = ServiceAssignmentCreate(leader_id=tenant["leader"])
+    with patch.object(sa_router, "require_role_in_district"):
+        async with sessions() as db:
+            await _assign(db, retreat, body)
+            await db.commit()
+        async with sessions() as db:
+            with pytest.raises(HTTPException) as exc:
+                await _assign(db, tenant["s1"], body)
+
+    assert exc.value.status_code == 409
+    assert "no_double_booking" in {c["rule_id"] for c in exc.value.detail["conflicts"]}
+
+
+@pytest.mark.asyncio
 async def test_leader_of_other_district_is_rejected(sessions, tenant) -> None:
     with patch.object(sa_router, "require_role_in_district"):
         async with sessions() as db:
@@ -180,8 +219,47 @@ async def test_migration_keeps_most_confirmed_then_newest_assignment(sessions, t
                 },
             )
         await db.execute(text(migration.BACKFILL_PLANNING_SLOT_SQL))
+        await db.execute(text(migration.ARCHIVE_DUPLICATES_SQL))
+        lock_down = migration.LOCK_DOWN_ARCHIVE_SQL.replace(":app_role", migration._quote_literal("nak_app"))
+        await db.execute(text(lock_down))
         await db.execute(text(migration.DELETE_DUPLICATES_SQL))
         survivors = (await db.execute(text("SELECT leader_name FROM service_assignments"))).scalars().all()
+        archived = (
+            await db.execute(text(f"SELECT leader_name FROM {migration.ARCHIVE_TABLE} ORDER BY leader_name"))
+        ).scalars().all()
+        app_can_read = await db.scalar(
+            text(f"SELECT has_table_privilege('nak_app', '{migration.ARCHIVE_TABLE}', 'SELECT')")
+        )
+        forced_rls = await db.scalar(
+            text("SELECT relforcerowsecurity FROM pg_class WHERE relname = :t"), {"t": migration.ARCHIVE_TABLE}
+        )
+
+        # Downgrade puts the archived rows back and drops the archive.
+        await db.execute(text(migration.RESTORE_DUPLICATES_SQL))
+        restored = (
+            await db.execute(text("SELECT leader_name FROM service_assignments ORDER BY leader_name"))
+        ).scalars().all()
+        archive_left = await db.scalar(text(f"SELECT to_regclass('{migration.ARCHIVE_TABLE}')"))
         await db.rollback()
 
     assert survivors == ["confirmed-old"]
+    assert archived == ["assigned-newer", "confirmed-older", "open-newest"]
+    assert app_can_read is False
+    assert forced_rls is True
+    assert restored == sorted(name for name, *_ in rows)
+    assert archive_left is None
+
+
+@pytest.mark.asyncio
+async def test_migration_without_duplicates_leaves_no_archive(sessions, tenant) -> None:
+    spec = importlib.util.spec_from_file_location("assignment_unique", _MIGRATION)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    async with sessions() as db:
+        await db.execute(text(migration.ARCHIVE_DUPLICATES_SQL))
+        lock_down = migration.LOCK_DOWN_ARCHIVE_SQL.replace(":app_role", migration._quote_literal("nak_app"))
+        await db.execute(text(lock_down))
+        archive = await db.scalar(text(f"SELECT to_regclass('{migration.ARCHIVE_TABLE}')"))
+        await db.rollback()
+
+    assert archive is None

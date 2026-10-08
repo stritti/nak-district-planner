@@ -39,5 +39,8 @@ Bezirk geprüft, sodass Datensätze anderer Mandanten referenziert werden konnte
 - Backend: Router `service_assignments`, `export`, `registrations`, `leaders`,
   `planning_series`, `districts`; Repository `SqlServiceAssignmentRepository.list_leader_schedule`;
   neue Alembic-Revision (eine Head).
-- Betrieb: Die Migration löscht doppelte Zuweisungen unwiderruflich; der Downgrade
-  stellt sie nicht wieder her.
+- Betrieb: Die Migration verschiebt doppelte Zuweisungen in die Archivtabelle
+  `service_assignment_duplicates_468` (nur für den Datenbank-Owner lesbar, RLS ohne
+  Policy erzwungen); ohne Dubletten entsteht keine Tabelle. Der Downgrade stellt die
+  archivierten Zeilen wieder her und entfernt das Archiv. Nach Prüfung kann der
+  Betrieb die Tabelle löschen.

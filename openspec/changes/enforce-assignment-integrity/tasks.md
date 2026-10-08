@@ -1,6 +1,6 @@
 ## 1. Eindeutigkeit und Nebenläufigkeit
 
-- [x] 1.1 Migration `20261007_assignment_unique`: `planning_slot_id` aus `event_id` nachbefüllen, Dubletten deterministisch auflösen, Unique-Index anlegen (Downgrade: nicht eindeutiger Index)
+- [x] 1.1 Migration `20261007_assignment_unique`: `planning_slot_id` aus `event_id` nachbefüllen, Dubletten deterministisch auflösen und vorher archivieren (nur Owner, RLS erzwungen), Unique-Index anlegen (Downgrade: nicht eindeutiger Index, archivierte Zeilen zurück)
 - [x] 1.2 ORM `ServiceAssignmentORM.planning_slot_id` als `unique=True` deklarieren (`alembic check` ohne Drift)
 - [x] 1.3 Router: `IntegrityError` beim Speichern → 409
 - [x] 1.4 Advisory-Lock pro `leader_id` vor Konfliktprüfung (Anlegen und Ändern)
@@ -20,4 +20,5 @@
 ## 4. Verifikation
 
 - [x] 4.1 PostgreSQL-Integrationstest mit zwei parallelen Sessions (Doppelbuchung, zweite Zuweisung pro Slot)
-- [x] 4.2 Integrationstest der Dubletten-Auflösung der Migration
+- [x] 4.2 Integrationstest der Dubletten-Auflösung der Migration inkl. Archiv, Rechteentzug und Downgrade-Wiederherstellung
+- [x] 4.3 PostgreSQL-Integrationstest: mehrtägige EventInstance (52 h) blockiert eine spätere Zuweisung

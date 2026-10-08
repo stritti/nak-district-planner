@@ -11,6 +11,10 @@ Das System SHALL höchstens eine Dienstzuweisung pro Planungseintrag speichern u
 - **WHEN** die Migration auf Daten mit mehreren Zuweisungen pro Planungseintrag läuft
 - **THEN** bleibt pro Planungseintrag die Zuweisung mit dem höchsten Status (CONFIRMED vor ASSIGNED vor OPEN), bei Gleichstand die mit verknüpftem Amtsträger und danach die zuletzt geänderte erhalten
 
+#### Scenario: Bereinigte Dubletten bleiben nachvollziehbar
+- **WHEN** die Migration Dubletten entfernt
+- **THEN** liegen die entfernten Zeilen in einer nur für den Datenbank-Owner lesbaren Archivtabelle, die Anwendungsrolle kann sie nicht lesen und der Downgrade stellt sie wieder her
+
 ### Requirement: Serialisierte Zuweisung pro Amtsträger
 Das System SHALL Konfliktprüfung und Speichern einer Zuweisung für denselben Amtsträger über einen transaktionsgebundenen Advisory-Lock serialisieren.
 
@@ -24,6 +28,10 @@ Das System SHALL Planungseinträge ohne EventInstance mit ihrer geplanten Zeit (
 #### Scenario: Ziel ohne EventInstance
 - **WHEN** ein Amtsträger einem Planungseintrag ohne EventInstance zugewiesen wird, der zeitgleich zu einer bestehenden Zuweisung liegt
 - **THEN** meldet die Prüfung einen BLOCK-Konflikt `no_double_booking`
+
+#### Scenario: Mehrtägiger Dienst überschneidet sich
+- **WHEN** ein Amtsträger einer bestehenden EventInstance zugewiesen ist, die länger als 24 Stunden dauert und Tage vor dem Ziel begonnen hat, aber noch läuft
+- **THEN** meldet die Prüfung einen BLOCK-Konflikt `no_double_booking`, weil EventInstances über ihre tatsächliche Überschneidung und nicht über ein festes Rückblickfenster gesucht werden
 
 ### Requirement: Referenzen müssen zum Bezirk gehören
 Das System SHALL `congregation_id`- und `leader_id`-Werte aus Request-Bodies ablehnen, die unbekannt sind oder zu einem anderen Bezirk gehören, und dafür mit 422 und einer für beide Fälle identischen Meldung antworten.
