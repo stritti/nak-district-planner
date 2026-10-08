@@ -96,6 +96,7 @@ async def test_approve_reject_delete_paths() -> None:
         email="m@example.com",
     )
     db = AsyncMock()
+    db.scalar.return_value = district_id  # congregation_id belongs to the district
     auth = _auth()
 
     with (

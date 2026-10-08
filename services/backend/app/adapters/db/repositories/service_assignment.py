@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.db.orm_models.event_instance import EventInstanceORM
+from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
+from app.domain.models.planning_slot import PlanningSlotStatus
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
+from app.domain.planning.conflict_result import ScheduledService
 from app.domain.ports.repositories import ServiceAssignmentRepository
 
 
@@ -68,6 +73,54 @@ class SqlServiceAssignmentRepository(ServiceAssignmentRepository):
             select(ServiceAssignmentORM).where(ServiceAssignmentORM.leader_id == leader_id)
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
+
+    async def list_leader_schedule(
+        self,
+        leader_id: uuid.UUID,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+        exclude_assignment_id: uuid.UUID | None = None,
+    ) -> list[ScheduledService]:
+        """Active services of a leader near a time window, in one query.
+
+        A service matches when its EventInstance overlaps the window or, when it
+        has no instance yet, when its planning date lies inside the window's dates.
+        """
+        slot_id = func.coalesce(ServiceAssignmentORM.planning_slot_id, ServiceAssignmentORM.event_id)
+        query = (
+            select(
+                PlanningSlotORM.congregation_id,
+                PlanningSlotORM.planning_date,
+                PlanningSlotORM.planning_time,
+                EventInstanceORM.actual_start_at,
+                EventInstanceORM.actual_end_at,
+            )
+            .select_from(ServiceAssignmentORM)
+            .join(PlanningSlotORM, PlanningSlotORM.id == slot_id)
+            .outerjoin(EventInstanceORM, EventInstanceORM.planning_slot_id == PlanningSlotORM.id)
+            .where(
+                ServiceAssignmentORM.leader_id == leader_id,
+                PlanningSlotORM.status == PlanningSlotStatus.ACTIVE,
+                or_(
+                    and_(
+                        EventInstanceORM.id.is_not(None),
+                        EventInstanceORM.actual_start_at < window_end,
+                        EventInstanceORM.actual_end_at > window_start,
+                    ),
+                    and_(
+                        EventInstanceORM.id.is_(None),
+                        PlanningSlotORM.planning_date.between(
+                            window_start.astimezone(UTC).date(), window_end.astimezone(UTC).date()
+                        ),
+                    ),
+                ),
+            )
+        )
+        if exclude_assignment_id is not None:
+            query = query.where(ServiceAssignmentORM.id != exclude_assignment_id)
+        result = await self._session.execute(query)
+        return [ScheduledService(*row) for row in result.all()]
 
     async def save(self, assignment: ServiceAssignment) -> None:
         existing = await self._session.get(ServiceAssignmentORM, assignment.id)
