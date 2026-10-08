@@ -19,7 +19,7 @@ permissions:
   pull-requests: write
 
 env:
-  PYTHON_VERSION: "3.11.17"
+  PYTHON_VERSION: "3.14.7"
   DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
 
 jobs:

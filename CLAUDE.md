@@ -51,7 +51,7 @@ nak-district-planner/
 
 ## Tech Stack
 
-**Backend:** Python 3.11+, FastAPI (async), SQLAlchemy 2.0, PostgreSQL 18, Celery (PostgreSQL broker/result backend), Valkey (rate limiting) — managed with **uv**
+**Backend:** Python 3.14, FastAPI (async), SQLAlchemy 2.0, PostgreSQL 18, Celery (PostgreSQL broker/result backend), Valkey (rate limiting) — managed with **uv**
 **Frontend:** Vue.js 3 (Composition API), Vite, Tailwind CSS, Pinia — built with **bun**
 **Infrastructure:** Docker & Docker Compose (backend, worker, frontend, db, valkey; one-shot `migrate` service for Alembic with owner credentials)
 
