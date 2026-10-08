@@ -11,6 +11,11 @@ Production container builds SHALL install application dependencies from locked d
 - **WHEN** a newer supported base image or build tool is available
 - **THEN** automated dependency monitoring opens a reviewable update instead of relying on a mutable tag
 
+#### Scenario: CI verifies the shipped toolchain
+- **WHEN** CI runs backend, migration, audit or frontend jobs
+- **THEN** it uses the same Python and Bun versions as the production Dockerfiles
+- **AND** a runtime image update is merged only together with the matching CI pins, `requires-python`, ruff `target-version` and lockfiles
+
 ### Requirement: Internal HTTP cannot bypass the public TLS boundary
 The default production Compose configuration SHALL NOT publish the internal HTTP frontend service on all host interfaces. Public traffic SHALL enter through the configured TLS reverse proxy.
 
