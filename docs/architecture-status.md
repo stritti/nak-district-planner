@@ -59,6 +59,8 @@ Die Allowlist ist kein Zielzustand und darf fuer neue Features nicht erweitert w
 - Migration Graph/FK/Offline-SQL/Roundtrip CI: ✅
 - Verschluesselter Backup-/Restore-Drill: ✅
 - PostgreSQL RLS-Integrationstests: ✅
+- Update-Hinweis (SemVer inkl. Prereleases, `update_available` im Version-Endpoint, Banner mit Release-Notes-Link): ✅
+- In-App-Update-Ausfuehrung (Update-Endpoint, Docker-Socket-Modus): ❌ entfernt (#469) — Updates nur per Runbook
 
 ## 5. Frontend-Sicherheits- und Testgrenzen
 

@@ -30,7 +30,7 @@
 - [x] 4.1 Create `useVersionStore` Pinia store with state: currentVersion, latestVersion, updateMode, lastChecked *(`src/stores/version.ts`)*
 - [x] 4.2 Implement `checkVersion()` action that calls `GET /api/v1/system/version` *(über `src/api/system.ts`)*
 - [x] 4.3 Implement `triggerUpdate()` action that calls `POST /api/v1/system/update` *(über `src/api/system.ts`)*
-- [ ] 4.4 Implement polling on store mount (check version every 30 minutes while admin is active) *(kein Polling im `version.ts`-Store gefunden — prüfen, ob ein anderer Timer existiert)*
+- [x] 4.4 Implement polling on store mount (check version every 30 minutes while admin is active) *(Polling liegt in `UpdateBanner.vue` (`onMounted`/`setInterval`, 30 min), nicht im Store)*
 
 ## 5. Frontend — Update Banner
 
@@ -56,3 +56,7 @@
 - [x] 7.5 Unit tests for `/api/v1/system/update` in both modes *(Update-Endpoint-Tests)*
 - [x] 7.6 Unit tests for Celery task `trigger_docker_update` (mocked subprocess) *(`tests/unit/test_tasks_more.py`)*
 - [x] 7.7 Unit tests for frontend `UpdateBanner.vue` component (visible/hidden for admin/non-admin, dismiss, version comparison) *(`src/components/__tests__/UpdateBanner.test.ts` + `src/stores/version.test.ts`)*
+
+## 8. Superseded (#469)
+
+- [x] 8.1 Update execution removed (section 3, task 4.3, 6.1/6.2 `UPDATE_MODE`/`DOCKER_COMPOSE_DIR`, tests 7.5/7.6): see change `remove-inapp-update-execution`. The app only displays available updates; operators update per `docs/production-runbook.md`.

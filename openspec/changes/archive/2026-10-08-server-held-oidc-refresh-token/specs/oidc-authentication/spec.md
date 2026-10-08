@@ -82,21 +82,6 @@ Every browser POST that uses or mutates the server-held refresh session SHALL su
 - **AND** sends that value in the CSRF request header
 - **AND** does not rely on a value captured before server-side CSRF rotation
 
-### Requirement: Backend accepts the CSRF token only from the request header
-The backend SHALL validate state-changing requests (POST, PUT, PATCH, DELETE) only against the token in the configured CSRF request header. The CSRF cookie SHALL NOT be accepted as a fallback, because browsers attach it to cross-site requests automatically. SameSite remains an additional, not a replacing, control.
-
-#### Scenario: Cookie without header
-- **WHEN** a state-changing request carries a valid CSRF cookie but no CSRF header, or an empty header
-- **THEN** the backend responds with 403 "CSRF validation failed"
-
-#### Scenario: Tampered header
-- **WHEN** the CSRF header contains a token with an invalid signature
-- **THEN** the backend responds with 403
-
-#### Scenario: Concurrent rotation
-- **WHEN** parallel responses rotate the CSRF cookie and a request sends a previously issued, still unexpired signed token in the header
-- **THEN** the request is accepted
-
 ### Requirement: Logout clears the server-held refresh credential
 The backend SHALL delete the refresh cookie on logout/revocation even if the upstream provider cannot be reached. Upstream revocation failures SHALL be logged for operational visibility.
 

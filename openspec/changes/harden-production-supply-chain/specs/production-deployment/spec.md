@@ -27,11 +27,13 @@ The default production Compose configuration SHALL NOT publish the internal HTTP
 ### Requirement: Browser security headers are applied
 The application nginx SHALL emit a restrictive Content-Security-Policy and baseline browser security headers. Browser API connections SHALL be restricted to the application origin unless an explicitly reviewed external endpoint is required. HSTS SHALL be configured at the public TLS termination layer, not on the internal HTTP hop.
 
-#### Scenario: Application page is served
+#### Scenario: SPA response
 - **WHEN** the frontend nginx serves the application
 - **THEN** the response carries a Content-Security-Policy whose `connect-src` is limited to `'self'`
 - **AND** Referrer-Policy and Permissions-Policy headers are set
 - **AND** the internal HTTP hop does not send HSTS
+
+## ADDED Requirements
 
 ### Requirement: Shipped JavaScript dependency graph has no known high advisories
 The release SHALL NOT ship a frontend dependency graph with known high or critical advisories. Remediation SHALL update the affected locked package to a patched compatible version in every committed Bun lockfile that contains it, without audit exceptions or a lowered audit threshold.

@@ -143,7 +143,7 @@ The backend SHALL delete the refresh cookie on logout/revocation even if the ups
 
 #### Scenario: Provider revocation fails
 - **WHEN** `POST /api/v1/auth/oidc/revoke` is called and the provider revocation endpoint errors or is unreachable
-- **THEN** the backend logs a warning, still deletes the refresh cookie and responds with 204
+- **THEN** the backend logs a warning without the token value, still deletes the refresh cookie and responds with 204
 
 ### Requirement: PKCE authorization code flow in the SPA
 The SPA SHALL start login with an authorization request containing `state` and a PKCE `code_challenge`, SHALL verify `state` on callback, and SHALL exchange the code through `POST /api/v1/auth/oidc/token` with the `code_verifier`. The client secret SHALL stay in the backend.
