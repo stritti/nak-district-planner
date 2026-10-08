@@ -44,6 +44,10 @@ The system SHALL persist a stable generation key on each generated planning slot
 - **WHEN** a generated planning slot was hard-deleted (no row with its generation key remains)
 - **THEN** the next pre-generation run creates the occurrence again; planners suppress a single occurrence by cancelling it instead of deleting it
 
+#### Scenario: Generated slot repurposed by a planner
+- **WHEN** a planner moves a generated slot to another congregation or changes its category away from `Gottesdienst`
+- **THEN** the slot loses its generation key, it is never adopted back as the service, and the occurrence is generated again once its date and time are free
+
 ### Requirement: Generation key is unique per district
 The system SHALL enforce at most one planning slot per generation key within a district, regardless of the slot status, and pre-generation SHALL skip an occurrence whose insert violates this rule instead of failing.
 

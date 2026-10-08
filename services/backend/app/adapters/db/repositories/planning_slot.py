@@ -121,7 +121,9 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         existing = await self._session.get(PlanningSlotORM, slot.id)
         if existing is not None:
             slot.forget_generation_key_if_reassigned(
-                district_id=existing.district_id, congregation_id=existing.congregation_id
+                district_id=existing.district_id,
+                congregation_id=existing.congregation_id,
+                category=existing.category,
             )
         row = existing or PlanningSlotORM()
         self._apply(row, slot)

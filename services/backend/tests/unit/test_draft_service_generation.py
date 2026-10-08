@@ -4,6 +4,8 @@ import uuid
 from collections.abc import Collection
 from datetime import UTC, date, datetime, time, timedelta, timezone
 
+import pytest
+
 from app.application.draft_service_generation import (
     GenerateDraftServicesUseCase,
     draft_service_generation_key,
@@ -100,9 +102,9 @@ class InMemoryPlanningSlotRepo(PlanningSlotRepository):
         stored = self._stored.get(slot.id)
         if stored is not None:
             slot.forget_generation_key_if_reassigned(
-                district_id=stored[0], congregation_id=stored[1]
+                district_id=stored[0], congregation_id=stored[1], category=stored[2]
             )
-        self._stored[slot.id] = (slot.district_id, slot.congregation_id)
+        self._stored[slot.id] = (slot.district_id, slot.congregation_id, slot.category)
         self._slots[slot.id] = slot
 
     async def lock_district_for_generation(self, district_id: uuid.UUID) -> None:
@@ -125,7 +127,7 @@ class InMemoryPlanningSlotRepo(PlanningSlotRepository):
             if same_key or same_active_time:
                 return False
         self._slots[slot.id] = slot
-        self._stored[slot.id] = (slot.district_id, slot.congregation_id)
+        self._stored[slot.id] = (slot.district_id, slot.congregation_id, slot.category)
         return True
 
 
@@ -605,23 +607,28 @@ async def test_slot_reassigned_to_other_congregation_loses_key_and_is_regenerate
     )
 
 
-def test_forget_generation_key_only_when_tenant_changes() -> None:
+@pytest.mark.parametrize("change", ["none", "congregation", "category"])
+def test_forget_generation_key_only_when_slot_is_repurposed(change) -> None:
     district_id, congregation_id = uuid.uuid4(), uuid.uuid4()
     slot = PlanningSlot.create(
         district_id=district_id,
         congregation_id=congregation_id,
         planning_date=date(2026, 4, 1),
         planning_time=time(18, 0),
+        category="Gottesdienst",
         generation_key="draft-service:x:2026-04-01",
     )
+    if change == "congregation":
+        slot.congregation_id = None
+    elif change == "category":
+        slot.category = "Konzert"
 
     slot.forget_generation_key_if_reassigned(
-        district_id=district_id, congregation_id=congregation_id
+        district_id=district_id, congregation_id=congregation_id, category="Gottesdienst"
     )
-    assert slot.generation_key == "draft-service:x:2026-04-01"
 
-    slot.forget_generation_key_if_reassigned(district_id=district_id, congregation_id=None)
-    assert slot.generation_key is None
+    expected = "draft-service:x:2026-04-01" if change == "none" else None
+    assert slot.generation_key == expected
 
 
 async def test_generation_locks_each_district_before_writing() -> None:
@@ -634,3 +641,26 @@ async def test_generation_locks_each_district_before_writing() -> None:
     )
 
     assert slot_repo.locked_districts == [district.id]
+
+
+async def test_generated_slot_changed_to_other_category_loses_key_and_is_regenerated() -> None:
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    use_case = _use_case(district, congregation, slot_repo, InMemoryEventInstanceRepo())
+    await use_case.run_for_window(**ONE_WEEK)
+    (changed,) = slot_repo._slots.values()
+
+    changed.category = "Konzert"  # planner repurposes the slot via PATCH
+    await slot_repo.save(changed)
+    occupied = await use_case.run_for_window(**ONE_WEEK)
+
+    assert changed.generation_key is None
+    assert occupied["created"] == 0  # the concert still occupies the time; never adopted back
+
+    changed.planning_time = time(15, 0)  # ... until the planner moves it
+    await slot_repo.save(changed)
+    freed = await use_case.run_for_window(**ONE_WEEK)
+
+    assert freed["created"] == 1
+    assert changed.generation_key is None

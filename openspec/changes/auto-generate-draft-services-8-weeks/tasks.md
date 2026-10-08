@@ -25,4 +25,5 @@
 - [x] 4.2 Add unit/integration tests for idempotency (second run creates no duplicates).
 - [x] 4.4 Add test case for moved generated event (Wednesday -> Thursday) to verify no regeneration at the original slot.
 - [x] 4.5 Add regression tests for #488: moved time, cancelled slot, legacy backfill, concurrent insert (unit + PostgreSQL integration).
+- [x] 4.6 Clear the generation key when a slot moves to another congregation or changes category; regression tests.
 - [x] 4.3 Add timezone/DST-focused tests to verify generated datetimes remain stable across transitions.
