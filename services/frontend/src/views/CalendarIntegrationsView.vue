@@ -11,7 +11,6 @@
       </button>
     </div>
 
-    <!-- District filter -->
     <div class="mb-5">
       <select
         v-model="filterDistrictId"
@@ -28,7 +27,6 @@
     <div v-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Lade…</div>
     <div v-else-if="loadError" class="text-sm text-red-600 dark:text-red-400">{{ loadError }}</div>
 
-    <!-- Integration list -->
     <div v-else-if="integrations.length > 0" class="space-y-3">
       <div
         v-for="item in integrations"
@@ -124,7 +122,6 @@
       @action="openForm"
     />
 
-    <!-- Feiertage Import -->
     <div class="mt-8 card">
       <button
         class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg"
@@ -142,7 +139,6 @@
         </p>
 
         <div class="flex flex-wrap gap-3 items-end">
-          <!-- District -->
           <div>
             <label class="filter-label text-gray-600 dark:text-gray-400">Bezirk</label>
             <select
@@ -156,7 +152,6 @@
             </select>
           </div>
 
-          <!-- Year -->
           <div>
             <label class="filter-label text-gray-600 dark:text-gray-400">Jahr</label>
             <input
@@ -166,7 +161,6 @@
             />
           </div>
 
-          <!-- State -->
           <div>
             <label class="filter-label text-gray-600 dark:text-gray-400">
               Bundesland <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
@@ -201,7 +195,6 @@
       </div>
     </div>
 
-    <!-- Delete confirmation dialog -->
     <ConfirmDialog
       :open="deleteTarget !== null"
       variant="danger"
@@ -214,7 +207,6 @@
       @cancel="deleteTarget = null"
     />
 
-    <!-- Edit modal -->
     <div
       v-if="editTarget"
       class="modal-backdrop"
@@ -230,7 +222,6 @@
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Typ: <span class="font-medium">{{ editTarget.type }}</span></p>
 
         <div class="space-y-4">
-          <!-- Name -->
           <div>
             <label class="form-label">Name</label>
             <input
@@ -240,7 +231,6 @@
             />
           </div>
 
-          <!-- Credentials — ICS -->
           <template v-if="editTarget.type === 'ICS'">
             <div>
               <label class="form-label">Kalender-URL (.ics)</label>
@@ -253,7 +243,6 @@
             </div>
           </template>
 
-          <!-- Credentials — CalDAV -->
           <template v-else-if="editTarget.type === 'CALDAV'">
             <div>
               <label class="form-label">Server-URL</label>
@@ -266,18 +255,15 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="form-label">Benutzername</label>
-                <input v-model="editForm.creds.username" type="text"
-                  class="form-input" />
+                <input v-model="editForm.creds.username" type="text" class="form-input" />
               </div>
               <div>
                 <label class="form-label">Passwort</label>
-                <input v-model="editForm.creds.password" type="password"
-                  class="form-input" />
+                <input v-model="editForm.creds.password" type="password" class="form-input" />
               </div>
             </div>
           </template>
 
-          <!-- Credentials — Google / Microsoft -->
           <template v-else>
             <div>
               <label class="form-label">Zugangsdaten (JSON)</label>
@@ -290,7 +276,6 @@
             </div>
           </template>
 
-          <!-- Sync interval -->
           <div>
             <label class="form-label">Sync-Intervall (Minuten)</label>
             <input
@@ -300,7 +285,6 @@
             />
           </div>
 
-          <!-- Default category -->
           <div>
             <label class="form-label">
               Standard-Kategorie <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
@@ -331,7 +315,6 @@
       </div>
     </div>
 
-    <!-- Create modal -->
     <div
       v-if="formOpen"
       class="modal-backdrop"
@@ -346,7 +329,6 @@
         </div>
 
         <div class="space-y-4">
-          <!-- District -->
           <div>
             <label class="form-label">Bezirk</label>
             <select
@@ -360,7 +342,6 @@
             </select>
           </div>
 
-          <!-- Congregation (optional) -->
           <div v-if="form.district_id">
             <label class="form-label">
               Gemeinde <span class="text-gray-400 dark:text-gray-500 font-normal">(optional — leer = Bezirksebene)</span>
@@ -376,7 +357,6 @@
             </select>
           </div>
 
-          <!-- Name -->
           <div>
             <label class="form-label">Name</label>
             <input
@@ -387,7 +367,6 @@
             />
           </div>
 
-          <!-- Type -->
           <div>
             <label class="form-label">Typ</label>
             <select
@@ -401,7 +380,6 @@
             </select>
           </div>
 
-          <!-- Credentials — ICS -->
           <template v-if="form.type === 'ICS'">
             <div>
               <label class="form-label">Kalender-URL (.ics)</label>
@@ -414,7 +392,6 @@
             </div>
           </template>
 
-          <!-- Credentials — CalDAV -->
           <template v-else-if="form.type === 'CALDAV'">
             <div>
               <label class="form-label">Server-URL</label>
@@ -445,7 +422,6 @@
             </div>
           </template>
 
-          <!-- Credentials — Google / Microsoft -->
           <template v-else>
             <div class="rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-200 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
               OAuth-Flow für {{ form.type === 'GOOGLE' ? 'Google' : 'Microsoft' }} ist noch nicht implementiert.
@@ -462,7 +438,6 @@
             </div>
           </template>
 
-          <!-- Sync interval -->
           <div>
             <label class="form-label">
               Sync-Intervall (Minuten)
@@ -476,7 +451,6 @@
             />
           </div>
 
-          <!-- Capabilities -->
           <div>
             <label class="form-label">Fähigkeiten</label>
             <div class="flex gap-4 flex-wrap">
@@ -492,7 +466,6 @@
             </div>
           </div>
 
-          <!-- Default category -->
           <div>
             <label class="form-label">
               Standard-Kategorie <span class="text-gray-400 dark:text-gray-500 font-normal">(optional)</span>
@@ -530,6 +503,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -541,6 +515,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import EmptyState from '../components/EmptyState.vue'
+import { useCalendarIntegrationsStore } from '../stores/calendarIntegrations'
 import { useDistrictsStore } from '../stores/districts'
 import { useToastStore } from '../stores/toast'
 import {
@@ -549,16 +524,12 @@ import {
   type CongregationResponse,
   type FeiertageImportResult,
 } from '../api/districts'
-import {
-  createIntegration,
-  deleteIntegration,
-  listIntegrations,
-  triggerSync,
-  updateIntegration,
-  type CalendarCapability,
-  type CalendarIntegrationResponse,
-  type CalendarType,
-  type SyncResult,
+import type {
+  CalendarCapability,
+  CalendarIntegrationCreate,
+  CalendarIntegrationResponse,
+  CalendarIntegrationUpdate,
+  CalendarType,
 } from '../api/calendarIntegrations'
 
 const DE_STATES: Record<string, string> = {
@@ -570,25 +541,27 @@ const DE_STATES: Record<string, string> = {
 }
 
 const districtsStore = useDistrictsStore()
+const integrationsStore = useCalendarIntegrationsStore()
 const toastStore = useToastStore()
+const {
+  integrations,
+  loading,
+  error: loadError,
+  syncingId,
+  syncResults,
+  syncErrors,
+} = storeToRefs(integrationsStore)
 
-const integrations = ref<CalendarIntegrationResponse[]>([])
-const loading = ref(false)
-const loadError = ref('')
 const filterDistrictId = ref('')
-
-const syncingId = ref<string | null>(null)
-const syncResults = reactive<Record<string, SyncResult>>({})
-const syncErrors = reactive<Record<string, string>>({})
-
 const ALL_CAPABILITIES: CalendarCapability[] = ['READ', 'WRITE', 'WEBHOOK']
+const allCongregations = ref<CongregationResponse[]>([])
 
 onMounted(async () => {
   if (districtsStore.districts.length === 0) await districtsStore.fetchDistricts()
   if (districtsStore.selectedDistrictId) {
     filterDistrictId.value = districtsStore.selectedDistrictId
   }
-  const all = await Promise.all(districtsStore.districts.map((d) => listCongregations(d.id)))
+  const all = await Promise.all(districtsStore.districts.map((district) => listCongregations(district.id)))
   allCongregations.value = all.flat()
   await load()
 })
@@ -601,45 +574,24 @@ async function onFilterDistrictChange() {
 }
 
 async function load() {
-  loading.value = true
-  loadError.value = ''
-  try {
-    const res = await listIntegrations(filterDistrictId.value || undefined)
-    integrations.value = res.items
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : 'Fehler beim Laden'
-  } finally {
-    loading.value = false
-  }
+  await integrationsStore.fetchIntegrations(filterDistrictId.value || undefined)
 }
 
 async function sync(id: string) {
-  syncingId.value = id
-  delete syncErrors[id]
-  try {
-    syncResults[id] = await triggerSync(id)
-    // Refresh last_synced_at
-    await load()
-  } catch (e) {
-    syncErrors[id] = e instanceof Error ? e.message : 'Sync fehlgeschlagen'
-  } finally {
-    syncingId.value = null
-  }
+  await integrationsStore.triggerIntegrationSync(id)
 }
 
 function districtName(id: string): string {
-  return districtsStore.districts.find((d) => d.id === id)?.name ?? id
+  return districtsStore.districts.find((district) => district.id === id)?.name ?? id
 }
 
-const allCongregations = ref<CongregationResponse[]>([])
-
 function congregationName(id: string): string {
-  return allCongregations.value.find((c) => c.id === id)?.name ?? id
+  return allCongregations.value.find((congregation) => congregation.id === id)?.name ?? id
 }
 
 function formatDt(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
+  const date = new Date(iso)
+  return date.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
 }
 
 function typeBadge(type: CalendarType): string {
@@ -652,7 +604,6 @@ function typeBadge(type: CalendarType): string {
   return map[type]
 }
 
-// --- Delete ---
 const deleteTarget = ref<CalendarIntegrationResponse | null>(null)
 const deleting = ref(false)
 
@@ -662,25 +613,22 @@ function confirmDelete(item: CalendarIntegrationResponse) {
 
 async function executeDelete() {
   if (!deleteTarget.value) return
-  const name = deleteTarget.value.name
+  const { id, name } = deleteTarget.value
   deleting.value = true
   try {
-    await deleteIntegration(deleteTarget.value.id)
-    integrations.value = integrations.value.filter((i) => i.id !== deleteTarget.value!.id)
+    await integrationsStore.remove(id)
     deleteTarget.value = null
     toastStore.success('Integration gelöscht', name)
-  } catch (e) {
-    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
+  } catch (error) {
+    toastStore.error('Löschen fehlgeschlagen', error instanceof Error ? error.message : undefined)
   } finally {
     deleting.value = false
   }
 }
 
-// --- Edit ---
 const editTarget = ref<CalendarIntegrationResponse | null>(null)
 const editSaving = ref(false)
 const editError = ref('')
-
 const editForm = reactive({
   name: '',
   creds: { url: '', username: '', password: '' },
@@ -703,8 +651,20 @@ function buildEditCredentials(): Record<string, string> | undefined {
   if (!editTarget.value) return undefined
   const type = editTarget.value.type
   if (type === 'ICS') return editForm.creds.url.trim() ? { url: editForm.creds.url.trim() } : undefined
-  if (type === 'CALDAV') return editForm.creds.url.trim() ? { url: editForm.creds.url.trim(), username: editForm.creds.username.trim(), password: editForm.creds.password } : undefined
-  try { return editForm.credsJson.trim() ? JSON.parse(editForm.credsJson) : undefined } catch { return undefined }
+  if (type === 'CALDAV') {
+    return editForm.creds.url.trim()
+      ? {
+          url: editForm.creds.url.trim(),
+          username: editForm.creds.username.trim(),
+          password: editForm.creds.password,
+        }
+      : undefined
+  }
+  try {
+    return editForm.credsJson.trim() ? JSON.parse(editForm.credsJson) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 async function saveEdit() {
@@ -712,31 +672,27 @@ async function saveEdit() {
   editSaving.value = true
   editError.value = ''
   try {
-    const payload: Parameters<typeof updateIntegration>[1] = {
+    const payload: CalendarIntegrationUpdate = {
       name: editForm.name.trim() || undefined,
       sync_interval: editForm.sync_interval,
       default_category: editForm.default_category.trim() || null,
     }
-    const creds = buildEditCredentials()
-    if (creds) payload.credentials = creds
+    const credentials = buildEditCredentials()
+    if (credentials) payload.credentials = credentials
 
-    const updated = await updateIntegration(editTarget.value.id, payload)
-    const idx = integrations.value.findIndex((i) => i.id === updated.id)
-    if (idx !== -1) integrations.value[idx] = updated
+    await integrationsStore.update(editTarget.value.id, payload)
     editTarget.value = null
-  } catch (e) {
-    editError.value = e instanceof Error ? e.message : 'Fehler beim Speichern'
+  } catch (error) {
+    editError.value = error instanceof Error ? error.message : 'Fehler beim Speichern'
   } finally {
     editSaving.value = false
   }
 }
 
-// --- Form ---
 const formOpen = ref(false)
 const saving = ref(false)
 const formError = ref('')
 const formCongregations = ref<CongregationResponse[]>([])
-
 const form = reactive({
   district_id: '',
   congregation_id: '',
@@ -760,10 +716,14 @@ watch(() => form.district_id, async (id) => {
 
 const formValid = computed(() => {
   if (!form.district_id || !form.name.trim()) return false
-  if (form.type === 'ICS') return !!form.creds.url.trim()
-  if (form.type === 'CALDAV') return !!form.creds.url.trim() && !!form.creds.username.trim()
-  // GOOGLE / MICROSOFT
-  try { JSON.parse(form.credsJson); return true } catch { return false }
+  if (form.type === 'ICS') return Boolean(form.creds.url.trim())
+  if (form.type === 'CALDAV') return Boolean(form.creds.url.trim() && form.creds.username.trim())
+  try {
+    JSON.parse(form.credsJson)
+    return true
+  } catch {
+    return false
+  }
 })
 
 function openForm() {
@@ -779,12 +739,14 @@ function openForm() {
   form.default_category = ''
   formError.value = ''
   formOpen.value = true
-  // Preload congregations when a filter district is already set
-  // (watch won't fire if form.district_id didn't change)
   if (filterDistrictId.value) {
-    listCongregations(filterDistrictId.value).then((cs) => {
-      formCongregations.value = cs
-    }).catch(() => {})
+    listCongregations(filterDistrictId.value)
+      .then((congregations) => {
+        formCongregations.value = congregations
+      })
+      .catch(() => {
+        formCongregations.value = []
+      })
   }
 }
 
@@ -808,7 +770,7 @@ async function submit() {
   saving.value = true
   formError.value = ''
   try {
-    const created = await createIntegration({
+    const payload: CalendarIntegrationCreate = {
       district_id: form.district_id,
       congregation_id: form.congregation_id || null,
       name: form.name.trim(),
@@ -817,22 +779,20 @@ async function submit() {
       sync_interval: form.sync_interval,
       capabilities: form.capabilities,
       default_category: form.default_category.trim() || null,
-    })
-    integrations.value.unshift(created)
+    }
+    await integrationsStore.create(payload)
     closeForm()
-  } catch (e) {
-    formError.value = e instanceof Error ? e.message : 'Fehler beim Anlegen'
+  } catch (error) {
+    formError.value = error instanceof Error ? error.message : 'Fehler beim Anlegen'
   } finally {
     saving.value = false
   }
 }
 
-// --- Feiertage Import ---
 const feiertageOpen = ref(false)
 const feiertageImporting = ref(false)
 const feiertageResult = ref<FeiertageImportResult | null>(null)
 const feiertageError = ref('')
-
 const feiertageForm = reactive({
   districtId: '',
   year: new Date().getFullYear(),
@@ -850,8 +810,8 @@ async function runFeiertageImport() {
       feiertageForm.year,
       feiertageForm.stateCode || null,
     )
-  } catch (e) {
-    feiertageError.value = e instanceof Error ? e.message : 'Import fehlgeschlagen'
+  } catch (error) {
+    feiertageError.value = error instanceof Error ? error.message : 'Import fehlgeschlagen'
   } finally {
     feiertageImporting.value = false
   }
