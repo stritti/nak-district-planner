@@ -4,7 +4,8 @@ Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deploymen
 
 ## 1. Voraussetzungen
 
-- Gueltige `.env` fuer Produktion (keine Dev-Secrets)
+- Gueltige `.env` fuer Produktion (keine Dev-Secrets) und `.env.db` mit dem PostgreSQL-Owner-Passwort (nur fuer `db`/`migrate`, siehe `docs/deployment-migrations.md`)
+  - Beim Upgrade einer bestehenden Installation `POSTGRES_PASSWORD` (und ggf. `MIGRATION_DATABASE_URL`) aus `.env` entfernen und nach `.env.db` verschieben. Mit `APP_ENV=production` verweigern API und Worker sonst den Start (`production_guard`).
 - Laufende Infrastruktur: Reverse Proxy, Datenbank, Redis
 - Backup-Strategie fuer PostgreSQL vorhanden
 
@@ -33,7 +34,7 @@ Der Production Guard verhindert den Start, wenn kritische Werte nicht gesetzt si
 
 1. Aktuellen Code bereitstellen (`main`/Release-Tag)
 2. Images bauen: `docker compose -f docker-compose.yml build`
-3. Migrationen ausfuehren: `docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head`
+3. Migrationen ausfuehren: `docker compose -f docker-compose.yml run --no-deps --rm migrate` (verwendet das in Schritt 2 gebaute Image, Details in `docs/deployment-migrations.md`)
 4. Stack starten/aktualisieren: `docker compose -f docker-compose.yml up -d`
 5. Health pruefen: `curl http://localhost/api/health`
 
@@ -48,7 +49,7 @@ sieht nur stabile Releases. Ältere Versionen werden nie als Update angezeigt.
 ## 3. Rollback (Basisverfahren)
 
 1. Vor Deployment DB-Backup erstellen.
-2. Bei Fehlern auf letztes stabiles Release zurueckgehen.
+2. Bei Fehlern auf letztes stabiles Release zurueckgehen. Hat das fehlerhafte Release bereits migriert, startet das aeltere Image nicht (Schema-Guard, fail closed): zuerst Backup einspielen oder mit dem neueren Image `alembic downgrade <revision>` ausfuehren.
 3. Wenn noetig DB-Restore aus validiertem Backup.
 4. Post-Rollback Smoke-Test (Login, Eventliste, Matrix, Export).
 
@@ -130,6 +131,14 @@ Abschnitt Verantwortlichkeiten).
 Der Counter wird erhöht, wenn Redis bei einer Rate-Limit-Prüfung nicht erreichbar
 ist oder einen Fehler liefert. Das System lässt den Request in diesem Fall bewusst
 zu, damit ein Redis-Ausfall nicht den gesamten Dienst blockiert.
+
+Ausnahme: OIDC-Token-Exchange (`POST /api/v1/auth/oidc/token`, 30/min) und
+oeffentliche Selbstregistrierung (`POST /api/v1/districts/{id}/registrations`,
+10/min) werden waehrend eines Fail-Open durch einen lokalen Fallback-Limiter je
+Client-Identitaet begrenzt. Dieser Limiter ist **pro Prozess**: Die effektive
+Grenze betraegt `Limit × Worker-Prozesse × Backend-Replikas`, und der Zaehler
+beginnt bei jedem Neustart wieder bei null. Er ist eine Notbremse, kein Ersatz
+fuer den Redis-Limiter.
 
 - **Voraussetzung:** `OTEL_ENABLED=true` setzen und `OTEL_ENDPOINT` auf einen
   erreichbaren OTLP-Collector mit Metrics-Export konfigurieren. Die Metriken des
