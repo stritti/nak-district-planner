@@ -6,11 +6,9 @@ import traceback
 from contextlib import asynccontextmanager
 
 import httpx
-from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from alembic import command
 from app.adapters.api import deps
 from app.adapters.api.middleware.audit import AuditMiddleware
 from app.adapters.api.middleware.csrf import CSRFMiddleware
@@ -40,6 +38,7 @@ from app.adapters.api.routers import (
 from app.adapters.api.routers.health import _build_health_response
 from app.adapters.auth.oidc import OIDCAdapter
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.db.schema_version import SchemaVersionError, assert_database_schema_current
 from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
@@ -60,8 +59,6 @@ def configure_logging() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
-
     configure_logging()
 
     try:
@@ -70,8 +67,11 @@ async def lifespan(app: FastAPI):
         print("🚨", str(e))
         sys.exit(1)
 
-    cfg = Config("alembic.ini")
-    await asyncio.to_thread(command.upgrade, cfg, "head")
+    try:
+        await assert_database_schema_current(engine)
+    except SchemaVersionError as e:
+        logging.getLogger(__name__).critical("Database schema check failed: %s", e)
+        raise
 
     await audit_service.start()
     register_event_mail_hooks()
