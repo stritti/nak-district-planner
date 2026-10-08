@@ -12,3 +12,7 @@
 - [x] 2.3 Guard in `run_sync`, Filter in `sync_all_active_integrations`, kein Celery-Retry für den Fehler
 - [x] 2.4 UI-Anpassung in `CalendarIntegrationsView.vue`
 - [x] 2.5 README/Docs aktualisieren; Connector-Code unverändert behalten
+
+## 3. Review-Nacharbeiten (Codex)
+
+- [x] 3.1 Ausgehende Schreibzugriffe (`push_deviation_resolution`, `push_conflict_resolution`) für GOOGLE/MICROSOFT verweigern → 409 statt 502

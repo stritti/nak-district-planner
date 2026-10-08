@@ -22,6 +22,10 @@ Existing `GOOGLE` and `MICROSOFT` integrations SHALL remain readable, SHALL be s
 - **WHEN** an admin triggers a sync for a `MICROSOFT` integration
 - **THEN** the API SHALL respond with 409 and a message that the provider is not supported in version 1.0
 
+#### Scenario: Resolving a conflict on a Google-linked event
+- **WHEN** a planner resolves a deviation or sync conflict whose writable link belongs to a `GOOGLE` or `MICROSOFT` integration
+- **THEN** the provider SHALL NOT be contacted, the API SHALL respond with 409, and the local state SHALL remain retryable
+
 ### Requirement: UI offers only supported providers
 The calendar integration form SHALL offer ICS and CalDAV as selectable types and SHALL show Google and Microsoft only as disabled options marked "geplant".
 

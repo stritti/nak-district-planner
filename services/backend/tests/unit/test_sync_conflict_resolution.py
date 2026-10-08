@@ -27,7 +27,9 @@ _CONG_ID = uuid.uuid4()
 _INT_ID = uuid.uuid4()
 
 
-def _integration(*, writable: bool = True) -> CalendarIntegration:
+def _integration(
+    *, writable: bool = True, cal_type: CalendarType = CalendarType.CALDAV
+) -> CalendarIntegration:
     capabilities = [CalendarCapability.READ]
     if writable:
         capabilities.append(CalendarCapability.WRITE)
@@ -36,7 +38,7 @@ def _integration(*, writable: bool = True) -> CalendarIntegration:
         district_id=_DISTRICT_ID,
         congregation_id=_CONG_ID,
         name="Test Kalender",
-        type=CalendarType.GOOGLE,
+        type=cal_type,
         credentials_enc="encrypted",
         sync_interval=60,
         capabilities=capabilities,
@@ -78,7 +80,7 @@ def _link(
 ) -> ExternalEventLink:
     return ExternalEventLink.create(
         event_instance_id=instance.id,
-        provider=CalendarType.GOOGLE.value,
+        provider=CalendarType.CALDAV.value,
         external_event_id="uid@test",
         calendar_integration_id=_INT_ID,
         last_synced_hash="old-hash",
@@ -210,3 +212,30 @@ async def test_provider_failure_does_not_advance_baseline(
     assert link.revision_marker == "stale-revision"
     link_repo.save.assert_not_awaited()
     instance_repo.save.assert_not_awaited()
+
+
+# ── v1.0 provider scope (#467): no outbound writes to Google/Microsoft ──────
+
+
+@pytest.mark.parametrize("cal_type", [CalendarType.GOOGLE, CalendarType.MICROSOFT])
+@pytest.mark.parametrize(
+    "push", [sync_service.push_conflict_resolution, sync_service.push_deviation_resolution]
+)
+async def test_outbound_write_to_unsupported_provider_is_refused(
+    monkeypatch: pytest.MonkeyPatch, cal_type: CalendarType, push
+) -> None:
+    from app.domain.errors import UnsupportedCalendarTypeError
+
+    instance = _instance(shifted=True)
+    link = _link(instance, baseline=_baseline())
+    link_repo, instance_repo, connector, session = _install_runtime(
+        monkeypatch, link=link, integration=_integration(cal_type=cal_type)
+    )
+
+    with pytest.raises(UnsupportedCalendarTypeError, match="ICS"):
+        await push(instance, session)
+
+    connector.update_event_times.assert_not_awaited()
+    link_repo.save.assert_not_awaited()
+    instance_repo.save.assert_not_awaited()
+    assert link.revision_marker == "stale-revision"

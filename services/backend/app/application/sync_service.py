@@ -396,6 +396,9 @@ async def push_deviation_resolution(instance: EventInstance, session: AsyncSessi
         integration = await integration_repo.get(link.calendar_integration_id)
         if integration is None or CalendarCapability.WRITE not in integration.capabilities:
             continue
+        if integration.type not in SUPPORTED_CALENDAR_TYPES:
+            # No outbound writes with static Google/Microsoft tokens (#467).
+            raise UnsupportedCalendarTypeError(integration.type)
         raw = RawCalendarEvent(
             uid=link.external_event_id,
             title=instance.title,
@@ -447,6 +450,9 @@ async def push_conflict_resolution(instance: EventInstance, session: AsyncSessio
         integration = await integration_repo.get(link.calendar_integration_id)
         if integration is None or CalendarCapability.WRITE not in integration.capabilities:
             continue
+        if integration.type not in SUPPORTED_CALENDAR_TYPES:
+            # No outbound writes with static Google/Microsoft tokens (#467).
+            raise UnsupportedCalendarTypeError(integration.type)
         changed_fields = _changed_fields(internal_payload, link.last_synced_payload)
         unsupported_fields = changed_fields - {"actual_start_at", "actual_end_at"}
         if unsupported_fields:
