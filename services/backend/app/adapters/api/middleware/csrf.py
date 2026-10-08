@@ -20,7 +20,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     """FastAPI Middleware for CSRF protection.
 
     Implements the Double-Submit Pattern for CSRF protection:
-    - CSRF token is sent both as a cookie and in a custom header
+    - CSRF token is issued as a readable cookie and must be echoed in a custom
+      header; the cookie alone is never accepted
     - Token is validated on state-changing requests (POST, PUT, DELETE, PATCH)
     - Token is automatically rotated on each response
     """
@@ -103,24 +104,13 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         return self._add_csrf_cookie(response, request)
 
     def _get_csrf_token(self, request: Request) -> str | None:
-        """Extract CSRF token from header or cookie.
+        """Extract the CSRF token from the request header only.
 
-        Args:
-            request: HTTP request.
-
-        Returns:
-            CSRF token string, or None if not found.
+        The cookie is never accepted as a fallback: browsers attach cookies to
+        cross-site requests automatically, so only an explicitly set header
+        proves that same-origin JavaScript read the token (#458).
         """
-        # Try header first
-        token = request.headers.get(self.header_name)
-        if token:
-            return token
-
-        # Try cookie
-        if hasattr(request, "cookies"):
-            return request.cookies.get(self.cookie_name)
-
-        return None
+        return request.headers.get(self.header_name) or None
 
     def _get_session_id(self, request: Request) -> str | None:
         """Extract session ID from request.
