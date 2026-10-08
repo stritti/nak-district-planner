@@ -3064,5 +3064,3 @@
 * chore: standardize markdown formatting and update documentation references across the repository (a75b6a9)
 * chore: clean up whitespace and update yamllint configuration (ba4f5bf)
 * chore: update release-please token to use GITHUB_TOKEN (3936d60)
-
-# Changelog
