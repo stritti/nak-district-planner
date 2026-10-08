@@ -113,6 +113,9 @@ def _raw_event(uid: str = "uid-1"):
         location=None,
         is_cancelled=False,
         content_hash=f"hash-{uid}",
+        series_uid=None,
+        recurrence_id=None,
+        outside_window=False,
     )
 
 
