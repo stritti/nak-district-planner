@@ -100,8 +100,19 @@ describe('ExportTokensView', () => {
     expect(wrapper.html()).toContain('/api/v1/export/secret-path-token/calendar.ics')
   })
 
-  it('switches approval filters and updates the generated calendar URL', async () => {
+  it('hides the approval filter for public tokens, which are always confirmed-only', async () => {
     vi.mocked(exportApi.listExportTokens).mockResolvedValue([token()])
+    const { wrapper } = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Freigabe:')
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Inkl. Geplante')).toBe(false)
+  })
+
+  it('switches approval filters and updates the generated calendar URL', async () => {
+    vi.mocked(exportApi.listExportTokens).mockResolvedValue([
+      token({ token_type: 'INTERNAL' }),
+    ])
     const { wrapper } = mountView()
     await flushPromises()
 
