@@ -8,7 +8,7 @@ Der Service `migrate` verwendet `.env.db` und `.env.docker.migrate`, fuehrt einm
 
 ### Credentials
 
-Das PostgreSQL-Owner-Passwort (`POSTGRES_PASSWORD`) steht ausschliesslich in `.env.db` (gitignored, Vorlage `.env.db.example`). Diese Datei laden nur `db`, `db-test` und `migrate`. Backend, Worker und alle weiteren Runtime-Services laden `.env` und `.env.docker` und erhalten damit nur die eingeschraenkte Rolle `APP_DB_USER`. `.env` darf daher kein `POSTGRES_PASSWORD` enthalten; fehlt `.env.db`, bricht `docker compose` bereits beim Laden der Konfiguration ab.
+Das PostgreSQL-Owner-Passwort (`POSTGRES_PASSWORD`) steht ausschliesslich in `.env.db` (gitignored, Vorlage `.env.db.example`). Diese Datei laden nur `db`, `db-test` und `migrate`. Backend, Worker und alle weiteren Runtime-Services laden `.env` und `.env.docker` und erhalten damit nur die eingeschraenkte Rolle `APP_DB_USER`. Das Frontend laedt nur `.env.docker.frontend` (aus `.env` interpoliertes `NGINX_REAL_IP_FROM`, keine Secrets). `.env` darf daher kein `POSTGRES_PASSWORD` enthalten; fehlt `.env.db`, bricht `docker compose` bereits beim Laden der Konfiguration ab.
 
 Fuer ein reproduzierbares Deployment:
 
@@ -28,13 +28,16 @@ Ein erstmaliges `docker compose up -d` startet den One-shot-Migrationsservice al
 docker compose run --no-deps --rm --build migrate
 ```
 
-Bei lokaler Backend-Ausfuehrung ausserhalb von Docker bleibt der direkte Alembic-Aufruf gueltig:
+Bei lokaler Backend-Ausfuehrung ausserhalb von Docker migriert Alembic mit der Owner-Rolle aus `.env.db`; die Anwendung selbst nutzt `DATABASE_URL`:
 
 ```bash
 cd services/backend
-uv run alembic upgrade head
+MIGRATION_DATABASE_URL=postgresql+asyncpg://nak:<POSTGRES_PASSWORD aus .env.db>@localhost:5433/nak_planner \
+  uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
+
+`make migrate` fuehrt dagegen den Compose-Service `migrate` aus und liest `.env.db` selbst.
 
 ## Fail-fast-Schema-Pruefung
 

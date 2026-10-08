@@ -1,7 +1,8 @@
 .PHONY: migrate seed seed-dry-run
 
+# Runs the one-shot migrate service, which alone loads the owner credentials (.env.db).
 migrate:
-	cd services/backend && uv run alembic upgrade head
+	docker compose run --no-deps --rm --build migrate
 
 seed:
 	cd services/backend && uv run python seed_testdata.py
