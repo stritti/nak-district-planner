@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**v1.0.0-rc.1 — release candidate in feature freeze.** OIDC authentication (server-held refresh cookie), RBAC, tenant isolation (middleware + PostgreSQL RLS), audit logging, rate limiting and CSRF protection are implemented and wired into `main.py` (see `docs/security/`). 48 Alembic migration files. Planning model (PlanningSlot/EventInstance), matrix planning (UC-03), calendar connectors and hybrid sync (UC-01/UC-02), governed external-event ingestion, distribution and ICS export (UC-04/05/06), notifications and mail hooks are implemented.
+**v1.0.0-rc.2 — release candidate in feature freeze.** OIDC authentication (server-held refresh cookie), RBAC, tenant isolation (middleware + PostgreSQL RLS), audit logging, rate limiting and CSRF protection are implemented and wired into `main.py` (see `docs/security/`). 54 Alembic migration files. Planning model (PlanningSlot/EventInstance), matrix planning (UC-03), calendar connectors and hybrid sync (UC-01/UC-02), governed external-event ingestion, distribution and ICS export (UC-04/05/06), notifications and mail hooks are implemented.
 
 **Source of truth:** `openspec/specs/` describes what is implemented (baseline, 2026-10-07); active work lives in `openspec/changes/`, delivered changes in `openspec/changes/archive/`. The v1.0 release backlog is tracked in GitHub issue #476 (see `docs/reviews/2026-10-07-release-1.0-review.md`).
 
