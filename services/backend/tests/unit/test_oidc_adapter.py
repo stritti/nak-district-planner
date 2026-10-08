@@ -623,6 +623,33 @@ class TestUserExtraction:
         with pytest.raises(TokenValidationError, match="subject"):
             oidc_adapter.extract_user_info({})
 
+    # Issue #461: only an IdP-asserted, verified ``email`` claim may be used
+    # for registration auto-linking.
+    def test_email_verified_true_boolean(self, oidc_adapter: OIDCAdapter) -> None:
+        user = oidc_adapter.extract_user_info(
+            {"sub": "u", "email": "u@example.com", "email_verified": True}
+        )
+        assert user["email_verified"] is True
+
+    @pytest.mark.parametrize("verified", [None, False, "true", "True", 1, "yes"])
+    def test_email_verified_requires_boolean_true(
+        self, oidc_adapter: OIDCAdapter, verified: object
+    ) -> None:
+        claims: dict[str, object] = {"sub": "u", "email": "u@example.com"}
+        if verified is not None:
+            claims["email_verified"] = verified
+        user = oidc_adapter.extract_user_info(claims)
+        assert user["email_verified"] is False
+
+    def test_username_fallback_is_never_verified(self, oidc_adapter: OIDCAdapter) -> None:
+        user = oidc_adapter.extract_user_info(
+            {"sub": "u", "preferred_username": "victim@example.com", "email_verified": True}
+        )
+        # Display fallback is kept ...
+        assert user["email"] == "victim@example.com"
+        # ... but it is not a verified email and must not be used for linking.
+        assert user["email_verified"] is False
+
 
 class TestClientLifecycle:
     @pytest.mark.asyncio
