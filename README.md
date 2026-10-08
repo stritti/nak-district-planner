@@ -2,6 +2,8 @@
 
 Planungswerkzeug für Gottesdienste und Veranstaltungen in NAK-Bezirken.
 Verwaltet Gemeinden, Termine und Dienstzuweisungen; exportiert Kalender als ICS-Feed.
+Externe Kalender werden in Version 1.0 per **ICS** und **CalDAV** angebunden;
+Google Calendar und Microsoft 365 sind geplant (OAuth-Flow mit Token-Refresh fehlt noch).
 
 ## Dokumentation
 
