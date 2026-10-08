@@ -19,6 +19,7 @@ from app.adapters.api.schemas.planning_series import (
     PlanningSeriesResponse,
     PlanningSeriesUpdate,
 )
+from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import require_role_in_district, require_superadmin
 from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
@@ -81,6 +82,7 @@ async def create_planning_series(
     **RBAC:** Requires DISTRICT_ADMIN role in the district.
     """
     require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    await ensure_congregation_in_district(db, body.district_id, body.congregation_id)
 
     series = PlanningSeries.create(
         district_id=body.district_id,
@@ -148,6 +150,7 @@ async def update_planning_series(
     # Apply updates
     fields = body.model_fields_set
     if "congregation_id" in fields and body.congregation_id is not None:
+        await ensure_congregation_in_district(db, series.district_id, body.congregation_id)
         series.congregation_id = body.congregation_id
     if "category" in fields and body.category is not None:
         series.category = body.category

@@ -2,7 +2,8 @@
 
 District-level planning slots (congregation_id=None) with a matching
 `applicability` entry must appear in the congregation's event view, but only
-when ACTIVE (PUBLISHED). Empty applicability or CANCELLED status excludes them.
+when ACTIVE and released (approval_status=CONFIRMED). Empty applicability,
+CANCELLED status or a PLANNED draft excludes them (issue #466).
 """
 
 from __future__ import annotations
@@ -22,7 +23,11 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
 )
 from app.domain.models.membership import Membership, ScopeType
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import (
+    EventApprovalStatus,
+    PlanningSlot,
+    PlanningSlotStatus,
+)
 from app.domain.models.role import Role
 from app.main import app
 
@@ -98,6 +103,7 @@ def _slot(
     applicability: list[str] | None = None,
     status: PlanningSlotStatus = PlanningSlotStatus.ACTIVE,
     title: str = "Gottesdienst",
+    approval_status: EventApprovalStatus = EventApprovalStatus.CONFIRMED,
 ) -> PlanningSlot:
     return PlanningSlot.create(
         district_id=district_id,
@@ -108,6 +114,7 @@ def _slot(
         title=title,
         applicability=applicability,
         status=status,
+        approval_status=approval_status,
     )
 
 
@@ -216,6 +223,31 @@ def test_cancelled_district_slot_excluded_even_with_matching_applicability():
 
     assert response.status_code == 200
     assert response.json()["items"] == []
+
+
+def test_planned_district_slot_not_distributed_to_congregation_view():
+    """Drafts (PLANNED) stay invisible to congregations until confirmed (#466)."""
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    district_slot = _slot(
+        district_id,
+        congregation_id=None,
+        applicability=["all"],
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    own_draft = _slot(
+        district_id, congregation_id=congregation_id, approval_status=EventApprovalStatus.PLANNED
+    )
+    slot_repo, inst_repo = _mock_repos([district_slot, own_draft])
+
+    with (
+        _auth_client(district_id) as (client, headers),
+        _repository_overrides(slot_repo=slot_repo, instance_repo=inst_repo),
+    ):
+        response = _list_events(client, headers, district_id, congregation_id)
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["items"]] == [str(own_draft.id)]
 
 
 def test_district_view_still_returns_district_slots():

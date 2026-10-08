@@ -200,15 +200,12 @@ async def list_events(
     if only_district_level:
         all_slots = [s for s in all_slots if s.congregation_id is None]
     elif congregation_id is not None:
+        # Own slots in every state; district slots only once released (UC-04).
         all_slots = [
             s
             for s in all_slots
             if s.congregation_id == congregation_id
-            or (
-                s.congregation_id is None
-                and s.status == PlanningSlotStatus.ACTIVE
-                and ("all" in s.applicability or str(congregation_id) in s.applicability)
-            )
+            or (s.status == PlanningSlotStatus.ACTIVE and s.is_distributed_to(congregation_id))
         ]
 
     if status_filter is not None:

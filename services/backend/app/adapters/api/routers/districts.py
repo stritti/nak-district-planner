@@ -37,6 +37,7 @@ from app.adapters.api.schemas.district import (
     ServiceTime,
 )
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
+from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_congregation,
@@ -67,7 +68,7 @@ from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import CongregationInvitation
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
 
@@ -202,6 +203,10 @@ async def create_congregation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     await _validate_group_assignment(group_repo, district_id, body.group_id)
+    await ensure_congregation_in_district(
+        db, district_id, body.invitation_target_congregation_id,
+        field="invitation_target_congregation_id",
+    )
     service_times = (
         [st.model_dump() for st in body.service_times] if body.service_times is not None else None
     )
@@ -289,6 +294,10 @@ async def update_congregation(
     if "invitation_target_type" in body.model_fields_set:
         congregation.invitation_target_type = body.invitation_target_type
     if "invitation_target_congregation_id" in body.model_fields_set:
+        await ensure_congregation_in_district(
+            db, district_id, body.invitation_target_congregation_id,
+            field="invitation_target_congregation_id",
+        )
         congregation.invitation_target_congregation_id = body.invitation_target_congregation_id
     if "invitation_external_note" in body.model_fields_set:
         congregation.invitation_external_note = body.invitation_external_note
@@ -494,13 +503,17 @@ async def get_matrix(
         c.id: _expected_dates(c.service_times, from_date, to_date) for c in congregations
     }
 
-    # Load all PlanningSlots for the district in the date range
-    # This includes both Gottesdienst and Feiertag slots
-    all_slots: list[PlanningSlot] = await slot_repo.list_for_date_range(
-        district_id=district_id,
-        from_date=from_date,
-        to_date=to_date,
-    )
+    # Load all ACTIVE PlanningSlots for the district in the date range (Gottesdienst
+    # and Feiertag). CANCELLED slots are neither gaps nor services (issue #466).
+    all_slots: list[PlanningSlot] = [
+        slot
+        for slot in await slot_repo.list_for_date_range(
+            district_id=district_id,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        if slot.status == PlanningSlotStatus.ACTIVE
+    ]
 
     # Separate slots by category
     gottesdienst_slots: list[PlanningSlot] = [
@@ -523,15 +536,22 @@ async def get_matrix(
         all_dates.add(slot.planning_date.isoformat())
     sorted_dates: list[str] = sorted(all_dates)
 
-    # Build slot lookup: (owner_id, date_key) -> slot
-    # For Gottesdienst slots, owner can be congregation or district
-    slot_by_owner_date: dict[tuple[uuid.UUID, str], PlanningSlot] = {}
+    gottesdienst_slots_by_date: dict[str, list[PlanningSlot]] = {}
     for slot in gottesdienst_slots:
-        owner_id = slot.congregation_id or slot.district_id
-        key = (owner_id, slot.planning_date.isoformat())
-        existing_slot = slot_by_owner_date.get(key)
-        if existing_slot is None or slot.planning_time < existing_slot.planning_time:
-            slot_by_owner_date[key] = slot
+        gottesdienst_slots_by_date.setdefault(slot.planning_date.isoformat(), []).append(slot)
+
+    def _cell_slot(congregation_id: uuid.UUID, date_key: str) -> PlanningSlot | None:
+        """Own slot before a distributed district slot; earliest time first."""
+        visible = [
+            slot
+            for slot in gottesdienst_slots_by_date.get(date_key, [])
+            if slot.is_visible_to(congregation_id)
+        ]
+        return min(
+            visible,
+            key=lambda slot: (slot.congregation_id is None, slot.planning_time),
+            default=None,
+        )
 
     # Batch-load leaders for this district
     leaders = await leader_repo.list_by_district(district_id)
@@ -604,11 +624,7 @@ async def get_matrix(
                     cells[date_key] = MatrixCell()
                     continue
 
-            # Get slot for this congregation and date
-            slot: PlanningSlot | None = slot_by_owner_date.get((congregation.id, date_key))
-            if slot is None:
-                # Try district-level slot
-                slot = slot_by_owner_date.get((district_id, date_key))
+            slot: PlanningSlot | None = _cell_slot(congregation.id, date_key)
 
             if slot is None:
                 # Expected by schedule but no slot exists yet

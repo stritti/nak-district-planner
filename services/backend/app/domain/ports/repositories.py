@@ -26,6 +26,7 @@ from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
+from app.domain.planning.conflict_result import ScheduledService
 
 
 class DistrictRepository(ABC):
@@ -275,6 +276,17 @@ class ServiceAssignmentRepository(ABC):
     @abstractmethod
     async def list_by_leader(self, leader_id: uuid.UUID) -> list[ServiceAssignment]:
         pass
+
+    @abstractmethod
+    async def list_leader_schedule(
+        self,
+        leader_id: uuid.UUID,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+        exclude_assignment_id: uuid.UUID | None = None,
+    ) -> list[ScheduledService]:
+        """Active services of the leader that may conflict with the given window."""
 
     @abstractmethod
     async def save(self, assignment: ServiceAssignment) -> None:

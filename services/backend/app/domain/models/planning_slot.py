@@ -121,6 +121,35 @@ class PlanningSlot:
         ):
             self.generation_key = None
 
+    def is_visible_to(self, congregation_id: uuid.UUID) -> bool:
+        """Whether this slot belongs in the given congregation's scope (UC-03/04/05).
+
+        A congregation slot is visible only to its own congregation; a district
+        slot (``congregation_id is None``) only to the congregations listed in
+        ``applicability`` (or all of them via the ``"all"`` sentinel). An empty
+        ``applicability`` means "not distributed". Status and approval are
+        deliberately not considered here; see :meth:`is_distributed_to`.
+        """
+        if self.congregation_id is not None:
+            return self.congregation_id == congregation_id
+        return (
+            APPLICABILITY_ALL in self.applicability
+            or str(congregation_id) in self.applicability
+        )
+
+    @property
+    def is_confirmed(self) -> bool:
+        """Approval policy: only CONFIRMED slots are released to outside audiences."""
+        return self.approval_status == EventApprovalStatus.CONFIRMED
+
+    def is_distributed_to(self, congregation_id: uuid.UUID) -> bool:
+        """Whether a district slot is released (CONFIRMED) to the congregation (UC-04)."""
+        return (
+            self.congregation_id is None
+            and self.is_confirmed
+            and self.is_visible_to(congregation_id)
+        )
+
     def distribute_to(
         self,
         entries: Iterable[str],

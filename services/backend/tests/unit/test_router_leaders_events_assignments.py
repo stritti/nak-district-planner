@@ -579,9 +579,39 @@ async def test_service_assignment_crud_paths() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["create", "update", "delete"])
+async def test_service_assignment_writes_touch_planning_slot(action: str) -> None:
+    """Assignment changes bump the slot revision so ICS feeds re-sync (#466)."""
+    slot = _planning_slot(district_id=uuid.uuid4())
+    before = datetime(2026, 1, 1, tzinfo=UTC)
+    slot.updated_at = before
+    assignment = ServiceAssignment.create(event_id=slot.id, leader_name="Pr. X")
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = assignment
+    args = (_auth_context(), AsyncMock(), slot_repo, sa_repo)
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
+        if action == "create":
+            await sa_router.create_assignment(
+                slot.id, ServiceAssignmentCreate(leader_name="Pr. Y"), *args
+            )
+        elif action == "update":
+            await sa_router.update_assignment(
+                slot.id, assignment.id, ServiceAssignmentUpdate(leader_name="Pr. Z"), *args
+            )
+        else:
+            await sa_router.delete_assignment(slot.id, assignment.id, *args)
+
+    assert slot.updated_at > before
+    slot_repo.save.assert_awaited_once_with(slot)
+
+
+@pytest.mark.asyncio
 async def test_service_assignment_create_blocks_conflict() -> None:
     slot = _planning_slot()
     db = AsyncMock()
+    db.scalar.return_value = slot.district_id  # leader belongs to the district
     leader_id = uuid.uuid4()
     slot_repo = AsyncMock()
     slot_repo.get = AsyncMock(return_value=slot)
@@ -613,6 +643,7 @@ async def test_service_assignment_create_blocks_conflict() -> None:
 async def test_service_assignment_create_allows_confirmed_warning() -> None:
     slot = _planning_slot()
     db = AsyncMock()
+    db.scalar.return_value = slot.district_id  # leader belongs to the district
     leader_id = uuid.uuid4()
     slot_repo = AsyncMock()
     slot_repo.get = AsyncMock(return_value=slot)
