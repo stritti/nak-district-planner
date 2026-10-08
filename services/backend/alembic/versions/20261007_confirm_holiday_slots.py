@@ -11,7 +11,7 @@ Downgrade is a deliberate no-op: the previous approval and applicability values
 are not recorded, and the new values are valid under the old schema.
 
 Revision ID: 20261007_confirm_holidays
-Revises: 20261007_celery_tables
+Revises: 20261007_assignment_unique
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261007_confirm_holidays"
-down_revision = "20261007_celery_tables"
+down_revision = "20261007_assignment_unique"
 branch_labels = None
 depends_on = None
 

@@ -37,6 +37,7 @@ from app.adapters.api.schemas.district import (
     ServiceTime,
 )
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
+from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_congregation,
@@ -202,6 +203,10 @@ async def create_congregation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     await _validate_group_assignment(group_repo, district_id, body.group_id)
+    await ensure_congregation_in_district(
+        db, district_id, body.invitation_target_congregation_id,
+        field="invitation_target_congregation_id",
+    )
     service_times = (
         [st.model_dump() for st in body.service_times] if body.service_times is not None else None
     )
@@ -289,6 +294,10 @@ async def update_congregation(
     if "invitation_target_type" in body.model_fields_set:
         congregation.invitation_target_type = body.invitation_target_type
     if "invitation_target_congregation_id" in body.model_fields_set:
+        await ensure_congregation_in_district(
+            db, district_id, body.invitation_target_congregation_id,
+            field="invitation_target_congregation_id",
+        )
         congregation.invitation_target_congregation_id = body.invitation_target_congregation_id
     if "invitation_external_note" in body.model_fields_set:
         congregation.invitation_external_note = body.invitation_external_note
