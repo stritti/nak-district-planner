@@ -33,6 +33,7 @@
 - [x] 3.11 Discovery-/CSRF-Bootstrap und deduplizierter Restore sind als Unit-Tests abgedeckt.
 - [x] 3.12 E2E-Auth-Fixtures verwenden den produktiven HttpOnly-Restore-Vertrag statt persistierter Auth-Credentials.
 - [x] 3.13 Direkte Reloads geschuetzter Routen werden durch die Restore-basierten E2E-Flows abgedeckt.
+- [x] 3.14 Backend akzeptiert CSRF-Token nur aus dem Header; Cookie-Fallback entfernt, Regressionstests ueber HTTPS-Testclient (#458).
 
 ## 4. Verifikation
 

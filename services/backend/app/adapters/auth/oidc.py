@@ -463,12 +463,19 @@ class OIDCAdapter:
         if username is None:
             username = email or sub
 
+        # Only a real ``email`` claim with ``email_verified`` exactly boolean
+        # ``true`` counts as verified. String values ("true") are rejected on
+        # purpose: fail closed rather than guess IdP-specific encodings (#461).
+        email_verified = email is not None and token_claims.get("email_verified") is True
+
         if email is None:
+            # Display-only fallback; never verified, never used for linking.
             email = username if "@" in username else f"{sub}@oidc.local"
 
         return {
             "sub": sub,
             "email": email,
+            "email_verified": email_verified,
             "username": username,
             "name": token_claims.get("name") or token_claims.get("given_name", ""),
             "given_name": token_claims.get("given_name"),
