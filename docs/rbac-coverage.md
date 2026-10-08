@@ -105,7 +105,6 @@ Legende:
 | | `/{id}` | PUT | R(PLANNER) | AUDIT | RL |
 | | | DELETE | R(PLANNER) | AUDIT | RL |
 | **system** | `/api/v1/system/version` | GET | SUPERADMIN / R(DISTRICT_ADMIN) / R(CONGREGATION_ADMIN) | – | RL |
-| | `/api/v1/system/update` | POST | SUPERADMIN | AUDIT | RL |
 | **health** | `/api/health` | GET/HEAD/OPTIONS | 🔓 Public | – | – |
 
 ## Anmerkungen
@@ -226,7 +225,6 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | GET | `/api/v1/public/districts` | `registrations.list_districts_public` | 🔓 Public | – |
 | GET | `/api/v1/public/districts/{district_id}/congregations` | `registrations.list_congregations_public` | 🔓 Public | – |
 | GET | `/api/v1/registrations/pending-overview` | `registrations.get_pending_overview` | 🔐 Auth | `get_districts_where_user_has_role`, `is_superadmin` |
-| POST | `/api/v1/system/update` | `system.trigger_update` | 🔐 Auth | `is_superadmin` |
 | GET | `/api/v1/system/version` | `system.get_version` | 🔐 Auth | `get_districts_where_user_has_role`, `is_superadmin` |
 | GET, HEAD, OPTIONS | `/health` | `health.health` | 🔓 Public | – |
 <!-- rbac-inventory:end -->

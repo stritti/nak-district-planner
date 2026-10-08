@@ -5,7 +5,6 @@ import * as systemApi from '@/api/system'
 
 vi.mock('@/api/system', () => ({
   getVersion: vi.fn(),
-  triggerUpdate: vi.fn(),
 }))
 
 const versionResponse = (overrides = {}) => ({
@@ -51,14 +50,14 @@ describe('useVersionStore', () => {
     const store = useVersionStore()
     store.hasUpdate = true
     vi.mocked(systemApi.getVersion).mockResolvedValueOnce(
-      versionResponse({ current_version: '0.5.0', latest_version: '0.5.0' }),
+      versionResponse({ current_version: '0.5.0', latest_version: '0.5.0', update_available: false }),
     )
     await store.checkVersion()
     expect(store.hasUpdate).toBe(false)
 
     store.hasUpdate = true
     vi.mocked(systemApi.getVersion).mockResolvedValueOnce(
-      versionResponse({ latest_version: null }),
+      versionResponse({ latest_version: null, update_available: false }),
     )
     await store.checkVersion()
     expect(store.hasUpdate).toBe(false)
@@ -105,42 +104,10 @@ describe('useVersionStore', () => {
     expect(store.hasUpdate).toBe(true)
   })
 
-  it('triggers an update and records a successful result and mode', async () => {
-    const result = {
-      status: 'started' as const,
-      mode: 'docker-socket' as const,
-      instructions: null,
-    }
-    vi.mocked(systemApi.triggerUpdate).mockResolvedValue(result)
-    const store = useVersionStore()
-
-    await expect(store.trigger()).resolves.toEqual(result)
-
-    expect(store.updateResult).toEqual(result)
-    expect(store.updateMode).toBe('docker-socket')
-    expect(store.updating).toBe(false)
-  })
-
-  it('records a safe manual result and rethrows when update triggering fails', async () => {
-    const error = new Error('update unavailable')
-    vi.mocked(systemApi.triggerUpdate).mockRejectedValue(error)
-    const store = useVersionStore()
-
-    await expect(store.trigger()).rejects.toThrow('update unavailable')
-
-    expect(store.updateResult).toEqual({
-      status: 'error',
-      mode: 'manual',
-      instructions: null,
-    })
-    expect(store.updating).toBe(false)
-  })
-
   it('resets mutable version state', async () => {
     vi.mocked(systemApi.getVersion).mockResolvedValue(versionResponse())
     const store = useVersionStore()
     await store.checkVersion()
-    store.updateResult = { status: 'manual', mode: 'manual', instructions: 'run it' }
 
     store.$reset()
 
@@ -149,6 +116,19 @@ describe('useVersionStore', () => {
     expect(store.lastChecked).toBeNull()
     expect(store.releaseUrl).toBeNull()
     expect(store.hasUpdate).toBe(false)
-    expect(store.updateResult).toBeNull()
+  })
+
+  it('trusts backend update_available (no banner for older/equal versions)', async () => {
+    vi.mocked(systemApi.getVersion).mockResolvedValue(
+      versionResponse({ current_version: '1.0.0rc1', latest_version: '0.29.3', update_available: false }),
+    )
+    const store = useVersionStore()
+    await store.checkVersion()
+    expect(store.hasUpdate).toBe(false)
+  })
+
+  it('does not expose an update trigger', () => {
+    const store = useVersionStore()
+    expect('trigger' in store).toBe(false)
   })
 })
