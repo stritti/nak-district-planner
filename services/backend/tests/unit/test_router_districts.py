@@ -339,7 +339,7 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
                 invitation_target_congregation_id=uuid.uuid4(),
             ),
             object(),
-            AsyncMock(),
+            AsyncMock(scalar=AsyncMock(return_value=district_id)),  # target in same district
             cong_repo=cong_repo,
             group_repo=group_repo,
         )
@@ -351,7 +351,7 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
                 invitation_external_note="Hinweis",
             ),
             object(),
-            AsyncMock(),
+            AsyncMock(scalar=AsyncMock(return_value=district_id)),  # target in same district
             cong_repo=cong_repo,
             group_repo=group_repo,
         )

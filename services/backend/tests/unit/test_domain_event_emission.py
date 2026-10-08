@@ -230,6 +230,7 @@ async def test_registration_approval_publishes_event() -> None:
     cong_repo = AsyncMock()
     cong_repo.get.return_value = Congregation.create(name="G", district_id=DISTRICT)
     db = AsyncMock()
+    db.scalar.return_value = DISTRICT  # congregation_id belongs to the district
     with (
         patch.object(registrations_router, "require_role_in_district"),
         patch.object(registrations_router, "get_idp_provisioner", return_value=None),

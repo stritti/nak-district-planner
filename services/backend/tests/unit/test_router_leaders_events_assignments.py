@@ -582,6 +582,7 @@ async def test_service_assignment_crud_paths() -> None:
 async def test_service_assignment_create_blocks_conflict() -> None:
     slot = _planning_slot()
     db = AsyncMock()
+    db.scalar.return_value = slot.district_id  # leader belongs to the district
     leader_id = uuid.uuid4()
     slot_repo = AsyncMock()
     slot_repo.get = AsyncMock(return_value=slot)
@@ -613,6 +614,7 @@ async def test_service_assignment_create_blocks_conflict() -> None:
 async def test_service_assignment_create_allows_confirmed_warning() -> None:
     slot = _planning_slot()
     db = AsyncMock()
+    db.scalar.return_value = slot.district_id  # leader belongs to the district
     leader_id = uuid.uuid4()
     slot_repo = AsyncMock()
     slot_repo.get = AsyncMock(return_value=slot)
