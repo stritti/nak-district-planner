@@ -9,7 +9,7 @@ Downgrade is a deliberate no-op: the previous (NULL/PLANNED) values are not
 recorded, and CONFIRMED holidays are valid under the old schema.
 
 Revision ID: 20261007_confirm_holidays
-Revises: 20261001_slot_gaps
+Revises: 20261007_celery_tables
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261007_confirm_holidays"
-down_revision = "20261001_slot_gaps"
+down_revision = "20261007_celery_tables"
 branch_labels = None
 depends_on = None
 
