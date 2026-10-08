@@ -111,7 +111,7 @@ class Settings(BaseSettings):
         return _parse_nat64_prefixes(self.calendar_nat64_prefixes)
 
     @model_validator(mode="after")
-    def reject_insecure_calendar_urls_in_production(self) -> "Settings":
+    def reject_insecure_calendar_urls_in_production(self) -> Settings:
         """Fail every process (API, worker, beat) at settings load, not only the API lifespan."""
         if self.app_env == "production" and self.calendar_allow_insecure_urls:
             raise ValueError(
