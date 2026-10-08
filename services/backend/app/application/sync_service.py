@@ -389,7 +389,9 @@ async def push_deviation_resolution(instance: EventInstance, session: AsyncSessi
     link_repo = SqlExternalEventLinkRepository(session)
     integration_repo = SqlCalendarIntegrationRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
-    pushed = False
+    # Preflight: validate every writable link before the first provider call,
+    # so a mixed CalDAV + Google event is refused without partial writes (#467).
+    writable_links: list[tuple[ExternalEventLink, CalendarIntegration]] = []
     for link in await link_repo.list_by_event_instance(instance.id):
         if link.state != ExternalEventLinkState.ACTIVE:
             continue
@@ -399,6 +401,10 @@ async def push_deviation_resolution(instance: EventInstance, session: AsyncSessi
         if integration.type not in SUPPORTED_CALENDAR_TYPES:
             # No outbound writes with static Google/Microsoft tokens (#467).
             raise UnsupportedCalendarTypeError(integration.type)
+        writable_links.append((link, integration))
+
+    pushed = False
+    for link, integration in writable_links:
         raw = RawCalendarEvent(
             uid=link.external_event_id,
             title=instance.title,
