@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import logging
 import socket
 from collections.abc import AsyncIterator, Awaitable, Callable
 
@@ -27,6 +28,8 @@ import httpx
 
 from app.config import settings
 from app.domain.ports.calendar import CalendarConnectorError
+
+logger = logging.getLogger(__name__)
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 # Prefixes that embed an IPv4 address in the low 32 bits: NAT64 (RFC 6052)
@@ -39,6 +42,15 @@ Resolver = Callable[[str, int], Awaitable[list[str]]]
 
 class UnsafeCalendarUrlError(CalendarConnectorError):
     """The calendar URL or its resolved address is not allowed."""
+
+
+class BlockedAddressError(httpx.ConnectError):
+    """The host resolved to a non-public address.
+
+    Deliberately a transport error: callers see the same generic message as
+    for an unresolvable or unreachable host, so the sync endpoint and
+    last_sync_error cannot be used as an internal-DNS oracle.
+    """
 
 
 class ResponseTooLargeError(CalendarConnectorError):
@@ -155,7 +167,8 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             except OSError as exc:
                 raise httpx.ConnectError("Name resolution failed", request=request) from exc
             if not addresses or not all(_is_public(a) for a in addresses):
-                raise UnsafeCalendarUrlError("Kalender-URL zeigt auf ein nicht erlaubtes Netz")
+                logger.warning("Calendar request blocked: host resolved to a non-public address")
+                raise BlockedAddressError("Blocked address", request=request)
             if _ip_literal(host) is None:
                 # Connect to the validated IP; the copied Host header and the
                 # SNI extension keep virtual hosting and cert checks intact.

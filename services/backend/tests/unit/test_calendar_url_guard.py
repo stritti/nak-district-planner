@@ -44,6 +44,17 @@ BLOCKED_ADDRESSES = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _no_retry_backoff(monkeypatch):
+    # Blocked and unreachable hosts are retried identically (no timing oracle);
+    # skip the real backoff sleeps in tests.
+    from tenacity import wait_none
+
+    monkeypatch.setattr(
+        "app.adapters.calendar.http_policy.wait_exponential_jitter", lambda **_: wait_none()
+    )
+
+
 def _resolver(*addresses: str):
     async def resolve(host: str, port: int) -> list[str]:
         return list(addresses)
@@ -189,7 +200,7 @@ async def test_every_redirect_hop_is_revalidated_even_if_redirects_are_enabled()
 
     transport = GuardedTransport(inner=httpx.MockTransport(handler), resolver=resolve)
     async with guarded_client(transport=transport, follow_redirects=True) as client:
-        with pytest.raises(UnsafeCalendarUrlError):
+        with pytest.raises(httpx.ConnectError):
             await client.get("https://calendar.example.com/feed.ics")
     assert calls == ["calendar.example.com"]
 
@@ -309,3 +320,26 @@ async def test_identity_encoded_response_is_accepted():
     connector = ICalConnector(client=_client(handler, "93.184.216.34"))
     assert await connector.fetch_events({"url": "https://calendar.example.com/feed.ics"}) == []
 
+
+async def test_blocked_dns_answer_is_indistinguishable_from_unresolvable_host():
+    """No internal-DNS oracle via trigger_sync / last_sync_error (finding 7)."""
+
+    async def unresolvable(host, port):
+        raise OSError("Name or service not known")
+
+    def message(connector_cls, resolver, creds):
+        async def run():
+            transport = GuardedTransport(inner=httpx.MockTransport(_ok), resolver=resolver)
+            connector = connector_cls(client=guarded_client(transport=transport))
+            with pytest.raises(CalendarConnectorError) as exc_info:
+                await connector.fetch_events(creds)
+            return str(exc_info.value)
+
+        return run()
+
+    ics = {"url": "https://intranet.example.com/feed.ics"}
+    dav = {"url": "https://intranet.example.com/cal/", "username": "u", "password": "p"}
+    for connector_cls, creds in ((ICalConnector, ics), (CalDAVConnector, dav)):
+        blocked = await message(connector_cls, _resolver("10.0.0.8"), creds)
+        missing = await message(connector_cls, unresolvable, creds)
+        assert blocked == missing
