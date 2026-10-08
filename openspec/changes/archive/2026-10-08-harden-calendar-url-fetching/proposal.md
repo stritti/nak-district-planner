@@ -1,6 +1,6 @@
 ## Why
 
-Issue #463: Kalender-URLs (`credentials.url` für ICS/CalDAV) wurden beim Anlegen/Ändern nicht validiert; schon `CONGREGATION_ADMIN` konnte beliebige Ziele eintragen. Der ICS-Client folgte Redirects, es gab keine Prüfung auf private/Loopback/Link-local/ULA-Netze, Antworten wurden unbegrenzt gelesen, und unterschiedliche Fehlertexte ("HTTP <code>" vs. "Transportfehler") wirkten über den Sync-Endpunkt und `last_sync_error` als Port-/Service-Orakel. CalDAV-Fehler enthielten zudem die URL inkl. eingebetteter Zugangsdaten. Damit war Server-Side Request Forgery gegen interne Dienste (DB, Valkey, Cloud-Metadaten) möglich.
+Issue #463: Kalender-URLs (`credentials.url` für ICS/CalDAV) wurden beim Anlegen/Ändern nicht validiert; schon `CONGREGATION_ADMIN` konnte beliebige Ziele eintragen. Der ICS-Client folgte Redirects, es gab keine Prüfung auf private/Loopback/Link-local/ULA-Netze, Antworten wurden unbegrenzt gelesen, und unterschiedliche Fehlertexte (`HTTP <code>` vs. `Transportfehler`) wirkten über den Sync-Endpunkt und `last_sync_error` als Port-/Service-Orakel. CalDAV-Fehler enthielten zudem die URL inkl. eingebetteter Zugangsdaten. Damit war Server-Side Request Forgery gegen interne Dienste (DB, Valkey, Cloud-Metadaten) möglich.
 
 ## What Changes
 
