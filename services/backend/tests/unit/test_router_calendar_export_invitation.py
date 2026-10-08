@@ -199,7 +199,7 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
                 district_id=district_id,
                 name="Name",
                 type=CalendarType.ICS,
-                credentials={"u": "x"},
+                credentials={"url": "https://calendar.example.com/feed.ics"},
             ),
             auth,
             db,

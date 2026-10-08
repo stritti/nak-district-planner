@@ -99,6 +99,7 @@ Eine Route darf nur dann ohne Bearer-Authentifizierung erreichbar sein, wenn sie
 - CSP und Security Header sind restriktiv; externe `connect-src`-Ziele muessen begruendet sein: ✅ (PR #440)
 - Runtime und Migration verwenden getrennte DB-Verantwortlichkeiten: ✅
 - Schema-Migration gehoert in den Deployment-Schritt, nicht in den API-Lifespan: ✅ (PR #441)
+- Ausgehende Kalender-Abrufe (ICS/CalDAV) sind SSRF-gehaertet: nur HTTPS, nur oeffentliche Zieladressen (Pruefung und IP-Pinning je Anfrage), keine Redirects, max. 10 MB, hoechstens 30 Sekunden je Abruf inkl. Retries, generische Fehlermeldungen: ✅ (#463)
 
 ### 7.1 Keine In-App-Updates
 
