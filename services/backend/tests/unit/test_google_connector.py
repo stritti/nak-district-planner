@@ -381,7 +381,7 @@ class TestFetchEvents:
         )
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(CalendarConnectorError, match="HTTP 404"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_http_401_raises_value_error(
@@ -393,7 +393,7 @@ class TestFetchEvents:
         )
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(CalendarConnectorError, match="HTTP 401"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_http_500_raises_value_error(
@@ -405,7 +405,7 @@ class TestFetchEvents:
         )
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(CalendarConnectorError, match="HTTP 500"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_html_response_raises_value_error(
