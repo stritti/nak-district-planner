@@ -74,6 +74,8 @@ services:
     # preserving the documented reverse-proxy target on 127.0.0.1:80.
     ports:
       - "127.0.0.1:80:80"
+    env_file:
+      - .env.docker.frontend
     depends_on:
       migrate:
         condition: service_completed_successfully

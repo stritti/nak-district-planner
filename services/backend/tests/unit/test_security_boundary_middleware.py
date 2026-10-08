@@ -260,7 +260,8 @@ def test_local_fallback_buckets_are_separated_by_identifier() -> None:
     app = registration_app(LocalFallbackRateLimiter())
     path = "/api/v1/districts/11111111-1111-1111-1111-111111111111/registrations"
 
-    with TestClient(app) as client:
+    # Requests arrive via the trusted frontend nginx, which sets X-Real-IP.
+    with TestClient(app, client=("172.18.0.5", 40000)) as client:
         for _ in range(10):
             client.post(path, headers={"X-Real-IP": "198.51.100.1"})
         assert client.post(path, headers={"X-Real-IP": "198.51.100.1"}).status_code == 429
