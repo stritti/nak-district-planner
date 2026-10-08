@@ -78,8 +78,10 @@ async def test_unhandled_exception_handler() -> None:
 
 @pytest.mark.asyncio
 async def test_lifespan_initializes_and_cleans_up() -> None:
+    schema_check = AsyncMock()
     with (
         patch("asyncio.to_thread", new=AsyncMock()),
+        patch("app.main.assert_database_schema_current", new=schema_check),
         patch("app.main.httpx.AsyncClient") as client_cls,
         patch("app.main.OIDCAdapter") as adapter_cls,
         patch("app.main.deps.set_oidc_adapter"),
@@ -95,14 +97,36 @@ async def test_lifespan_initializes_and_cleans_up() -> None:
         async with main.lifespan(main.app):
             pass
 
+        schema_check.assert_awaited_once_with(main.engine)
         adapter.discover.assert_awaited_once()
         adapter.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
+async def test_lifespan_rejects_stale_schema_before_runtime_services_start() -> None:
+    schema_check = AsyncMock(side_effect=main.SchemaVersionError("stale schema"))
+    audit_start = AsyncMock()
+
+    with (
+        patch("app.main.assert_database_schema_current", new=schema_check),
+        patch("app.main.audit_service.start", new=audit_start),
+        patch("app.main.OIDCAdapter") as adapter_cls,
+    ):
+        with pytest.raises(main.SchemaVersionError, match="stale schema"):
+            async with main.lifespan(main.app):
+                pass
+
+    schema_check.assert_awaited_once_with(main.engine)
+    audit_start.assert_not_awaited()
+    adapter_cls.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_lifespan_startup_redis_failure_does_not_increment_fail_open_counter() -> None:
+    schema_check = AsyncMock()
     with (
         patch("asyncio.to_thread", new=AsyncMock()),
+        patch("app.main.assert_database_schema_current", new=schema_check),
         patch("app.main.httpx.AsyncClient") as client_cls,
         patch("app.main.OIDCAdapter") as adapter_cls,
         patch("app.main.deps.set_oidc_adapter"),
@@ -120,4 +144,5 @@ async def test_lifespan_startup_redis_failure_does_not_increment_fail_open_count
         async with main.lifespan(main.app):
             pass
 
+    schema_check.assert_awaited_once_with(main.engine)
     increment_mock.assert_not_called()

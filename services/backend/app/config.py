@@ -2,6 +2,7 @@
 
 import importlib.metadata
 import ipaddress
+import os
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -145,6 +146,9 @@ class Settings(BaseSettings):
             return "0.0.0"
 
 
+OWNER_CREDENTIAL_VARIABLES = ("POSTGRES_PASSWORD", "MIGRATION_DATABASE_URL")
+
+
 def production_guard(settings: Settings) -> None:
     """Validate production configuration and block startup on critical issues.
 
@@ -156,6 +160,14 @@ def production_guard(settings: Settings) -> None:
         return
 
     errors: list[str] = []
+
+    # Owner credentials belong to the db/migrate services only (.env.db). A
+    # legacy .env may still carry them into runtime containers on upgrade.
+    errors.extend(
+        f"{name} must not be set for runtime services (move it to .env.db)"
+        for name in OWNER_CREDENTIAL_VARIABLES
+        if os.environ.get(name)
+    )
 
     # SECRET_KEY must be non-default and have sufficient entropy
     if settings.secret_key in (
