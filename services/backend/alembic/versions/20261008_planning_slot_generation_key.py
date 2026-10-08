@@ -9,7 +9,7 @@ rows stay NULL; the generator backfills them when it matches them by date/time.
 The table's RLS policies are row-based and need no change for a new column.
 
 Revision ID: 20261008_slot_gen_key
-Revises: 20261001_slot_gaps
+Revises: 20261007_celery_tables
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20261008_slot_gen_key"
-down_revision = "20261001_slot_gaps"
+down_revision = "20261007_celery_tables"
 branch_labels = None
 depends_on = None
 
