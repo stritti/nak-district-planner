@@ -14,7 +14,8 @@ from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import recurring_ical_events
-from icalendar import Calendar
+from dateutil.rrule import rrulestr
+from icalendar import Calendar, vRecur
 
 from app.config import settings
 from app.domain.models.raw_calendar_event import RawCalendarEvent, occurrence_key
@@ -57,6 +58,82 @@ def _recurrence_label(value: date | datetime, tz: ZoneInfo) -> str:
     return value.strftime("%Y%m%d")
 
 
+class RecurrenceLimitError(ValueError):
+    """A feed would expand into more work than one sync may spend on it."""
+
+    def __init__(self) -> None:
+        super().__init__("Kalender enthält zu viele oder zu dichte Serientermine")
+
+
+_SUB_DAILY = {"SECONDLY", "MINUTELY", "HOURLY"}
+# dateutil steps (from each series' DTSTART up to the window end) per feed.
+_ITERATION_BUDGET = 100_000
+
+
+def _naive(value: date | datetime) -> datetime:
+    if not isinstance(value, datetime):
+        return datetime(value.year, value.month, value.day)
+    return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+
+
+def _guard_recurrences(calendar: Calendar, start: datetime, end: datetime) -> None:
+    """Bound expansion cost before the library materializes occurrences.
+
+    External feeds are untrusted: sub-daily rules are rejected, iteration from
+    each DTSTART is budgeted and in-window occurrences are capped, so a hostile
+    RRULE fails the sync quickly instead of exhausting CPU and memory.
+    """
+    budget, in_window = _ITERATION_BUDGET, 0
+    window_start, window_end = _naive(start), _naive(end)
+    for component in calendar.walk("VEVENT"):
+        rules = component.get("RRULE") or []
+        for rule in rules if isinstance(rules, list) else [rules]:
+            if str((rule.get("FREQ") or [""])[0]).upper() in _SUB_DAILY:
+                raise RecurrenceLimitError()
+            # UNTIL only shortens a series; dropping it avoids tz mismatches.
+            bounded = vRecur({k: v for k, v in rule.items() if k != "UNTIL"})
+            dtstart = _naive(component["DTSTART"].dt)
+            for occurrence in rrulestr(bounded.to_ical().decode(), dtstart=dtstart):
+                budget -= 1
+                if occurrence > window_end:
+                    break
+                in_window += occurrence >= window_start
+                if budget < 0 or in_window > settings.sync_max_occurrences:
+                    raise RecurrenceLimitError()
+
+
+def _raw_event(component, key: str, tz: ZoneInfo, **extra) -> RawCalendarEvent:
+    start_at = to_utc(component["DTSTART"], tz)
+    if "DTEND" in component:
+        end_at = to_utc(component["DTEND"], tz)
+    elif "DURATION" in component:
+        end_at = start_at + component["DURATION"].dt
+    else:
+        end_at = start_at
+    if end_at <= start_at:
+        end_at = start_at + timedelta(days=1)  # legacy default for events without an end
+    title = str(component.get("SUMMARY") or "") or "(kein Titel)"
+    description = component.get("DESCRIPTION")
+    return RawCalendarEvent(
+        uid=key,
+        title=title,
+        start_at=start_at,
+        end_at=end_at,
+        description=str(description).strip() if description else None,
+        content_hash=content_hash(key, start_at, end_at, title),
+        is_cancelled=str(component.get("STATUS", "")).upper() == "CANCELLED",
+        **extra,
+    )
+
+
+def _identity(component, recurring: set[str], tz: ZoneInfo) -> tuple[str, dict]:
+    uid = str(component.get("UID"))
+    if uid not in recurring:
+        return uid, {}
+    recurrence_id = _recurrence_label(component["RECURRENCE-ID"].dt, tz)
+    return occurrence_key(uid, recurrence_id), {"series_uid": uid, "recurrence_id": recurrence_id}
+
+
 def expand_events(
     calendar: Calendar,
     *,
@@ -65,44 +142,36 @@ def expand_events(
     revision_marker: str | None = None,
     resource_id: str | None = None,
 ) -> list[RawCalendarEvent]:
-    """Return every event occurrence overlapping [from_dt, to_dt]."""
+    """Return every occurrence overlapping [from_dt, to_dt], plus presence markers.
+
+    Single events and RECURRENCE-ID overrides outside the window are returned
+    with ``outside_window=True``: they still exist at the source (e.g. moved
+    beyond the window) and must not be reconciled as deleted. Generated
+    occurrences outside the window are not materialized.
+    """
     tz = _local_zone()
     start = from_dt or _UNBOUNDED_START
     end = to_dt or (from_dt or datetime.now(UTC)) + _UNBOUNDED_SPAN
-    # A VEVENT without DTSTART cannot be placed in time (and breaks expansion).
+    # A VEVENT without UID or DTSTART cannot be identified or placed in time.
     calendar.subcomponents = [
-        c for c in calendar.subcomponents if c.name != "VEVENT" or "DTSTART" in c
+        c for c in calendar.subcomponents
+        if c.name != "VEVENT" or ("DTSTART" in c and c.get("UID"))
     ]
+    _guard_recurrences(calendar, start, end)
     recurring = _recurring_uids(calendar)
+    source = {"revision_marker": revision_marker, "resource_id": resource_id}
     events: list[RawCalendarEvent] = []
     for component in recurring_ical_events.of(calendar).between(start, end):
-        uid = str(component.get("UID") or "")
-        if not uid:
-            continue
-        start_at = to_utc(component["DTSTART"], tz)
-        if "DTEND" in component:
-            end_at = to_utc(component["DTEND"], tz)
-        elif "DURATION" in component:
-            end_at = start_at + component["DURATION"].dt
-        else:
-            end_at = start_at
-        if end_at <= start_at:
-            end_at = start_at + timedelta(days=1)  # legacy default for events without an end
-        if uid in recurring:
-            uid = occurrence_key(uid, _recurrence_label(component["RECURRENCE-ID"].dt, tz))
-        title = str(component.get("SUMMARY") or "") or "(kein Titel)"
-        description = component.get("DESCRIPTION")
-        events.append(
-            RawCalendarEvent(
-                uid=uid,
-                title=title,
-                start_at=start_at,
-                end_at=end_at,
-                description=str(description).strip() if description else None,
-                content_hash=content_hash(uid, start_at, end_at, title),
-                is_cancelled=str(component.get("STATUS", "")).upper() == "CANCELLED",
-                revision_marker=revision_marker,
-                resource_id=resource_id,
-            )
-        )
+        key, identity = _identity(component, recurring, tz)
+        events.append(_raw_event(component, key, tz, **identity, **source))
+    if len(events) > settings.sync_max_occurrences:
+        raise RecurrenceLimitError()
+    seen = {event.uid for event in events}
+    for component in calendar.walk("VEVENT"):
+        if any(name in component for name in ("RRULE", "RDATE")):
+            continue  # series masters: occurrences outside the window stay virtual
+        key, identity = _identity(component, recurring, tz)
+        if key not in seen:
+            seen.add(key)
+            events.append(_raw_event(component, key, tz, outside_window=True, **identity, **source))
     return events

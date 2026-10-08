@@ -214,16 +214,19 @@ class TestFetchEvents:
         cutoff = datetime(2026, 3, 2, tzinfo=UTC)
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_BASIC, VEVENT_CANCELLED)))
         events = await connector.fetch_events(CREDS, from_dt=cutoff)
-        assert len(events) == 1
-        assert events[0].uid == "uid-cancelled@test"
+        in_window = [event.uid for event in events if not event.outside_window]
+        assert in_window == ["uid-cancelled@test"]
+        # Events outside the window are reported as presence only (#483).
+        assert [e.uid for e in events if e.outside_window] == ["uid-basic@test"]
 
     async def test_to_dt_filter_excludes_future_events(self):
         # VEVENT_CANCELLED starts 2026-03-05 — cutoff is 2026-03-04 → excluded
         to = datetime(2026, 3, 4, tzinfo=UTC)
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_BASIC, VEVENT_CANCELLED)))
         events = await connector.fetch_events(CREDS, to_dt=to)
-        assert len(events) == 1
-        assert events[0].uid == "uid-basic@test"
+        in_window = [event.uid for event in events if not event.outside_window]
+        assert in_window == ["uid-basic@test"]
+        assert [e.uid for e in events if e.outside_window] == ["uid-cancelled@test"]
 
     async def test_http_404_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(404)))

@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     sync_window_future_months: int = Field(default=24, ge=1, le=120)
     # Floating times and all-day dates in external calendars are local to this zone.
     sync_default_timezone: str = "Europe/Berlin"
+    # Upper bound of in-window occurrences per feed/resource; protects against
+    # hostile or broken RRULEs in external calendars.
+    sync_max_occurrences: int = Field(default=5000, ge=1)
     min_travel_minutes: int = Field(default=30, ge=0)
 
     # Version check & self-update

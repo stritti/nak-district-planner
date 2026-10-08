@@ -66,7 +66,8 @@ async def test_weekly_series_is_expanded_across_dst_with_exdate_and_override():
 async def test_series_master_older_than_window_still_yields_occurrences():
     """The master DTSTART (2025-11-02) lies far before the window start."""
     events = await _fetch(from_dt=datetime(2026, 4, 20, tzinfo=UTC), to_dt=datetime(2026, 4, 30, tzinfo=UTC))
-    assert [event.uid for event in events] == [f"{SERIES}::20260426T080000Z"]
+    in_window = [event.uid for event in events if not event.outside_window]
+    assert in_window == [f"{SERIES}::20260426T080000Z"]
 
 
 async def test_non_recurring_events_keep_plain_uid():
@@ -85,11 +86,6 @@ async def test_floating_and_all_day_times_use_district_timezone():
     all_day = events["bezirksjugendtag-2026@gemeinde-mitte.example"]
     assert all_day.start_at == datetime(2026, 4, 17, 22, tzinfo=UTC)
     assert all_day.end_at == datetime(2026, 4, 18, 22, tzinfo=UTC)
-
-
-async def test_events_outside_window_are_not_returned():
-    uids = {event.uid for event in await _fetch()}
-    assert "jahresfest-2028@gemeinde-mitte.example" not in uids
 
 
 async def test_repeated_fetch_is_stable():
@@ -174,6 +170,7 @@ async def test_caldav_refuses_writes_to_a_single_occurrence():
         start_at=datetime(2026, 3, 29, 8, tzinfo=UTC), end_at=datetime(2026, 3, 29, 9, 30, tzinfo=UTC),
         description=None, content_hash="", is_cancelled=False,
         resource_id="/calendars/gemeinde/gd-sonntag.ics",
+        series_uid=SERIES, recurrence_id="20260329T080000Z",
     )
     with pytest.raises(CalendarConnectorError):
         await connector.delete_event(CALDAV_CREDS, occurrence)
@@ -183,3 +180,103 @@ async def test_caldav_refuses_writes_to_a_single_occurrence():
         )
     client.delete.assert_not_called()
     client.put.assert_not_called()
+
+
+async def test_caldav_identity_is_not_parsed_from_the_uid():
+    """A plain UID that happens to contain '::' is an ordinary single event."""
+    from app.domain.models.raw_calendar_event import RawCalendarEvent
+
+    connector, client = _caldav(b"")
+    client.delete = AsyncMock(return_value=MagicMock(status_code=204, raise_for_status=MagicMock()))
+    single = RawCalendarEvent(
+        uid="urn::legacy::event-7", title="Einzeltermin",
+        start_at=datetime(2026, 3, 29, 8, tzinfo=UTC), end_at=datetime(2026, 3, 29, 9, tzinfo=UTC),
+        description=None, content_hash="", is_cancelled=False,
+        resource_id="/calendars/gemeinde/event-7.ics",
+    )
+    await connector.delete_event(CALDAV_CREDS, single)
+    client.delete.assert_awaited_once()
+
+
+# ── Codex review of PR #483 ──────────────────────────────────────────────────
+
+
+def _feed(*vevents: str) -> bytes:
+    body = "\r\n".join(vevents)
+    return f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//T//EN\r\n{body}\r\nEND:VCALENDAR\r\n".encode()
+
+
+def _series(uid: str, dtstart: str, rrule: str) -> str:
+    return (
+        f"BEGIN:VEVENT\r\nUID:{uid}\r\nSUMMARY:Serie\r\nDTSTART:{dtstart}\r\n"
+        f"DURATION:PT1H\r\nRRULE:{rrule}\r\nEND:VEVENT"
+    )
+
+
+async def _fetch_body(body: bytes, **window):
+    connector = ICalConnector(client=_client(body))
+    return await connector.fetch_events({"url": "https://example.com/cal.ics"}, **(window or WINDOW))
+
+
+async def test_occurrences_carry_explicit_series_identity():
+    events = _by_uid(await _fetch())
+    occurrence = events[f"{SERIES}::20260329T080000Z"]
+    assert (occurrence.series_uid, occurrence.recurrence_id) == (SERIES, "20260329T080000Z")
+    single = events["aemterstunde-2026-04-10@gemeinde-mitte.example"]
+    assert (single.series_uid, single.recurrence_id) == (None, None)
+
+
+async def test_long_series_uid_keeps_storage_key_within_column_limit():
+    uid = "x" * 490 + "@example"
+    events = await _fetch_body(_feed(_series(uid, "20260301T090000Z", "FREQ=WEEKLY;COUNT=2")))
+    again = await _fetch_body(_feed(_series(uid, "20260301T090000Z", "FREQ=WEEKLY;COUNT=2")))
+    assert len(events) == 2
+    assert all(len(event.uid) <= 500 for event in events)
+    assert len({event.uid for event in events}) == 2
+    assert [e.uid for e in events] == [e.uid for e in again]
+    assert events[0].series_uid == uid
+
+
+@pytest.mark.parametrize(
+    "rrule", ["FREQ=SECONDLY", "FREQ=MINUTELY", "FREQ=DAILY;BYHOUR=0,1,2,3,4,5,6,7,8,9,10,11;BYMINUTE=0,5,10,15,20,25,30,35,40,45,50,55"]
+)
+async def test_explosive_recurrence_fails_fast(rrule):
+    import time
+
+    from app.domain.ports.calendar import CalendarConnectorError
+
+    started = time.monotonic()
+    with pytest.raises(CalendarConnectorError):
+        await _fetch_body(_feed(_series("dos@example", "20200101T000000Z", rrule)))
+    assert time.monotonic() - started < 5
+
+
+async def test_ancient_daily_series_fails_fast_instead_of_iterating_for_minutes():
+    import time
+
+    from app.domain.ports.calendar import CalendarConnectorError
+
+    started = time.monotonic()
+    with pytest.raises(CalendarConnectorError):
+        await _fetch_body(_feed(_series("old@example", "00010101T000000Z", "FREQ=DAILY")))
+    assert time.monotonic() - started < 5
+
+
+async def test_occurrence_cap_applies_per_feed(monkeypatch):
+    from app.config import settings
+    from app.domain.ports.calendar import CalendarConnectorError
+
+    monkeypatch.setattr(settings, "sync_max_occurrences", 50)
+    with pytest.raises(CalendarConnectorError):
+        await _fetch_body(_feed(_series("daily@example", "20260301T090000Z", "FREQ=DAILY")))
+    monkeypatch.setattr(settings, "sync_max_occurrences", 5000)
+    assert len(await _fetch_body(_feed(_series("daily@example", "20260301T090000Z", "FREQ=DAILY")))) == 60
+
+
+async def test_events_outside_window_are_reported_as_presence_only():
+    """A moved event outside the window still exists and must not be reconciled away."""
+    events = _by_uid(await _fetch())
+    far = events["jahresfest-2028@gemeinde-mitte.example"]
+    assert far.outside_window is True
+    assert far.start_at == datetime(2028, 6, 4, 8, tzinfo=UTC)
+    assert not any(e.outside_window for uid, e in events.items() if uid != far.uid)

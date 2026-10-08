@@ -148,6 +148,12 @@ async def test_ics_series_sync_is_idempotent_and_reconciles_only_inside_window(s
         statuses = await slot_status()
         assert statuses.pop("aemterstunde") == "CANCELLED"
         assert set(statuses.values()) == {"ACTIVE"}
+
+        # Codex #483: a temporary feed omission must not cancel permanently.
+        restored = await sync("gemeinde_mitte.ics", SPRING)
+        assert (restored.cancelled, restored.updated) == (0, 1)
+        assert set((await slot_status()).values()) == {"ACTIVE"}
+        assert (await sync("gemeinde_mitte.ics", SPRING)).updated == 0
     finally:
         async with sessions() as db:
             for sql in (

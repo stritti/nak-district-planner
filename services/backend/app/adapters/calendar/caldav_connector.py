@@ -19,13 +19,13 @@ from icalendar import Calendar as ICalendar
 
 from app.adapters.calendar.deletion import delete_resource
 from app.adapters.calendar.ical_events import expand_events
-from app.domain.models.raw_calendar_event import RawCalendarEvent, series_uid_of
+from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
 
 def _refuse_occurrence_write(event: RawCalendarEvent) -> None:
     """A series is one resource: writing one occurrence would rewrite or delete all."""
-    if series_uid_of(event.uid) is not None:
+    if event.recurrence_id is not None:
         raise CalendarConnectorError(
             "Einzeltermine wiederkehrender CalDAV-Serien können nicht zurückgeschrieben werden"
         )

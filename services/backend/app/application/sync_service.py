@@ -39,7 +39,7 @@ from app.domain.models.calendar_integration import (
 from app.domain.models.event_instance import EventInstance, EventSource, SyncState
 from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
-from app.domain.models.raw_calendar_event import RawCalendarEvent, series_uid_of
+from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 from app.domain.services.sync_policy import (
     INTERNAL_DELETE_MARKER,
@@ -287,6 +287,32 @@ async def _apply_external_update(
     return SyncOutcome.UPDATED
 
 
+SNAPSHOT_GAP_REASON = "missing-from-authoritative-snapshot"
+
+
+async def _restore_after_snapshot_gap(
+    context: SyncContext, raw: RawCalendarEvent, link: ExternalEventLink, slot: PlanningSlot | None
+) -> bool:
+    """Reactivate a slot cancelled only because the event was missing from a snapshot.
+
+    Cancellations by planners or by the provider (STATUS:CANCELLED) carry no
+    snapshot-gap marker and are never undone here.
+    """
+    if link.deletion_reason != SNAPSHOT_GAP_REASON or raw.is_cancelled:
+        return False
+    now = datetime.now(UTC)
+    link.deletion_origin = None
+    link.deletion_reason = None
+    link.updated_at = now
+    await context.link_repo.save(link)
+    if slot is None or slot.status != PlanningSlotStatus.CANCELLED:
+        return False
+    slot.status = PlanningSlotStatus.ACTIVE
+    slot.updated_at = now
+    await context.slot_repo.save(slot)
+    return True
+
+
 async def _process_existing_event(
     *,
     raw: RawCalendarEvent,
@@ -303,6 +329,7 @@ async def _process_existing_event(
     if instance is None:
         return SyncOutcome.SKIPPED
     slot = await context.slot_repo.get(instance.planning_slot_id)
+    restored = await _restore_after_snapshot_gap(context, raw, existing_link, slot)
     if (
         instance.sync_state == SyncState.DIRTY_INTERNAL
         and not instance.deviation_flag
@@ -342,7 +369,7 @@ async def _process_existing_event(
         )
         return SyncOutcome.CANCELLED
     if existing_link.last_synced_hash == new_content_hash:
-        return SyncOutcome.SKIPPED
+        return SyncOutcome.UPDATED if restored else SyncOutcome.SKIPPED
     if raw.is_cancelled:
         return await _handle_external_cancel(
             context=context, raw=raw, existing_link=existing_link,
@@ -366,12 +393,11 @@ async def _find_link(context: SyncContext, raw: RawCalendarEvent) -> ExternalEve
         external_event_id=raw.uid,
         calendar_integration_id=context.integration_id,
     )
-    series_uid = series_uid_of(raw.uid)
-    if link is not None or series_uid is None:
+    if link is not None or raw.series_uid is None:
         return link
     legacy = await context.link_repo.get_by_external_event(
         provider=context.integration.type.value,
-        external_event_id=series_uid,
+        external_event_id=raw.series_uid,
         calendar_integration_id=context.integration_id,
     )
     if (
@@ -420,7 +446,7 @@ async def _reconcile_missing_provider_events(
             link.event_instance_id = None
             link.state = ExternalEventLinkState.SYNC_TOMBSTONE
             link.deletion_origin = "EXTERNAL"
-            link.deletion_reason = "missing-from-authoritative-snapshot"
+            link.deletion_reason = SNAPSHOT_GAP_REASON
             link.tombstoned_at = now
             link.updated_at = now
             await context.link_repo.save(link)
@@ -429,6 +455,10 @@ async def _reconcile_missing_provider_events(
         elif slot and slot.status != PlanningSlotStatus.CANCELLED:
             slot.status = PlanningSlotStatus.CANCELLED
             slot.updated_at = now
+            # Marks this cancellation as reversible: only a cancel caused by
+            # absence is undone when the provider shows the event again.
+            link.deletion_origin = "EXTERNAL"
+            link.deletion_reason = SNAPSHOT_GAP_REASON
             link.updated_at = now
             await context.slot_repo.save(slot)
             await context.link_repo.save(link)
@@ -539,6 +569,26 @@ async def push_conflict_resolution(instance: EventInstance, session: AsyncSessio
     return pushed
 
 
+async def _sync_one(
+    context: SyncContext, raw: RawCalendarEvent, existing_link: ExternalEventLink | None
+) -> SyncOutcome:
+    """Process one provider event; connector errors are isolated per event."""
+    new_content_hash = _compute_content_hash(raw)
+    try:
+        if existing_link is None:
+            return await _import_new_event(
+                raw=raw, context=context, new_content_hash=new_content_hash
+            )
+        return await _process_existing_event(
+            raw=raw, context=context, existing_link=existing_link,
+            new_content_hash=new_content_hash,
+        )
+    except CalendarConnectorError:
+        # Never include provider-controlled identifiers or exception text.
+        logger.warning("Calendar sync event skipped after connector error")
+        return SyncOutcome.FAILED
+
+
 async def run_sync(
     integration_id: uuid.UUID, session: AsyncSession, *, now: datetime | None = None
 ) -> SyncResult:
@@ -569,26 +619,28 @@ async def run_sync(
             credentials, from_dt=window[0], to_dt=window[1]
         )
         seen_uids: set[str] = set()
+        outside_window: list[RawCalendarEvent] = []
         for raw in raw_events:
-            seen_uids.add(raw.uid)
-            existing_link = await _find_link(context, raw)
-            new_content_hash = _compute_content_hash(raw)
-            try:
-                if existing_link is None:
-                    outcome = await _import_new_event(
-                        raw=raw, context=context,
-                        new_content_hash=new_content_hash,
-                    )
-                else:
-                    outcome = await _process_existing_event(
-                        raw=raw, context=context, existing_link=existing_link,
-                        new_content_hash=new_content_hash,
-                    )
-                counters[outcome] += 1
-            except CalendarConnectorError:
-                # Never include provider-controlled identifiers or exception text.
-                logger.warning("Calendar sync event skipped after connector error")
+            if raw.uid in seen_uids:
+                # Two source events map to one identity; never let them flip-flop.
+                logger.warning("Calendar sync event skipped: duplicate identity in snapshot")
                 counters[SyncOutcome.FAILED] += 1
+                continue
+            seen_uids.add(raw.uid)
+            if raw.outside_window:
+                outside_window.append(raw)
+                continue
+            counters[await _sync_one(context, raw, await _find_link(context, raw))] += 1
+        if outside_window:
+            # Presence beyond the window: update known events (e.g. moved by the
+            # provider), never import unknown ones. One query instead of N.
+            active = {
+                link.external_event_id: link
+                for link in await link_repo.list_active_by_integration(integration_id)
+            }
+            for raw in outside_window:
+                if raw.uid in active:
+                    counters[await _sync_one(context, raw, active[raw.uid])] += 1
         if connector.authoritative_snapshot:
             counters.update(
                 await _reconcile_missing_provider_events(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -23,20 +24,29 @@ class RawCalendarEvent:
     is_cancelled: bool  # True if STATUS=CANCELLED in the source
     revision_marker: str | None = None
     resource_id: str | None = None
+    # Set only for occurrences of a recurring series; ``uid`` is then the
+    # composed storage key (see ``occurrence_key``).
+    series_uid: str | None = None
+    recurrence_id: str | None = None
+    # True for an event that exists in the source but lies outside the queried
+    # window: it proves presence (no deletion) and may update a linked event,
+    # but is never imported as new.
+    outside_window: bool = False
 
 
-OCCURRENCE_KEY_SEPARATOR = "::"
+
+EXTERNAL_EVENT_ID_MAX_LENGTH = 500  # external_event_id columns are String(500)
 
 
 def occurrence_key(series_uid: str, recurrence_id: str) -> str:
-    """Stable identity of one occurrence of a recurring series: UID + RECURRENCE-ID.
+    """Storage key of one occurrence of a recurring series: UID + RECURRENCE-ID.
 
-    Non-recurring events keep their plain UID so existing links do not churn.
+    The key is only ever composed, never parsed back: callers carry
+    ``series_uid``/``recurrence_id`` explicitly. Overlong UIDs are replaced by
+    their SHA-256 so the key always fits the external_event_id columns.
     """
-    return f"{series_uid}{OCCURRENCE_KEY_SEPARATOR}{recurrence_id}"
-
-
-def series_uid_of(uid: str) -> str | None:
-    """Return the series UID if ``uid`` identifies a single occurrence, else None."""
-    series, separator, _ = uid.rpartition(OCCURRENCE_KEY_SEPARATOR)
-    return series if separator else None
+    key = f"{series_uid}::{recurrence_id}"
+    if len(key) <= EXTERNAL_EVENT_ID_MAX_LENGTH:
+        return key
+    digest = hashlib.sha256(series_uid.encode()).hexdigest()
+    return f"sha256:{digest}::{recurrence_id}"

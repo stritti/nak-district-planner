@@ -26,9 +26,32 @@ ICS and CalDAV connectors SHALL expand recurring series into individual occurren
 - **WHEN** a series' first occurrence lies before the window start
 - **THEN** its occurrences inside the window are still returned
 
+#### Scenario: Explicit occurrence identity
+- **WHEN** an occurrence is produced from a series
+- **THEN** it carries `series_uid` and `recurrence_id` explicitly, the composed storage key is never parsed back, and a plain UID containing `::` is treated as a single event
+
+#### Scenario: Overlong UID
+- **WHEN** the composed key `UID::RECURRENCE-ID` would exceed 500 characters
+- **THEN** the UID part is replaced by `sha256:<hex digest of the UID>` so the key fits the external_event_id columns and stays stable
+
+#### Scenario: Duplicate identity in one snapshot
+- **WHEN** two source events map to the same storage key
+- **THEN** only the first is processed and the second is counted as failed
+
 #### Scenario: Idempotent repeated sync
 - **WHEN** an unchanged feed is synchronized twice
 - **THEN** the second run creates, updates and cancels nothing
+
+### Requirement: Bounded recurrence expansion
+Expansion of external feeds SHALL be bounded: rules with FREQ SECONDLY, MINUTELY or HOURLY SHALL be rejected, iteration from each series start SHALL be limited to a fixed budget (100 000 steps per feed or resource), and in-window occurrences SHALL be capped by `SYNC_MAX_OCCURRENCES` (default 5000). Exceeding a bound SHALL fail the sync with a generic error.
+
+#### Scenario: Hostile secondly rule
+- **WHEN** a feed contains `RRULE:FREQ=SECONDLY`
+- **THEN** the fetch fails within seconds with a connector error and nothing is reconciled
+
+#### Scenario: Too many occurrences
+- **WHEN** a feed expands into more in-window occurrences than `SYNC_MAX_OCCURRENCES`
+- **THEN** the fetch fails with a connector error
 
 ### Requirement: Floating and all-day times
 Floating date-times and all-day dates SHALL be interpreted in `SYNC_DEFAULT_TIMEZONE` (default Europe/Berlin).
@@ -51,6 +74,14 @@ ICS and CalDAV results SHALL be treated as authoritative snapshots: a linked eve
 #### Scenario: Event outside the window
 - **WHEN** a linked event starts after the window end
 - **THEN** it is not cancelled although it is absent from the result
+
+#### Scenario: Event moved outside the window
+- **WHEN** a linked single event or override is moved by the provider to a time outside the window
+- **THEN** the ICS connector reports it as present outside the window, the linked instance is updated and the slot is not cancelled
+
+#### Scenario: Event restored after a snapshot gap
+- **WHEN** a slot was cancelled because its event was missing from a snapshot and the event reappears uncancelled
+- **THEN** the slot is reactivated, while slots cancelled by planners or by provider STATUS:CANCELLED stay cancelled
 
 #### Scenario: Legacy series link
 - **WHEN** a series was linked under its plain UID before occurrence identities existed

@@ -22,3 +22,11 @@
 - [x] 4.1 ICS fixtures: weekly series across DST, EXDATE, override, floating, all-day, far future
 - [x] 4.2 Unit tests for connectors, window, reconciliation bounds, legacy re-keying
 - [x] 4.3 PostgreSQL integration test: idempotent second run, removed event cancelled, out-of-window event kept
+
+## 5. Review hardening (PR #483)
+
+- [x] 5.1 Reactivate slots cancelled only by a snapshot gap when the event reappears
+- [x] 5.2 Bound recurrence expansion (sub-daily rejection, iteration budget, `SYNC_MAX_OCCURRENCES`)
+- [x] 5.3 Report ICS events outside the window as presence; update linked ones, never import or cancel them
+- [x] 5.4 Hash overlong UIDs in occurrence keys (≤ 500 characters)
+- [x] 5.5 Carry `series_uid`/`recurrence_id` explicitly; never parse the storage key; skip duplicate keys

@@ -24,6 +24,17 @@ one occurrence flip the hash of the whole series on every run, times shift by
 - Legacy series links (stored under the plain UID before this change) are
   re-keyed to the occurrence starting at the linked instance's start, so the
   planned slot is updated instead of cancelled.
+- Expansion of untrusted feeds is bounded: sub-daily RRULEs are rejected, iteration
+  is budgeted and in-window occurrences are capped (`SYNC_MAX_OCCURRENCES`, 5000).
+- ICS events outside the window are reported as presence-only, so an event the
+  provider moved out of the window is updated instead of cancelled. CalDAV filters
+  server-side and cannot report them; there, an event moved beyond the window
+  boundaries (>24 months ahead, >62 days back) is still reconciled as missing.
+- A slot cancelled only because its event was missing from a snapshot is marked
+  on the link (`deletion_reason`) and reactivated when the event reappears;
+  manual and provider (STATUS:CANCELLED) cancellations are never undone.
+- Occurrences carry `series_uid`/`recurrence_id` explicitly; the composed key is
+  never parsed; overlong UIDs are hashed to keep keys within 500 characters.
 - CalDAV refuses write-back (time update / delete) of a single occurrence,
   because it would rewrite or delete the whole series resource.
 
