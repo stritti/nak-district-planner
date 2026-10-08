@@ -1,10 +1,10 @@
-"""FastAPI router for system version and update endpoints.
+"""FastAPI router for the system version endpoint.
 
-Protected by RBAC — all endpoints require admin privileges.
+The application only *reports* available updates; it never executes them
+(no docker socket, no update task — see #469). Operators update via the
+documented runbook (docs/production-runbook.md).
 
-RBAC Notes:
-- /version: Requires DISTRICT_ADMIN or CONGREGATION_ADMIN role in any district
-- /update: Requires SUPERADMIN role
+RBAC: /version requires DISTRICT_ADMIN or CONGREGATION_ADMIN in any district.
 """
 
 from __future__ import annotations
@@ -14,12 +14,12 @@ import logging
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.adapters.api.deps import CurrentUserWithMemberships
-from app.adapters.api.schemas.system import SystemVersionResponse, UpdateResponse
+from app.adapters.api.schemas.system import SystemVersionResponse
 from app.adapters.auth.permissions import (
     get_districts_where_user_has_role,
 )
 from app.adapters.version_check.cache import version_cache
-from app.adapters.version_check.ghcr import GhcrTagFetcher, latest_semver
+from app.adapters.version_check.ghcr import GhcrTagFetcher, is_newer, latest_semver
 from app.config import settings
 from app.domain.models.role import Role
 
@@ -58,7 +58,7 @@ async def get_version(
         try:
             fetcher = GhcrTagFetcher()
             tags = fetcher.fetch_tags("backend")
-            latest = latest_semver(tags)
+            latest = latest_semver(tags, current)
             version_cache.set(latest)
             logger.info("Version check completed: current=%s latest=%s", current, latest)
         except Exception as e:
@@ -75,47 +75,5 @@ async def get_version(
         latest_version=latest,
         last_checked=last_checked,
         release_url=release_url,
-    )
-
-
-@router.post("/update", response_model=UpdateResponse)
-async def trigger_update(
-    auth: CurrentUserWithMemberships,
-) -> UpdateResponse:
-    """Trigger a system update.
-
-    In manual mode: returns shell commands to run on the server.
-    In docker-socket mode: fires a Celery task to pull and restart.
-
-    **RBAC:** Requires SUPERADMIN role (highest privilege).
-    """
-    # RBAC Guard: Only superadmin can trigger system updates
-    if not auth.user.is_superadmin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Nur Superadministratoren können das System aktualisieren.",
-        )
-
-    if settings.update_mode == "docker-socket":
-        if not settings.docker_compose_dir:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=(
-                    "DOCKER_COMPOSE_DIR is not configured. Set it to the project root directory."
-                ),
-            )
-        from app.application.tasks import trigger_docker_update
-
-        trigger_docker_update.delay()
-        return UpdateResponse(status="started", mode="docker-socket")
-
-    # Manual mode — return instructions
-    return UpdateResponse(
-        status="manual",
-        mode="manual",
-        instructions=[
-            "cd /opt/nak-district-planner",
-            "docker compose pull",
-            "docker compose up -d",
-        ],
+        update_available=is_newer(latest, current),
     )
