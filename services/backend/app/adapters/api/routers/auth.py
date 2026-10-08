@@ -53,7 +53,7 @@ class OIDCTokenExchangeRequest(BaseModel):
     code_verifier: str | None = None
 
     @model_validator(mode="after")
-    def validate_grant_parameters(self) -> "OIDCTokenExchangeRequest":
+    def validate_grant_parameters(self) -> OIDCTokenExchangeRequest:
         if self.grant_type == "authorization_code" and (
             not self.code or not self.redirect_uri or not self.code_verifier
         ):
