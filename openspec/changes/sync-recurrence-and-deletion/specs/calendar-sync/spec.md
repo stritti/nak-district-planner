@@ -80,11 +80,19 @@ Time updates and deletions SHALL be refused for links that identify a single occ
 - **THEN** the times are written back as before
 
 ### Requirement: Floating and all-day times
-Floating date-times and all-day dates SHALL be interpreted in `SYNC_DEFAULT_TIMEZONE` (default Europe/Berlin).
+Floating date-times and all-day dates SHALL be interpreted in the feed's `X-WR-TIMEZONE` if it names a valid zone, otherwise in `SYNC_DEFAULT_TIMEZONE` (default Europe/Berlin), consistently for occurrences inside and events outside the window. Day-based durations SHALL be nominal: counted on the wall clock of the start's zone.
 
 #### Scenario: Floating time in summer
 - **WHEN** a floating event starts at 19:30 on 2026-04-01
 - **THEN** it is stored as 17:30 UTC
+
+#### Scenario: Feed declares its zone
+- **WHEN** a feed with `X-WR-TIMEZONE:America/New_York` contains floating events inside and outside the window
+- **THEN** both are interpreted in America/New_York
+
+#### Scenario: Day duration across a DST change
+- **WHEN** an event starts at local midnight on a DST change day with `DURATION:P1D`
+- **THEN** it ends at the next local midnight
 
 #### Scenario: All-day event
 - **WHEN** an all-day event is dated 2026-04-18
@@ -120,8 +128,8 @@ ICS and CalDAV results SHALL be treated as authoritative snapshots: a linked eve
 
 #### Scenario: Event restored after a snapshot gap
 - **WHEN** a slot was cancelled because its event was missing from a snapshot and the event reappears uncancelled
-- **THEN** the slot is reactivated, while slots cancelled by planners or by provider STATUS:CANCELLED stay cancelled; a STATUS:CANCELLED seen after a snapshot gap replaces the gap marker, so a later un-cancel does not reactivate the slot
+- **THEN** the slot is reactivated unless a planner edited or confirmed it since (instance DIRTY_INTERNAL or CONFLICT), while slots cancelled by planners or by provider STATUS:CANCELLED stay cancelled; a STATUS:CANCELLED seen after a snapshot gap replaces the gap marker, so a later un-cancel does not reactivate the slot
 
 #### Scenario: Legacy series link
 - **WHEN** a series was linked under its plain UID before occurrence identities existed
-- **THEN** the occurrence starting at the linked instance's start takes over the link and the slot stays active
+- **THEN** the occurrence starting at the linked instance's start, or an override whose RECURRENCE-ID names that start, takes over the link and the slot stays active

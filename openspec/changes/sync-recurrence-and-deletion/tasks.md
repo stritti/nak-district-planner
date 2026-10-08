@@ -49,3 +49,6 @@
 - [x] 8.1 CalDAV: confirm a missing resource via GET on its href before cancelling; Microsoft no longer authoritative
 - [x] 8.2 VEVENT without UID makes the snapshot incomplete
 - [x] 8.3 Open-ended events end one calendar day later in the event's time zone (DST-safe)
+- [x] 8.4 Gap restoration skips instances a planner edited or confirmed since
+- [x] 8.5 Legacy series links are adopted by moved overrides via RECURRENCE-ID
+- [x] 8.6 Floating times follow X-WR-TIMEZONE consistently; day durations are nominal across DST

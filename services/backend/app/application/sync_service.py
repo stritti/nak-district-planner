@@ -13,6 +13,7 @@ from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from zoneinfo import ZoneInfo
 
 from dateutil.relativedelta import relativedelta
 from sqlalchemy import text
@@ -300,12 +301,17 @@ SNAPSHOT_GAP_REASON = "missing-from-authoritative-snapshot"
 
 
 async def _restore_after_snapshot_gap(
-    context: SyncContext, raw: RawCalendarEvent, link: ExternalEventLink, slot: PlanningSlot | None
+    context: SyncContext,
+    raw: RawCalendarEvent,
+    link: ExternalEventLink,
+    instance: EventInstance,
+    slot: PlanningSlot | None,
 ) -> bool:
     """Reactivate a slot cancelled only because the event was missing from a snapshot.
 
     Cancellations by planners or by the provider (STATUS:CANCELLED) carry no
-    snapshot-gap marker and are never undone here.
+    snapshot-gap marker and are never undone here; neither is a gap cancellation
+    a planner has since edited or confirmed (instance no longer provider-owned).
     """
     if link.deletion_reason != SNAPSHOT_GAP_REASON or raw.is_cancelled:
         return False
@@ -314,6 +320,8 @@ async def _restore_after_snapshot_gap(
     link.deletion_reason = None
     link.updated_at = now
     await context.link_repo.save(link)
+    if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
+        return False
     if slot is None or slot.status != PlanningSlotStatus.CANCELLED:
         return False
     slot.status = PlanningSlotStatus.ACTIVE
@@ -338,7 +346,7 @@ async def _process_existing_event(
     if instance is None:
         return SyncOutcome.SKIPPED
     slot = await context.slot_repo.get(instance.planning_slot_id)
-    restored = await _restore_after_snapshot_gap(context, raw, existing_link, slot)
+    restored = await _restore_after_snapshot_gap(context, raw, existing_link, instance, slot)
     if (
         instance.sync_state == SyncState.DIRTY_INTERNAL
         and not instance.deviation_flag
@@ -390,6 +398,17 @@ async def _process_existing_event(
     )
 
 
+def _original_start(raw: RawCalendarEvent) -> datetime | None:
+    """Start of the occurrence a RECURRENCE-ID override replaces (moved overrides)."""
+    rid = raw.recurrence_id
+    if not rid:
+        return None
+    if rid.endswith("Z"):
+        return datetime.strptime(rid, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+    day = datetime.strptime(rid, "%Y%m%d")
+    return day.replace(tzinfo=ZoneInfo(settings.sync_default_timezone)).astimezone(UTC)
+
+
 async def _find_link(context: SyncContext, raw: RawCalendarEvent) -> ExternalEventLink | None:
     """Look up the link for ``raw``, adopting a pre-#465 series link if it matches.
 
@@ -416,7 +435,7 @@ async def _find_link(context: SyncContext, raw: RawCalendarEvent) -> ExternalEve
     ):
         return None
     instance = await context.instance_repo.get(legacy.event_instance_id)
-    if instance is None or instance.actual_start_at != raw.start_at:
+    if instance is None or instance.actual_start_at not in (raw.start_at, _original_start(raw)):
         return None
     legacy.external_event_id = raw.uid
     legacy.updated_at = datetime.now(UTC)

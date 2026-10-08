@@ -421,3 +421,28 @@ async def test_caldav_resource_check_fails_closed():
         await connector.resource_exists(CALDAV_CREDS, "/calendars/gemeinde/gd.ics")
     with pytest.raises(CalendarConnectorError, match="außerhalb"):
         await connector.resource_exists(CALDAV_CREDS, "https://evil.example/x.ics")
+
+
+async def test_floating_times_follow_x_wr_timezone_inside_and_outside_the_window():
+    body = (
+        b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//T//EN\r\nX-WR-TIMEZONE:America/New_York\r\n"
+        b"BEGIN:VEVENT\r\nUID:in@x\r\nSUMMARY:In\r\nDTSTART:20260401T193000\r\n"
+        b"DTEND:20260401T203000\r\nEND:VEVENT\r\n"
+        b"BEGIN:VEVENT\r\nUID:out@x\r\nSUMMARY:Out\r\nDTSTART:20290401T193000\r\n"
+        b"DTEND:20290401T203000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    events = _by_uid(await _fetch_body(body))
+    assert events["in@x"].start_at == datetime(2026, 4, 1, 23, 30, tzinfo=UTC)
+    assert events["out@x"].start_at == datetime(2029, 4, 1, 23, 30, tzinfo=UTC)
+
+
+async def test_day_duration_is_nominal_across_dst_outside_the_window():
+    body = _feed(
+        "BEGIN:VEVENT\r\nUID:dur@example\r\nSUMMARY:Tag\r\nDTSTART:20290325T000000\r\n"
+        "DURATION:P1D\r\nEND:VEVENT"
+    )
+    (event,) = await _fetch_body(body)
+    assert event.outside_window
+    # Europe/Berlin, 2029-03-25 is the 23-hour DST day: local midnight to local midnight
+    assert event.start_at == datetime(2029, 3, 24, 23, tzinfo=UTC)
+    assert event.end_at == datetime(2029, 3, 25, 22, tzinfo=UTC)

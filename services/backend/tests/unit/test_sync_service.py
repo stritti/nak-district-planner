@@ -925,6 +925,53 @@ class TestWindowBoundedProvider:
         mocks["connector"].resource_exists.assert_not_awaited()
 
 
+class TestCodexReviewFindingsRound4:
+    async def test_gap_cancellation_confirmed_by_planner_is_not_undone(self, mocks):
+        slot = _make_slot()
+        start = _NOW + timedelta(days=30)
+        instance = _make_event_instance(
+            planning_slot_id=slot.id, actual_start_at=start, actual_end_at=start + timedelta(hours=1)
+        )
+        raw = _raw(start_at=start, end_at=start + timedelta(hours=1))
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=raw.content_hash)
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].authoritative_snapshot = True
+        mocks["link_repo"].list_active_by_integration.return_value = [link]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        mocks["connector"].fetch_events.return_value = []
+        await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert slot.status == PlanningSlotStatus.CANCELLED
+
+        instance.sync_state = SyncState.DIRTY_INTERNAL  # planner saves the cancellation
+        mocks["connector"].fetch_events.return_value = [raw]
+        await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert slot.status == PlanningSlotStatus.CANCELLED
+
+    async def test_moved_override_adopts_legacy_series_link_by_recurrence_id(self, mocks):
+        slot = _make_slot()
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        legacy = _make_link(event_instance_id=instance.id, uid="uid@test", last_synced_hash="old")
+        moved = _occurrence(
+            _START.strftime("%Y%m%dT%H%M%SZ"),
+            start_at=_START + timedelta(hours=2),
+            end_at=_END + timedelta(hours=2),
+        )
+
+        async def by_external_event(*, provider, external_event_id, calendar_integration_id):
+            return legacy if external_event_id == legacy.external_event_id else None
+
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.return_value = [moved]
+        mocks["link_repo"].get_by_external_event.side_effect = by_external_event
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+        await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert legacy.external_event_id == moved.uid
+
+
 async def test_incomplete_snapshot_skips_deletion_reconciliation(mocks):
     """Codex 0d600122: a resource that failed to load is not a provider deletion."""
     slot = _make_slot()

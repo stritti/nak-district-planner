@@ -4,7 +4,8 @@ Shared by the ICS and CalDAV connectors. Recurring series (RRULE/RDATE with
 EXDATE and RECURRENCE-ID overrides) are expanded with ``recurring-ical-events``
 (LGPL-3.0-or-later, used unmodified as a library). Each occurrence of a series
 is identified by UID + RECURRENCE-ID; non-recurring events keep their UID.
-Floating times and all-day dates are local to the configured district timezone.
+Floating times and all-day dates are local to the feed's X-WR-TIMEZONE (which the
+expansion library applies), otherwise to the configured district timezone.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, date, datetime, timedelta
 from typing import NamedTuple
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import recurring_ical_events
 from dateutil.rrule import rrulestr
@@ -28,6 +29,22 @@ _UNBOUNDED_SPAN = timedelta(days=731)
 
 def _local_zone() -> ZoneInfo:
     return ZoneInfo(settings.sync_default_timezone)
+
+
+def _feed_zone(calendar: Calendar) -> ZoneInfo:
+    """Zone for floating times: the feed's X-WR-TIMEZONE, else the district zone.
+
+    ``recurring_ical_events`` already applies X-WR-TIMEZONE to the occurrences it
+    expands; single events read directly must use the same zone, or an event
+    would shift when it crosses the window boundary.
+    """
+    name = calendar.get("X-WR-TIMEZONE")
+    if name:
+        try:
+            return ZoneInfo(str(name))
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return _local_zone()
 
 
 def to_utc(value, tz: ZoneInfo | None = None) -> datetime:
@@ -110,18 +127,28 @@ def _guard_recurrences(calendar: Calendar, start: datetime, end: datetime) -> No
 _OPEN_END = "X-NAK-OPEN-END"
 
 
+def _after(start_local: datetime, duration: timedelta) -> datetime:
+    """End of ``duration`` after a zone-aware start (RFC 5545 3.3.6).
+
+    Days are nominal, i.e. counted on the wall clock of the start's zone, so a
+    day across a DST change still ends at the same local time; the rest is exact.
+    """
+    days = timedelta(days=duration.days)
+    return (start_local + days).astimezone(UTC) + (duration - days)
+
+
 def _raw_event(component, key: str, tz: ZoneInfo, **extra) -> RawCalendarEvent:
-    start_at = to_utc(component["DTSTART"], tz)
+    dtstart = component["DTSTART"].dt
+    if not isinstance(dtstart, datetime):
+        dtstart = datetime(dtstart.year, dtstart.month, dtstart.day)
+    start_local = dtstart if dtstart.tzinfo else dtstart.replace(tzinfo=tz)
+    start_at = start_local.astimezone(UTC)
     if component.get(_OPEN_END):
-        # Legacy default: one calendar day, counted in the event's zone so a DST
-        # day (23/25 h) still ends at the next local midnight.
-        dtstart = component["DTSTART"].dt
-        zone = dtstart.tzinfo if isinstance(dtstart, datetime) and dtstart.tzinfo else tz
-        end_at = (start_at.astimezone(zone) + timedelta(days=1)).astimezone(UTC)
+        end_at = _after(start_local, timedelta(days=1))  # legacy default without an end
     elif "DTEND" in component:
         end_at = to_utc(component["DTEND"], tz)
     elif "DURATION" in component:
-        end_at = start_at + component["DURATION"].dt
+        end_at = _after(start_local, component["DURATION"].dt)
     else:
         end_at = start_at
     title = str(component.get("SUMMARY") or "") or "(kein Titel)"
@@ -172,7 +199,7 @@ def expand_events(
     beyond the window) and must not be reconciled as deleted. Generated
     occurrences outside the window are not materialized.
     """
-    tz = _local_zone()
+    tz = _feed_zone(calendar)
     start = from_dt or _UNBOUNDED_START
     end = to_dt or (from_dt or datetime.now(UTC)) + _UNBOUNDED_SPAN
     # A VEVENT without UID, broken or without DTSTART is dropped and makes the
