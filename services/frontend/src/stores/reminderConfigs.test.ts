@@ -28,39 +28,56 @@ beforeEach(() => {
 })
 
 describe('useReminderConfigsStore', () => {
-  it('loads an empty list without errors', async () => {
-    vi.mocked(api.listReminderConfigs).mockResolvedValue([])
+  it('loads records and clears loading/error', async () => {
+    vi.mocked(api.listReminderConfigs).mockResolvedValue([existing])
     const store = useReminderConfigsStore()
+
     await store.load(district)
-    expect(store.items).toEqual([])
+
+    expect(store.items).toEqual([existing])
     expect(store.loading).toBe(false)
     expect(store.error).toBeNull()
     expect(api.listReminderConfigs).toHaveBeenCalledWith(district)
   })
 
-  it('loads records and reports failures without stale state', async () => {
-    vi.mocked(api.listReminderConfigs).mockResolvedValueOnce([existing])
-      .mockRejectedValueOnce(new Error('Nicht erreichbar'))
+  it.each([
+    [new Error('Nicht erreichbar'), 'Nicht erreichbar'],
+    ['offline', 'Erinnerungen konnten nicht geladen werden'],
+  ])('reports load failures without stale records', async (failure, expected) => {
+    vi.mocked(api.listReminderConfigs).mockRejectedValueOnce(failure)
     const store = useReminderConfigsStore()
+    store.items = [existing]
+
     await store.load(district)
-    expect(store.items).toEqual([existing])
-    await store.load(district)
+
     expect(store.items).toEqual([])
-    expect(store.error).toBe('Nicht erreichbar')
+    expect(store.error).toBe(expected)
     expect(store.loading).toBe(false)
   })
 
-  it('ignores a response for a previously selected district', async () => {
-    let release!: (configs: api.ReminderConfig[]) => void
-    vi.mocked(api.listReminderConfigs).mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+  it('ignores success and failure from a previously selected district', async () => {
+    let resolveOld!: (configs: api.ReminderConfig[]) => void
+    vi.mocked(api.listReminderConfigs)
+      .mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
       .mockResolvedValueOnce([])
     const store = useReminderConfigsStore()
     const first = store.load(district)
     await store.load('district-b')
-    release([existing])
+    resolveOld([existing])
     await first
     expect(store.districtId).toBe('district-b')
     expect(store.items).toEqual([])
+
+    let rejectOld!: (error: unknown) => void
+    vi.mocked(api.listReminderConfigs)
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject }))
+      .mockResolvedValueOnce([])
+    const staleFailure = store.load(district)
+    await store.load('district-b')
+    rejectOld(new Error('stale'))
+    await staleFailure
+    expect(store.error).toBeNull()
+    expect(store.loading).toBe(false)
   })
 
   it('creates, updates, and soft-deactivates a reminder', async () => {
@@ -70,6 +87,7 @@ describe('useReminderConfigsStore', () => {
     vi.mocked(api.deleteReminderConfig).mockResolvedValue(undefined)
     const store = useReminderConfigsStore()
     await store.load(district)
+
     await store.create(input)
     expect(store.items).toEqual([existing])
     await store.update(existing.id, { day_of_month: 28 })
@@ -79,27 +97,83 @@ describe('useReminderConfigsStore', () => {
     expect(store.saving).toBe(false)
   })
 
-  it('requires a selected district before mutating', async () => {
+  it('requires a selected district before every mutation', async () => {
     const store = useReminderConfigsStore()
     await expect(store.create(input)).rejects.toThrow('Kein Bezirk')
     await expect(store.update(existing.id, {})).rejects.toThrow('Kein Bezirk')
     await expect(store.deactivate(existing.id)).rejects.toThrow('Kein Bezirk')
   })
 
-  it('retains existing records after failed changes', async () => {
+  it.each([
+    ['create', 'Erinnerung konnte nicht angelegt werden'],
+    ['update', 'Erinnerung konnte nicht gespeichert werden'],
+    ['deactivate', 'Erinnerung konnte nicht deaktiviert werden'],
+  ] as const)('uses fallback error text for non-Error %s failures', async (operation, expected) => {
+    vi.mocked(api.listReminderConfigs).mockResolvedValue([existing])
+    const store = useReminderConfigsStore()
+    await store.load(district)
+
+    if (operation === 'create') {
+      vi.mocked(api.createReminderConfig).mockRejectedValueOnce('failure')
+      await expect(store.create(input)).rejects.toBe('failure')
+    } else if (operation === 'update') {
+      vi.mocked(api.updateReminderConfig).mockRejectedValueOnce('failure')
+      await expect(store.update(existing.id, {})).rejects.toBe('failure')
+    } else {
+      vi.mocked(api.deleteReminderConfig).mockRejectedValueOnce('failure')
+      await expect(store.deactivate(existing.id)).rejects.toBe('failure')
+    }
+
+    expect(store.error).toBe(expected)
+    expect(store.saving).toBe(false)
+  })
+
+  it('retains existing records after Error failures', async () => {
     vi.mocked(api.listReminderConfigs).mockResolvedValue([existing])
     vi.mocked(api.createReminderConfig).mockRejectedValue(new Error('Create failed'))
     vi.mocked(api.updateReminderConfig).mockRejectedValue(new Error('Update failed'))
     vi.mocked(api.deleteReminderConfig).mockRejectedValue(new Error('Delete failed'))
     const store = useReminderConfigsStore()
     await store.load(district)
+
     await expect(store.create(input)).rejects.toThrow('Create failed')
-    expect(store.items).toEqual([existing])
     await expect(store.update(existing.id, { day_of_month: 30 })).rejects.toThrow('Update failed')
-    expect(store.items[0].day_of_month).toBe(31)
     await expect(store.deactivate(existing.id)).rejects.toThrow('Delete failed')
-    expect(store.items[0].is_active).toBe(true)
+
+    expect(store.items).toEqual([existing])
     expect(store.error).toBe('Delete failed')
     expect(store.saving).toBe(false)
+  })
+
+  it('does not apply completed mutations after the district changed', async () => {
+    const store = useReminderConfigsStore()
+    store.districtId = district
+    store.items = [existing]
+
+    let resolveCreate!: (value: api.ReminderConfig) => void
+    vi.mocked(api.createReminderConfig).mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve }))
+    const create = store.create(input)
+    store.districtId = 'district-b'
+    resolveCreate({ ...existing, id: 'created-late' })
+    await create
+    expect(store.items).toEqual([existing])
+
+    store.districtId = district
+    let resolveUpdate!: (value: api.ReminderConfig) => void
+    vi.mocked(api.updateReminderConfig).mockImplementationOnce(() => new Promise(resolve => { resolveUpdate = resolve }))
+    const update = store.update(existing.id, { day_of_month: 28 })
+    store.districtId = 'district-b'
+    resolveUpdate({ ...existing, day_of_month: 28 })
+    await update
+    expect(store.items[0].day_of_month).toBe(31)
+
+    store.districtId = district
+    let resolveDelete!: () => void
+    vi.mocked(api.deleteReminderConfig).mockImplementationOnce(() => new Promise(resolve => { resolveDelete = resolve }))
+    const deactivate = store.deactivate(existing.id)
+    store.districtId = 'district-b'
+    resolveDelete()
+    await deactivate
+    expect(store.items[0].is_active).toBe(true)
   })
 })

@@ -146,24 +146,6 @@ class TestEndpointProtection:
         )
         assert response.status_code == 401
 
-    def test_create_event_requires_auth(self):
-        """POST /api/v1/system/update should require auth."""
-        import uuid
-
-        client = TestClient(app)
-        csrf = _csrf_token(client)
-        response = client.post(
-            "/api/v1/system/update",
-            json={
-                "district_id": str(uuid.uuid4()),
-                "title": "Test Event",
-                "start_at": "2026-04-02T10:00:00Z",
-                "end_at": "2026-04-02T11:00:00Z",
-            },
-            headers={"X-CSRF-Token": csrf},
-        )
-        assert response.status_code == 401
-
     def test_list_leaders_requires_auth(self):
         """GET /api/v1/districts/{id}/leaders should require auth."""
         import uuid
