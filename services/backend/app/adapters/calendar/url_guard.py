@@ -201,10 +201,13 @@ class GuardedTransport(httpx.AsyncBaseTransport):
 
         host = request.url.host
         port = request.url.port or (443 if request.url.scheme == "https" else 80)
-        # Resolution counts against the request's connect timeout.
-        timeout = (request.extensions.get("timeout") or {}).get("connect") or _DEFAULT_DNS_TIMEOUT
+        # One connect deadline covers DNS resolution and every address fallback,
+        # so black-holed answers cannot multiply the configured timeout.
+        timeouts = request.extensions.get("timeout") or {}
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + (timeouts.get("connect") or _DEFAULT_DNS_TIMEOUT)
         try:
-            addresses = await asyncio.wait_for(self._resolve(host, port), timeout)
+            addresses = await asyncio.wait_for(self._resolve(host, port), deadline - loop.time())
         except TimeoutError as exc:
             raise httpx.ConnectTimeout("Name resolution timed out", request=request) from exc
         except OSError as exc:
@@ -218,12 +221,19 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         # virtual hosting and certificate checks bound to the hostname.
         last_error: httpx.TransportError | None = None
         for address in dict.fromkeys(a.split("%", 1)[0] for a in addresses):
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise httpx.ConnectTimeout("Connect timed out", request=request)
             pinned = httpx.Request(
                 request.method,
                 request.url.copy_with(host=address),
                 headers=request.headers,
                 stream=request.stream,
-                extensions={**request.extensions, "sni_hostname": host},
+                extensions={
+                    **request.extensions,
+                    "timeout": {**timeouts, "connect": remaining},
+                    "sni_hostname": host,
+                },
             )
             try:
                 response = await self._inner.handle_async_request(pinned)
