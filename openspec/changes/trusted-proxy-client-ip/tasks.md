@@ -9,6 +9,7 @@
 
 - [x] 2.1 `set_real_ip_from` aus `NGINX_REAL_IP_FROM` generieren; `real_ip_header X-Forwarded-For; real_ip_recursive on;`.
 - [x] 2.2 Bereinigtes `X-Forwarded-For` und `X-Forwarded-Proto` (Fallback `$scheme`) an das Backend senden.
+- [x] 2.3 `NGINX_REAL_IP_FROM` per `.env.docker.frontend` (aus `.env` interpoliert) statt `environment:`; das Frontend laedt `.env` nicht.
 
 ## 3. Dokumentation
 
