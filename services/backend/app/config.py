@@ -120,7 +120,7 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def validate_oidc_settings(self) -> "Settings":
+    def validate_oidc_settings(self) -> Settings:
         """Validate OIDC settings are properly configured in production."""
         if self.app_env != "production":
             return self
