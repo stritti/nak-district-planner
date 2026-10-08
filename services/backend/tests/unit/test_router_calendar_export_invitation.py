@@ -526,6 +526,37 @@ async def test_public_feed_anonymizes_leader_id_assignment_without_loading_leade
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("token_type", "personal", "exported"),
+    [("PUBLIC", False, False), ("PUBLIC", True, True), ("INTERNAL", False, True)],
+)
+async def test_internal_events_stay_out_of_public_feeds(token_type, personal, exported) -> None:
+    """A PUBLIC feed must not leak title/description of INTERNAL-visibility events."""
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    slot = _planning_slot(
+        district_id=district_id, congregation_id=None, applicability=[str(congregation_id)]
+    )
+    instance = _event_instance(planning_slot_id=slot.id, visibility=EventVisibility.INTERNAL)
+    leader_id = uuid.uuid4() if personal else None
+    token = ExportToken.create(
+        label="Feed",
+        token_type=TokenType(token_type),
+        district_id=district_id,
+        congregation_id=None if personal else congregation_id,
+        leader_id=leader_id,
+    )
+    assignments = [_assignment_stub(slot.id, "Leiter", leader_id=leader_id)] if personal else []
+    repos = _export_repos(token=token, slots=[slot], instances=[instance], assignments=assignments)
+
+    response = await export_router.export_calendar_ics(
+        token.token, _export_session(AsyncMock()), approval_status=None, **repos
+    )
+
+    assert (f"UID:{slot.id}@nak-bezirksplaner".encode() in response.body) is exported
+
+
+@pytest.mark.asyncio
 async def test_export_calendar_ics_empty() -> None:
     """Export with no slots produces valid calendar with no VEVENT."""
     district_id = uuid.uuid4()

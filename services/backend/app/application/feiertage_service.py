@@ -175,6 +175,8 @@ async def import_feiertage(
                 planning_date=holiday_date,
                 planning_time=planning_time,
                 category="Feiertag",
+                # Holidays apply to every congregation, including ones created later
+                applicability=["all"],
                 title=name,
                 status=PlanningSlotStatus.ACTIVE,
                 # Holidays are reference data, released immediately (issue #466)
@@ -241,6 +243,8 @@ async def import_kirchliche_festtage(
                 planning_date=day,
                 planning_time=planning_time,
                 category="Feiertag",
+                # Holidays apply to every congregation, including ones created later
+                applicability=["all"],
                 title=name,
                 status=PlanningSlotStatus.ACTIVE,
                 # Holidays are reference data, released immediately (issue #466)

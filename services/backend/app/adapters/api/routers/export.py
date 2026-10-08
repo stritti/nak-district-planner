@@ -29,7 +29,7 @@ from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
-from app.domain.models.event_instance import EventInstance
+from app.domain.models.event_instance import EventInstance, EventVisibility
 from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
@@ -203,6 +203,18 @@ async def export_calendar_ics(
         inst.planning_slot_id: inst for inst in instances
     }
 
+    # Personal and INTERNAL feeds are internal: they show leader names and
+    # INTERNAL events. PUBLIC feeds anonymize names (like the leaders RLS policy,
+    # they never load leader rows) and omit events with INTERNAL visibility.
+    show_names = bool(export_token.leader_id) or export_token.token_type == TokenType.INTERNAL
+    if not show_names:
+        all_slots = [
+            s
+            for s in all_slots
+            if (inst := instance_by_slot.get(s.id)) is None
+            or inst.visibility != EventVisibility.INTERNAL
+        ]
+
     # PUBLIC tokens always export CONFIRMED slots only; the query parameter can
     # only narrow INTERNAL feeds (ExportToken.confirmed_only).
     if export_token.confirmed_only(approval_status):
@@ -216,10 +228,6 @@ async def export_calendar_ics(
         assignments = [a for a in assignments if a.leader_id == export_token.leader_id]
         leader_slot_ids = {_slot_key(a) for a in assignments}
         all_slots = [s for s in all_slots if s.id in leader_slot_ids]
-
-    # Personal and INTERNAL feeds show names; PUBLIC feeds anonymize them and,
-    # like the leaders RLS policy, never load leader rows.
-    show_names = bool(export_token.leader_id) or export_token.token_type == TokenType.INTERNAL
 
     # Batch-load leaders so leader_id-only assignments can be resolved to a display name
     if export_token.district_id and show_names:

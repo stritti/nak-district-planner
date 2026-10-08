@@ -18,6 +18,7 @@
 - [x] 4.3 Emit DTSTAMP/LAST-MODIFIED/SEQUENCE from `updated_at`
 - [x] 4.4 Include displayed leader and congregation revisions; SEQUENCE based on 2020 (32-bit safe beyond 2038)
 - [x] 4.5 Leaders RLS: export tokens read only the leaders their feed names (migration `20261008_rls_export_leaders`); PUBLIC feeds load no leader rows
+- [x] 4.6 PUBLIC feeds omit events with INTERNAL visibility
 
 ## 5. Frontend
 - [x] 5.1 Show approval filter toggle only for INTERNAL export tokens
@@ -25,3 +26,4 @@
 ## 6. Holidays
 - [x] 6.1 Regression test: imported holiday distributed to a congregation appears in its event view
 - [x] 6.2 Create imported holidays as CONFIRMED; data migration for existing holiday slots
+- [x] 6.3 Imported holidays get `applicability=["all"]` (also for existing district holidays in the data migration)

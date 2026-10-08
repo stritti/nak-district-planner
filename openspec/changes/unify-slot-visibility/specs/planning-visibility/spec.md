@@ -22,6 +22,10 @@ The system SHALL distribute district slots to congregations only when they are `
 - **WHEN** a district slot with `applicability=["all"]` has `approval_status=PLANNED`
 - **THEN** it does not appear in any congregation event view
 
+#### Scenario: Imported holidays reach every congregation
+- **WHEN** a holiday is imported after a congregation was created
+- **THEN** the holiday slot carries `applicability=["all"]` and `CONFIRMED` and appears in that congregation's event view and feed
+
 #### Scenario: Confirmed district slot is distributed
 - **WHEN** a district slot with `applicability=["all"]` is `ACTIVE` and `CONFIRMED`
 - **THEN** it appears in every congregation event view
@@ -42,7 +46,7 @@ The planning matrix SHALL consider only `ACTIVE` slots. A cell SHALL show the co
 - **THEN** it appears in A's row and not in congregation B's row
 
 ### Requirement: ICS export follows the shared visibility rules
-The ICS export SHALL include, for congregation tokens, the congregation's own slots plus district slots distributed to it; for personal leader tokens, only slots assigned to that leader. PUBLIC tokens SHALL export only `CONFIRMED` slots regardless of the `approval_status` query parameter; INTERNAL tokens MAY use the parameter and default to including `PLANNED` slots.
+The ICS export SHALL include, for congregation tokens, the congregation's own slots plus district slots distributed to it; for personal leader tokens, only slots assigned to that leader. PUBLIC tokens SHALL export only `CONFIRMED` slots regardless of the `approval_status` query parameter; INTERNAL tokens MAY use the parameter and default to including `PLANNED` slots. PUBLIC tokens without a leader SHALL NOT export slots whose event instance has `visibility=INTERNAL`.
 
 #### Scenario: Congregation feed contains distributed district events
 - **WHEN** a congregation token's feed is requested and a confirmed district slot applies to that congregation
@@ -51,6 +55,10 @@ The ICS export SHALL include, for congregation tokens, the congregation's own sl
 #### Scenario: PUBLIC token cannot request drafts
 - **WHEN** a PUBLIC token's feed is requested with `?approval_status=include_planned`
 - **THEN** `PLANNED` slots are not exported
+
+#### Scenario: PUBLIC feed omits internal events
+- **WHEN** a PUBLIC congregation token's feed contains a distributed slot whose event instance is `INTERNAL`
+- **THEN** the slot, its title and description are not exported, while INTERNAL and personal leader feeds include it
 
 #### Scenario: Leader feed is personal
 - **WHEN** a leader token's feed is requested
