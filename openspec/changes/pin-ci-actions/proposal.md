@@ -5,7 +5,7 @@ Die Workflows referenzieren Actions über verschiebbare Tags (`@v7`). Ein kompro
 ## What Changes
 
 - Jede `uses:`-Referenz in `.github/workflows/` ist auf einen vollständigen Commit-SHA gepinnt, mit der Release-Version als Kommentar. Dependabot (`github-actions`) aktualisiert SHA und Kommentar.
-- `ci.yml` vergibt auf Workflow-Ebene nur `contents: read`; `pull-requests: write` hat ausschließlich der Backend-Job, der den Coverage-Kommentar schreibt.
+- `ci.yml` vergibt auf Workflow-Ebene nur Leserechte (`contents: read`, `pull-requests: read` für `dorny/paths-filter`); `pull-requests: write` hat ausschließlich der Backend-Job, der den Coverage-Kommentar schreibt.
 
 ## Impact
 

@@ -9,7 +9,7 @@ Every action referenced by a GitHub Actions workflow SHALL be pinned to a full 4
 - **AND** the change only takes effect through a reviewable dependency-update pull request
 
 ### Requirement: Workflow token permissions follow least privilege
-Workflows SHALL grant `contents: read` by default. Write scopes SHALL be granted only to the jobs that need them.
+Workflows SHALL grant only read scopes by default. Write scopes SHALL be granted only to the jobs that need them.
 
 #### Scenario: CI test jobs run on a pull request
 - **WHEN** the frontend or E2E jobs of the CI workflow run
