@@ -119,7 +119,8 @@ Authoritative descriptions live in `openspec/specs/` (notably `planning-model`, 
 - `sync_state`: CLEAN | DIRTY_INTERNAL | DIRTY_EXTERNAL | CONFLICT (+ `ExternalEventLink` per provider event)
 
 **CalendarIntegration** — external calendar source:
-- `type`: GOOGLE | MICROSOFT | CALDAV | ICS; `credentials_enc`: Fernet-encrypted JSON
+- `type`: GOOGLE | MICROSOFT | CALDAV | ICS — v1.0 supports only ICS + CALDAV (`SUPPORTED_CALENDAR_TYPES`, #467); GOOGLE/MICROSOFT are rejected on create and skipped by sync
+- `credentials_enc`: Fernet-encrypted JSON
 - `sync_interval` (minutes), `capabilities`: READ | WRITE | WEBHOOK
 - `delete_behavior`: MARK_CANCELLED | HARD_DELETE; optional `default_category`
 - `ExternalEventCandidate` — unmatched external event awaiting review (PENDING | ACCEPTED | DISMISSED)

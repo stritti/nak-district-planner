@@ -5,6 +5,16 @@ class IntegrationNotFoundError(ValueError):
     """The calendar integration to sync no longer exists; retrying cannot succeed."""
 
 
+class UnsupportedCalendarTypeError(ValueError):
+    """The calendar provider is not supported in this version (#467); retrying cannot succeed."""
+
+    def __init__(self, calendar_type: str) -> None:
+        super().__init__(
+            f"Kalendertyp {calendar_type} wird in Version 1.0 nicht unterstützt. "
+            "Unterstützt werden ICS und CalDAV."
+        )
+
+
 class CandidateReviewError(Exception):
     """Base error for candidate review conflicts."""
 
