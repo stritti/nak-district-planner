@@ -159,28 +159,42 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         # decodes after the transport, so a compressed body would bypass the
         # size cap (decompression bomb).
         request.headers["Accept-Encoding"] = "identity"
-        if not self._allow_insecure:
-            host = request.url.host
-            port = request.url.port or (443 if request.url.scheme == "https" else 80)
-            try:
-                addresses = await self._resolve(host, port)
-            except OSError as exc:
-                raise httpx.ConnectError("Name resolution failed", request=request) from exc
-            if not addresses or not all(_is_public(a) for a in addresses):
-                logger.warning("Calendar request blocked: host resolved to a non-public address")
-                raise BlockedAddressError("Blocked address", request=request)
-            if _ip_literal(host) is None:
-                # Connect to the validated IP; the copied Host header and the
-                # SNI extension keep virtual hosting and cert checks intact.
-                request = httpx.Request(
-                    request.method,
-                    request.url.copy_with(host=addresses[0].split("%", 1)[0]),
-                    headers=request.headers,
-                    stream=request.stream,
-                    extensions={**request.extensions, "sni_hostname": host},
-                )
+        if self._allow_insecure or _ip_literal(request.url.host) is not None:
+            # IP literals were fully validated by _check_url (or dev opt-in).
+            return await self._checked(await self._inner.handle_async_request(request))
 
-        response = await self._inner.handle_async_request(request)
+        host = request.url.host
+        port = request.url.port or (443 if request.url.scheme == "https" else 80)
+        try:
+            addresses = await self._resolve(host, port)
+        except OSError as exc:
+            raise httpx.ConnectError("Name resolution failed", request=request) from exc
+        if not addresses or not all(_is_public(a) for a in addresses):
+            logger.warning("Calendar request blocked: host resolved to a non-public address")
+            raise BlockedAddressError("Blocked address", request=request)
+
+        # Connect only to the validated IPs (in resolver order, falling back on
+        # connect failures); the copied Host header and the SNI extension keep
+        # virtual hosting and certificate checks bound to the hostname.
+        last_error: httpx.TransportError | None = None
+        for address in dict.fromkeys(a.split("%", 1)[0] for a in addresses):
+            pinned = httpx.Request(
+                request.method,
+                request.url.copy_with(host=address),
+                headers=request.headers,
+                stream=request.stream,
+                extensions={**request.extensions, "sni_hostname": host},
+            )
+            try:
+                response = await self._inner.handle_async_request(pinned)
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                last_error = exc
+                continue
+            return await self._checked(response)
+        assert last_error is not None  # noqa: S101 - loop ran at least once
+        raise last_error
+
+    async def _checked(self, response: httpx.Response) -> httpx.Response:
         if response.headers.get("content-encoding", "identity").strip().lower() != "identity":
             await response.aclose()
             raise UnsupportedContentEncodingError("Kalender-Antwort ist komprimiert")

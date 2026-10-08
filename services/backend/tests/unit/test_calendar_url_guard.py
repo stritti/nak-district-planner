@@ -321,6 +321,39 @@ async def test_identity_encoded_response_is_accepted():
     assert await connector.fetch_events({"url": "https://calendar.example.com/feed.ics"}) == []
 
 
+async def test_falls_back_to_next_validated_address_on_connect_error():
+    tried: list[str] = []
+
+    def handler(request):
+        tried.append(request.url.host)
+        if request.url.host == "93.184.216.34":
+            raise httpx.ConnectError("unreachable", request=request)
+        return _ok(request)
+
+    connector = ICalConnector(
+        client=_client(handler, "93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946")
+    )
+    await connector.fetch_events({"url": "https://calendar.example.com/feed.ics"})
+    # each resilient_request attempt tries the first address, then falls back
+    assert tried[:2] == ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"]
+
+
+async def test_fallback_never_leaves_the_validated_address_set():
+    tried: list[str] = []
+
+    def handler(request):
+        tried.append(request.url.host)
+        raise httpx.ConnectError("unreachable", request=request)
+
+    transport = GuardedTransport(
+        inner=httpx.MockTransport(handler), resolver=_resolver("93.184.216.34", "93.184.216.35")
+    )
+    async with guarded_client(transport=transport) as client:
+        with pytest.raises(httpx.ConnectError):
+            await client.get("https://calendar.example.com/feed.ics")
+    assert tried == ["93.184.216.34", "93.184.216.35"]
+
+
 async def test_blocked_dns_answer_is_indistinguishable_from_unresolvable_host():
     """No internal-DNS oracle via trigger_sync / last_sync_error (finding 7)."""
 
