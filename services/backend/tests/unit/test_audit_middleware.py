@@ -30,27 +30,7 @@ def middleware(mock_app):
 
 
 class TestGetClientIP:
-    """Tests for _get_client_ip method."""
-
-    def test_x_forwarded_for(self, middleware):
-        """Test extraction from x-forwarded-for header."""
-        request = MagicMock(spec=Request)
-        request.headers.get.side_effect = lambda key, default=None: {
-            "x-forwarded-for": "203.0.113.1, 198.51.100.2",
-        }.get(key.lower(), default)
-
-        ip = middleware._get_client_ip(request)
-        assert ip == "203.0.113.1"
-
-    def test_x_real_ip(self, middleware):
-        """Test extraction from x-real-ip header."""
-        request = MagicMock(spec=Request)
-        request.headers.get.side_effect = lambda key, default=None: {
-            "x-real-ip": "10.0.0.1",
-        }.get(key.lower(), default)
-
-        ip = middleware._get_client_ip(request)
-        assert ip == "10.0.0.1"
+    """Tests for _get_client_ip method (proxy trust: tests/unit/test_client_ip.py)."""
 
     def test_client_host_fallback(self, middleware):
         """Test fallback to request.client.host."""
