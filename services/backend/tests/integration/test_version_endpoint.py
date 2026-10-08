@@ -80,7 +80,6 @@ class TestSystemVersionEndpoint:
             patch(
                 "app.adapters.version_check.ghcr.GhcrTagFetcher.fetch_tags", return_value=["0.4.6"]
             ),
-            patch("app.adapters.version_check.ghcr.latest_semver", return_value="0.4.6"),
             patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
             patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
         ):
@@ -97,7 +96,7 @@ class TestSystemVersionEndpoint:
 
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/system/version",
+                "/api/v1/system/version?refresh=true",
                 headers={"Authorization": f"Bearer {valid_token}"},
             )
 
@@ -106,18 +105,15 @@ class TestSystemVersionEndpoint:
         assert data["current_version"] == "0.4.5"
         assert "latest_version" in data
         assert data["latest_version"] == "0.4.6"
-
-    def test_version_requires_auth(self):
-        client = TestClient(app)
-        resp = client.get("/api/v1/system/version")
-        assert resp.status_code == 401
+        assert data["update_available"] is True
 
 
-class TestSystemUpdateEndpoint:
-    """Tests for POST /api/v1/system/update."""
-
-    def test_update_manual_mode(self, mock_oidc_adapter, mock_db_session, valid_token):
+    def test_rc_not_offered_older_stable(self, mock_oidc_adapter, mock_db_session, valid_token):
         with (
+            patch("importlib.metadata.version", return_value="1.0.0rc1"),
+            patch(
+                "app.adapters.version_check.ghcr.GhcrTagFetcher.fetch_tags", return_value=["0.29.3", "1.0.0-rc.1", "latest"]
+            ),
             patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
             patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
         ):
@@ -133,20 +129,34 @@ class TestSystemUpdateEndpoint:
 
 
             client = TestClient(app)
-            csrf = _csrf_token(client, valid_token)
-            resp = client.post(
-                "/api/v1/system/update",
-                headers={"Authorization": f"Bearer {valid_token}", "X-CSRF-Token": csrf},
+            resp = client.get(
+                "/api/v1/system/version?refresh=true",
+                headers={"Authorization": f"Bearer {valid_token}"},
             )
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "manual"
-        assert "instructions" in data
-        assert data["mode"] == "manual"
+        assert data["latest_version"] == "1.0.0-rc.1"
+        assert data["update_available"] is False
 
-    def test_update_requires_auth(self):
+    def test_version_requires_auth(self):
         client = TestClient(app)
-        csrf = _csrf_token(client)
-        resp = client.post("/api/v1/system/update", headers={"X-CSRF-Token": csrf})
+        resp = client.get("/api/v1/system/version")
         assert resp.status_code == 401
+
+
+class TestSystemUpdateEndpointRemoved:
+    """The app must not execute deployment updates (#469)."""
+
+    def test_update_endpoint_is_gone(self, valid_token):
+        client = TestClient(app)
+        csrf = _csrf_token(client, valid_token)
+        resp = client.post(
+            "/api/v1/system/update",
+            headers={"Authorization": f"Bearer {valid_token}", "X-CSRF-Token": csrf},
+        )
+        assert resp.status_code in (404, 405)
+
+    def test_no_update_routes_registered(self):
+        paths = {getattr(r, "path", "") for r in app.routes}
+        assert "/api/v1/system/update" not in paths

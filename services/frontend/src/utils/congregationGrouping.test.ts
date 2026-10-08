@@ -58,4 +58,35 @@ describe('buildCongregationSections', () => {
     expect(sections).toHaveLength(1)
     expect(sections[0].title).toBe('Sondergruppe')
   })
+
+  it('uses a generic group title for orphaned congregations without group metadata', () => {
+    const sections = buildCongregationSections(
+      [congregation('c2', 'Zeta', 'ghost'), congregation('c1', 'Alpha', 'ghost')],
+      [],
+    )
+
+    expect(sections).toEqual([
+      {
+        key: 'group-ghost',
+        title: 'Gruppe',
+        items: expect.any(Array),
+      },
+    ])
+    expect(sections[0].items.map((item) => item.name)).toEqual(['Alpha', 'Zeta'])
+  })
+
+  it('uses no heading when all congregations are ungrouped and sorts them', () => {
+    const sections = buildCongregationSections(
+      [congregation('c2', 'West', null), congregation('c1', 'Nord', null)],
+      [group('unused', 'Leere Gruppe')],
+    )
+
+    expect(sections).toHaveLength(1)
+    expect(sections[0].title).toBeNull()
+    expect(sections[0].items.map((item) => item.name)).toEqual(['Nord', 'West'])
+  })
+
+  it('returns no sections for an empty district', () => {
+    expect(buildCongregationSections([], [group('g1', 'Ring A')])).toEqual([])
+  })
 })

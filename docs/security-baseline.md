@@ -330,44 +330,22 @@ server {
 
 ---
 
-## 8. Docker Socket Self-Update
+## 8. Keine In-App-Updates
 
-### 8.1 Sicherheitswarnung
+Die Anwendung **führt keine Deployment-Updates aus** (#469). Es gibt keinen
+Update-Endpoint, keinen Update-Task und keinen Docker-Socket-Modus; der
+Docker-Socket darf nie in Container gemountet werden (root-äquivalenter
+Host-Zugriff).
 
-- ⚠️ **NICHT** in Produktion ohne vorherige Sicherheitspruefung aktivieren.
-- **UPDATE_MODE=docker-socket** mountet den Docker-Socket in den Backend-Container.
-  Der Container erhaelt dadurch **root-equivalenten Zugriff** auf den Docker-Daemon.
+- Die Anwendung zeigt Administratoren nur an, dass eine neuere Version existiert
+  (`GET /api/v1/system/version`, Link auf die Release Notes).
+- Updates erfolgen ausschließlich durch Betreiber nach `docs/production-runbook.md`
+  (immer mit `-f docker-compose.yml`, damit das Dev-Override nicht greift).
 
-### 8.2 Risikoanalyse
+### 8.1 Compliance-Checks
 
-**Gefahren:**
-- Container kann andere Container starten/stoppen
-- Container kann auf Host-Dateisystem zugreifen
-- Container kann Netzwerkverbindungen herstellen
-- Container kann Docker-Daemon Konfiguration lesen/ändern
-
-**Empfehlung:**
-- **Produktion:** Immer **UPDATE_MODE=manual** verwenden
-- **Entwicklung:** Docker-Socket Modus nur in isolierten Umgebungen
-- **Alternative:** Externen Update-Service verwenden (z.B. Watchtower)
-
-### 8.3 Implementierungsdetails
-
-**Celery-Task `trigger_docker_update`:**
-- Führt nur feste Befehle aus: `docker compose pull`, `docker compose up -d`
-- Keine benutzerdefinierten Argumente
-- Keine Shell-Command Injection möglich
-
-**Sicherheitsmassnahmen:**
-- Task ist nur für Superadmin zugänglich
-- Task validiert die Befehle vor der Ausführung
-- Task loggt alle Aktionen
-
-### 8.4 Compliance-Checks
-
-- [ ] UPDATE_MODE ist in Produktion auf "manual" gesetzt
-- [ ] Docker-Socket ist in Produktion nicht gemountet
-- [ ] Update-Prozess ist dokumentiert und getestet
+- [ ] Docker-Socket ist in keinem Container gemountet
+- [ ] Updates werden nach Runbook inkl. Migrationsschritt durchgeführt
 
 ---
 

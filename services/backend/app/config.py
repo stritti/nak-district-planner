@@ -76,11 +76,9 @@ class Settings(BaseSettings):
     sync_max_occurrences: int = Field(default=5000, ge=1)
     min_travel_minutes: int = Field(default=30, ge=0)
 
-    # Version check & self-update
+    # Version check (display only — the app never executes updates, see #469)
     ghcr_owner: str = "stritti"
     ghcr_repo: str = "nak-district-planner"
-    update_mode: str = "manual"
-    docker_compose_dir: str = ""
 
     @field_validator("sync_default_timezone")
     @classmethod
@@ -92,7 +90,7 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def validate_oidc_settings(self) -> "Settings":
+    def validate_oidc_settings(self) -> Settings:
         """Validate OIDC settings are properly configured in production."""
         if self.app_env != "production":
             return self
