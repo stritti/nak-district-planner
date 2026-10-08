@@ -10,7 +10,7 @@
 # duplicates runtime environment variables.
 services:
   backend:
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --no-proxy-headers
     volumes:
       - ./services/backend/app:/app/app
       - ./services/backend/tests:/app/tests
@@ -31,23 +31,9 @@ services:
     volumes:
       - ./services/backend/app:/app/app
 
-  # Uncomment this section to enable automatic self-update via Docker socket.
-  # WARNING: Mounting the Docker socket gives the container root-equivalent access
-  # to the Docker daemon. Only use in trusted environments.
-  #
-  # backend:
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   environment:
-  #     UPDATE_MODE: docker-socket
-  #     DOCKER_COMPOSE_DIR: /app
-  #
-  # worker:
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   environment:
-  #     UPDATE_MODE: docker-socket
-  #     DOCKER_COMPOSE_DIR: /app
+  beat:
+    volumes:
+      - ./services/backend/app:/app/app
 
   db:
     ports:

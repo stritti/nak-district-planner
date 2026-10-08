@@ -22,6 +22,11 @@ class CalendarType(StrEnum):
     ICS = "ICS"
 
 
+# Version 1.0 scope (#467): Google/Microsoft have no OAuth flow/token refresh,
+# so they are not offered. Their connectors stay for the post-1.0 backlog.
+SUPPORTED_CALENDAR_TYPES = frozenset({CalendarType.ICS, CalendarType.CALDAV})
+
+
 class CalendarCapability(StrEnum):
     """Capabilities supported for a calendar integration.
 

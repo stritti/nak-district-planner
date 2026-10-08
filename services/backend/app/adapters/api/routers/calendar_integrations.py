@@ -21,21 +21,40 @@ from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationUpdate,
     SyncResult,
 )
+from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_congregation,
     require_role_in_district,
 )
+from app.adapters.calendar.url_guard import UnsafeCalendarUrlError, validate_calendar_url
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.application.crypto import CryptoError, encrypt_credentials
 from app.application.services.calendar_integration_service import CalendarIntegrationService
 from app.application.sync_service import run_sync
-from app.domain.models.calendar_integration import CalendarIntegration
+from app.domain.errors import UnsupportedCalendarTypeError
+from app.domain.models.calendar_integration import (
+    SUPPORTED_CALENDAR_TYPES,
+    CalendarIntegration,
+    CalendarType,
+)
 from app.domain.models.role import Role
 from app.domain.ports.calendar import CalendarConnectorError
 
 router = APIRouter(prefix="/api/v1/calendar-integrations", tags=["calendar-integrations"])
+
+_URL_BASED_TYPES = {CalendarType.ICS, CalendarType.CALDAV}
+
+
+def _validate_credentials_url(calendar_type: CalendarType, credentials: dict) -> None:
+    """Reject unsafe calendar URLs before they are stored (SSRF, #463)."""
+    if "url" not in credentials and calendar_type not in _URL_BASED_TYPES:
+        return
+    try:
+        validate_calendar_url(credentials.get("url"))
+    except UnsafeCalendarUrlError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 def _to_response(integration: CalendarIntegration) -> CalendarIntegrationResponse:
@@ -80,7 +99,14 @@ async def create_calendar_integration(
             require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
     else:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    await ensure_congregation_in_district(db, body.district_id, body.congregation_id)
 
+    if body.type not in SUPPORTED_CALENDAR_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(UnsupportedCalendarTypeError(body.type)),
+        )
+    _validate_credentials_url(body.type, body.credentials)
     integration = await service.create_integration(body)
     return _to_response(integration)
 
@@ -147,6 +173,8 @@ async def trigger_sync(
 
     try:
         summary = await run_sync(integration_id, db)
+    except UnsupportedCalendarTypeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except (ValueError, CryptoError, CalendarConnectorError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return SyncResult(
@@ -186,6 +214,8 @@ async def update_calendar_integration(
     else:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
 
+    if body.credentials is not None:
+        _validate_credentials_url(integration.type, body.credentials)
     integration = await service.update_integration(integration, body)
     return _to_response(integration)
 

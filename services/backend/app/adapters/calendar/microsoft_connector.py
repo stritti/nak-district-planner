@@ -39,7 +39,9 @@ def _validate_next_link(url: str) -> str:
 class MicrosoftGraphCalendarConnector(CalendarConnector):
     """Adapter for Microsoft Graph Calendar API."""
 
-    authoritative_snapshot = True
+    # Graph omits events moved outside the query window and offers no cheap
+    # presence check here, so missing events are never reconciled as deleted.
+    authoritative_snapshot = False
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client or httpx.AsyncClient(timeout=30.0)

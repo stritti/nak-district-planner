@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from datetime import date
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.repositories import PlanningSlotRepository
+
+_UNIQUE_VIOLATION = "23505"
+# Namespaces the per-district generator lock apart from other advisory locks
+# that are keyed by plain entity UUIDs.
+_GENERATION_LOCK_NAMESPACE = uuid.UUID("5d0c2f4e-4b8a-4c63-9a57-2b1f0e8d4c11")
+
+
+def _sqlstate(exc: IntegrityError) -> str | None:
+    orig = exc.orig
+    return getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
 
 
 def _orm_to_domain(row: PlanningSlotORM) -> PlanningSlot:
@@ -23,6 +36,7 @@ def _orm_to_domain(row: PlanningSlotORM) -> PlanningSlot:
         invitation_source_congregation_id=row.invitation_source_congregation_id,
         invitation_source_event_id=row.invitation_source_event_id,
         applicability=row.applicability or [],
+        generation_key=row.generation_key,
         planning_date=row.planning_date,
         planning_time=row.planning_time,
         status=PlanningSlotStatus(row.status),
@@ -90,9 +104,59 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         )
         return [_orm_to_domain(row) for row in result.scalars().all()]
 
+    async def list_by_generation_keys(
+        self, *, district_id: uuid.UUID, generation_keys: Collection[str]
+    ) -> list[PlanningSlot]:
+        if not generation_keys:
+            return []
+        result = await self._session.execute(
+            select(PlanningSlotORM).where(
+                PlanningSlotORM.district_id == district_id,
+                PlanningSlotORM.generation_key.in_(list(generation_keys)),
+            )
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
     async def save(self, slot: PlanningSlot) -> None:
         existing = await self._session.get(PlanningSlotORM, slot.id)
+        if existing is not None:
+            slot.forget_generation_key_if_reassigned(
+                district_id=existing.district_id,
+                congregation_id=existing.congregation_id,
+                category=existing.category,
+            )
         row = existing or PlanningSlotORM()
+        self._apply(row, slot)
+        if existing is None:
+            self._session.add(row)
+        await self._session.flush()
+
+    async def lock_district_for_generation(self, district_id: uuid.UUID) -> None:
+        await acquire_advisory_xact_lock(
+            self._session, uuid.uuid5(_GENERATION_LOCK_NAMESPACE, str(district_id))
+        )
+
+    async def add_if_absent(self, slot: PlanningSlot) -> bool:
+        """Insert inside a SAVEPOINT; a unique violation only rolls back the savepoint.
+
+        A concurrent transaction inserting the same generation key blocks on the
+        unique index until it commits, then this insert fails with 23505 and is
+        reported as skipped. The ORM path is kept (instead of ON CONFLICT) so the
+        domain audit ``after_flush`` hook still records generated slots.
+        """
+        row = PlanningSlotORM()
+        self._apply(row, slot)
+        try:
+            async with self._session.begin_nested():
+                self._session.add(row)
+        except IntegrityError as exc:
+            if _sqlstate(exc) != _UNIQUE_VIOLATION:
+                raise
+            return False
+        return True
+
+    @staticmethod
+    def _apply(row: PlanningSlotORM, slot: PlanningSlot) -> None:
         row.id = slot.id
         row.series_id = slot.series_id
         row.district_id = slot.district_id
@@ -103,14 +167,12 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row.invitation_source_congregation_id = slot.invitation_source_congregation_id
         row.invitation_source_event_id = slot.invitation_source_event_id
         row.applicability = slot.applicability
+        row.generation_key = slot.generation_key
         row.planning_date = slot.planning_date
         row.planning_time = slot.planning_time
         row.status = slot.status
         row.created_at = slot.created_at
         row.updated_at = slot.updated_at
-        if existing is None:
-            self._session.add(row)
-        await self._session.flush()
 
     async def delete(self, slot_id: uuid.UUID) -> None:
         row = await self._session.get(PlanningSlotORM, slot_id)

@@ -62,8 +62,8 @@
                 <ArrowTopRightOnSquareIcon class="h-4 w-4" />
               </a>
             </div>
-            <!-- approval_status filter -->
-            <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+            <!-- approval_status filter (PUBLIC tokens are always confirmed-only) -->
+            <div v-if="t.token_type === 'INTERNAL'" class="flex items-center gap-2 mt-1.5 flex-wrap">
               <span class="text-[11px] text-gray-400 dark:text-gray-500">Freigabe:</span>
               <button
                 class="text-[11px] px-2 py-0.5 rounded border transition-colors"
@@ -277,8 +277,8 @@ function congregationName(id: string): string {
 }
 
 function defaultFilter(t: ExportTokenResponse): 'confirmed_only' | 'include_planned' {
-  // Match backend logic: public tokens without leader → confirmed_only, else include_planned
-  if (t.token_type === 'PUBLIC' && !t.leader_id) return 'confirmed_only'
+  // Match backend logic: public tokens are always confirmed_only, internal default include_planned
+  if (t.token_type === 'PUBLIC') return 'confirmed_only'
   return 'include_planned'
 }
 

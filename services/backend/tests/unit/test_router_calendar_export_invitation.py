@@ -39,7 +39,12 @@ from app.domain.models.invitation import (
     InvitationTargetType,
     OverwriteDecisionStatus,
 )
-from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
+from app.domain.models.leader import Leader
+from app.domain.models.planning_slot import (
+    EventApprovalStatus,
+    PlanningSlot,
+    PlanningSlotStatus,
+)
 
 # ---------------------------------------------------------------------------
 # Helper factories
@@ -74,6 +79,8 @@ def _planning_slot(**overrides) -> PlanningSlot:
         title=overrides.get("title", "Gottesdienst"),
         approval_status=overrides.get("approval_status", EventApprovalStatus.CONFIRMED),
         slot_id=overrides.get("slot_id"),
+        status=overrides.get("status", PlanningSlotStatus.ACTIVE),
+        applicability=overrides.get("applicability"),
     )
 
 
@@ -192,7 +199,7 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
                 district_id=district_id,
                 name="Name",
                 type=CalendarType.ICS,
-                credentials={"u": "x"},
+                credentials={"url": "https://calendar.example.com/feed.ics"},
             ),
             auth,
             db,
@@ -496,6 +503,57 @@ async def test_export_calendar_ics_leader_token_shows_assignments() -> None:
     )
 
     assert b"Dienstleiter: Bezirksvorsteher M" in response.body
+
+
+@pytest.mark.asyncio
+async def test_public_feed_anonymizes_leader_id_assignment_without_loading_leaders() -> None:
+    """PUBLIC feeds never read leader rows (RLS denies them) yet still mark the slot as assigned."""
+    district_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    token = ExportToken.create(
+        label="Public", token_type=TokenType.PUBLIC, district_id=district_id, congregation_id=None
+    )
+    repos = _export_repos(
+        token=token, slots=[slot], assignments=[_assignment_stub(slot.id, "", leader_id=uuid.uuid4())]
+    )
+
+    response = await export_router.export_calendar_ics(
+        token.token, _export_session(AsyncMock()), approval_status=None, **repos
+    )
+
+    assert b"Dienstleiter: [Name anonymisiert]" in response.body
+    repos["leader_repo_dep"].list_by_district.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("token_type", "personal", "exported"),
+    [("PUBLIC", False, False), ("PUBLIC", True, True), ("INTERNAL", False, True)],
+)
+async def test_internal_events_stay_out_of_public_feeds(token_type, personal, exported) -> None:
+    """A PUBLIC feed must not leak title/description of INTERNAL-visibility events."""
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    slot = _planning_slot(
+        district_id=district_id, congregation_id=None, applicability=[str(congregation_id)]
+    )
+    instance = _event_instance(planning_slot_id=slot.id, visibility=EventVisibility.INTERNAL)
+    leader_id = uuid.uuid4() if personal else None
+    token = ExportToken.create(
+        label="Feed",
+        token_type=TokenType(token_type),
+        district_id=district_id,
+        congregation_id=None if personal else congregation_id,
+        leader_id=leader_id,
+    )
+    assignments = [_assignment_stub(slot.id, "Leiter", leader_id=leader_id)] if personal else []
+    repos = _export_repos(token=token, slots=[slot], instances=[instance], assignments=assignments)
+
+    response = await export_router.export_calendar_ics(
+        token.token, _export_session(AsyncMock()), approval_status=None, **repos
+    )
+
+    assert (f"UID:{slot.id}@nak-bezirksplaner".encode() in response.body) is exported
 
 
 @pytest.mark.asyncio
@@ -1029,3 +1087,219 @@ async def test_export_calendar_ics_internal_token_shows_full_leader_name() -> No
 
     assert b"Dienstleiter: Bezirksvorsteher M" in response.body
     assert b"[Name anonymisiert]" not in response.body
+
+
+# ===================================================================
+# ICS export: shared visibility rules (issue #466)
+# ===================================================================
+
+
+def _vevents(body: bytes) -> list[str]:
+    return body.decode().split("BEGIN:VEVENT")[1:]
+
+
+async def _export(token: ExportToken, slots: list, approval_status=None, **repo_kwargs):
+    db = _export_session(AsyncMock())
+    repos = _export_repos(token=token, slots=slots, **repo_kwargs)
+    return await export_router.export_calendar_ics(
+        token.token, db, approval_status=approval_status, **repos
+    )
+
+
+@pytest.mark.asyncio
+async def test_export_congregation_feed_includes_applicable_district_slots() -> None:
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    own = _planning_slot(district_id=district_id, congregation_id=congregation_id)
+    distributed = _planning_slot(
+        district_id=district_id, congregation_id=None, applicability=[str(congregation_id)]
+    )
+    to_all = _planning_slot(district_id=district_id, congregation_id=None, applicability=["all"])
+    not_distributed = _planning_slot(district_id=district_id, congregation_id=None)
+    other_congregation = _planning_slot(district_id=district_id)
+    token = ExportToken.create(
+        label="Gemeinde",
+        token_type=TokenType.PUBLIC,
+        district_id=district_id,
+        congregation_id=congregation_id,
+    )
+
+    response = await _export(
+        token, [own, distributed, to_all, not_distributed, other_congregation]
+    )
+
+    exported = {s.id for s in (own, distributed, to_all) if str(s.id).encode() in response.body}
+    assert exported == {own.id, distributed.id, to_all.id}
+    assert response.body.count(b"BEGIN:VEVENT") == 3
+
+
+@pytest.mark.asyncio
+async def test_export_public_token_cannot_include_planned_via_query() -> None:
+    district_id = uuid.uuid4()
+    planned = _planning_slot(district_id=district_id, approval_status=EventApprovalStatus.PLANNED)
+    token = ExportToken.create(
+        label="Public",
+        token_type=TokenType.PUBLIC,
+        district_id=district_id,
+        congregation_id=None,
+    )
+
+    response = await _export(token, [planned], approval_status="include_planned")
+
+    assert b"BEGIN:VEVENT" not in response.body
+
+
+@pytest.mark.asyncio
+async def test_export_cancelled_slot_is_marked_cancelled() -> None:
+    district_id = uuid.uuid4()
+    cancelled = _planning_slot(district_id=district_id, status=PlanningSlotStatus.CANCELLED)
+    token = ExportToken.create(
+        label="Export", token_type=TokenType.PUBLIC, district_id=district_id, congregation_id=None
+    )
+
+    response = await _export(token, [cancelled])
+
+    [vevent] = _vevents(response.body)
+    assert f"UID:{cancelled.id}@nak-bezirksplaner" in vevent
+    assert "STATUS:CANCELLED" in vevent
+
+
+@pytest.mark.asyncio
+async def test_export_change_metadata_follows_updated_at() -> None:
+    district_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    slot.created_at = datetime(2026, 1, 1, 8, 0, tzinfo=UTC)
+    slot.updated_at = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
+    token = ExportToken.create(
+        label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
+    )
+
+    first = _vevents((await _export(token, [slot])).body)[0]
+    slot.updated_at += timedelta(minutes=5)
+    second = _vevents((await _export(token, [slot])).body)[0]
+
+    assert "DTSTAMP:20260302T093000Z" in first
+    assert "LAST-MODIFIED:20260302T093000Z" in first
+
+    def _sequence(vevent: str) -> int:
+        line = next(x for x in vevent.splitlines() if x.startswith("SEQUENCE:"))
+        return int(line.removeprefix("SEQUENCE:"))
+
+    assert _sequence(second) > _sequence(first)
+
+
+def _sequence_of(vevent: str) -> int:
+    line = next(x for x in vevent.splitlines() if x.startswith("SEQUENCE:"))
+    return int(line.removeprefix("SEQUENCE:"))
+
+
+def test_export_sequence_fits_rfc5545_integer_beyond_2038() -> None:
+    assert export_router._sequence(datetime(2087, 12, 31, tzinfo=UTC)) < 2**31
+
+
+@pytest.mark.asyncio
+async def test_export_leader_rename_advances_revision() -> None:
+    district_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    slot.updated_at = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
+    leader = Leader.create(name="Alt", district_id=district_id)
+    leader.updated_at = slot.updated_at
+    assignment = _assignment_stub(slot.id, "", leader_id=leader.id)
+    token = ExportToken.create(
+        label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
+    )
+
+    first = _vevents(
+        (await _export(token, [slot], assignments=[assignment], leaders=[leader])).body
+    )[0]
+    leader.name = "Neu"
+    leader.updated_at += timedelta(minutes=5)
+    second = _vevents(
+        (await _export(token, [slot], assignments=[assignment], leaders=[leader])).body
+    )[0]
+
+    assert "Neu" in second
+    assert "LAST-MODIFIED:20260302T093500Z" in second
+    assert _sequence_of(second) > _sequence_of(first)
+
+
+@pytest.mark.asyncio
+async def test_export_congregation_rename_advances_revision() -> None:
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id, congregation_id=congregation_id)
+    slot.updated_at = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
+    token = ExportToken.create(
+        label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
+    )
+
+    async def export_with(name: str, updated_at: datetime) -> str:
+        db = AsyncMock()
+        result = MagicMock()
+        congregation = MagicMock(id=congregation_id, updated_at=updated_at)
+        congregation.name = name
+        result.scalars.return_value = [congregation]
+        db.execute.return_value = result
+        repos = _export_repos(token=token, slots=[slot])
+        response = await export_router.export_calendar_ics(
+            token.token, db, approval_status=None, **repos
+        )
+        return _vevents(response.body)[0]
+
+    first = await export_with("Alt", slot.updated_at)
+    second = await export_with("Neu", slot.updated_at + timedelta(minutes=5))
+
+    assert "LOCATION:Neu" in second
+    assert "LAST-MODIFIED:20260302T093500Z" in second
+    assert _sequence_of(second) > _sequence_of(first)
+
+
+@pytest.mark.asyncio
+async def test_export_leader_feed_contains_only_that_leaders_slots() -> None:
+    district_id = uuid.uuid4()
+    leader_id = uuid.uuid4()
+    mine = _planning_slot(district_id=district_id)
+    someone_elses = _planning_slot(district_id=district_id)
+    unassigned = _planning_slot(district_id=district_id)
+    token = ExportToken.create(
+        label="Leader",
+        token_type=TokenType.INTERNAL,
+        district_id=district_id,
+        congregation_id=None,
+        leader_id=leader_id,
+    )
+
+    response = await _export(
+        token,
+        [mine, someone_elses, unassigned],
+        assignments=[
+            _assignment_stub(mine.id, "Ev. Ich", leader_id=leader_id),
+            _assignment_stub(someone_elses.id, "Ev. Andere", leader_id=uuid.uuid4()),
+        ],
+    )
+
+    [vevent] = _vevents(response.body)
+    assert str(mine.id) in vevent
+
+
+@pytest.mark.asyncio
+async def test_export_leader_feed_uses_canonical_planning_slot_key() -> None:
+    """Legacy rows whose event_id differs from planning_slot_id still match (#466)."""
+    district_id = uuid.uuid4()
+    leader_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    legacy = _assignment_stub(slot.id, "Ev. Ich", leader_id=leader_id)
+    legacy.event_id = uuid.uuid4()
+    token = ExportToken.create(
+        label="Leader",
+        token_type=TokenType.INTERNAL,
+        district_id=district_id,
+        congregation_id=None,
+        leader_id=leader_id,
+    )
+
+    response = await _export(token, [slot], assignments=[legacy])
+
+    [vevent] = _vevents(response.body)
+    assert str(slot.id) in vevent
+    assert "Dienstleiter: Ev. Ich" in vevent

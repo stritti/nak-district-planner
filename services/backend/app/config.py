@@ -1,11 +1,33 @@
 """app/config.py: Module."""
 
 import importlib.metadata
+import ipaddress
+import os
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.models.calendar_integration import SyncDeleteMode
+
+_NAT64_PREFIX_LENGTHS = {32, 40, 48, 56, 64, 96}
+
+
+def _parse_nat64_prefixes(value: str) -> tuple[ipaddress.IPv6Network, ...]:
+    networks = []
+    for item in filter(None, (part.strip() for part in value.split(","))):
+        try:
+            network = ipaddress.ip_network(item)
+        except ValueError as exc:
+            raise ValueError(f"CALENDAR_NAT64_PREFIXES: invalid prefix {item!r}") from exc
+        if not isinstance(network, ipaddress.IPv6Network):
+            raise ValueError(f"CALENDAR_NAT64_PREFIXES: {item!r} is not IPv6")
+        if network.prefixlen not in _NAT64_PREFIX_LENGTHS:
+            raise ValueError(
+                f"CALENDAR_NAT64_PREFIXES: {item!r} must have length 32, 40, 48, 56, 64 or 96"
+            )
+        networks.append(network)
+    return tuple(networks)
 
 
 class Settings(BaseSettings):
@@ -18,6 +40,10 @@ class Settings(BaseSettings):
     valkey_url: str = "valkey://valkey:6379/0"
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
+
+    # Comma-separated peer networks whose X-Real-IP header is trusted (the
+    # frontend nginx container). Default: loopback + Docker bridge networks.
+    trusted_proxies: str = "127.0.0.0/8,::1/128,172.16.0.0/12"
 
     # SMTP outbound delivery (SMTP is selected only in production)
     smtp_host: str = ""
@@ -65,13 +91,63 @@ class Settings(BaseSettings):
     conflict_check_enabled: bool = True
     sync_delete_mode: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
     sync_expected_duration_minutes: int = Field(default=90, ge=1)
+    # Provider sync window (#465): [now - past_days, now + future_months].
+    sync_window_past_days: int = Field(default=62, ge=1)
+    sync_window_future_months: int = Field(default=24, ge=1, le=120)
+    # Floating times and all-day dates in external calendars are local to this zone.
+    sync_default_timezone: str = "Europe/Berlin"
+    # Upper bound of in-window occurrences per feed/resource; protects against
+    # hostile or broken RRULEs in external calendars.
+    sync_max_occurrences: int = Field(default=5000, ge=1)
     min_travel_minutes: int = Field(default=30, ge=0)
+    # Dev only: allow http:// and private/loopback calendar URLs (local test
+    # servers). Rejected by production_guard — SSRF protection, see #463.
+    calendar_allow_insecure_urls: bool = False
+    # Network-specific NAT64 prefixes (RFC 6052) of the host's DNS64/NAT64
+    # setup, comma-separated IPv6 CIDRs of length 32/40/48/56/64/96. Addresses
+    # inside them are unwrapped and the embedded IPv4 is checked (SSRF, #463).
+    calendar_nat64_prefixes: str = ""
 
-    # Version check & self-update
+    # Version check (display only — the app never executes updates, see #469)
     ghcr_owner: str = "stritti"
     ghcr_repo: str = "nak-district-planner"
-    update_mode: str = "manual"
-    docker_compose_dir: str = ""
+
+    @field_validator("sync_default_timezone")
+    @classmethod
+    def validate_sync_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError(f"Unknown IANA timezone: {value}") from exc
+        return value
+
+    @field_validator("calendar_nat64_prefixes")
+    @classmethod
+    def validate_calendar_nat64_prefixes(cls, value: str) -> str:
+        _parse_nat64_prefixes(value)
+        return value
+
+    @property
+    def calendar_nat64_networks(self) -> tuple[ipaddress.IPv6Network, ...]:
+        return _parse_nat64_prefixes(self.calendar_nat64_prefixes)
+
+    @model_validator(mode="after")
+    def reject_insecure_calendar_urls_in_production(self) -> Settings:
+        """Fail every process (API, worker, beat) at settings load, not only the API lifespan."""
+        if self.app_env == "production" and self.calendar_allow_insecure_urls:
+            raise ValueError(
+                "CALENDAR_ALLOW_INSECURE_URLS must be false in production (SSRF protection)"
+            )
+        return self
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def validate_trusted_proxies(cls, value: str) -> str:
+        """Reject malformed proxy networks at startup instead of per request."""
+        for network in value.split(","):
+            if network.strip():
+                ipaddress.ip_network(network.strip(), strict=False)
+        return value
 
     @model_validator(mode="after")
     def validate_oidc_settings(self) -> Settings:
@@ -101,6 +177,9 @@ class Settings(BaseSettings):
             return "0.0.0"
 
 
+OWNER_CREDENTIAL_VARIABLES = ("POSTGRES_PASSWORD", "MIGRATION_DATABASE_URL")
+
+
 def production_guard(settings: Settings) -> None:
     """Validate production configuration and block startup on critical issues.
 
@@ -112,6 +191,14 @@ def production_guard(settings: Settings) -> None:
         return
 
     errors: list[str] = []
+
+    # Owner credentials belong to the db/migrate services only (.env.db). A
+    # legacy .env may still carry them into runtime containers on upgrade.
+    errors.extend(
+        f"{name} must not be set for runtime services (move it to .env.db)"
+        for name in OWNER_CREDENTIAL_VARIABLES
+        if os.environ.get(name)
+    )
 
     # SECRET_KEY must be non-default and have sufficient entropy
     if settings.secret_key in (

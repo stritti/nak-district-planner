@@ -14,6 +14,7 @@ from starlette.responses import Response
 from starlette.status import HTTP_403_FORBIDDEN
 
 from app.adapters.api.access_metrics import record_access_denied
+from app.adapters.api.client_ip import get_client_ip
 from app.application.audit_service import AuditAction, AuditContext, AuditStatus, audit_service
 
 logger = logging.getLogger(__name__)
@@ -181,30 +182,8 @@ class AuditMiddleware(BaseHTTPMiddleware):
         )
 
     def _get_client_ip(self, request: Request) -> str | None:
-        """Extract client IP address from request.
-
-        Args:
-            request: HTTP request.
-
-        Returns:
-            Client IP address, or None if not available.
-        """
-        # Check for forwarded headers (reverse proxy)
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            # Take the first IP in the chain
-            return forwarded_for.split(",")[0].strip()
-
-        # Check for real IP header
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip
-
-        # Fall back to client address
-        if hasattr(request, "client") and request.client:
-            return request.client.host
-
-        return None
+        """Return the client IP via the shared trusted-proxy resolution."""
+        return get_client_ip(request)
 
     def _should_log_audit(self, request: Request, response: Response | None = None) -> bool:
         """Determine if this request should be audit logged.
@@ -300,7 +279,6 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     "status_code": response.status_code if response else None,
                     "duration_ms": round(duration * 1000, 2),
                     "user_agent": context.user_agent,
-                    **_claimed_identity(request, context),
                 },
             )
 
@@ -440,16 +418,3 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
 def _is_denied(response: Response | None) -> bool:
     return response is not None and response.status_code == HTTP_403_FORBIDDEN
-
-
-def _claimed_identity(request: Request, context: AuditContext) -> dict[str, str]:
-    """Unverified subject of requests rejected before authentication.
-
-    Kept apart from ``user_sub`` because the token was never verified, but it
-    is the only trace of who probed a foreign tenant.
-    """
-    if context.user_sub:
-        return {}
-    tenant_context = getattr(request.state, "tenant_context", None) or {}
-    claimed = tenant_context.get("user_sub")
-    return {"claimed_sub": claimed} if claimed else {}

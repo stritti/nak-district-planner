@@ -38,6 +38,7 @@ from app.adapters.api.schemas.registration import (
     RegistrationReject,
     RegistrationResponse,
 )
+from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.oidc import TokenValidationError
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
@@ -183,6 +184,7 @@ async def submit_registration(
                 headers={"WWW-Authenticate": "Bearer"},
             ) from exc
 
+    await ensure_congregation_in_district(db, district_id, body.congregation_id)
     reg = LeaderRegistration.create(
         district_id=district_id,
         name=body.name,
@@ -266,6 +268,7 @@ async def approve_registration(
     await _validate_scope_assignment(cong_repo, body, district_id)
 
     congregation_id = body.congregation_id if body.congregation_id is not None else reg.congregation_id
+    await ensure_congregation_in_district(db, district_id, congregation_id)
     rank = body.rank if body.rank is not None else reg.rank
     special_role = body.special_role if body.special_role is not None else reg.special_role
 

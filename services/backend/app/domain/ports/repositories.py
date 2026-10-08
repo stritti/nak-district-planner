@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Collection
 from datetime import date, datetime
 
 from app.domain.models.calendar_integration import CalendarIntegration
@@ -25,6 +26,7 @@ from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
 from app.domain.models.user import User
+from app.domain.planning.conflict_result import ScheduledService
 
 
 class DistrictRepository(ABC):
@@ -144,7 +146,31 @@ class PlanningSlotRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_by_generation_keys(
+        self, *, district_id: uuid.UUID, generation_keys: Collection[str]
+    ) -> list[PlanningSlot]:
+        """List slots of a district carrying one of the given generator keys (any status)."""
+        pass
+
+    @abstractmethod
     async def save(self, slot: PlanningSlot) -> None:
+        """Insert or update; clears ``generation_key`` when the slot changed tenant."""
+        pass
+
+    @abstractmethod
+    async def lock_district_for_generation(self, district_id: uuid.UUID) -> None:
+        """Serialize slot generators of one district until the transaction ends."""
+        pass
+
+    @abstractmethod
+    async def add_if_absent(self, slot: PlanningSlot) -> bool:
+        """Insert a new slot unless a uniqueness rule already holds a row for it.
+
+        Rules: same ``generation_key`` within the district, or another ACTIVE
+        slot of the congregation at the same date and time. Returns ``True``
+        when the slot was inserted, ``False`` when it was skipped. Must be safe
+        against concurrent callers (no exception, no duplicate).
+        """
         pass
 
     @abstractmethod
@@ -250,6 +276,17 @@ class ServiceAssignmentRepository(ABC):
     @abstractmethod
     async def list_by_leader(self, leader_id: uuid.UUID) -> list[ServiceAssignment]:
         pass
+
+    @abstractmethod
+    async def list_leader_schedule(
+        self,
+        leader_id: uuid.UUID,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+        exclude_assignment_id: uuid.UUID | None = None,
+    ) -> list[ScheduledService]:
+        """Active services of the leader that may conflict with the given window."""
 
     @abstractmethod
     async def save(self, assignment: ServiceAssignment) -> None:

@@ -1,47 +1,27 @@
-## 1. Backend: Sync Service Refactoring
+## 0. Erledigt vor dem Neuzuschnitt (2026-10-07)
 
-- [x] 1.1 Replace `_get_connector()` `if/elif` chain with `_CONNECTOR_MAP` dictionary registry
-- [x] 1.2 V1-Realität dokumentiert: Google/Microsoft adapters implementieren Fetches; `NotImplementedError` für OAuth-Stubs ist v1-Phase-Limitation (Phase-2-Design: Feature-Complete OAuth + Security-Review erforderlich)
-- [x] 1.3 Add Celery async bridge comment in `tasks.py` (explains `asyncio.run()` usage)
+- [x] 0.1 Connector-Registry `_CONNECTOR_MAP` in `sync_service.py` (Spec `calendar-connector`)
+- [x] 0.2 Typisiertes `SyncResult` statt `dict[str, int]` (Spec `calendar-sync`)
+- [x] 0.3 Einheitliche `Depends(get_<repository>)`-Injektion in allen Routern
+- [x] 0.4 `GET /health` mit DB- und Valkey-Prüfung (Spec `production-deployment`)
+- [x] 0.5 `MatrixFilters.vue` und `MatrixTable.vue` aus `MatrixView.vue` extrahiert
 
-## 2. Backend: Typed Result Objects
+## 1. EventListView
 
-- [x] 2.1 `SyncResult` dataclass in `application/sync_service.py` umgesetzt: `(created, updated, cancelled, auto_matched)` — Deduplication-Tracking für v1
-- [x] 2.2 `sync_service.py` gibt `SyncResult` statt `dict[str, int]` zurück (Type-Safety für Celery + API)
-- [x] 2.3 Celery-Task und API-Response-Adapter serialisieren `SyncResult`-Felder korrekt
+- [ ] 1.1 `EventFilters.vue` extrahieren
+- [ ] 1.2 `EventTable.vue` extrahieren
+- [ ] 1.3 `EventFormModal.vue` extrahieren
 
-## 3. Backend: Dependency Injection Patterns
+## 2. CalendarIntegrationsView
 
-- [x] 3.1 Audit all FastAPI routers for inconsistent session/service injection
-- [x] 3.2 Standardize repository access in all current FastAPI routers via typed `Depends(get_<repository>)` providers, including the later-added `event_hooks.py` router
-- [x] 3.3 Add type annotations to all repository `Depends()` parameters
+- [ ] 2.1 `IntegrationCard.vue` extrahieren
+- [ ] 2.2 `IntegrationFormModal.vue` extrahieren
 
-## 4. Backend: Health Check Endpoint
+## 3. LeadersAdminView und DistrictsAdminView
 
-- [x] 4.1 Implement `GET /health` endpoint in a dedicated router
-- [x] 4.2 Add DB ping (SQLAlchemy `text("SELECT 1")`) and Redis ping checks
-- [x] 4.3 Return HTTP 200 when healthy, HTTP 503 when degraded
-- [x] 4.4 Register `/health` router in `main.py`
-- [x] 4.5 Update `docker-compose.yml` `backend` service to use `GET /health` as healthcheck
+- [ ] 3.1 Leader-Liste und Leader-Formular aus `LeadersAdminView.vue` extrahieren (Abwesenheiten liegen bereits in `LeaderUnavailabilityForm.vue`/`LeaderUnavailabilityList.vue`)
+- [ ] 3.2 Bezirks-, Gemeinde- und Gruppenformulare aus `DistrictsAdminView.vue` extrahieren
 
-## 5. Frontend: HTTP Client
+## 4. Verifikation
 
-- [ ] 5.1 Create `src/services/api/httpClient.ts` (axios instance or fetch wrapper)
-- [ ] 5.2 Add auth token injection interceptor
-- [ ] 5.3 Add global 401 handler (trigger logout)
-- [ ] 5.4 Migrate all existing API files to use `httpClient` instead of raw `fetch`/`axios` *(15/16 API-Module nutzen `apiFetch` aus `src/api/client.ts`; `registrations.ts` nutzt bewusst `publicFetch` für unauthentifizierte Zugriffe — prüfen, ob Teil-Calls migrierbar sind)*
-
-## 6. Frontend: OAuth Stub UI
-
-- [x] 6.1 Add "Coming soon" badge in integration form for Google and Microsoft types *(Hinweis-Banner "OAuth-Flow ist noch nicht implementiert" in `CalendarIntegrationsView.vue`)*
-- [ ] 6.2 Disable integration form submit button when Google/Microsoft type is selected *(Submit bleibt aktiv — JSON-Credentials können manuell hinterlegt werden; prüfen, ob das beabsichtigt ist)*
-
-## 7. Frontend: View Component Decomposition
-
-- [ ] 7.1 Extract `EventFilters.vue` from `EventListView.vue`
-- [ ] 7.2 Extract `EventTable.vue` from `EventListView.vue`
-- [ ] 7.3 Extract `EventFormModal.vue` from `EventListView.vue`
-- [ ] 7.4 Extract `IntegrationCard.vue` from `CalendarIntegrationsView.vue`
-- [ ] 7.5 Extract `IntegrationFormModal.vue` from `CalendarIntegrationsView.vue`
-- [ ] 7.6 Extract `MatrixFilters.vue` from `MatrixView.vue`
-- [ ] 7.7 Extract `MatrixTable.vue` from `MatrixView.vue`
+- [ ] 4.1 Frontend-Unit-Tests, ESLint und Playwright-E2E bestehen unverändert

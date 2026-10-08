@@ -2,6 +2,8 @@
 
 Planungswerkzeug für Gottesdienste und Veranstaltungen in NAK-Bezirken.
 Verwaltet Gemeinden, Termine und Dienstzuweisungen; exportiert Kalender als ICS-Feed.
+Externe Kalender werden in Version 1.0 per **ICS** und **CalDAV** angebunden;
+Google Calendar und Microsoft 365 sind geplant (OAuth-Flow mit Token-Refresh fehlt noch).
 
 ## Dokumentation
 
@@ -34,12 +36,15 @@ Historische Inhalte wurden in die strukturierte Projektdokumentation ueberfuehrt
 
 ```bash
 cp .env.example .env
+cp .env.db.example .env.db
 ```
 
-`.env` öffnen und die Platzhalter ersetzen:
+`.env.db` enthält nur das PostgreSQL-Owner-Passwort (`POSTGRES_PASSWORD`). Es wird
+ausschließlich von `db`, `db-test` und `migrate` geladen — Backend und Worker
+erhalten es nie. In `.env.db` ein sicheres Passwort setzen und in `.env` die
+übrigen Platzhalter ersetzen:
 
 ```dotenv
-POSTGRES_PASSWORD=ein-sicheres-passwort
 SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
 API_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
 ```
@@ -76,7 +81,7 @@ docker compose up -d
 Beim ersten Start und nach jeder neuen Migrationsdatei:
 
 ```bash
-docker compose run --no-deps --rm --build migrate alembic upgrade head
+docker compose run --no-deps --rm --build migrate
 ```
 
 Neue Migration erstellen (nach ORM-Änderungen):
@@ -155,7 +160,8 @@ docker compose up -d db valkey
 ```bash
 cd services/backend
 uv sync                              # Abhängigkeiten installieren
-uv run alembic upgrade head          # Migrationen anwenden
+MIGRATION_DATABASE_URL=postgresql+asyncpg://nak:<POSTGRES_PASSWORD aus .env.db>@localhost:5433/nak_planner \
+  uv run alembic upgrade head        # Migrationen mit Owner-Rolle anwenden
 uv run uvicorn app.main:app --reload # http://localhost:8000
 ```
 
@@ -216,14 +222,21 @@ docker compose -f docker-compose.yml build
 
 #### 2. `.env` für Produktion befüllen
 
-Auf dem Server eine `.env` anlegen — **niemals** die Dev-Werte übernehmen:
+Auf dem Server eine `.env` anlegen — **niemals** die Dev-Werte übernehmen.
+`DATABASE_URL`/`VALKEY_URL` für die Container setzt `.env.docker` (Runtime-Rolle
+`APP_DB_USER`). Das Owner-Passwort gehört **nur** in `.env.db`:
 
 ```dotenv
-POSTGRES_USER=nak
+# .env.db
 POSTGRES_PASSWORD=<starkes-passwort>
+```
+
+```dotenv
+# .env
+POSTGRES_USER=nak
 POSTGRES_DB=nak_planner
-DATABASE_URL=postgresql+asyncpg://nak:<passwort>@db:5432/nak_planner
-VALKEY_URL=valkey://valkey:6379/0
+APP_DB_USER=nak_app
+APP_DB_PASSWORD=<anderes-starkes-passwort>
 SECRET_KEY=<64-zeichen-hex>
 API_KEY=<64-zeichen-hex>
 APP_ENV=production
@@ -237,7 +250,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 #### 3. Datenbank migrieren
 
 ```bash
-docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head
+docker compose -f docker-compose.yml run --no-deps --rm migrate
 ```
 
 #### 4. Stack starten
@@ -295,7 +308,7 @@ git pull
 docker compose -f docker-compose.yml build
 
 # 3. Migrationen anwenden (falls neue Dateien vorhanden)
-docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head
+docker compose -f docker-compose.yml run --no-deps --rm migrate
 
 # 4. Stack neu starten (rollendes Neustarten ohne Downtime nicht ohne Orchestrator)
 docker compose -f docker-compose.yml up -d

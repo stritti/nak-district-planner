@@ -117,8 +117,8 @@ def test_create_calendar_integration_happy_path():
             json={
                 "district_id": str(district_id),
                 "name": "Old",
-                "type": "GOOGLE",
-                "credentials": {"access_token": "secret"},
+                "type": "ICS",
+                "credentials": {"url": "https://calendar.example.com/feed.ics"},
                 "sync_interval": 15,
                 "capabilities": ["READ"],
             },
@@ -171,3 +171,152 @@ def test_delete_calendar_integration_happy_path():
     with _auth_client(district_id, calendar_repo=repo) as (client, headers):
         response = client.delete(f"/api/v1/calendar-integrations/{integration.id}", headers=headers)
     assert response.status_code == 204
+
+
+# ── SSRF hardening (#463): URL validated at create/update ────────────────────
+
+
+import pytest  # noqa: E402
+
+UNSAFE_URLS = [
+    "http://calendar.example.com/feed.ics",
+    "https://127.0.0.1/feed.ics",
+    "https://169.254.169.254/latest/meta-data",
+    "https://192.168.0.10/feed.ics",
+    "https://[::1]/feed.ics",
+    "https://[fd00::1]/feed.ics",
+    "https://[::ffff:10.0.0.1]/feed.ics",
+    "https://localhost/feed.ics",
+    "https://localhost./feed.ics",
+    "https://foo.localhost./feed.ics",
+    "https://LOCALHOST./feed.ics",
+    "https://user:pw@calendar.example.com/feed.ics",  # ggignore - fake test credentials
+    "file:///etc/passwd",
+]
+
+
+def _create_body(district_id: uuid.UUID, cal_type: str, credentials: dict) -> dict:
+    return {
+        "district_id": str(district_id),
+        "name": "Feed",
+        "type": cal_type,
+        "credentials": credentials,
+        "sync_interval": 15,
+        "capabilities": ["READ"],
+    }
+
+
+@pytest.mark.parametrize("cal_type", ["ICS", "CALDAV"])
+@pytest.mark.parametrize("url", UNSAFE_URLS)
+def test_create_rejects_unsafe_calendar_url_with_422(cal_type, url):
+    district_id = uuid.uuid4()
+    service = AsyncMock()
+    with _auth_client(district_id, calendar_service=service) as (client, headers):
+        response = client.post(
+            "/api/v1/calendar-integrations",
+            json=_create_body(district_id, cal_type, {"url": url}),
+            headers=headers,
+        )
+    assert response.status_code == 422
+    assert "user:pw" not in response.text
+    service.create_integration.assert_not_called()
+
+
+@pytest.mark.parametrize("cal_type", ["ICS", "CALDAV"])
+def test_create_requires_url_for_url_based_types(cal_type):
+    district_id = uuid.uuid4()
+    service = AsyncMock()
+    with _auth_client(district_id, calendar_service=service) as (client, headers):
+        response = client.post(
+            "/api/v1/calendar-integrations",
+            json=_create_body(district_id, cal_type, {}),
+            headers=headers,
+        )
+    assert response.status_code == 422
+    service.create_integration.assert_not_called()
+
+
+def test_create_accepts_public_https_calendar_url():
+    district_id = uuid.uuid4()
+    service = AsyncMock()
+    service.create_integration.return_value = _integration(district_id)
+    with _auth_client(district_id, calendar_service=service) as (client, headers):
+        response = client.post(
+            "/api/v1/calendar-integrations",
+            json=_create_body(district_id, "ICS", {"url": "https://calendar.example.com/f.ics"}),
+            headers=headers,
+        )
+    assert response.status_code == 201
+
+
+@pytest.mark.parametrize("url", UNSAFE_URLS)
+def test_update_rejects_unsafe_calendar_url_with_422(url):
+    district_id = uuid.uuid4()
+    integration = dataclasses.replace(_integration(district_id), type=CalendarType.ICS)
+    repo = AsyncMock()
+    repo.get.return_value = integration
+    service = AsyncMock()
+    with _auth_client(district_id, calendar_repo=repo, calendar_service=service) as (
+        client,
+        headers,
+    ):
+        response = client.patch(
+            f"/api/v1/calendar-integrations/{integration.id}",
+            json={"credentials": {"url": url}},
+            headers=headers,
+        )
+    assert response.status_code == 422
+    service.update_integration.assert_not_called()
+
+
+# ── v1.0 provider scope (#467): only ICS and CalDAV ──────────────────────────
+
+
+@pytest.mark.parametrize("cal_type", ["GOOGLE", "MICROSOFT"])
+def test_create_rejects_unsupported_provider_with_422(cal_type):
+    district_id = uuid.uuid4()
+    service = AsyncMock()
+    with _auth_client(district_id, calendar_service=service) as (client, headers):
+        response = client.post(
+            "/api/v1/calendar-integrations",
+            json=_create_body(district_id, cal_type, {"access_token": "t"}),
+            headers=headers,
+        )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "ICS" in detail and "CalDAV" in detail
+    service.create_integration.assert_not_called()
+
+
+@pytest.mark.parametrize("cal_type", ["GOOGLE", "MICROSOFT"])
+def test_update_cannot_change_type_to_unsupported_provider(cal_type):
+    district_id = uuid.uuid4()
+    integration = dataclasses.replace(_integration(district_id), type=CalendarType.ICS)
+    repo = AsyncMock()
+    repo.get.return_value = integration
+    service = AsyncMock()
+    with _auth_client(district_id, calendar_repo=repo, calendar_service=service) as (
+        client,
+        headers,
+    ):
+        response = client.patch(
+            f"/api/v1/calendar-integrations/{integration.id}",
+            json={"type": cal_type},
+            headers=headers,
+        )
+    assert response.status_code == 422
+    service.update_integration.assert_not_called()
+
+
+def test_existing_google_integration_stays_readable():
+    district_id = uuid.uuid4()
+    repo = AsyncMock()
+    repo.list_by_district.return_value = [_integration(district_id)]  # type GOOGLE
+    with _auth_client(district_id, calendar_repo=repo) as (client, headers):
+        response = client.get(
+            "/api/v1/calendar-integrations",
+            params={"district_id": str(district_id)},
+            headers=headers,
+        )
+    assert response.status_code == 200
+    assert response.json()["items"][0]["type"] == "GOOGLE"

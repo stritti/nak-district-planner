@@ -48,7 +48,7 @@ def _async_url(**overrides):
 
 
 def _token(sub: str) -> str:
-    """JWT-shaped token: middleware reads the unverified subject, OIDC is mocked."""
+    """JWT-shaped token whose subject is trusted only by the mocked OIDC validator."""
 
     def part(data: dict) -> str:
         return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
@@ -132,7 +132,7 @@ async def world(owner: AsyncEngine) -> AsyncIterator[World]:
     districts = [seeded.a.district_id, seeded.b.district_id]
     async with owner.begin() as conn:
         for statement in (
-            "DELETE FROM audit_logs WHERE user_sub LIKE :p OR extra_metadata->>'claimed_sub' LIKE :p",
+            "DELETE FROM audit_logs WHERE user_sub LIKE :p",
             "DELETE FROM memberships WHERE user_sub LIKE :p",
             "DELETE FROM users WHERE sub LIKE :p",
         ):
@@ -185,14 +185,12 @@ async def api(world: World) -> AsyncIterator[httpx.AsyncClient]:
             patch("app.adapters.db.session.AsyncSessionLocal", factory),
             patch.object(audit_module, "AsyncSessionLocal", factory),
         ):
-            # The global service outlives the per-test event loop; its queue
-            # must belong to the current loop or the writer spins on errors.
             audit_module.audit_service._queue = asyncio.Queue()
             await audit_module.audit_service.start()
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 yield client
-            await audit_module.audit_service.stop()  # flushes queued audit entries
+            await audit_module.audit_service.stop()
     finally:
         app.dependency_overrides.pop(get_db_session, None)
         deps.set_oidc_adapter(None)
@@ -231,7 +229,6 @@ async def test_planner_manages_leaders_in_own_district(api, owner, world) -> Non
         == 0
     )
 
-    # The request-level audit trail records every successful write.
     await audit_module.audit_service.stop()
     async with owner.connect() as conn:
         trail = (
@@ -282,11 +279,10 @@ async def test_foreign_rows_are_invisible_even_via_own_district_path(api, owner,
         f"/api/v1/events/{world.b.slot_id}", json={"title": "Gekapert"}, headers=headers
     )
 
-    # Foreign ids under the own district and foreign events are hidden by RLS
-    # (404, existence is not even confirmed); a write under the foreign
-    # district path is already refused by the tenant validation middleware.
-    assert (patched.status_code, event_patch.status_code) == (404, 404)
-    assert deleted.status_code == 403
+    # Foreign resources are hidden by RLS even when their identifiers are
+    # supplied under a route the caller can otherwise address. A foreign
+    # district path is rejected by the role guard first (403, audited).
+    assert (patched.status_code, deleted.status_code, event_patch.status_code) == (404, 403, 404)
     name = await _scalar(owner, "SELECT name FROM leaders WHERE id = :id", id=world.b.leader_id)
     title = await _scalar(
         owner, "SELECT title FROM planning_slots WHERE id = :id", id=world.b.slot_id
@@ -312,7 +308,7 @@ async def test_denied_read_is_audited_for_the_probed_district(api, owner, world)
     headers = await _headers(api, world.a.planner_sub)
     response = await api.get(f"/api/v1/districts/{world.b.district_id}/matrix", headers=headers)
     assert response.status_code == 403
-    await audit_module.audit_service.stop()  # flush before inspecting
+    await audit_module.audit_service.stop()
 
     async with owner.connect() as conn:
         rows = (
@@ -332,5 +328,130 @@ async def test_denied_read_is_audited_for_the_probed_district(api, owner, world)
     assert rows[0]["status"] == "FAILED"
     assert rows[0]["district_id"] == world.b.district_id
     assert rows[0]["extra_metadata"]["http_method"] == "GET"
-    # Rejected before authentication: the subject is recorded as an unverified claim.
-    assert rows[0]["extra_metadata"]["claimed_sub"] == world.a.planner_sub
+    # Middleware must not persist identity claims extracted from an unverified bearer payload.
+    assert "claimed_sub" not in rows[0]["extra_metadata"]
+
+
+async def test_congregation_export_feed_contains_distributed_district_slots(
+    api, owner, world
+) -> None:
+    """RLS lets a congregation token read applicable district slots only (#466)."""
+    congregation_id = uuid.uuid4()
+    token = f"e2e-{world.run}-{uuid.uuid4().hex}"
+    applicable, to_all, not_applicable, foreign = (uuid.uuid4() for _ in range(4))
+    slots = [
+        (applicable, world.a.district_id, [str(congregation_id)]),
+        (to_all, world.a.district_id, ["all"]),
+        (not_applicable, world.a.district_id, [str(uuid.uuid4())]),
+        (foreign, world.b.district_id, ["all", str(congregation_id)]),
+    ]
+    async with owner.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO congregations (id, name, district_id, created_at, updated_at) "
+                "VALUES (:id, 'Gemeinde A', :d, now(), now())"
+            ),
+            {"id": congregation_id, "d": world.a.district_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO export_tokens (id, token, label, token_type, district_id, "
+                "congregation_id) VALUES (:id, :t, 'Gemeinde A', 'PUBLIC', :d, :c)"
+            ),
+            {"id": uuid.uuid4(), "t": token, "d": world.a.district_id, "c": congregation_id},
+        )
+        for slot_id, district_id, applicability in slots:
+            await conn.execute(
+                text(
+                    "INSERT INTO planning_slots (id, district_id, title, category, planning_date, "
+                    "planning_time, status, approval_status, applicability, created_at, "
+                    "updated_at) VALUES (:id, :d, 'Bezirksgottesdienst', 'Gottesdienst', "
+                    "'2027-01-10', '10:00', 'ACTIVE', 'CONFIRMED', :a, now(), now())"
+                ),
+                {"id": slot_id, "d": district_id, "a": applicability},
+            )
+    try:
+        response = await api.get(f"/api/v1/export/{token}/calendar.ics")
+    finally:
+        async with owner.begin() as conn:
+            await conn.execute(text("DELETE FROM export_tokens WHERE token = :t"), {"t": token})
+            await conn.execute(
+                text("DELETE FROM planning_slots WHERE id = ANY(:ids)"),
+                {"ids": [slot_id for slot_id, _, _ in slots]},
+            )
+            await conn.execute(
+                text("DELETE FROM congregations WHERE id = :id"), {"id": congregation_id}
+            )
+
+    assert response.status_code == 200, response.text
+    body = response.text
+    assert f"UID:{applicable}@nak-bezirksplaner" in body
+    assert f"UID:{to_all}@nak-bezirksplaner" in body
+    assert str(not_applicable) not in body
+    assert str(foreign) not in body
+
+
+@pytest.mark.parametrize(
+    ("token_type", "personal", "expected_comment"),
+    [
+        ("INTERNAL", False, "Dienstleiter: Leiter Export"),
+        ("PUBLIC", True, "Dienstleiter: Leiter Export"),
+        ("PUBLIC", False, "Dienstleiter: [Name anonymisiert]"),
+    ],
+)
+async def test_export_feed_resolves_leader_names_under_rls(
+    api, owner, world, token_type, personal, expected_comment
+) -> None:
+    """Export tokens read only the leaders their feed names (#485)."""
+    leader_id, slot_id = uuid.uuid4(), uuid.uuid4()
+    token = f"e2e-{world.run}-{uuid.uuid4().hex}"
+    async with owner.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO leaders (id, name, district_id) VALUES (:id, 'Leiter Export', :d)"
+            ),
+            {"id": leader_id, "d": world.a.district_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO planning_slots (id, district_id, title, category, planning_date, "
+                "planning_time, status, approval_status, applicability, created_at, updated_at) "
+                "VALUES (:id, :d, 'Gottesdienst', 'Gottesdienst', '2027-01-10', '10:00', "
+                "'ACTIVE', 'CONFIRMED', '{}', now(), now())"
+            ),
+            {"id": slot_id, "d": world.a.district_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO service_assignments (id, event_id, planning_slot_id, leader_id, "
+                "status, created_at, updated_at) "
+                "VALUES (:id, :s, :s, :l, 'ASSIGNED', now(), now())"
+            ),
+            {"id": uuid.uuid4(), "s": slot_id, "l": leader_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO export_tokens (id, token, label, token_type, district_id, leader_id) "
+                "VALUES (:id, :t, 'Feed', :tt, :d, :l)"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "t": token,
+                "tt": token_type,
+                "d": world.a.district_id,
+                "l": leader_id if personal else None,
+            },
+        )
+    try:
+        response = await api.get(f"/api/v1/export/{token}/calendar.ics")
+    finally:
+        async with owner.begin() as conn:
+            await conn.execute(text("DELETE FROM export_tokens WHERE token = :t"), {"t": token})
+            await conn.execute(text("DELETE FROM planning_slots WHERE id = :id"), {"id": slot_id})
+            await conn.execute(text("DELETE FROM leaders WHERE id = :id"), {"id": leader_id})
+
+    assert response.status_code == 200, response.text
+    assert f"UID:{slot_id}@nak-bezirksplaner" in response.text
+    assert expected_comment in response.text
+    if expected_comment.endswith("[Name anonymisiert]"):
+        assert "Leiter Export" not in response.text

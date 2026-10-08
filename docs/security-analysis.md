@@ -575,7 +575,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 | **A07:2021 - Identification and Authentication Failures** | ⚠️ Teilweise | OIDC gut, aber MFA fehlt |
 | **A08:2021 - Software and Data Integrity Failures** | ✅ Gut | Hash-basierte Deduplizierung, Request Validation |
 | **A09:2021 - Security Logging and Monitoring Failures** | ❌ Kritisch | Kein Audit-Logging |
-| **A10:2021 - Server-Side Request Forgery (SSRF)** | ✅ Gut | Keine direkte URL-Fetching von User-Input |
+| **A10:2021 - Server-Side Request Forgery (SSRF)** | ✅ Gut | Benutzerdefinierte Kalender-URLs laufen über `url_guard.GuardedTransport`: nur HTTPS, Auflösung + Prüfung auf öffentliche Adressen bei jeder Anfrage inkl. Redirect-Hops, Verbindung zur geprüften IP (DNS-Rebinding-sicher), 10-MB-Limit; Validierung bei Create/Update (422) (#463) |
 
 ### 7.2 CIS Controls
 

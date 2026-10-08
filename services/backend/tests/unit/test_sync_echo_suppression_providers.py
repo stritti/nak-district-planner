@@ -141,6 +141,10 @@ def _link(instance: EventInstance, provider: CalendarType) -> ExternalEventLink:
 
 
 def _install_runtime(monkeypatch: pytest.MonkeyPatch, provider: CalendarType):
+    # GOOGLE/MICROSOFT are disabled in 1.0 (#467); connectors are kept and stay covered.
+    monkeypatch.setattr(
+        "app.application.sync_service.SUPPORTED_CALENDAR_TYPES", frozenset(CalendarType)
+    )
     connector_cls = _CONNECTOR_TYPES[provider]
     connector = connector_cls(client=MagicMock())
     connector.fetch_events = AsyncMock(return_value=[])
@@ -249,7 +253,8 @@ async def test_google_delete_echo_uses_explicit_cancellation_tombstone(
     link_repo.list_active_by_integration.assert_not_awaited()
 
 
-@pytest.mark.parametrize("provider", [CalendarType.MICROSOFT, CalendarType.CALDAV])
+# Microsoft is not an authoritative snapshot (no presence check for moved events).
+@pytest.mark.parametrize("provider", [CalendarType.CALDAV])
 async def test_collection_provider_delete_echo_uses_missing_resource_reconciliation(
     monkeypatch: pytest.MonkeyPatch, provider: CalendarType
 ) -> None:

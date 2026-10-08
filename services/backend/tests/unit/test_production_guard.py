@@ -211,3 +211,67 @@ def test_production_guard_oidc_client_id_default() -> None:
     settings.app_env = "production"
     with pytest.raises(RuntimeError, match="OIDC_CLIENT_ID"):
         production_guard(settings)
+
+
+def test_insecure_calendar_urls_rejected_when_settings_are_built_in_production() -> None:
+    # Enforced at Settings construction so every process (API, Celery worker,
+    # beat) refuses it — not only the FastAPI lifespan's production_guard.
+    with pytest.raises(ValueError, match="CALENDAR_ALLOW_INSECURE_URLS"):
+        _valid_prod_settings(calendar_allow_insecure_urls=True)
+
+
+def test_insecure_calendar_urls_allowed_outside_production() -> None:
+    settings = _valid_prod_settings(app_env="development", calendar_allow_insecure_urls=True)
+    assert settings.calendar_allow_insecure_urls is True
+
+
+def test_calendar_insecure_urls_default_off() -> None:
+    assert _valid_prod_settings().calendar_allow_insecure_urls is False
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2001:db8::/33",  # not an RFC 6052 prefix length
+        "2001:db8::/128",
+        "10.0.0.0/8",  # IPv4
+        "not-a-prefix",
+        "2001:db8::1/64",  # host bits set
+    ],
+)
+def test_invalid_calendar_nat64_prefixes_fail_settings_construction(value) -> None:
+    with pytest.raises(ValueError, match="CALENDAR_NAT64_PREFIXES"):
+        _valid_prod_settings(app_env="development", calendar_nat64_prefixes=value)
+
+
+def test_valid_calendar_nat64_prefixes_are_parsed() -> None:
+    settings = _valid_prod_settings(
+        calendar_nat64_prefixes=" 2001:db8::/32 , 2001:db8:122:344::/96 "
+    )
+    assert [str(n) for n in settings.calendar_nat64_networks] == [
+        "2001:db8::/32",
+        "2001:db8:122:344::/96",
+    ]
+    assert _valid_prod_settings().calendar_nat64_networks == ()
+
+
+@pytest.mark.parametrize("name", ["POSTGRES_PASSWORD", "MIGRATION_DATABASE_URL"])
+def test_owner_credentials_in_runtime_environment_block_startup(monkeypatch, name) -> None:
+    """A legacy ``.env`` may still carry the DB owner password into runtime services."""
+    monkeypatch.setenv(name, "owner-secret")
+
+    with pytest.raises(RuntimeError, match=name):
+        production_guard(_valid_prod_settings())
+
+
+def test_owner_credentials_check_ignores_development(monkeypatch) -> None:
+    monkeypatch.setenv("POSTGRES_PASSWORD", "changeme")
+
+    production_guard(Settings(_env_file=None, app_env="development"))
+
+
+def test_runtime_without_owner_credentials_passes(monkeypatch) -> None:
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    monkeypatch.delenv("MIGRATION_DATABASE_URL", raising=False)
+
+    production_guard(_valid_prod_settings())

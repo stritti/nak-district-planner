@@ -21,7 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import (
+    EventApprovalStatus,
+    PlanningSlot,
+    PlanningSlotStatus,
+)
 
 NAGER_DATE_URL = "https://date.nager.at/api/v3/PublicHolidays/{year}/DE"
 
@@ -171,8 +175,12 @@ async def import_feiertage(
                 planning_date=holiday_date,
                 planning_time=planning_time,
                 category="Feiertag",
+                # Holidays apply to every congregation, including ones created later
+                applicability=["all"],
                 title=name,
                 status=PlanningSlotStatus.ACTIVE,
+                # Holidays are reference data, released immediately (issue #466)
+                approval_status=EventApprovalStatus.CONFIRMED,
             )
             await slot_repo.save(slot)
             created += 1
@@ -235,8 +243,12 @@ async def import_kirchliche_festtage(
                 planning_date=day,
                 planning_time=planning_time,
                 category="Feiertag",
+                # Holidays apply to every congregation, including ones created later
+                applicability=["all"],
                 title=name,
                 status=PlanningSlotStatus.ACTIVE,
+                # Holidays are reference data, released immediately (issue #466)
+                approval_status=EventApprovalStatus.CONFIRMED,
             )
             await slot_repo.save(slot)
             created += 1

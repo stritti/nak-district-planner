@@ -31,19 +31,20 @@ from collections.abc import Awaitable
 from datetime import UTC, datetime
 
 from app.celery_app import celery
-from app.domain.errors import IntegrationNotFoundError
+from app.domain.errors import IntegrationNotFoundError, UnsupportedCalendarTypeError
+from app.domain.models.calendar_integration import SUPPORTED_CALENDAR_TYPES
 
 logger = logging.getLogger(__name__)
 
 
-async def _run_as_system_worker(coro: Awaitable[T]) -> T:
+async def _run_as_system_worker[T](coro: Awaitable[T]) -> T:
     """Run DB work with a bounded system-worker tenant context for RLS GUCs.
 
     Every task runs in its own ``asyncio.run`` loop. Pooled asyncpg connections
     are bound to the loop that opened them, so the pool is disposed before the
     loop closes; the next task opens fresh connections on its own loop (#464).
     """
-    from app.adapters.db import session as db_session
+    from app.adapters.db.session import engine
     from app.tenant import TenantContext
 
     TenantContext.set_context(user_sub="system:celery-worker", user_roles=["SYSTEM_WORKER"])
@@ -51,7 +52,7 @@ async def _run_as_system_worker(coro: Awaitable[T]) -> T:
         return await coro
     finally:
         TenantContext.clear_context()
-        await db_session.engine.dispose()
+        await engine.dispose()
 
 
 # Exponential backoff for failing syncs: 60 s, 120 s, 240 s, 480 s (capped at
@@ -139,7 +140,7 @@ class SyncIntegrationTask(celery.Task):
     base=SyncIntegrationTask,
     bind=True,
     autoretry_for=(Exception,),
-    dont_autoretry_for=(IntegrationNotFoundError,),
+    dont_autoretry_for=(IntegrationNotFoundError, UnsupportedCalendarTypeError),
     max_retries=SYNC_MAX_RETRIES,
     retry_backoff=SYNC_RETRY_BACKOFF_SECONDS,
     retry_backoff_max=SYNC_RETRY_BACKOFF_MAX_SECONDS,
@@ -174,6 +175,27 @@ def sync_calendar_integration(self, integration_id: str) -> dict:
     return summary
 
 
+def _due_integration_ids(integrations, now: datetime) -> list[str]:
+    """Return ids of integrations due for sync; unsupported providers are skipped (#467)."""
+    ids: list[str] = []
+    for integration in integrations:
+        if integration.type not in SUPPORTED_CALENDAR_TYPES:
+            logger.warning(
+                "Automatischer Sync übersprungen: Kalendertyp %s wird in Version 1.0 "
+                "nicht unterstützt (integration_id=%s)",
+                integration.type,
+                integration.id,
+            )
+            continue
+        if integration.last_synced_at is None:
+            ids.append(str(integration.id))
+            continue
+        elapsed = (now - integration.last_synced_at).total_seconds() / 60
+        if elapsed >= integration.sync_interval:
+            ids.append(str(integration.id))
+    return ids
+
+
 @celery.task(name="sync_all_active_integrations")
 def sync_all_active_integrations() -> dict:
     """Triggered by Celery beat every 5 minutes.
@@ -189,18 +211,7 @@ def sync_all_active_integrations() -> dict:
     async def _run() -> list[str]:
         async with AsyncSessionLocal() as session:
             repo = SqlCalendarIntegrationRepository(session)
-            integrations = await repo.list_active()
-            now = datetime.now(UTC)
-            ids_to_sync: list[str] = []
-            for integration in integrations:
-                integration_id = str(integration.id)
-                if integration.last_synced_at is None:
-                    ids_to_sync.append(integration_id)
-                    continue
-                elapsed = (now - integration.last_synced_at).total_seconds() / 60
-                if elapsed >= integration.sync_interval:
-                    ids_to_sync.append(integration_id)
-            return ids_to_sync
+            return _due_integration_ids(await repo.list_active(), datetime.now(UTC))
 
     ids = asyncio.run(_run_as_system_worker(_run()))
     for integration_id in ids:
@@ -496,90 +507,13 @@ def check_version() -> dict:
     """
     from app.adapters.version_check.cache import version_cache
     from app.adapters.version_check.ghcr import GhcrTagFetcher
-
-    fetcher = GhcrTagFetcher()
-    latest = fetcher.fetch_latest_version("backend")
-    version_cache.set(latest)
-    logger.info(
-        "check_version: latest=%s current=%s",
-        latest,
-        __import__("app.config", fromlist=["settings"]).settings.app_version,
-    )
-    return {"latest": latest}
-
-
-@celery.task(name="trigger_docker_update")
-def trigger_docker_update() -> dict:
-    """Celery task — pull latest Docker images and restart services.
-
-    Runs `docker compose pull` and `docker compose up -d` in the configured
-    project directory. Only available in `docker-socket` mode.
-
-    The task uses subprocess with a timeout to prevent hanging.
-    Services are restarted in-place (rolling restart via compose).
-    Database migrations are NOT run automatically — admin must trigger them.
-    """
-    import subprocess
-    from pathlib import Path
-
     from app.config import settings
 
-    compose_dir = settings.docker_compose_dir
-    if not compose_dir:
-        return {"status": "error", "message": "DOCKER_COMPOSE_DIR not configured"}
-
-    project_path = Path(compose_dir)
-    if not project_path.exists():
-        return {"status": "error", "message": f"Directory not found: {compose_dir}"}
-
-    results: dict[str, str] = {}
-
-    # Step 1: Pull latest images
-    logger.info("trigger_docker_update: pulling latest images in %s", compose_dir)
-    try:
-        pull = subprocess.run(
-            ["docker", "compose", "pull"],
-            cwd=compose_dir,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        results["pull"] = "ok" if pull.returncode == 0 else f"failed: {pull.stderr.strip()}"
-        if pull.returncode != 0:
-            logger.error("trigger_docker_update: pull failed: %s", pull.stderr)
-    except subprocess.TimeoutExpired:
-        results["pull"] = "timeout"
-        logger.error("trigger_docker_update: pull timed out")
-    except Exception as e:
-        results["pull"] = f"error: {e}"
-        logger.exception("trigger_docker_update: pull error")
-
-    if results.get("pull", "").startswith("failed") or results.get("pull") == "timeout":
-        return {"status": "error", "details": results}
-
-    # Step 2: Restart services
-    logger.info("trigger_docker_update: restarting services")
-    try:
-        up = subprocess.run(
-            ["docker", "compose", "up", "-d"],
-            cwd=compose_dir,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        results["up"] = "ok" if up.returncode == 0 else f"failed: {up.stderr.strip()}"
-        if up.returncode != 0:
-            logger.error("trigger_docker_update: up failed: %s", up.stderr)
-    except subprocess.TimeoutExpired:
-        results["up"] = "timeout"
-        logger.error("trigger_docker_update: up timed out")
-    except Exception as e:
-        results["up"] = f"error: {e}"
-        logger.exception("trigger_docker_update: up error")
-
-    success = results.get("pull") == "ok" and results.get("up") == "ok"
-    logger.info("trigger_docker_update: completed: %s", results)
-    return {"status": "ok" if success else "error", "details": results}
+    current = settings.app_version
+    latest = GhcrTagFetcher().fetch_latest_version("backend", current)
+    version_cache.set(latest)
+    logger.info("check_version: latest=%s current=%s", latest, current)
+    return {"latest": latest}
 
 
 @celery.task(name="generate_planning_slots")

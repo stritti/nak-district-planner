@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('./client')
 
 import * as client from './client'
-import { getVersion, triggerUpdate } from './system'
+import * as systemApi from './system'
+import { getVersion } from './system'
 
 const apiFetch = vi.mocked(client.apiFetch)
 
@@ -21,8 +22,7 @@ describe('system API', () => {
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/system/version?refresh=true')
   })
 
-  it('triggers an update request', async () => {
-    await triggerUpdate()
-    expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/system/update', { method: 'POST' })
+  it('does not offer an in-app update endpoint (#469)', () => {
+    expect('triggerUpdate' in systemApi).toBe(false)
   })
 })

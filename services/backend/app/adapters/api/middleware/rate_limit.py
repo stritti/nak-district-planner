@@ -1,37 +1,67 @@
-"""Rate Limiting Middleware for FastAPI.
+"""Rate limiting middleware for FastAPI."""
 
-This middleware implements rate limiting using Redis-based sliding window algorithm.
-"""
+from __future__ import annotations
 
 import logging
+import re
+from dataclasses import dataclass
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 
+from app.adapters.api.client_ip import get_client_ip
+from app.application.local_rate_limiter import LocalFallbackRateLimiter
 from app.application.rate_limiter import (
     RateLimitConfig,
+    RateLimitResult,
     increment_fail_open_counter,
     rate_limiter,
 )
 
 logger = logging.getLogger(__name__)
 
+_UUID_SEGMENT = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+
+
+@dataclass(frozen=True)
+class SensitiveFallbackConfig:
+    """Local fallback limits used only while the shared Valkey limiter is unavailable."""
+
+    auth_token_limit: int = 30
+    public_registration_limit: int = 10
+    window_seconds: int = 60
+
+
+@dataclass(frozen=True)
+class SensitiveEndpointRule:
+    """Declarative description of a route that needs a local fail-open fallback."""
+
+    method: str
+    pattern: re.Pattern[str]
+    limit_attribute: str
+
+    def matches(self, method: str, path: str) -> bool:
+        return method.upper() == self.method and self.pattern.fullmatch(path) is not None
+
+
+SENSITIVE_ENDPOINT_RULES = (
+    SensitiveEndpointRule(
+        method="POST",
+        pattern=re.compile(r"/api/v1/auth/oidc/token"),
+        limit_attribute="auth_token_limit",
+    ),
+    SensitiveEndpointRule(
+        method="POST",
+        pattern=re.compile(rf"/api/v1/districts/{_UUID_SEGMENT}/registrations"),
+        limit_attribute="public_registration_limit",
+    ),
+)
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """FastAPI Middleware for rate limiting.
-
-    Registered via ``app.add_middleware()`` — Starlette instantiates it
-    as ASGI middleware and calls ``dispatch(request, call_next)`` for
-    each request.
-
-    This middleware:
-    - Checks rate limits for each request
-    - Returns HTTP 429 when rate limit is exceeded
-    - Adds standard rate limit headers to responses
-    - Supports both authenticated and unauthenticated users
-    """
+    """Apply Valkey-backed limits with local fallback for sensitive endpoints."""
 
     def __init__(
         self,
@@ -40,51 +70,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         config: RateLimitConfig | None = None,
         exempt_paths: set[str] | None = None,
         exempt_methods: set[str] | None = None,
-    ):
-        """Initialize the rate limit middleware.
-
-        Args:
-            app: FastAPI application instance.
-            rate_limiter: Rate limiter instance.
-            config: Rate limit configuration.
-            exempt_paths: Set of paths to exempt from rate limiting.
-            exempt_methods: Set of HTTP methods to exempt.
-        """
+        local_fallback_limiter: LocalFallbackRateLimiter | None = None,
+        sensitive_fallback_config: SensitiveFallbackConfig | None = None,
+    ) -> None:
         super().__init__(app)
         self.rate_limiter = rate_limiter
         self.config = config or RateLimitConfig()
         self.exempt_paths = exempt_paths or {"/api/health"}
         self.exempt_methods = exempt_methods or {"OPTIONS"}
+        self.local_fallback_limiter = local_fallback_limiter or LocalFallbackRateLimiter()
+        self.sensitive_fallback_config = sensitive_fallback_config or SensitiveFallbackConfig()
 
-    async def dispatch(
-        self,
-        request: Request,
-        call_next,
-    ) -> Response:
-        """Process a request through the middleware.
-
-        Args:
-            request: Incoming HTTP request.
-            call_next: Next middleware or route handler.
-
-        Returns:
-            HTTP response, potentially with rate limit headers.
-        """
-        # Skip rate limiting for exempt paths
-        if request.url.path in self.exempt_paths:
+    async def dispatch(self, request: Request, call_next) -> Response:
+        if request.url.path in self.exempt_paths or request.method in self.exempt_methods:
             return await call_next(request)
 
-        # Skip rate limiting for exempt methods
-        if request.method in self.exempt_methods:
-            return await call_next(request)
-
-        # Get identifier (user sub or IP address)
         identifier = self._get_identifier(request)
-
-        # Check if user is authenticated
         is_authenticated = self._is_authenticated(request)
 
-        # Check normal sliding-window rate limit
         result = await self.rate_limiter.check_rate_limit(
             identifier=identifier,
             endpoint=request.url.path,
@@ -92,18 +95,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             config=self.config,
             record_fail_open_metric=True,
         )
-        # If rate limit exceeded, return 429
         if not result.allowed:
-            logger.warning(
-                f"Rate limit exceeded for {identifier} on {request.method} {request.url.path}"
-            )
-            return JSONResponse(
-                status_code=HTTP_429_TOO_MANY_REQUESTS,
-                content={"detail": "Rate limit exceeded"},
-                headers=await self.rate_limiter.get_rate_limit_headers(result),
-            )
+            return await self._rate_limited_response(request, identifier, result, "normal")
 
-        # Enforce burst limit (short-window spike protection)
         burst_result = await self.rate_limiter.check_burst_limit(
             identifier=identifier,
             endpoint=request.url.path,
@@ -113,109 +107,82 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if burst_result.fail_open and not result.fail_open and burst_result.fail_open_reason:
             increment_fail_open_counter(burst_result.fail_open_reason)
         if not burst_result.allowed:
-            logger.warning(
-                f"Burst rate limit exceeded for {identifier} on {request.method} {request.url.path}"
-            )
-            return JSONResponse(
-                status_code=HTTP_429_TOO_MANY_REQUESTS,
-                content={"detail": "Rate limit exceeded"},
-                headers=await self.rate_limiter.get_rate_limit_headers(burst_result),
-            )
+            return await self._rate_limited_response(request, identifier, burst_result, "burst")
 
-        # Process request
+        header_result = result
+        fallback_config = self._sensitive_fallback_config(request.method, request.url.path)
+        if (result.fail_open or burst_result.fail_open) and fallback_config is not None:
+            rule_name, fallback_limit, fallback_window = fallback_config
+            # Bucket per rule, not per raw path: otherwise every random district
+            # UUID would open a new bucket and LRU eviction could reset the limit.
+            local_result = await self.local_fallback_limiter.check(
+                identifier=identifier,
+                endpoint=rule_name,
+                limit=fallback_limit,
+                window_seconds=fallback_window,
+            )
+            header_result = local_result
+            if not local_result.allowed:
+                return await self._rate_limited_response(
+                    request,
+                    identifier,
+                    local_result,
+                    "local-fallback",
+                )
+
         response = await call_next(request)
-
-        # Add rate limit headers to response
-        rate_limit_headers = await self.rate_limiter.get_rate_limit_headers(result)
-        for header, value in rate_limit_headers.items():
+        for header, value in (await self.rate_limiter.get_rate_limit_headers(header_result)).items():
             response.headers[header] = value
-
         return response
 
-    def _get_identifier(self, request: Request) -> str:
-        """Get identifier for rate limiting (user sub or IP address).
+    async def _rate_limited_response(
+        self,
+        request: Request,
+        identifier: str,
+        result: RateLimitResult,
+        source: str,
+    ) -> JSONResponse:
+        logger.warning(
+            "Rate limit exceeded for %s on %s %s (%s)",
+            identifier,
+            request.method,
+            request.url.path,
+            source,
+        )
+        return JSONResponse(
+            status_code=HTTP_429_TOO_MANY_REQUESTS,
+            content={"detail": "Rate limit exceeded"},
+            headers=await self.rate_limiter.get_rate_limit_headers(result),
+        )
 
-        Only ``request.state.user`` (set by the auth dependency after
-        route resolution) is trusted for per-user rate limiting — we do
-        not extract the ``sub`` claim from an unverified JWT to avoid
-        allowing an unauthenticated client to impersonate a user's rate-
-        limit bucket.
-
-        Since middleware runs before FastAPI dependencies, user-based
-        identifiers are only available for requests that have passed
-        through an outer middleware or setup that populates
-        ``request.state.user``.  In all other cases IP-based or
-        anonymous limiting is used.
-
-        Args:
-            request: HTTP request.
-
-        Returns:
-            Identifier string.
-        """
-        # Try to get user sub from authenticated user (populated after deps run)
-        if hasattr(request.state, "user") and request.state.user:
-            user = request.state.user
-            if hasattr(user, "sub") and user.sub:
-                return f"user:{user.sub}"
-
-        # Fall back to IP address
-        ip_address = self._get_client_ip(request)
-        if ip_address:
-            return f"ip:{ip_address}"
-
-        # Last resort - use a generic identifier
-        return "anonymous"
-
-    def _is_authenticated(self, request: Request) -> bool:
-        """Check if request is authenticated.
-
-        Args:
-            request: HTTP request.
-
-        Returns:
-            True if user is authenticated.
-        """
-        if hasattr(request.state, "user") and request.state.user:
-            return True
-
-        # Check for Bearer token
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.lower().startswith("bearer "):
-            return True
-
-        return False
-
-    def _get_client_ip(self, request: Request) -> str | None:
-        """Extract client IP address from request.
-
-        Trust model: behind nginx reverse proxy. The proxy sets
-        ``X-Real-IP`` to ``$remote_addr``. If that header is absent,
-        takes the last entry from ``X-Forwarded-For`` (the proxy-appended
-        value), which is not spoofable by external clients because ``nginx``
-        appends ``$remote_addr`` to any incoming header via
-        ``$proxy_add_x_forwarded_for``.
-
-        Args:
-            request: HTTP request.
-
-        Returns:
-            Client IP address, or None if not available.
-        """
-        # 1. X-Real-IP — set by nginx to $remote_addr, not alterable by client
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip
-
-        # 2. X-Forwarded-For — last entry is the proxy-appended $remote_addr
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
-            if ips:
-                return ips[-1]
-
-        # 3. Fall back to direct client address
-        if hasattr(request, "client") and request.client:
-            return request.client.host
-
+    def _sensitive_fallback_config(self, method: str, path: str) -> tuple[str, int, int] | None:
+        """Return (bucket name, limit, window) for a declared sensitive route."""
+        for rule in SENSITIVE_ENDPOINT_RULES:
+            if rule.matches(method, path):
+                return (
+                    rule.limit_attribute,
+                    int(getattr(self.sensitive_fallback_config, rule.limit_attribute)),
+                    self.sensitive_fallback_config.window_seconds,
+                )
         return None
+
+    def _get_identifier(self, request: Request) -> str:
+        """Use a verified principal when available, otherwise the client IP."""
+        user = getattr(request.state, "user", None)
+        sub = getattr(user, "sub", None) if user else None
+        if isinstance(sub, str) and sub:
+            return f"user:{sub}"
+
+        ip_address = get_client_ip(request)
+        return f"ip:{ip_address}" if ip_address else "anonymous"
+
+    @staticmethod
+    def _is_authenticated(request: Request) -> bool:
+        """Return whether a verified principal is already available.
+
+        Middleware runs before FastAPI dependencies in the common request path,
+        so mere presence of an Authorization header is not treated as proof of
+        authentication. This avoids granting an authenticated rate multiplier
+        to arbitrary bearer strings.
+        """
+        return bool(getattr(request.state, "user", None))

@@ -54,6 +54,11 @@ class PlanningSlot:
     # List of congregation IDs (as strings) that this slot applies to (for district-wide holidays)
     # Supports "all" sentinel string for district-wide applicability
     applicability: list[str] = field(default_factory=list)
+    # Stable identity of the generator occurrence that created this slot (e.g.
+    # "draft-service:<congregation>:<local date>"). Survives planner edits of
+    # date/time so a re-run never re-creates a moved, cancelled slot. Unique per
+    # district; None for manually created or imported slots.
+    generation_key: str | None = None
 
     @classmethod
     def create(
@@ -72,6 +77,7 @@ class PlanningSlot:
         applicability: list[str] | None = None,
         status: PlanningSlotStatus = PlanningSlotStatus.ACTIVE,
         slot_id: uuid.UUID | None = None,
+        generation_key: str | None = None,
     ) -> PlanningSlot:
         now = datetime.now(timezone.utc)
         return cls(
@@ -85,11 +91,64 @@ class PlanningSlot:
             invitation_source_congregation_id=invitation_source_congregation_id,
             invitation_source_event_id=invitation_source_event_id,
             applicability=applicability or [],
+            generation_key=generation_key,
             planning_date=planning_date,
             planning_time=planning_time,
             status=status,
             created_at=now,
             updated_at=now,
+        )
+
+    def forget_generation_key_if_reassigned(
+        self,
+        *,
+        district_id: uuid.UUID,
+        congregation_id: uuid.UUID | None,
+        category: str | None,
+    ) -> None:
+        """Drop the generator identity once the slot stops being the generated occurrence.
+
+        The key names the congregation's service occurrence (district-unique). A slot
+        moved to another congregation or changed to another category no longer
+        represents it; keeping the key would make the generator treat the original
+        service as existing, and the unique index would block re-creating it. Pass
+        the district/congregation/category as last persisted.
+        """
+        if (self.district_id, self.congregation_id, self.category) != (
+            district_id,
+            congregation_id,
+            category,
+        ):
+            self.generation_key = None
+
+
+    def is_visible_to(self, congregation_id: uuid.UUID) -> bool:
+        """Whether this slot belongs in the given congregation's scope (UC-03/04/05).
+
+        A congregation slot is visible only to its own congregation; a district
+        slot (``congregation_id is None``) only to the congregations listed in
+        ``applicability`` (or all of them via the ``"all"`` sentinel). An empty
+        ``applicability`` means "not distributed". Status and approval are
+        deliberately not considered here; see :meth:`is_distributed_to`.
+        """
+        if self.congregation_id is not None:
+            return self.congregation_id == congregation_id
+        return (
+            APPLICABILITY_ALL in self.applicability
+            or str(congregation_id) in self.applicability
+        )
+
+    @property
+    def is_confirmed(self) -> bool:
+        """Approval policy: only CONFIRMED slots are released to outside audiences."""
+        return self.approval_status == EventApprovalStatus.CONFIRMED
+
+    def is_distributed_to(self, congregation_id: uuid.UUID) -> bool:
+        """Whether a district slot is released (CONFIRMED) to the congregation (UC-04)."""
+        return (
+            self.congregation_id is None
+            and self.is_confirmed
+            and self.is_visible_to(congregation_id)
         )
 
     def distribute_to(

@@ -28,6 +28,7 @@ from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
 from app.application.sync_service import push_conflict_resolution, push_deviation_resolution
+from app.domain.errors import UnsupportedCalendarTypeError
 from app.domain.event_payloads import plan_finalized
 from app.domain.models.event_instance import (
     EventInstance,
@@ -42,7 +43,7 @@ from app.domain.models.planning_slot import (
     PlanningSlotStatus,
 )
 from app.domain.models.role import Role
-from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.ports.calendar import CalendarConnectorError, OccurrenceWriteBackError
 from app.domain.services.sync_policy import internal_state, resolve_conflict
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
@@ -200,15 +201,12 @@ async def list_events(
     if only_district_level:
         all_slots = [s for s in all_slots if s.congregation_id is None]
     elif congregation_id is not None:
+        # Own slots in every state; district slots only once released (UC-04).
         all_slots = [
             s
             for s in all_slots
             if s.congregation_id == congregation_id
-            or (
-                s.congregation_id is None
-                and s.status == PlanningSlotStatus.ACTIVE
-                and ("all" in s.applicability or str(congregation_id) in s.applicability)
-            )
+            or (s.status == PlanningSlotStatus.ACTIVE and s.is_distributed_to(congregation_id))
         ]
 
     if status_filter is not None:
@@ -317,6 +315,13 @@ async def update_event(
     return _slot_to_event(slot, instance)
 
 
+def _provider_write_error(exc: CalendarConnectorError, detail: str) -> HTTPException:
+    """409 for writes the provider model cannot express, 502 for provider failures."""
+    if isinstance(exc, OccurrenceWriteBackError):
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+
+
 @router.post("/{event_id}/resolve-deviation", response_model=EventResponse)
 async def resolve_event_deviation(
     event_id: uuid.UUID,
@@ -344,13 +349,17 @@ async def resolve_event_deviation(
     try:
         if current.calendar_integration_id is not None:
             await push_deviation_resolution(current, session)
+    except UnsupportedCalendarTypeError as exc:
+        current.deviation_flag = True
+        current.sync_state = SyncState.DIRTY_INTERNAL
+        await instance_repo.save(current)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except CalendarConnectorError as exc:
         current.deviation_flag = True
         current.sync_state = SyncState.DIRTY_INTERNAL
         await instance_repo.save(current)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Abweichung lokal aufgelöst, Provider-Aktualisierung fehlgeschlagen.",
+        raise _provider_write_error(
+            exc, "Abweichung lokal aufgelöst, Provider-Aktualisierung fehlgeschlagen."
         ) from exc
     return _slot_to_event(slot, await instance_repo.get(instance.id))
 
@@ -388,12 +397,15 @@ async def resolve_event_conflict(
     try:
         if instance.calendar_integration_id is not None:
             await push_conflict_resolution(instance, session)
+    except UnsupportedCalendarTypeError as exc:
+        instance.sync_state = SyncState.CONFLICT
+        await instance_repo.save(instance)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except CalendarConnectorError as exc:
         instance.sync_state = SyncState.CONFLICT
         await instance_repo.save(instance)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Konflikt lokal aufgelöst, Provider-Aktualisierung fehlgeschlagen.",
+        raise _provider_write_error(
+            exc, "Konflikt lokal aufgelöst, Provider-Aktualisierung fehlgeschlagen."
         ) from exc
     return _slot_to_event(slot, await instance_repo.get(instance.id))
 

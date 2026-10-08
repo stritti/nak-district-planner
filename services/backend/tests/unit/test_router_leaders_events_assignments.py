@@ -221,17 +221,17 @@ async def test_leader_not_found_paths() -> None:
         )
     with pytest.raises(HTTPException):
         await leaders_router.create_leader(
-            district_id, LeaderCreate(name="N"), object(), db, districts=district_repo, leaders_repo=AsyncMock()
+            district_id, LeaderCreate(name="N"), _auth_context(), db, districts=district_repo, leaders_repo=AsyncMock()
         )
     district_repo.get.return_value = District.create(name="D")
     leader_repo = AsyncMock()
     leader_repo.get.return_value = None
     with pytest.raises(HTTPException):
         await leaders_router.update_leader(
-            district_id, uuid.uuid4(), LeaderUpdate(name="N"), object(), db, leader_repo
+            district_id, uuid.uuid4(), LeaderUpdate(name="N"), _auth_context(), db, leader_repo
         )
     with pytest.raises(HTTPException):
-        await leaders_router.delete_leader(district_id, uuid.uuid4(), object(), db, leaders_repo=leader_repo)
+        await leaders_router.delete_leader(district_id, uuid.uuid4(), _auth_context(), db, leaders_repo=leader_repo)
 
 @pytest.mark.asyncio
 async def test_leader_update_wrong_district() -> None:
@@ -579,9 +579,39 @@ async def test_service_assignment_crud_paths() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["create", "update", "delete"])
+async def test_service_assignment_writes_touch_planning_slot(action: str) -> None:
+    """Assignment changes bump the slot revision so ICS feeds re-sync (#466)."""
+    slot = _planning_slot(district_id=uuid.uuid4())
+    before = datetime(2026, 1, 1, tzinfo=UTC)
+    slot.updated_at = before
+    assignment = ServiceAssignment.create(event_id=slot.id, leader_name="Pr. X")
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = assignment
+    args = (_auth_context(), AsyncMock(), slot_repo, sa_repo)
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
+        if action == "create":
+            await sa_router.create_assignment(
+                slot.id, ServiceAssignmentCreate(leader_name="Pr. Y"), *args
+            )
+        elif action == "update":
+            await sa_router.update_assignment(
+                slot.id, assignment.id, ServiceAssignmentUpdate(leader_name="Pr. Z"), *args
+            )
+        else:
+            await sa_router.delete_assignment(slot.id, assignment.id, *args)
+
+    assert slot.updated_at > before
+    slot_repo.save.assert_awaited_once_with(slot)
+
+
+@pytest.mark.asyncio
 async def test_service_assignment_create_blocks_conflict() -> None:
     slot = _planning_slot()
     db = AsyncMock()
+    db.scalar.return_value = slot.district_id  # leader belongs to the district
     leader_id = uuid.uuid4()
     slot_repo = AsyncMock()
     slot_repo.get = AsyncMock(return_value=slot)
@@ -613,6 +643,7 @@ async def test_service_assignment_create_blocks_conflict() -> None:
 async def test_service_assignment_create_allows_confirmed_warning() -> None:
     slot = _planning_slot()
     db = AsyncMock()
+    db.scalar.return_value = slot.district_id  # leader belongs to the district
     leader_id = uuid.uuid4()
     slot_repo = AsyncMock()
     slot_repo.get = AsyncMock(return_value=slot)
@@ -865,3 +896,39 @@ async def test_service_assignment_list_empty() -> None:
         )
 
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_leader_routes_check_role_before_loading_foreign_rows() -> None:
+    """Outsiders get 403 (audited as ACCESS_DENIED), not 404 from an RLS-hidden row."""
+    district_id = uuid.uuid4()
+    outsider = _auth_context(is_superadmin=False)
+    db = AsyncMock()
+    district_repo = AsyncMock()
+    district_repo.get.return_value = None
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = None
+
+    calls = [
+        leaders_router.list_leaders(
+            district_id, outsider, db, districts=district_repo, leaders_repo=leader_repo
+        ),
+        leaders_router.create_leader(
+            district_id, LeaderCreate(name="N"), outsider, db,
+            districts=district_repo, leaders_repo=leader_repo,
+        ),
+        leaders_router.update_leader(
+            district_id, uuid.uuid4(), LeaderUpdate(name="X"), outsider, db, leader_repo
+        ),
+        leaders_router.delete_leader(
+            district_id, uuid.uuid4(), outsider, db, leaders_repo=leader_repo
+        ),
+    ]
+    for call in calls:
+        with pytest.raises(HTTPException) as exc:
+            await call
+        assert exc.value.status_code == 403
+
+    district_repo.get.assert_not_awaited()
+    leader_repo.get.assert_not_awaited()
+    leader_repo.delete.assert_not_awaited()

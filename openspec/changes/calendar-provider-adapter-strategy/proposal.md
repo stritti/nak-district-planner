@@ -1,3 +1,5 @@
+> **Baseline-Hinweis (2026-10-07, #475):** Der aktuelle Ist-Stand steht in `openspec/specs/calendar-connector` und `openspec/specs/calendar-sync`. Dieser Backlog-Change ergänzt eine eigene Vertrags-Capability; beim Umsetzen sind überschneidende Baseline-Anforderungen per `MODIFIED` in diesen Specs nachzuziehen statt doppelt zu beschreiben.
+
 ## Why
 
 Google and Microsoft calendar adapters currently implement protocol details directly with httpx. PR #375 adds necessary pagination and retry hardening, but long-term maintainability also requires an explicit provider-adapter strategy for token refresh, pagination, throttling, error normalization, and SDK upgrades.
