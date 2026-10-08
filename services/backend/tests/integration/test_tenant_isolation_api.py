@@ -389,3 +389,69 @@ async def test_congregation_export_feed_contains_distributed_district_slots(
     assert f"UID:{to_all}@nak-bezirksplaner" in body
     assert str(not_applicable) not in body
     assert str(foreign) not in body
+
+
+@pytest.mark.parametrize(
+    ("token_type", "personal", "expected_comment"),
+    [
+        ("INTERNAL", False, "Dienstleiter: Leiter Export"),
+        ("PUBLIC", True, "Dienstleiter: Leiter Export"),
+        ("PUBLIC", False, "Dienstleiter: [Name anonymisiert]"),
+    ],
+)
+async def test_export_feed_resolves_leader_names_under_rls(
+    api, owner, world, token_type, personal, expected_comment
+) -> None:
+    """Export tokens read only the leaders their feed names (#485)."""
+    leader_id, slot_id = uuid.uuid4(), uuid.uuid4()
+    token = f"e2e-{world.run}-{uuid.uuid4().hex}"
+    async with owner.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO leaders (id, name, district_id) VALUES (:id, 'Leiter Export', :d)"
+            ),
+            {"id": leader_id, "d": world.a.district_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO planning_slots (id, district_id, title, category, planning_date, "
+                "planning_time, status, approval_status, applicability, created_at, updated_at) "
+                "VALUES (:id, :d, 'Gottesdienst', 'Gottesdienst', '2027-01-10', '10:00', "
+                "'ACTIVE', 'CONFIRMED', '{}', now(), now())"
+            ),
+            {"id": slot_id, "d": world.a.district_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO service_assignments (id, event_id, planning_slot_id, leader_id, "
+                "status, created_at, updated_at) "
+                "VALUES (:id, :s, :s, :l, 'ASSIGNED', now(), now())"
+            ),
+            {"id": uuid.uuid4(), "s": slot_id, "l": leader_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO export_tokens (id, token, label, token_type, district_id, leader_id) "
+                "VALUES (:id, :t, 'Feed', :tt, :d, :l)"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "t": token,
+                "tt": token_type,
+                "d": world.a.district_id,
+                "l": leader_id if personal else None,
+            },
+        )
+    try:
+        response = await api.get(f"/api/v1/export/{token}/calendar.ics")
+    finally:
+        async with owner.begin() as conn:
+            await conn.execute(text("DELETE FROM export_tokens WHERE token = :t"), {"t": token})
+            await conn.execute(text("DELETE FROM planning_slots WHERE id = :id"), {"id": slot_id})
+            await conn.execute(text("DELETE FROM leaders WHERE id = :id"), {"id": leader_id})
+
+    assert response.status_code == 200, response.text
+    assert f"UID:{slot_id}@nak-bezirksplaner" in response.text
+    assert expected_comment in response.text
+    if expected_comment.endswith("[Name anonymisiert]"):
+        assert "Leiter Export" not in response.text

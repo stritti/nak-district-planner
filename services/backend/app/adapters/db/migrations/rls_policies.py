@@ -204,6 +204,42 @@ def export_token_lookup_sql(alias: str = "export_tokens") -> str:
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
+def leader_read_sql(alias: str = "leaders") -> str:
+    """Membership-based leader visibility (before export-token reads, #485)."""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR {district_membership_sql(alias)}
+    OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def export_token_leader_read_sql(alias: str = "leaders") -> str:
+    """Export tokens may read only the leaders their feed names (#485).
+
+    A personal leader feed reads its own leader, an INTERNAL feed the leaders of
+    its district. PUBLIC feeds anonymize names and therefore read none.
+    """
+    return f"""
+EXISTS (
+    SELECT 1
+    FROM export_tokens et
+    WHERE et.token = current_setting('app.current_export_token', true)
+      AND et.district_id = {alias}.district_id
+      AND (et.leader_id = {alias}.id OR (et.leader_id IS NULL AND et.token_type = 'INTERNAL'))
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def leader_row_read_sql(alias: str = "leaders") -> str:
+    """SELECT visibility of leader rows."""
+    return f"({leader_read_sql(alias)} OR {export_token_leader_read_sql(alias)})"
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def leaders_self_update_sql(alias: str = "leaders") -> str:
     """Keep leader updates planner-scoped; avoid broad viewer/self-link writes in RLS."""
     return planning_slot_write_sql(alias)
@@ -529,11 +565,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY leaders_tenant_isolation_policy ON leaders
                 FOR SELECT
-                USING (
-                    {SUPERADMIN_SQL}
-                    OR {district_membership_sql("leaders")}
-                    OR (leaders.congregation_id IS NOT NULL AND {congregation_membership_sql("leaders")})
-                );
+                USING {leader_row_read_sql("leaders")};
             """,
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY leaders_insert_policy ON leaders

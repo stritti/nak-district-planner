@@ -217,8 +217,12 @@ async def export_calendar_ics(
         leader_slot_ids = {_slot_key(a) for a in assignments}
         all_slots = [s for s in all_slots if s.id in leader_slot_ids]
 
+    # Personal and INTERNAL feeds show names; PUBLIC feeds anonymize them and,
+    # like the leaders RLS policy, never load leader rows.
+    show_names = bool(export_token.leader_id) or export_token.token_type == TokenType.INTERNAL
+
     # Batch-load leaders so leader_id-only assignments can be resolved to a display name
-    if export_token.district_id:
+    if export_token.district_id and show_names:
         leader_repo = leader_repo_dep
         leaders = await leader_repo.list_by_district(export_token.district_id)
         leaders_by_id = {ldr.id: ldr for ldr in leaders}
@@ -239,6 +243,8 @@ async def export_calendar_ics(
             display_name = f"{rank_prefix}{ldr.name}"
             key = _slot_key(a)
             leader_revision[key] = max(ldr.updated_at, leader_revision.get(key, ldr.updated_at))
+        elif a.leader_id and not show_names:
+            display_name = "[Name anonymisiert]"
 
         # For each slot keep the best name (non-None wins over None)
         slot_key = _slot_key(a)
@@ -316,11 +322,8 @@ async def export_calendar_ics(
 
         leader = assignment_map.get(slot.id)
         if leader:
-            # Personal leader token → always show full name (INTERNAL behaviour)
-            if export_token.leader_id or export_token.token_type == TokenType.INTERNAL:
-                vevent.add("comment", f"Dienstleiter: {leader}")
-            else:
-                vevent.add("comment", "Dienstleiter: [Name anonymisiert]")
+            name = leader if show_names else "[Name anonymisiert]"
+            vevent.add("comment", f"Dienstleiter: {name}")
 
         cal.add_component(vevent)
 

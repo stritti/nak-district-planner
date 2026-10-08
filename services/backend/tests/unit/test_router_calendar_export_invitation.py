@@ -506,6 +506,26 @@ async def test_export_calendar_ics_leader_token_shows_assignments() -> None:
 
 
 @pytest.mark.asyncio
+async def test_public_feed_anonymizes_leader_id_assignment_without_loading_leaders() -> None:
+    """PUBLIC feeds never read leader rows (RLS denies them) yet still mark the slot as assigned."""
+    district_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    token = ExportToken.create(
+        label="Public", token_type=TokenType.PUBLIC, district_id=district_id, congregation_id=None
+    )
+    repos = _export_repos(
+        token=token, slots=[slot], assignments=[_assignment_stub(slot.id, "", leader_id=uuid.uuid4())]
+    )
+
+    response = await export_router.export_calendar_ics(
+        token.token, _export_session(AsyncMock()), approval_status=None, **repos
+    )
+
+    assert b"Dienstleiter: [Name anonymisiert]" in response.body
+    repos["leader_repo_dep"].list_by_district.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_export_calendar_ics_empty() -> None:
     """Export with no slots produces valid calendar with no VEVENT."""
     district_id = uuid.uuid4()

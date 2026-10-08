@@ -56,6 +56,17 @@ The ICS export SHALL include, for congregation tokens, the congregation's own sl
 - **WHEN** a leader token's feed is requested
 - **THEN** only slots with an assignment for that leader are exported
 
+### Requirement: Export tokens read only the leaders they name
+Under row-level security the leaders SELECT policy SHALL let an export token read the leader of a personal leader feed and, for INTERNAL tokens, the leaders of the token's district. PUBLIC tokens SHALL read no leader rows; their feeds mark assigned services as `Dienstleiter: [Name anonymisiert]`.
+
+#### Scenario: INTERNAL feed with a leader_id-only assignment
+- **WHEN** an INTERNAL export of the district contains a slot whose assignment references only a leader id
+- **THEN** the event carries `Dienstleiter: <name>` although the request is unauthenticated
+
+#### Scenario: PUBLIC feed
+- **WHEN** a PUBLIC export contains the same slot
+- **THEN** the event carries `Dienstleiter: [Name anonymisiert]` and no leader row is read
+
 ### Requirement: ICS change semantics
 The ICS export SHALL keep UIDs stable (`{slot_id}@nak-bezirksplaner`), SHALL emit `STATUS:CANCELLED` for cancelled slots, and SHALL derive `DTSTAMP` and `LAST-MODIFIED` from the latest `updated_at` of everything rendered into the event (slot, event instance, displayed leader, congregation) and `SEQUENCE` from the seconds since 2020-01-01 of that revision, so it stays within the 32-bit RFC 5545 INTEGER.
 
