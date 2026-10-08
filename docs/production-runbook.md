@@ -60,7 +60,7 @@ Wenn beim Upgrade kein `SUPERADMIN_SUB` gesetzt ist, pinnt die Migration determi
 
    Der Schritt verwendet das in Schritt 2 gebaute Image (Details in `docs/deployment-migrations.md`).
 
-5. Erst nach erfolgreicher Migration API/Worker aktualisieren:
+5. Erst nach erfolgreicher Migration API, Worker und Beat aktualisieren:
 
    ```bash
    docker compose -f docker-compose.yml up -d
@@ -77,6 +77,23 @@ mit dem neuen Release-Tag. Versionsvergleich nach SemVer 2.0 (inkl. Prereleases 
 `1.0.0-rc.1`; PEP-440-Versionen wie `1.0.0rc1` werden normalisiert). Prereleases
 werden nur angeboten, wenn bereits eine Prerelease läuft; eine stabile Installation
 sieht nur stabile Releases. Ältere Versionen werden nie als Update angezeigt.
+
+### 3.1 Laufende Services
+
+| Service | Aufgabe | Hinweise |
+|---------|---------|----------|
+| `backend` | API | `restart: unless-stopped` |
+| `worker` | Celery-Tasks | `restart: unless-stopped` |
+| `beat` | Periodische Jobs (`celery_app.beat_schedule`: Kalender-Sync, Erinnerungen, Draft-Generierung, Lueckenscan, ...) | **Genau eine Instanz** — jede weitere Replik loest jeden Job erneut aus; nie mit `--scale beat=N` skalieren. Schedule-Datei im Volume `beat_schedule`. |
+| `frontend`, `db`, `valkey` | Web, Datenbank, Rate-Limiting | `restart: unless-stopped` |
+| `migrate` | One-shot-Migration | Kein Restart; Runtime-Services starten erst nach Erfolg |
+| `db-test` | Nur lokale Tests | Profil `test`: `docker compose --profile test up -d db-test` |
+
+Worker und Beat pruefen beim Start den Alembic-Head und beenden sich bei Abweichung. Pruefen, dass Beat laeuft: `docker compose logs beat | grep "beat: Starting"`.
+
+### 3.2 Image-Tags
+
+Pushes auf `main`/`develop` veroeffentlichen nur `<branch>`- und `sha-<commit>`-Tags. `latest`, `<major>` und `<major>.<minor>` setzt ausschliesslich der Release-Workflow fuer stabile Releases (keine Prereleases). Produktion pinnt eine Release-Version, nicht `main`.
 
 ## 4. Rollback
 
