@@ -32,6 +32,9 @@ from app.domain.ports.calendar import CalendarConnectorError
 logger = logging.getLogger(__name__)
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
+# Hard upper bound for one calendar fetch: DNS, every connect/TLS attempt,
+# response headers and body together (and all retries, see http_policy).
+REQUEST_BUDGET_SECONDS = 30.0
 _DEFAULT_DNS_TIMEOUT = 10.0
 # Prefixes that embed an IPv4 address (RFC 6052 layout): the well-known and
 # local-use NAT64 prefixes and IPv4-translatable SIIT addresses (RFC 7915,
@@ -153,13 +156,29 @@ async def _system_resolver(host: str, port: int) -> list[str]:
     return [str(info[4][0]) for info in infos]
 
 
+def _budget_exceeded(request: httpx.Request) -> httpx.TimeoutException:
+    return httpx.TimeoutException("Calendar request exceeded its time budget", request=request)
+
+
 class _CappedStream(httpx.AsyncByteStream):
-    def __init__(self, stream: httpx.AsyncByteStream) -> None:
+    """Caps the body size and keeps reading within the request deadline."""
+
+    def __init__(self, stream: httpx.AsyncByteStream, request: httpx.Request, deadline: float) -> None:
         self._stream = stream
+        self._request = request
+        self._deadline = deadline
 
     async def __aiter__(self) -> AsyncIterator[bytes]:
         total = 0
-        async for chunk in self._stream:
+        loop = asyncio.get_running_loop()
+        chunks = aiter(self._stream)
+        while True:
+            try:
+                chunk = await asyncio.wait_for(anext(chunks), self._deadline - loop.time())
+            except StopAsyncIteration:
+                return
+            except TimeoutError as exc:
+                raise _budget_exceeded(self._request) from exc
             total += len(chunk)
             if total > MAX_RESPONSE_BYTES:
                 raise ResponseTooLargeError("Kalender-Antwort ist zu groß")
@@ -178,6 +197,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         inner: httpx.AsyncBaseTransport | None = None,
         resolver: Resolver | None = None,
         allow_insecure: bool | None = None,
+        budget_seconds: float = REQUEST_BUDGET_SECONDS,
     ) -> None:
         # No keep-alive: a pooled connection is keyed by the pinned IP and
         # must not be reused for a different hostname/SNI.
@@ -185,6 +205,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             limits=httpx.Limits(max_keepalive_connections=0)
         )
         self._resolve = resolver or _system_resolver
+        self._budget = budget_seconds
         self._allow_insecure = (
             settings.calendar_allow_insecure_urls if allow_insecure is None else allow_insecure
         )
@@ -195,17 +216,22 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         # decodes after the transport, so a compressed body would bypass the
         # size cap (decompression bomb).
         request.headers["Accept-Encoding"] = "identity"
+        loop = asyncio.get_running_loop()
+        # Everything below (DNS, every connect/TLS attempt, headers, body)
+        # shares one deadline; httpx timeouts only bound single operations.
+        budget_deadline = loop.time() + self._budget
         if self._allow_insecure or _ip_literal(request.url.host) is not None:
             # IP literals were fully validated by _check_url (or dev opt-in).
-            return await self._checked(await self._inner.handle_async_request(request))
+            return await self._attempt(request, request, budget_deadline)
 
         host = request.url.host
         port = request.url.port or (443 if request.url.scheme == "https" else 80)
         # One connect deadline covers DNS resolution and every address fallback,
         # so black-holed answers cannot multiply the configured timeout.
         timeouts = request.extensions.get("timeout") or {}
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + (timeouts.get("connect") or _DEFAULT_DNS_TIMEOUT)
+        deadline = min(
+            loop.time() + (timeouts.get("connect") or _DEFAULT_DNS_TIMEOUT), budget_deadline
+        )
         try:
             addresses = await asyncio.wait_for(self._resolve(host, port), deadline - loop.time())
         except TimeoutError as exc:
@@ -236,15 +262,29 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                 },
             )
             try:
-                response = await self._inner.handle_async_request(pinned)
+                return await self._attempt(request, pinned, budget_deadline)
             except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
                 last_error = exc
                 continue
-            return await self._checked(response)
         assert last_error is not None  # noqa: S101 - loop ran at least once
         raise last_error
 
-    async def _checked(self, response: httpx.Response) -> httpx.Response:
+    async def _attempt(
+        self, request: httpx.Request, outgoing: httpx.Request, budget_deadline: float
+    ) -> httpx.Response:
+        """One connection attempt (TCP, TLS, headers) within the request budget."""
+        remaining = budget_deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise _budget_exceeded(request)
+        try:
+            response = await asyncio.wait_for(self._inner.handle_async_request(outgoing), remaining)
+        except TimeoutError as exc:
+            raise _budget_exceeded(request) from exc
+        return await self._checked(response, request, budget_deadline)
+
+    async def _checked(
+        self, response: httpx.Response, request: httpx.Request, deadline: float
+    ) -> httpx.Response:
         if response.headers.get("content-encoding", "identity").strip().lower() != "identity":
             await response.aclose()
             raise UnsupportedContentEncodingError("Kalender-Antwort ist komprimiert")
@@ -252,7 +292,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         if length.isdigit() and int(length) > MAX_RESPONSE_BYTES:
             await response.aclose()
             raise ResponseTooLargeError("Kalender-Antwort ist zu groß")
-        response.stream = _CappedStream(response.stream)  # type: ignore[arg-type]
+        response.stream = _CappedStream(response.stream, request, deadline)  # type: ignore[arg-type]
         return response
 
     async def aclose(self) -> None:
@@ -268,7 +308,7 @@ def guarded_client(
     """
     return httpx.AsyncClient(
         transport=transport or GuardedTransport(),
-        timeout=30.0,
+        timeout=REQUEST_BUDGET_SECONDS,
         follow_redirects=follow_redirects,
         trust_env=False,
     )

@@ -27,3 +27,4 @@
 - [x] 3.9 Legacy-IPv4-Literale (`127.1`, `2130706433`, `0x7f.1`) werden statisch als IPv4 interpretiert und abgelehnt (Codex-Review #487).
 - [x] 3.10 IPv6 site-local (`fec0::/10`) explizit ablehnen; Python meldet den Bereich als `is_global` (Codex-Review #487).
 - [x] 3.11 Eine gemeinsame Connect-Deadline für DNS-Auflösung und alle Adress-Fallbacks (Codex-Review #487).
+- [x] 3.12 Hartes Gesamtbudget von 30 s pro Abruf: DNS, alle Connect-/TLS-Versuche, Header und Body; Retries teilen sich dasselbe Budget (Maintainer-Entscheidung #486).

@@ -517,3 +517,91 @@ def test_well_known_nat64_prefixes_are_always_unwrapped(prefix):
 def test_embedded_ipv4_extraction_matches_rfc6052_examples(prefix, address):
     extracted = _embedded_ipv4(ipaddress.IPv6Address(address), ipaddress.IPv6Network(prefix))
     assert str(extracted) == "192.0.2.33"
+
+
+# ── One hard time budget per fetch (#486: never longer than 30 s) ────────────
+
+
+class _Stall(httpx.AsyncBaseTransport):
+    """Accepts the TCP connect, then never finishes (e.g. a stalled TLS handshake)."""
+
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    async def handle_async_request(self, request):
+        import asyncio
+
+        self.attempts += 1
+        await asyncio.sleep(3600)
+
+
+async def _elapsed(transport, url="https://calendar.example.com/feed.ics"):
+    import time
+
+    async with httpx.AsyncClient(
+        transport=transport, timeout=httpx.Timeout(5.0), trust_env=False
+    ) as client:
+        started = time.monotonic()
+        with pytest.raises(httpx.TimeoutException):
+            response = await client.get(url)
+            await response.aread()
+        return time.monotonic() - started
+
+
+async def test_stalled_handshakes_on_every_address_stay_within_the_budget():
+    stall = _Stall()
+    transport = GuardedTransport(
+        inner=stall,
+        resolver=_resolver("93.184.216.34", "93.184.216.35", "93.184.216.36"),
+        budget_seconds=0.3,
+    )
+    assert await _elapsed(transport) < 0.45  # not 3 x connect, not 3 x read
+    assert stall.attempts == 1  # a timed-out attempt ends the fetch: budget used up
+
+
+async def test_slowly_trickling_body_stays_within_the_budget():
+    import asyncio
+
+    async def drip():
+        for _ in range(100):
+            await asyncio.sleep(0.05)  # each chunk is far below httpx's 5 s read timeout
+            yield b"x"
+
+    def handler(request):
+        return httpx.Response(200, stream=_AsyncStream(drip()))
+
+    transport = GuardedTransport(
+        inner=httpx.MockTransport(handler), resolver=_resolver("93.184.216.34"), budget_seconds=0.3
+    )
+    assert await _elapsed(transport) < 0.45
+
+
+class _AsyncStream(httpx.AsyncByteStream):
+    def __init__(self, gen) -> None:
+        self._gen = gen
+
+    async def __aiter__(self):
+        async for chunk in self._gen:
+            yield chunk
+
+
+async def test_retries_share_one_budget(monkeypatch):
+    import asyncio
+    import time
+
+    from app.adapters.calendar import http_policy
+
+    monkeypatch.setattr(http_policy, "REQUEST_BUDGET_SECONDS", 0.3)
+    calls = 0
+
+    async def flaky():
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.2)
+        raise httpx.ConnectTimeout("timed out")
+
+    started = time.monotonic()
+    with pytest.raises(CalendarConnectorError):
+        await http_policy.resilient_request(flaky, provider="iCal")
+    assert time.monotonic() - started < 0.45
+    assert calls <= 2
