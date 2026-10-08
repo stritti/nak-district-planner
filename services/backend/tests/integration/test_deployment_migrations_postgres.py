@@ -83,3 +83,24 @@ def test_concurrent_migration_waits_for_advisory_lock() -> None:
         holder.cursor().execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
         holder.close()
     assert proc.wait(timeout=60) == 0
+
+
+def test_runtime_role_can_use_celery_broker_tables_without_ddl() -> None:
+    owner = parse_dsn(OWNER_DSN)
+    app = psycopg2.connect(make_dsn(OWNER_DSN, user=APP_ROLE, password=APP_PASSWORD))
+    try:
+        with app.cursor() as cur:
+            cur.execute("SELECT has_schema_privilege(current_user, 'public', 'CREATE')")
+            assert cur.fetchone()[0] is False, "runtime role must not have DDL rights"
+            cur.execute(
+                "INSERT INTO kombu_queue (id, name) VALUES (nextval('queue_id_sequence'), %s)",
+                (f"probe-{owner['dbname']}-{time.time_ns()}",),
+            )
+            cur.execute(
+                "INSERT INTO celery_taskmeta (id, task_id, status) "
+                "VALUES (nextval('task_id_sequence'), %s, 'PENDING')",
+                (f"probe-{time.time_ns()}",),
+            )
+        app.rollback()
+    finally:
+        app.close()
