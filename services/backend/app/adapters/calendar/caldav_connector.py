@@ -10,8 +10,8 @@ or with bearer token: {"url": "...", "access_token": "token"}
 
 from __future__ import annotations
 
-import hashlib
-from datetime import UTC, datetime, timedelta
+import logging
+from datetime import UTC, datetime
 from urllib.parse import urljoin, urlsplit
 
 import defusedxml.ElementTree as ET
@@ -19,28 +19,29 @@ import httpx
 from icalendar import Calendar as ICalendar
 
 from app.adapters.calendar.deletion import delete_resource
+from app.adapters.calendar.ical_events import expand_events
 from app.adapters.calendar.url_guard import guarded_client
-from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
+from app.domain.models.raw_calendar_event import RawCalendarEvent, is_occurrence_key
+from app.domain.ports.calendar import (
+    CalendarConnector,
+    CalendarConnectorError,
+    OccurrenceWriteBackError,
+)
+
+logger = logging.getLogger(__name__)
 
 
-def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:
-    payload = f"{uid}|{start_at.isoformat()}|{end_at.isoformat()}|{title}"
-    return hashlib.sha256(payload.encode()).hexdigest()
-
-
-def _to_utc(value) -> datetime:
-    """Normalize iCalendar date/datetime values to UTC."""
-    raw = value.dt if hasattr(value, "dt") else value
-    if isinstance(raw, datetime):
-        return raw.replace(tzinfo=UTC) if raw.tzinfo is None else raw.astimezone(UTC)
-    return datetime(raw.year, raw.month, raw.day, tzinfo=UTC)
+def _refuse_occurrence_write(event: RawCalendarEvent) -> None:
+    """A series is one resource: writing one occurrence would rewrite or delete all."""
+    if event.recurrence_id is not None or is_occurrence_key(event.uid):
+        raise OccurrenceWriteBackError()
 
 
 class CalDAVConnector(CalendarConnector):
     """Adapter for CalDAV servers."""
 
     authoritative_snapshot = True
+    window_bounded_snapshot = True
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client or guarded_client()
@@ -65,8 +66,14 @@ class CalDAVConnector(CalendarConnector):
                 "CalDAV credentials must include either access_token or username/password"
             )
 
-        # Build CalDAV calendar-query REPORT
-        # This requests VEVENT components in the specified time range
+        # Build CalDAV calendar-query REPORT for VEVENTs overlapping the window.
+        # RFC 4791 9.9: unset bounds are omitted, never sent as empty attributes.
+        bounds = " ".join(
+            f'{name}="{self._format_datetime(value)}"'
+            for name, value in (("start", from_dt), ("end", to_dt))
+            if value is not None
+        )
+        time_range = f"\n                <C:time-range {bounds}/>" if bounds else ""
         calendar_query = f"""<?xml version="1.0" encoding="UTF-8"?>
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
     <D:prop>
@@ -75,9 +82,7 @@ class CalDAVConnector(CalendarConnector):
     </D:prop>
     <C:filter>
         <C:comp-filter name="VCALENDAR">
-            <C:comp-filter name="VEVENT">
-                <C:time-range start="{self._format_datetime(from_dt) if from_dt else ""}" 
-                             end="{self._format_datetime(to_dt) if to_dt else ""}"/>
+            <C:comp-filter name="VEVENT">{time_range}
             </C:comp-filter>
         </C:comp-filter>
     </C:filter>
@@ -119,81 +124,46 @@ class CalDAVConnector(CalendarConnector):
 
         events: list[RawCalendarEvent] = []
 
-        # Find all response elements
+        # A resource that is missing, empty or unparseable is skipped, but the
+        # result then no longer proves deletions (snapshot_complete=False).
+        unusable = 0
         for resp in root.findall(".//D:response", namespaces):
-            # Get calendar-data element
-            cal_data_elem = resp.find(".//C:calendar-data", namespaces)
-            if cal_data_elem is None or cal_data_elem.text is None:
-                continue
-
-            cal_data = cal_data_elem.text
-            if not cal_data.strip():
-                continue
-
-            # Parse the iCalendar data
+            cal_data = resp.findtext(".//C:calendar-data", namespaces=namespaces) or ""
             try:
-                cal = ICalendar.from_ical(cal_data)
+                cal = ICalendar.from_ical(cal_data) if cal_data.strip() else None
             except Exception:
-                # Skip invalid iCalendar data
+                cal = None
+            if cal is None:
+                unusable += 1
                 continue
 
-            # Extract VEVENT components
-            for component in cal.walk():
-                if component.name != "VEVENT":
-                    continue
-
-                uid_raw = component.get("UID")
-                uid = str(uid_raw) if uid_raw else ""
-                if not uid:
-                    continue
-
-                summary = component.get("SUMMARY", "")
-                title = str(summary) if summary else "(kein Titel)"
-
-                dtstart = component.get("DTSTART")
-                dtend = component.get("DTEND")
-                duration = component.get("DURATION")
-
-                if dtstart is None:
-                    continue
-
-                start_at = _to_utc(dtstart)
-
-                if dtend is not None:
-                    end_at = _to_utc(dtend)
-                elif duration is not None:
-                    end_at = start_at + duration.dt
-                else:
-                    # All-day default: 1 day
-                    end_at = start_at + timedelta(days=1)
-
-                description_raw = component.get("DESCRIPTION")
-                description = str(description_raw).strip() if description_raw else None
-
-                status_raw = component.get("STATUS")
-                is_cancelled = str(status_raw).upper() == "CANCELLED" if status_raw else False
-
-                events.append(
-                    RawCalendarEvent(
-                        uid=uid,
-                        title=title,
-                        start_at=start_at,
-                        end_at=end_at,
-                        description=description,
-                        content_hash=_content_hash(uid, start_at, end_at, title),
-                        is_cancelled=is_cancelled,
-                        revision_marker=resp.findtext("D:getetag", namespaces=namespaces)
-                        or resp.findtext(".//D:getetag", namespaces=namespaces),
-                        resource_id=resp.findtext("D:href", namespaces=namespaces),
-                    )
+            try:
+                expanded = expand_events(
+                    cal,
+                    from_dt=from_dt,
+                    to_dt=to_dt,
+                    revision_marker=resp.findtext("D:getetag", namespaces=namespaces)
+                    or resp.findtext(".//D:getetag", namespaces=namespaces),
+                    resource_id=resp.findtext("D:href", namespaces=namespaces),
                 )
+            except Exception as exc:
+                # Fail the snapshot instead of silently dropping (and then
+                # reconciling away) every occurrence of this resource.
+                raise CalendarConnectorError("CalDAV Serie konnte nicht expandiert werden") from exc
+            events.extend(expanded.events)
+            unusable += not expanded.complete
 
+        self.snapshot_complete = unusable == 0
+        if unusable:
+            # Count only: hrefs and payloads are provider-controlled.
+            logger.warning("CalDAV snapshot incomplete: %d unusable resource(s)", unusable)
         return events
 
     async def update_event_times(
         self, credentials: dict, event: RawCalendarEvent, *, start_at: datetime, end_at: datetime
     ) -> str | None:
         """Update only event times while preserving the provider's current resource fields."""
+        _refuse_occurrence_write(event)
         if not event.resource_id or "url" not in credentials:
             raise CalendarConnectorError("CalDAV resource href oder Basis-URL fehlt")
         base = credentials["url"].rstrip("/") + "/"
@@ -270,6 +240,7 @@ class CalDAVConnector(CalendarConnector):
         return response.headers.get("etag")
 
     async def delete_event(self, credentials: dict, event: RawCalendarEvent) -> None:
+        _refuse_occurrence_write(event)
         if not event.resource_id:
             raise CalendarConnectorError("CalDAV resource href fehlt")
         if "url" not in credentials:
@@ -288,6 +259,32 @@ class CalDAVConnector(CalendarConnector):
             self._client, url, headers=headers,
             auth=(credentials["username"], credentials["password"]) if "username" in credentials else None,
         )
+
+    async def resource_exists(self, credentials: dict, resource_id: str) -> bool:
+        """GET the resource href; 404/410 means deleted, other failures raise."""
+        if "url" not in credentials:
+            raise CalendarConnectorError("CalDAV Basis-URL fehlt in den Credentials")
+        base = credentials["url"].rstrip("/") + "/"
+        url = urljoin(base, resource_id)
+        source, target = urlsplit(base), urlsplit(url)
+        if (source.scheme, source.netloc) != (target.scheme, target.netloc) or not target.path.startswith(source.path):
+            raise CalendarConnectorError("CalDAV resource liegt außerhalb des Kalenders")
+        headers = {}
+        if "access_token" in credentials:
+            headers["Authorization"] = f"Bearer {credentials['access_token']}"
+        auth = (
+            (credentials["username"], credentials["password"])
+            if "username" in credentials and "password" in credentials
+            else None
+        )
+        try:
+            response = await self._client.get(url, headers=headers, auth=auth)
+            if response.status_code in (404, 410):
+                return False
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CalendarConnectorError("CalDAV Ressource konnte nicht geprüft werden") from exc
+        return True
 
     def _format_datetime(self, dt: datetime | None) -> str:
         """Format datetime for CalDAV time-range format."""
