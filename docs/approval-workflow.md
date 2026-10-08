@@ -92,7 +92,7 @@ provision_user(email, name, ...)
     │
     ├─ _find_user_by_email(token, email)
     │   GET /admin/realms/{realm}/users?email=...&exact=true
-    │   → Vorhandenen User suchen, ggf. überspringen
+    │   → Vorhandenen User suchen; gebunden wird nur bei emailVerified=true
     │
     ├─ _create_user(token, email, name)  [nur wenn nicht vorhanden]
     │   POST /admin/realms/{realm}/users
@@ -117,6 +117,8 @@ provision_user(email, name, ...)
 2. Ein **Passwort setzen** (`UPDATE_PASSWORD`)
 
 Erst nach diesen beiden Schritten ist der Account aktiv und der Login möglich.
+
+**Sicherheit (#461):** Ein bereits existierendes Keycloak-Konto wird nur dann an die Registrierung gebunden (`user_sub`), wenn Keycloak dessen E-Mail als verifiziert führt (`emailVerified=true`). Andernfalls (auch nach einem 409-Konflikt beim Anlegen) bleibt die Registrierung unverknüpft, der Status lautet `EXISTING_UNVERIFIED` bzw. `EXISTING_UNVERIFIED_INVITED`, und die Einladungsmail (falls aktiviert) geht an die Adresse selbst. Die Verknüpfung erfolgt dann beim ersten Login mit verifizierter E-Mail (siehe Post-Login-Verknüpfung).
 
 ### Schritt 4 (Alternativ): Webhook-Provisionierung
 
@@ -149,7 +151,7 @@ Erwartete Antwort:
 ### Schritt 5: Ergebnis speichern
 
 Nach dem Provisioning werden in der Registration gespeichert:
-- `idp_provision_status`: z. B. `CREATED_INVITED`, `CREATED`, `EXISTING_INVITED`, `EXISTING`, `FAILED`
+- `idp_provision_status`: z. B. `CREATED_INVITED`, `CREATED`, `EXISTING_INVITED`, `EXISTING`, `EXISTING_UNVERIFIED_INVITED`, `EXISTING_UNVERIFIED`, `FAILED`
 - `idp_provision_error`: Fehlermeldung bei Fehlschlag
 - `idp_provisioned_at`: Zeitstempel
 
@@ -195,21 +197,19 @@ Dieser Mechanismus ist unabhängig vom IdP-Provisioning. Wenn der Benutzer bere
 
 **Datei:** `services/backend/app/adapters/api/deps.py` (Zeile 170–201)
 
-Nach dem Login sucht das System nach **genau einer** approvten, aber noch nicht verknüpften Registrierung mit derselben E-Mail-Adresse:
+Nach dem Login ruft das System die SQL-Funktion `link_approved_registration(user_sub, email)` auf. Sie verknüpft **genau eine** approvte, noch nicht verknüpfte Registrierung mit derselben E-Mail-Adresse (case-insensitive) und materialisiert die Membership.
+
+**Voraussetzung (#461):** Der Aufruf erfolgt nur, wenn das Token einen `email`-Claim enthält **und** `email_verified` exakt der Boolean `true` ist. Fehlt der Claim, ist er `false` oder ein String (`"true"`), wird **nicht** verknüpft (fail closed). Der Fallback auf `preferred_username` (wenn kein `email`-Claim vorhanden ist) dient nur der Anzeige und führt nie zu einer Verknüpfung.
 
 ```python
-candidates = await reg_repo.list_approved_unlinked_by_email(user.email)
-if len(candidates) == 1:
-    registration = candidates[0]
-    registration.user_sub = user.sub  # Verknüpfung
-    # Membership materialisieren
-    await membership_repo.upsert_by_scope(
-        user_sub=user.sub,
-        role=registration.assigned_role,
-        scope_type=registration.assigned_scope_type,
-        scope_id=registration.assigned_scope_id,
+if user.email and user.email_verified:
+    await session.execute(
+        text("SELECT ... FROM link_approved_registration(:user_sub, :email)"),
+        {"user_sub": user.sub, "email": user.email},
     )
 ```
+
+Die SQL-Funktion selbst prüft nur, dass `user_sub` dem Session-Subjekt (`app.current_user_sub`) entspricht; die Verifikation der E-Mail kann sie nicht prüfen. Das Gate liegt bewusst in der Anwendungsschicht (`services/backend/app/adapters/api/deps.py`).
 
 Dies ist für den Fall gedacht, dass die Registration ohne vorherigen Login (und damit ohne `user_sub`) eingereicht wurde. Sobald der Benutzer das erste Mal eingeloggt ist, wird die Verknüpfung automatisch hergestellt.
 
@@ -248,6 +248,15 @@ Benutzer                         Browser/Frontend                   Backend     
 
 ## Konfiguration
 
+### IdP-Anforderung: `email_verified`
+
+Die automatische Post-Login-Verknüpfung setzt voraus, dass der IdP den Claim `email_verified` als Boolean im Access-Token bzw. in der Userinfo-Antwort liefert:
+
+- **Keycloak:** Client-Scope `email` dem Client zuweisen (Default); dessen Mapper "email verified" schreibt `email_verified` ins Token. Im Realm "Verify email" aktivieren bzw. Selbstregistrierung nur mit E-Mail-Verifikation erlauben.
+- **Authentik:** Scope-Mapping `email` im OAuth2-Provider aktivieren. Prüfen, dass `email_verified` nur für tatsächlich verifizierte Adressen `true` ist (z. B. eigenes Scope-Mapping, das den Wert aus einem per E-Mail-Stage im Enrollment-Flow gesetzten Attribut ableitet).
+
+Liefert der IdP den Claim nicht, wird nicht automatisch verknüpft; der Benutzer muss sich dann eingeloggt registrieren (die Registrierung trägt dann direkt seine `user_sub`).
+
 ### Umgebungsvariablen
 
 | Variable | Default | Beschreibung |
@@ -281,7 +290,7 @@ Die Registration-Tabelle enthält folgende IdP-bezogene Felder:
 
 | Feld | Typ | Beschreibung |
 |------|-----|-------------|
-| `idp_provision_status` | `str?` | Status der IdP-Provisionierung (`CREATED_INVITED`, `CREATED`, `EXISTING_INVITED`, `EXISTING`, `FAILED`) |
+| `idp_provision_status` | `str?` | Status der IdP-Provisionierung (`CREATED_INVITED`, `CREATED`, `EXISTING_INVITED`, `EXISTING`, `EXISTING_UNVERIFIED_INVITED`, `EXISTING_UNVERIFIED`, `FAILED`) |
 | `idp_provision_error` | `str?` | Fehlermeldung bei fehlgeschlagener Provisionierung |
 | `idp_provisioned_at` | `datetime?` | Zeitpunkt der Provisionierung |
 
@@ -306,7 +315,7 @@ APPROVED + IDP: FAILED           →  roter Badge "IDP: FAILED"
 - Benutzer ohne Membership erhalten auf geschuetzten Endpunkten `403` mit Hinweis auf ausstehende Freigabe.
 - `superadmin` ist von der Membership-Pflicht ausgenommen.
 - Wenn IdP-Provisioning fehlschlägt, wird die Freigabe **trotzdem durchgeführt** — der Fehler wird in `idp_provision_error` vermerkt.
-- Die Post-Login-Verknüpfung funktioniert nur, wenn genau **eine** unverknüpfte Registration zur E-Mail existiert. Bei mehreren wird keine automatische Verknüpfung vorgenommen (Log-Warning).
+- Die Post-Login-Verknüpfung erfolgt nur mit verifizierter E-Mail (`email_verified=true`) und nur, wenn genau **eine** unverknüpfte Registration zur E-Mail existiert. Bei mehreren wird keine automatische Verknüpfung vorgenommen (Log-Warning).
 
 ## API-Hinweise
 

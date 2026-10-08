@@ -18,6 +18,7 @@ from app.application.tasks import (
     sync_calendar_integration,
 )
 from app.domain.errors import IntegrationNotFoundError
+from tests.unit.coroutine_mocks import close_coroutine
 
 
 @pytest.fixture
@@ -42,7 +43,7 @@ def request_context():
 
 def _close_coroutine_and_raise(exc: BaseException):
     def run(coro):
-        coro.close()
+        close_coroutine(coro)
         raise exc
 
     return run
@@ -104,7 +105,7 @@ class TestRetryBehaviour:
         summary = {"created": 1, "updated": 0, "cancelled": 0}
 
         def run(coro):
-            coro.close()
+            close_coroutine(coro)
             return summary
 
         with (
