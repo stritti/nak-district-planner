@@ -868,3 +868,65 @@ async def test_imported_holiday_distributed_to_congregation_appears_in_its_view(
 
     assert saved
     assert {item.id for item in result.items} == {slot.id for slot in saved}
+
+
+# ── v1.0 provider scope (#467): unsupported provider on outbound write → 409 ─
+
+
+@pytest.mark.asyncio
+async def test_resolve_deviation_with_unsupported_provider_returns_409():
+    from app.domain.errors import UnsupportedCalendarTypeError
+    from app.domain.models.event_instance import SyncState
+
+    slot = _slot()
+    instance = _instance(slot)
+    instance.calendar_integration_id = uuid.uuid4()
+    instance.deviation_flag = True
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get.return_value = instance
+    instance_repo.get_by_planning_slot.return_value = instance
+    push = AsyncMock(side_effect=UnsupportedCalendarTypeError("GOOGLE"))
+    with (
+        patch.object(events, "SqlPlanningSlotRepository", return_value=slot_repo),
+        patch.object(events, "SqlEventInstanceRepository", return_value=instance_repo),
+        patch.object(events, "require_role_in_district"),
+        patch.object(events, "push_deviation_resolution", push),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_deviation(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
+
+    assert exc.value.status_code == 409
+    assert "ICS" in exc.value.detail
+    assert instance.deviation_flag is True
+    assert instance.sync_state == SyncState.DIRTY_INTERNAL
+
+
+@pytest.mark.asyncio
+async def test_resolve_conflict_with_unsupported_provider_returns_409() -> None:
+    from app.domain.errors import UnsupportedCalendarTypeError
+    from app.domain.models.event_instance import SyncState
+
+    slot = _slot()
+    instance = _instance(slot)
+    instance.calendar_integration_id = uuid.uuid4()
+    instance.sync_state = SyncState.CONFLICT
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get_by_planning_slot.return_value = instance
+    push = AsyncMock(side_effect=UnsupportedCalendarTypeError("MICROSOFT"))
+    with (
+        patch.object(events, "require_role_in_district"),
+        patch.object(events, "push_conflict_resolution", push),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await events.resolve_event_conflict(
+            slot.id, _auth(), AsyncMock(), slot_repo=slot_repo, instance_repo=instance_repo
+        )
+    assert exc.value.status_code == 409
+    assert "ICS" in exc.value.detail
+    assert instance.sync_state == SyncState.CONFLICT

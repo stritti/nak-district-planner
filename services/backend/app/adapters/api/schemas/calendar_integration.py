@@ -49,7 +49,9 @@ class CalendarIntegrationResponse(BaseModel):
 
 
 class CalendarIntegrationUpdate(BaseModel):
-    """CalendarIntegrationUpdate."""
+    """CalendarIntegrationUpdate. The type is immutable; unknown fields are rejected (422)."""
+
+    model_config = {"extra": "forbid"}
 
     name: str | None = Field(None, min_length=1, max_length=255)
     credentials: dict | None = None  # if provided, re-encrypted before storage

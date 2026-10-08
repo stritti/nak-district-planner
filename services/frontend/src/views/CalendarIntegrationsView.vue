@@ -46,6 +46,12 @@
               >
                 {{ item.is_active ? 'Aktiv' : 'Inaktiv' }}
               </span>
+              <span
+                v-if="!isSupported(item.type)"
+                class="badge bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+              >
+                in Version 1.0 nicht unterstützt – kein Sync
+              </span>
             </div>
             <div class="mt-1 text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
               <div>
@@ -77,8 +83,8 @@
             <div class="flex items-center gap-1.5">
               <button
                 class="btn-icon flex items-center gap-1 text-xs px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 disabled:opacity-50"
-                :disabled="syncingId === item.id"
-                title="Jetzt synchronisieren"
+                :disabled="syncingId === item.id || !isSupported(item.type)"
+                :title="isSupported(item.type) ? 'Jetzt synchronisieren' : 'Synchronisierung in Version 1.0 nicht unterstützt'"
                 @click="sync(item.id)"
               >
                 <ArrowPathIcon class="h-3.5 w-3.5" :class="syncingId === item.id ? 'animate-spin' : ''" />
@@ -116,7 +122,7 @@
     <EmptyState
       v-else
       message="Noch keine Integrationen angelegt."
-      hint="Verbinde einen Google-, Microsoft-, CalDAV- oder ICS-Kalender, um Termine zu importieren."
+      hint="Verbinde einen ICS- oder CalDAV-Kalender, um Termine zu importieren."
       :icon="CalendarDaysIcon"
       action-label="Integration anlegen"
       @action="openForm"
@@ -373,10 +379,14 @@
               v-model="form.type"
               class="form-input"
             >
-              <option value="ICS">ICS (öffentliche URL)</option>
-              <option value="CALDAV">CalDAV (mit Anmeldedaten)</option>
-              <option value="GOOGLE">Google Calendar</option>
-              <option value="MICROSOFT">Microsoft / Outlook</option>
+              <option
+                v-for="option in PROVIDER_OPTIONS"
+                :key="option.value"
+                :value="option.value"
+                :disabled="!isSupported(option.value)"
+              >
+                {{ option.label }}
+              </option>
             </select>
           </div>
 
@@ -422,21 +432,6 @@
             </div>
           </template>
 
-          <template v-else>
-            <div class="rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-200 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-              OAuth-Flow für {{ form.type === 'GOOGLE' ? 'Google' : 'Microsoft' }} ist noch nicht implementiert.
-              Du kannst die Zugangsdaten als JSON hinterlegen (für manuelle Token-Verwaltung).
-            </div>
-            <div>
-              <label class="form-label">Zugangsdaten (JSON)</label>
-              <textarea
-                v-model="form.credsJson"
-                rows="4"
-                placeholder='{"access_token": "...", "refresh_token": "..."}'
-                class="form-input font-mono"
-              />
-            </div>
-          </template>
 
           <div>
             <label class="form-label">
@@ -577,6 +572,20 @@ async function load() {
   await integrationsStore.fetchIntegrations(filterDistrictId.value || undefined)
 }
 
+// Version 1.0 (#467): only ICS and CalDAV. Google/Microsoft need an OAuth flow
+// with token refresh first; existing integrations stay visible but are not synced.
+const SUPPORTED_TYPES: CalendarType[] = ['ICS', 'CALDAV']
+const PROVIDER_OPTIONS: { value: CalendarType; label: string }[] = [
+  { value: 'ICS', label: 'ICS (öffentliche URL)' },
+  { value: 'CALDAV', label: 'CalDAV (mit Anmeldedaten)' },
+  { value: 'GOOGLE', label: 'Google Calendar (geplant)' },
+  { value: 'MICROSOFT', label: 'Microsoft / Outlook (geplant)' },
+]
+
+function isSupported(type: CalendarType): boolean {
+  return SUPPORTED_TYPES.includes(type)
+}
+
 async function sync(id: string) {
   await integrationsStore.triggerIntegrationSync(id)
 }
@@ -699,7 +708,6 @@ const form = reactive({
   name: '',
   type: 'ICS' as CalendarType,
   creds: { url: '', username: '', password: '' },
-  credsJson: '',
   sync_interval: 60,
   capabilities: ['READ'] as CalendarCapability[],
   default_category: '',
@@ -716,14 +724,9 @@ watch(() => form.district_id, async (id) => {
 
 const formValid = computed(() => {
   if (!form.district_id || !form.name.trim()) return false
-  if (form.type === 'ICS') return Boolean(form.creds.url.trim())
-  if (form.type === 'CALDAV') return Boolean(form.creds.url.trim() && form.creds.username.trim())
-  try {
-    JSON.parse(form.credsJson)
-    return true
-  } catch {
-    return false
-  }
+  if (form.type === 'ICS') return !!form.creds.url.trim()
+  if (form.type === 'CALDAV') return !!form.creds.url.trim() && !!form.creds.username.trim()
+  return false // GOOGLE / MICROSOFT: not supported in 1.0 (#467)
 })
 
 function openForm() {
@@ -733,7 +736,6 @@ function openForm() {
   form.name = ''
   form.type = 'ICS'
   form.creds = { url: '', username: '', password: '' }
-  form.credsJson = ''
   form.sync_interval = 60
   form.capabilities = ['READ']
   form.default_category = ''
@@ -756,14 +758,11 @@ function closeForm() {
 
 function buildCredentials(): Record<string, string> {
   if (form.type === 'ICS') return { url: form.creds.url.trim() }
-  if (form.type === 'CALDAV') {
-    return {
-      url: form.creds.url.trim(),
-      username: form.creds.username.trim(),
-      password: form.creds.password,
-    }
+  return {
+    url: form.creds.url.trim(),
+    username: form.creds.username.trim(),
+    password: form.creds.password,
   }
-  return JSON.parse(form.credsJson)
 }
 
 async function submit() {
