@@ -160,7 +160,8 @@ docker compose up -d db valkey
 ```bash
 cd services/backend
 uv sync                              # Abhängigkeiten installieren
-uv run alembic upgrade head          # Migrationen anwenden
+MIGRATION_DATABASE_URL=postgresql+asyncpg://nak:<POSTGRES_PASSWORD aus .env.db>@localhost:5433/nak_planner \
+  uv run alembic upgrade head        # Migrationen mit Owner-Rolle anwenden
 uv run uvicorn app.main:app --reload # http://localhost:8000
 ```
 

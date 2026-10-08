@@ -25,3 +25,8 @@
 - [x] 3.2 Compose-Konfiguration erfolgreich.
 - [x] 3.3 Migration Graph & FK Names erfolgreich.
 - [x] 3.4 Encrypted Backup & Isolated Restore erfolgreich.
+
+## Follow-ups (post-merge review)
+
+- [x] Treat driver-level connection errors (OSError) as schema-version errors so workers exit
+- [x] `make migrate` uses the Compose `migrate` service; host commands document `MIGRATION_DATABASE_URL`
