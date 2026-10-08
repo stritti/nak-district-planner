@@ -3,6 +3,7 @@
 import importlib.metadata
 import ipaddress
 import os
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -90,6 +91,14 @@ class Settings(BaseSettings):
     conflict_check_enabled: bool = True
     sync_delete_mode: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
     sync_expected_duration_minutes: int = Field(default=90, ge=1)
+    # Provider sync window (#465): [now - past_days, now + future_months].
+    sync_window_past_days: int = Field(default=62, ge=1)
+    sync_window_future_months: int = Field(default=24, ge=1, le=120)
+    # Floating times and all-day dates in external calendars are local to this zone.
+    sync_default_timezone: str = "Europe/Berlin"
+    # Upper bound of in-window occurrences per feed/resource; protects against
+    # hostile or broken RRULEs in external calendars.
+    sync_max_occurrences: int = Field(default=5000, ge=1)
     min_travel_minutes: int = Field(default=30, ge=0)
     # Dev only: allow http:// and private/loopback calendar URLs (local test
     # servers). Rejected by production_guard — SSRF protection, see #463.
@@ -102,6 +111,15 @@ class Settings(BaseSettings):
     # Version check (display only — the app never executes updates, see #469)
     ghcr_owner: str = "stritti"
     ghcr_repo: str = "nak-district-planner"
+
+    @field_validator("sync_default_timezone")
+    @classmethod
+    def validate_sync_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError(f"Unknown IANA timezone: {value}") from exc
+        return value
 
     @field_validator("calendar_nat64_prefixes")
     @classmethod
