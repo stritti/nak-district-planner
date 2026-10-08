@@ -1,459 +1,164 @@
 # Security Baseline
 
-**Version:** 2.0.0  
-**Datum:** 2025-06-19  
-**Status:** Aktiv  
-**Verantwortlich:** Security Team  
+**Stand:** 4. Oktober 2026  
+**Release-Ziel:** `1.0.0-rc.2`  
+**Status:** aktiv; RC-2-Haertungen werden erst nach erfolgreichem Merge ihrer Workstreams als abgeschlossen markiert
 
-> **Hinweis:** Dieses Dokument definiert die verbindlichen Sicherheitsleitplanken.
-> Detaillierte Analysen und Implementierungsanleitungen finden sich in `docs/security-analysis.md`.
+Dieses Dokument beschreibt die verbindlichen Sicherheitsgrenzen des NAK District Planner. Detail- und Betriebsdokumente sind unter `docs/security/` und im `docs/production-runbook.md` verlinkt.
 
----
+Legende: ✅ aktiv auf `main` · 🟡 offener RC-2-Workstream / Release-Gate · ❌ offen
 
-## 1. Authentifizierung und Autorisierung
+## 1. Authentifizierung und Token-Vertrauen
 
-### 1.1 Anforderungen
+- OIDC Authorization Code Flow mit PKCE: ✅
+- JWT-Signaturpruefung ueber JWKS: ✅
+- Issuer-, Audience-/`azp`- und Expiry-Pruefung: ✅
+- Ungueltige JWTs duerfen **nicht** auf UserInfo/Introspection ausweichen: ✅ (PR #438)
+- Opaque Access Tokens duerfen kontrolliert ueber UserInfo/Introspection validiert werden: ✅ (PR #438)
+- Opaque-Token-Ergebnisse muessen fuer den konfigurierten Client/Issuer geeignet sein: ✅ (PR #438)
 
-- ✅ **OIDC (Authorization Code Flow mit PKCE)** fuer Frontend-Login implementiert.
-- ✅ **Token-Validierung** im Backend via JWKS, inkl. Issuer-/Audience-/Expiry-Pruefung.
-- ✅ **Rollen und Scopes** gemaess `docs/roles.md` implementiert.
-- ✅ **Membership-Gate** fuer geschuetzte Endpunkte gemaess `docs/approval-workflow.md` implementiert.
+### 1.1 Fail-closed-Regel fuer JWTs
 
-### 1.2 Implementierungsdetails
+Ein Token, das syntaktisch wie ein JWT aufgebaut ist, wird ausschliesslich kryptographisch und gegen die erwarteten Claims validiert. Falsche Signatur, falscher Issuer/Audience, abgelaufene Tokens oder fehlende Pflichtclaims fuehren zur Ablehnung. Ein nachgelagerter UserInfo-/Introspection-Aufruf darf einen solchen Fehler nicht in einen Erfolg umwandeln.
 
-**OIDC-Adapter (`app/adapters/auth/oidc.py`):**
-- Provider-agnostische Implementierung (Keycloak, Authentik, Okta, etc.)
-- JWKS-Caching mit 1-Stunden TTL und Fallback auf Cache bei Fehlern
-- Mehrstufige Token-Validierung: JWT → userinfo → introspection
-- Automatische Clock-Skew Toleranz (120 Sekunden)
+UserInfo/Introspection ist nur fuer Tokenformen vorgesehen, die nicht als JWT lokal validierbar sind.
 
-**Berechtigungsprüfung (`app/adapters/auth/permissions.py`):**
-- Rollenhierarchie: VIEWER (1) < PLANNER (2) < CONGREGATION_ADMIN (3) < DISTRICT_ADMIN (4)
-- Scope-basierte Zugriffskontrolle (District und Congregation)
-- Superadmin-Bypass für systemweite Operationen
-
-**Wichtige Endpunkte:**
-- `GET /api/v1/auth/oidc/discovery` - OIDC Discovery (unauthentifiziert)
-- `POST /api/v1/auth/oidc/token` - Token Exchange (unauthentifiziert)
-- `GET /api/v1/auth/me` - Current User Info (authentifiziert)
-- `GET /api/v1/auth/access` - Access Context mit Memberships (authentifiziert)
-
-### 1.3 Compliance-Checks
-
-- [ ] Alle geschützten Endpunkte erfordern gültige Authentifizierung
-- [ ] Alle schreibenden Operationen erfordern Berechtigungsprüfung
-- [ ] Cross-Tenant Zugriff ist verhindert
-- [ ] Token-Validierung umfasst Signatur, Issuer, Audience, Expiry
-
----
-
-## 2. Daten- und Geheimnisschutz
+## 2. Browser-Session und Credential-Speicherung
 
-### 2.1 Anforderungen
+Die Provider-Refresh-Credential bleibt serverseitig; der Browser haelt nur kurzlebige Session-Daten im Memory (PR #442).
 
-- ✅ **API-Keys, Client-Secrets und Zugangsdaten** niemals im Repository speichern.
-- ✅ **Sensible Konfiguration** nur ueber `.env` / Secret-Management.
-- ✅ **Externe Kalender-Credentials** verschluesselt speichern (Service-Layer-Verschluesselung).
+Anforderungen:
 
-### 2.2 Implementierungsdetails
+- Provider-Refresh-Token bleibt serverseitig in einem `Secure`, `HttpOnly`, `SameSite`-Cookie: ✅ (PR #442)
+- Provider-Refresh-Token wird nie in JSON an Browser-JavaScript zurueckgegeben: ✅ (PR #442)
+- Access-/ID-Token werden nur in Memory gehalten, nicht in `localStorage`: ✅ (PR #442)
+- ein Reload kann die Memory-Session ueber die serverseitige Refresh-Session wiederherstellen: ✅ (PR #442)
+- Logout widerruft die serverseitig gehaltene Refresh-Credential best-effort und loescht das Cookie immer lokal: ✅ (PR #442)
+- state-changing Cookie-Endpunkte bleiben CSRF-geschuetzt: ✅ (PR #442)
 
-**Credential Encryption (`app/application/crypto.py`):**
-- Algorithmus: Fernet (AES-128-CBC)
-- Key Derivation: SHA-256 Hash von `settings.secret_key`
-- Format: Base64url-encoded Fernet Tokens
-- Fehlerbehandlung: `CryptoError` mit deutschen Fehlermeldungen
+Tabgebundene Koordinationsdaten duerfen `sessionStorage` verwenden, sofern sie keine Provider-Credential enthalten.
 
-**Verwendungsmuster:**
-```python
-from app.application.crypto import encrypt_credentials, decrypt_credentials
+## 3. Autorisierung und Tenant Isolation
 
-# Verschlüsseln vor dem Speichern
-encrypted = encrypt_credentials({"api_key": "...", "url": "..."})
-
-# Entschlüsseln beim Lesen
-credentials = decrypt_credentials(encrypted)
-```
-
-**Warnung:** Ändern von `SECRET_KEY` macht alle verschlüsselten Daten unlesbar!
+- Membership-basiertes RBAC mit District-/Congregation-Scopes: ✅
+- automatisiertes Route-Inventar fuer Auth-/RBAC-Coverage: ✅
+- PostgreSQL Row Level Security auf Tenant-Tabellen: ✅
+- getrennte Runtime-DB-Rolle ohne `BYPASSRLS`: ✅
+- System-Worker-Kontext ist explizit und begrenzt: ✅
+- Tenant-Autorisierung darf nicht auf unverifiziert dekodierten JWT-Claims beruhen: ✅ (PR #443)
+- fachliche Autorisierung erfolgt nach verifizierter Authentifizierung ueber Dependencies/RBAC; RLS bleibt letzte Datenbankgrenze: ✅ (PR #443)
 
-### 2.3 Datenklassifizierung
-
-| Datenkategorie | Schutzbedarf | Massnahmen |
-|---------------|--------------|-----------|
-| **Secrets** (API-Keys, Passwords, Tokens) | **Kritisch** | Verschlüsselung, kein Logging, kein Commit |
-| **Auth-Tokens** (JWT, Session Tokens) | **Hoch** | HTTPS, kurze Lebensdauer, sichere Speicherung |
-| **Benutzerdaten** (E-Mail, Name, Rollen) | **Mittel** | Zugriffskontrolle, DSGVO-konform |
-| **Kalenderdaten** (Events, Assignments) | **Mittel** | Tenant-Isolation, Zugriffskontrolle |
-| **Systemdaten** (Logs, Metriken) | **Niedrig** | Keine sensiblen Daten enthalten |
+Ein vom Client kontrollierter Claim oder Header ist niemals alleinige Berechtigungsquelle.
 
-### 2.4 Compliance-Checks
+## 4. Superadmin-Bootstrap
 
-- [ ] Alle Secrets werden verschlüsselt gespeichert
-- [ ] Keine Secrets in Code, Logs oder Error Messages
-- [ ] `.env` Dateien sind gitignored
-- [ ] Produktions-Secrets werden über Secret-Manager bereitgestellt
+Der Bootstrap ist owner-controlled: ✅
 
----
+- `app_superadmin_config` ist Owner-State und fuer die Runtime-Rolle weder lesbar noch schreibbar.
+- `grant_bootstrap_superadmin(TEXT)` ist eine eng begrenzte SECURITY-DEFINER-Funktion.
+- Auf einer frischen leeren Installation wird ohne owner-provisionierten Subject **kein** erster Login automatisch Superadmin.
+- `SUPERADMIN_SUB` sollte vor der Bootstrap-Migration auf den exakten OIDC-`sub` gesetzt werden; alternativ provisioniert der DB-Owner die Konfiguration.
+- Auf bestehenden Installationen pinnt die Migration bei fehlendem `SUPERADMIN_SUB` deterministisch einen vorhandenen Superadmin bzw. den fruehesten Benutzer.
 
-## 3. Transport- und Netzwerksicherheit
+Details: `docs/production-runbook.md`.
 
-### 3.1 Anforderungen
+## 5. CSRF, Rate Limiting und oeffentliche Endpunkte
 
-- ✅ **Produktion nur ueber HTTPS** (TLS-Termination am Reverse Proxy).
-- ✅ **Interne Dienste** (DB, Redis, Backend-Port) nicht oeffentlich exponieren.
-- ⚠️ **CORS** restriktiv konfigurieren (in Entwicklung locker).
-
-### 3.2 Implementierungsdetails
-
-**Produktionskonfiguration:**
-- Backend-Port (8000) nicht nach außen exponiert
-- Datenbank-Port (5432) nicht nach außen exponiert
-- Redis-Port (6379) nicht nach außen exponiert
-- Alle Services kommunizieren über internes Docker-Netzwerk
-
-**Reverse Proxy Beispiel (nginx):**
-```nginx
-server {
-    listen 443 ssl;
-    server_name planer.example.de;
-    
-    ssl_certificate /etc/letsencrypt/live/planer.example.de/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/planer.example.de/privkey.pem;
-    
-    # Security Headers
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "DENY" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    
-    location / {
-        proxy_pass http://127.0.0.1:80;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-}
-```
-
-### 3.3 Compliance-Checks
-
-- [ ] HTTPS ist in Produktion aktiviert
-- [ ] Interne Ports sind nicht öffentlich zugänglich
-- [ ] CORS ist in Produktion restriktiv konfiguriert
-- [ ] Security Headers sind konfiguriert
-
----
-
-## 4. API-Schutz
-
-### 4.1 Anforderungen
-
-- ✅ **Geschuetzte Endpunkte** erfordern gueltige Authentifizierung.
-- ❌ **Oeffentliche Endpunkte** (z. B. ICS-Export) erhalten Rate-Limiting (Roadmap).
-- ✅ **Sicherheitsrelevante Fehler** werden ohne sensitive Interna ausgeliefert.
-
-### 4.2 Authentifizierungsmethoden
-
-| Methode | Verwendung | Header | Status |
-|---------|-----------|--------|--------|
-| **JWT Bearer** | Benutzer-Aktionen | `Authorization: Bearer <token>` | ✅ Implementiert |
-| ~~API Key~~ | ~~Service-to-Service~~ | ~~`X-API-Key`~~ | ❌ Entfernt mit der OIDC-Migration (`phase4b-oidc-auth-idp-agnostic`, Tasks 4.2/4.3); es gibt keine eingehende API-Key-Authentifizierung |
-| **Export Token** | Öffentlicher Kalender-Export | URL-Parameter | ✅ Implementiert |
-
-### 4.3 Endpunkt-Klassifizierung
-
-| Endpunkt | Authentifizierung | Zugriff | Rate Limiting |
-|----------|------------------|---------|---------------|
-| `/api/health` | Keine | Öffentlich | ❌ Nein |
-| `/api/v1/auth/oidc/discovery` | Keine | Öffentlich | ❌ Nein |
-| `/api/v1/auth/oidc/token` | Keine | Öffentlich | ❌ Nein |
-| `/api/v1/auth/me` | JWT Bearer | Authentifiziert | ❌ Nein |
-| `/api/v1/events` | JWT Bearer | Authentifiziert | ❌ Nein |
-| `/api/v1/export/{token}/calendar.ics` | Export Token | Öffentlich | ❌ **Fehlt!** |
-
-### 4.4 Compliance-Checks
-
-- [ ] Alle geschützten Endpunkte erfordern Authentifizierung
-- [ ] Ausgehende Schlüssel (`IDP_PROVISIONING_API_KEY`) werden sicher gespeichert und rotiert
-- [ ] Rate Limiting ist für öffentliche Endpunkte implementiert
-- [ ] Input Validation ist für alle Endpunkte implementiert
-
----
-
-## 5. Supply-Chain und statische Scans
-
-### 5.1 Anforderungen
-
-- ✅ **Security-Workflow** nutzt CodeQL, pip-audit und bun audit (siehe `.github/workflows/security.yml`).
-- ✅ **PRs mit neuen Dependencies** erfordern kurze Risikoeinschaetzung.
-
-### 5.2 Automatisierte Scans
-
-**GitHub Actions Workflow:**
-- **CodeQL:** Statische Code-Analyse für Python und JavaScript/TypeScript
-  - Ausführung: Bei Push auf main/develop, PRs, und wöchentlich (Montags 08:00 UTC)
-  - Sprachen: Python, JavaScript/TypeScript
-  - Queries: security-and-quality
-
-- **pip-audit:** Python Dependency Vulnerability Scan
-  - Ausführung: Bei jedem Push/PR
-  - Datenbank: OSV (Open Source Vulnerabilities)
-
-- **bun audit:** JavaScript/TypeScript Dependency Scan
-  - Ausführung: Bei jedem Push/PR
-  - Level: moderate (Standard)
-
-### 5.3 Manuelle Reviews
-
-**Dependency Review Prozess:**
-1. Popularität und Wartungsstatus prüfen
-2. Sicherheitshistorie analysieren
-3. Lizenzkompatibilität verifizieren
-4. Risikoeinschätzung dokumentieren
-5. Entscheidung im PR begrunden
-
-### 5.4 Compliance-Checks
-
-- [ ] Alle Dependencies sind in pyproject.toml/package.json deklariert
-- [ ] Keine direkten `pip install` oder `npm install` im Code
-- [ ] Security Scans laufen erfolgreich durch
-- [ ] Neue Dependencies haben Risikoeinschätzung
-
----
-
-## 6. Audit und Nachvollziehbarkeit
-
-### 6.1 Anforderungen
-
-- ⚠️ **Governance-relevante Aktionen** sollen auditierbar sein.
-- ❌ **Vollstaendige Audit-Log-Abdeckung** ist als priorisierte Roadmap-Massnahme definiert.
-
-### 6.2 Audit-Logging Anforderungen
-
-**Zu loggende Ereignisse:**
-- Alle schreibenden Operationen (CREATE, UPDATE, DELETE)
-- Alle Authentifizierungsversuche (erfolgreich und fehlgeschlagen)
-- Alle Autorisierungsentscheidungen (erlaubt und verweigert)
-- Alle Konfigurationsänderungen
-- Alle Admin-Operationen
-
-**Log-Format:**
-```json
-{
-  "timestamp": "2025-06-19T10:00:00.000Z",
-  "level": "INFO",
-  "event_type": "AUDIT",
-  "action": "CREATE",
-  "resource_type": "Event",
-  "resource_id": "550e8400-e29b-41d4-a716-446655440000",
-  "user_sub": "user123",
-  "user_roles": ["DISTRICT_ADMIN"],
-  "district_id": "123e4567-e89b-12d3-a456-426614174000",
-  "ip_address": "192.168.1.100",
-  "user_agent": "Mozilla/5.0...",
-  "status": "success",
-  "changes": {"title": "Neuer Gottesdienst"},
-  "metadata": {}
-}
-```
-
-### 6.3 Compliance-Checks
-
-- [ ] Audit-Logging ist für alle schreibenden Operationen implementiert
-- [ ] Audit-Logs sind unveränderlich gespeichert
-- [ ] Audit-Logs enthalten alle erforderlichen Felder
-- [ ] Log-Retention Policy ist definiert und wird eingehalten
-
----
-
-## 7. Betriebsregeln
-
-### 7.1 Anforderungen
-
-- ✅ **Secrets regelmaessig rotieren** (IDP-Admin, API-Keys, App-Secret).
-- ✅ **Backup/Restore-Verfahren** regelmaessig testen.
-- ✅ **Security-Incidents** dokumentieren und mit Massnahmen nachverfolgen.
-
-### 7.2 Secrets Management
-
-**Rotation Intervalle:**
-- **IDP Admin Credentials:** Alle 90 Tage
-- **API Keys:** Alle 90 Tage
-- **Application Secrets (SECRET_KEY, etc.):** Alle 180 Tage
-- **Database Credentials:** Alle 180 Tage
-- **TLS Zertifikate:** Alle 90 Tage (oder automatisch via Let's Encrypt)
-
-**Rotation Prozess:**
-1. Neue Secrets generieren
-2. Alte Secrets in allen Konfigurationen ersetzen
-3. Services neu starten
-4. Funktionstests durchführen
-5. Alte Secrets sicher archivieren (30 Tage)
-6. Alte Secrets endgültig löschen
-
-### 7.3 Backup und Restore
-
-**Backup-Strategie:**
-- **Häufigkeit:** Täglich
-- **Retention:** 30 Tage
-- **Typ:** Vollständige Datenbank-Dumps (pg_dump -Fc)
-- **Speicherort:** Externer, verschlüsselter Speicher
-- **Test:** Monatlicher Restore-Test
-
-**Restore-Prozess:**
-1. Backup-Datei validieren
-2. Testsystem vorbereiten
-3. Backup wiederherstellen
-4. Datenintegrität prüfen
-5. Anwendungstests durchführen
-
-### 7.4 Incident Response
-
-**Incident Klassifikation:**
-- **Kritisch:** Aktiver Angriff, Datenkompromittierung - Reaktionszeit: < 1 Stunde
-- **Hoch:** Potenzielle Kompromittierung - Reaktionszeit: < 4 Stunden
-- **Mittel:** Sicherheitsvorfall mit begrenzter Auswirkung - Reaktionszeit: < 24 Stunden
-- **Niedrig:** Sicherheitsrelevantes Ereignis - Reaktionszeit: < 72 Stunden
-
-**Response Team:**
-- Security Team: <security@nak-district-planner.example>
-- Projektleiter: <project-lead@nak-district-planner.example>
-- Hosting Provider: <support@hosting-provider.example>
-
-### 7.5 Compliance-Checks
-
-- [ ] Secrets-Rotation Plan ist definiert
-- [ ] Backup-Prozess ist dokumentiert und getestet
-- [ ] Incident Response Procedure ist definiert
-- [ ] Security Contacts sind aktuell
-
----
-
-## 8. Keine In-App-Updates
-
-Die Anwendung **führt keine Deployment-Updates aus** (#469). Es gibt keinen
-Update-Endpoint, keinen Update-Task und keinen Docker-Socket-Modus; der
-Docker-Socket darf nie in Container gemountet werden (root-äquivalenter
-Host-Zugriff).
-
-- Die Anwendung zeigt Administratoren nur an, dass eine neuere Version existiert
-  (`GET /api/v1/system/version`, Link auf die Release Notes).
-- Updates erfolgen ausschließlich durch Betreiber nach `docs/production-runbook.md`
-  (immer mit `-f docker-compose.yml`, damit das Dev-Override nicht greift).
-
-### 8.1 Compliance-Checks
-
-- [ ] Docker-Socket ist in keinem Container gemountet
-- [ ] Updates werden nach Runbook inkl. Migrationsschritt durchgeführt
-
----
-
-## 9. Compliance Matrix
-
-### 9.1 OWASP Top 10 2021
-
-| OWASP | Kategorie | Status | Massnahmen |
-|-------|----------|--------|------------|
-| A01 | Broken Access Control | ⚠️ Teilweise | RBAC + Tenant-Isolation implementiert, RLS fehlt |
-| A02 | Cryptographic Failures | ✅ Gut | Fernet Encryption, JWT Validation |
-| A03 | Injection | ✅ Gut | SQLAlchemy ORM, Pydantic Validation |
-| A04 | Insecure Design | ⚠️ Teilweise | Architektur gut, Features fehlen |
-| A05 | Security Misconfiguration | ⚠️ Teilweise | Security Headers fehlen, Rate Limiting fehlt |
-| A06 | Vulnerable Components | ✅ Gut | Automatisierte Scans |
-| A07 | Identification and Auth Failures | ⚠️ Teilweise | OIDC gut, MFA fehlt |
-| A08 | Software and Data Integrity | ✅ Gut | Hash-basierte Deduplizierung |
-| A09 | Security Logging Failures | ❌ Kritisch | Audit-Logging fehlt |
-| A10 | SSRF | ✅ Gut | Kein direktes URL-Fetching |
-
-### 9.2 CIS Controls v8
-
-| Control | Beschreibung | Status |
-|---------|--------------|--------|
-| 1.1 | Inventory of Hardware Assets | ✅ Gut |
-| 1.2 | Inventory of Software Assets | ✅ Gut |
-| 2.1 | Secure Config for Hardware | ⚠️ Teilweise |
-| 2.2 | Secure Config for Software | ⚠️ Teilweise |
-| 3.1 | Data Protection | ⚠️ Teilweise |
-| 3.2 | Data Retention | ❌ Nicht implementiert |
-| 4.1 | Secure Config Management | ⚠️ Teilweise |
-| 5.1 | Account Management | ⚠️ Teilweise |
-| 6.1 | Access Control | ⚠️ Teilweise |
-| 7.1 | Vulnerability Management | ✅ Gut |
-| 8.1 | Audit Log Management | ❌ Kritisch |
-
-### 9.3 DSGVO / GDPR
-
-| Anforderung | Status | Massnahmen |
-|-------------|--------|------------|
-| Datenminimierung | ✅ Gut | Nur notwendige Daten |
-| Zweckbindung | ✅ Gut | Klare Datenverwendung |
-| Löschkonzept | ❌ Nicht implementiert | Soft-Delete vorhanden |
-| Betroffenenrechte | ❌ Nicht implementiert | Export/Löschung fehlt |
-| Datenschutz-Folgenabschätzung | ❌ Nicht durchgeführt | - |
-
----
-
-## 10. Priorisierte Massnahmen
-
-### 10.1 Kritisch (SOFORT)
-
-1. **Audit-Logging implementieren** (SEC-009)
-   - Alle schreibenden Operationen loggen
-   - Unveränderliche Speicherung
-   - Log-Retention Policy definieren
-
-2. **Rate Limiting für öffentliche Endpunkte** (SEC-016)
-   - ICS-Export Endpunkte schützen
-   - Redis-basierte Implementierung
-   - Konfigurierbare Limits
-
-### 10.2 Hoch (Q3 2025)
-
-3. **CSRF-Schutz implementieren** (SEC-004)
-   - Middleware für state-changing Requests
-   - Token-basierte Validierung
-
-4. **Tenant-Isolation verbessern** (SEC-021)
-   - PostgreSQL RLS implementieren
-   - Tenant-Context Middleware
-
-### 10.3 Mittel (Q4 2025)
-
-5. **API-Key Rotation** (SEC-002)
-   - Automatisierte Rotation
-   - Grace Period für alte Keys
-
-6. **Security Headers** (A05)
-   - CSP, HSTS, X-Frame-Options
-   - X-Content-Type-Options, X-XSS-Protection
-
-7. **DSGVO Compliance** (GDPR)
-   - Löschkonzept implementieren
-   - Betroffenenrechte umsetzen
-
-### 10.4 Niedrig (2026)
-
-8. **Multi-Factor Authentication** (A07)
-   - OIDC Provider Integration
-   - oder eigenständige TOTP-Implementierung
-
-9. **Request Signing** (A04)
-   - HMAC-Signing für Service-to-Service
-   - oder Mutual TLS
-
----
-
-## 11. Verweise
-
-- [Detaillierte Security Analyse](docs/security-analysis.md)
-- [Rollenmodell](docs/roles.md)
-- [Approval Workflow](docs/approval-workflow.md)
-- [Production Runbook](docs/production-runbook.md)
-- [Security Workflow](.github/workflows/security.yml)
-
----
-
-**Dokumentenverantwortlich:** Security Team  
-**Nächste Review:** 2025-12-19  
-**Klassifikation:** Intern - Nur für autorisiertes Personal
+- Double-Submit-CSRF-Schutz fuer state-changing Browser-Requests: ✅
+- globale und pfadspezifische Rate Limits: ✅
+- ICS-Export ist tokenbasiert oeffentlich und rate-limited: ✅
+- OIDC Discovery/Token-Exchange sind bewusst oeffentlich und rate-limited: ✅
+- OIDC-Token-Exchange und oeffentliche Selbstregistrierung behalten bei Valkey-Ausfall einen lokalen Fallback-Limiter: ✅ (PR #443)
+- Rate-Limiter-Degradation wird geloggt/telemetriert: ✅; lokale Fallback-Nutzung ist Bestandteil des RC-2-Monitorings
+
+### 5.1 Oeffentliche Endpunkte
+
+Eine Route darf nur dann ohne Bearer-Authentifizierung erreichbar sein, wenn sie im automatisierten `PUBLIC_ENDPOINTS`-Inventar dokumentiert ist. Ein neuer unauthentifizierter Endpunkt ohne explizite Klassifizierung muss CI brechen.
+
+## 6. Daten- und Geheimnisschutz
+
+- Secrets, API-Keys und Client-Credentials werden nicht committed.
+- externe Kalender-Credentials werden verschluesselt gespeichert.
+- sensitive Token-/Secret-Werte duerfen nicht in Logs oder Fehlerantworten gelangen.
+- Production-Secrets werden ueber Secret-Management bereitgestellt.
+- `SECRET_KEY`-Rotation ist ein geplanter Betriebsvorgang, weil davon verschluesselte Daten betroffen sein koennen.
+
+| Datenklasse | Schutzbedarf | Mindestmassnahmen |
+|---|---|---|
+| Secrets / Provider-Credentials | kritisch | Secret-Management, keine Logs, keine Browser-Persistenz |
+| Access-/ID-Tokens | hoch | HTTPS, kurze Lebensdauer, memory-only (PR #442) |
+| Benutzer-/Membership-Daten | hoch | RBAC, RLS, Audit |
+| Kalender-/Planungsdaten | mittel | Tenant-Isolation, RBAC, RLS |
+| Logs/Metriken | mittel | keine Secrets, begrenzte Metadaten, Retention |
+
+## 7. Transport- und Deployment-Grenzen
+
+- Produktion nur hinter TLS-Termination: ✅
+- Datenbank und Valkey/Redis nicht oeffentlich exponiert: ✅
+- Anwendungseinstieg darf den vorgesehenen TLS-Proxy nicht ueber einen oeffentlichen Host-Port umgehen: ✅ (PR #440)
+- CSP und Security Header sind restriktiv; externe `connect-src`-Ziele muessen begruendet sein: ✅ (PR #440)
+- Runtime und Migration verwenden getrennte DB-Verantwortlichkeiten: ✅
+- Schema-Migration gehoert in den Deployment-Schritt, nicht in den API-Lifespan: ✅ (PR #441)
+
+### 7.1 Keine In-App-Updates
+
+Die Anwendung **fuehrt keine Deployment-Updates aus** (#469): kein Update-Endpoint, kein Update-Task, kein Docker-Socket-Modus. Der Docker-Socket darf nie in einen Container gemountet werden (root-aequivalenter Host-Zugriff). Die Anwendung zeigt Administratoren nur an, dass eine neuere Version existiert (`GET /api/v1/system/version`); Updates erfolgen ausschliesslich durch Betreiber nach `docs/production-runbook.md`.
+
+## 8. Audit und Nachvollziehbarkeit
+
+- AuditMiddleware fuer relevante Requests: ✅
+- Domain-/DB-Audit fuer kritische Writes: ✅
+- verweigerte Tenant-/RBAC-Zugriffe werden nachvollziehbar erfasst: ✅
+- Secrets und komplette Token-Claims duerfen nicht geloggt werden: verbindlich
+
+Audit-Logs sind Sicherheitsdaten und muessen gegen unautorisierte Veraenderung sowie unbegrenzte Aufbewahrung geschuetzt werden.
+
+## 9. Supply Chain und CI
+
+Verpflichtende Sicherheits-/Qualitaetskontrollen im aktiven `main`-Ruleset:
+
+- Backend Unit Tests & Coverage
+- Frontend Unit Tests
+- Frontend E2E
+- Migration Graph & FK Names
+- Encrypted Backup & Isolated Restore
+- MegaLinter
+- Dependency Review
+- pip-audit
+- bun audit
+- CodeQL Python
+- CodeQL JavaScript/TypeScript
+- Backend-/Frontend-Image-Build
+- Dokumentations-Build
+
+Das Ruleset arbeitet strict und ohne Bypass. Aktuell werden noch keine Approvals verlangt; mindestens eine menschliche Approval plus stale-review/thread-resolution-Haertung bleibt Governance-Arbeit vor finalem 1.0.0.
+
+## 10. Coverage und Testqualitaet
+
+- Backend-Coverage-Gate: mindestens 80 Prozent: ✅
+- Frontend-Coverage muss alle relevanten Production-Sources messen und fuer Statements, Branches, Functions und Lines mindestens 80 Prozent erreichen: ✅ (PR #439)
+- Production-Code darf nicht breit ausgeschlossen werden, nur um ein Coverage-Gate zu erreichen.
+- Security-Fixes muessen Negativ-/Ausnahmefaelle testen (invalid JWT, falscher Issuer/Audience, fehlender Refresh-Cookie, Provider-Fehler, Valkey-Ausfall, Cross-Tenant-Zugriff).
+- RuntimeWarnings durch falsch gemockte/unawaited Coroutines gelten als Testqualitaets-Schuld und muessen vor finalem 1.0.0 bereinigt werden.
+
+## 11. Release-Gate fuer RC-2
+
+RC-2 ist erst freigabefaehig, wenn:
+
+1. PR #438, #440, #441, #442 und #443 inhaltlich verifiziert und alle verpflichtenden Checks gruen sind;
+2. PR #439 die reale Frontend-Coverage >80 Prozent erreicht;
+3. keine blockierenden Security-/CodeQL-/Dependency-Findings offen sind;
+4. Migration und Restore-Drill erfolgreich sind;
+5. OpenSpec fuer die ausgelieferten Grenzen verifiziert und erledigte Changes archiviert sind;
+6. Runbook und Architekturstatus dem ausgelieferten Code entsprechen.
+
+## 12. Referenzen
+
+- `docs/production-runbook.md`
+- `docs/architecture-status.md`
+- `docs/rbac-coverage.md`
+- `docs/security/tenant-isolation.md`
+- `docs/security/rate-limiting.md`
+- `docs/security/csrf-protection.md`
+- `.github/workflows/security.yml`
+- `openspec/security-roadmap.md`
