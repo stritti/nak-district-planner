@@ -38,6 +38,9 @@ BLOCKED_ADDRESSES = [
     "::ffff:10.0.0.1",  # IPv4-mapped RFC1918
     "64:ff9b::a9fe:a9fe",  # NAT64 of 169.254.169.254
     "2002:7f00:1::1",  # 6to4 of 127.0.0.1
+    "::ffff:0:127.0.0.1",  # IPv4-translatable (SIIT, RFC 7915) loopback
+    "::ffff:0:10.0.0.1",  # IPv4-translatable RFC1918
+    "240.0.0.1",  # reserved
 ]
 
 
@@ -81,6 +84,8 @@ def _ok(request: httpx.Request) -> httpx.Response:
         "https://[::1]/feed.ics",
         "https://[fc00::1]/feed.ics",
         "https://[::ffff:127.0.0.1]/feed.ics",
+        "https://[::ffff:0:127.0.0.1]/feed.ics",
+        "https://[::ffff:0:10.0.0.1]/feed.ics",
     ],
 )
 def test_validate_rejects_unsafe_urls(url):

@@ -29,7 +29,10 @@ from app.config import settings
 from app.domain.ports.calendar import CalendarConnectorError
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
-_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+# Prefixes that embed an IPv4 address in the low 32 bits: NAT64 (RFC 6052)
+# and IPv4-translatable SIIT addresses (RFC 7915). Python reports the latter
+# as is_global, so they are unwrapped and the embedded IPv4 is checked.
+_EMBEDDED_IPV4 = (ipaddress.ip_network("64:ff9b::/96"), ipaddress.ip_network("::ffff:0:0/96"))
 
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
@@ -53,9 +56,9 @@ def _is_public(address: str) -> bool:
             ip = ip.ipv4_mapped
         elif ip.sixtofour is not None:
             ip = ip.sixtofour
-        elif ip in _NAT64:
+        elif any(ip in prefix for prefix in _EMBEDDED_IPV4):
             ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
-    return ip.is_global and not ip.is_multicast
+    return ip.is_global and not (ip.is_multicast or ip.is_reserved)
 
 
 def _ip_literal(host: str) -> str | None:
