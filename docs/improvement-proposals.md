@@ -22,7 +22,7 @@ Weiterentwicklung.
 | Bezirk & Gemeinde (CRUD) | ✅ | ✅ | – | Inkl. Hierarchie |
 | Event-CRUD | ✅ | ✅ | – | Phase-1-Refactor geplant |
 | Kalender-Integration (ICS/CalDAV) | ✅ | ✅ | `uc-01-kalender-anbindung` | Voll funktionsfähig |
-| Kalender-Integration (Google/Microsoft) | ✅ | 🟡 | `uc-01-kalender-anbindung` | Nur Stubs – OAuth-Flows ausstehend |
+| Kalender-Integration (Google/Microsoft) | ✅ | 🟡 | `uc-01-kalender-anbindung` | In v1.0 deaktiviert (#467) – OAuth-Flows ausstehend |
 | Zyklischer Sync (Celery) | ✅ | ✅ | `uc-02-zyklischer-sync` | Hash-basierte Deduplizierung |
 | Dienstplanung-Matrix | ✅ | ✅ | `uc-03-dienstplanung-matrix` | Inkl. LÜCKE & Modal |
 | Feiertags-Import | ✅ | ✅ | `uc-04-05-06-event-export-feiertage` | Nager.Date + Gauss |
