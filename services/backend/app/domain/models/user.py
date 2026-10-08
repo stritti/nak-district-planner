@@ -19,6 +19,9 @@ class User:
         given_name: First name (optional)
         family_name: Last name (optional)
         created_at: When user was first created in the system
+        email_verified: True only when the current token carried an ``email``
+            claim with ``email_verified`` == boolean ``true`` (per request,
+            not persisted). Required for registration auto-linking (#461).
     """
 
     sub: str
@@ -29,6 +32,7 @@ class User:
     family_name: str | None = None
     is_superadmin: bool = False
     created_at: datetime | None = None
+    email_verified: bool = False
 
     def __post_init__(self) -> None:
         """Ensure created_at is set to now if not provided."""
