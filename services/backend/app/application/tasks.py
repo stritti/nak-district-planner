@@ -31,7 +31,8 @@ from collections.abc import Awaitable
 from datetime import UTC, datetime
 
 from app.celery_app import celery
-from app.domain.errors import IntegrationNotFoundError
+from app.domain.errors import IntegrationNotFoundError, UnsupportedCalendarTypeError
+from app.domain.models.calendar_integration import SUPPORTED_CALENDAR_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ class SyncIntegrationTask(celery.Task):
     base=SyncIntegrationTask,
     bind=True,
     autoretry_for=(Exception,),
-    dont_autoretry_for=(IntegrationNotFoundError,),
+    dont_autoretry_for=(IntegrationNotFoundError, UnsupportedCalendarTypeError),
     max_retries=SYNC_MAX_RETRIES,
     retry_backoff=SYNC_RETRY_BACKOFF_SECONDS,
     retry_backoff_max=SYNC_RETRY_BACKOFF_MAX_SECONDS,
@@ -174,6 +175,27 @@ def sync_calendar_integration(self, integration_id: str) -> dict:
     return summary
 
 
+def _due_integration_ids(integrations, now: datetime) -> list[str]:
+    """Return ids of integrations due for sync; unsupported providers are skipped (#467)."""
+    ids: list[str] = []
+    for integration in integrations:
+        if integration.type not in SUPPORTED_CALENDAR_TYPES:
+            logger.warning(
+                "Automatischer Sync übersprungen: Kalendertyp %s wird in Version 1.0 "
+                "nicht unterstützt (integration_id=%s)",
+                integration.type,
+                integration.id,
+            )
+            continue
+        if integration.last_synced_at is None:
+            ids.append(str(integration.id))
+            continue
+        elapsed = (now - integration.last_synced_at).total_seconds() / 60
+        if elapsed >= integration.sync_interval:
+            ids.append(str(integration.id))
+    return ids
+
+
 @celery.task(name="sync_all_active_integrations")
 def sync_all_active_integrations() -> dict:
     """Triggered by Celery beat every 5 minutes.
@@ -189,18 +211,7 @@ def sync_all_active_integrations() -> dict:
     async def _run() -> list[str]:
         async with AsyncSessionLocal() as session:
             repo = SqlCalendarIntegrationRepository(session)
-            integrations = await repo.list_active()
-            now = datetime.now(UTC)
-            ids_to_sync: list[str] = []
-            for integration in integrations:
-                integration_id = str(integration.id)
-                if integration.last_synced_at is None:
-                    ids_to_sync.append(integration_id)
-                    continue
-                elapsed = (now - integration.last_synced_at).total_seconds() / 60
-                if elapsed >= integration.sync_interval:
-                    ids_to_sync.append(integration_id)
-            return ids_to_sync
+            return _due_integration_ids(await repo.list_active(), datetime.now(UTC))
 
     ids = asyncio.run(_run_as_system_worker(_run()))
     for integration_id in ids:

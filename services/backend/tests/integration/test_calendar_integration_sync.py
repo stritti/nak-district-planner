@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
 from app.adapters.api.deps import get_calendar_integration_repository, get_db_session
+from app.domain.models.calendar_integration import CalendarType
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.role import Role
 from app.domain.ports.calendar import CalendarConnectorError
@@ -88,12 +89,18 @@ def _integration(district_id: uuid.UUID):
         id=uuid.uuid4(),
         district_id=district_id,
         congregation_id=None,
-        type=SimpleNamespace(value="GOOGLE"),
+        type=CalendarType.ICS,
         credentials_enc="enc",
         default_category=None,
         last_synced_at=None,
         last_sync_error=None,
     )
+
+
+def _unsupported_integration(district_id: uuid.UUID, cal_type: CalendarType):
+    integration = _integration(district_id)
+    integration.type = cal_type
+    return integration
 
 
 def _raw_event(uid: str = "uid-1"):
@@ -287,3 +294,22 @@ def test_trigger_sync_requires_csrf_token():
 
     assert response.status_code == 403
     run_sync.assert_not_called()
+
+
+@pytest.mark.parametrize("cal_type", [CalendarType.GOOGLE, CalendarType.MICROSOFT])
+def test_manual_sync_of_unsupported_provider_returns_409(cal_type):
+    """#467: Google/Microsoft are not supported in 1.0 — clear error, connector untouched."""
+    district_id = uuid.uuid4()
+    integration = _unsupported_integration(district_id, cal_type)
+    repo = _repo_returning(integration)
+    connector = _connector(events=[_raw_event()])
+
+    with (
+        _mock_auth_context(district_id, repo) as (client, headers),
+        _sync_pipeline(repo, connector),
+    ):
+        response = client.post(_sync_url(integration), headers=headers)
+
+    assert response.status_code == 409
+    assert "ICS" in response.json()["detail"]
+    connector.fetch_events.assert_not_called()
