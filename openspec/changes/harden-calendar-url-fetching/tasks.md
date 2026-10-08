@@ -22,3 +22,5 @@
 - [x] 3.4 DNS-Auflösung durch Connect-Timeout begrenzen
 - [x] 3.5 Reservierte und IPv4-translatable (`::ffff:0:0/96`) Adressen blockieren
 - [x] 3.6 Blockierte DNS-Antwort mit gleicher Meldung wie nicht auflösbarer Host (kein DNS-Orakel)
+- [x] 3.7 Hostnamen normalisieren (Kleinschreibung, abschließende Punkte), `localhost.` ablehnen
+- [x] 3.8 `CALENDAR_NAT64_PREFIXES` (RFC 6052, /32–/96) mit Extraktion der eingebetteten IPv4; `64:ff9b:1::/48` ergänzt

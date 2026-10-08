@@ -227,3 +227,29 @@ def test_insecure_calendar_urls_allowed_outside_production() -> None:
 
 def test_calendar_insecure_urls_default_off() -> None:
     assert _valid_prod_settings().calendar_allow_insecure_urls is False
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2001:db8::/33",  # not an RFC 6052 prefix length
+        "2001:db8::/128",
+        "10.0.0.0/8",  # IPv4
+        "not-a-prefix",
+        "2001:db8::1/64",  # host bits set
+    ],
+)
+def test_invalid_calendar_nat64_prefixes_fail_settings_construction(value) -> None:
+    with pytest.raises(ValueError, match="CALENDAR_NAT64_PREFIXES"):
+        _valid_prod_settings(app_env="development", calendar_nat64_prefixes=value)
+
+
+def test_valid_calendar_nat64_prefixes_are_parsed() -> None:
+    settings = _valid_prod_settings(
+        calendar_nat64_prefixes=" 2001:db8::/32 , 2001:db8:122:344::/96 "
+    )
+    assert [str(n) for n in settings.calendar_nat64_networks] == [
+        "2001:db8::/32",
+        "2001:db8:122:344::/96",
+    ]
+    assert _valid_prod_settings().calendar_nat64_networks == ()
