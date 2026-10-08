@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     docker_compose_dir: str = ""
 
     @model_validator(mode="after")
+    def reject_insecure_calendar_urls_in_production(self) -> "Settings":
+        """Fail every process (API, worker, beat) at settings load, not only the API lifespan."""
+        if self.app_env == "production" and self.calendar_allow_insecure_urls:
+            raise ValueError(
+                "CALENDAR_ALLOW_INSECURE_URLS must be false in production (SSRF protection)"
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_oidc_settings(self) -> "Settings":
         """Validate OIDC settings are properly configured in production."""
         if self.app_env != "production":
@@ -157,11 +166,6 @@ def production_guard(settings: Settings) -> None:
         "",
     ):
         errors.append("OIDC_CLIENT_ID must be changed from the default value")
-
-    if settings.calendar_allow_insecure_urls:
-        errors.append(
-            "CALENDAR_ALLOW_INSECURE_URLS must be false in production (SSRF protection)"
-        )
 
     # Outbound mail must never silently fall back to logging in production.
     if not settings.smtp_host:
