@@ -253,7 +253,8 @@ async def test_google_delete_echo_uses_explicit_cancellation_tombstone(
     link_repo.list_active_by_integration.assert_not_awaited()
 
 
-@pytest.mark.parametrize("provider", [CalendarType.MICROSOFT, CalendarType.CALDAV])
+# Microsoft is not an authoritative snapshot (no presence check for moved events).
+@pytest.mark.parametrize("provider", [CalendarType.CALDAV])
 async def test_collection_provider_delete_echo_uses_missing_resource_reconciliation(
     monkeypatch: pytest.MonkeyPatch, provider: CalendarType
 ) -> None:
