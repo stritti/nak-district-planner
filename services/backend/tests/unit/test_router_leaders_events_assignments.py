@@ -221,17 +221,17 @@ async def test_leader_not_found_paths() -> None:
         )
     with pytest.raises(HTTPException):
         await leaders_router.create_leader(
-            district_id, LeaderCreate(name="N"), object(), db, districts=district_repo, leaders_repo=AsyncMock()
+            district_id, LeaderCreate(name="N"), _auth_context(), db, districts=district_repo, leaders_repo=AsyncMock()
         )
     district_repo.get.return_value = District.create(name="D")
     leader_repo = AsyncMock()
     leader_repo.get.return_value = None
     with pytest.raises(HTTPException):
         await leaders_router.update_leader(
-            district_id, uuid.uuid4(), LeaderUpdate(name="N"), object(), db, leader_repo
+            district_id, uuid.uuid4(), LeaderUpdate(name="N"), _auth_context(), db, leader_repo
         )
     with pytest.raises(HTTPException):
-        await leaders_router.delete_leader(district_id, uuid.uuid4(), object(), db, leaders_repo=leader_repo)
+        await leaders_router.delete_leader(district_id, uuid.uuid4(), _auth_context(), db, leaders_repo=leader_repo)
 
 @pytest.mark.asyncio
 async def test_leader_update_wrong_district() -> None:
@@ -894,3 +894,39 @@ async def test_service_assignment_list_empty() -> None:
         )
 
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_leader_routes_check_role_before_loading_foreign_rows() -> None:
+    """Outsiders get 403 (audited as ACCESS_DENIED), not 404 from an RLS-hidden row."""
+    district_id = uuid.uuid4()
+    outsider = _auth_context(is_superadmin=False)
+    db = AsyncMock()
+    district_repo = AsyncMock()
+    district_repo.get.return_value = None
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = None
+
+    calls = [
+        leaders_router.list_leaders(
+            district_id, outsider, db, districts=district_repo, leaders_repo=leader_repo
+        ),
+        leaders_router.create_leader(
+            district_id, LeaderCreate(name="N"), outsider, db,
+            districts=district_repo, leaders_repo=leader_repo,
+        ),
+        leaders_router.update_leader(
+            district_id, uuid.uuid4(), LeaderUpdate(name="X"), outsider, db, leader_repo
+        ),
+        leaders_router.delete_leader(
+            district_id, uuid.uuid4(), outsider, db, leaders_repo=leader_repo
+        ),
+    ]
+    for call in calls:
+        with pytest.raises(HTTPException) as exc:
+            await call
+        assert exc.value.status_code == 403
+
+    district_repo.get.assert_not_awaited()
+    leader_repo.get.assert_not_awaited()
+    leader_repo.delete.assert_not_awaited()
