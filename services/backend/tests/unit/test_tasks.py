@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.application.tasks import sync_calendar_integration
+from tests.unit.coroutine_mocks import CoroutineClosingMock
 
 
 class TestSyncCalendarIntegrationTask:
@@ -22,7 +23,9 @@ class TestSyncCalendarIntegrationTask:
 
         mock_result = {"created": 1, "updated": 0, "cancelled": 0}
 
-        with patch("app.application.tasks.asyncio.run") as mock_asyncio_run:
+        with patch(
+            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+        ) as mock_asyncio_run:
             mock_asyncio_run.return_value = mock_result
 
             result = sync_calendar_integration(integration_id)
@@ -37,7 +40,9 @@ class TestSyncCalendarIntegrationTask:
         """
         integration_id = str(uuid.uuid4())
 
-        with patch("app.application.tasks.asyncio.run") as mock_asyncio_run:
+        with patch(
+            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+        ) as mock_asyncio_run:
             mock_asyncio_run.side_effect = RuntimeError("DB connection failed")
 
             with pytest.raises(RuntimeError, match="DB connection failed"):
@@ -47,7 +52,9 @@ class TestSyncCalendarIntegrationTask:
         """sync_calendar_integration should convert string ID to UUID."""
         integration_id = str(uuid.uuid4())
 
-        with patch("app.application.tasks.asyncio.run") as mock_asyncio_run:
+        with patch(
+            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+        ) as mock_asyncio_run:
             mock_asyncio_run.return_value = {"created": 0, "updated": 0, "cancelled": 0}
 
             result = sync_calendar_integration(integration_id)
@@ -67,7 +74,9 @@ class TestSyncAllActiveIntegrationsTask:
         fake_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
 
         with (
-            patch("app.application.tasks.asyncio.run") as mock_asyncio_run,
+            patch(
+                "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+            ) as mock_asyncio_run,
             patch("app.application.tasks.sync_calendar_integration") as mock_task,
         ):
             mock_asyncio_run.return_value = fake_ids
@@ -91,7 +100,9 @@ class TestImportFeiertageTask:
         district_id = str(uuid.uuid4())
         year = 2026
 
-        with patch("app.application.tasks.asyncio.run") as mock_asyncio_run:
+        with patch(
+            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+        ) as mock_asyncio_run:
             mock_asyncio_run.return_value = {"created": 10, "updated": 0, "skipped": 5}
 
             result = import_feiertage_task(district_id, year)
@@ -110,7 +121,9 @@ class TestImportKirchlicheFesttageTask:
         district_id = str(uuid.uuid4())
         year = 2026
 
-        with patch("app.application.tasks.asyncio.run") as mock_asyncio_run:
+        with patch(
+            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+        ) as mock_asyncio_run:
             mock_asyncio_run.return_value = {"created": 6, "updated": 0, "skipped": 0}
 
             result = import_kirchliche_festtage_task(district_id, year)
@@ -125,7 +138,9 @@ class TestGenerateDraftServicesWindowTask:
     def test_generate_draft_services_window_success(self):
         from app.application.tasks import generate_draft_services_window
 
-        with patch("app.application.tasks.asyncio.run") as mock_asyncio_run:
+        with patch(
+            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+        ) as mock_asyncio_run:
             mock_asyncio_run.return_value = {
                 "districts": 2,
                 "congregations": 9,
@@ -166,3 +181,37 @@ class TestSyncAllSkipsUnsupportedProviders:
         assert ids == [str(ics.id), str(caldav.id)]
         assert str(google.id) in caplog.text and str(microsoft.id) in caplog.text
         assert "nicht unterstützt" in caplog.text
+
+
+class TestRunAsSystemWorker:
+    """Each Celery task runs on a fresh event loop (``asyncio.run``)."""
+
+    async def test_disposes_engine_pool_before_loop_closes(self):
+        """Pooled asyncpg connections must not outlive the loop that opened them."""
+        from app.application.tasks import _run_as_system_worker
+
+        async def work():
+            return "done"
+
+        engine = MagicMock()
+        engine.dispose = AsyncMock()
+        with patch("app.adapters.db.session.engine", engine):
+            assert await _run_as_system_worker(work()) == "done"
+
+        engine.dispose.assert_awaited_once()
+
+    async def test_disposes_engine_pool_on_failure(self):
+        from app.application.tasks import _run_as_system_worker
+
+        async def work():
+            raise RuntimeError("boom")
+
+        engine = MagicMock()
+        engine.dispose = AsyncMock()
+        with (
+            patch("app.adapters.db.session.engine", engine),
+            pytest.raises(RuntimeError, match="boom"),
+        ):
+            await _run_as_system_worker(work())
+
+        engine.dispose.assert_awaited_once()
