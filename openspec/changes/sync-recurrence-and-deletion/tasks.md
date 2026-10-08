@@ -37,3 +37,9 @@
 - [x] 6.2 Refuse occurrence write-back in push paths before any connector call (409); no migration
 - [x] 6.3 Keep UNTIL in the expansion budget, normalized to naive UTC
 - [x] 6.4 One-day default only without DTEND and DURATION; explicit zero length stays
+
+## 7. Review hardening (263a306f)
+
+- [x] 7.1 Half-open window bounds for deletion reconciliation (`<=`/`>=`)
+- [x] 7.2 Last sync error keeps the incomplete-snapshot note when events also failed
+- [x] 7.3 Provider STATUS:CANCELLED replaces the snapshot-gap marker

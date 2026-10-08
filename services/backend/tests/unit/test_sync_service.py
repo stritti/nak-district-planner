@@ -788,6 +788,80 @@ class TestCodexReviewFindings:
         assert result.failed == 1
 
 
+class TestCodexReviewFindingsRound2:
+    """Regression tests for the second Codex review of PR #483."""
+
+    @pytest.mark.parametrize("edge", ["ends_at_window_start", "starts_at_window_end"])
+    async def test_events_touching_half_open_window_bounds_are_not_reconciled(self, mocks, edge):
+        mocks["integration_repo"].get.return_value = _integration()
+        await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        window = mocks["connector"].fetch_events.await_args.kwargs
+        if edge == "ends_at_window_start":
+            start, end = window["from_dt"] - timedelta(hours=1), window["from_dt"]
+        else:
+            start, end = window["to_dt"], window["to_dt"] + timedelta(hours=1)
+        slot = _make_slot()
+        instance = _make_event_instance(
+            planning_slot_id=slot.id, actual_start_at=start, actual_end_at=end
+        )
+        mocks["connector"].authoritative_snapshot = True
+        mocks["link_repo"].list_active_by_integration.return_value = [
+            _make_link(event_instance_id=instance.id)
+        ]
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+        result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert result.cancelled == 0
+        assert slot.status == PlanningSlotStatus.ACTIVE
+
+    async def test_incomplete_snapshot_status_survives_event_failures(self, mocks):
+        integration = _integration()
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].authoritative_snapshot = True
+        mocks["connector"].snapshot_complete = False
+        mocks["link_repo"].get_by_external_event.return_value = None
+        mocks["connector"].fetch_events.return_value = [_raw(), _raw(title="Kollision")]
+        with patch(
+            "app.application.sync_service.import_candidate_or_match", AsyncMock(return_value=False)
+        ):
+            result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert result.failed == 1
+        assert integration.last_sync_error == (
+            "1 calendar event(s) failed during partial sync; "
+            "Kalender unvollständig geladen; Löschabgleich übersprungen"
+        )
+
+    async def test_provider_cancellation_after_snapshot_gap_is_not_undone(self, mocks):
+        from dataclasses import replace
+
+        slot = _make_slot()
+        start = _NOW + timedelta(days=30)
+        instance = _make_event_instance(
+            planning_slot_id=slot.id, actual_start_at=start, actual_end_at=start + timedelta(hours=1)
+        )
+        raw = _raw(start_at=start, end_at=start + timedelta(hours=1))
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=raw.content_hash)
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].authoritative_snapshot = True
+        mocks["link_repo"].list_active_by_integration.return_value = [link]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        mocks["connector"].fetch_events.return_value = []
+        await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert link.deletion_reason == "missing-from-authoritative-snapshot"
+
+        cancelled = _raw(start_at=start, end_at=start + timedelta(hours=1), is_cancelled=True)
+        mocks["connector"].fetch_events.return_value = [cancelled]
+        await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert link.deletion_reason == "provider-cancellation"
+
+        mocks["connector"].fetch_events.return_value = [replace(raw, title="Wieder da")]
+        await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert slot.status == PlanningSlotStatus.CANCELLED
+
+
 async def test_incomplete_snapshot_skips_deletion_reconciliation(mocks):
     """Codex 0d600122: a resource that failed to load is not a provider deletion."""
     slot = _make_slot()

@@ -220,6 +220,10 @@ async def _handle_external_cancel(
         await context.link_repo.save(existing_link)
         await context.slot_repo.delete(slot.id)
         return SyncOutcome.CANCELLED
+    # The provider's explicit cancellation replaces any snapshot-gap marker,
+    # so a later un-cancel is not mistaken for a transient gap.
+    existing_link.deletion_origin = "EXTERNAL"
+    existing_link.deletion_reason = "provider-cancellation"
     if slot and slot.status != PlanningSlotStatus.CANCELLED:
         slot.status = PlanningSlotStatus.CANCELLED
         slot.updated_at = datetime.now(UTC)
@@ -436,8 +440,10 @@ async def _reconcile_missing_provider_events(
         instance = await context.instance_repo.get(link.event_instance_id)
         if (
             instance is None
-            or instance.actual_end_at < window_start
-            or instance.actual_start_at > window_end
+            # Provider windows are half-open: an event ending at the start or
+            # starting at the end is not part of the response (RFC 4791 9.9).
+            or instance.actual_end_at <= window_start
+            or instance.actual_start_at >= window_end
         ):
             continue
         slot = await context.slot_repo.get(instance.planning_slot_id)
@@ -669,10 +675,10 @@ async def run_sync(
             )
         integration.last_synced_at = datetime.now(UTC)
         failed = counters[SyncOutcome.FAILED]
-        integration.last_sync_error = (
-            f"{failed} calendar event(s) failed during partial sync" if failed
-            else _INCOMPLETE_SNAPSHOT if incomplete else None
-        )
+        problems = [f"{failed} calendar event(s) failed during partial sync"] if failed else []
+        if incomplete:
+            problems.append(_INCOMPLETE_SNAPSHOT)
+        integration.last_sync_error = "; ".join(problems) or None
         await integration_repo.save(integration)
     except Exception as exc:
         integration.last_sync_error = str(exc)[:500]

@@ -91,11 +91,11 @@ Floating date-times and all-day dates SHALL be interpreted in `SYNC_DEFAULT_TIME
 - **THEN** it starts at 2026-04-17 22:00 UTC and ends one day later
 
 ### Requirement: Window-bounded deletion detection
-ICS and CalDAV results SHALL be treated as authoritative snapshots: a linked event missing from the result SHALL be cancelled according to the integration's `delete_behavior` only when its instance lies inside the queried window.
+ICS and CalDAV results SHALL be treated as authoritative snapshots: a linked event missing from the result SHALL be cancelled according to the integration's `delete_behavior` only when its instance lies inside the queried window. The window is half-open like the provider query: an instance ending exactly at the window start or starting exactly at the window end is outside.
 
 #### Scenario: Incomplete snapshot
 - **WHEN** a CalDAV resource in the window has missing, empty or unparseable calendar data, or an ICS feed contains an unparseable VEVENT
-- **THEN** the remaining events are processed, no deletion reconciliation runs for that sync, a warning without provider identifiers is logged and the integration's last sync error states that reconciliation was skipped
+- **THEN** the remaining events are processed, no deletion reconciliation runs for that sync, a warning without provider identifiers is logged and the integration's last sync error states that reconciliation was skipped, also when individual events failed in the same sync
 
 #### Scenario: Removed feed event
 - **WHEN** a previously linked event inside the window disappears from the ICS feed
@@ -105,13 +105,17 @@ ICS and CalDAV results SHALL be treated as authoritative snapshots: a linked eve
 - **WHEN** a linked event starts after the window end
 - **THEN** it is not cancelled although it is absent from the result
 
+#### Scenario: Event touching a window bound
+- **WHEN** a linked event ends exactly at the window start or starts exactly at the window end and is absent from the result
+- **THEN** it is not cancelled
+
 #### Scenario: Event moved outside the window
 - **WHEN** a linked single event or override is moved by the provider to a time outside the window
 - **THEN** the ICS connector reports it as present outside the window, the linked instance is updated and the slot is not cancelled
 
 #### Scenario: Event restored after a snapshot gap
 - **WHEN** a slot was cancelled because its event was missing from a snapshot and the event reappears uncancelled
-- **THEN** the slot is reactivated, while slots cancelled by planners or by provider STATUS:CANCELLED stay cancelled
+- **THEN** the slot is reactivated, while slots cancelled by planners or by provider STATUS:CANCELLED stay cancelled; a STATUS:CANCELLED seen after a snapshot gap replaces the gap marker, so a later un-cancel does not reactivate the slot
 
 #### Scenario: Legacy series link
 - **WHEN** a series was linked under its plain UID before occurrence identities existed
