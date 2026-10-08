@@ -34,6 +34,15 @@ class TestSemVer:
         assert SemVer.parse("1.0.0-") is None
         assert SemVer.parse("1.0.0-rc..1") is None
         assert SemVer.parse("1.0.0-rc.01") is None
+        # SemVer 2.0: no leading zeros in major/minor/patch.
+        assert SemVer.parse("01.0.0") is None
+        assert SemVer.parse("1.00.0") is None
+        assert SemVer.parse("1.0.00") is None
+        assert SemVer.parse("v01.2.3") is None
+
+    def test_parse_accepts_zero_and_multi_digit_core_fields(self):
+        assert SemVer.parse("0.0.0") is not None
+        assert SemVer.parse("10.20.30") is not None
         assert SemVer.parse("sha-abc123") is None
 
     def test_ordering(self):

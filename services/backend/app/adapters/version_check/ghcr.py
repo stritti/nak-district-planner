@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # pre-release suffix (``1.0.0rc1``) as reported by Python package metadata.
 # SemVer build metadata / PEP 440 local versions (``+...``) are ignored for precedence.
 SEMVER_PATTERN = re.compile(
-    r"^v?(\d+)\.(\d+)\.(\d+)"
+    r"^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
     r"(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
     r"(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)"
     r"|(a|b|rc)(\d+))?(?:\+[0-9A-Za-z.-]+)?$"
