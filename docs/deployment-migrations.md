@@ -8,7 +8,7 @@ Der Service `migrate` verwendet `.env.db` und `.env.docker.migrate`, fuehrt einm
 
 ### Credentials
 
-Das PostgreSQL-Owner-Passwort (`POSTGRES_PASSWORD`) steht ausschliesslich in `.env.db` (gitignored, Vorlage `.env.db.example`). Diese Datei laden nur `db`, `db-test` und `migrate`. Backend, Worker und alle weiteren Runtime-Services laden `.env` und `.env.docker` und erhalten damit nur die eingeschraenkte Rolle `APP_DB_USER`. `.env` darf daher kein `POSTGRES_PASSWORD` enthalten; fehlt `.env.db`, bricht `docker compose` bereits beim Laden der Konfiguration ab.
+Das PostgreSQL-Owner-Passwort (`POSTGRES_PASSWORD`) steht ausschliesslich in `.env.db` (gitignored, Vorlage `.env.db.example`). Diese Datei laden nur `db`, `db-test` und `migrate`. Backend, Worker und alle weiteren Runtime-Services laden `.env` und `.env.docker` und erhalten damit nur die eingeschraenkte Rolle `APP_DB_USER`. Das Frontend laedt nur `.env.docker.frontend` (aus `.env` interpoliertes `NGINX_REAL_IP_FROM`, keine Secrets). `.env` darf daher kein `POSTGRES_PASSWORD` enthalten; fehlt `.env.db`, bricht `docker compose` bereits beim Laden der Konfiguration ab.
 
 Fuer ein reproduzierbares Deployment:
 
