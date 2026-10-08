@@ -38,7 +38,21 @@ BLOCKED_ADDRESSES = [
     "::ffff:10.0.0.1",  # IPv4-mapped RFC1918
     "64:ff9b::a9fe:a9fe",  # NAT64 of 169.254.169.254
     "2002:7f00:1::1",  # 6to4 of 127.0.0.1
+    "::ffff:0:127.0.0.1",  # IPv4-translatable (SIIT, RFC 7915) loopback
+    "::ffff:0:10.0.0.1",  # IPv4-translatable RFC1918
+    "240.0.0.1",  # reserved
 ]
+
+
+@pytest.fixture(autouse=True)
+def _no_retry_backoff(monkeypatch):
+    # Blocked and unreachable hosts are retried identically (no timing oracle);
+    # skip the real backoff sleeps in tests.
+    from tenacity import wait_none
+
+    monkeypatch.setattr(
+        "app.adapters.calendar.http_policy.wait_exponential_jitter", lambda **_: wait_none()
+    )
 
 
 def _resolver(*addresses: str):
@@ -81,6 +95,8 @@ def _ok(request: httpx.Request) -> httpx.Response:
         "https://[::1]/feed.ics",
         "https://[fc00::1]/feed.ics",
         "https://[::ffff:127.0.0.1]/feed.ics",
+        "https://[::ffff:0:127.0.0.1]/feed.ics",
+        "https://[::ffff:0:10.0.0.1]/feed.ics",
     ],
 )
 def test_validate_rejects_unsafe_urls(url):
@@ -184,7 +200,7 @@ async def test_every_redirect_hop_is_revalidated_even_if_redirects_are_enabled()
 
     transport = GuardedTransport(inner=httpx.MockTransport(handler), resolver=resolve)
     async with guarded_client(transport=transport, follow_redirects=True) as client:
-        with pytest.raises(UnsafeCalendarUrlError):
+        with pytest.raises(httpx.ConnectError):
             await client.get("https://calendar.example.com/feed.ics")
     assert calls == ["calendar.example.com"]
 
@@ -269,3 +285,109 @@ async def test_caldav_error_contains_neither_url_nor_credentials(status):
     message = str(exc_info.value)
     for leaked in ("dav.example.com", "secret-path-token", "alice", "hunter2", str(status)):
         assert leaked not in message
+
+
+# ── review follow-ups (#463) ─────────────────────────────────────────────────
+
+
+async def test_gzip_bomb_is_rejected_before_decompression():
+    import gzip
+
+    bomb = gzip.compress(b"\0" * (MAX_RESPONSE_BYTES + 1024 * 1024))
+    assert len(bomb) < MAX_RESPONSE_BYTES // 100
+    seen: list[httpx.Request] = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(
+            200,
+            content=bomb,
+            headers={"content-encoding": "gzip", "content-type": "text/calendar"},
+        )
+
+    connector = ICalConnector(client=_client(handler, "93.184.216.34"))
+    with pytest.raises(CalendarConnectorError):
+        await connector.fetch_events({"url": "https://calendar.example.com/feed.ics"})
+    assert seen[0].headers["accept-encoding"] == "identity"
+
+
+async def test_identity_encoded_response_is_accepted():
+    def handler(request):
+        return httpx.Response(
+            200, content=ICS, headers={"content-encoding": "identity", "content-type": "text/calendar"}
+        )
+
+    connector = ICalConnector(client=_client(handler, "93.184.216.34"))
+    assert await connector.fetch_events({"url": "https://calendar.example.com/feed.ics"}) == []
+
+
+async def test_falls_back_to_next_validated_address_on_connect_error():
+    tried: list[str] = []
+
+    def handler(request):
+        tried.append(request.url.host)
+        if request.url.host == "93.184.216.34":
+            raise httpx.ConnectError("unreachable", request=request)
+        return _ok(request)
+
+    connector = ICalConnector(
+        client=_client(handler, "93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946")
+    )
+    await connector.fetch_events({"url": "https://calendar.example.com/feed.ics"})
+    # each resilient_request attempt tries the first address, then falls back
+    assert tried[:2] == ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"]
+
+
+async def test_fallback_never_leaves_the_validated_address_set():
+    tried: list[str] = []
+
+    def handler(request):
+        tried.append(request.url.host)
+        raise httpx.ConnectError("unreachable", request=request)
+
+    transport = GuardedTransport(
+        inner=httpx.MockTransport(handler), resolver=_resolver("93.184.216.34", "93.184.216.35")
+    )
+    async with guarded_client(transport=transport) as client:
+        with pytest.raises(httpx.ConnectError):
+            await client.get("https://calendar.example.com/feed.ics")
+    assert tried == ["93.184.216.34", "93.184.216.35"]
+
+
+async def test_slow_dns_resolution_is_bounded_by_connect_timeout():
+    import asyncio
+
+    async def slow_resolver(host, port):
+        await asyncio.sleep(5)
+        return ["93.184.216.34"]
+
+    transport = GuardedTransport(inner=httpx.MockTransport(_ok), resolver=slow_resolver)
+    async with httpx.AsyncClient(
+        transport=transport, timeout=httpx.Timeout(5.0, connect=0.05), trust_env=False
+    ) as client:
+        with pytest.raises(httpx.ConnectTimeout):
+            await client.get("https://calendar.example.com/feed.ics")
+
+
+async def test_blocked_dns_answer_is_indistinguishable_from_unresolvable_host():
+    """No internal-DNS oracle via trigger_sync / last_sync_error (finding 7)."""
+
+    async def unresolvable(host, port):
+        raise OSError("Name or service not known")
+
+    def message(connector_cls, resolver, creds):
+        async def run():
+            transport = GuardedTransport(inner=httpx.MockTransport(_ok), resolver=resolver)
+            connector = connector_cls(client=guarded_client(transport=transport))
+            with pytest.raises(CalendarConnectorError) as exc_info:
+                await connector.fetch_events(creds)
+            return str(exc_info.value)
+
+        return run()
+
+    ics = {"url": "https://intranet.example.com/feed.ics"}
+    dav = {"url": "https://intranet.example.com/cal/", "username": "u", "password": "p"}
+    for connector_cls, creds in ((ICalConnector, ics), (CalDAVConnector, dav)):
+        blocked = await message(connector_cls, _resolver("10.0.0.8"), creds)
+        missing = await message(connector_cls, unresolvable, creds)
+        assert blocked == missing

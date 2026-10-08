@@ -29,12 +29,20 @@ The calendar HTTP client SHALL resolve the host of every request, including redi
 ### Requirement: Calendar responses are size-limited
 The calendar HTTP client SHALL abort responses larger than 10 MB, based on Content-Length and while streaming.
 
+#### Scenario: Compressed feed (decompression bomb)
+- **WHEN** a feed answers with a `Content-Encoding` other than `identity`
+- **THEN** the connector SHALL reject it, since only `Accept-Encoding: identity` is requested
+
 #### Scenario: Oversized feed
 - **WHEN** a feed returns more than 10 MB
 - **THEN** reading SHALL stop and the connector SHALL raise a connector error
 
 ### Requirement: Calendar errors do not leak targets or secrets
 Connector errors and persisted `last_sync_error` values SHALL NOT contain URLs, credentials, HTTP status codes, or the distinction between transport and HTTP failures.
+
+#### Scenario: Hostname resolves to a private address
+- **WHEN** a feed hostname resolves to a private address
+- **THEN** the user-facing error SHALL be identical to the one for an unresolvable host
 
 #### Scenario: CalDAV server returns 401
 - **WHEN** a CalDAV REPORT fails with HTTP 401 for a URL containing a secret path

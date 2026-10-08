@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import logging
 import socket
 from collections.abc import AsyncIterator, Awaitable, Callable
 
@@ -28,8 +29,14 @@ import httpx
 from app.config import settings
 from app.domain.ports.calendar import CalendarConnectorError
 
+logger = logging.getLogger(__name__)
+
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
-_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+_DEFAULT_DNS_TIMEOUT = 10.0
+# Prefixes that embed an IPv4 address in the low 32 bits: NAT64 (RFC 6052)
+# and IPv4-translatable SIIT addresses (RFC 7915). Python reports the latter
+# as is_global, so they are unwrapped and the embedded IPv4 is checked.
+_EMBEDDED_IPV4 = (ipaddress.ip_network("64:ff9b::/96"), ipaddress.ip_network("::ffff:0:0/96"))
 
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
@@ -38,8 +45,21 @@ class UnsafeCalendarUrlError(CalendarConnectorError):
     """The calendar URL or its resolved address is not allowed."""
 
 
+class BlockedAddressError(httpx.ConnectError):
+    """The host resolved to a non-public address.
+
+    Deliberately a transport error: callers see the same generic message as
+    for an unresolvable or unreachable host, so the sync endpoint and
+    last_sync_error cannot be used as an internal-DNS oracle.
+    """
+
+
 class ResponseTooLargeError(CalendarConnectorError):
     """The calendar response exceeded MAX_RESPONSE_BYTES."""
+
+
+class UnsupportedContentEncodingError(CalendarConnectorError):
+    """The server compressed the response although identity was requested."""
 
 
 def _is_public(address: str) -> bool:
@@ -49,9 +69,9 @@ def _is_public(address: str) -> bool:
             ip = ip.ipv4_mapped
         elif ip.sixtofour is not None:
             ip = ip.sixtofour
-        elif ip in _NAT64:
+        elif any(ip in prefix for prefix in _EMBEDDED_IPV4):
             ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
-    return ip.is_global and not ip.is_multicast
+    return ip.is_global and not (ip.is_multicast or ip.is_reserved)
 
 
 def _ip_literal(host: str) -> str | None:
@@ -136,27 +156,53 @@ class GuardedTransport(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         _check_url(request.url, self._allow_insecure)
-        if not self._allow_insecure:
-            host = request.url.host
-            port = request.url.port or (443 if request.url.scheme == "https" else 80)
-            try:
-                addresses = await self._resolve(host, port)
-            except OSError as exc:
-                raise httpx.ConnectError("Name resolution failed", request=request) from exc
-            if not addresses or not all(_is_public(a) for a in addresses):
-                raise UnsafeCalendarUrlError("Kalender-URL zeigt auf ein nicht erlaubtes Netz")
-            if _ip_literal(host) is None:
-                # Connect to the validated IP; the copied Host header and the
-                # SNI extension keep virtual hosting and cert checks intact.
-                request = httpx.Request(
-                    request.method,
-                    request.url.copy_with(host=addresses[0].split("%", 1)[0]),
-                    headers=request.headers,
-                    stream=request.stream,
-                    extensions={**request.extensions, "sni_hostname": host},
-                )
+        # Request uncompressed bodies and refuse anything else below: httpx
+        # decodes after the transport, so a compressed body would bypass the
+        # size cap (decompression bomb).
+        request.headers["Accept-Encoding"] = "identity"
+        if self._allow_insecure or _ip_literal(request.url.host) is not None:
+            # IP literals were fully validated by _check_url (or dev opt-in).
+            return await self._checked(await self._inner.handle_async_request(request))
 
-        response = await self._inner.handle_async_request(request)
+        host = request.url.host
+        port = request.url.port or (443 if request.url.scheme == "https" else 80)
+        # Resolution counts against the request's connect timeout.
+        timeout = (request.extensions.get("timeout") or {}).get("connect") or _DEFAULT_DNS_TIMEOUT
+        try:
+            addresses = await asyncio.wait_for(self._resolve(host, port), timeout)
+        except TimeoutError as exc:
+            raise httpx.ConnectTimeout("Name resolution timed out", request=request) from exc
+        except OSError as exc:
+            raise httpx.ConnectError("Name resolution failed", request=request) from exc
+        if not addresses or not all(_is_public(a) for a in addresses):
+            logger.warning("Calendar request blocked: host resolved to a non-public address")
+            raise BlockedAddressError("Blocked address", request=request)
+
+        # Connect only to the validated IPs (in resolver order, falling back on
+        # connect failures); the copied Host header and the SNI extension keep
+        # virtual hosting and certificate checks bound to the hostname.
+        last_error: httpx.TransportError | None = None
+        for address in dict.fromkeys(a.split("%", 1)[0] for a in addresses):
+            pinned = httpx.Request(
+                request.method,
+                request.url.copy_with(host=address),
+                headers=request.headers,
+                stream=request.stream,
+                extensions={**request.extensions, "sni_hostname": host},
+            )
+            try:
+                response = await self._inner.handle_async_request(pinned)
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                last_error = exc
+                continue
+            return await self._checked(response)
+        assert last_error is not None  # noqa: S101 - loop ran at least once
+        raise last_error
+
+    async def _checked(self, response: httpx.Response) -> httpx.Response:
+        if response.headers.get("content-encoding", "identity").strip().lower() != "identity":
+            await response.aclose()
+            raise UnsupportedContentEncodingError("Kalender-Antwort ist komprimiert")
         length = response.headers.get("content-length", "")
         if length.isdigit() and int(length) > MAX_RESPONSE_BYTES:
             await response.aclose()

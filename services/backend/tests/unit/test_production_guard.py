@@ -213,10 +213,16 @@ def test_production_guard_oidc_client_id_default() -> None:
         production_guard(settings)
 
 
-def test_production_guard_rejects_insecure_calendar_urls() -> None:
-    settings = _valid_prod_settings(calendar_allow_insecure_urls=True)
-    with pytest.raises(RuntimeError, match="CALENDAR_ALLOW_INSECURE_URLS"):
-        production_guard(settings)
+def test_insecure_calendar_urls_rejected_when_settings_are_built_in_production() -> None:
+    # Enforced at Settings construction so every process (API, Celery worker,
+    # beat) refuses it — not only the FastAPI lifespan's production_guard.
+    with pytest.raises(ValueError, match="CALENDAR_ALLOW_INSECURE_URLS"):
+        _valid_prod_settings(calendar_allow_insecure_urls=True)
+
+
+def test_insecure_calendar_urls_allowed_outside_production() -> None:
+    settings = _valid_prod_settings(app_env="development", calendar_allow_insecure_urls=True)
+    assert settings.calendar_allow_insecure_urls is True
 
 
 def test_calendar_insecure_urls_default_off() -> None:
