@@ -144,7 +144,7 @@ für einen vollständigen Abschluss braucht es entweder Nachbesserung oder eine 
 ### PR-6: Dokumentation aktualisieren (alte Analyse-Docs bereinigen)
 > Findings: **M-5**, **M-4**
 
-- [ ] `docs/openspec-gap-analysis.md` als "historisch" kennzeichnen oder archivieren
+- [x] `docs/openspec-gap-analysis.md` als "historisch" kennzeichnen oder archivieren (2026-10-07 nach `docs/archive/openspec-gap-analysis.md` verschoben, #475)
 - [ ] `docs/rbac-completion-plan.md` auf "Done" setzen (auth.py/system.py-Guards sind umgesetzt)
 - [ ] `docs/architecture-status.md` aktualisieren: `ExternalEventLink` ✅ (teilweise), Audit-Logging ✅,
       Rate-Limiting ✅

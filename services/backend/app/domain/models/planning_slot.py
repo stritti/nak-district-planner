@@ -121,6 +121,7 @@ class PlanningSlot:
         ):
             self.generation_key = None
 
+
     def is_visible_to(self, congregation_id: uuid.UUID) -> bool:
         """Whether this slot belongs in the given congregation's scope (UC-03/04/05).
 

@@ -1,3 +1,5 @@
+> **Baseline-Hinweis (2026-10-07, #475):** Der aktuelle Ist-Stand steht in `openspec/specs/calendar-connector` und `openspec/specs/calendar-sync`. Dieser Backlog-Change ergänzt eine eigene Vertrags-Capability; beim Umsetzen sind überschneidende Baseline-Anforderungen per `MODIFIED` in diesen Specs nachzuziehen statt doppelt zu beschreiben.
+
 ## Why
 
 PR #375 hardens calendar synchronization, but the current transition functions and flat field-authority map will become increasingly difficult to evolve when conflict resolution, per-integration policies, and additional provider states are added. The architecture already defines PlanningSlot as the aggregate root and requires deterministic, idempotent synchronization. The state policy must make these invariants explicit instead of spreading them across application-service branches.

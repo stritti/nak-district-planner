@@ -2,7 +2,9 @@
 
 **Version:** 1.0.0  
 **Datum:** 2025-06-19  
-**Status:** Aktiv  
+**Status:** Aktiv (Statusabgleich 2026-10-07, #475)  
+
+> **Stand 2026-10-07:** Der umgesetzte Sicherheitsstand ist als Baseline in `openspec/specs/` beschrieben (`oidc-authentication`, `rbac-model`, `scoped-membership-enforcement`, `tenant-isolation`, `audit-logging`, `rate-limiting`, `csrf-protection`, `production-deployment`). Offene Release-Blocker für v1.0 stehen im Tracker-Issue #476 und im [Release-Review 1.0](../docs/reviews/2026-10-07-release-1.0-review.md). Die Zeitplan-Tabellen unten sind historisch.
 **Verantwortlich:** Security Team  
 
 ---
@@ -143,18 +145,18 @@ RATE_LIMIT_ENDPOINTS:
 
 ### 4. **Tenant-Isolation verbessern** (SEC-020, SEC-021)
 
-**Status:** ⚠️ Teilweise implementiert  
+**Status:** ✅ Implementiert (Middleware-Vorprüfung + PostgreSQL RLS unter Nicht-Owner-Rolle; Spec `tenant-isolation`). Offen: Rate-Limit-Tenant-Grenze (#434).  
 **Risiko:** Kritisch (OWASP A01)  
 **Aufwand:** ~5 Wochen  
-**OpenSpec:** [`improve-tenant-isolation`](changes/improve-tenant-isolation/)  
+**OpenSpec:** [`archive/2026-10-07-improve-tenant-isolation`](changes/archive/2026-10-07-improve-tenant-isolation/) (archiviert)  
 
 #### 📋 Spezifikation
 
 | Dokument | Beschreibung | Status |
 |----------|-------------|--------|
-| [proposal.md](changes/improve-tenant-isolation/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
-| [design.md](changes/improve-tenant-isolation/design.md) | Detaillierte Implementierung | ✅ Fertig |
-| [tasks.md](changes/improve-tenant-isolation/tasks.md) | Aufgabenliste | ⚠️ Teilweise (siehe Datei) |
+| [proposal.md](changes/archive/2026-10-07-improve-tenant-isolation/proposal.md) | Warum, Was, Fähigkeiten | ✅ Fertig |
+| [design.md](changes/archive/2026-10-07-improve-tenant-isolation/design.md) | Detaillierte Implementierung | ✅ Fertig |
+| [tasks.md](changes/archive/2026-10-07-improve-tenant-isolation/tasks.md) | Aufgabenliste | ✅ Fertig (nicht zutreffende Punkte als entfallen markiert) |
 
 #### 🎯 Ziele
 - Vollständige Tenant-Isolation auf Application- und DB-Ebene
@@ -166,7 +168,7 @@ RATE_LIMIT_ENDPOINTS:
 - `TenantContext` für Kontextvariable
 - `TenantMiddleware` für Request-Extraktion
 - PostgreSQL RLS Policies für alle Tenant-Tabellen
-- `TenantAwareRepository` Basis-Klasse
+- ~~`TenantAwareRepository` Basis-Klasse~~ (entfallen — Filterung über RLS)
 - `TenantValidationService` für explizite Validierung
 - `@validate_tenant_district` Decorator
 - `@validate_tenant_congregation` Decorator
@@ -203,7 +205,7 @@ RATE_LIMIT_ENDPOINTS:
 
 ### 5. **API-Key Rotation** (SEC-002)
 
-**Status:** ⚠️ Teilweise implementiert  
+**Status:** ➖ Entfallen — die API-Key-Authentifizierung wurde mit der OIDC-Migration entfernt; verbleibende Schlüssel sind ausgehende Webhook-Secrets  
 **Risiko:** Hoch  
 **Aufwand:** ~2 Wochen  
 
@@ -222,7 +224,7 @@ RATE_LIMIT_ENDPOINTS:
 
 ### 6. **Security Headers** (A05)
 
-**Status:** ❌ Nicht implementiert  
+**Status:** ✅ Implementiert im Frontend-nginx (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy); HSTS am TLS-Reverse-Proxy (Spec `production-deployment`)  
 **Risiko:** Mittel  
 **Aufwand:** ~1 Woche  
 
@@ -326,14 +328,14 @@ RATE_LIMIT_ENDPOINTS:
 
 | Metrik | Zielwert | Aktuell | Status |
 |--------|----------|---------|--------|
-| **OWASP Top 10 Compliance** | 10/10 | 6/10 | ⚠️ Verbesserung nötig |
-| **CIS Controls Compliance** | 10/10 | 8/10 | ⚠️ Verbesserung nötig |
+| **OWASP Top 10 Compliance** | 10/10 | nicht neu erhoben | ⚠️ Siehe Release-Review 2026-10-07 |
+| **CIS Controls Compliance** | 10/10 | nicht neu erhoben | ⚠️ Siehe Release-Review 2026-10-07 |
 | **Critical Vulnerabilities** | 0 | 0 | ✅ Gut |
 | **High Vulnerabilities** | < 5 | 0 | ✅ Gut |
-| **Audit Log Coverage** | 100% | 0% | ❌ Kritisch |
-| **Rate Limit Coverage** | 100% | 0% | ❌ Kritisch |
-| **CSRF Protection Coverage** | 100% | 0% | ❌ Kritisch |
-| **Tenant Isolation Coverage** | 100% | 50% | ⚠️ Teilweise |
+| **Audit Log Coverage** | 100% | Schreibende Requests + 403 (Middleware), Domain-Audit für Slots/Zuweisungen/Integrationen/Export-Tokens | ✅ Kern erfüllt |
+| **Rate Limit Coverage** | 100% | Alle Routen außer Health/OPTIONS (fail-open bei Valkey-Ausfall) | ⚠️ Tenant-Grenze offen (#434) |
+| **CSRF Protection Coverage** | 100% | Alle zustandsändernden Requests außer Health/Discovery | ⚠️ Header-only-Prüfung offen (#458) |
+| **Tenant Isolation Coverage** | 100% | RLS auf allen Tenant-Tabellen, Integrationstests `test_rls_postgres.py` | ✅ Gut |
 
 ### Performance Metrics
 
@@ -355,8 +357,11 @@ RATE_LIMIT_ENDPOINTS:
 | implement-audit-logging | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-09-07-implement-audit-logging/` |
 | implement-rate-limiting | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-09-07-implement-rate-limiting/` |
 | implement-csrf-protection | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-09-07-implement-csrf-protection/` |
-| improve-tenant-isolation | HIGH | ⚠️ Teilweise implementiert | `openspec/changes/improve-tenant-isolation/` |
-| introduce-non-functional-baseline | HIGH | ✅ Bestehend | `openspec/changes/introduce-non-functional-baseline/` |
+| improve-tenant-isolation | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-10-07-improve-tenant-isolation/` |
+| introduce-non-functional-baseline | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-10-07-introduce-non-functional-baseline/` |
+| harden-oidc-token-validation | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-10-07-harden-oidc-token-validation/` |
+| server-held-oidc-refresh-token | HIGH | ✅ Archiviert | `openspec/changes/archive/2026-10-08-server-held-oidc-refresh-token/` |
+| harden-production-supply-chain | HIGH | ⚠️ Offener PR | `openspec/changes/harden-production-supply-chain/` |
 
 ### Verweise
 
@@ -367,7 +372,7 @@ RATE_LIMIT_ENDPOINTS:
 
 ---
 
-## 📋 Offene Compliance-Lücken (Stand 2026-09-12)
+## 📋 Offene Compliance-Lücken (Stand 2026-10-07)
 
 Die folgenden Punkte sind in den archivierten OpenSpec-Changes als **nicht umgesetzt** dokumentiert und sollten als Follow-up-Changes erfasst werden:
 
@@ -376,7 +381,7 @@ Die folgenden Punkte sind in den archivierten OpenSpec-Changes als **nicht umges
 | implement-audit-logging | `@audit_action` Decorator, `AuditAPI` (Admin-Abfrage), `AuditRetentionService` (automatische Bereinigung) | MEDIUM |
 | implement-rate-limiting | Rate-Limit Monitoring/Metrics, Frontend 429-Handling | MEDIUM |
 | implement-csrf-protection | E2E-Verifizierung der Frontend-Integration (`useCSRF()` gegen echte Browser-Requests) | HIGH |
-| improve-tenant-isolation | RLS-Integrationstests (echte PostgreSQL), API-Key Tenant-Kontext, Monitoring/Alerting, Rollback-Plan | HIGH |
+| improve-tenant-isolation | RLS-Integrationstests vorhanden; offen: Rate-Limit pro Tenant (#434), Monitoring/Alerting | MEDIUM |
 
 ---
 
@@ -406,6 +411,7 @@ Die folgenden Punkte sind in den archivierten OpenSpec-Changes als **nicht umges
 |---------|-------|-------|-----------|
 | 1.0.0 | 2025-06-19 | Security Team | Initialversion |
 | 1.0.1 | 2026-09-12 | Security Team | Offene Compliance-Lücken dokumentiert, Audit-Status korrigiert |
+| 1.0.2 | 2026-10-07 | Claude (#475) | Status und Metriken an `main` und die OpenSpec-Baseline angeglichen |
 
 **Nächste Review:** 2025-09-30 (nach Q3 2025)
 **Klassifikation:** Intern - Nur für autorisiertes Personal

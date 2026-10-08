@@ -1,8 +1,10 @@
 # Projektfahrplan: NAK Bezirksplaner
 
 **Version:** 1.0  
-**Stand:** 22. Juni 2026  
-**Aktuelle Version:** v0.22.0  
+**Stand:** 7. Oktober 2026  
+**Aktuelle Version:** v1.0.0-rc.1 (Feature-Freeze)  
+
+> **Aktualisierung 2026-10-07 (#475):** Die Statusspalte unten ist auf den Stand von `main` gebracht. Was tatsächlich implementiert ist, beschreiben die Baseline-Specs in `openspec/specs/`; offene Release-Blocker und Folgearbeiten stehen im Tracker-Issue #476 und im [Release-Review 1.0](docs/reviews/2026-10-07-release-1.0-review.md). Die detaillierten Meilenstein-Abschnitte weiter unten sind der ursprüngliche Plan und werden nicht mehr fortgeschrieben.
 
 ---
 
@@ -35,14 +37,14 @@ Der **NAK Bezirksplaner** ist eine webbasierte Planungsplattform für Neuapostol
 
 | Meilenstein | Version | Zeitrahmen | Priorität | Status |
 |-------------|---------|------------|-----------|--------|
-| **M1: Planning Model Finalisierung** | v0.23.0 | Juli 2026 | 🔴 Critical | 🟡 Teilweise |
-| **M2: RBAC Vollständigkeit** | v0.24.0 | August 2026 | 🔴 Critical | 🟡 Teilweise |
-| **M3: Sync-Algorithmus Härtung** | v0.25.0 | September 2026 | 🔴 Critical | ❌ Offen |
-| **M4: Audit-Logging** | v0.26.0 | Oktober 2026 | 🟠 High | ❌ Offen |
-| **M5: Konfliktprüfung** | v0.27.0 | November 2026 | 🟠 High | ❌ Offen |
-| **M6: Non-Functional Baseline** | v0.28.0 | Dezember 2026 | 🟡 Medium | ❌ Offen |
-| **M7: Benachrichtigungen** | v0.29.0 | Januar 2027 | 🟡 Medium | ❌ Offen |
-| **M8: Produktions-Hardening** | v1.0.0 | Februar 2027 | 🟠 High | ❌ Offen |
+| **M1: Planning Model Finalisierung** | v0.23.0 | Juli 2026 | 🔴 Critical | ✅ Erledigt (Spec `planning-model`) |
+| **M2: RBAC Vollständigkeit** | v0.24.0 | August 2026 | 🔴 Critical | ✅ Erledigt (Specs `rbac-model`, `scoped-membership-enforcement`) |
+| **M3: Sync-Algorithmus Härtung** | v0.25.0 | September 2026 | 🔴 Critical | ✅ Erledigt (Specs `calendar-sync`, `external-event-ingestion`) |
+| **M4: Audit-Logging** | v0.26.0 | Oktober 2026 | 🟠 High | ✅ Erledigt (Spec `audit-logging`) |
+| **M5: Konfliktprüfung** | v0.27.0 | November 2026 | 🟠 High | 🟡 Teilweise (Konfliktregeln aktiv; Change `p1-domain-conflict-quality` offen) |
+| **M6: Non-Functional Baseline** | v0.28.0 | Dezember 2026 | 🟡 Medium | ✅ Erledigt (archiviert 2026-10-07) |
+| **M7: Benachrichtigungen** | v0.29.0 | Januar 2027 | 🟡 Medium | ✅ Erledigt (Specs `notifications`, `mail-notifications`) |
+| **M8: Produktions-Hardening** | v1.0.0 | Februar 2027 | 🟠 High | 🟡 In Arbeit (v1.0.0-rc.1; Blocker in #476) |
 
 ---
 
