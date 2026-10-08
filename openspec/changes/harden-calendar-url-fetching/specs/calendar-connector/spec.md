@@ -26,6 +26,10 @@ The calendar HTTP client SHALL resolve the host of every request, including redi
 - **WHEN** an admin stores `https://localhost./feed.ics` or `https://foo.localhost./feed.ics`
 - **THEN** the API SHALL respond with 422
 
+#### Scenario: Legacy numeric IPv4 literal
+- **WHEN** an admin stores a URL whose host is an abbreviated, integer, hex or octal IPv4 form such as `127.1`, `2130706433` or `0x7f.1`
+- **THEN** the host SHALL be interpreted as the IPv4 address it denotes and a non-public address SHALL be rejected with 422
+
 #### Scenario: DNS rebinding between check and connect
 - **WHEN** a hostname resolves to a public address during validation
 - **THEN** the connection SHALL be made to exactly that address so a later DNS answer cannot redirect it

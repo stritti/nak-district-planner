@@ -101,6 +101,13 @@ def _ip_literal(host: str) -> str | None:
     try:
         return str(ipaddress.ip_address(host.strip("[]")))
     except ValueError:
+        pass
+    # Legacy IPv4 forms ("127.1", "2130706433", "0x7f.1") are not valid for
+    # ipaddress but getaddrinfo() resolves them without DNS; treat them as the
+    # IPv4 address they denote. Real hostnames never parse with inet_aton().
+    try:
+        return str(ipaddress.IPv4Address(socket.inet_aton(host)))
+    except OSError:
         return None
 
 
