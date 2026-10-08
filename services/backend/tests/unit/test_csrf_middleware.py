@@ -19,7 +19,9 @@ def client() -> TestClient:
     async def create_thing():
         return {"created": True}
 
-    return TestClient(app)
+    # https: the CSRF cookie is Secure, so only then does the client send it
+    # back like a browser would.
+    return TestClient(app, base_url="https://testserver")
 
 
 @pytest.mark.parametrize(
@@ -39,5 +41,43 @@ def test_request_with_valid_token_passes(client) -> None:
     token = client.cookies["csrf_token"]
 
     response = client.post("/api/v1/things", headers={"X-CSRF-Token": token})
+
+    assert response.json() == {"created": True}
+
+
+def test_cookie_only_token_is_rejected(client) -> None:
+    """A browser sends the cookie on cross-site requests; it is no proof (#458)."""
+    client.get("/api/v1/things")
+    assert client.cookies["csrf_token"]
+
+    response = client.post("/api/v1/things")
+
+    assert response.status_code == 403
+
+
+def test_empty_header_is_rejected_even_with_valid_cookie(client) -> None:
+    client.get("/api/v1/things")
+
+    response = client.post("/api/v1/things", headers={"X-CSRF-Token": ""})
+
+    assert response.status_code == 403
+
+
+def test_tampered_header_is_rejected(client) -> None:
+    client.get("/api/v1/things")
+    token = client.cookies["csrf_token"]
+
+    response = client.post("/api/v1/things", headers={"X-CSRF-Token": token[:-2] + "xx"})
+
+    assert response.status_code == 403
+
+
+def test_previous_token_stays_valid_after_parallel_rotation(client) -> None:
+    """Parallel requests rotate the cookie; an earlier signed header still passes."""
+    client.get("/api/v1/things")
+    first = client.cookies["csrf_token"]
+    client.get("/api/v1/things")  # rotates the cookie
+
+    response = client.post("/api/v1/things", headers={"X-CSRF-Token": first})
 
     assert response.json() == {"created": True}
