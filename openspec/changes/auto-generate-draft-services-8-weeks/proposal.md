@@ -24,5 +24,3 @@ Gemeinden planen Gottesdienste oft mit festen Standardzeiten, aber das manuelle 
 - Database access layer for querying existing events and persisting new draft events.
 - Celery background scheduling/task flow for periodic pre-generation runs.
 - Potential API surface for managing congregation standard service times if not already present.
-
-> **Hinweis beim Archivieren (2026-10-07, #475):** Die Anforderung „Moved generated services are not recreated at original slot“ wurde ursprünglich über `events.generation_slot_key` umgesetzt. Mit dem Entfernen der `events`-Tabelle (Alembic 0125) ist dieser Schlüssel entfallen; die heutige Generierung dedupliziert nur nach Gemeinde/Datum/Uhrzeit. Die Baseline-Spec `planning-model` beschreibt den tatsächlichen Stand; die Regression ist im Release-Review (`docs/reviews/2026-10-07-release-1.0-review.md`) als Folgepunkt vermerkt.
