@@ -135,6 +135,37 @@ def planning_slot_read_sql(alias: str = "planning_slots") -> str:
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
+def distributed_slot_export_sql(alias: str = "planning_slots") -> str:
+    """Congregation export tokens may read district slots distributed to them (#466).
+
+    Mirrors ``PlanningSlot.is_visible_to``: same district, ``congregation_id`` NULL
+    and ``applicability`` containing ``'all'`` or the token's congregation.
+    """
+    return f"""
+(
+    {alias}.congregation_id IS NULL
+    AND EXISTS (
+        SELECT 1
+        FROM export_tokens et
+        WHERE et.token = current_setting('app.current_export_token', true)
+          AND et.district_id = {alias}.district_id
+          AND et.congregation_id IS NOT NULL
+          AND (
+              'all' = ANY({alias}.applicability)
+              OR et.congregation_id::text = ANY({alias}.applicability)
+          )
+    )
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def planning_slot_row_read_sql(alias: str = "planning_slots") -> str:
+    """SELECT visibility of planning-slot rows (and rows derived from them)."""
+    return f"({planning_slot_read_sql(alias)} OR {distributed_slot_export_sql(alias)})"
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def planning_slot_write_sql(alias: str = "planning_slots") -> str:
     return f"""
 (
@@ -170,6 +201,42 @@ def export_token_lookup_sql(alias: str = "export_tokens") -> str:
     OR {alias}.token = current_setting('app.current_export_token', true)
 )
 """
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def leader_read_sql(alias: str = "leaders") -> str:
+    """Membership-based leader visibility (before export-token reads, #485)."""
+    return f"""
+(
+    {SUPERADMIN_SQL}
+    OR {district_membership_sql(alias)}
+    OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def export_token_leader_read_sql(alias: str = "leaders") -> str:
+    """Export tokens may read only the leaders their feed names (#485).
+
+    A personal leader feed reads its own leader, an INTERNAL feed the leaders of
+    its district. PUBLIC feeds anonymize names and therefore read none.
+    """
+    return f"""
+EXISTS (
+    SELECT 1
+    FROM export_tokens et
+    WHERE et.token = current_setting('app.current_export_token', true)
+      AND et.district_id = {alias}.district_id
+      AND (et.leader_id = {alias}.id OR (et.leader_id IS NULL AND et.token_type = 'INTERNAL'))
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
+def leader_row_read_sql(alias: str = "leaders") -> str:
+    """SELECT visibility of leader rows."""
+    return f"({leader_read_sql(alias)} OR {export_token_leader_read_sql(alias)})"
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
@@ -420,7 +487,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY planning_slots_tenant_isolation_policy ON planning_slots
                 FOR SELECT
-                USING {planning_slot_read_sql()};
+                USING {planning_slot_row_read_sql()};
             """,
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY planning_slots_insert_policy ON planning_slots
@@ -446,7 +513,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY event_instances_tenant_isolation_policy ON event_instances
                 FOR SELECT
-                USING {related_planning_slot_sql("event_instances", planning_slot_read_sql)};
+                USING {related_planning_slot_sql("event_instances", planning_slot_row_read_sql)};
             """,
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY event_instances_insert_policy ON event_instances
@@ -472,7 +539,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY service_assignments_tenant_isolation_policy ON service_assignments
                 FOR SELECT
-                USING {related_planning_slot_sql("service_assignments", planning_slot_read_sql)};
+                USING {related_planning_slot_sql("service_assignments", planning_slot_row_read_sql)};
             """,
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY service_assignments_insert_policy ON service_assignments
@@ -498,11 +565,7 @@ RLS_POLICIES = {
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY leaders_tenant_isolation_policy ON leaders
                 FOR SELECT
-                USING (
-                    {SUPERADMIN_SQL}
-                    OR {district_membership_sql("leaders")}
-                    OR (leaders.congregation_id IS NOT NULL AND {congregation_membership_sql("leaders")})
-                );
+                USING {leader_row_read_sql("leaders")};
             """,
             f"""/* # nosec B608 — policy DDL with internal identifiers only, values via current_setting GUCs */
             CREATE POLICY leaders_insert_policy ON leaders

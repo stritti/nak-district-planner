@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.adapters.db.migrations.rls_policies import get_all_rls_sql, get_rls_sql
+from app.adapters.db.migrations.rls_policies import RLS_POLICIES, get_all_rls_sql, get_rls_sql
 
 
 def test_rls_sql_does_not_reference_missing_invitation_overwrite_columns() -> None:
@@ -39,3 +39,11 @@ def test_export_token_and_registration_policy_branches_exist() -> None:
     assert "CREATE POLICY export_tokens_update_policy" in sql
     assert "CREATE POLICY export_tokens_delete_policy" in sql
     assert "leader_registrations.user_sub = current_setting('app.current_user_sub', true)" in sql
+
+
+def test_slot_select_policies_allow_distributed_district_slots_for_export() -> None:
+    """Congregation tokens read applicable district slots; writes stay unchanged (#466)."""
+    for table in ("planning_slots", "event_instances", "service_assignments"):
+        select_policy, *write_policies = RLS_POLICIES[table]["policies"]
+        assert "ANY(" in select_policy and "applicability" in select_policy, table
+        assert all("applicability" not in policy for policy in write_policies), table

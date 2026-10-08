@@ -244,8 +244,14 @@ async def test_list_events_applies_filters_and_paginates() -> None:
 async def test_list_events_filters_district_slots_by_applicability() -> None:
     district_id = uuid.uuid4()
     congregation_id = uuid.uuid4()
-    visible = _slot(district_id=district_id, applicability=["all"])
-    invisible = _slot(district_id=district_id, applicability=[])
+    visible = _slot(
+        district_id=district_id,
+        applicability=["all"],
+        approval_status=EventApprovalStatus.CONFIRMED,
+    )
+    invisible = _slot(
+        district_id=district_id, applicability=[], approval_status=EventApprovalStatus.CONFIRMED
+    )
     slot_repo = AsyncMock()
     slot_repo.list_for_date_range.return_value = [visible, invisible]
     instance_repo = AsyncMock()
@@ -814,6 +820,54 @@ def test_resolve_conflict_policy_transition_only_from_conflict() -> None:
     for state in (SyncState.CLEAN, SyncState.DIRTY_INTERNAL, SyncState.DIRTY_EXTERNAL):
         with pytest.raises(ValueError):
             resolve_conflict(state)
+
+
+@pytest.mark.asyncio
+async def test_imported_holiday_distributed_to_congregation_appears_in_its_view() -> None:
+    """Imported holidays are reference data and stay visible once referenced (#466)."""
+    from app.application.feiertage_service import (
+        import_kirchliche_festtage,
+        reference_feiertage_for_congregation,
+    )
+
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    saved: list[PlanningSlot] = []
+    import_repo = AsyncMock()
+    import_repo.list_for_date_range.return_value = []
+    import_repo.save.side_effect = saved.append
+    with patch(
+        "app.application.feiertage_service.SqlPlanningSlotRepository", return_value=import_repo
+    ):
+        await import_kirchliche_festtage(district_id, 2026, AsyncMock())
+        import_repo.list_for_date_range.return_value = saved
+        await reference_feiertage_for_congregation(district_id, congregation_id, AsyncMock())
+
+    slot_repo = AsyncMock()
+    slot_repo.list_for_date_range.return_value = saved
+    instance_repo = AsyncMock()
+    instance_repo.list_by_planning_slots.return_value = []
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
+        result = await events.list_events(
+            _auth(),
+            AsyncMock(),
+            district_id=district_id,
+            congregation_id=congregation_id,
+            group_id=None,
+            only_district_level=False,
+            status_filter=None,
+            approval_status=None,
+            is_service=None,
+            from_dt=datetime(2026, 1, 1, tzinfo=UTC),
+            to_dt=datetime(2026, 12, 31, tzinfo=UTC),
+            limit=500,
+            offset=0,
+            slot_repo=slot_repo,
+            inst_repo=instance_repo,
+        )
+
+    assert saved
+    assert {item.id for item in result.items} == {slot.id for slot in saved}
 
 
 # ── v1.0 provider scope (#467): unsupported provider on outbound write → 409 ─

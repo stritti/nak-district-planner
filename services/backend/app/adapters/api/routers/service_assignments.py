@@ -30,6 +30,7 @@ from app.adapters.db.repositories.service_assignment import SqlServiceAssignment
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.domain.event_payloads import assignment_confirmed
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
@@ -61,6 +62,16 @@ def _raise_blocking_conflicts(conflicts: list, *, confirm_warnings: bool) -> Non
             status_code=status.HTTP_409_CONFLICT,
             detail=_conflict_detail(blocking + warnings).model_dump(mode="json"),
         )
+
+
+async def _touch_slot(slots: SqlPlanningSlotRepository, planning_slot: PlanningSlot) -> None:
+    """Bump the slot revision: assignments are part of the exported event (UC-05).
+
+    ICS feeds derive DTSTAMP/LAST-MODIFIED/SEQUENCE from the slot's updated_at;
+    touching it also covers deletions, which leave no assignment row behind.
+    """
+    planning_slot.updated_at = datetime.now(UTC)
+    await slots.save(planning_slot)
 
 
 async def _check_leader(
@@ -154,6 +165,7 @@ async def create_assignment(
         status=body.status,
     )
     await _save(assignments_repo, assignment)
+    await _touch_slot(slots, planning_slot)
     return _assignment_response(assignment)
 
 
@@ -223,6 +235,7 @@ async def update_assignment(
         assignment.status = body.status
     assignment.updated_at = datetime.now(UTC)
     await assignments_repo.save(assignment)
+    await _touch_slot(slots, planning_slot)
     if newly_confirmed:
         publish_after_commit(
             db,
@@ -271,3 +284,4 @@ async def delete_assignment(
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     await assignments_repo.delete(assignment_id)
+    await _touch_slot(slots, planning_slot)

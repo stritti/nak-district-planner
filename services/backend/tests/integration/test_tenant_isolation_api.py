@@ -330,3 +330,128 @@ async def test_denied_read_is_audited_for_the_probed_district(api, owner, world)
     assert rows[0]["extra_metadata"]["http_method"] == "GET"
     # Middleware must not persist identity claims extracted from an unverified bearer payload.
     assert "claimed_sub" not in rows[0]["extra_metadata"]
+
+
+async def test_congregation_export_feed_contains_distributed_district_slots(
+    api, owner, world
+) -> None:
+    """RLS lets a congregation token read applicable district slots only (#466)."""
+    congregation_id = uuid.uuid4()
+    token = f"e2e-{world.run}-{uuid.uuid4().hex}"
+    applicable, to_all, not_applicable, foreign = (uuid.uuid4() for _ in range(4))
+    slots = [
+        (applicable, world.a.district_id, [str(congregation_id)]),
+        (to_all, world.a.district_id, ["all"]),
+        (not_applicable, world.a.district_id, [str(uuid.uuid4())]),
+        (foreign, world.b.district_id, ["all", str(congregation_id)]),
+    ]
+    async with owner.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO congregations (id, name, district_id, created_at, updated_at) "
+                "VALUES (:id, 'Gemeinde A', :d, now(), now())"
+            ),
+            {"id": congregation_id, "d": world.a.district_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO export_tokens (id, token, label, token_type, district_id, "
+                "congregation_id) VALUES (:id, :t, 'Gemeinde A', 'PUBLIC', :d, :c)"
+            ),
+            {"id": uuid.uuid4(), "t": token, "d": world.a.district_id, "c": congregation_id},
+        )
+        for slot_id, district_id, applicability in slots:
+            await conn.execute(
+                text(
+                    "INSERT INTO planning_slots (id, district_id, title, category, planning_date, "
+                    "planning_time, status, approval_status, applicability, created_at, "
+                    "updated_at) VALUES (:id, :d, 'Bezirksgottesdienst', 'Gottesdienst', "
+                    "'2027-01-10', '10:00', 'ACTIVE', 'CONFIRMED', :a, now(), now())"
+                ),
+                {"id": slot_id, "d": district_id, "a": applicability},
+            )
+    try:
+        response = await api.get(f"/api/v1/export/{token}/calendar.ics")
+    finally:
+        async with owner.begin() as conn:
+            await conn.execute(text("DELETE FROM export_tokens WHERE token = :t"), {"t": token})
+            await conn.execute(
+                text("DELETE FROM planning_slots WHERE id = ANY(:ids)"),
+                {"ids": [slot_id for slot_id, _, _ in slots]},
+            )
+            await conn.execute(
+                text("DELETE FROM congregations WHERE id = :id"), {"id": congregation_id}
+            )
+
+    assert response.status_code == 200, response.text
+    body = response.text
+    assert f"UID:{applicable}@nak-bezirksplaner" in body
+    assert f"UID:{to_all}@nak-bezirksplaner" in body
+    assert str(not_applicable) not in body
+    assert str(foreign) not in body
+
+
+@pytest.mark.parametrize(
+    ("token_type", "personal", "expected_comment"),
+    [
+        ("INTERNAL", False, "Dienstleiter: Leiter Export"),
+        ("PUBLIC", True, "Dienstleiter: Leiter Export"),
+        ("PUBLIC", False, "Dienstleiter: [Name anonymisiert]"),
+    ],
+)
+async def test_export_feed_resolves_leader_names_under_rls(
+    api, owner, world, token_type, personal, expected_comment
+) -> None:
+    """Export tokens read only the leaders their feed names (#485)."""
+    leader_id, slot_id = uuid.uuid4(), uuid.uuid4()
+    token = f"e2e-{world.run}-{uuid.uuid4().hex}"
+    async with owner.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO leaders (id, name, district_id) VALUES (:id, 'Leiter Export', :d)"
+            ),
+            {"id": leader_id, "d": world.a.district_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO planning_slots (id, district_id, title, category, planning_date, "
+                "planning_time, status, approval_status, applicability, created_at, updated_at) "
+                "VALUES (:id, :d, 'Gottesdienst', 'Gottesdienst', '2027-01-10', '10:00', "
+                "'ACTIVE', 'CONFIRMED', '{}', now(), now())"
+            ),
+            {"id": slot_id, "d": world.a.district_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO service_assignments (id, event_id, planning_slot_id, leader_id, "
+                "status, created_at, updated_at) "
+                "VALUES (:id, :s, :s, :l, 'ASSIGNED', now(), now())"
+            ),
+            {"id": uuid.uuid4(), "s": slot_id, "l": leader_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO export_tokens (id, token, label, token_type, district_id, leader_id) "
+                "VALUES (:id, :t, 'Feed', :tt, :d, :l)"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "t": token,
+                "tt": token_type,
+                "d": world.a.district_id,
+                "l": leader_id if personal else None,
+            },
+        )
+    try:
+        response = await api.get(f"/api/v1/export/{token}/calendar.ics")
+    finally:
+        async with owner.begin() as conn:
+            await conn.execute(text("DELETE FROM export_tokens WHERE token = :t"), {"t": token})
+            await conn.execute(text("DELETE FROM planning_slots WHERE id = :id"), {"id": slot_id})
+            await conn.execute(text("DELETE FROM leaders WHERE id = :id"), {"id": leader_id})
+
+    assert response.status_code == 200, response.text
+    assert f"UID:{slot_id}@nak-bezirksplaner" in response.text
+    assert expected_comment in response.text
+    if expected_comment.endswith("[Name anonymisiert]"):
+        assert "Leiter Export" not in response.text
