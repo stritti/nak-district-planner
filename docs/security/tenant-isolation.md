@@ -483,8 +483,9 @@ or by a role guard in a router, leaves two signals:
 1. **Audit entry** with `action = ACCESS_DENIED`, `status = FAILED`, the probed
    `district_id`/`congregation_id` and the route in `extra_metadata`. Reads are
    included; a rejected GET of another tenant's data is the typical probe.
-   Requests rejected before authentication carry the unverified subject as
-   `extra_metadata.claimed_sub`, never as `user_sub`. District admins of the
+   Only a verified subject is recorded as `user_sub`; requests rejected
+   before authentication have no subject (unverified bearer claims are never
+   decoded). Use the client IP and route to trace them. District admins of the
    probed district can read these entries (audit RLS policy).
 2. **Metric** `nak.access.denied` (OpenTelemetry counter, exported when
    `OTEL_ENABLED=true`) with the bounded attributes `http.request.method` and
@@ -513,7 +514,7 @@ groups:
 To find the subject behind an alert, query the audit log:
 
 ```sql
-SELECT timestamp, coalesce(user_sub, extra_metadata->>'claimed_sub') AS subject,
+SELECT timestamp, user_sub AS subject, ip_address,
        district_id, extra_metadata->>'path' AS path
 FROM audit_logs
 WHERE action = 'ACCESS_DENIED' AND timestamp > now() - interval '1 hour'
