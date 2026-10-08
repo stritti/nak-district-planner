@@ -15,7 +15,21 @@ from typing import NamedTuple
 import pytest
 
 APPLICATION_ROOT = Path(__file__).resolve().parents[2] / "app" / "application"
+DOMAIN_ROOT = Path(__file__).resolve().parents[2] / "app" / "domain"
 FORBIDDEN_PREFIXES = ("app.adapters", "sqlalchemy")
+# The domain is pure Python: no outer layer, no framework, no infrastructure.
+DOMAIN_FORBIDDEN_PREFIXES = (
+    "app.adapters",
+    "app.application",
+    "app.main",
+    "app.celery_app",
+    "sqlalchemy",
+    "fastapi",
+    "starlette",
+    "celery",
+    "httpx",
+    "redis",
+)
 
 
 class LegacyDebt(NamedTuple):
@@ -154,25 +168,47 @@ LEGACY_APPLICATION_ADAPTER_IMPORTS: dict[str, LegacyDebt] = {
 }
 
 
-def _forbidden_imports(path: Path) -> set[str]:
-    """Return the adapter/ORM modules imported anywhere in ``path``."""
+def _is_forbidden(module: str, prefixes: tuple[str, ...]) -> bool:
+    return any(module == p or module.startswith(p + ".") for p in prefixes)
+
+
+def _forbidden_imports(path: Path, package: str, prefixes: tuple[str, ...]) -> set[str]:
+    """Return the forbidden modules imported anywhere in ``path``.
+
+    Relative imports are resolved against the file's package, and
+    ``from app import adapters`` counts as importing ``app.adapters``, so neither
+    form slips past the check.
+    """
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     modules: set[str] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            modules.add(node.module)
-        elif isinstance(node, ast.Import):
+        if isinstance(node, ast.Import):
             modules.update(alias.name for alias in node.names)
-    return {m for m in modules if m == "sqlalchemy" or m.startswith(FORBIDDEN_PREFIXES)}
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                parts = package.split(".")
+                parent = parts[: len(parts) - (node.level - 1)]
+                base = ".".join(parent + ([node.module] if node.module else []))
+            else:
+                base = node.module or ""
+            if _is_forbidden(base, prefixes):
+                modules.add(base)
+            else:
+                modules.update(f"{base}.{alias.name}" for alias in node.names if alias.name != "*")
+    return {m for m in modules if _is_forbidden(m, prefixes)}
 
 
-def scan(root: Path) -> dict[str, set[str]]:
+def scan(
+    root: Path, package: str = "app.application", prefixes: tuple[str, ...] = FORBIDDEN_PREFIXES
+) -> dict[str, set[str]]:
     """Map each module below ``root`` (posix relative path) to its forbidden imports."""
-    return {
-        path.relative_to(root).as_posix(): imports
-        for path in root.rglob("*.py")
-        if (imports := _forbidden_imports(path))
-    }
+    result = {}
+    for path in root.rglob("*.py"):
+        relative = path.relative_to(root)
+        file_package = ".".join([package, *relative.parent.parts])
+        if imports := _forbidden_imports(path, file_package, prefixes):
+            result[relative.as_posix()] = imports
+    return result
 
 
 def new_violations(
@@ -196,6 +232,13 @@ def test_application_layer_does_not_gain_new_adapter_dependencies() -> None:
         "Define a domain port/interface and inject the adapter at the composition boundary instead: "
         f"{violations}"
     )
+
+
+def test_domain_layer_has_no_outward_or_framework_dependencies() -> None:
+    """The domain has no debt allowlist: it must stay free of every outer layer."""
+    violations = scan(DOMAIN_ROOT, package="app.domain", prefixes=DOMAIN_FORBIDDEN_PREFIXES)
+
+    assert not violations, f"app.domain must not depend on outer layers or frameworks: {violations}"
 
 
 def test_legacy_allowlist_has_no_stale_entries() -> None:
@@ -240,6 +283,26 @@ def test_scanner_rejects_new_violations(tmp_path: Path, source: str, expected: l
 
     assert violations["new_service.py"] == expected
     assert violations.get("legacy.py", []) == [m for m in expected if m != "sqlalchemy"]
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "source", "expected"),
+    [
+        ("new_service.py", "from ..adapters.db import session\n", "app.adapters.db"),
+        ("services/new_service.py", "from ...adapters import mail\n", "app.adapters"),
+        ("new_service.py", "from app import adapters\n", "app.adapters"),
+        ("new_service.py", "from .. import adapters\n", "app.adapters"),
+    ],
+)
+def test_scanner_resolves_relative_and_package_imports(
+    tmp_path: Path, relative_path: str, source: str, expected: str
+) -> None:
+    """Negative test: indirect spellings of an adapter import are reported too."""
+    target = tmp_path / relative_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source, encoding="utf-8")
+
+    assert new_violations(scan(tmp_path), {}) == {relative_path: [expected]}
 
 
 def test_scanner_accepts_port_based_module(tmp_path: Path) -> None:

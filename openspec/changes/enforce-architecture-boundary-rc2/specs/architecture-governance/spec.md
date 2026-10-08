@@ -20,9 +20,20 @@ Existing RC-2 violations MAY remain temporarily only when they are named in an e
 - **WHEN** an allowlisted application module imports an `app.adapters...` module that is not listed for it in the legacy allowlist
 - **THEN** the architecture check fails
 
+#### Scenario: Adapter import spelled indirectly
+- **WHEN** an application module imports an adapter through a relative import (`from ..adapters import x`) or through its package (`from app import adapters`)
+- **THEN** the architecture check resolves it to `app.adapters...` and treats it like a direct import
+
 #### Scenario: Legacy debt is removed
 - **WHEN** an allowlisted application module no longer requires a concrete adapter
 - **THEN** its legacy allowlist entry is removed in the same change
+
+### Requirement: The domain layer stays framework-free
+The backend SHALL prevent modules below `app.domain` from importing `app.adapters`, `app.application`, the FastAPI/Celery entry points, or framework and infrastructure libraries (SQLAlchemy, FastAPI, Starlette, Celery, httpx, Redis). The domain has no legacy allowlist.
+
+#### Scenario: Domain model imports a framework
+- **WHEN** a module below `app.domain` imports `fastapi`, `sqlalchemy` or a module of an outer layer, directly or relatively
+- **THEN** the architecture check fails
 
 ### Requirement: Runtime version metadata has one source of truth
 The FastAPI application SHALL expose the same package-derived application version as health and system version reporting.
