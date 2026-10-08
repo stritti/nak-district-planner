@@ -3,6 +3,8 @@
 - [x] 1.1 Add an AST-based regression test for `app.application -> app.adapters` dependencies.
 - [x] 1.2 Record the RC-2 legacy adapter imports per file (exact imported modules) with explicit rationales; reject stale entries.
 - [x] 1.3 Verify the architecture test against the full backend unit suite.
+- [x] 1.4 Resolve relative imports and `from app import adapters` in the scanner; negative tests for each spelling.
+- [x] 1.5 Enforce a framework-free `app.domain` (no allowlist); verified by planting a violation in each layer.
 
 ## 2. Release metadata
 
