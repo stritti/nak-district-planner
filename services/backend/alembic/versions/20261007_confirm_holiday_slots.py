@@ -24,16 +24,25 @@ branch_labels = None
 depends_on = None
 
 
+# Rows the importers created: district-level, midnight, no approval status (the
+# importers never set one; every other slot source does). Holiday slots a planner
+# approved, planned or owns per congregation are left as they are. Applicability
+# goes first, while approval_status still identifies the imported rows; their
+# congregation ids were appended by reference_feiertage_for_congregation.
+_IMPORTED_HOLIDAY = (
+    "category = 'Feiertag' AND congregation_id IS NULL "
+    "AND planning_time = '00:00:00' AND approval_status IS NULL"
+)
+
+
 def upgrade() -> None:
     op.execute(
-        "UPDATE planning_slots SET approval_status = 'CONFIRMED', updated_at = now() "
-        "WHERE category = 'Feiertag' "
-        "AND approval_status IS DISTINCT FROM 'CONFIRMED'"
+        "UPDATE planning_slots SET applicability = ARRAY['all']::varchar[], updated_at = now() "
+        f"WHERE {_IMPORTED_HOLIDAY} AND NOT ('all' = ANY(applicability))"
     )
     op.execute(
-        "UPDATE planning_slots SET applicability = ARRAY['all']::varchar[], updated_at = now() "
-        "WHERE category = 'Feiertag' AND congregation_id IS NULL "
-        "AND NOT ('all' = ANY(applicability))"
+        "UPDATE planning_slots SET approval_status = 'CONFIRMED', updated_at = now() "
+        f"WHERE {_IMPORTED_HOLIDAY}"
     )
 
 

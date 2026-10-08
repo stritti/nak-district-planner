@@ -26,4 +26,4 @@
 ## 6. Holidays
 - [x] 6.1 Regression test: imported holiday distributed to a congregation appears in its event view
 - [x] 6.2 Create imported holidays as CONFIRMED; data migration for existing holiday slots
-- [x] 6.3 Imported holidays get `applicability=["all"]` (also for existing district holidays in the data migration)
+- [x] 6.3 Imported holidays get `applicability=["all"]`; the data migration updates only rows the importers created (district-level, 00:00, no approval status)
