@@ -373,6 +373,37 @@ async def test_fallback_never_leaves_the_validated_address_set():
     assert tried == ["93.184.216.34", "93.184.216.35"]
 
 
+async def test_address_fallbacks_share_one_connect_deadline():
+    """Several black-holed addresses must not each get the full connect timeout."""
+    import asyncio
+    import time
+
+    budgets: list[float] = []
+
+    class BlackHole(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            connect = request.extensions["timeout"]["connect"]
+            budgets.append(connect)
+            await asyncio.sleep(connect)
+            raise httpx.ConnectTimeout("timed out", request=request)
+
+    transport = GuardedTransport(
+        inner=BlackHole(),
+        resolver=_resolver("93.184.216.34", "93.184.216.35", "93.184.216.36", "93.184.216.37"),
+    )
+    async with httpx.AsyncClient(
+        transport=transport, timeout=httpx.Timeout(5.0, connect=0.2), trust_env=False
+    ) as client:
+        started = time.monotonic()
+        with pytest.raises(httpx.ConnectTimeout):
+            await client.get("https://calendar.example.com/feed.ics")
+        elapsed = time.monotonic() - started
+
+    assert elapsed < 0.35  # one 0.2 s budget, not 4 x 0.2 s
+    assert budgets[0] <= 0.2
+    assert all(later < budgets[0] for later in budgets[1:])
+
+
 async def test_slow_dns_resolution_is_bounded_by_connect_timeout():
     import asyncio
 

@@ -26,3 +26,4 @@
 - [x] 3.8 `CALENDAR_NAT64_PREFIXES` (RFC 6052, /32–/96) mit Extraktion der eingebetteten IPv4; `64:ff9b:1::/48` ergänzt
 - [x] 3.9 Legacy-IPv4-Literale (`127.1`, `2130706433`, `0x7f.1`) werden statisch als IPv4 interpretiert und abgelehnt (Codex-Review #487).
 - [x] 3.10 IPv6 site-local (`fec0::/10`) explizit ablehnen; Python meldet den Bereich als `is_global` (Codex-Review #487).
+- [x] 3.11 Eine gemeinsame Connect-Deadline für DNS-Auflösung und alle Adress-Fallbacks (Codex-Review #487).
