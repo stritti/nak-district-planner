@@ -71,7 +71,7 @@ def _set_tenant_gucs(connection, **kwargs):
 event.listen(engine.sync_engine, "begin", _set_tenant_gucs)
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_db_session() -> AsyncGenerator[AsyncSession]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
