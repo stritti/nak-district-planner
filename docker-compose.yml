@@ -9,6 +9,7 @@ services:
         condition: service_completed_successfully
       valkey:
         condition: service_started
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -44,6 +45,26 @@ services:
         condition: service_completed_successfully
       valkey:
         condition: service_started
+    restart: unless-stopped
+
+  # The only scheduler for celery_app.beat_schedule. Run exactly one instance:
+  # every additional replica would fire each periodic job again. The schedule
+  # file (last run times) lives on a named volume so restarts do not re-run or
+  # skip jobs. Runtime credentials only (.env + .env.docker), like the worker.
+  beat:
+    build: ./services/backend
+    command: uv run celery -A app.celery_app beat --loglevel=info --schedule /app/beat/celerybeat-schedule
+    env_file:
+      - .env
+      - .env.docker
+    volumes:
+      - beat_schedule:/app/beat
+    deploy:
+      replicas: 1
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
   frontend:
     build: ./services/frontend
@@ -60,6 +81,7 @@ services:
         condition: service_completed_successfully
       backend:
         condition: service_started
+    restart: unless-stopped
 
   db:
     # NOTE: PG18+ requires mount at /var/lib/postgresql (not /data) so it can
@@ -71,14 +93,18 @@ services:
       - .env.db
     volumes:
       - ./postgres_data:/var/lib/postgresql
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # Local test database only; never part of a normal `up`.
+  # Start explicitly: docker compose --profile test up -d db-test
   db-test:
     image: postgres:18.6-alpine
+    profiles: [test]
     env_file:
       - .env
       - .env.db
@@ -92,6 +118,10 @@ services:
       retries: 5
 
   valkey:
-    image: valkey/valkey:8.1.10-alpine
+    image: valkey/valkey:9.1.2-alpine
     volumes:
       - ./valkey_data:/data
+    restart: unless-stopped
+
+volumes:
+  beat_schedule:
