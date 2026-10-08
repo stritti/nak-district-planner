@@ -230,17 +230,17 @@ class TestFetchEvents:
 
     async def test_http_404_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(404)))
-        with pytest.raises(CalendarConnectorError, match="404"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_http_401_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(401)))
-        with pytest.raises(CalendarConnectorError, match="401"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_http_500_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(500)))
-        with pytest.raises(CalendarConnectorError, match="500"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_html_response_raises_value_error(self):

@@ -242,7 +242,9 @@ def test_trigger_sync_unexpected_failure_returns_500_and_persists_error():
         response = client.post(_sync_url(integration), headers=headers)
 
     assert response.status_code == 500
-    assert integration.last_sync_error == "boom sync failed"
+    # Unexpected exception text may embed URLs/credentials (#463): store a generic message.
+    assert integration.last_sync_error is not None
+    assert "boom" not in integration.last_sync_error
 
 
 def test_trigger_sync_unknown_integration_returns_404():

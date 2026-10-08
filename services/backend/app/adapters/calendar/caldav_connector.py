@@ -20,6 +20,7 @@ from icalendar import Calendar as ICalendar
 
 from app.adapters.calendar.deletion import delete_resource
 from app.adapters.calendar.ical_events import expand_events
+from app.adapters.calendar.url_guard import guarded_client
 from app.domain.models.raw_calendar_event import RawCalendarEvent, is_occurrence_key
 from app.domain.ports.calendar import (
     CalendarConnector,
@@ -43,7 +44,7 @@ class CalDAVConnector(CalendarConnector):
     window_bounded_snapshot = True
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(timeout=30.0)
+        self._client = client or guarded_client()
 
     async def fetch_events(
         self,
@@ -101,15 +102,10 @@ class CalDAVConnector(CalendarConnector):
                 if "username" in credentials and "password" in credentials
                 else None,
             )
-        except httpx.RequestError as exc:
-            raise CalendarConnectorError("Transportfehler beim Laden des CalDAV Kalenders") from exc
-
-        try:
             response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise CalendarConnectorError(
-                f"HTTP {exc.response.status_code} beim Laden des CalDAV Kalenders: {exc}"
-            ) from exc
+        except httpx.HTTPError as exc:
+            # Generic text: no status/transport oracle, no URL or credentials (#463).
+            raise CalendarConnectorError("CalDAV Kalender konnte nicht geladen werden") from exc
 
         # Parse the multi-status response
         # This is simplified - a production implementation would properly parse XML
@@ -117,7 +113,7 @@ class CalDAVConnector(CalendarConnector):
         try:
             root = ET.fromstring(response.content)
         except ET.ParseError as exc:
-            raise CalendarConnectorError(f"Ungültige XML-Antwort vom CalDAV Server: {exc}") from exc
+            raise CalendarConnectorError("Ungültige XML-Antwort vom CalDAV Server") from exc
 
         # Define namespaces
         namespaces = {

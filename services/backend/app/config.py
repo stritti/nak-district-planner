@@ -10,6 +10,25 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.models.calendar_integration import SyncDeleteMode
 
+_NAT64_PREFIX_LENGTHS = {32, 40, 48, 56, 64, 96}
+
+
+def _parse_nat64_prefixes(value: str) -> tuple[ipaddress.IPv6Network, ...]:
+    networks = []
+    for item in filter(None, (part.strip() for part in value.split(","))):
+        try:
+            network = ipaddress.ip_network(item)
+        except ValueError as exc:
+            raise ValueError(f"CALENDAR_NAT64_PREFIXES: invalid prefix {item!r}") from exc
+        if not isinstance(network, ipaddress.IPv6Network):
+            raise ValueError(f"CALENDAR_NAT64_PREFIXES: {item!r} is not IPv6")
+        if network.prefixlen not in _NAT64_PREFIX_LENGTHS:
+            raise ValueError(
+                f"CALENDAR_NAT64_PREFIXES: {item!r} must have length 32, 40, 48, 56, 64 or 96"
+            )
+        networks.append(network)
+    return tuple(networks)
+
 
 class Settings(BaseSettings):
     """Settings."""
@@ -81,6 +100,13 @@ class Settings(BaseSettings):
     # hostile or broken RRULEs in external calendars.
     sync_max_occurrences: int = Field(default=5000, ge=1)
     min_travel_minutes: int = Field(default=30, ge=0)
+    # Dev only: allow http:// and private/loopback calendar URLs (local test
+    # servers). Rejected by production_guard — SSRF protection, see #463.
+    calendar_allow_insecure_urls: bool = False
+    # Network-specific NAT64 prefixes (RFC 6052) of the host's DNS64/NAT64
+    # setup, comma-separated IPv6 CIDRs of length 32/40/48/56/64/96. Addresses
+    # inside them are unwrapped and the embedded IPv4 is checked (SSRF, #463).
+    calendar_nat64_prefixes: str = ""
 
     # Version check (display only — the app never executes updates, see #469)
     ghcr_owner: str = "stritti"
@@ -94,6 +120,25 @@ class Settings(BaseSettings):
         except (ValueError, ZoneInfoNotFoundError) as exc:
             raise ValueError(f"Unknown IANA timezone: {value}") from exc
         return value
+
+    @field_validator("calendar_nat64_prefixes")
+    @classmethod
+    def validate_calendar_nat64_prefixes(cls, value: str) -> str:
+        _parse_nat64_prefixes(value)
+        return value
+
+    @property
+    def calendar_nat64_networks(self) -> tuple[ipaddress.IPv6Network, ...]:
+        return _parse_nat64_prefixes(self.calendar_nat64_prefixes)
+
+    @model_validator(mode="after")
+    def reject_insecure_calendar_urls_in_production(self) -> Settings:
+        """Fail every process (API, worker, beat) at settings load, not only the API lifespan."""
+        if self.app_env == "production" and self.calendar_allow_insecure_urls:
+            raise ValueError(
+                "CALENDAR_ALLOW_INSECURE_URLS must be false in production (SSRF protection)"
+            )
+        return self
 
     @field_validator("trusted_proxies")
     @classmethod

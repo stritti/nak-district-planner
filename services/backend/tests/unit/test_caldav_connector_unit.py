@@ -302,17 +302,17 @@ class TestFetchEvents:
 
     async def test_http_404_raises(self):
         connector = CalDAVConnector(client=_mock_xml_response("<error/>", status=404))
-        with pytest.raises(CalendarConnectorError, match="404"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS_BASIC)
 
     async def test_http_401_raises(self):
         connector = CalDAVConnector(client=_mock_xml_response("<error/>", status=401))
-        with pytest.raises(CalendarConnectorError, match="401"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS_BASIC)
 
     async def test_http_500_raises(self):
         connector = CalDAVConnector(client=_mock_xml_response("<error/>", status=500))
-        with pytest.raises(CalendarConnectorError, match="500"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS_BASIC)
 
     async def test_invalid_xml_raises(self):

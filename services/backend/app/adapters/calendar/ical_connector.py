@@ -16,6 +16,7 @@ from icalendar import Calendar as ICalendar  # type: ignore[import-untyped]
 
 from app.adapters.calendar.http_policy import resilient_request
 from app.adapters.calendar.ical_events import expand_events
+from app.adapters.calendar.url_guard import guarded_client
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -32,7 +33,7 @@ class ICalConnector(CalendarConnector):
     authoritative_snapshot = True
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+        self._client = client or guarded_client()
 
     async def fetch_events(
         self,
@@ -51,15 +52,14 @@ class ICalConnector(CalendarConnector):
         content_type = response.headers.get("content-type", "")
         if "text/html" in content_type:
             raise CalendarConnectorError(
-                f"URL liefert HTML statt eines Kalenders (Content-Type: {content_type}). "
-                "Bitte die direkte .ics-URL verwenden."
+                "URL liefert HTML statt eines Kalenders. Bitte die direkte .ics-URL verwenden."
             )
 
         try:
             cal = ICalendar.from_ical(response.content.decode("utf-8"))
             expanded = expand_events(cal, from_dt=from_dt, to_dt=to_dt)
         except Exception as exc:
-            raise CalendarConnectorError(f"Ungültiges iCal-Format: {exc}") from exc
+            raise CalendarConnectorError("Ungültiges iCal-Format") from exc
         self.snapshot_complete = expanded.complete
         if not expanded.complete:
             logger.warning("iCal feed contains unparseable events; snapshot is incomplete")

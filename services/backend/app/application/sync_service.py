@@ -732,7 +732,13 @@ async def run_sync(
         integration.last_sync_error = "; ".join(problems) or None
         await integration_repo.save(integration)
     except Exception as exc:
-        integration.last_sync_error = str(exc)[:500]
+        # Only connector errors carry curated, secret-free texts; anything else
+        # may embed URLs or credentials (#463).
+        integration.last_sync_error = (
+            str(exc)[:500]
+            if isinstance(exc, CalendarConnectorError)
+            else "Synchronisierung fehlgeschlagen (interner Fehler)"
+        )
         await integration_repo.save(integration)
         raise
     return SyncResult(
