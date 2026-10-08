@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import UpdateBanner from "@/components/UpdateBanner.vue";
 import { useAuthStore } from "@/stores/auth";
+import { useVersionStore } from "@/stores/version";
 import * as systemApi from "@/api/system";
 
 vi.mock("@/api/system", () => ({
@@ -62,4 +63,35 @@ describe("UpdateBanner", () => {
     expect(localStorage.getItem("dismissedVersion")).toBe("1.0.0");
     expect(wrapper.find('[data-testid="update-banner"]').exists()).toBe(false);
   });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('stays hidden when the user is unauthenticated or no update exists', async () => {
+    vi.mocked(systemApi.getVersion).mockResolvedValue(versionResponse(false))
+    const wrapper = mount(UpdateBanner)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="update-banner"]').exists()).toBe(false)
+
+    useAuthStore().setToken({ accessToken: 't', expiresAt: Date.now() / 1000 + 3600 } as never)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="update-banner"]').exists()).toBe(false)
+  })
+
+  it('checks on mount, polls every 30 minutes and clears the timer on unmount', async () => {
+    vi.useFakeTimers()
+    const store = useVersionStore()
+    const checkVersion = vi.spyOn(store, 'checkVersion').mockResolvedValue(undefined)
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
+
+    const wrapper = mount(UpdateBanner)
+    expect(checkVersion).toHaveBeenCalledOnce()
+
+    vi.advanceTimersByTime(30 * 60 * 1000)
+    expect(checkVersion).toHaveBeenCalledTimes(2)
+
+    wrapper.unmount()
+    expect(clearIntervalSpy).toHaveBeenCalled()
+  })
 });

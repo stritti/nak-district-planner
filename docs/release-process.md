@@ -192,6 +192,16 @@ Die finale Promotion ist ein eigener überprüfbarer Change:
 4. Den von Release Please erzeugten `v1.0.0`-Release-PR erst nach erneut vollständig grünem Gate mergen.
 5. Prüfen, dass `v1.0.0` als stabiler GitHub Release erscheint und die stabilen GHCR-Aliase aktualisiert werden.
 
+### Toolchain-Versionen
+
+Laufzeit- und CI-Toolchain müssen identisch sein. Ein Dependabot-Update eines Basis-Images wird nur zusammen mit allen Pins gemergt:
+
+| Werkzeug | Quelle der Wahrheit | Muss übereinstimmen mit |
+|---|---|---|
+| Python | `services/backend/Dockerfile` (`python:3.14.7-slim`) | `PYTHON_VERSION` in `ci.yml` und `alembic-check.yml`, `python-version` in `security.yml`, `requires-python` und ruff `target-version` in `services/backend/pyproject.toml`, `uv.lock` |
+| bun | `services/frontend/Dockerfile` (`oven/bun:1.4.2-alpine`) | `BUN_VERSION` in `ci.yml`, `docs.yml` und `security.yml`; Lockfiles bestehen `bun install --frozen-lockfile` |
+| uv | `version` von `astral-sh/setup-uv` in `ci.yml` | `alembic-check.yml`, `security.yml` |
+
 ---
 
 ## Automatisch aktualisierte Dateien

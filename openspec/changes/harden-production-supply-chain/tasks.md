@@ -22,6 +22,13 @@
 
 ## 4. Advisory-Remediation (#456)
 
-- [x] 4.1 `source-map-js` 1.2.1 → 1.2.2 (GHSA-68fv-2mgg-jv7q) in `services/frontend/bun.lock`, `bun.lock` und `docs/bun.lock` gezielt aktualisiert; keine weiteren Pakete veraendert.
+- [x] 4.1 `source-map-js` 1.2.1 → 1.2.2 (GHSA-68fv-2mgg-jv7q) in `services/frontend/bun.lock`, `bun.lock` und dem inzwischen entfernten `docs/bun.lock` gezielt aktualisiert; keine weiteren Pakete veraendert.
 - [x] 4.2 Frozen Install, Frontend-Tests (377), Build und `bun audit` (Frontend: keine Befunde) mit Bun 1.2.23 verifiziert.
 - [ ] 4.3 Docs-Toolchain (`vitepress` 1.x → vite 5/postcss/nanoid/js-yaml) separat behandeln: nur Build-Zeit, nicht im ausgelieferten Image; eigenes Issue.
+
+## 5. Toolchain-Angleichung (#473)
+
+- [x] 5.1 Runtime-Images auf Python 3.14.7 (#448) und Bun 1.4.2 (#446); CI-Pins (`ci.yml`, `alembic-check.yml`, `security.yml`, `docs.yml`) identisch.
+- [x] 5.2 `requires-python >=3.14`, ruff `target-version = "py314"`, `uv.lock` neu gelockt.
+- [x] 5.3 Unbenutzte `docs/package.json`/`docs/bun.lock` entfernt; Dependabot fuer Root-Compose und Root-Bun-Toolchain.
+- [x] 5.4 Lokal mit Python 3.14.7/Bun 1.4.2 verifiziert: Backend-Unit (1231), Integration+Performance (160), Frontend frozen install, Lint, Tests (377), Build.
