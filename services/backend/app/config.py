@@ -1,6 +1,7 @@
 """app/config.py: Module."""
 
 import importlib.metadata
+import ipaddress
 import os
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -20,6 +21,10 @@ class Settings(BaseSettings):
     valkey_url: str = "valkey://valkey:6379/0"
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
+
+    # Comma-separated peer networks whose X-Real-IP header is trusted (the
+    # frontend nginx container). Default: loopback + Docker bridge networks.
+    trusted_proxies: str = "127.0.0.0/8,::1/128,172.16.0.0/12"
 
     # SMTP outbound delivery (SMTP is selected only in production)
     smtp_host: str = ""
@@ -88,6 +93,15 @@ class Settings(BaseSettings):
             ZoneInfo(value)
         except (ValueError, ZoneInfoNotFoundError) as exc:
             raise ValueError(f"Unknown IANA timezone: {value}") from exc
+        return value
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def validate_trusted_proxies(cls, value: str) -> str:
+        """Reject malformed proxy networks at startup instead of per request."""
+        for network in value.split(","):
+            if network.strip():
+                ipaddress.ip_network(network.strip(), strict=False)
         return value
 
     @model_validator(mode="after")

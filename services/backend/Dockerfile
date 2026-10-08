@@ -32,4 +32,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
 RUN useradd --create-home --uid 1000 appuser && mkdir -p /app/beat && chown -R appuser:appuser /app
 USER 1000
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Client IP resolution is done once in app/adapters/api/client_ip.py
+# (TRUSTED_PROXIES); uvicorn must not rewrite request.client from headers.
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]
