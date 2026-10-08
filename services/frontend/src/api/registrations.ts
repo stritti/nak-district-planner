@@ -1,4 +1,5 @@
 import { apiFetch } from './client'
+import { getCurrentCSRFHeaders } from '../composables/useCSRF'
 import type { LeaderRank, SpecialRole } from './leaders'
 
 type ScopeType = 'DISTRICT' | 'CONGREGATION'
@@ -83,7 +84,13 @@ export interface PublicCongregationInfo {
 async function publicFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(url, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers as Record<string, string>) },
+    headers: {
+      'Content-Type': 'application/json',
+      // The backend accepts the CSRF token only as header (#458); the public
+      // GETs on the registration page set the cookie beforehand.
+      ...getCurrentCSRFHeaders(),
+      ...(options.headers as Record<string, string>),
+    },
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
