@@ -15,7 +15,7 @@ class Role(StrEnum):
     PLANNER = "PLANNER"
     VIEWER = "VIEWER"
 
-    def __lt__(self, other: "Role") -> bool:
+    def __lt__(self, other: Role) -> bool:
         """Compare roles by privilege level (higher privilege > lower privilege).
 
         Returns True if self has LOWER privilege than other.
@@ -25,14 +25,14 @@ class Role(StrEnum):
         # Lower index = higher privilege, so self < other means self has lower privilege
         return hierarchy.index(self) > hierarchy.index(other)
 
-    def __le__(self, other: "Role") -> bool:
+    def __le__(self, other: Role) -> bool:
         """Return True if self has at most the privilege of other."""
         return self < other or self == other
 
-    def __gt__(self, other: "Role") -> bool:
+    def __gt__(self, other: Role) -> bool:
         """Return True if self has higher privilege than other."""
         return other < self
 
-    def __ge__(self, other: "Role") -> bool:
+    def __ge__(self, other: Role) -> bool:
         """Return True if self has at least the privilege of other."""
         return other <= self

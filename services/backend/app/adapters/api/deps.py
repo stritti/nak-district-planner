@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Callable, Coroutine
-from typing import Annotated, Any, NamedTuple, TypeVar
+from typing import Annotated, Any, NamedTuple
 
 from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -46,7 +46,6 @@ from app.domain.models.user import User
 
 logger = logging.getLogger(__name__)
 
-RepositoryT = TypeVar("RepositoryT")
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 _oidc_adapter: OIDCAdapter | None = None
@@ -233,7 +232,7 @@ async def get_notification_service(
     return NotificationService(notification_repo=repo)
 
 
-def make_repository_dependency(
+def make_repository_dependency[RepositoryT](
     repository_type: type[RepositoryT],
 ) -> Callable[..., Coroutine[Any, Any, RepositoryT]]:
     """Create a typed FastAPI dependency for a SQLAlchemy repository adapter."""

@@ -15,8 +15,8 @@ permissions:
   pull-requests: write
 
 env:
-  PYTHON_VERSION: "3.11.17"
-  BUN_VERSION: "1.2.23"
+  PYTHON_VERSION: "3.14.7"
+  BUN_VERSION: "1.4.2"
 
 jobs:
   changes:
@@ -43,8 +43,6 @@ jobs:
               - 'services/frontend/**'
               - 'package.json'
               - 'bun.lock'
-              - 'docs/package.json'
-              - 'docs/bun.lock'
               - 'docker-compose*.yml'
               - '.markdownlint.json'
               - '.github/workflows/**'
@@ -53,8 +51,6 @@ jobs:
               - 'services/frontend/**'
               - 'package.json'
               - 'bun.lock'
-              - 'docs/package.json'
-              - 'docs/bun.lock'
               - 'docker-compose*.yml'
               - '.markdownlint.json'
               - '.github/workflows/**'

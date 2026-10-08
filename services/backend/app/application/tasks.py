@@ -29,17 +29,14 @@ import logging
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import TypeVar
 
 from app.celery_app import celery
 from app.domain.errors import IntegrationNotFoundError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
 
-
-async def _run_as_system_worker(coro: Awaitable[T]) -> T:
+async def _run_as_system_worker[T](coro: Awaitable[T]) -> T:
     """Run DB work with a bounded system-worker tenant context for RLS GUCs."""
     from app.tenant import TenantContext
 
