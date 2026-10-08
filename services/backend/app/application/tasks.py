@@ -36,14 +36,14 @@ from app.domain.errors import IntegrationNotFoundError
 logger = logging.getLogger(__name__)
 
 
-async def _run_as_system_worker(coro: Awaitable[T]) -> T:
+async def _run_as_system_worker[T](coro: Awaitable[T]) -> T:
     """Run DB work with a bounded system-worker tenant context for RLS GUCs.
 
     Every task runs in its own ``asyncio.run`` loop. Pooled asyncpg connections
     are bound to the loop that opened them, so the pool is disposed before the
     loop closes; the next task opens fresh connections on its own loop (#464).
     """
-    from app.adapters.db import session as db_session
+    from app.adapters.db.session import engine
     from app.tenant import TenantContext
 
     TenantContext.set_context(user_sub="system:celery-worker", user_roles=["SYSTEM_WORKER"])
@@ -51,7 +51,7 @@ async def _run_as_system_worker(coro: Awaitable[T]) -> T:
         return await coro
     finally:
         TenantContext.clear_context()
-        await db_session.engine.dispose()
+        await engine.dispose()
 
 
 # Exponential backoff for failing syncs: 60 s, 120 s, 240 s, 480 s (capped at

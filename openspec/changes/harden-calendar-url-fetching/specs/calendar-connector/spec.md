@@ -26,6 +26,10 @@ The calendar HTTP client SHALL resolve the host of every request, including redi
 - **WHEN** an admin stores `https://localhost./feed.ics` or `https://foo.localhost./feed.ics`
 - **THEN** the API SHALL respond with 422
 
+#### Scenario: Deprecated IPv6 site-local address
+- **WHEN** a URL literal or a DNS answer is in `fec0::/10`
+- **THEN** it SHALL be treated as non-public and rejected, even though the platform reports it as globally routable
+
 #### Scenario: Legacy numeric IPv4 literal
 - **WHEN** an admin stores a URL whose host is an abbreviated, integer, hex or octal IPv4 form such as `127.1`, `2130706433` or `0x7f.1`
 - **THEN** the host SHALL be interpreted as the IPv4 address it denotes and a non-public address SHALL be rejected with 422

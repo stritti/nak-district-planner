@@ -77,7 +77,9 @@ def _embedded_ipv4(
 
 
 def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    return ip.is_global and not (ip.is_multicast or ip.is_reserved)
+    # Python reports the deprecated IPv6 site-local range (fec0::/10) as global.
+    site_local = isinstance(ip, ipaddress.IPv6Address) and ip.is_site_local
+    return ip.is_global and not (ip.is_multicast or ip.is_reserved or site_local)
 
 
 def _is_public(address: str) -> bool:

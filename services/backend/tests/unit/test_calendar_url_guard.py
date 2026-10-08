@@ -24,6 +24,8 @@ ICS = b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//T//EN\r\nEND:VCALENDAR\r\n"
 
 BLOCKED_ADDRESSES = [
     "127.0.0.1",  # loopback
+    "fec0::1",  # deprecated IPv6 site-local (is_global=True in Python)
+    "feff::1",  # upper end of fec0::/10
     "169.254.169.254",  # link-local / cloud metadata
     "10.0.0.5",  # RFC1918
     "172.16.3.4",  # RFC1918
@@ -102,6 +104,7 @@ def _ok(request: httpx.Request) -> httpx.Response:
         "https://[::ffff:127.0.0.1]/feed.ics",
         "https://[::ffff:0:127.0.0.1]/feed.ics",
         "https://[::ffff:0:10.0.0.1]/feed.ics",
+        "https://[fec0::1]/feed.ics",
         # Legacy IPv4 literal forms that getaddrinfo()/inet_aton() resolve
         # without DNS: abbreviated, single integer, hex and octal.
         "https://127.1/feed.ics",
