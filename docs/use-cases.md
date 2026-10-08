@@ -6,18 +6,21 @@ Diese Seite dokumentiert die detaillierten Anwendungsfälle (Use-Cases) des NAK 
 
 **Ziel:** Einbindung externer Kalenderquellen.
 
-**Unterstützte Provider:**
-- **Google Calendar** (manuell verwaltete OAuth-Token)
-- **Microsoft 365 / Outlook** (Konfiguration vorhanden, Synchronisierung derzeit nicht verfügbar)
-- **iCalendar (ICS)** (URL-basiert, direkt oder über CalDAV)
-- **CalDAV** (WebDAV-basiert)
+**Unterstützte Provider (Version 1.0):**
+- **iCalendar (ICS)** (URL-basiert, nur HTTPS)
+- **CalDAV** (WebDAV-basiert, nur HTTPS)
+
+**Geplant (nach 1.0):** Google Calendar und Microsoft 365 / Outlook. Ohne OAuth-Flow mit
+Token-Refresh würde die Synchronisierung etwa eine Stunde nach der Einrichtung ausfallen
+(#467). Die API lehnt das Anlegen solcher Integrationen mit HTTP 422 ab; die UI zeigt sie als
+„geplant" (deaktiviert). Bestehende Google-/Microsoft-Integrationen bleiben lesbar, werden vom
+automatischen Sync übersprungen (Warn-Log) und ein manueller Sync liefert HTTP 409. Der
+Connector-Code bleibt für die spätere Umsetzung erhalten.
 
 **Ablauf:**
-1. User wählt Provider-Typ.
-2. Für Google hinterlegt ein Administrator die verwalteten Token als JSON; für ICS/CalDAV werden URL und Credentials hinterlegt.
-3. Google synchronisiert derzeit nur den primären Kalender; eine interaktive OAuth-Anmeldung und Kalender-Auswahl sind Phase 2.
-4. Microsoft-Graph-Integrationen können bis zur vollständigen Zeitbereichsabfrage nicht synchronisiert werden.
-5. Speicherung der verschlüsselten Credentials.
+1. User wählt Provider-Typ (ICS oder CalDAV).
+2. Für ICS/CalDAV werden URL und ggf. Credentials hinterlegt.
+3. Speicherung der verschlüsselten Credentials.
 
 **Vertrauens-Entscheidung (Trust Policy):**
 - In v1 werden Events aus konfigurierten, vertrauenswürdigen ICS-/CalDAV-Quellen direkt durch UC-02 übernommen.
@@ -34,7 +37,7 @@ Nutzung des Strategy-Patterns für verschiedene Provider mit einheitlichem Sync-
 
 **Ablauf:**
 1. Celery-Job prüft `last_sync_at` für alle aktiven `CalendarIntegration`-Einträge.
-2. Ruft die APIs verfügbarer Provider auf (Google, ICS, CalDAV); Microsoft Graph ist bis zur vollständigen Zeitbereichsabfrage ausgesetzt.
+2. Ruft die in Version 1.0 unterstützten Provider auf (ICS, CalDAV); Google-/Microsoft-Integrationen werden übersprungen und protokolliert (#467).
 3. Ordnet externe Events vorhandenen Slots über Gemeinde, Datum, Uhrzeit und Kategorie zu; für bereits verknüpfte Events erkennt ein Content-Hash Änderungen.
 
 **Sync-Logik (für die in v1 freigegebenen ICS-/CalDAV-Quellen):**

@@ -30,8 +30,9 @@ from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.crypto import decrypt_credentials
 from app.application.external_candidate_sync_adapter import import_candidate_or_match
 from app.config import settings
-from app.domain.errors import IntegrationNotFoundError
+from app.domain.errors import IntegrationNotFoundError, UnsupportedCalendarTypeError
 from app.domain.models.calendar_integration import (
+    SUPPORTED_CALENDAR_TYPES,
     CalendarCapability,
     CalendarIntegration,
     CalendarType,
@@ -530,10 +531,12 @@ async def _writable_links(
     link_repo: SqlExternalEventLinkRepository,
     integration_repo: SqlCalendarIntegrationRepository,
 ) -> list[tuple[ExternalEventLink, CalendarIntegration]]:
-    """Active links of writable integrations; refuses series occurrences up front.
+    """Active links of writable integrations, validated before any provider write.
 
-    Links do not persist ``recurrence_id``, so occurrences are recognized by
-    their stored key before any provider write happens.
+    Refuses unsupported providers (no outbound writes with static Google/Microsoft
+    tokens, #467) and series occurrences up front, so a mixed set of links fails
+    without partial writes. Links do not persist ``recurrence_id``, so occurrences
+    are recognized by their stored key.
     """
     writable: list[tuple[ExternalEventLink, CalendarIntegration]] = []
     for link in await link_repo.list_by_event_instance(instance.id):
@@ -542,6 +545,8 @@ async def _writable_links(
         integration = await integration_repo.get(link.calendar_integration_id)
         if integration is None or CalendarCapability.WRITE not in integration.capabilities:
             continue
+        if integration.type not in SUPPORTED_CALENDAR_TYPES:
+            raise UnsupportedCalendarTypeError(integration.type)
         if is_occurrence_key(link.external_event_id):
             raise OccurrenceWriteBackError()
         writable.append((link, integration))
@@ -676,6 +681,8 @@ async def run_sync(
     integration = await integration_repo.get(integration_id)
     if integration is None:
         raise IntegrationNotFoundError(f"CalendarIntegration {integration_id} not found")
+    if integration.type not in SUPPORTED_CALENDAR_TYPES:
+        raise UnsupportedCalendarTypeError(integration.type)
     counters: Counter[SyncOutcome] = Counter()
     try:
         credentials = decrypt_credentials(integration.credentials_enc)

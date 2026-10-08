@@ -33,7 +33,12 @@ from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.application.crypto import CryptoError, encrypt_credentials
 from app.application.services.calendar_integration_service import CalendarIntegrationService
 from app.application.sync_service import run_sync
-from app.domain.models.calendar_integration import CalendarIntegration, CalendarType
+from app.domain.errors import UnsupportedCalendarTypeError
+from app.domain.models.calendar_integration import (
+    SUPPORTED_CALENDAR_TYPES,
+    CalendarIntegration,
+    CalendarType,
+)
 from app.domain.models.role import Role
 from app.domain.ports.calendar import CalendarConnectorError
 
@@ -96,6 +101,11 @@ async def create_calendar_integration(
         require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
     await ensure_congregation_in_district(db, body.district_id, body.congregation_id)
 
+    if body.type not in SUPPORTED_CALENDAR_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(UnsupportedCalendarTypeError(body.type)),
+        )
     _validate_credentials_url(body.type, body.credentials)
     integration = await service.create_integration(body)
     return _to_response(integration)
@@ -163,6 +173,8 @@ async def trigger_sync(
 
     try:
         summary = await run_sync(integration_id, db)
+    except UnsupportedCalendarTypeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except (ValueError, CryptoError, CalendarConnectorError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return SyncResult(

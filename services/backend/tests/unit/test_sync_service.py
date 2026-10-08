@@ -522,6 +522,14 @@ class TestEchoSuppressionPerWritableProvider:
     no writes on the next inbound sync run — for every writable provider type.
     """
 
+    @pytest.fixture(autouse=True)
+    def _all_providers_enabled(self, monkeypatch):
+        # GOOGLE/MICROSOFT are disabled in 1.0 (#467) but their connector code is
+        # kept for the post-1.0 OAuth work, so its sync semantics stay covered.
+        monkeypatch.setattr(
+            "app.application.sync_service.SUPPORTED_CALENDAR_TYPES", frozenset(CalendarType)
+        )
+
     @pytest.mark.parametrize("provider", [CalendarType.GOOGLE, CalendarType.MICROSOFT, CalendarType.CALDAV])
     async def test_pushed_time_update_echo_is_suppressed(self, mocks, provider):
         integration = _integration()
@@ -994,3 +1002,20 @@ async def test_incomplete_snapshot_skips_deletion_reconciliation(mocks):
     assert integration.last_sync_error == (
         "Kalender unvollständig geladen; Löschabgleich übersprungen"
     )
+
+
+class TestUnsupportedProviders:
+    """#467: Google/Microsoft are not supported in 1.0 (no OAuth refresh)."""
+
+    @pytest.mark.parametrize("cal_type", [CalendarType.GOOGLE, CalendarType.MICROSOFT])
+    async def test_run_sync_refuses_unsupported_type_without_calling_connector(
+        self, mocks, cal_type
+    ):
+        from app.domain.errors import UnsupportedCalendarTypeError
+
+        integration = _integration()
+        integration.type = cal_type
+        mocks["integration_repo"].get.return_value = integration
+        with pytest.raises(UnsupportedCalendarTypeError, match="ICS"):
+            await run_sync(_INT_ID, mocks["session"])
+        mocks["connector"].fetch_events.assert_not_called()

@@ -102,7 +102,7 @@ app/
 - `Congregation` (Gemeinde) — belongs to a district
 
 **CalendarIntegration** — external calendar source:
-- `type`: GOOGLE | MICROSOFT | CALDAV | ICS
+- `type`: GOOGLE | MICROSOFT | CALDAV | ICS — v1.0 supports only ICS + CALDAV (`SUPPORTED_CALENDAR_TYPES`, #467); GOOGLE/MICROSOFT are rejected on create and skipped by sync
 - `credentials`: encrypted JSON (OAuth tokens or URL/auth)
 - `sync_interval`: minutes
 - `capabilities`: READ | WRITE | WEBHOOK

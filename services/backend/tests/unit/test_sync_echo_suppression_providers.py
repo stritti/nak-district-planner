@@ -141,6 +141,10 @@ def _link(instance: EventInstance, provider: CalendarType) -> ExternalEventLink:
 
 
 def _install_runtime(monkeypatch: pytest.MonkeyPatch, provider: CalendarType):
+    # GOOGLE/MICROSOFT are disabled in 1.0 (#467); connectors are kept and stay covered.
+    monkeypatch.setattr(
+        "app.application.sync_service.SUPPORTED_CALENDAR_TYPES", frozenset(CalendarType)
+    )
     connector_cls = _CONNECTOR_TYPES[provider]
     connector = connector_cls(client=MagicMock())
     connector.fetch_events = AsyncMock(return_value=[])

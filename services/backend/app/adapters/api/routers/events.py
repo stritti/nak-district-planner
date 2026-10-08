@@ -28,6 +28,7 @@ from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
 from app.application.sync_service import push_conflict_resolution, push_deviation_resolution
+from app.domain.errors import UnsupportedCalendarTypeError
 from app.domain.event_payloads import plan_finalized
 from app.domain.models.event_instance import (
     EventInstance,
@@ -351,6 +352,11 @@ async def resolve_event_deviation(
     try:
         if current.calendar_integration_id is not None:
             await push_deviation_resolution(current, session)
+    except UnsupportedCalendarTypeError as exc:
+        current.deviation_flag = True
+        current.sync_state = SyncState.DIRTY_INTERNAL
+        await instance_repo.save(current)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except CalendarConnectorError as exc:
         current.deviation_flag = True
         current.sync_state = SyncState.DIRTY_INTERNAL
@@ -394,6 +400,10 @@ async def resolve_event_conflict(
     try:
         if instance.calendar_integration_id is not None:
             await push_conflict_resolution(instance, session)
+    except UnsupportedCalendarTypeError as exc:
+        instance.sync_state = SyncState.CONFLICT
+        await instance_repo.save(instance)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except CalendarConnectorError as exc:
         instance.sync_state = SyncState.CONFLICT
         await instance_repo.save(instance)
