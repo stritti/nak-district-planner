@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from app.domain.models.congregation import Congregation
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.ports.repositories import (
@@ -19,11 +20,25 @@ from app.domain.ports.repositories import (
 DEFAULT_SERVICE_DURATION_MINUTES = 90
 
 
+DRAFT_SERVICE_KEY_PREFIX = "draft-service"
+
+
 @dataclass(frozen=True)
 class PlannedServiceSlot:
     slot_key: str
     start_at_utc: datetime
     end_at_utc: datetime
+    local_date: date
+
+
+def draft_service_generation_key(congregation_id: uuid.UUID, local_date: date) -> str:
+    """Stable identity of a generated worship service: congregation + local date.
+
+    The time is deliberately not part of the key: ``expand_service_slots``
+    yields at most one service per congregation and day, and the key must stay
+    the same when a planner moves the service or the configured time changes.
+    """
+    return f"{DRAFT_SERVICE_KEY_PREFIX}:{congregation_id}:{local_date.isoformat()}"
 
 
 def expand_service_slots(
@@ -61,6 +76,7 @@ def expand_service_slots(
                     slot_key=slot_key,
                     start_at_utc=local_start.astimezone(UTC),
                     end_at_utc=local_end.astimezone(UTC),
+                    local_date=current,
                 )
             )
             break
@@ -150,53 +166,16 @@ class GenerateDraftServicesUseCase:
                     invalid_configurations += 1
                     continue
 
-                # Load existing gaps PlanningSlots for this congregation in the window
-                existing_slots = await self._slot_repo.list_for_date_range(
+                outcome = await self._generate_for_congregation(
                     district_id=district.id,
+                    congregation=congregation,
+                    slots=slots,
                     from_date=from_date,
-                    to_date=(to_date_exclusive - timedelta(days=1)),
+                    to_date_exclusive=to_date_exclusive,
                 )
-                existing_for_congregation = {
-                    (
-                        slot.planning_date.isoformat(),
-                        slot.planning_time.isoformat(),
-                    )
-                    for slot in existing_slots
-                    if slot.congregation_id == congregation.id and slot.category == "Gottesdienst"
-                }
-
-                for slot in slots:
-                    planning_time = _planning_time_from_utc(slot.start_at_utc)
-                    key = (slot.start_at_utc.date().isoformat(), planning_time.isoformat())
-
-                    if key in existing_for_congregation:
-                        skipped_existing += 1
-                        continue
-
-                    planning_slot = PlanningSlot.create(
-                        district_id=district.id,
-                        congregation_id=congregation.id,
-                        category="Gottesdienst",
-                        planning_date=slot.start_at_utc.date(),
-                        planning_time=planning_time,
-                        status=PlanningSlotStatus.ACTIVE,
-                    )
-                    await self._slot_repo.save(planning_slot)
-
-                    instance = EventInstance.create(
-                        planning_slot_id=planning_slot.id,
-                        title=(
-                            f"Gottesdienst {congregation.name}"
-                            if congregation.name
-                            else "Gottesdienst"
-                        ),
-                        actual_start_at=slot.start_at_utc,
-                        actual_end_at=slot.end_at_utc,
-                        source=EventSource.INTERNAL,
-                        visibility=EventVisibility.PUBLIC,
-                    )
-                    await self._instance_repo.save(instance)
-                    created += 1
+                created += outcome["created"]
+                skipped_existing += outcome["skipped_existing"]
+                adopted_existing += outcome["adopted_existing"]
 
         return {
             "districts": len(districts),
@@ -206,3 +185,85 @@ class GenerateDraftServicesUseCase:
             "adopted_existing": adopted_existing,
             "invalid_configurations": invalid_configurations,
         }
+
+    async def _generate_for_congregation(
+        self,
+        *,
+        district_id: uuid.UUID,
+        congregation: Congregation,
+        slots: list[PlannedServiceSlot],
+        from_date: date,
+        to_date_exclusive: date,
+    ) -> dict[str, int]:
+        """Create missing drafts; an occurrence counts as existing in any of these cases.
+
+        1. A slot carries its generation key — whatever its date, time or status
+           (moved or CANCELLED by a planner).
+        2. Legacy slot without key at the generated date/time (data from before
+           the key existed): adopted and backfilled with the key.
+        3. The insert hits a unique index (concurrent run, or another ACTIVE
+           slot already occupies that date/time).
+        """
+        counts = {"created": 0, "skipped_existing": 0, "adopted_existing": 0}
+        keyed = {draft_service_generation_key(congregation.id, s.local_date): s for s in slots}
+        existing_keys = {
+            slot.generation_key
+            for slot in await self._slot_repo.list_by_generation_keys(
+                district_id=district_id, generation_keys=keyed.keys()
+            )
+        }
+        legacy_by_date_time = {
+            (slot.planning_date, slot.planning_time): slot
+            for slot in await self._slot_repo.list_for_date_range(
+                district_id=district_id,
+                # planning_date is the UTC date, which may differ by one day from
+                # the local window bounds.
+                from_date=from_date - timedelta(days=1),
+                to_date=to_date_exclusive,
+            )
+            if slot.generation_key is None
+            and slot.congregation_id == congregation.id
+            and slot.category == "Gottesdienst"
+        }
+
+        for key, planned in keyed.items():
+            if key in existing_keys:
+                counts["skipped_existing"] += 1
+                continue
+
+            planning_date = planned.start_at_utc.date()
+            planning_time = _planning_time_from_utc(planned.start_at_utc)
+            legacy = legacy_by_date_time.pop((planning_date, planning_time), None)
+            if legacy is not None:
+                legacy.generation_key = key
+                await self._slot_repo.save(legacy)
+                counts["adopted_existing"] += 1
+                continue
+
+            planning_slot = PlanningSlot.create(
+                district_id=district_id,
+                congregation_id=congregation.id,
+                category="Gottesdienst",
+                planning_date=planning_date,
+                planning_time=planning_time,
+                status=PlanningSlotStatus.ACTIVE,
+                generation_key=key,
+            )
+            if not await self._slot_repo.add_if_absent(planning_slot):
+                counts["skipped_existing"] += 1
+                continue
+
+            instance = EventInstance.create(
+                planning_slot_id=planning_slot.id,
+                title=(
+                    f"Gottesdienst {congregation.name}" if congregation.name else "Gottesdienst"
+                ),
+                actual_start_at=planned.start_at_utc,
+                actual_end_at=planned.end_at_utc,
+                source=EventSource.INTERNAL,
+                visibility=EventVisibility.PUBLIC,
+            )
+            await self._instance_repo.save(instance)
+            counts["created"] += 1
+
+        return counts

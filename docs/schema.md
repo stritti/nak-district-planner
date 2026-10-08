@@ -50,6 +50,22 @@ Partieller Unique-Index auf `planning_slots (congregation_id, planning_date, pla
   die älteren Unique Constraints oben). Eine nutzerfreundliche Fehlermeldung ist Teil von
   `p1-domain-conflict-quality`, nicht dieser Änderung.
 
+## Generator-Schlüssel: `uq_planning_slots_generation_key`
+
+Partieller Unique-Index auf `planning_slots (district_id, generation_key)`
+(Migration `20261008_slot_gen_key`), aktiv für `WHERE generation_key IS NOT NULL`,
+**unabhängig vom Status**:
+
+- `generation_key` ist die stabile Identität eines automatisch erzeugten
+  Entwurfs-Gottesdienstes (`draft-service:<congregation_id>:<lokales Datum>`,
+  `draft_service_generation.py`). Er bleibt erhalten, wenn Planende Datum/Uhrzeit
+  ändern oder den Slot absagen; der Generator legt das Vorkommen dann nicht neu an (#488).
+- Gleichzeitige Generatorläufe: der zweite Insert scheitert am Index und wird im
+  Repository (`add_if_absent`, SAVEPOINT) als „existiert bereits“ übersprungen.
+- Altbestand ohne Schlüssel wird beim nächsten Lauf per Datum/Uhrzeit erkannt und
+  nachträglich mit dem Schlüssel versehen. Hart gelöschte Slots werden wieder erzeugt;
+  einzelne Termine daher absagen statt löschen.
+
 ## Tenant-Scoping (Fremdschlüssel)
 
 Mandantenfähige Tabellen tragen `district_id` und/oder `congregation_id` als

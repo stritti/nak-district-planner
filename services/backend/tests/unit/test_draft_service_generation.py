@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from datetime import UTC, date, datetime, time, timedelta, timezone
 
 from app.application.draft_service_generation import (
     GenerateDraftServicesUseCase,
+    draft_service_generation_key,
     expand_service_slots,
 )
 from app.domain.models.congregation import Congregation
@@ -78,11 +80,40 @@ class InMemoryPlanningSlotRepo(PlanningSlotRepository):
             if slot.district_id == district_id and from_date <= slot.planning_date <= to_date
         ]
 
+    async def list_by_generation_keys(
+        self, *, district_id: uuid.UUID, generation_keys: Collection[str]
+    ) -> list[PlanningSlot]:
+        keys = set(generation_keys)
+        return [
+            slot
+            for slot in self._slots.values()
+            if slot.district_id == district_id and slot.generation_key in keys
+        ]
+
     async def delete(self, slot_id: uuid.UUID) -> None:
         self._slots.pop(slot_id, None)
 
     async def save(self, slot: PlanningSlot) -> None:
         self._slots[slot.id] = slot
+
+    async def add_if_absent(self, slot: PlanningSlot) -> bool:
+        """Mirror the two partial unique indexes of planning_slots."""
+        for other in self._slots.values():
+            same_key = (
+                slot.generation_key is not None
+                and other.district_id == slot.district_id
+                and other.generation_key == slot.generation_key
+            )
+            same_active_time = (
+                slot.congregation_id is not None
+                and slot.status == other.status == PlanningSlotStatus.ACTIVE
+                and (other.congregation_id, other.planning_date, other.planning_time)
+                == (slot.congregation_id, slot.planning_date, slot.planning_time)
+            )
+            if same_key or same_active_time:
+                return False
+        self._slots[slot.id] = slot
+        return True
 
 
 class InMemoryEventInstanceRepo(EventInstanceRepository):
@@ -369,3 +400,169 @@ async def test_run_for_window_all_slots_invalid() -> None:
 
     assert result["created"] == 0
     assert result["invalid_configurations"] >= 1
+
+
+# ── Generator key (issue #488) ───────────────────────────────────────────
+
+
+async def test_generated_draft_moved_by_planner_is_not_regenerated() -> None:
+    """A draft the planner moved to another time must not be re-created."""
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    instance_repo = InMemoryEventInstanceRepo()
+    use_case = GenerateDraftServicesUseCase(
+        district_repo=InMemoryDistrictRepo([district]),
+        congregation_repo=InMemoryCongregationRepo({district.id: [congregation]}),
+        slot_repo=slot_repo,
+        instance_repo=instance_repo,
+    )
+    window = {"from_date": date(2026, 4, 1), "to_date_exclusive": date(2026, 4, 8)}
+
+    first = await use_case.run_for_window(**window)
+    assert first["created"] == 1
+    (slot,) = slot_repo._slots.values()
+    slot.planning_time = time(17, 30)  # planner moves 20:00 local -> 19:30 local
+
+    second = await use_case.run_for_window(**window)
+
+    assert second["created"] == 0
+    assert len(slot_repo._slots) == 1
+    assert len(instance_repo._instances) == 1
+
+
+def _use_case(district, congregation, slot_repo, instance_repo) -> GenerateDraftServicesUseCase:
+    return GenerateDraftServicesUseCase(
+        district_repo=InMemoryDistrictRepo([district]),
+        congregation_repo=InMemoryCongregationRepo({district.id: [congregation]}),
+        slot_repo=slot_repo,
+        instance_repo=instance_repo,
+    )
+
+
+ONE_WEEK = {"from_date": date(2026, 4, 1), "to_date_exclusive": date(2026, 4, 8)}
+
+
+async def test_generated_slot_carries_stable_generation_key() -> None:
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    await _use_case(district, congregation, slot_repo, InMemoryEventInstanceRepo()).run_for_window(
+        **ONE_WEEK
+    )
+
+    (slot,) = slot_repo._slots.values()
+    assert slot.generation_key == draft_service_generation_key(congregation.id, date(2026, 4, 1))
+    assert slot.generation_key == f"draft-service:{congregation.id}:2026-04-01"
+
+
+async def test_generated_draft_moved_to_other_day_is_not_regenerated() -> None:
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    use_case = _use_case(district, congregation, slot_repo, InMemoryEventInstanceRepo())
+    await use_case.run_for_window(**ONE_WEEK)
+    (slot,) = slot_repo._slots.values()
+    slot.planning_date = date(2026, 4, 20)  # moved outside the generation window
+
+    second = await use_case.run_for_window(**ONE_WEEK)
+
+    assert second["created"] == 0
+    assert second["skipped_existing"] == 1
+    assert len(slot_repo._slots) == 1
+
+
+async def test_cancelled_generated_slot_is_not_recreated() -> None:
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    use_case = _use_case(district, congregation, slot_repo, InMemoryEventInstanceRepo())
+    await use_case.run_for_window(**ONE_WEEK)
+    (slot,) = slot_repo._slots.values()
+    slot.status = PlanningSlotStatus.CANCELLED
+
+    second = await use_case.run_for_window(**ONE_WEEK)
+
+    assert second["created"] == 0
+    assert [s.status for s in slot_repo._slots.values()] == [PlanningSlotStatus.CANCELLED]
+
+
+async def test_legacy_slot_without_key_is_adopted_and_backfilled() -> None:
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    legacy = PlanningSlot.create(
+        district_id=district.id,
+        congregation_id=congregation.id,
+        category="Gottesdienst",
+        planning_date=date(2026, 4, 1),
+        planning_time=time(18, 0),  # 20:00 Europe/Berlin (CEST) in UTC
+    )
+    await slot_repo.save(legacy)
+    use_case = _use_case(district, congregation, slot_repo, InMemoryEventInstanceRepo())
+
+    first = await use_case.run_for_window(**ONE_WEEK)
+
+    assert (first["created"], first["adopted_existing"]) == (0, 1)
+    assert legacy.generation_key == draft_service_generation_key(congregation.id, date(2026, 4, 1))
+    # Converged: once moved, the backfilled legacy slot is still recognised.
+    legacy.planning_time = time(17, 30)
+    second = await use_case.run_for_window(**ONE_WEEK)
+    assert second["created"] == 0
+    assert second["skipped_existing"] == 1
+    assert len(slot_repo._slots) == 1
+
+
+async def test_cancelled_legacy_slot_is_adopted_not_resurrected() -> None:
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    legacy = PlanningSlot.create(
+        district_id=district.id,
+        congregation_id=congregation.id,
+        category="Gottesdienst",
+        planning_date=date(2026, 4, 1),
+        planning_time=time(18, 0),
+        status=PlanningSlotStatus.CANCELLED,
+    )
+    await slot_repo.save(legacy)
+
+    result = await _use_case(
+        district, congregation, slot_repo, InMemoryEventInstanceRepo()
+    ).run_for_window(**ONE_WEEK)
+
+    assert result["created"] == 0
+    assert result["adopted_existing"] == 1
+    assert len(slot_repo._slots) == 1
+
+
+async def test_insert_rejected_by_unique_rule_is_skipped_without_instance() -> None:
+    """A concurrent run that inserted the same key first makes this insert a no-op."""
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    instance_repo = InMemoryEventInstanceRepo()
+    use_case = _use_case(district, congregation, slot_repo, instance_repo)
+    key = draft_service_generation_key(congregation.id, date(2026, 4, 1))
+    concurrent = PlanningSlot.create(
+        district_id=district.id,
+        congregation_id=congregation.id,
+        category="Gottesdienst",
+        planning_date=date(2026, 4, 1),
+        planning_time=time(18, 0),
+        generation_key=key,
+    )
+
+    async def no_keys(**_: object) -> list[PlanningSlot]:
+        # Simulate the race: the concurrent row is not visible to the lookup.
+        return []
+
+    slot_repo.list_by_generation_keys = no_keys  # type: ignore[method-assign]
+    slot_repo._slots[concurrent.id] = concurrent
+
+    result = await use_case.run_for_window(**ONE_WEEK)
+
+    assert result["created"] == 0
+    assert result["skipped_existing"] == 1
+    assert len(slot_repo._slots) == 1
+    assert instance_repo._instances == {}
