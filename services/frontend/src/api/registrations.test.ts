@@ -25,6 +25,7 @@ describe('registration API', () => {
   })
 
   afterEach(() => {
+    document.cookie = 'csrf_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
     vi.unstubAllGlobals()
   })
 
@@ -73,6 +74,21 @@ describe('registration API', () => {
       body: JSON.stringify(body),
       headers: { 'Content-Type': 'application/json' },
     })
+  })
+
+  it('sends the CSRF cookie value as header, the backend rejects cookie-only requests', async () => {
+    document.cookie = 'csrf_token=signed-token; path=/'
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 'r1' }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+
+    await submitRegistration('d1', { name: 'A', email: 'a@example.org' })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/v1/districts/d1/registrations')
+    expect(init?.method).toBe('POST')
+    expect((init?.headers as Record<string, string>)['X-CSRF-Token']).toBe('signed-token')
   })
 
   it('surfaces public API errors including an available response body', async () => {
