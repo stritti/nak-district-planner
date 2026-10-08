@@ -76,6 +76,10 @@ Schema-changing migrations SHALL execute as a dedicated one-shot deployment step
 - **THEN** startup fails with a schema-version error
 - **AND** operators are directed to run the deployment migration step
 
+#### Scenario: Database unreachable at worker start
+- **WHEN** a Celery worker or beat process starts and the database connection is refused, the host does not resolve or the connection times out
+- **THEN** the schema check fails with a schema-version error and the process exits instead of continuing without the check
+
 ### Requirement: Runtime credentials cannot perform deployment DDL
 Backend, worker and every other runtime service SHALL load only runtime database credentials. The PostgreSQL owner password SHALL live in a dedicated env file loaded only by the database containers and the migration service.
 
@@ -100,6 +104,11 @@ The repository SHALL document the explicit production and local-development migr
 - **WHEN** an older image is started against a schema migrated by a newer release
 - **THEN** the documentation states that the runtime fails closed with a schema-version error
 - **AND** names backup restore or an explicit downgrade with the newer image as the remedy
+
+#### Scenario: Developer migrates locally
+- **WHEN** a developer runs `make migrate` or migrates from the host
+- **THEN** `make migrate` uses the one-shot `migrate` service, which reads the owner password from `.env.db`
+- **AND** the host command sets `MIGRATION_DATABASE_URL` with the owner password from `.env.db` instead of relying on the example `DATABASE_URL`
 
 ### Requirement: A single scheduler runs periodic jobs
 The Compose stack SHALL run exactly one Celery beat process as a dedicated service. It SHALL use runtime database credentials only, start after the one-shot migration completed successfully, verify the schema revision before scheduling, and persist its schedule file on a named volume.
