@@ -102,6 +102,15 @@ def _ok(request: httpx.Request) -> httpx.Response:
         "https://[::ffff:127.0.0.1]/feed.ics",
         "https://[::ffff:0:127.0.0.1]/feed.ics",
         "https://[::ffff:0:10.0.0.1]/feed.ics",
+        # Legacy IPv4 literal forms that getaddrinfo()/inet_aton() resolve
+        # without DNS: abbreviated, single integer, hex and octal.
+        "https://127.1/feed.ics",
+        "https://10.1/feed.ics",
+        "https://2130706433/feed.ics",
+        "https://0x7f.1/feed.ics",
+        "https://0x7f000001/feed.ics",
+        "https://0177.0.0.1/feed.ics",
+        "https://0251.0376.0251.0376/feed.ics",
     ],
 )
 def test_validate_rejects_unsafe_urls(url):
@@ -112,6 +121,8 @@ def test_validate_rejects_unsafe_urls(url):
 def test_validate_accepts_public_https_url():
     validate_calendar_url("https://calendar.example.com/feed.ics")
     validate_calendar_url("https://93.184.216.34:8443/feed.ics")
+    # Names that merely start with digits are hostnames, not IP literals.
+    validate_calendar_url("https://1und1.example.com/feed.ics")
 
 
 def test_validate_allows_http_and_local_only_with_dev_opt_in():
