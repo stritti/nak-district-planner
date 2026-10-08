@@ -31,6 +31,10 @@ services:
     volumes:
       - ./services/backend/app:/app/app
 
+  beat:
+    volumes:
+      - ./services/backend/app:/app/app
+
   db:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
