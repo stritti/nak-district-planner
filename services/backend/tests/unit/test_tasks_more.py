@@ -14,13 +14,16 @@ from app.application.tasks import (
     cleanup_old_events,
     trigger_docker_update,
 )
+from tests.unit.coroutine_mocks import CoroutineClosingMock
 
 
 class TestCleanupOldEvents:
     """Tests for cleanup_old_events Celery task."""
 
     def test_cleanup_old_events_success(self):
-        with patch("app.application.tasks.asyncio.run") as mock_run:
+        with patch(
+            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+        ) as mock_run:
             mock_run.return_value = {"deleted": 5, "cutoff": "2024-06-15T00:00:00+00:00"}
 
             result = cleanup_old_events()
@@ -30,7 +33,9 @@ class TestCleanupOldEvents:
 
     def test_cleanup_old_events_feb29_edge_case(self):
         """Test that Feb-29 edge case doesn't crash."""
-        with patch("app.application.tasks.asyncio.run") as mock_run:
+        with patch(
+            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+        ) as mock_run:
             mock_run.return_value = {"deleted": 0, "cutoff": "2024-02-29T00:00:00+00:00"}
 
             result = cleanup_old_events()
@@ -129,7 +134,9 @@ class TestAutoImportFeiertage:
     """Tests for auto_import_feiertage Celery task."""
 
     def test_auto_import_success(self):
-        with patch("app.application.tasks.asyncio.run") as mock_run:
+        with patch(
+            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+        ) as mock_run:
             mock_run.return_value = {
                 "years": [2026],
                 "districts": 2,
