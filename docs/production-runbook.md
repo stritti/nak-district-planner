@@ -67,6 +67,14 @@ Wenn beim Upgrade kein `SUPERADMIN_SUB` gesetzt ist, pinnt die Migration determi
 
 Die API-Runtime ist **nicht** Owner des Migrations-Lifecycles. Ein Anwendungsstart darf keine `alembic upgrade`-Operation als Seiteneffekt ausfuehren; vor dem Traffic muss das Schema durch den Deployment-Schritt auf dem erwarteten Stand sein.
 
+**Update-Hinweis in der App:** Die Anwendung zeigt Administratoren nur an, dass eine
+neuere Version verfügbar ist (Banner mit Link auf die Release Notes). Sie führt
+selbst **keine** Updates aus — ein Update ist immer das obige Standard-Deployment
+mit dem neuen Release-Tag. Versionsvergleich nach SemVer 2.0 (inkl. Prereleases wie
+`1.0.0-rc.1`; PEP-440-Versionen wie `1.0.0rc1` werden normalisiert). Prereleases
+werden nur angeboten, wenn bereits eine Prerelease läuft; eine stabile Installation
+sieht nur stabile Releases. Ältere Versionen werden nie als Update angezeigt.
+
 ## 4. Rollback
 
 1. Fehlerbild und betroffene Version dokumentieren.

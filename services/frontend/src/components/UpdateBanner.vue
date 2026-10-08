@@ -38,17 +38,7 @@
           <!-- Actions -->
           <div class="flex items-center gap-2 shrink-0">
             <button
-              v-if="store.updateMode === 'docker-socket'"
-              :disabled="store.updating"
-              class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              @click="handleUpdate"
-            >
-              <ArrowPathIcon v-if="store.updating" class="h-4 w-4 animate-spin" />
-              <ArrowDownTrayIcon v-else class="h-4 w-4" />
-              {{ store.updating ? 'Update läuft...' : 'Aktualisieren' }}
-            </button>
-            <button
-              v-else
+              data-testid="show-instructions"
               class="inline-flex items-center gap-1.5 rounded-md border border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900 px-3 py-1.5 text-sm font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-800 transition-colors"
               @click="showInstructions = !showInstructions"
             >
@@ -70,26 +60,13 @@
         <div v-if="showInstructions" class="mt-2 pb-1">
           <div class="rounded-md bg-blue-100 dark:bg-blue-900/50 px-4 py-3">
             <p class="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">
-              SSH auf dem Server ausführen:
+              Auf dem Server im Projektverzeichnis ausführen (siehe docs/production-runbook.md):
             </p>
             <pre class="text-xs text-blue-800 dark:text-blue-200 overflow-x-auto whitespace-pre-wrap font-mono">
-cd /opt/nak-district-planner
-docker compose pull
-docker compose up -d
-docker compose exec backend alembic upgrade head</pre>
-          </div>
-        </div>
-
-        <!-- Update result feedback -->
-        <div v-if="updateFeedback" class="mt-2 pb-1">
-          <div
-            class="rounded-md px-4 py-2 text-sm"
-            :class="updateFeedback.type === 'success'
-              ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
-              : 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300'"
-          >
-            <p class="font-medium">{{ updateFeedback.title }}</p>
-            <p v-if="updateFeedback.message" class="text-xs mt-0.5">{{ updateFeedback.message }}</p>
+git fetch --tags &amp;&amp; git checkout v{{ store.latestVersion }}
+docker compose -f docker-compose.yml build
+docker compose -f docker-compose.yml run --no-deps --rm --build migrate alembic upgrade head
+docker compose -f docker-compose.yml up -d</pre>
           </div>
         </div>
       </div>
@@ -102,7 +79,6 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useVersionStore } from '../stores/version'
 import {
-  ArrowDownTrayIcon,
   ArrowPathIcon,
   CodeBracketIcon,
   XMarkIcon,
@@ -113,41 +89,9 @@ const store = useVersionStore()
 
 const showInstructions = ref(false)
 
-interface Feedback {
-  type: 'success' | 'error'
-  title: string
-  message?: string
-}
-
-const updateFeedback = ref<Feedback | null>(null)
-
-const visible = computed(() => {
-  return authStore.isAuthenticated && store.hasUpdate && !store.updating
-})
+const visible = computed(() => authStore.isAuthenticated && store.hasUpdate)
 
 let pollInterval: ReturnType<typeof setInterval> | null = null
-
-async function handleUpdate() {
-  updateFeedback.value = null
-  try {
-    const result = await store.trigger()
-    if (result.status === 'started') {
-      updateFeedback.value = {
-        type: 'success',
-        title: 'Update gestartet',
-        message: 'Die Docker-Images werden aktualisiert und die Dienste neu gestartet. Dies kann einige Minuten dauern.',
-      }
-    } else if (result.status === 'manual') {
-      showInstructions.value = true
-    }
-  } catch {
-    updateFeedback.value = {
-      type: 'error',
-      title: 'Update fehlgeschlagen',
-      message: 'Das Update konnte nicht gestartet werden. Bitte führen Sie die manuelle Anleitung aus.',
-    }
-  }
-}
 
 onMounted(() => {
   // Check version on mount (only for admins — determined by auth permissions)

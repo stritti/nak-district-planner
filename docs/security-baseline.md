@@ -100,6 +100,10 @@ Eine Route darf nur dann ohne Bearer-Authentifizierung erreichbar sein, wenn sie
 - Runtime und Migration verwenden getrennte DB-Verantwortlichkeiten: ✅
 - Schema-Migration gehoert in den Deployment-Schritt, nicht in den API-Lifespan: 🟡 RC-2, PR #441
 
+### 7.1 Keine In-App-Updates
+
+Die Anwendung **fuehrt keine Deployment-Updates aus** (#469): kein Update-Endpoint, kein Update-Task, kein Docker-Socket-Modus. Der Docker-Socket darf nie in einen Container gemountet werden (root-aequivalenter Host-Zugriff). Die Anwendung zeigt Administratoren nur an, dass eine neuere Version existiert (`GET /api/v1/system/version`); Updates erfolgen ausschliesslich durch Betreiber nach `docs/production-runbook.md`.
+
 ## 8. Audit und Nachvollziehbarkeit
 
 - AuditMiddleware fuer relevante Requests: ✅
