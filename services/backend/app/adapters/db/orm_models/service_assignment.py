@@ -25,7 +25,9 @@ class ServiceAssignmentORM(Base):
         UUID(as_uuid=True),
         ForeignKey("planning_slots.id", ondelete="CASCADE"),
         nullable=True,
+        # One assignment per planning slot (migration 20261007_assignment_unique).
         index=True,
+        unique=True,
     )
     leader_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("leaders.id", ondelete="SET NULL"), nullable=True, index=True

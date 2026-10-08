@@ -22,6 +22,10 @@ from app.adapters.api.deps import (
     get_service_assignment_repository,
 )
 from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportTokenResponse
+from app.adapters.api.tenant_references import (
+    ensure_congregation_in_district,
+    ensure_leader_in_district,
+)
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
@@ -52,6 +56,8 @@ async def create_export_token(
     repo: SqlExportTokenRepository = Depends(get_export_token_repository),
 ) -> ExportTokenResponse:
     require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    await ensure_congregation_in_district(session, body.district_id, body.congregation_id)
+    await ensure_leader_in_district(session, body.district_id, body.leader_id)
 
     token = ExportToken.create(
         label=body.label,

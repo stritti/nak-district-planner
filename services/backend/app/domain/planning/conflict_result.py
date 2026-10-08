@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
 
 
@@ -10,6 +10,28 @@ class Severity(StrEnum):
     PASS = "PASS"
     WARN = "WARN"
     BLOCK = "BLOCK"
+
+
+@dataclass(frozen=True)
+class ScheduledService:
+    """A planned service: slot date/time (UTC) plus the actual instance times, if any."""
+
+    congregation_id: uuid.UUID | None
+    planning_date: date
+    planning_time: time
+    actual_start_at: datetime | None = None
+    actual_end_at: datetime | None = None
+
+    def window(self, default_duration: timedelta) -> tuple[datetime, datetime]:
+        """Actual times when an EventInstance exists, else the planned slot time.
+
+        The fallback keeps conflict checks fail-closed for slots that have no
+        EventInstance yet (planning_time is stored as naive UTC).
+        """
+        if self.actual_start_at is not None and self.actual_end_at is not None:
+            return self.actual_start_at, self.actual_end_at
+        start = datetime.combine(self.planning_date, self.planning_time, tzinfo=UTC)
+        return start, start + default_duration
 
 
 @dataclass(frozen=True)

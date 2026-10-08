@@ -21,6 +21,7 @@ from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationUpdate,
     SyncResult,
 )
+from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_congregation,
@@ -93,6 +94,7 @@ async def create_calendar_integration(
             require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
     else:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    await ensure_congregation_in_district(db, body.district_id, body.congregation_id)
 
     _validate_credentials_url(body.type, body.credentials)
     integration = await service.create_integration(body)
