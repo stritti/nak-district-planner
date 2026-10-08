@@ -1,34 +1,33 @@
 # Production Runbook
 
-Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deployments.
+Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deployments des NAK District Planner. Es ist auf den RC-2-Stand ausgerichtet.
 
 ## 1. Voraussetzungen
 
-- Gueltige `.env` fuer Produktion (keine Dev-Secrets) und `.env.db` mit dem PostgreSQL-Owner-Passwort (nur fuer `db`/`migrate`, siehe `docs/deployment-migrations.md`)
+- Gueltige Produktionskonfiguration ohne Development-Secrets: `.env` fuer die Anwendung und `.env.db` mit dem PostgreSQL-Owner-Passwort (nur fuer `db`/`migrate`, siehe `docs/deployment-migrations.md`)
   - Beim Upgrade einer bestehenden Installation `POSTGRES_PASSWORD` (und ggf. `MIGRATION_DATABASE_URL`) aus `.env` entfernen und nach `.env.db` verschieben. Mit `APP_ENV=production` verweigern API und Worker sonst den Start (`production_guard`).
-- Laufende Infrastruktur: Reverse Proxy, Datenbank, Redis
-- Backup-Strategie fuer PostgreSQL vorhanden
+- TLS-Termination am Reverse Proxy; der Anwendungseinstieg ist nicht direkt oeffentlich exponiert
+- PostgreSQL und Valkey/Redis nur im internen Netz erreichbar
+- Verschluesselte PostgreSQL-Backups und ein getesteter Restore-Pfad
+- OIDC-Provider erreichbar und Redirect-URIs auf HTTPS begrenzt
 
 ### 1.1 Production-Config-Checkliste
 
-Vor jedem Deployment in Produktion pruefen:
-
 | Pruefung | Erwartung |
-|----------|-----------|
+|---|---|
 | `APP_ENV=production` | Production Guard ist aktiv |
-| `SECRET_KEY` | Min. 32 Zeichen, nicht `replace-with-*` |
-| `OIDC_CLIENT_SECRET` | Echter Wert, nicht `replace-with-*` |
-| `OIDC_DISCOVERY_URL` | Echte URL (HTTPS), nicht `oidc.example.com` |
-| `OIDC_CLIENT_ID` | Echter Wert, nicht `replace-with-oidc-client-id` |
-| Debug-Modus | `DEBUG` ist nicht `true` (oder gar nicht gesetzt) |
-| CORS-Origins | Nicht `["*"]` |
-| OIDC-Redirect-URIs | Verwenden HTTPS |
-| `CONFLICT_CHECK_ENABLED` | Standardmäßig aktiv (`true`); nur bei Notfällen deaktivieren — die Konfliktprüfung verhindert Doppelbuchungen und Zuweisungen abwesender Amtsträger (siehe `docs/conflict-rules.md`) |
-| IDP-Provisioning (falls aktiv) | `IDP_PROVISIONING_API_KEY` und `IDP_PROVISIONING_ENDPOINT` (HTTPS) gesetzt |
-| `SUPERADMIN_SUB` (optional) | Wenn gesetzt, wird dieser User erzwungen; sonst wird der erste User automatisch Superadmin |
-| Backup-Key | `BACKUP_ENCRYPT_KEY` ist gesetzt fuer verschluesselte Backups |
+| `SECRET_KEY` | mindestens 32 Zeichen, kein Platzhalter |
+| `OIDC_CLIENT_SECRET` | echter Provider-Wert |
+| `OIDC_DISCOVERY_URL` | produktive HTTPS-URL |
+| `OIDC_CLIENT_ID` | produktiver Client |
+| Debug-Modus | deaktiviert |
+| CORS | kein Wildcard-Origin in Produktion |
+| `CONFLICT_CHECK_ENABLED` | standardmaessig aktiv |
+| IDP-Provisioning | bei Aktivierung HTTPS-Endpunkt und Secret gesetzt |
+| `SUPERADMIN_SUB` | bei frischer leerer Installation vor der Migration gesetzt |
+| `BACKUP_ENCRYPT_KEY` | fuer verschluesselte Backups gesetzt |
 
-Der Production Guard verhindert den Start, wenn kritische Werte nicht gesetzt sind.
+Der Production Guard verhindert den Start bei kritischen unsicheren Werten.
 
 ### 1.2 Reverse Proxy und Client-IP
 
@@ -58,13 +57,46 @@ Client -> externer TLS-Proxy -> 127.0.0.1:80 -> frontend-nginx -> backend:8000
   unterschiedlicher `ip_address`; ein mitgeschicktes `X-Forwarded-For: 1.2.3.4` taucht
   dort nicht auf.
 
-## 2. Standard-Deployment
+## 2. Superadmin-Bootstrap
 
-1. Aktuellen Code bereitstellen (`main`/Release-Tag)
-2. Images bauen: `docker compose -f docker-compose.yml build`
-3. Migrationen ausfuehren: `docker compose -f docker-compose.yml run --no-deps --rm migrate` (verwendet das in Schritt 2 gebaute Image, Details in `docs/deployment-migrations.md`)
-4. Stack starten/aktualisieren: `docker compose -f docker-compose.yml up -d`
-5. Health pruefen: `curl http://localhost/api/health`
+Der Superadmin-Bootstrap ist owner-controlled. Die Anwendung darf sich keinen Superadmin selbst verleihen.
+
+### 2.1 Frische leere Installation
+
+Vor der Migration `0017` muss `SUPERADMIN_SUB` auf den exakten, case-sensitiven OIDC-`sub` des initialen Superadmins gesetzt werden. Alternativ kann der Datenbank-Owner danach `app_superadmin_config.superadmin_sub` provisionieren.
+
+Wenn die Migration auf einer leeren Installation ohne konfigurierten Subject laeuft, wird **kein** erster Login automatisch zum Superadmin. Bis der DB-Owner einen Subject provisioniert, vergibt `grant_bootstrap_superadmin(TEXT)` keine neue Berechtigung.
+
+### 2.2 Upgrade einer bestehenden Installation
+
+Wenn `SUPERADMIN_SUB` gesetzt ist, wird genau dieser Subject als Superadmin erzwungen. Bei Rotation werden veraltete persistierte Superadmin-Flags fuer andere Subjects entfernt.
+
+Wenn beim Upgrade kein `SUPERADMIN_SUB` gesetzt ist, pinnt die Migration deterministisch einen bereits vorhandenen Superadmin oder ersatzweise den fruehesten bestehenden Benutzer. Dadurch entscheidet nicht die Login-Reihenfolge nach dem Deployment ueber die Berechtigung.
+
+`app_superadmin_config` ist nur fuer den Datenbank-Owner bestimmt. Die Runtime-Rolle darf die Tabelle weder lesen noch schreiben und erhaelt nur den eng begrenzten EXECUTE-Zugriff auf die SECURITY-DEFINER-Funktion.
+
+## 3. Standard-Deployment
+
+1. Release-Tag bzw. freigegebenen `main`-Stand bereitstellen.
+2. Images reproduzierbar mit den committed Lockfiles bauen: `docker compose -f docker-compose.yml build`
+3. Vor jeder Schemaaenderung ein Backup erstellen.
+4. Migrationen ueber den dedizierten Deployment-/`migrate`-Schritt ausfuehren:
+
+   ```bash
+   docker compose -f docker-compose.yml run --no-deps --rm migrate
+   ```
+
+   Der Schritt verwendet das in Schritt 2 gebaute Image (Details in `docs/deployment-migrations.md`).
+
+5. Erst nach erfolgreicher Migration API, Worker und Beat aktualisieren:
+
+   ```bash
+   docker compose -f docker-compose.yml up -d
+   ```
+
+6. Readiness/Health pruefen und anschliessend Login, Eventliste, Matrix und Export als Smoke-Test ausfuehren.
+
+Die API-Runtime ist **nicht** Owner des Migrations-Lifecycles. Ein Anwendungsstart darf keine `alembic upgrade`-Operation als Seiteneffekt ausfuehren; vor dem Traffic muss das Schema durch den Deployment-Schritt auf dem erwarteten Stand sein.
 
 **Update-Hinweis in der App:** Die Anwendung zeigt Administratoren nur an, dass eine
 neuere Version verfügbar ist (Banner mit Link auf die Release Notes). Sie führt
@@ -74,7 +106,7 @@ mit dem neuen Release-Tag. Versionsvergleich nach SemVer 2.0 (inkl. Prereleases 
 werden nur angeboten, wenn bereits eine Prerelease läuft; eine stabile Installation
 sieht nur stabile Releases. Ältere Versionen werden nie als Update angezeigt.
 
-### 2.1 Laufende Services
+### 3.1 Laufende Services
 
 | Service | Aufgabe | Hinweise |
 |---------|---------|----------|
@@ -87,198 +119,113 @@ sieht nur stabile Releases. Ältere Versionen werden nie als Update angezeigt.
 
 Worker und Beat pruefen beim Start den Alembic-Head und beenden sich bei Abweichung. Pruefen, dass Beat laeuft: `docker compose logs beat | grep "beat: Starting"`.
 
-### 2.2 Image-Tags
+### 3.2 Image-Tags
 
 Pushes auf `main`/`develop` veroeffentlichen nur `<branch>`- und `sha-<commit>`-Tags. `latest`, `<major>` und `<major>.<minor>` setzt ausschliesslich der Release-Workflow fuer stabile Releases (keine Prereleases). Produktion pinnt eine Release-Version, nicht `main`.
 
-## 3. Rollback (Basisverfahren)
+## 4. Rollback
 
-1. Vor Deployment DB-Backup erstellen.
-2. Bei Fehlern auf letztes stabiles Release zurueckgehen. Hat das fehlerhafte Release bereits migriert, startet das aeltere Image nicht (Schema-Guard, fail closed): zuerst Backup einspielen oder mit dem neueren Image `alembic downgrade <revision>` ausfuehren.
-3. Wenn noetig DB-Restore aus validiertem Backup.
-4. Post-Rollback Smoke-Test (Login, Eventliste, Matrix, Export).
+1. Fehlerbild und betroffene Version dokumentieren.
+2. Auf das letzte stabile Release zurueckrollen. Hat das fehlerhafte Release bereits migriert, startet das aeltere Image nicht (Schema-Guard, fail closed): zuerst Backup einspielen oder mit dem neueren Image `alembic downgrade <revision>` ausfuehren.
+3. Datenbank nur dann zurueckrollen/restaurieren, wenn die Migration nicht vorwaertskompatibel ist und ein validiertes Backup vorliegt.
+4. Health- und Smoke-Tests wiederholen.
+5. Ursache und Folgemassnahmen dokumentieren.
 
-## 4. Backup und Restore
+## 5. Backup und Restore
 
-**Ziele:** RPO ≤ 24h (max. 1 Tag Datenverlust), RTO ≤ 4h (max. 4h bis Wiederherstellung).
+Zielwerte: RPO maximal 24 Stunden, RTO maximal 4 Stunden.
 
-### 4.1 Backup erstellen
+### 5.1 Backup
 
 ```bash
 BACKUP_ENCRYPT_KEY=<gpg-recipient> ./scripts/backup.sh
 ```
 
-- Läuft täglich (Cron oder externer Scheduler — kein Kubernetes-CronJob in diesem Setup).
-- Nutzt `pg_dump -Fc` innerhalb des `db`-Containers, verschlüsselt das Ergebnis mit GPG
-  (`BACKUP_ENCRYPT_KEY`), bevor es den Container verlässt.
-- `production_guard()` verweigert den Start in Produktion, wenn `BACKUP_ENCRYPT_KEY` fehlt.
-- Aufbewahrung: 30 Tage Standard (`BACKUP_RETENTION_DAYS`), ältere Backups werden automatisch gelöscht.
-- Ablagepfad (`BACKUP_DIR`) muss selbst regelmäßig extern gesichert werden (Backup-Rotation).
+- `pg_dump -Fc` wird verschluesselt abgelegt.
+- Standard-Retention: 30 Tage (`BACKUP_RETENTION_DAYS`).
+- `BACKUP_DIR` muss zusaetzlich extern gesichert werden.
 
-### 4.2 Restore durchführen
+### 5.2 Restore
 
 ```bash
-./scripts/restore.sh <backup-datei>.dump.gpg --dry-run   # Integritätsprüfung ohne Änderung
-./scripts/restore.sh <backup-datei>.dump.gpg              # mit Bestätigungsabfrage
+./scripts/restore.sh <backup>.dump.gpg --dry-run
+./scripts/restore.sh <backup>.dump.gpg
 ```
 
-Schritt-für-Schritt:
-1. Backup-Datei bereitstellen (entschlüsselt automatisch, wenn `.gpg`).
-2. `--dry-run` ausführen — prüft Archiv-Integrität via `pg_restore --list`, ändert nichts.
-3. Ohne `--dry-run` ausführen — fragt vor dem Überschreiben explizit nach Bestätigung.
-4. Nach dem Restore: Anwendung neu starten, Health-Check + Smoke-Test (siehe Abschnitt 3) durchführen.
-5. Ergebnis (Datum, Dauer, Auffälligkeiten) im Incident-/Ops-Log dokumentieren.
+Der Dry-Run validiert das Archiv ohne Datenveraenderung. Nach dem Restore folgen Health-Check und Smoke-Test.
 
-#### Automatisierter Restore-Drill
+### 5.3 Automatisierter Restore-Drill
 
-`scripts/restore-drill.sh` prüft die technische Wiederherstellbarkeit mit der gleichen
-PostgreSQL-Major-Version wie die Produktionsumgebung. Der Drill verwendet zwei voneinander
-getrennte PostgreSQL-18-Container:
+`.github/workflows/restore-drill.yml` prueft Backup, GPG-Verschluesselung, Restore in eine getrennte PostgreSQL-18-Zieldatenbank, Datenvergleich und einen Korruptions-Negativtest. Ein erfolgreicher CI-Drill ersetzt nicht den vierteljaehrlichen Restore eines echten Produktionsbackups in Staging.
 
-1. Source-Datenbank mit Prüfdaten anlegen.
-2. Mit dem produktiven `scripts/backup.sh` ein GPG-verschlüsseltes Backup erzeugen.
-3. Source-Datenbank vollständig stoppen.
-4. Unabhängige Target-Datenbank mit abweichenden Prüfdaten starten.
-5. Das Backup mit dem produktiven `scripts/restore.sh` zuerst im `--dry-run` prüfen und
-   anschließend wirklich wiederherstellen.
-6. Wiederhergestellte Daten gegen die Source-Prüfdaten verifizieren.
-7. Ein absichtlich beschädigtes Archiv prüfen; es muss vor einer Datenänderung abgewiesen
-   werden und die Target-Daten müssen unverändert bleiben.
+## 6. Monitoring und Security Operations
 
-Der Workflow `.github/workflows/restore-drill.yml` führt diesen Drill für jeden Pull Request
-gegen `main`, bei jedem Push auf `main`, wöchentlich sowie manuell aus. Der erfolgreiche
-GitHub-Actions-Lauf `37014902252` vom 2. Oktober 2026 dokumentiert den ersten vollständigen
-CI-Nachweis.
+Mindestens ueberwachen:
 
-Der automatisierte Drill ersetzt nicht den vierteljährlichen Restore aus einem echten
-Produktionsbackup in einer produktionsnahen Staging-Umgebung. Dieser Test prüft zusätzlich
-externe Backup-Ablage, Berechtigungen, Betriebszugriffe und den realen Smoke-Test.
+- Container-Restarts und Health/Readiness
+- OIDC-Erreichbarkeit und Tokenfehler
+- Datenbank- und Valkey/Redis-Erreichbarkeit
+- Audit- und Autorisierungsfehler
+- Rate-Limiter-Fallbacks
+- Backup-/Restore-Fehler
 
-| Datum | Umgebung | Ergebnis | Durchgeführt von |
-|-------|----------|----------|-------------------|
-| 2026-10-02 | GitHub Actions, getrennte PostgreSQL-18-Source/Target-Container | Erfolgreich: GPG-Backup, Dry-Run, Restore, Datenvergleich und Korruptions-Negativtest | CI `Restore Drill` |
-| _(vierteljährlicher Staging-Test ausstehend)_ | | | |
+### 6.1 Rate-Limiter-Fallback
 
-### 4.3 Verantwortlichkeit
+Normale Routen koennen bei Valkey-Ausfall gemaess Betriebsstrategie weiterlaufen; der OIDC-Token-Exchange (`POST /api/v1/auth/oidc/token`, 30/min) und die oeffentliche Selbstregistrierung (`POST /api/v1/districts/{id}/registrations`, 10/min) werden waehrend eines Fail-Open durch einen lokalen Fallback-Limiter je Client-Identitaet begrenzt. Dieser Limiter ist **pro Prozess**: Die effektive Grenze betraegt `Limit × Worker-Prozesse × Backend-Replikas`, und der Zaehler beginnt bei jedem Neustart wieder bei null. Er ist eine Notbremse, kein Ersatz fuer den Valkey-Limiter. Jeder Fallback muss operational sichtbar sein und als Degradation beobachtet werden.
 
-Backup/Restore-Verantwortung liegt beim Backend-Team (siehe `openspec/security-roadmap.md`,
-Abschnitt Verantwortlichkeiten).
+Bei einem Fallback-Ereignis:
 
-## 5. Monitoring und Alarmierung (Minimum)
+1. Valkey-Erreichbarkeit, DNS, Credentials und Connection-Limits pruefen.
+2. Backend-Logs/Metriken korrelieren.
+3. Nach Wiederherstellung kontrollierten Request ausfuehren und weitere Fallbacks ausschliessen.
+4. Ursache und Dauer im Betriebstagebuch dokumentieren.
 
-- Container-Status und Restart-Raten beobachten.
-- Fehlerlogs fuer Backend/Worker aktiv monitoren.
-- OIDC/IDP Erreichbarkeit und Token-Fehlerquote ueberwachen.
-- Rate-Limiter-Fail-Open-Metrik `rate_limiter.fail_open` ueberwachen.
+### 6.2 Secrets
 
-### 5.1 Rate-Limiter-Fail-Open
+- Secrets nur ueber Secret-Management bereitstellen, niemals committen.
+- `SECRET_KEY`, OIDC-Client-Secret und Provisioning-Credentials regelmaessig rotieren.
+- Eine `SECRET_KEY`-Rotation kann bestehende verschluesselte Anwendungsdaten/Sessions beeinflussen und muss geplant erfolgen.
 
-Der Counter wird erhöht, wenn Redis bei einer Rate-Limit-Prüfung nicht erreichbar
-ist oder einen Fehler liefert. Das System lässt den Request in diesem Fall bewusst
-zu, damit ein Redis-Ausfall nicht den gesamten Dienst blockiert.
+### 6.3 OIDC-Session-Schutz
 
-Ausnahme: OIDC-Token-Exchange (`POST /api/v1/auth/oidc/token`, 30/min) und
-oeffentliche Selbstregistrierung (`POST /api/v1/districts/{id}/registrations`,
-10/min) werden waehrend eines Fail-Open durch einen lokalen Fallback-Limiter je
-Client-Identitaet begrenzt. Dieser Limiter ist **pro Prozess**: Die effektive
-Grenze betraegt `Limit × Worker-Prozesse × Backend-Replikas`, und der Zaehler
-beginnt bei jedem Neustart wieder bei null. Er ist eine Notbremse, kein Ersatz
-fuer den Redis-Limiter.
-
-- **Voraussetzung:** `OTEL_ENABLED=true` setzen und `OTEL_ENDPOINT` auf einen
-  erreichbaren OTLP-Collector mit Metrics-Export konfigurieren. Die Metriken des
-  Backends im Monitoring-Backend verfügbar machen und den Alert dort einrichten.
-- **Alarm:** auslösen, sobald innerhalb von 5 Minuten mindestens ein Fail-Open-
-  Ereignis auftritt; bei wiederholten Ereignissen als Incident behandeln.
-- **Prüfung:** Das `reason`-Attribut der Metrik im Monitoring-Backend prüfen und
-  mit dem Backend-Log korrelieren. Anschließend Redis-Erreichbarkeit, DNS,
-  Credentials sowie Verbindungsgrenzen prüfen.
-- **Recovery:** Redis wiederherstellen, anschließend einen kontrollierten Request
-  ausführen und bestätigen, dass keine weiteren Fail-Open-Ereignisse auftreten.
-- **Nachbereitung:** Ereignisdauer, Ursache und Gegenmaßnahme im Betriebstagebuch
-  dokumentieren.
-
-## 6. Security Operations
-
-### 6.1 Secret-Lifecycle
-
-Kritische Secrets (SECRET_KEY, OIDC_CLIENT_SECRET, IDP_PROVISIONING_API_KEY) unterliegen einem festgelegten Lifecycle:
-
-**Erzeugung:**
-- SECRET_KEY: `python -c "import secrets; print(secrets.token_hex(32))"` (64 Zeichen Hex)
-- OIDC_CLIENT_SECRET: Wird durch den OIDC-Provider generiert (z. B. Keycloak Client Secret)
-- IDP_PROVISIONING_API_KEY: Wird durch den IDP-Provisioning-Dienst (z. B. Webhook-Endpoint) generiert
-- Alle Secrets werden im Secrets-Manager (z. B. Docker Secrets, HashiCorp Vault, 1Password Connect) gespeichert, **nicht** in der `.env`-Datei im Repository
-
-**Rotationsintervall (Empfehlung):**
-
-| Secret | Intervall | Begründung |
-|--------|-----------|------------|
-| `SECRET_KEY` | Alle 90 Tage oder bei Rotation eines anderen Secrets | Führt zur Ungültigkeit aller Sessions (User müssen neu einloggen) |
-| `OIDC_CLIENT_SECRET` | Alle 90 Tage | Gängige OIDC-Praxis; kein Session-Verlust |
-| `IDP_PROVISIONING_API_KEY` | Alle 90 Tage | Bei Kompromittierung: sofort rotieren |
-
-**Rotationsverfahren:**
-1. Neues Secret generieren und im Secrets-Manager hinterlegen
-2. Deployment mit neuem Secret durchführen (Dienst neu starten)
-3. Altes Secret im Secrets-Manager aufbewahren (Fallback für 48 h)
-4. Nach erfolgreichem Monitoring (48 h) altes Secret endgültig löschen
-5. Rotation im Betriebstagebuch dokumentieren
-
-**Recovery:**
-1. Wenn der aktuelle SECRET_KEY verloren geht: Backup wiederherstellen, das mit dem alten Key erstellt wurde
-2. Neuen SECRET_KEY generieren (alle Sessions werden ungültig)
-3. OIDC_CLIENT_SECRET beim OIDC-Provider zurücksetzen
-4. Alle Benutzer über notwendigen Neulogin informieren
-
-### 6.2 Security-Scans
-
-- Regelmaessige Auswertung der CI-Scanner-Ergebnisse (Ruff, Bandit, Trivy).
-- Schwachstellen-Monitoring fuer Python-Abhaengigkeiten via `pip-audit` oder Dependabot.
-- Bei Incident: Zeitstrahl, Scope, Mitigation und Follow-up dokumentieren.
+Provider-Refresh-Credentials duerfen nicht in JavaScript-zugaenglichem persistentem Speicher liegen. Der RC-2-Zielstand haelt die Refresh-Credential serverseitig in einem Secure/HttpOnly/SameSite-Cookie; die SPA haelt nur kurzlebige Access-/ID-Sessiondaten im Speicher und kann eine Session ueber den serverseitigen Refresh-Pfad wiederherstellen.
 
 ## 7. Release-Disziplin
 
-- Commit- und Release-Prozess gemaess `docs/release-process.md`.
-- Produktive Deployments bevorzugt aus versionierten Releases.
+Produktive Deployments erfolgen aus versionierten Releases. Vor einem Release Candidate muessen alle verpflichtenden Status Checks auf dem finalen Head erfolgreich sein.
 
-### 7.1 Erforderliche Branch-Protection-Checks
+### 7.1 Aktives `main`-Ruleset
 
-Für `main` muss das aktive GitHub-Ruleset Änderungen über Pull Requests erzwingen, aktuelle
-Required Status Checks verlangen, Branch-Löschung und Non-Fast-Forward-Updates verhindern
-und ohne regulären Bypass arbeiten. Für den v1-Release-Gate sind folgende stabilen
-Check-Namen verbindlich:
+Ruleset `main` (ID `13623643`) ist aktiv. Es erzwingt Pull Requests, strict Required Status Checks, verhindert Branch-Loeschung und Non-Fast-Forward-Updates und besitzt keinen Bypass-Akteur.
+
+Aktuell verpflichtende Check-Namen:
 
 - `Backend — Unit Tests & Coverage`
-- `Frontend — Unit Tests`
-- `Frontend — E2E Tests`
-- `Migration Graph & FK Names`
 - `Encrypted Backup & Isolated Restore`
-- `MegaLinter`
-- `Dependency Review`
-- `CodeQL Analysis (python)`
-- `CodeQL Analysis (javascript-typescript)`
-- `Python Dependency Audit (pip-audit)`
 - `Frontend Dependency Audit (bun audit)`
+- `Frontend — E2E Tests`
+- `Frontend — Unit Tests`
+- `Migration Graph & FK Names`
+- `Dependency Review`
+- `Python Dependency Audit (pip-audit)`
+- `CodeQL Analysis (javascript-typescript)`
+- `CodeQL Analysis (python)`
+- `MegaLinter`
 - `Build Backend Image`
 - `Build Frontend Image`
 - `Build documentation`
 
-`Build documentation` läuft absichtlich auf jedem Pull Request gegen `main`, damit ein als
-Required Check konfigurierter Status nicht wegen eines Workflow-Pfadfilters dauerhaft
-`pending` bleibt. Die Docker-Build- und Frontend-Jobs dürfen bei nicht betroffenen Pfaden
-intern als `skipped` enden, ihre stabilen Check-Namen werden aber durch die übergeordneten
-PR-Workflows erzeugt.
+`Backend — Unit Tests & Coverage` muss die Projektgrenze von mindestens 80 Prozent einhalten. Der Frontend-Unit-Job muss die reale Production-Source-Coverage ebenfalls mit mindestens 80 Prozent fuer Statements, Branches, Functions und Lines durchsetzen.
 
-`Backend — Unit Tests & Coverage` enthält das Coverage-Gate von mindestens 80 Prozent sowie
-die unveränderte Integration-/Performance-Absicherung des CI-Workflows. Der Migrationsjob
-enthält Single-Head-Prüfung, FK-Namen, Offline-SQL, Migration auf einer frischen
-PostgreSQL-Datenbank, Downgrade/Upgrade-Roundtrip, Seed-Dry-Run und den blockierenden
-`alembic check`. Der Restore-Job prüft die Wiederherstellbarkeit eines verschlüsselten
-Backups in einer unabhängigen PostgreSQL-18-Zieldatenbank.
+Das Ruleset verlangt derzeit `0` approving Reviews und keine verpflichtende Review-Thread-Aufloesung. Das ist fuer RC-2 kein technischer CI-Blocker, bleibt aber ein Governance-Haertungspunkt vor dem finalen 1.0.0-Release (mindestens eine Freigabe, stale-review dismissal und Thread-Resolution pruefen).
 
-Das aktuell vorhandene Ruleset schützt bereits vor Branch-Löschung und
-Non-Fast-Forward-Updates. Das Erzwingen von Pull Requests und Required Status Checks ist
-Repo-Admin-Konfiguration und wird in GitHub-Issue #403 nachverfolgt. Der Repository-Code
-allein kann diese Einstellung nicht erzwingen. Vor Veröffentlichung eines v1 Release
-Candidate muss der tatsächliche Ruleset-Stand erneut gegen diese Liste verifiziert werden.
+### 7.2 Release-Gate
+
+Vor RC-2 pruefen:
+
+1. alle oben genannten Required Checks auf dem finalen Head erfolgreich;
+2. Backend- und Frontend-Coverage jeweils >80 Prozent ohne kuenstliche Production-Code-Ausnahmen;
+3. Migration/Restore-Drill erfolgreich;
+4. CodeQL und Dependency Audits ohne blockierende Findings;
+5. OpenSpec-Changes fuer den Releaseumfang verifiziert und erledigte Changes archiviert;
+6. Architektur- und Security-Dokumentation entspricht dem ausgelieferten Code.
