@@ -10,13 +10,13 @@ The release process SHALL validate the actual combined commit after stacking or 
 ### Requirement: Exactly one intended Alembic upgrade head
 The release migration graph SHALL have one intended upgrade head and SHALL successfully upgrade a representative previous-version PostgreSQL database to that head without data loss outside documented migration policies.
 
-#### Scenario: Assignment and holiday migration branches
-- **WHEN** #484's `20261007_assignment_unique` and #485's `20261007_confirm_holidays` both descend from `20261007_celery_tables`
+#### Scenario: Independently added migrations share a parent
+- **WHEN** two release pull requests each add a migration revising the same parent revision (as #484, #485 and #491 did with `20261007_celery_tables`)
 - **THEN** integration SHALL adjust revision lineage or add an explicit merge revision, and `alembic heads`, `upgrade head`, `alembic check` and downgrade policy SHALL be verified on the integrated tree
 
 #### Scenario: Existing duplicate assignments
 - **WHEN** the assignment uniqueness migration encounters duplicates
-- **THEN** retention order SHALL be deterministic, the removed rows SHALL be measured or reported, and the documented irreversible cleanup policy SHALL be reviewed before production deployment
+- **THEN** retention order SHALL be deterministic, the removed rows SHALL be preserved in an archive readable only by the database owner (not by the application role), and the downgrade SHALL restore them
 
 ### Requirement: Calendar synchronization is bounded, deterministic and safely reconciled
 The system SHALL apply provider-independent identity and synchronization decisions, bound remote calendar resource consumption, and SHALL NOT infer source deletion merely from absence in an incomplete or bounded snapshot.
@@ -65,13 +65,6 @@ The release specification baseline SHALL reflect the merged production code; act
 #### Scenario: Generation spec archived while still changing
 - **WHEN** #489 archives `auto-generate-draft-services-8-weeks` and #491 still changes its spec and tasks
 - **THEN** the final archive and baseline SHALL incorporate the accepted #491 behavior and strict validation SHALL succeed
-
-### Requirement: New application logic preserves the dependency direction
-New application components SHALL depend on domain/application ports for persistence and external systems, rather than importing concrete infrastructure adapters. Existing exceptions SHALL remain explicitly bounded legacy debt.
-
-#### Scenario: New direct adapter import
-- **WHEN** a new application service imports a concrete `app.adapters` module
-- **THEN** the architecture gate SHALL fail until the dependency is inverted rather than extending the legacy allowlist
 
 ### Requirement: Release verification covers failure paths
 The combined release candidate SHALL meet the repository's existing coverage threshold of greater than 80 percent and SHALL exercise security, concurrency, partial failure, time-zone boundary and migration edge cases without weakening any existing quality gate.

@@ -11,7 +11,7 @@
 
 ## 2. Architecture governance for 1.0
 
-- [ ] 2.1 Preserve #444's architecture dependency regression gate; reject new application-to-infrastructure imports outside the documented legacy inventory.
+- [ ] 2.1 Preserve #444's architecture dependency regression gate (normative in the `architecture-governance` capability); reject new application-to-infrastructure imports outside the documented legacy inventory.
 - [ ] 2.2 Document transactional and external-provider side-effect boundaries in the sync code and OpenSpec, including what an application rollback cannot undo.
 - [ ] 2.3 Document the distinct policies for business applicability, tenant authorization and PUBLIC/INTERNAL/personal publication.
 
