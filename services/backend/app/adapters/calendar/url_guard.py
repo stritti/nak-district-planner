@@ -42,6 +42,10 @@ class ResponseTooLargeError(CalendarConnectorError):
     """The calendar response exceeded MAX_RESPONSE_BYTES."""
 
 
+class UnsupportedContentEncodingError(CalendarConnectorError):
+    """The server compressed the response although identity was requested."""
+
+
 def _is_public(address: str) -> bool:
     ip = ipaddress.ip_address(address.split("%", 1)[0])
     if isinstance(ip, ipaddress.IPv6Address):
@@ -136,6 +140,10 @@ class GuardedTransport(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         _check_url(request.url, self._allow_insecure)
+        # Request uncompressed bodies and refuse anything else below: httpx
+        # decodes after the transport, so a compressed body would bypass the
+        # size cap (decompression bomb).
+        request.headers["Accept-Encoding"] = "identity"
         if not self._allow_insecure:
             host = request.url.host
             port = request.url.port or (443 if request.url.scheme == "https" else 80)
@@ -157,6 +165,9 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                 )
 
         response = await self._inner.handle_async_request(request)
+        if response.headers.get("content-encoding", "identity").strip().lower() != "identity":
+            await response.aclose()
+            raise UnsupportedContentEncodingError("Kalender-Antwort ist komprimiert")
         length = response.headers.get("content-length", "")
         if length.isdigit() and int(length) > MAX_RESPONSE_BYTES:
             await response.aclose()

@@ -269,3 +269,38 @@ async def test_caldav_error_contains_neither_url_nor_credentials(status):
     message = str(exc_info.value)
     for leaked in ("dav.example.com", "secret-path-token", "alice", "hunter2", str(status)):
         assert leaked not in message
+
+
+# ── review follow-ups (#463) ─────────────────────────────────────────────────
+
+
+async def test_gzip_bomb_is_rejected_before_decompression():
+    import gzip
+
+    bomb = gzip.compress(b"\0" * (MAX_RESPONSE_BYTES + 1024 * 1024))
+    assert len(bomb) < MAX_RESPONSE_BYTES // 100
+    seen: list[httpx.Request] = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(
+            200,
+            content=bomb,
+            headers={"content-encoding": "gzip", "content-type": "text/calendar"},
+        )
+
+    connector = ICalConnector(client=_client(handler, "93.184.216.34"))
+    with pytest.raises(CalendarConnectorError):
+        await connector.fetch_events({"url": "https://calendar.example.com/feed.ics"})
+    assert seen[0].headers["accept-encoding"] == "identity"
+
+
+async def test_identity_encoded_response_is_accepted():
+    def handler(request):
+        return httpx.Response(
+            200, content=ICS, headers={"content-encoding": "identity", "content-type": "text/calendar"}
+        )
+
+    connector = ICalConnector(client=_client(handler, "93.184.216.34"))
+    assert await connector.fetch_events({"url": "https://calendar.example.com/feed.ics"}) == []
+
