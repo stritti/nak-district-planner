@@ -56,3 +56,89 @@ The system SHALL expose `POST`, `GET`, `PATCH` and `DELETE` on `/api/v1/calendar
 #### Scenario: Unscoped listing by a regular user
 - **WHEN** a non-superadmin calls `GET /api/v1/calendar-integrations` without a scope parameter
 - **THEN** the API responds with 403
+
+### Requirement: Calendar URLs are validated before storage
+The system SHALL reject calendar integration credentials whose `url` is not an HTTPS URL with a host, contains embedded credentials, or targets `localhost` or a non-public IP literal, on create and on update, with HTTP 422 and a message that does not echo the URL.
+
+#### Scenario: Private address on create
+- **WHEN** an admin creates an ICS or CalDAV integration with `https://169.254.169.254/latest/meta-data`
+- **THEN** the API SHALL respond with 422 and SHALL NOT store the integration
+
+#### Scenario: Plain HTTP on update
+- **WHEN** an admin updates credentials to `http://calendar.example.com/feed.ics` while `CALENDAR_ALLOW_INSECURE_URLS` is false
+- **THEN** the API SHALL respond with 422 and SHALL NOT change the integration
+
+### Requirement: Every outbound calendar connection is restricted to public addresses
+The calendar HTTP client SHALL resolve the host of every request, including redirect hops, reject it if any resolved address is loopback, private, link-local, unique-local, reserved, multicast, or an IPv4-mapped/6to4/NAT64 form of such an address, and connect to the validated address while preserving the original Host header and TLS server name.
+
+#### Scenario: Hostname resolves to loopback
+- **WHEN** a feed hostname resolves to `127.0.0.1`, `::1`, `fc00::1` or `::ffff:10.0.0.1`
+- **THEN** the connector SHALL fail with a connector error before any connection is opened
+
+#### Scenario: Network-specific NAT64 prefix
+- **WHEN** `CALENDAR_NAT64_PREFIXES` lists an RFC 6052 prefix (length 32, 40, 48, 56, 64 or 96) and a feed hostname resolves to an address inside it whose embedded IPv4 (u-octet skipped) is `10.0.0.1`, `127.0.0.1` or `169.254.169.254`
+- **THEN** the connector SHALL fail before any connection is opened, while a public embedded IPv4 SHALL be accepted; invalid prefixes SHALL prevent the settings from loading
+
+#### Scenario: Trailing-dot localhost
+- **WHEN** an admin stores `https://localhost./feed.ics` or `https://foo.localhost./feed.ics`
+- **THEN** the API SHALL respond with 422
+
+#### Scenario: Deprecated IPv6 site-local address
+- **WHEN** a URL literal or a DNS answer is in `fec0::/10`
+- **THEN** it SHALL be treated as non-public and rejected, even though the platform reports it as globally routable
+
+#### Scenario: Legacy numeric IPv4 literal
+- **WHEN** an admin stores a URL whose host is an abbreviated, integer, hex or octal IPv4 form such as `127.1`, `2130706433` or `0x7f.1`
+- **THEN** the host SHALL be interpreted as the IPv4 address it denotes and a non-public address SHALL be rejected with 422
+
+#### Scenario: DNS rebinding between check and connect
+- **WHEN** a hostname resolves to a public address during validation
+- **THEN** the connection SHALL be made to exactly that address so a later DNS answer cannot redirect it
+
+#### Scenario: Redirect to an internal host
+- **WHEN** a feed responds with a redirect to an internal address
+- **THEN** the redirect SHALL NOT be followed and the sync SHALL fail with a generic error
+
+### Requirement: Calendar responses are size-limited
+The calendar HTTP client SHALL abort responses larger than 10 MB, based on Content-Length and while streaming.
+
+#### Scenario: Compressed feed (decompression bomb)
+- **WHEN** a feed answers with a `Content-Encoding` other than `identity`
+- **THEN** the connector SHALL reject it, since only `Accept-Encoding: identity` is requested
+
+#### Scenario: Oversized feed
+- **WHEN** a feed returns more than 10 MB
+- **THEN** reading SHALL stop and the connector SHALL raise a connector error
+
+### Requirement: A calendar fetch never takes longer than 30 seconds
+The calendar HTTP client SHALL bound every fetch by one total budget of 30 seconds covering DNS resolution, every connect and TLS attempt across all resolved addresses, the response headers and the body; retries of transient failures SHALL share the same budget. Exceeding it SHALL fail with the generic connector error.
+
+#### Scenario: Stalled TLS handshake on every address
+- **WHEN** each resolved address accepts the TCP connection but never completes the TLS handshake
+- **THEN** the fetch SHALL fail after at most 30 seconds in total
+
+#### Scenario: Slowly trickling body
+- **WHEN** a feed sends its body in small chunks, each within the read timeout, but slower than the budget allows
+- **THEN** reading SHALL stop when the budget is used up
+
+#### Scenario: Retries
+- **WHEN** a transient failure triggers retries
+- **THEN** all attempts and backoff waits together SHALL stay within the 30-second budget
+
+### Requirement: Calendar errors do not leak targets or secrets
+Connector errors and persisted `last_sync_error` values SHALL NOT contain URLs, credentials, HTTP status codes, or the distinction between transport and HTTP failures.
+
+#### Scenario: Hostname resolves to a private address
+- **WHEN** a feed hostname resolves to a private address
+- **THEN** the user-facing error SHALL be identical to the one for an unresolvable host
+
+#### Scenario: CalDAV server returns 401
+- **WHEN** a CalDAV REPORT fails with HTTP 401 for a URL containing a secret path
+- **THEN** the error message SHALL be the generic CalDAV load failure text without URL, user name, password or status code
+
+### Requirement: Insecure calendar URLs are a development-only opt-in
+`CALENDAR_ALLOW_INSECURE_URLS` SHALL default to false and SHALL block application startup when enabled with `APP_ENV=production`.
+
+#### Scenario: Opt-in in production
+- **WHEN** the application starts in production with `CALENDAR_ALLOW_INSECURE_URLS=true`
+- **THEN** the production guard SHALL refuse to start
