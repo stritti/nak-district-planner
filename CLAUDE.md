@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**v0.29.3 — production-facing application, all four MVP phases complete.** OIDC authentication, RBAC, tenant isolation (middleware + PostgreSQL RLS), audit logging, rate limiting, and CSRF protection are implemented and wired into `main.py` (see `docs/security/`). 30 Alembic migrations applied. Matrix planning view (UC-03), calendar sync (UC-01/UC-02), and event export (UC-04/05/06) are implemented. See `openspec/security-roadmap.md` and `openspec/changes/` for the current backlog — notably `p0-strukturell-multi-tenant-operations` (backup/restore, exclusion constraints) and `p1-domain-conflict-quality` (double-booking detection) are the highest-priority open gaps.
+**v1.0.0-rc.1 — production-facing application, all four MVP phases complete.** OIDC authentication, RBAC, tenant isolation (middleware + PostgreSQL RLS), audit logging, rate limiting, and CSRF protection are implemented and wired into `main.py` (see `docs/security/`). 30 Alembic migrations applied. Matrix planning view (UC-03), calendar sync (UC-01/UC-02), and event export (UC-04/05/06) are implemented. See `openspec/security-roadmap.md` and `openspec/changes/` for the current backlog — notably `p0-strukturell-multi-tenant-operations` (backup/restore, exclusion constraints) and `p1-domain-conflict-quality` (double-booking detection) are the highest-priority open gaps.
 
 The spec is written in German (NAK = Neuapostolische Kirche / New Apostolic Church).
 
@@ -49,7 +49,7 @@ nak-district-planner/
 
 ## Tech Stack
 
-**Backend:** Python 3.11+, FastAPI (async), SQLAlchemy 2.0, PostgreSQL 15+, Redis + Celery — managed with **uv**
+**Backend:** Python 3.14, FastAPI (async), SQLAlchemy 2.0, PostgreSQL 15+, Redis + Celery — managed with **uv**
 **Frontend:** Vue.js 3 (Composition API), Vite, Tailwind CSS, Pinia — built with **bun**
 **Infrastructure:** Docker & Docker Compose (5 containers)
 

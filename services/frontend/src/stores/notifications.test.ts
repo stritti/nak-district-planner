@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '../api/notifications'
 import { useNotificationStore } from './notifications'
@@ -35,82 +35,149 @@ describe('notification store', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 0 })
-  })
-
-  it('dismisses unread notifications and adjusts the badge once', async () => {
-    const store = prepareStore()
-    vi.mocked(api.listNotifications).mockResolvedValue(loadedNotifications(makeNotification('one')))
-    vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 1 })
+    vi.mocked(api.markNotificationRead).mockResolvedValue()
     vi.mocked(api.dismissNotification).mockResolvedValue()
-    await store.fetch('district-one')
-    await store.fetchUnreadCount('district-one')
-
-    await store.dismiss('one')
-    expect(api.dismissNotification).toHaveBeenCalledExactlyOnceWith('one')
-    expect(store.items).toEqual([])
-    expect(store.unreadCount).toBe(0)
-    expect(store.total).toBe(0)
-
-    await store.dismiss('one')
-    expect(api.dismissNotification).toHaveBeenCalledTimes(1)
+    vi.mocked(api.markAllNotificationsRead).mockResolvedValue({ marked_read: 0 })
   })
 
-  it('does not decrement the badge for an already-read notification', async () => {
-    const store = prepareStore()
-    vi.mocked(api.listNotifications).mockResolvedValue(loadedNotifications(makeNotification('read', '2026-09-30T08:01:00Z')))
-    vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 3 })
-    vi.mocked(api.dismissNotification).mockResolvedValue()
-    await store.fetch('district-one')
-    await store.fetchUnreadCount('district-one')
+  afterEach(() => vi.useRealTimers())
 
-    await store.dismiss('read')
-    expect(store.unreadCount).toBe(3)
-  })
-
-  it('preserves the item and badge if dismissal fails', async () => {
-    const store = prepareStore()
-    vi.mocked(api.listNotifications).mockResolvedValue(loadedNotifications(makeNotification('one')))
-    vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 1 })
-    vi.mocked(api.dismissNotification).mockRejectedValue(new Error('API unavailable'))
-    await store.fetch('district-one')
-    await store.fetchUnreadCount('district-one')
-
-    await expect(store.dismiss('one')).rejects.toThrow('API unavailable')
-    expect(store.items).toHaveLength(1)
-    expect(store.unreadCount).toBe(1)
-  })
-
-  it('filters dismissed data defensively even when the server sends it', async () => {
+  it('loads, filters dismissed items and forwards list options', async () => {
     const store = prepareStore()
     vi.mocked(api.listNotifications).mockResolvedValue(loadedNotifications(
       makeNotification('visible'),
       { ...makeNotification('hidden'), dismissed_at: '2026-09-30T08:00:00Z' },
     ))
-    await store.fetch('district-one')
 
+    await store.fetch('district-one', { unreadOnly: true, limit: 7 })
+
+    expect(api.listNotifications).toHaveBeenCalledWith('district-one', {
+      unreadOnly: true,
+      limit: 7,
+    })
     expect(store.items.map((item) => item.id)).toEqual(['visible'])
     expect(store.unreadItems).toHaveLength(1)
+    expect(store.total).toBe(2)
+    expect(store.loading).toBe(false)
   })
 
-  it('ignores stale responses from a previously selected district', async () => {
+  it.each([
+    [new Error('offline'), 'offline'],
+    ['offline', 'Fehler beim Laden der Benachrichtigungen'],
+  ])('records current-district fetch failures', async (failure, expected) => {
+    vi.mocked(api.listNotifications).mockRejectedValueOnce(failure)
+    const store = prepareStore()
+
+    await store.fetch('district-one')
+
+    expect(store.error).toBe(expected)
+    expect(store.loading).toBe(false)
+  })
+
+  it('ignores stale success and error responses from a previous district', async () => {
     const store = prepareStore()
     let resolveFirst!: (value: api.NotificationListResponse) => void
     vi.mocked(api.listNotifications)
       .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
       .mockResolvedValueOnce(loadedNotifications(makeNotification('current')))
-
     const oldRequest = store.fetch('district-one')
     await store.fetch('district-two')
     resolveFirst(loadedNotifications(makeNotification('stale')))
     await oldRequest
-
     expect(store.items.map((item) => item.id)).toEqual(['current'])
-    expect(store.loading).toBe(false)
+
+    let rejectOld!: (reason: unknown) => void
+    vi.mocked(api.listNotifications)
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject }))
+      .mockResolvedValueOnce(loadedNotifications(makeNotification('current-2')))
+    const staleFailure = store.fetch('district-one')
+    await store.fetch('district-two')
+    rejectOld(new Error('stale'))
+    await staleFailure
+    expect(store.error).toBeNull()
+    expect(store.items.map((item) => item.id)).toEqual(['current-2'])
   })
 
-  it('drops stale mutations when switching districts', async () => {
+  it('updates unread count, ignores failed polls and stale count responses', async () => {
     const store = prepareStore()
-    vi.mocked(api.listNotifications).mockResolvedValueOnce(loadedNotifications(makeNotification('old')))
+    vi.mocked(api.getUnreadCount).mockResolvedValueOnce({ count: 5 }).mockRejectedValueOnce(new Error('offline'))
+    await store.fetchUnreadCount('district-one')
+    await store.fetchUnreadCount('district-one')
+    expect(store.unreadCount).toBe(5)
+
+    let resolveOld!: (value: { count: number }) => void
+    vi.mocked(api.getUnreadCount)
+      .mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+      .mockResolvedValueOnce({ count: 2 })
+    const oldPoll = store.fetchUnreadCount('district-one')
+    await store.fetchUnreadCount('district-two')
+    resolveOld({ count: 99 })
+    await oldPoll
+    expect(store.unreadCount).toBe(2)
+  })
+
+  it('marks unread visible notifications read once and never goes negative', async () => {
+    const store = prepareStore()
+    vi.mocked(api.listNotifications).mockResolvedValue(loadedNotifications(makeNotification('one')))
+    vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 1 })
+    await store.fetch('district-one')
+    await store.fetchUnreadCount('district-one')
+
+    await store.markRead('missing')
+    await store.markRead('one')
+    await store.markRead('one')
+
+    expect(api.markNotificationRead).toHaveBeenCalledTimes(1)
+    expect(store.items[0].read_at).not.toBeNull()
+    expect(store.unreadCount).toBe(0)
+  })
+
+  it('does not mutate a mark-read result after switching districts', async () => {
+    const store = prepareStore()
+    vi.mocked(api.listNotifications)
+      .mockResolvedValueOnce(loadedNotifications(makeNotification('old')))
+      .mockResolvedValueOnce(loadedNotifications(makeNotification('new')))
+    await store.fetch('district-one')
+    let release!: () => void
+    vi.mocked(api.markNotificationRead).mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+
+    const pending = store.markRead('old')
+    await store.fetch('district-two')
+    release()
+    await pending
+
+    expect(store.items[0].id).toBe('new')
+    expect(store.items[0].read_at).toBeNull()
+  })
+
+  it('dismisses unread and read notifications while preserving state on API failure', async () => {
+    const store = prepareStore()
+    vi.mocked(api.listNotifications).mockResolvedValue(loadedNotifications(
+      makeNotification('unread'),
+      makeNotification('read', '2026-09-30T08:01:00Z'),
+    ))
+    vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 1 })
+    await store.fetch('district-one')
+    await store.fetchUnreadCount('district-one')
+
+    await store.dismiss('missing')
+    await store.dismiss('read')
+    expect(store.unreadCount).toBe(1)
+    await store.dismiss('unread')
+    expect(store.unreadCount).toBe(0)
+    expect(store.total).toBe(0)
+
+    vi.mocked(api.listNotifications).mockResolvedValue(loadedNotifications(makeNotification('keep')))
+    await store.fetch('district-one')
+    vi.mocked(api.dismissNotification).mockRejectedValueOnce(new Error('API unavailable'))
+    await expect(store.dismiss('keep')).rejects.toThrow('API unavailable')
+    expect(store.items).toHaveLength(1)
+  })
+
+  it('drops stale dismiss mutations after switching districts', async () => {
+    const store = prepareStore()
+    vi.mocked(api.listNotifications)
+      .mockResolvedValueOnce(loadedNotifications(makeNotification('old')))
       .mockResolvedValueOnce(loadedNotifications(makeNotification('new')))
     await store.fetch('district-one')
     let resolveDismiss!: () => void
@@ -123,25 +190,67 @@ describe('notification store', () => {
     expect(store.items.map((item) => item.id)).toEqual(['new'])
   })
 
-  it('marks visible notifications read without negative badge counts', async () => {
+  it('marks all eligible notifications read and subtracts only the reported count', async () => {
     const store = prepareStore()
-    vi.mocked(api.listNotifications).mockResolvedValue(loadedNotifications(makeNotification('one')))
+    vi.mocked(api.listNotifications).mockResolvedValue(loadedNotifications(
+      makeNotification('unread'),
+      makeNotification('read', '2026-09-30T08:01:00Z'),
+      { ...makeNotification('dismissed'), dismissed_at: '2026-09-30T08:02:00Z' },
+    ))
     vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 1 })
-    vi.mocked(api.markNotificationRead).mockResolvedValue()
+    vi.mocked(api.markAllNotificationsRead).mockResolvedValue({ marked_read: 5 })
     await store.fetch('district-one')
     await store.fetchUnreadCount('district-one')
 
-    await store.markRead('one')
-    await store.markRead('one')
-    expect(api.markNotificationRead).toHaveBeenCalledTimes(1)
+    await store.markAllRead('district-one')
+
+    expect(api.markAllNotificationsRead).toHaveBeenCalledWith('district-one')
+    expect(store.items.every((item) => item.read_at || item.dismissed_at)).toBe(true)
     expect(store.unreadCount).toBe(0)
   })
 
-  it('does not clear the last known badge count after a failed poll', async () => {
+  it('drops stale mark-all responses after switching districts', async () => {
     const store = prepareStore()
-    vi.mocked(api.getUnreadCount).mockResolvedValueOnce({ count: 5 }).mockRejectedValueOnce(new Error('offline'))
-    await store.fetchUnreadCount('district-one')
-    await store.fetchUnreadCount('district-one')
-    expect(store.unreadCount).toBe(5)
+    vi.mocked(api.listNotifications)
+      .mockResolvedValueOnce(loadedNotifications(makeNotification('old')))
+      .mockResolvedValueOnce(loadedNotifications(makeNotification('new')))
+    await store.fetch('district-one')
+    let release!: (value: { marked_read: number }) => void
+    vi.mocked(api.markAllNotificationsRead).mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+
+    const pending = store.markAllRead('district-one')
+    await store.fetch('district-two')
+    release({ marked_read: 1 })
+    await pending
+
+    expect(store.items[0].id).toBe('new')
+    expect(store.items[0].read_at).toBeNull()
+  })
+
+  it('starts, replaces and stops polling and reset clears state', async () => {
+    vi.useFakeTimers()
+    const store = prepareStore()
+    vi.mocked(api.getUnreadCount).mockResolvedValue({ count: 3 })
+
+    store.startPolling('district-one', 1000)
+    await Promise.resolve()
+    expect(api.getUnreadCount).toHaveBeenCalledWith('district-one')
+
+    vi.advanceTimersByTime(1000)
+    await Promise.resolve()
+    expect(api.getUnreadCount).toHaveBeenCalledTimes(2)
+
+    store.startPolling('district-two', 1000)
+    store.error = 'old'
+    store.items = [makeNotification('old')]
+    store.total = 1
+    store.unreadCount = 3
+    store.reset()
+
+    expect(store.items).toEqual([])
+    expect(store.total).toBe(0)
+    expect(store.unreadCount).toBe(0)
+    expect(store.loading).toBe(false)
+    expect(store.error).toBeNull()
   })
 })
