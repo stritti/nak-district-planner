@@ -211,7 +211,7 @@ async def test_keycloak_provisioning_adapter_existing_user() -> None:
     token_resp.json.return_value = {"access_token": "t"}
 
     lookup_existing = MagicMock(status_code=200)
-    lookup_existing.json.return_value = [{"id": "existing-1"}]
+    lookup_existing.json.return_value = [{"id": "existing-1", "emailVerified": True}]
 
     client_ctx = AsyncMock()
     c = client_ctx.__aenter__.return_value
@@ -230,6 +230,75 @@ async def test_keycloak_provisioning_adapter_existing_user() -> None:
         )
     assert result.status == "EXISTING"
     assert result.user_sub == "existing-1"
+
+
+def _kc_adapter(invite: bool) -> KeycloakProvisioningAdapter:
+    return KeycloakProvisioningAdapter(
+        base_url="https://kc.example.com",
+        realm="nak-planner",
+        admin_username="admin",
+        admin_password="secret",
+        timeout_seconds=2,
+        invite_on_approval=invite,
+    )
+
+
+async def _kc_provision(adapter: KeycloakProvisioningAdapter, client_ctx: AsyncMock):
+    with patch("app.adapters.idp.keycloak_provisioner.httpx.AsyncClient", return_value=client_ctx):
+        return await adapter.provision_user(
+            email="victim@example.com",
+            name="Victim",
+            district_id=str(uuid.uuid4()),
+            registration_id=str(uuid.uuid4()),
+            role="DISTRICT_ADMIN",
+            scope_type="DISTRICT",
+            scope_id=str(uuid.uuid4()),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry_extra", [{}, {"emailVerified": False}, {"emailVerified": "true"}])
+@pytest.mark.parametrize("invite", [False, True])
+async def test_keycloak_existing_unverified_account_is_not_bound(
+    entry_extra: dict, invite: bool
+) -> None:
+    """Issue #461: an existing Keycloak account whose email is not verified
+    must not be bound to the registration (no user_sub returned).
+    """
+    token_resp = MagicMock(status_code=200)
+    token_resp.json.return_value = {"access_token": "t"}
+    lookup = MagicMock(status_code=200)
+    lookup.json.return_value = [{"id": "attacker-1", **entry_extra}]
+    client_ctx = AsyncMock()
+    c = client_ctx.__aenter__.return_value
+    c.post = AsyncMock(return_value=token_resp)
+    c.get = AsyncMock(return_value=lookup)
+    c.put = AsyncMock(return_value=MagicMock(status_code=204, text=""))
+
+    result = await _kc_provision(_kc_adapter(invite), client_ctx)
+
+    assert result.user_sub is None
+    assert result.status == ("EXISTING_UNVERIFIED_INVITED" if invite else "EXISTING_UNVERIFIED")
+
+
+@pytest.mark.asyncio
+async def test_keycloak_conflict_on_create_does_not_bind_unverified_account() -> None:
+    """A 409 race on create must apply the same emailVerified check."""
+    token_resp = MagicMock(status_code=200)
+    token_resp.json.return_value = {"access_token": "t"}
+    lookup_empty = MagicMock(status_code=200)
+    lookup_empty.json.return_value = []
+    lookup_unverified = MagicMock(status_code=200)
+    lookup_unverified.json.return_value = [{"id": "attacker-1", "emailVerified": False}]
+    client_ctx = AsyncMock()
+    c = client_ctx.__aenter__.return_value
+    c.post = AsyncMock(side_effect=[token_resp, MagicMock(status_code=409, text="exists")])
+    c.get = AsyncMock(side_effect=[lookup_empty, lookup_unverified])
+
+    result = await _kc_provision(_kc_adapter(False), client_ctx)
+
+    assert result.user_sub is None
+    assert result.status == "EXISTING_UNVERIFIED"
 
 
 def test_settings_parsing_and_validation() -> None:
