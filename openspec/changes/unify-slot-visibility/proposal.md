@@ -24,8 +24,9 @@ and cancelled slots were exported as normal events.
 - ICS export: congregation feeds include district slots released to the
   congregation; leader feeds only that leader's slots; CANCELLED slots are
   emitted with `STATUS:CANCELLED` so subscribed calendars remove them;
-  `DTSTAMP`/`LAST-MODIFIED` from `updated_at`; `SEQUENCE` = epoch seconds of the
-  last revision (monotonic). UIDs remain `{slot_id}@nak-bezirksplaner`.
+  `DTSTAMP`/`LAST-MODIFIED` from the last revision of slot, event instance,
+  displayed leader and congregation; `SEQUENCE` = seconds since 2020 of that
+  revision (monotonic, within the 32-bit RFC 5545 INTEGER). UIDs remain `{slot_id}@nak-bezirksplaner`.
 - Frontend: the planned/confirmed toggle is shown for INTERNAL tokens only.
 
 This change supersedes the outdated event-distribution wording of

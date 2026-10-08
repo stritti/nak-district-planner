@@ -57,7 +57,7 @@ The ICS export SHALL include, for congregation tokens, the congregation's own sl
 - **THEN** only slots with an assignment for that leader are exported
 
 ### Requirement: ICS change semantics
-The ICS export SHALL keep UIDs stable (`{slot_id}@nak-bezirksplaner`), SHALL emit `STATUS:CANCELLED` for cancelled slots, and SHALL derive `DTSTAMP` and `LAST-MODIFIED` from the last revision (`updated_at`) and `SEQUENCE` from its epoch seconds.
+The ICS export SHALL keep UIDs stable (`{slot_id}@nak-bezirksplaner`), SHALL emit `STATUS:CANCELLED` for cancelled slots, and SHALL derive `DTSTAMP` and `LAST-MODIFIED` from the latest `updated_at` of everything rendered into the event (slot, event instance, displayed leader, congregation) and `SEQUENCE` from the seconds since 2020-01-01 of that revision, so it stays within the 32-bit RFC 5545 INTEGER.
 
 #### Scenario: Cancelled slot removed from subscribed calendars
 - **WHEN** a slot that was previously exported is cancelled
@@ -66,3 +66,7 @@ The ICS export SHALL keep UIDs stable (`{slot_id}@nak-bezirksplaner`), SHALL emi
 #### Scenario: Updated slot increases SEQUENCE
 - **WHEN** a slot's `updated_at` advances
 - **THEN** its `LAST-MODIFIED` reflects the new time and its `SEQUENCE` increases
+
+#### Scenario: Leader or congregation rename updates the event revision
+- **WHEN** the displayed leader or the slot's congregation is renamed
+- **THEN** the exported event's `LAST-MODIFIED` and `SEQUENCE` advance although the slot itself is unchanged

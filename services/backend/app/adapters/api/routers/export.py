@@ -142,9 +142,13 @@ def _slot_key(assignment: ServiceAssignment) -> uuid.UUID:
     return assignment.planning_slot_id or assignment.event_id
 
 
+# RFC 5545 INTEGER is 32-bit; Unix-epoch seconds would overflow in 2038.
+_SEQUENCE_EPOCH = datetime(2020, 1, 1, tzinfo=UTC)
+
+
 def _sequence(last_modified: datetime) -> int:
-    """Return the iCal SEQUENCE: epoch seconds of the last revision (monotonic)."""
-    return int(last_modified.timestamp())
+    """Return the iCal SEQUENCE: seconds since 2020 of the last revision (monotonic)."""
+    return int((last_modified - _SEQUENCE_EPOCH).total_seconds())
 
 
 @router.get("/export/{token_str}/calendar.ics", include_in_schema=False)
@@ -169,7 +173,6 @@ async def export_calendar_ics(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
 
     # RLS public export policies use app.current_export_token for scoped reads.
-
 
     # Load PlanningSlots for a wide window (past 1 year, future 2 years)
     now = datetime.now(UTC).date()
@@ -224,6 +227,8 @@ async def export_calendar_ics(
 
     # Build assignment_map: prefer non-empty leader_name; fall back to leader_id lookup
     assignment_map: dict[uuid.UUID, str | None] = {}
+    # Leader renames change the exported COMMENT without touching the slot
+    leader_revision: dict[uuid.UUID, datetime] = {}
     for a in assignments:
         display_name: str | None = None
         if a.leader_name:
@@ -232,6 +237,8 @@ async def export_calendar_ics(
             ldr = leaders_by_id[a.leader_id]
             rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
             display_name = f"{rank_prefix}{ldr.name}"
+            key = _slot_key(a)
+            leader_revision[key] = max(ldr.updated_at, leader_revision.get(key, ldr.updated_at))
 
         # For each slot keep the best name (non-None wins over None)
         slot_key = _slot_key(a)
@@ -243,7 +250,9 @@ async def export_calendar_ics(
     cong_result = await session.execute(
         select(CongregationORM).where(CongregationORM.district_id == export_token.district_id)
     )
-    cong_map: dict[uuid.UUID, str] = {c.id: c.name for c in cong_result.scalars()}
+    congregations = list(cong_result.scalars())
+    cong_map: dict[uuid.UUID, str] = {c.id: c.name for c in congregations}
+    cong_revision: dict[uuid.UUID, datetime] = {c.id: c.updated_at for c in congregations}
 
     # Build iCalendar
     cal = Calendar()
@@ -275,8 +284,16 @@ async def export_calendar_ics(
             vevent.add("dtstart", vt)
             vevent.add("dtend", vt + _SYNTHESIZED_EVENT_DURATION)
 
-        # Change metadata from the last revision so clients pick up updates
-        last_modified = max(slot.updated_at, instance.updated_at) if instance else slot.updated_at
+        # Change metadata from the last revision of everything rendered into the
+        # VEVENT (slot, instance, leader name, congregation name)
+        revisions = [slot.updated_at]
+        if instance:
+            revisions.append(instance.updated_at)
+        if slot.id in leader_revision:
+            revisions.append(leader_revision[slot.id])
+        if slot.congregation_id in cong_revision:
+            revisions.append(cong_revision[slot.congregation_id])
+        last_modified = max(revisions)
         vevent.add("dtstamp", last_modified)
         vevent.add("last-modified", last_modified)
         vevent.add("sequence", _sequence(last_modified))

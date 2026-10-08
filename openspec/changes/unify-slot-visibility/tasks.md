@@ -16,6 +16,7 @@
 - [x] 4.1 Regression tests: congregation feed, PUBLIC override, STATUS:CANCELLED, change metadata, leader feed
 - [x] 4.2 Apply shared predicate and token approval policy in export router
 - [x] 4.3 Emit DTSTAMP/LAST-MODIFIED/SEQUENCE from `updated_at`
+- [x] 4.4 Include displayed leader and congregation revisions; SEQUENCE based on 2020 (32-bit safe beyond 2038)
 
 ## 5. Frontend
 - [x] 5.1 Show approval filter toggle only for INTERNAL export tokens

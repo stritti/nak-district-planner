@@ -39,6 +39,7 @@ from app.domain.models.invitation import (
     InvitationTargetType,
     OverwriteDecisionStatus,
 )
+from app.domain.models.leader import Leader
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
     PlanningSlot,
@@ -1134,6 +1135,72 @@ async def test_export_change_metadata_follows_updated_at() -> None:
         return int(line.removeprefix("SEQUENCE:"))
 
     assert _sequence(second) > _sequence(first)
+
+
+def _sequence_of(vevent: str) -> int:
+    line = next(x for x in vevent.splitlines() if x.startswith("SEQUENCE:"))
+    return int(line.removeprefix("SEQUENCE:"))
+
+
+def test_export_sequence_fits_rfc5545_integer_beyond_2038() -> None:
+    assert export_router._sequence(datetime(2087, 12, 31, tzinfo=UTC)) < 2**31
+
+
+@pytest.mark.asyncio
+async def test_export_leader_rename_advances_revision() -> None:
+    district_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id)
+    slot.updated_at = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
+    leader = Leader.create(name="Alt", district_id=district_id)
+    leader.updated_at = slot.updated_at
+    assignment = _assignment_stub(slot.id, "", leader_id=leader.id)
+    token = ExportToken.create(
+        label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
+    )
+
+    first = _vevents(
+        (await _export(token, [slot], assignments=[assignment], leaders=[leader])).body
+    )[0]
+    leader.name = "Neu"
+    leader.updated_at += timedelta(minutes=5)
+    second = _vevents(
+        (await _export(token, [slot], assignments=[assignment], leaders=[leader])).body
+    )[0]
+
+    assert "Neu" in second
+    assert "LAST-MODIFIED:20260302T093500Z" in second
+    assert _sequence_of(second) > _sequence_of(first)
+
+
+@pytest.mark.asyncio
+async def test_export_congregation_rename_advances_revision() -> None:
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    slot = _planning_slot(district_id=district_id, congregation_id=congregation_id)
+    slot.updated_at = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
+    token = ExportToken.create(
+        label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
+    )
+
+    async def export_with(name: str, updated_at: datetime) -> str:
+        db = AsyncMock()
+        result = MagicMock()
+        congregation = MagicMock(id=congregation_id, updated_at=updated_at)
+        congregation.name = name
+        result.scalars.return_value = [congregation]
+        db.execute.return_value = result
+        repos = _export_repos(token=token, slots=[slot])
+        response = await export_router.export_calendar_ics(
+            token.token, db, approval_status=None, **repos
+        )
+        return _vevents(response.body)[0]
+
+    first = await export_with("Alt", slot.updated_at)
+    second = await export_with("Neu", slot.updated_at + timedelta(minutes=5))
+
+    assert "LOCATION:Neu" in second
+    assert "LAST-MODIFIED:20260302T093500Z" in second
+    assert _sequence_of(second) > _sequence_of(first)
 
 
 @pytest.mark.asyncio
