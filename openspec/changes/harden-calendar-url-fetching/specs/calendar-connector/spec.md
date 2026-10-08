@@ -53,6 +53,21 @@ The calendar HTTP client SHALL abort responses larger than 10 MB, based on Conte
 - **WHEN** a feed returns more than 10 MB
 - **THEN** reading SHALL stop and the connector SHALL raise a connector error
 
+### Requirement: A calendar fetch never takes longer than 30 seconds
+The calendar HTTP client SHALL bound every fetch by one total budget of 30 seconds covering DNS resolution, every connect and TLS attempt across all resolved addresses, the response headers and the body; retries of transient failures SHALL share the same budget. Exceeding it SHALL fail with the generic connector error.
+
+#### Scenario: Stalled TLS handshake on every address
+- **WHEN** each resolved address accepts the TCP connection but never completes the TLS handshake
+- **THEN** the fetch SHALL fail after at most 30 seconds in total
+
+#### Scenario: Slowly trickling body
+- **WHEN** a feed sends its body in small chunks, each within the read timeout, but slower than the budget allows
+- **THEN** reading SHALL stop when the budget is used up
+
+#### Scenario: Retries
+- **WHEN** a transient failure triggers retries
+- **THEN** all attempts and backoff waits together SHALL stay within the 30-second budget
+
 ### Requirement: Calendar errors do not leak targets or secrets
 Connector errors and persisted `last_sync_error` values SHALL NOT contain URLs, credentials, HTTP status codes, or the distinction between transport and HTTP failures.
 
