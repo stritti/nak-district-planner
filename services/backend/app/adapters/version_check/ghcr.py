@@ -13,55 +13,87 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-SEMVER_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+# SemVer 2.0 core + optional prerelease (``1.0.0-rc.1``), or a PEP 440
+# pre-release suffix (``1.0.0rc1``) as reported by Python package metadata.
+# SemVer build metadata / PEP 440 local versions (``+...``) are ignored for precedence.
+SEMVER_PATTERN = re.compile(
+    r"^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
+    r"(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)"
+    r"|(a|b|rc)(\d+))?(?:\+[0-9A-Za-z.-]+)?$"
+)
+_PEP440_PRE = {"a": "alpha", "b": "beta", "rc": "rc"}
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True)
 class SemVer:
-    """Simple SemVer value object for comparison."""
+    """SemVer value object with SemVer 2.0 precedence (prereleases included)."""
 
     major: int
     minor: int
     patch: int
+    pre: tuple[str, ...] = ()
 
     @classmethod
     def parse(cls, tag: str) -> SemVer | None:
-        """Parse a SemVer tag like '0.4.5' or 'v0.4.5'."""
+        """Parse ``0.4.5``, ``v1.0.0-rc.1`` or PEP 440 ``1.0.0rc1`` (→ ``1.0.0-rc.1``)."""
         match = SEMVER_PATTERN.match(tag)
         if not match:
             return None
-        return cls(
-            major=int(match.group(1)),
-            minor=int(match.group(2)),
-            patch=int(match.group(3)),
-        )
+        major, minor, patch, pre, pep_kind, pep_num = match.groups()
+        if pep_kind:
+            pre = f"{_PEP440_PRE[pep_kind]}.{int(pep_num)}"
+        return cls(int(major), int(minor), int(patch), tuple(pre.split(".")) if pre else ())
+
+    @property
+    def is_prerelease(self) -> bool:
+        """True for versions with a prerelease part."""
+        return bool(self.pre)
+
+    def _key(self) -> tuple:
+        # Final release ranks above any prerelease of the same core version;
+        # numeric identifiers compare numerically and rank below alphanumerics.
+        pre = tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in self.pre)
+        return (self.major, self.minor, self.patch, not self.pre, pre)
+
+    def __lt__(self, other: SemVer) -> bool:
+        """Compare by SemVer precedence."""
+        return self._key() < other._key()
 
     def __str__(self) -> str:
-        """Return the version as ``major.minor.patch`` string."""
-        return f"{self.major}.{self.minor}.{self.patch}"
+        """Return the canonical SemVer string, e.g. ``1.0.0-rc.1``."""
+        core = f"{self.major}.{self.minor}.{self.patch}"
+        return f"{core}-{'.'.join(self.pre)}" if self.pre else core
 
 
 def parse_semver_tags(tags: Sequence[str]) -> list[SemVer]:
     """Filter and parse a list of tag strings, returning only valid SemVers."""
-    result: list[SemVer] = []
-    for tag in tags:
-        parsed = SemVer.parse(tag)
-        if parsed is not None:
-            result.append(parsed)
-    return result
+    return [v for v in map(SemVer.parse, tags) if v is not None]
 
 
-def latest_semver(tags: Sequence[str]) -> str | None:
-    """Return the highest SemVer tag from a list of tag strings.
+def latest_semver(tags: Sequence[str], current: str | None = None) -> str | None:
+    """Return the highest SemVer tag (without ``v`` prefix) or None.
 
-    Returns the tag *without* the 'v' prefix (e.g. '0.5.0').
-    Returns None if no valid SemVer tags are found.
+    Policy: prerelease tags are only considered when ``current`` is itself a
+    prerelease; installations on a stable release are only offered stable
+    releases. Non-SemVer tags (``latest``, ``sha-…``) are ignored.
     """
-    parsed = parse_semver_tags(tags)
-    if not parsed:
-        return None
-    parsed.sort(reverse=True)
-    return str(parsed[0])
+    cur = SemVer.parse(current) if current else None
+    allow_pre = cur is not None and cur.is_prerelease
+    candidates = [v for v in parse_semver_tags(tags) if allow_pre or not v.is_prerelease]
+    return str(max(candidates)) if candidates else None
+
+
+def is_newer(latest: str | None, current: str) -> bool:
+    """True only if ``latest`` is strictly newer than ``current`` (never a downgrade).
+
+    Fails safe: an unparseable ``current`` never gets an update offer.
+    """
+    new = SemVer.parse(latest) if latest else None
+    if new is None:
+        return False
+    cur = SemVer.parse(current)
+    return cur is not None and cur < new
 
 
 class GhcrTagFetcher:
@@ -97,7 +129,8 @@ class GhcrTagFetcher:
             logger.exception("Unexpected error fetching ghcr.io tags: %s", e)
             return []
 
-    def fetch_latest_version(self, service: str = "backend") -> str | None:
+    def fetch_latest_version(
+        self, service: str = "backend", current: str | None = None
+    ) -> str | None:
         """Fetch and return the latest SemVer version for a service image."""
-        tags = self.fetch_tags(service)
-        return latest_semver(tags)
+        return latest_semver(self.fetch_tags(service), current)

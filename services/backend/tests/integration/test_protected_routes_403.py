@@ -802,7 +802,6 @@ def test_pending_overview_returns_empty_for_non_admin(auth_client):
     ("method", "path"),
     [
         ("get", "/api/v1/system/version"),  # needs DISTRICT_ADMIN/CONG_ADMIN anywhere
-        ("post", "/api/v1/system/update"),  # superadmin only
     ],
 )
 def test_system_routes_return_403(auth_client, method, path):

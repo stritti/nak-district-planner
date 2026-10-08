@@ -39,6 +39,14 @@ Der Production Guard verhindert den Start, wenn kritische Werte nicht gesetzt si
 4. Stack starten/aktualisieren: `docker compose -f docker-compose.yml up -d`
 5. Health pruefen: `curl http://localhost/api/health`
 
+**Update-Hinweis in der App:** Die Anwendung zeigt Administratoren nur an, dass eine
+neuere Version verfügbar ist (Banner mit Link auf die Release Notes). Sie führt
+selbst **keine** Updates aus — ein Update ist immer das obige Standard-Deployment
+mit dem neuen Release-Tag. Versionsvergleich nach SemVer 2.0 (inkl. Prereleases wie
+`1.0.0-rc.1`; PEP-440-Versionen wie `1.0.0rc1` werden normalisiert). Prereleases
+werden nur angeboten, wenn bereits eine Prerelease läuft; eine stabile Installation
+sieht nur stabile Releases. Ältere Versionen werden nie als Update angezeigt.
+
 ## 3. Rollback (Basisverfahren)
 
 1. Vor Deployment DB-Backup erstellen.
