@@ -11,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 
+from app.adapters.api.client_ip import get_client_ip
 from app.application.local_rate_limiter import LocalFallbackRateLimiter
 from app.application.rate_limiter import (
     RateLimitConfig,
@@ -172,7 +173,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if isinstance(sub, str) and sub:
             return f"user:{sub}"
 
-        ip_address = self._get_client_ip(request)
+        ip_address = get_client_ip(request)
         return f"ip:{ip_address}" if ip_address else "anonymous"
 
     @staticmethod
@@ -185,20 +186,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         to arbitrary bearer strings.
         """
         return bool(getattr(request.state, "user", None))
-
-    @staticmethod
-    def _get_client_ip(request: Request) -> str | None:
-        """Extract client IP according to the documented nginx trust model."""
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip
-
-        forwarded_for = request.headers.get("x-forwarded-for")
-        if forwarded_for:
-            ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
-            if ips:
-                return ips[-1]
-
-        if request.client:
-            return request.client.host
-        return None

@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     secret_key: str = "replace-with-a-long-random-secret-key"
     app_env: str = "development"
 
+    # Comma-separated peer networks whose X-Real-IP header is trusted (the
+    # frontend nginx container). Default: loopback + Docker bridge networks.
+    trusted_proxies: str = "127.0.0.0/8,::1/128,172.16.0.0/12"
+
     # SMTP outbound delivery (SMTP is selected only in production)
     smtp_host: str = ""
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -117,6 +121,15 @@ class Settings(BaseSettings):
                 "CALENDAR_ALLOW_INSECURE_URLS must be false in production (SSRF protection)"
             )
         return self
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def validate_trusted_proxies(cls, value: str) -> str:
+        """Reject malformed proxy networks at startup instead of per request."""
+        for network in value.split(","):
+            if network.strip():
+                ipaddress.ip_network(network.strip(), strict=False)
+        return value
 
     @model_validator(mode="after")
     def validate_oidc_settings(self) -> Settings:

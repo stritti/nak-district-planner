@@ -1,5 +1,6 @@
 """Unit tests for fail-fast database schema version verification."""
 
+import socket
 from contextlib import AbstractAsyncContextManager
 from typing import Any
 
@@ -87,6 +88,22 @@ async def test_schema_assert_rejects_unreadable_version_table(
 ) -> None:
     _set_expected_heads(monkeypatch, ["0021"])
     engine = _Engine(_Connection(error=SQLAlchemyError("missing table")))
+
+    with pytest.raises(schema_version.SchemaVersionError, match="Could not read"):
+        await schema_version.assert_database_schema_current(engine)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [ConnectionRefusedError("refused"), socket.gaierror("no such host"), TimeoutError()],
+)
+async def test_schema_assert_rejects_unreachable_database(
+    monkeypatch: pytest.MonkeyPatch, error: OSError
+) -> None:
+    """Driver-level connection errors must stop the worker, not slip past the guard."""
+    _set_expected_heads(monkeypatch, ["0021"])
+    engine = _Engine(_Connection(error=error))
 
     with pytest.raises(schema_version.SchemaVersionError, match="Could not read"):
         await schema_version.assert_database_schema_current(engine)  # type: ignore[arg-type]
