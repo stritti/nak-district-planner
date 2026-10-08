@@ -45,8 +45,8 @@ Tabgebundene Koordinationsdaten duerfen `sessionStorage` verwenden, sofern sie k
 - PostgreSQL Row Level Security auf Tenant-Tabellen: ✅
 - getrennte Runtime-DB-Rolle ohne `BYPASSRLS`: ✅
 - System-Worker-Kontext ist explizit und begrenzt: ✅
-- Tenant-Autorisierung darf nicht auf unverifiziert dekodierten JWT-Claims beruhen: 🟡 RC-2, PR #443
-- fachliche Autorisierung erfolgt nach verifizierter Authentifizierung ueber Dependencies/RBAC; RLS bleibt letzte Datenbankgrenze: 🟡 RC-2, PR #443
+- Tenant-Autorisierung darf nicht auf unverifiziert dekodierten JWT-Claims beruhen: ✅ (PR #443)
+- fachliche Autorisierung erfolgt nach verifizierter Authentifizierung ueber Dependencies/RBAC; RLS bleibt letzte Datenbankgrenze: ✅ (PR #443)
 
 Ein vom Client kontrollierter Claim oder Header ist niemals alleinige Berechtigungsquelle.
 
@@ -68,7 +68,7 @@ Details: `docs/production-runbook.md`.
 - globale und pfadspezifische Rate Limits: ✅
 - ICS-Export ist tokenbasiert oeffentlich und rate-limited: ✅
 - OIDC Discovery/Token-Exchange sind bewusst oeffentlich und rate-limited: ✅
-- sicherheitssensitive Auth-/Registrierungs-/Provisioning-Pfade behalten bei Valkey-Ausfall einen lokalen Fallback-Limiter: 🟡 RC-2, PR #443
+- OIDC-Token-Exchange und oeffentliche Selbstregistrierung behalten bei Valkey-Ausfall einen lokalen Fallback-Limiter: ✅ (PR #443)
 - Rate-Limiter-Degradation wird geloggt/telemetriert: ✅; lokale Fallback-Nutzung ist Bestandteil des RC-2-Monitorings
 
 ### 5.1 Oeffentliche Endpunkte
@@ -98,7 +98,11 @@ Eine Route darf nur dann ohne Bearer-Authentifizierung erreichbar sein, wenn sie
 - Anwendungseinstieg darf den vorgesehenen TLS-Proxy nicht ueber einen oeffentlichen Host-Port umgehen: ✅ (PR #440)
 - CSP und Security Header sind restriktiv; externe `connect-src`-Ziele muessen begruendet sein: ✅ (PR #440)
 - Runtime und Migration verwenden getrennte DB-Verantwortlichkeiten: ✅
-- Schema-Migration gehoert in den Deployment-Schritt, nicht in den API-Lifespan: 🟡 RC-2, PR #441
+- Schema-Migration gehoert in den Deployment-Schritt, nicht in den API-Lifespan: ✅ (PR #441)
+
+### 7.1 Keine In-App-Updates
+
+Die Anwendung **fuehrt keine Deployment-Updates aus** (#469): kein Update-Endpoint, kein Update-Task, kein Docker-Socket-Modus. Der Docker-Socket darf nie in einen Container gemountet werden (root-aequivalenter Host-Zugriff). Die Anwendung zeigt Administratoren nur an, dass eine neuere Version existiert (`GET /api/v1/system/version`); Updates erfolgen ausschliesslich durch Betreiber nach `docs/production-runbook.md`.
 
 ### 7.1 Keine In-App-Updates
 
@@ -136,7 +140,7 @@ Das Ruleset arbeitet strict und ohne Bypass. Aktuell werden noch keine Approvals
 ## 10. Coverage und Testqualitaet
 
 - Backend-Coverage-Gate: mindestens 80 Prozent: ✅
-- Frontend-Coverage muss alle relevanten Production-Sources messen und fuer Statements, Branches, Functions und Lines mindestens 80 Prozent erreichen: 🟡 RC-2, PR #439
+- Frontend-Coverage muss alle relevanten Production-Sources messen und fuer Statements, Branches, Functions und Lines mindestens 80 Prozent erreichen: ✅ (PR #439)
 - Production-Code darf nicht breit ausgeschlossen werden, nur um ein Coverage-Gate zu erreichen.
 - Security-Fixes muessen Negativ-/Ausnahmefaelle testen (invalid JWT, falscher Issuer/Audience, fehlender Refresh-Cookie, Provider-Fehler, Valkey-Ausfall, Cross-Tenant-Zugriff).
 - RuntimeWarnings durch falsch gemockte/unawaited Coroutines gelten als Testqualitaets-Schuld und muessen vor finalem 1.0.0 bereinigt werden.
