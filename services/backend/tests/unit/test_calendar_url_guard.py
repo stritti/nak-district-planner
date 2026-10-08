@@ -605,3 +605,35 @@ async def test_retries_share_one_budget(monkeypatch):
         await http_policy.resilient_request(flaky, provider="iCal")
     assert time.monotonic() - started < 0.45
     assert calls <= 2
+
+
+async def test_fallback_after_a_refused_address_is_bounded_by_both_deadlines():
+    """Fallback still happens, and the stalled second address ends at the budget."""
+    import asyncio
+    import time
+
+    tried: list[str] = []
+
+    class RefuseThenStall(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            tried.append(request.url.host)
+            if request.url.host == "93.184.216.34":
+                await asyncio.sleep(0.05)
+                raise httpx.ConnectError("refused", request=request)
+            await asyncio.sleep(3600)  # TCP accepted, TLS never completes
+
+    transport = GuardedTransport(
+        inner=RefuseThenStall(),
+        resolver=_resolver("93.184.216.34", "93.184.216.35"),
+        budget_seconds=0.3,
+    )
+    async with httpx.AsyncClient(
+        transport=transport, timeout=httpx.Timeout(5.0, connect=5.0), trust_env=False
+    ) as client:
+        started = time.monotonic()
+        with pytest.raises(httpx.TimeoutException):
+            await client.get("https://calendar.example.com/feed.ics")
+        elapsed = time.monotonic() - started
+
+    assert tried == ["93.184.216.34", "93.184.216.35"]  # fell back to the validated second IP
+    assert elapsed < 0.45  # total budget, although connect=5 s per attempt
