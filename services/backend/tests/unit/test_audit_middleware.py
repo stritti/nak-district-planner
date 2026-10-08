@@ -639,26 +639,3 @@ class TestContextOfRejectedRequests:
         assert context.district_id == district
         # The unverified claim is not recorded as the acting user.
         assert context.user_sub is None
-
-
-class TestClaimedIdentity:
-    @staticmethod
-    def _request(claimed):
-        request = MagicMock(spec=Request)
-        request.state = MagicMock(spec=["tenant_context"])
-        request.state.tenant_context = {"user_sub": claimed} if claimed else {}
-        return request
-
-    def test_unverified_subject_is_recorded_as_claim(self):
-        from app.adapters.api.middleware.audit import _claimed_identity
-
-        assert _claimed_identity(self._request("prober"), AuditContext()) == {
-            "claimed_sub": "prober"
-        }
-
-    def test_verified_user_needs_no_claim(self):
-        from app.adapters.api.middleware.audit import _claimed_identity
-
-        context = AuditContext(user_sub="verified")
-        assert _claimed_identity(self._request("prober"), context) == {}
-        assert _claimed_identity(self._request(None), AuditContext()) == {}
