@@ -15,13 +15,12 @@
           <p class="text-gray-600">Discovery wird geladen...</p>
         </div>
 
-        <!-- Error State -->
-        <div v-else-if="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p class="text-red-800">{{ error }}</p>
-        </div>
-
-        <!-- Login Form -->
         <div v-else>
+          <!-- Errors are recoverable: keep the login action available for an explicit retry. -->
+          <div v-if="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p class="text-red-800">{{ error }}</p>
+          </div>
+
           <form @submit.prevent="handleLogin" class="space-y-6">
             <button
               type="submit"

@@ -23,8 +23,8 @@ Historische Inhalte wurden in die strukturierte Projektdokumentation ueberfuehrt
 |------|---------------|
 | Docker | 24+ |
 | Docker Compose | v2 (Plugin, nicht Standalone) |
-| Python | 3.11+ (nur für lokale Alembic-Migrationen außerhalb Docker) |
-| bun | 1.x (nur für lokale Frontend-Entwicklung außerhalb Docker) |
+| Python | 3.14 (nur für lokale Alembic-Migrationen außerhalb Docker) |
+| bun | 1.4 (nur für lokale Frontend-Entwicklung außerhalb Docker) |
 
 ---
 
@@ -355,7 +355,7 @@ nak-district-planner/
 ├── docker-compose.override.yml  # Dev-Ergänzungen (automatisch)
 ├── .env.example                 # Vorlage — nach .env kopieren
 └── services/
-    ├── backend/                 # FastAPI + Celery (Python 3.11)
+    ├── backend/                 # FastAPI + Celery (Python 3.14)
     │   ├── app/
     │   │   ├── domain/          # Pure-Python-Entitäten & Ports (ABCs)
     │   │   ├── application/     # Use Cases & Celery-Tasks

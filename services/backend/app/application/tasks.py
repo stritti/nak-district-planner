@@ -29,24 +29,21 @@ import logging
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import TypeVar
 
 from app.celery_app import celery
 from app.domain.errors import IntegrationNotFoundError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
 
-
-async def _run_as_system_worker(coro: Awaitable[T]) -> T:
+async def _run_as_system_worker[T](coro: Awaitable[T]) -> T:
     """Run DB work with a bounded system-worker tenant context for RLS GUCs.
 
     Every task runs in its own ``asyncio.run`` loop. Pooled asyncpg connections
     are bound to the loop that opened them, so the pool is disposed before the
     loop closes; the next task opens fresh connections on its own loop (#464).
     """
-    from app.adapters.db import session as db_session
+    from app.adapters.db.session import engine
     from app.tenant import TenantContext
 
     TenantContext.set_context(user_sub="system:celery-worker", user_roles=["SYSTEM_WORKER"])
@@ -54,7 +51,7 @@ async def _run_as_system_worker(coro: Awaitable[T]) -> T:
         return await coro
     finally:
         TenantContext.clear_context()
-        await db_session.engine.dispose()
+        await engine.dispose()
 
 
 # Exponential backoff for failing syncs: 60 s, 120 s, 240 s, 480 s (capped at
@@ -499,90 +496,13 @@ def check_version() -> dict:
     """
     from app.adapters.version_check.cache import version_cache
     from app.adapters.version_check.ghcr import GhcrTagFetcher
-
-    fetcher = GhcrTagFetcher()
-    latest = fetcher.fetch_latest_version("backend")
-    version_cache.set(latest)
-    logger.info(
-        "check_version: latest=%s current=%s",
-        latest,
-        __import__("app.config", fromlist=["settings"]).settings.app_version,
-    )
-    return {"latest": latest}
-
-
-@celery.task(name="trigger_docker_update")
-def trigger_docker_update() -> dict:
-    """Celery task — pull latest Docker images and restart services.
-
-    Runs `docker compose pull` and `docker compose up -d` in the configured
-    project directory. Only available in `docker-socket` mode.
-
-    The task uses subprocess with a timeout to prevent hanging.
-    Services are restarted in-place (rolling restart via compose).
-    Database migrations are NOT run automatically — admin must trigger them.
-    """
-    import subprocess
-    from pathlib import Path
-
     from app.config import settings
 
-    compose_dir = settings.docker_compose_dir
-    if not compose_dir:
-        return {"status": "error", "message": "DOCKER_COMPOSE_DIR not configured"}
-
-    project_path = Path(compose_dir)
-    if not project_path.exists():
-        return {"status": "error", "message": f"Directory not found: {compose_dir}"}
-
-    results: dict[str, str] = {}
-
-    # Step 1: Pull latest images
-    logger.info("trigger_docker_update: pulling latest images in %s", compose_dir)
-    try:
-        pull = subprocess.run(
-            ["docker", "compose", "pull"],
-            cwd=compose_dir,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        results["pull"] = "ok" if pull.returncode == 0 else f"failed: {pull.stderr.strip()}"
-        if pull.returncode != 0:
-            logger.error("trigger_docker_update: pull failed: %s", pull.stderr)
-    except subprocess.TimeoutExpired:
-        results["pull"] = "timeout"
-        logger.error("trigger_docker_update: pull timed out")
-    except Exception as e:
-        results["pull"] = f"error: {e}"
-        logger.exception("trigger_docker_update: pull error")
-
-    if results.get("pull", "").startswith("failed") or results.get("pull") == "timeout":
-        return {"status": "error", "details": results}
-
-    # Step 2: Restart services
-    logger.info("trigger_docker_update: restarting services")
-    try:
-        up = subprocess.run(
-            ["docker", "compose", "up", "-d"],
-            cwd=compose_dir,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        results["up"] = "ok" if up.returncode == 0 else f"failed: {up.stderr.strip()}"
-        if up.returncode != 0:
-            logger.error("trigger_docker_update: up failed: %s", up.stderr)
-    except subprocess.TimeoutExpired:
-        results["up"] = "timeout"
-        logger.error("trigger_docker_update: up timed out")
-    except Exception as e:
-        results["up"] = f"error: {e}"
-        logger.exception("trigger_docker_update: up error")
-
-    success = results.get("pull") == "ok" and results.get("up") == "ok"
-    logger.info("trigger_docker_update: completed: %s", results)
-    return {"status": "ok" if success else "error", "details": results}
+    current = settings.app_version
+    latest = GhcrTagFetcher().fetch_latest_version("backend", current)
+    version_cache.set(latest)
+    logger.info("check_version: latest=%s current=%s", latest, current)
+    return {"latest": latest}
 
 
 @celery.task(name="generate_planning_slots")

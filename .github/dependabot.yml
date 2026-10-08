@@ -13,12 +13,12 @@ updates:
     directory: "/services/frontend" # Location of package manifests
     schedule:
       interval: "weekly"
-  - package-ecosystem: "uv" # See documentation for possible values
-    directory: "/services/backend" # Location of package manifests
+  - package-ecosystem: "bun"
+    directory: "/" # Root package.json: VitePress docs toolchain
     schedule:
       interval: "weekly"
-  - package-ecosystem: "docker"
-    directory: "/"
+  - package-ecosystem: "uv" # See documentation for possible values
+    directory: "/services/backend" # Location of package manifests
     schedule:
       interval: "weekly"
   - package-ecosystem: "docker"
@@ -29,7 +29,7 @@ updates:
     directory: "/services/frontend"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "docker-compose" # See documentation for possible values
-    directory: "/services/frontend" # Location of package manifests
+  - package-ecosystem: "docker-compose"
+    directory: "/" # docker-compose*.yml live in the repository root
     schedule:
       interval: "weekly"
