@@ -1,6 +1,7 @@
 import asyncio
 from logging.config import fileConfig
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 import app.adapters.db.orm_models
@@ -17,6 +18,11 @@ target_metadata = Base.metadata
 # Tables managed by migrations alone, without an ORM model. app_superadmin_config
 # holds the bootstrap superadmin and is only touched through SQL functions (0017).
 _SQL_ONLY_TABLES = frozenset({"app_superadmin_config"})
+
+
+# Fixed pg_advisory_lock key ("nakmigr" in ASCII): concurrent `migrate` runs
+# serialize instead of applying the same revisions twice.
+MIGRATION_LOCK_KEY = 0x6E616B6D696772
 
 
 def _include_object(obj, name, type_, reflected, compare_to) -> bool:
@@ -40,11 +46,20 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection):
-    context.configure(
-        connection=connection, target_metadata=target_metadata, include_object=_include_object
-    )
-    with context.begin_transaction():
-        context.run_migrations()
+    # Session-level lock: survives the migration transaction's commit and is
+    # released explicitly (or by PostgreSQL when the connection closes).
+    connection.execute(text("SELECT pg_advisory_lock(:key)"), {"key": MIGRATION_LOCK_KEY})
+    connection.commit()
+    try:
+        context.configure(
+            connection=connection, target_metadata=target_metadata, include_object=_include_object
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+    finally:
+        connection.rollback()
+        connection.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": MIGRATION_LOCK_KEY})
+        connection.commit()
 
 
 async def run_migrations_online() -> None:

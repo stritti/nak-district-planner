@@ -211,3 +211,25 @@ def test_production_guard_oidc_client_id_default() -> None:
     settings.app_env = "production"
     with pytest.raises(RuntimeError, match="OIDC_CLIENT_ID"):
         production_guard(settings)
+
+
+@pytest.mark.parametrize("name", ["POSTGRES_PASSWORD", "MIGRATION_DATABASE_URL"])
+def test_owner_credentials_in_runtime_environment_block_startup(monkeypatch, name) -> None:
+    """A legacy ``.env`` may still carry the DB owner password into runtime services."""
+    monkeypatch.setenv(name, "owner-secret")
+
+    with pytest.raises(RuntimeError, match=name):
+        production_guard(_valid_prod_settings())
+
+
+def test_owner_credentials_check_ignores_development(monkeypatch) -> None:
+    monkeypatch.setenv("POSTGRES_PASSWORD", "changeme")
+
+    production_guard(Settings(_env_file=None, app_env="development"))
+
+
+def test_runtime_without_owner_credentials_passes(monkeypatch) -> None:
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    monkeypatch.delenv("MIGRATION_DATABASE_URL", raising=False)
+
+    production_guard(_valid_prod_settings())
