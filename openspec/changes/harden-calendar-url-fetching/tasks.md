@@ -13,3 +13,12 @@
 - [x] 2.3 Generische Fehlertexte in `http_policy.py`, CalDAV und `run_sync`
 - [x] 2.4 Validierung im Router bei Create/Update
 - [x] 2.5 Setting `CALENDAR_ALLOW_INSECURE_URLS` + `production_guard` + `.env.example`
+
+## 3. Review-Nacharbeiten (Codex)
+
+- [x] 3.1 Komprimierte Antworten ablehnen (`Accept-Encoding: identity`), damit das Größenlimit dekodierte Bytes zählt
+- [x] 3.2 `CALENDAR_ALLOW_INSECURE_URLS` bereits beim Laden der Settings in Produktion ablehnen (API, Worker, Beat)
+- [x] 3.3 Fallback über alle geprüften Adressen bei Verbindungsfehlern
+- [x] 3.4 DNS-Auflösung durch Connect-Timeout begrenzen
+- [x] 3.5 Reservierte und IPv4-translatable (`::ffff:0:0/96`) Adressen blockieren
+- [x] 3.6 Blockierte DNS-Antwort mit gleicher Meldung wie nicht auflösbarer Host (kein DNS-Orakel)
