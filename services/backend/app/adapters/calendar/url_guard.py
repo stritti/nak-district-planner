@@ -32,6 +32,7 @@ from app.domain.ports.calendar import CalendarConnectorError
 logger = logging.getLogger(__name__)
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
+_DEFAULT_DNS_TIMEOUT = 10.0
 # Prefixes that embed an IPv4 address in the low 32 bits: NAT64 (RFC 6052)
 # and IPv4-translatable SIIT addresses (RFC 7915). Python reports the latter
 # as is_global, so they are unwrapped and the embedded IPv4 is checked.
@@ -165,8 +166,12 @@ class GuardedTransport(httpx.AsyncBaseTransport):
 
         host = request.url.host
         port = request.url.port or (443 if request.url.scheme == "https" else 80)
+        # Resolution counts against the request's connect timeout.
+        timeout = (request.extensions.get("timeout") or {}).get("connect") or _DEFAULT_DNS_TIMEOUT
         try:
-            addresses = await self._resolve(host, port)
+            addresses = await asyncio.wait_for(self._resolve(host, port), timeout)
+        except TimeoutError as exc:
+            raise httpx.ConnectTimeout("Name resolution timed out", request=request) from exc
         except OSError as exc:
             raise httpx.ConnectError("Name resolution failed", request=request) from exc
         if not addresses or not all(_is_public(a) for a in addresses):

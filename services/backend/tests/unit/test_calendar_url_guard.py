@@ -354,6 +354,21 @@ async def test_fallback_never_leaves_the_validated_address_set():
     assert tried == ["93.184.216.34", "93.184.216.35"]
 
 
+async def test_slow_dns_resolution_is_bounded_by_connect_timeout():
+    import asyncio
+
+    async def slow_resolver(host, port):
+        await asyncio.sleep(5)
+        return ["93.184.216.34"]
+
+    transport = GuardedTransport(inner=httpx.MockTransport(_ok), resolver=slow_resolver)
+    async with httpx.AsyncClient(
+        transport=transport, timeout=httpx.Timeout(5.0, connect=0.05), trust_env=False
+    ) as client:
+        with pytest.raises(httpx.ConnectTimeout):
+            await client.get("https://calendar.example.com/feed.ics")
+
+
 async def test_blocked_dns_answer_is_indistinguishable_from_unresolvable_host():
     """No internal-DNS oracle via trigger_sync / last_sync_error (finding 7)."""
 
