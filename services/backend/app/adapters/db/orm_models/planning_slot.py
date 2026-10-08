@@ -26,6 +26,15 @@ class PlanningSlotORM(Base):
             unique=True,
             postgresql_where=text("congregation_id IS NOT NULL AND status = 'ACTIVE'"),
         ),
+        # One slot per generator occurrence, whatever its status, so a re-run
+        # (or a concurrent run) cannot re-create a moved or cancelled draft.
+        Index(
+            "uq_planning_slots_generation_key",
+            "district_id",
+            "generation_key",
+            unique=True,
+            postgresql_where=text("generation_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -55,6 +64,7 @@ class PlanningSlotORM(Base):
     # List of congregation IDs (as strings) that this slot applies to (for district-wide holidays)
     # Supports "all" sentinel string for district-wide applicability
     applicability: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
+    generation_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     planning_date: Mapped[date] = mapped_column(Date, nullable=False)
     planning_time: Mapped[time] = mapped_column(Time(timezone=False), nullable=False)
     status: Mapped[PlanningSlotStatus] = mapped_column(

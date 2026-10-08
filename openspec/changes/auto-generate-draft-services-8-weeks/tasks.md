@@ -11,6 +11,7 @@
 - [x] 2.2 Implement creation of missing events as `DRAFT` with no `ServiceAssignment`.
 - [x] 2.3 Implement duplicate-prevention checks so reruns do not create duplicate events for existing slots.
 - [x] 2.4 Update generation logic to resolve duplicates via generation slot identity so manually moved generated services block recreation of original standard slots.
+- [x] 2.5 Persist `planning_slots.generation_key` (partial unique index per district) after the `events` table removal dropped `generation_slot_key`; dedupe by key, adopt and backfill legacy slots by date/time, skip unique-index conflicts idempotently (#488).
 
 ## 3. Background Execution and Integration
 
@@ -23,4 +24,6 @@
 - [x] 4.1 Add unit tests for slot expansion, 8-week horizon boundaries, and no-assignment default behavior.
 - [x] 4.2 Add unit/integration tests for idempotency (second run creates no duplicates).
 - [x] 4.4 Add test case for moved generated event (Wednesday -> Thursday) to verify no regeneration at the original slot.
+- [x] 4.5 Add regression tests for #488: moved time, cancelled slot, legacy backfill, concurrent insert (unit + PostgreSQL integration).
+- [x] 4.6 Clear the generation key when a slot moves to another congregation or changes category; regression tests.
 - [x] 4.3 Add timezone/DST-focused tests to verify generated datetimes remain stable across transitions.
