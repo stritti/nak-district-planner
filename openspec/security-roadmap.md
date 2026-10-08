@@ -360,7 +360,7 @@ RATE_LIMIT_ENDPOINTS:
 | improve-tenant-isolation | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-10-07-improve-tenant-isolation/` |
 | introduce-non-functional-baseline | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-10-07-introduce-non-functional-baseline/` |
 | harden-oidc-token-validation | HIGH | ✅ Implementiert (archiviert) | `openspec/changes/archive/2026-10-07-harden-oidc-token-validation/` |
-| server-held-oidc-refresh-token | HIGH | ✅ Auf `main`, Archivierung nach PR-Merge | `openspec/changes/server-held-oidc-refresh-token/` |
+| server-held-oidc-refresh-token | HIGH | ✅ Archiviert | `openspec/changes/archive/2026-10-08-server-held-oidc-refresh-token/` |
 | harden-production-supply-chain | HIGH | ⚠️ Offener PR | `openspec/changes/harden-production-supply-chain/` |
 
 ### Verweise
