@@ -34,6 +34,11 @@ _SQL_ONLY_TABLES = frozenset(
 MIGRATION_LOCK_KEY = 0x6E616B6D696772
 
 
+# Fixed pg_advisory_lock key ("nakmigr" in ASCII): concurrent `migrate` runs
+# serialize instead of applying the same revisions twice.
+MIGRATION_LOCK_KEY = 0x6E616B6D696772
+
+
 def _include_object(obj, name, type_, reflected, compare_to) -> bool:
     return not (type_ == "table" and name in _SQL_ONLY_TABLES)
 
