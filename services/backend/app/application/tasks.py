@@ -46,7 +46,7 @@ async def _run_as_system_worker(coro: Awaitable[T]) -> T:
     are bound to the loop that opened them, so the pool is disposed before the
     loop closes; the next task opens fresh connections on its own loop (#464).
     """
-    from app.adapters.db import session as db_session
+    import app.adapters.db.session as db_session
     from app.tenant import TenantContext
 
     TenantContext.set_context(user_sub="system:celery-worker", user_roles=["SYSTEM_WORKER"])
