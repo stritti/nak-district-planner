@@ -18,6 +18,14 @@ The calendar HTTP client SHALL resolve the host of every request, including redi
 - **WHEN** a feed hostname resolves to `127.0.0.1`, `::1`, `fc00::1` or `::ffff:10.0.0.1`
 - **THEN** the connector SHALL fail with a connector error before any connection is opened
 
+#### Scenario: Network-specific NAT64 prefix
+- **WHEN** `CALENDAR_NAT64_PREFIXES` lists an RFC 6052 prefix (length 32, 40, 48, 56, 64 or 96) and a feed hostname resolves to an address inside it whose embedded IPv4 (u-octet skipped) is `10.0.0.1`, `127.0.0.1` or `169.254.169.254`
+- **THEN** the connector SHALL fail before any connection is opened, while a public embedded IPv4 SHALL be accepted; invalid prefixes SHALL prevent the settings from loading
+
+#### Scenario: Trailing-dot localhost
+- **WHEN** an admin stores `https://localhost./feed.ics` or `https://foo.localhost./feed.ics`
+- **THEN** the API SHALL respond with 422
+
 #### Scenario: DNS rebinding between check and connect
 - **WHEN** a hostname resolves to a public address during validation
 - **THEN** the connection SHALL be made to exactly that address so a later DNS answer cannot redirect it

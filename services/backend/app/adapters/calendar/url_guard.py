@@ -33,10 +33,15 @@ logger = logging.getLogger(__name__)
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 _DEFAULT_DNS_TIMEOUT = 10.0
-# Prefixes that embed an IPv4 address in the low 32 bits: NAT64 (RFC 6052)
-# and IPv4-translatable SIIT addresses (RFC 7915). Python reports the latter
-# as is_global, so they are unwrapped and the embedded IPv4 is checked.
-_EMBEDDED_IPV4 = (ipaddress.ip_network("64:ff9b::/96"), ipaddress.ip_network("::ffff:0:0/96"))
+# Prefixes that embed an IPv4 address (RFC 6052 layout): the well-known and
+# local-use NAT64 prefixes and IPv4-translatable SIIT addresses (RFC 7915,
+# reported as is_global by Python). Deployments add their network-specific
+# NAT64 prefixes via CALENDAR_NAT64_PREFIXES.
+_BUILTIN_EMBEDDED_IPV4 = (
+    ipaddress.IPv6Network("64:ff9b::/96"),
+    ipaddress.IPv6Network("64:ff9b:1::/48"),
+    ipaddress.IPv6Network("::ffff:0:0/96"),
+)
 
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
@@ -62,16 +67,34 @@ class UnsupportedContentEncodingError(CalendarConnectorError):
     """The server compressed the response although identity was requested."""
 
 
+def _embedded_ipv4(
+    ip: ipaddress.IPv6Address, prefix: ipaddress.IPv6Network
+) -> ipaddress.IPv4Address:
+    """Extract the IPv4 address per RFC 6052 section 2.2 (skipping the u-octet, bits 64-71)."""
+    packed = ip.packed
+    slots = [i for i in range(prefix.prefixlen // 8, 16) if i != 8][:4]
+    return ipaddress.IPv4Address(bytes(packed[i] for i in slots))
+
+
+def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return ip.is_global and not (ip.is_multicast or ip.is_reserved)
+
+
 def _is_public(address: str) -> bool:
     ip = ipaddress.ip_address(address.split("%", 1)[0])
-    if isinstance(ip, ipaddress.IPv6Address):
-        if ip.ipv4_mapped is not None:
-            ip = ip.ipv4_mapped
-        elif ip.sixtofour is not None:
-            ip = ip.sixtofour
-        elif any(ip in prefix for prefix in _EMBEDDED_IPV4):
-            ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
-    return ip.is_global and not (ip.is_multicast or ip.is_reserved)
+    if isinstance(ip, ipaddress.IPv4Address):
+        return _is_public_ip(ip)
+    if ip.ipv4_mapped is not None:
+        return _is_public_ip(ip.ipv4_mapped)
+    if ip.sixtofour is not None:
+        return _is_public_ip(ip.sixtofour)
+    prefixes = [
+        p for p in _BUILTIN_EMBEDDED_IPV4 + settings.calendar_nat64_networks if ip in p
+    ]
+    if prefixes:
+        # Overlapping prefixes: every possible embedded IPv4 must be public.
+        return all(_is_public_ip(_embedded_ipv4(ip, p)) for p in prefixes)
+    return _is_public_ip(ip)
 
 
 def _ip_literal(host: str) -> str | None:
@@ -93,8 +116,11 @@ def _check_url(url: httpx.URL, allow_insecure: bool) -> None:
         )
     if allow_insecure:
         return
-    literal = _ip_literal(url.host)
-    if url.host == "localhost" or url.host.endswith(".localhost") or (
+    # httpx already lowercases and IDNA-encodes the host; strip trailing dots
+    # so "localhost." (FQDN form) cannot bypass the name check.
+    host = url.host.lower().rstrip(".")
+    literal = _ip_literal(host)
+    if host == "localhost" or host.endswith(".localhost") or (
         literal is not None and not _is_public(literal)
     ):
         raise UnsafeCalendarUrlError("Kalender-URL zeigt auf ein nicht erlaubtes Netz")

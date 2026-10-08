@@ -89,6 +89,11 @@ def _ok(request: httpx.Request) -> httpx.Response:
         None,
         42,
         "https://localhost/feed.ics",
+        "https://localhost./feed.ics",
+        "https://foo.localhost./feed.ics",
+        "https://LOCALHOST./feed.ics",
+        "https://Foo.LocalHost/feed.ics",
+        "https://localhost../feed.ics",
         "https://127.0.0.1/feed.ics",
         "https://169.254.169.254/latest/meta-data",
         "https://10.1.2.3/feed.ics",
@@ -391,3 +396,79 @@ async def test_blocked_dns_answer_is_indistinguishable_from_unresolvable_host():
         blocked = await message(connector_cls, _resolver("10.0.0.8"), creds)
         missing = await message(connector_cls, unresolvable, creds)
         assert blocked == missing
+
+
+# ── NAT64 network-specific prefixes (RFC 6052), finding B ────────────────────
+
+import ipaddress  # noqa: E402
+
+from app.adapters.calendar.url_guard import _embedded_ipv4, _is_public  # noqa: E402
+from app.config import settings  # noqa: E402
+
+# RFC 6052 section 2.4 examples: 192.0.2.33 embedded under each prefix length.
+RFC6052_EXAMPLES = {
+    "2001:db8::/32": "2001:db8:c000:221::",
+    "2001:db8:100::/40": "2001:db8:1c0:2:21::",
+    "2001:db8:122::/48": "2001:db8:122:c000:2:2100::",
+    "2001:db8:122:300::/56": "2001:db8:122:3c0:0:221::",
+    "2001:db8:122:344::/64": "2001:db8:122:344:c0:2:2100:0",
+    "2001:db8:122:344::/96": "2001:db8:122:344::c000:221",
+}
+
+
+def _synthesize(prefix: str, ipv4: str) -> str:
+    """Embed ipv4 under prefix per RFC 6052 (u-octet = byte 8 stays zero)."""
+    net = ipaddress.ip_network(prefix)
+    out = bytearray(net.network_address.packed)
+    slots = [i for i in range(net.prefixlen // 8, 16) if i != 8][:4]
+    for slot, byte in zip(slots, ipaddress.IPv4Address(ipv4).packed, strict=True):
+        out[slot] = byte
+    return str(ipaddress.IPv6Address(bytes(out)))
+
+
+@pytest.mark.parametrize(("prefix", "expected"), RFC6052_EXAMPLES.items())
+def test_synthesizer_matches_rfc6052_examples(prefix, expected):
+    assert ipaddress.IPv6Address(_synthesize(prefix, "192.0.2.33")) == ipaddress.IPv6Address(
+        expected
+    )
+
+
+@pytest.mark.parametrize("prefix", list(RFC6052_EXAMPLES))
+@pytest.mark.parametrize("embedded", ["10.0.0.1", "127.0.0.1", "169.254.169.254"])
+def test_configured_nat64_prefix_with_internal_ipv4_is_rejected(monkeypatch, prefix, embedded):
+    address = _synthesize(prefix, embedded)
+    monkeypatch.setattr(settings, "calendar_nat64_prefixes", prefix)
+    assert _is_public(address) is False
+
+
+@pytest.mark.parametrize("prefix", list(RFC6052_EXAMPLES))
+def test_configured_nat64_prefix_with_public_ipv4_is_accepted(monkeypatch, prefix):
+    monkeypatch.setattr(settings, "calendar_nat64_prefixes", prefix)
+    assert _is_public(_synthesize(prefix, "93.184.216.34")) is True
+
+
+def test_overlapping_nat64_prefixes_require_every_embedding_to_be_public(monkeypatch):
+    monkeypatch.setattr(settings, "calendar_nat64_prefixes", "2001:db8::/32,2001:db8:a00:1::/96")
+    address = _synthesize("2001:db8:a00:1::/96", "93.184.216.34")
+    # Public under the /96, but read as 10.0.0.1 under the /32: fail closed.
+    assert str(_embedded_ipv4(ipaddress.IPv6Address(address), ipaddress.IPv6Network("2001:db8::/32"))) == "10.0.0.1"
+    assert _is_public(address) is False
+
+
+def test_unconfigured_network_specific_prefix_is_not_unwrapped():
+    # Without configuration the address is judged as plain IPv6 (2001:db8::/32
+    # is documentation space, hence not global).
+    assert settings.calendar_nat64_prefixes == ""
+    assert _is_public(_synthesize("2001:db8:122:344::/96", "93.184.216.34")) is False
+
+
+@pytest.mark.parametrize("prefix", ["64:ff9b::/96", "64:ff9b:1::/48"])
+def test_well_known_nat64_prefixes_are_always_unwrapped(prefix):
+    assert _is_public(_synthesize(prefix, "10.0.0.1")) is False
+    assert _is_public(_synthesize(prefix, "93.184.216.34")) is True
+
+
+@pytest.mark.parametrize(("prefix", "address"), RFC6052_EXAMPLES.items())
+def test_embedded_ipv4_extraction_matches_rfc6052_examples(prefix, address):
+    extracted = _embedded_ipv4(ipaddress.IPv6Address(address), ipaddress.IPv6Network(prefix))
+    assert str(extracted) == "192.0.2.33"
