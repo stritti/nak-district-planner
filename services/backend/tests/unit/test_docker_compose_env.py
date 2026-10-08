@@ -33,7 +33,7 @@ def _env_entries(filename: str) -> dict[str, str]:
 
 
 def test_long_running_app_services_load_shared_docker_env() -> None:
-    for service in ("backend", "worker"):
+    for service in ("backend", "worker", "beat"):
         block = _service_block("docker-compose.yml", service)
         assert "- .env" in block
         assert "- .env.docker" in block
@@ -54,7 +54,7 @@ def test_specialized_services_load_only_their_env_overrides() -> None:
 
 
 def test_development_override_does_not_duplicate_runtime_environment() -> None:
-    for service in ("backend", "worker"):
+    for service in ("backend", "worker", "beat"):
         block = _service_block("docker-compose.override.yml", service)
         assert "    environment:" not in block
         assert "DATABASE_URL" not in block
