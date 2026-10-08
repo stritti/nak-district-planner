@@ -41,7 +41,9 @@ test.describe('Calendar integrations admin view', () => {
         body: JSON.stringify({ total_pending: 0 }),
       })
     })
-    await page.route('**/api/v1/calendar-integrations', async (route) => {
+    // The view filters by the selected district (`?district_id=…`); a plain glob
+    // would not match the query string and fall through to the catch-all.
+    await page.route(/\/api\/v1\/calendar-integrations(\?.*)?$/, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',

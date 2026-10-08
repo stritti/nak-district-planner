@@ -124,6 +124,7 @@ async def get_current_user(
             raise
 
         existing_user.is_superadmin = granted
+        existing_user.email_verified = user_info.get("email_verified") is True
         request.state.user = existing_user
         return existing_user
     except TokenValidationError as e:
@@ -160,7 +161,9 @@ async def get_current_user_with_memberships(
     membership_repo = SqlMembershipRepository(session)
     memberships = await membership_repo.get_all_by_user(user.sub)
 
-    if user.email:
+    # Auto-link only on an IdP-verified email claim (#461). The SQL function
+    # trusts the email it is given, so this app-layer check is the gate.
+    if user.email and user.email_verified:
         result = await session.execute(
             text(
                 """
