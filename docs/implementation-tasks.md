@@ -2,7 +2,7 @@
 
 > **Generated:** 2025-06-19  
 > **Status:** Active  
-> **Related:** [OpenSpec Gap Analysis](./openspec-gap-analysis.md)  
+> **Related:** [OpenSpec Gap Analysis](./archive/openspec-gap-analysis.md)  
 > **Priority:** Focus on Critical (🔴) and High (🟠) gaps
 
 ---
@@ -458,7 +458,7 @@ This document provides **actionable implementation tasks** to close the gaps ide
 
 ## 🔗 Related Documents
 
-- [OpenSpec Gap Analysis](./openspec-gap-analysis.md)
+- [OpenSpec Gap Analysis](./archive/openspec-gap-analysis.md)
 - [OpenSpec Architecture Overview](/openspec/architecture/overview.md)
 - [Implementation Roadmap](/openspec/architecture/implementation-roadmap.md)
 

@@ -106,4 +106,4 @@ Production-Code darf nicht breit ausgeschlossen werden, um das Coverage-Gate kue
 - Security Baseline: `docs/security-baseline.md`
 - Production Runbook: `docs/production-runbook.md`
 - RBAC-Coverage: `docs/rbac-coverage.md`
-- RC-2 Architektur-OpenSpec: `openspec/changes/enforce-architecture-boundary-rc2/`
+- RC-2 Architektur-OpenSpec: Baseline `openspec/specs/architecture-governance/` (archiviert: `openspec/changes/archive/2026-10-08-enforce-architecture-boundary-rc2/`)

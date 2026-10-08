@@ -1,38 +1,27 @@
 ## Warum
 
-Die Analyse des NAK District Planners gegen die OpenSpec-Spezifikationen (April 2026) hat
-mehrere Code-Qualitätsprobleme identifiziert, die die Wartbarkeit, Testbarkeit und
-Verständlichkeit des Codes beeinträchtigen. Dazu zählen: manuelle Factory-Ketten im
-Sync-Service, ungesicherte Google/Microsoft-OAuth-Stubs, ein unstrukturierter Frontend-API-Client,
-große monolithische Vue-Komponenten sowie fehlende Typisierung in der Application-Schicht.
-Außerdem fehlt ein standardisierter Health-Check-Endpoint für Docker-Umgebungen.
+Der ursprüngliche Change „code-quality“ (April 2026) bündelte Backend- und Frontend-Aufräumarbeiten. Die Backend-Punkte sind inzwischen umgesetzt und in den Baseline-Specs beschrieben (Connector-Registry und Sync-Ergebnis in `calendar-connector`/`calendar-sync`, `GET /health` in `production-deployment`). Die Annahmen „Google/Microsoft sind `NotImplementedError`-Stubs“ und „Health-Check prüft Redis“ treffen nicht mehr zu: beide Provider-Adapter implementieren Fetches, und der Cache-/Rate-Limit-Dienst ist Valkey. Der zentrale API-Client existiert als `src/api/client.ts` (`apiFetch`).
+
+Offen bleibt die Zerlegung großer Vue-Views: `LeadersAdminView.vue` (~1.400 Zeilen), `EventListView.vue` (~1.050), `CalendarIntegrationsView.vue` (~860) und `DistrictsAdminView.vue` (~800) mischen Filter, Tabellen, Formulare und Modals in einer Datei. `MatrixView.vue` ist bereits in `MatrixFilters.vue` und `MatrixTable.vue` zerlegt.
 
 ## Was sich ändert
 
-- Connector-Factory im Sync-Service durch ein Dictionary-Registry-Pattern ersetzen.
-- Google/Microsoft-Kalender-Stubs mit `NotImplementedError` und UI-Badge „Coming soon" kennzeichnen.
-- Zentralen HTTP-Client-Wrapper im Frontend einführen (Auth-Token-Injection, globale Fehlerbehandlung).
-- Große Vue-Views in kleinere Unterkomponenten aufteilen (`EventListView`, `CalendarIntegrationsView`,
-  `MatrixView`).
-- Typisierte Ergebnis-Objekte (`SyncResult`, etc.) statt `dict[str, int]` einführen.
-- Konsistentes Dependency-Injection-Muster in FastAPI-Routern etablieren.
-- Health-Check-Endpoint `GET /health` einführen.
+- Neuzuschnitt (2026-10-07, #475): Scope ist ausschließlich die **Frontend-View-Zerlegung**.
+- `EventListView.vue`, `CalendarIntegrationsView.vue`, `LeadersAdminView.vue` und `DistrictsAdminView.vue` delegieren Filter, Listen/Tabellen und Formular-Modals an fokussierte Unterkomponenten.
+- Verhalten, Routen und API-Aufrufe bleiben unverändert; bestehende Tests müssen weiter bestehen.
+
+## Nicht-Ziele
+
+- Keine neuen Backend-Anforderungen (Registry, Health-Check, typisierte Sync-Ergebnisse sind erledigt).
+- Kein neuer HTTP-Client; `apiFetch` bleibt der zentrale Client.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `backend-code-quality`: Refactored sync factory, typed result objects, DI patterns, health check
-- `frontend-code-quality`: Centralized HTTP client, decomposed view components, OAuth stub UX
-
-### Modified Capabilities
-
-- `calendar-sync` (uc-02): `_get_connector()` nutzt Registry statt `if/elif`-Kette
+- `frontend-view-decomposition`: Große Views sind in fokussierte Unterkomponenten zerlegt.
 
 ## Impact
 
-- **Backend:** `sync_service.py` refactored; neuer `GET /health`-Endpoint; Pydantic-Dataclass
-  `SyncResult`; alle Router auf konsistentes `Depends()`-Muster umgestellt
-- **Frontend:** Neuer `httpClient.ts`-Wrapper; `EventListView.vue`, `CalendarIntegrationsView.vue`,
-  `MatrixView.vue` jeweils in Sub-Komponenten aufgeteilt; OAuth-Stubs im UI markiert
-- **Abhängigkeiten:** Keine neuen externen Abhängigkeiten
+- **Frontend:** neue Komponenten unter `src/components/`; die genannten Views werden kleiner.
+- **Backend:** keine Änderungen.

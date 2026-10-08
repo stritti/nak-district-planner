@@ -1,4 +1,10 @@
-## ADDED Requirements
+# approved-user-onboarding Specification
+
+## Purpose
+
+Separates self-registration from access activation: a district administrator approves registrations with an explicit role and scope, optionally provisioning the user in the IdP.
+
+## Requirements
 
 ### Requirement: Registration approval SHALL activate user access explicitly
 The system SHALL treat self-registration and access activation as separate steps. A registered user MUST NOT gain access to protected business endpoints until a district administrator approves the registration and assigns an authorization scope.
@@ -25,8 +31,8 @@ The system SHALL require explicit authorization assignment during approval. Appr
 - **THEN** system creates or updates a membership for the approved user
 - **AND** future authorization checks use that membership for access decisions
 
-### Requirement: Approval SHOULD support optional IDP provisioning
-When enabled by configuration, the system SHOULD notify a provisioning endpoint at approval time so the user can be invited/created in the external IDP.
+### Requirement: Approval SHALL support optional IDP provisioning
+When enabled by configuration, the system SHALL notify a provisioning endpoint at approval time so the user can be invited/created in the external IDP.
 
 #### Scenario: Provisioning enabled and endpoint succeeds
 - **WHEN** a registration is approved and provisioning is enabled

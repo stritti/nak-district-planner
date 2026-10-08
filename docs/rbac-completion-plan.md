@@ -631,7 +631,7 @@ class TestRBACGuardConsistency:
 - [OpenSpec RBAC Change](/openspec/changes/introduce-rbac-permissions-model/)
 - [RBAC Model Spec](/openspec/changes/introduce-rbac-permissions-model/specs/rbac-model/spec.md)
 - [Implementation Tasks](/docs/implementation-tasks.md)
-- [Gap Analysis](/docs/openspec-gap-analysis.md)
+- [Gap Analysis](./archive/openspec-gap-analysis.md)
 
 ---
 

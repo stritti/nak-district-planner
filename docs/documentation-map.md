@@ -17,6 +17,7 @@ Diese Dokumente gelten als operative Quelle fuer Entwicklung und Betrieb.
 - `docs/production-runbook.md`: Betriebs- und Incident-Grundablaeufe
 - `docs/schema.md`: Kritische DB-Constraints (FKs, Unique Constraints), bekannte Schema-Drift
 - `docs/approval-workflow.md`: Benutzer-Onboarding, Freigabe-Workflow und IDP-Provisionierung
+- `openspec/specs/*/spec.md`: Baseline der implementierten Capabilities (Ist-Stand, seit 2026-10-07)
 - `openspec/architecture/overview.md`: Zielarchitektur (stabiler Rahmen)
 - `openspec/architecture/implementation-roadmap.md`: Priorisierte Umsetzungsreihenfolge
 
@@ -27,14 +28,16 @@ Diese Dokumente beschreiben geplante oder laufende Architektur-/Produkt-Aenderun
 - `openspec/changes/*/proposal.md`: Problemstellung und Zielbild
 - `openspec/changes/*/design.md`: Designentscheidungen
 - `openspec/changes/*/tasks.md`: Umsetzungsaufgaben
+- `openspec/changes/archive/*`: abgeschlossene bzw. ersetzte (SUPERSEDED) Changes
 - `docs/improvement-proposals.md`: Analyse und priorisierte Verbesserungsoptionen
+- `docs/reviews/*`: Release-Reviews mit Blocker- und Folgearbeitsliste (aktuell: `docs/reviews/2026-10-07-release-1.0-review.md`, Tracker #476)
 
 Hinweis: Planungsdokumente sind nicht automatisch implementiert. Der
 Implementierungsstatus wird in `docs/architecture-status.md` zusammengefasst.
 
 ## 3. Historische Dokumente
 
-Derzeit sind keine historischen Dokumente als aktive Seiten verlinkt.
+- `docs/archive/openspec-gap-analysis.md`: Gap-Analyse vom Juni 2026 (überholt durch die Baseline in `openspec/specs/`)
 
 Regel: Historische Inhalte duerfen nicht als alleinige Grundlage fuer neue
 Implementierung dienen. Bei Konflikten gilt Abschnitt 1.
@@ -44,7 +47,7 @@ Implementierung dienen. Bei Konflikten gilt Abschnitt 1.
 Wenn Aussagen kollidieren, gilt folgende Reihenfolge:
 
 1. Sicherheits- und Betriebsregeln in `docs/security-baseline.md` und `docs/production-runbook.md`
-2. Architektur- und Change-Regeln in `openspec/architecture/*` und aktiven `openspec/changes/*`
+2. Architektur- und Change-Regeln in `openspec/architecture/*`, der Baseline `openspec/specs/*` und aktiven `openspec/changes/*`
 3. Operative Entwicklerhinweise in `README.md` und `docs/getting-started.md`
 4. Historische Snapshots (nur Kontext)
 

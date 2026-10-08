@@ -1,4 +1,10 @@
-## ADDED Requirements
+# scoped-membership-enforcement Specification
+
+## Purpose
+
+Ensures that authenticated users reach protected business endpoints only through effective, correctly scoped memberships and that clients can display the resulting access context.
+
+## Requirements
 
 ### Requirement: Protected endpoints SHALL require effective memberships
 The system SHALL deny access to protected business endpoints when an authenticated user has no effective memberships, except for superadmin users.
