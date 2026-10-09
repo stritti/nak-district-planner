@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-rc.5](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.4...v1.0.0-rc.5) (2026-10-09)
+
+
+### Features
+
+* **frontend:** Frontend- und Backend-Version unauffällig im Footer anzeigen ([#516](https://github.com/stritti/nak-district-planner/issues/516)) ([2bad391](https://github.com/stritti/nak-district-planner/commit/2bad391ddb919391e71daeb0c3c793774d49c983))
+
 ## [1.0.0-rc.4](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.3...v1.0.0-rc.4) (2026-10-09)
 
 
