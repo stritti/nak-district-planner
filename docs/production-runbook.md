@@ -77,6 +77,24 @@ Wenn beim Upgrade kein `SUPERADMIN_SUB` gesetzt ist, pinnt die Migration determi
 
 `app_superadmin_config` ist nur fuer den Datenbank-Owner bestimmt. Die Runtime-Rolle darf die Tabelle weder lesen noch schreiben und erhaelt nur den eng begrenzten EXECUTE-Zugriff auf die SECURITY-DEFINER-Funktion.
 
+### 2.3 Neuer Benutzer-Subject (Realm- oder Keycloak-Wechsel)
+
+Der Superadmin ist an den OIDC-`sub` gebunden. Wechselt der Realm oder der Identity Provider (oder wird der Benutzer in Keycloak neu angelegt), hat dieselbe Person danach eine **neue** `sub`. Die gespeicherte gehört dann zum alten Konto, und der Login ist kein Superadmin mehr, bis der Datenbank-Owner den neuen Subject einträgt. `SUPERADMIN_SUB` in der `.env` hilft dabei nicht: Der Wert wird nur einmal übernommen, wenn die Migration `0017` läuft.
+
+Nach dem ersten Login mit dem neuen Konto:
+
+```bash
+# 1. Neue sub ablesen (Spalte sub der neuesten Zeile, case-sensitiv)
+docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c "SELECT sub, email, is_superadmin, created_at FROM users ORDER BY created_at;"
+
+# 2. Als Superadmin eintragen
+docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c "UPDATE app_superadmin_config SET superadmin_sub='<SUB>' WHERE id = 1;"
+```
+
+Danach abmelden und neu anmelden; beim nächsten Login setzt das Backend `is_superadmin` und entzieht es allen anderen Subjects. Es gibt genau einen Superadmin. Mitgliedschaften und Zuordnungen des alten Kontos hängen an der alten `sub` und gehen nicht automatisch über, der Superadmin kann sie neu vergeben.
+
 ## 3. Standard-Deployment
 
 > **Empfohlen:** der fertige Produktiv-Stack `docker-compose.prod.yml` mit Traefik (TLS/Let's Encrypt), Keycloak und den veröffentlichten GHCR-Images. Er ersetzt den externen TLS-Proxy aus 1.2 und den Image-Build auf dem Server; Einrichtung und Update siehe `docs/production-compose.md`. Die folgenden Schritte beschreiben den Betrieb mit `docker-compose.yml` und eigenem Reverse Proxy.
@@ -126,6 +144,21 @@ Worker und Beat pruefen beim Start den Alembic-Head und beenden sich bei Abweich
 ### 3.2 Image-Tags
 
 Pushes auf `main`/`develop` veroeffentlichen nur `<branch>`- und `sha-<commit>`-Tags. `latest`, `<major>` und `<major>.<minor>` setzt ausschliesslich der Release-Workflow fuer stabile Releases (keine Prereleases). Produktion pinnt eine Release-Version, nicht `main`.
+
+### 3.3 Backend startet nicht: `password authentication failed for user "nak_app"`
+
+Das Backend bricht beim Start mit `Could not read database schema version from alembic_version` ab, in der Ursache steht `password authentication failed for user "nak_app"`. Das passiert nach dem Upgrade einer Installation, die vor der Rollentrennung (Laufzeit-Benutzer `nak_app`, Besitzer `nak`) aufgesetzt wurde: Die Migration `0016_create_app_role` setzt das Passwort aus `APP_DB_PASSWORD` nur **einmal**, wenn sie erstmals läuft. `migrate` hat danach nichts mehr zu tun und setzt es nicht neu. Rolle und Rechte sind in Ordnung, nur das Passwort stimmt nicht mit der `.env` überein.
+
+Passwort als Owner nachsetzen (interaktiv, die Eingabe erscheint weder im Terminal noch in der Shell-Historie):
+
+```bash
+docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+\password nak_app
+\q
+docker compose up -d --force-recreate backend worker beat
+```
+
+Das Passwort muss exakt `APP_DB_PASSWORD` aus der `.env` entsprechen. Wird `APP_DB_PASSWORD` geändert, in der Datenbank und in der `.env` gemeinsam ändern und die Dienste mit `up -d --force-recreate` neu erzeugen; `docker compose restart` liest die `.env` nicht neu ein. Am einfachsten sind Passwörter ohne Sonderzeichen (`openssl rand -hex 24`), weil sie in der Datenbank-URL stehen.
 
 ## 4. Rollback
 
