@@ -152,6 +152,7 @@ async def test_opaque_audience_cannot_be_replaced_by_matching_azp(
         return_value={
             "active": True,
             "sub": "opaque-user",
+            "client_id": "planner-client",
             "aud": ["some-other-api"],
             "azp": "planner-client",
         }
