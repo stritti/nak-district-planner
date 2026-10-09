@@ -29,9 +29,7 @@ Views with a help context SHALL show non-blocking help modules filtered by authe
 
 ### Requirement: Session persistence of filters and sorting
 
-The frontend SHALL retain the last selected filter values, sort field, sort direction and existing sorting options for each view during the same browser-tab session. This requirement SHALL apply to the planning matrix, the event list and other views that provide filters or sorting.
-
-When the user leaves and reopens a view, navigates back or forward, or reloads the same tab, the view SHALL restore its valid session settings. The displayed controls and the requested or displayed results SHALL reflect the same restored state.
+Each view with filters or sorting, including the matrix and event list, SHALL retain its selected filter values and existing sort field, direction and options for the browser-tab session. Reopening the view, browser history navigation and reload SHALL restore valid settings. Controls and requested or displayed results SHALL reflect the same restored state.
 
 #### Scenario: Return to the matrix
 
@@ -65,9 +63,7 @@ Session settings SHALL be isolated by authenticated user, view and applicable di
 
 ### Requirement: Session reset and valid restoration
 
-Explicitly clearing filters or changing sorting SHALL update the retained state. Logging out or changing authenticated identity SHALL clear the previous user's retained and active settings. A new independent browser-tab session SHALL start with default settings; persistence across sessions or synchronization between tabs is not required.
-
-Values that are no longer valid or accessible SHALL fall back to valid defaults while other valid settings remain intact. Missing, unavailable or malformed session storage SHALL NOT prevent the view from loading with defaults.
+Filter resets and sorting changes SHALL update session settings. Logout or identity change SHALL clear retained and active settings; a new independent tab SHALL use defaults. Invalid or inaccessible values SHALL fall back to defaults while valid fields remain intact. Missing, unavailable or malformed storage SHALL NOT prevent loading with defaults. Persistence across sessions and synchronization between tabs are not required.
 
 #### Scenario: Explicit filter reset
 
