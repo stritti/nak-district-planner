@@ -62,3 +62,29 @@ The table SHALL show an in-cell saving state, prevent duplicate submissions, and
 #### Scenario: Double submission
 - **WHEN** a save is in progress and the user submits the same cell again
 - **THEN** at most one request for that mutation remains in flight
+
+### Requirement: Consistent editing across all tabular overviews
+Every table, list-style overview and planning matrix in the application SHALL use the same compact read-mode appearance and shared inline-edit interaction for directly mutable, authorised cells. Domain-specific API adapters SHALL preserve existing validations, permission scopes and business workflows. Read-only/derived columns SHALL never become editable merely to achieve consistency. Explicit actions, links, approvals and destructive operations SHALL retain their dedicated semantics and required confirmations.
+
+#### Scenario: Mutable cell in another overview
+- **WHEN** an authorised administrator activates a writable field in a non-event table
+- **THEN** the same cell activation, saving, cancellation, accessibility and error-handling behaviour applies as in the event overview, using that resource's authorised update API
+
+#### Scenario: Read-only overview
+- **WHEN** a user opens a table containing only derived or non-editable data
+- **THEN** the table uses the common compact read-only presentation and does not show an editor on cell activation
+
+#### Scenario: Action column or link
+- **WHEN** a user activates a row link, selection control or destructive/workflow action
+- **THEN** the intended navigation, selection or existing confirmation flow runs without accidentally activating an inline editor
+
+### Requirement: Shared implementation and inventory completeness
+The frontend SHALL provide a reusable inline-cell editing component/composable with consistent keyboard, pointer and touch behaviour, focus control and server-feedback states. The implementation SHALL maintain an inventory mapping all table columns to their editability, authorisation and mutation adapter or an explicit read-only exclusion reason. Completing this change SHALL require regression coverage for every inventoried table with writable cells.
+
+#### Scenario: New table adopts shared behaviour
+- **WHEN** a new tabular overview introduces an editable column
+- **THEN** it uses the shared cell-editing contract instead of a separate editing interaction
+
+#### Scenario: No incomplete migration
+- **WHEN** the change is accepted
+- **THEN** the inventory shows that every eligible table is integrated and each intentionally excluded table/column has a documented reason
