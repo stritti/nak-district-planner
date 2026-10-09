@@ -68,6 +68,12 @@ jobs:
           cp .env.keycloak.example .env.keycloak
           cp .env.keycloak-db.example .env.keycloak-db
           docker compose -f docker-compose.prod.yml config --quiet
+          # Variants with an existing Traefik and/or Keycloak on the host
+          for overrides in existing-keycloak existing-traefik "existing-keycloak existing-traefik"; do
+            args=(-f docker-compose.prod.yml)
+            for o in $overrides; do args+=(-f "deploy/compose/$o.yml"); done
+            docker compose "${args[@]}" config --quiet
+          done
 
   build-backend:
     name: Build Backend Image

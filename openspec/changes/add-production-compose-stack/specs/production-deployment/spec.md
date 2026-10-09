@@ -22,3 +22,15 @@ The repository SHALL provide a production Compose stack that runs the applicatio
 #### Scenario: Forwarded headers are trusted only from the proxy hop
 - **WHEN** a client sends its own `X-Forwarded-For` header
 - **THEN** neither the audit log nor rate limiting use it, and Keycloak derives scheme and host only from headers sent by the proxy network
+
+#### Scenario: Admin allowlist is closed by default
+- **WHEN** `KEYCLOAK_ADMIN_ALLOWED_IPS` is not set
+- **THEN** the Keycloak administration is reachable only from the server itself (`127.0.0.1/32`)
+
+#### Scenario: Existing Traefik on the host
+- **WHEN** the operator adds `deploy/compose/existing-traefik.yml`
+- **THEN** the bundled Traefik does not start, frontend and Keycloak join the operator's external proxy network and publish their routes, the admin allowlist and HSTS through labels, and still no container of the stack publishes ports or mounts the Docker socket
+
+#### Scenario: Existing Keycloak on the host
+- **WHEN** the operator adds `deploy/compose/existing-keycloak.yml`
+- **THEN** the bundled Keycloak and its database do not start, the bundled Traefik serves no Keycloak routes, and the auth host is no longer aliased to Traefik inside the stack

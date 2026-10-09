@@ -1,0 +1,60 @@
+# Override for docker-compose.prod.yml: publish the stack through an existing
+# Traefik on the host (Docker provider) instead of the bundled one.
+# See docs/production-compose.md.
+#
+#   COMPOSE_FILE=docker-compose.prod.yml:deploy/compose/existing-traefik.yml
+#
+# TRAEFIK_NETWORK        external Docker network of the existing Traefik (default traefik_net)
+# TRAEFIK_ENTRYPOINT     its HTTPS entrypoint (default websecure)
+# TRAEFIK_CERTRESOLVER   its ACME resolver (default letsencrypt)
+# TRAEFIK_PROXY_SUBNET   subnet of TRAEFIK_NETWORK; Keycloak trusts forwarded
+#                        headers only from there (default 172.16.0.0/12)
+services:
+  # The bundled Traefik only starts with this profile.
+  traefik:
+    profiles: [bundled-traefik]
+
+  frontend:
+    networks:
+      traefik-public:
+        # Unique name on the shared network (for file-provider setups).
+        aliases: [nak-frontend]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik_net}
+      - traefik.http.routers.nak-app.rule=Host(`${APP_HOST:?Set APP_HOST in .env}`)
+      - traefik.http.routers.nak-app.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.nak-app.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.nak-app.middlewares=nak-hsts
+      - traefik.http.routers.nak-app.service=nak-app
+      - traefik.http.services.nak-app.loadbalancer.server.port=80
+      - traefik.http.middlewares.nak-hsts.headers.stsSeconds=31536000
+      - traefik.http.middlewares.nak-hsts.headers.stsIncludeSubdomains=true
+
+  keycloak:
+    environment:
+      KC_PROXY_TRUSTED_ADDRESSES: ${TRAEFIK_PROXY_SUBNET:-172.16.0.0/12}
+    networks:
+      traefik-public:
+        aliases: [nak-keycloak]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik_net}
+      - traefik.http.routers.nak-auth.rule=Host(`${AUTH_HOST:?Set AUTH_HOST in .env}`)
+      - traefik.http.routers.nak-auth.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.nak-auth.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.nak-auth.middlewares=nak-hsts
+      - traefik.http.routers.nak-auth.service=nak-auth
+      # Administration (admin console + master realm) only from the allowlist.
+      - traefik.http.routers.nak-auth-admin.rule=Host(`${AUTH_HOST}`) && (PathPrefix(`/admin`) || PathPrefix(`/realms/master`))
+      - traefik.http.routers.nak-auth-admin.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.nak-auth-admin.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.nak-auth-admin.middlewares=nak-keycloak-admin,nak-hsts
+      - traefik.http.routers.nak-auth-admin.service=nak-auth
+      - traefik.http.middlewares.nak-keycloak-admin.ipallowlist.sourcerange=${KEYCLOAK_ADMIN_ALLOWED_IPS:-127.0.0.1/32}
+      - traefik.http.services.nak-auth.loadbalancer.server.port=8080
+
+networks:
+  traefik-public:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik_net}

@@ -16,6 +16,9 @@
 #
 # Only Traefik publishes ports (80/443). Traefik does not get the Docker
 # socket: routes are static (deploy/traefik/dynamic/), see docs/security-baseline.md.
+#
+# Existing Traefik or Keycloak on the host: add the overrides in deploy/compose/
+# (docs/production-compose.md, "Bestehenden Traefik oder Keycloak einbinden").
 
 x-app-image: &backend-image ${IMAGE_REGISTRY:-ghcr.io/stritti/nak-district-planner}/backend:${APP_VERSION:?Set APP_VERSION in .env, e.g. 1.0.0-rc.2}
 
@@ -44,7 +47,8 @@ services:
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
       - --entrypoints.websecure.address=:443
       - --entrypoints.websecure.http.tls.certresolver=letsencrypt
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?Set ACME_EMAIL in .env (Let's Encrypt account contact)}
+      # Optional contact address for the Let's Encrypt account.
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-}
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
       # Static routes from files instead of the Docker provider: no socket mount.
@@ -54,12 +58,15 @@ services:
       # Read by the Go templates in deploy/traefik/dynamic/*.yml
       APP_HOST: ${APP_HOST:?Set APP_HOST in .env, e.g. planer.example.org}
       AUTH_HOST: ${AUTH_HOST:?Set AUTH_HOST in .env, e.g. auth.example.org}
-      KEYCLOAK_ADMIN_ALLOWED_IPS: ${KEYCLOAK_ADMIN_ALLOWED_IPS:?Set KEYCLOAK_ADMIN_ALLOWED_IPS in .env (admin console CIDRs)}
+      # Unset = admin console closed to everyone outside the server itself.
+      KEYCLOAK_ADMIN_ALLOWED_IPS: ${KEYCLOAK_ADMIN_ALLOWED_IPS:-127.0.0.1/32}
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/traefik/dynamic:/etc/traefik/dynamic:ro
+      # One file per route set, so an override can drop the Keycloak routes.
+      - ./deploy/traefik/dynamic/app.yml:/etc/traefik/dynamic/app.yml:ro
+      - ./deploy/traefik/dynamic/keycloak.yml:/etc/traefik/dynamic/keycloak.yml:ro
       - traefik_acme:/letsencrypt
     networks:
       edge:

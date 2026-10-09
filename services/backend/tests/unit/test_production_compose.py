@@ -145,13 +145,83 @@ def test_keycloak_trusts_forwarded_headers_only_from_the_proxy_network() -> None
     assert keycloak["KC_HOSTNAME"].startswith("https://")
 
 
+def _routes(name: str) -> str:
+    return (REPO_ROOT / "deploy" / "traefik" / "dynamic" / name).read_text(encoding="utf-8")
+
+
 def test_keycloak_administration_is_behind_the_ip_allowlist() -> None:
-    routes = (REPO_ROOT / "deploy" / "traefik" / "dynamic" / "routes.yml").read_text(
-        encoding="utf-8"
-    )
+    routes = _routes("keycloak.yml")
     admin_router = routes.split("auth-admin:", 1)[1].split("middlewares:", 2)
     assert "PathPrefix(`/admin`)" in admin_router[0]
     assert "PathPrefix(`/realms/master`)" in admin_router[0]
     assert "keycloak-admin-allowlist" in admin_router[1].splitlines()[0]
     assert 'env "KEYCLOAK_ADMIN_ALLOWED_IPS"' in routes
-    assert "stsSeconds: 31536000" in routes
+    assert "stsSeconds: 31536000" in _routes("app.yml")
+    # Unset allowlist closes the admin console instead of opening it.
+    traefik_env = _services()["traefik"]["environment"]
+    assert (
+        traefik_env["KEYCLOAK_ADMIN_ALLOWED_IPS"] == "${KEYCLOAK_ADMIN_ALLOWED_IPS:-127.0.0.1/32}"
+    )
+
+
+# --- Overrides for an existing Traefik / Keycloak (deploy/compose/) ----------
+
+
+class _OverrideLoader(yaml.SafeLoader):
+    """SafeLoader that accepts Compose merge tags (!override, !reset)."""
+
+
+_OverrideLoader.add_multi_constructor(
+    "!",
+    lambda loader, _suffix, node: (
+        loader.construct_sequence(node)
+        if isinstance(node, yaml.SequenceNode)
+        else loader.construct_mapping(node)
+        if isinstance(node, yaml.MappingNode)
+        else loader.construct_scalar(node)
+    ),
+)
+
+
+def _override(name: str) -> dict:
+    path = REPO_ROOT / "deploy" / "compose" / name
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=_OverrideLoader)  # noqa: S506
+
+
+def test_existing_keycloak_drops_the_bundled_keycloak_and_its_routes() -> None:
+    raw = (REPO_ROOT / "deploy" / "compose" / "existing-keycloak.yml").read_text(encoding="utf-8")
+    services = _override("existing-keycloak.yml")["services"]
+    assert services["keycloak"]["profiles"] == ["bundled-keycloak"]
+    assert services["keycloak-db"]["profiles"] == ["bundled-keycloak"]
+
+    traefik = services["traefik"]
+    assert "volumes: !override" in raw and "networks: !override" in raw
+    assert not any("keycloak.yml" in v for v in traefik["volumes"])
+    assert any(v.startswith("./deploy/traefik/dynamic/app.yml:") for v in traefik["volumes"])
+    # No in-stack alias: AUTH_HOST must resolve to the real provider.
+    assert all(not (cfg or {}).get("aliases") for cfg in traefik["networks"].values())
+    assert "idp" not in services["backend"]["networks"]
+
+
+def test_existing_traefik_publishes_through_labels_without_ports_or_socket() -> None:
+    override = _override("existing-traefik.yml")
+    services = override["services"]
+    assert services["traefik"]["profiles"] == ["bundled-traefik"]
+    assert override["networks"]["traefik-public"]["external"] is True
+
+    for name in ("frontend", "keycloak"):
+        service = services[name]
+        assert "ports" not in service, name
+        assert "volumes" not in service, name
+        assert "traefik.enable=true" in service["labels"], name
+        assert "traefik-public" in service["networks"], name
+
+    labels = "\n".join(services["keycloak"]["labels"])
+    admin_rule = next(
+        line for line in services["keycloak"]["labels"] if "nak-auth-admin.rule=" in line
+    )
+    assert "PathPrefix(`/admin`)" in admin_rule
+    assert "PathPrefix(`/realms/master`)" in admin_rule
+    assert "nak-auth-admin.middlewares=nak-keycloak-admin" in labels
+    assert "ipallowlist.sourcerange=${KEYCLOAK_ADMIN_ALLOWED_IPS:-127.0.0.1/32}" in labels
+    assert "stsSeconds=31536000" in "\n".join(services["frontend"]["labels"])

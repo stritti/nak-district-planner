@@ -1,16 +1,9 @@
-# Traefik routes for docker-compose.prod.yml (file provider, Go template).
-# APP_HOST, AUTH_HOST and KEYCLOAK_ADMIN_ALLOWED_IPS come from the traefik
-# service environment (.env). Traefik reloads this file on change.
+# Traefik routes for the bundled Keycloak (docker-compose.prod.yml, file
+# provider, Go template). Not mounted when an existing Keycloak is used
+# (deploy/compose/existing-keycloak.yml). AUTH_HOST and
+# KEYCLOAK_ADMIN_ALLOWED_IPS come from the traefik service environment.
 http:
   routers:
-    app:
-      rule: Host(`{{ env "APP_HOST" }}`)
-      entryPoints: [websecure]
-      service: frontend
-      middlewares: [security-headers]
-      tls:
-        certResolver: letsencrypt
-
     auth:
       rule: Host(`{{ env "AUTH_HOST" }}`)
       entryPoints: [websecure]
@@ -30,13 +23,6 @@ http:
         certResolver: letsencrypt
 
   middlewares:
-    # HSTS belongs at the public TLS endpoint (docs/security-baseline.md);
-    # the remaining headers are set by frontend-nginx.
-    security-headers:
-      headers:
-        stsSeconds: 31536000
-        stsIncludeSubdomains: true
-
     keycloak-admin-allowlist:
       ipAllowList:
         # The template actions sit in comments so this file stays valid YAML
@@ -47,10 +33,6 @@ http:
           # {{- end }}
 
   services:
-    frontend:
-      loadBalancer:
-        servers:
-          - url: http://frontend:80
     keycloak:
       loadBalancer:
         servers:

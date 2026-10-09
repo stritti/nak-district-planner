@@ -26,7 +26,7 @@ Internet ──80/443──> traefik ──┬─ Host(APP_HOST)  ──> fronte
 
 Sicherheitsregeln, die die Tests in `tests/unit/test_production_compose.py` absichern:
 
-- Nur Traefik veröffentlicht Ports (80/443). Kein Container bekommt den Docker-Socket: Die Routen stehen statisch in `deploy/traefik/dynamic/routes.yml`, siehe `docs/security-baseline.md`.
+- Nur Traefik veröffentlicht Ports (80/443). Kein Container bekommt den Docker-Socket: Die Routen stehen statisch in `deploy/traefik/dynamic/` (`app.yml`, `keycloak.yml`), siehe `docs/security-baseline.md`.
 - Jedes Secret erreicht nur den Container, der es braucht:
   - `.env.db` (PostgreSQL-Owner): nur `db` und `migrate`
   - `.env.keycloak`: nur `keycloak`
@@ -73,6 +73,8 @@ KEYCLOAK_ADMIN_ALLOWED_IPS=203.0.113.10/32
 ```
 
 Mit `COMPOSE_FILE` benutzen auch `docker compose ...`, `make migrate` und `scripts/backup.sh` die Produktionsdatei.
+
+`ACME_EMAIL` ist optional; Let's Encrypt stellt auch ohne Kontaktadresse aus. `KEYCLOAK_ADMIN_ALLOWED_IPS` ist ebenfalls optional: Ohne Wert gilt `127.0.0.1/32`, die Adminkonsole ist dann von außen gesperrt.
 
 Danach die Anwendungswerte setzen, wie in der Checkliste in `docs/production-runbook.md`, Abschnitt 1.1:
 
@@ -161,6 +163,77 @@ curl -o /dev/null -w '%{http_code}\n' https://<AUTH_HOST>/admin/   # 403 von au�
 ```
 
 Das Backend prüft die Token gegen `https://<AUTH_HOST>/realms/nak`. Der Issuer in der Discovery-Antwort muss **genau** diese URL sein. Keycloak leitet sie aus `KC_HOSTNAME` ab.
+
+## Bestehenden Traefik oder Keycloak einbinden
+
+Läuft auf dem Server schon ein Traefik oder ein Keycloak, ersetzen zwei Override-Dateien in `deploy/compose/` den jeweils mitgelieferten Dienst. Sie werden über `COMPOSE_FILE` zugeschaltet (Trenner `:`) und brauchen Docker Compose ≥ 2.24.
+
+| Vorhanden auf dem Server | `COMPOSE_FILE` in `.env` |
+|---|---|
+| nichts (Standard) | `docker-compose.prod.yml` |
+| Keycloak | `docker-compose.prod.yml:deploy/compose/existing-keycloak.yml` |
+| Traefik | `docker-compose.prod.yml:deploy/compose/existing-traefik.yml` |
+| beides | `docker-compose.prod.yml:deploy/compose/existing-keycloak.yml:deploy/compose/existing-traefik.yml` |
+
+Prüfen, was tatsächlich startet: `docker compose config --services`
+
+### Vorhandener Keycloak (oder anderer OIDC-Provider)
+
+`deploy/compose/existing-keycloak.yml` legt `keycloak` und `keycloak-db` hinter das Profil `bundled-keycloak`, damit sie nicht starten. Außerdem:
+- Der mitgelieferte Traefik bekommt die Keycloak-Routen (`keycloak.yml`) nicht.
+- Der interne Alias `AUTH_HOST` → Traefik entfällt, damit das Backend den echten Provider über DNS erreicht.
+- Das Backend verlässt das `idp`-Netz.
+
+1. `AUTH_HOST` auf den Hostnamen des vorhandenen Providers setzen (z. B. `sso.example.org`).
+2. Im vorhandenen Keycloak einen Client `nak-planner` anlegen, wie in Abschnitt „4. Keycloak einrichten“ beschrieben, und `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` in `.env` eintragen.
+3. Der Issuer in der Discovery-Antwort muss über HTTPS mit einem öffentlich gültigen Zertifikat erreichbar sein. Das Backend prüft TLS und übernimmt den Issuer aus der Discovery-Antwort.
+4. `.env.keycloak` und `.env.keycloak-db` werden nicht gebraucht.
+5. Für das IdP-Provisioning die Admin-API des vorhandenen Keycloak verwenden (`IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://sso.example.org`) und einen eigenen Service-Account mit den nötigen Realm-Rechten einrichten.
+
+### Vorhandener Traefik
+
+`deploy/compose/existing-traefik.yml` legt den mitgelieferten Traefik hinter das Profil `bundled-traefik`, damit er nicht startet. Frontend und Keycloak hängen sich an das externe Netz des vorhandenen Traefik und veröffentlichen ihre Routen über **Docker-Labels**: App, Keycloak, Admin-Allowlist (`/admin`, Realm `master`) und HSTS, genau wie im mitgelieferten Stack.
+
+Voraussetzungen am vorhandenen Traefik:
+- Docker-Provider aktiv, am besten mit `exposedByDefault=false`
+- ein HTTPS-Entrypoint
+- ein ACME-Resolver
+- ein externes Docker-Netz, an das er angeschlossen ist
+
+Die Namen in `.env` angeben, falls sie von den Defaults abweichen:
+
+```dotenv
+TRAEFIK_NETWORK=traefik_net          # externes Netz des vorhandenen Traefik
+TRAEFIK_ENTRYPOINT=websecure         # HTTPS-Entrypoint
+TRAEFIK_CERTRESOLVER=letsencrypt     # ACME-Resolver
+TRAEFIK_PROXY_SUBNET=172.18.0.0/16   # Subnetz von TRAEFIK_NETWORK
+```
+
+So findest du das Subnetz heraus:
+
+```bash
+docker network inspect traefik_net --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+```
+
+Wichtig für die Vertrauenskette der Client-IP und der Forwarded-Header:
+- Keycloak vertraut Forwarded-Headern nur aus `TRAEFIK_PROXY_SUBNET` (Default `172.16.0.0/12`).
+- Das Frontend-nginx übernimmt die Client-IP nur von `NGINX_REAL_IP_FROM` (Default `127.0.0.1/32 172.16.0.0/12`). Liegt das Traefik-Netz außerhalb davon, z. B. in `192.168.0.0/16`, beide Werte in `.env` setzen. Sonst teilen sich alle Nutzer die Proxy-IP und damit einen Rate-Limit-Bucket.
+- Der vorhandene Traefik muss das `X-Forwarded-For` von Clients verwerfen, nicht übernehmen. Das ist der Default ohne `forwardedHeaders.trustedIPs`.
+
+Der Docker-Socket gehört hier dem vorhandenen Traefik; dieser Stack mountet ihn weiterhin nicht. Arbeitet der vorhandene Traefik nur mit dem File-Provider, statt der Labels die Dateien aus `deploy/traefik/dynamic/` in dessen Konfiguration übernehmen:
+- Hostnamen eintragen
+- Service-URLs auf `http://nak-frontend:80` und `http://nak-keycloak:8080` ändern; das sind die eindeutigen Aliase im gemeinsamen Netz.
+
+Das Backend erreicht `AUTH_HOST` ohne den mitgelieferten Traefik über das öffentliche DNS, also über den Router des Servers. Unterstützt das Netz kein Hairpin-NAT, `AUTH_HOST` per `extra_hosts` auf den Host zeigen lassen, z. B. in einer weiteren Override-Datei:
+
+```yaml
+services:
+  backend:
+    extra_hosts:
+      - "${AUTH_HOST}:host-gateway"
+```
+
+Das funktioniert nur, wenn Keycloak hinter demselben Traefik läuft.
 
 ## Hinweise
 
