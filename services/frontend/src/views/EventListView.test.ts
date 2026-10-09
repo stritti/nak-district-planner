@@ -5,6 +5,7 @@ import * as districtsApi from '../api/districts'
 import * as eventsApi from '../api/events'
 import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
+import { useMatrixStore } from '../stores/matrix'
 import EventListView from './EventListView.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +13,12 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   exportEvents: vi.fn(),
+  push: vi.fn(),
+}))
+
+vi.mock('vue-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-router')>()),
+  useRouter: () => ({ push: mocks.push }),
 }))
 
 vi.mock('../api/districts')
@@ -126,6 +133,20 @@ beforeEach(() => {
 })
 
 describe('EventListView', () => {
+  it('opens the matrix for the service week via the assign button', async () => {
+    const { wrapper, eventsStore } = setup()
+    await flushPromises()
+
+    const service = eventsStore.items.find((e) => e.is_service && e.status === 'ACTIVE')!
+    expect(service).toBeTruthy()
+    await wrapper.find('[data-testid="assign-in-matrix"]').trigger('click')
+
+    const matrix = useMatrixStore()
+    expect(matrix.districtId).toBe(service.district_id)
+    expect(matrix.fromDt <= matrix.toDt).toBe(true)
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'matrix' })
+  })
+
   it('loads and renders list events with district, congregation, source and status variants', async () => {
     const { wrapper, eventsStore } = setup()
     await flushPromises()

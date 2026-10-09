@@ -16,6 +16,14 @@ Describes the district planning matrix (UC-03) and service-leader assignments: d
 ### Requirement: Matrix columns and cells
 Columns SHALL be the union of dates expected by congregation `service_times`, dates of `Feiertag` slots (always shown, names in `holidays`) and dates of `Gottesdienst` slots. A cell SHALL resolve the congregation's `Gottesdienst` slot (earliest time on that date) or a district-level slot and expose approval status, assignment status and leader, `is_gap` (no assignment and not an invitation copy), deviation flag with minute differences, invitation source and invitation count.
 
+#### Scenario: Service moved outside the regular schedule
+- **WHEN** a `Gottesdienst` slot of a congregation lies on a date that is neither in its `service_times` nor a holiday (e.g. moved from Sunday to Saturday)
+- **THEN** its cell shows the slot and remains assignable instead of being rendered empty
+
+#### Scenario: Assign from the event list
+- **WHEN** the user triggers "Amtstragende:n zuweisen" on an active `Gottesdienst` in the event list
+- **THEN** the matrix opens for that district showing the week around the event, where the assignment modal is available
+
 #### Scenario: Unassigned service
 - **WHEN** a `Gottesdienst` slot has no service assignment
 - **THEN** its cell has `is_gap = true` and the UI renders it as a red "LÜCKE" cell that opens the assignment modal

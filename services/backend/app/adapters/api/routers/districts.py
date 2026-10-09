@@ -612,22 +612,13 @@ async def get_matrix(
             )
 
     for congregation in congregations:
-        cong_expected: set[str] = set(expected_by_cong[congregation.id])
         cells: dict[str, MatrixCell] = {}
 
         for date_key in sorted_dates:
-            # Check if this date is expected for this congregation
-            if date_key not in cong_expected:
-                # Check if there's a Feiertag on this date (always shown as column)
-                if date_key not in holidays:
-                    # Neither expected by schedule nor a holiday
-                    cells[date_key] = MatrixCell()
-                    continue
-
             slot: PlanningSlot | None = _cell_slot(congregation.id, date_key)
 
             if slot is None:
-                # Expected by schedule but no slot exists yet
+                # No visible slot for this congregation on this date
                 cells[date_key] = MatrixCell()
                 continue
 
