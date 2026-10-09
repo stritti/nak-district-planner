@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0-rc.3](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.2...v1.0.0-rc.3) (2026-10-09)
+
+
+### Features
+
+* **deploy:** production stack with Traefik, Keycloak and released GHCR images ([#509](https://github.com/stritti/nak-district-planner/issues/509)) ([82e23c4](https://github.com/stritti/nak-district-planner/commit/82e23c46ff91a4b0747c6da35044228380ce9588))
+
+
+### Bug Fixes
+
+* **docs:** serve GitHub Pages below the repository path ([#510](https://github.com/stritti/nak-district-planner/issues/510)) ([3fb80e6](https://github.com/stritti/nak-district-planner/commit/3fb80e6ec46a61800d7017acb7ca1015c08a59f1))
+* **release:** keep the duplicate archive out of autogenerate; restore CHANGELOG order ([#504](https://github.com/stritti/nak-district-planner/issues/504)) ([70ed16a](https://github.com/stritti/nak-district-planner/commit/70ed16a4774e4a456a83e98a019b87dfd5e8bde5))
+* **security:** remove tracked Keycloak env backup and block future commits ([#506](https://github.com/stritti/nak-district-planner/issues/506)) ([be8c775](https://github.com/stritti/nak-district-planner/commit/be8c77572115f683b957e4a943de2c690b20b769))
+* **security:** require client-bound introspection for opaque OIDC tokens ([#505](https://github.com/stritti/nak-district-planner/issues/505)) ([77b5f9e](https://github.com/stritti/nak-district-planner/commit/77b5f9ed3b97a8fe68a5a016b5278b46db6878ba))
+
 ## [1.0.0-rc.2](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2026-10-08)
 
 
