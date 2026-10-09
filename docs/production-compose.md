@@ -114,6 +114,15 @@ docker compose up -d traefik keycloak
 
 Traefik holt die Zertifikate beim ersten Aufruf der Hostnamen.
 
+Mit den Overrides aus [Bestehenden Traefik oder Keycloak einbinden](#bestehenden-traefik-oder-keycloak-einbinden) nur die Dienste nennen, die der Stack noch selbst mitbringt. Compose startet einen per Profil abgeschalteten Dienst sonst trotzdem, sobald er im Befehl steht:
+
+| Override | Startbefehl in diesem Schritt |
+|---|---|
+| keiner | `docker compose up -d traefik keycloak` |
+| `existing-traefik.yml` | `docker compose up -d keycloak` |
+| `existing-keycloak.yml` | entfällt; den Client im vorhandenen Keycloak anlegen (Schritte 3–4 unten) |
+| beide | entfällt; wie bei `existing-keycloak.yml` |
+
 1. `https://<AUTH_HOST>/admin/` aus einem Netz in `KEYCLOAK_ADMIN_ALLOWED_IPS` öffnen und mit dem Bootstrap-Admin anmelden.
 2. Einen dauerhaften Admin-Benutzer im Realm `master` anlegen, dann den Bootstrap-Admin löschen. Danach `KC_BOOTSTRAP_ADMIN_*` aus `.env.keycloak` entfernen.
 3. Realm `nak` anlegen und darin einen Client `nak-planner`:
@@ -123,9 +132,20 @@ Traefik holt die Zertifikate beim ersten Aufruf der Hostnamen.
    - Valid redirect URIs: `https://<APP_HOST>/auth/callback`
    - Valid post logout redirect URIs: `https://<APP_HOST>/*`
    - Web origins: `https://<APP_HOST>`
+   - Unter *Client scopes → nak-planner-dedicated* einen Mapper **Audience** hinzufügen:
+     - Included Client Audience: `nak-planner`
+     - Add to access token: an
+
+     Ohne diesen Mapper enthält das Access-Token nur `aud=account`. Das Backend lehnt dann jede API-Anfrage mit 401 ab, obwohl die Anmeldung klappt.
 4. Das Client-Secret in `.env` als `OIDC_CLIENT_SECRET` eintragen, dazu `OIDC_DISCOVERY_URL` und `OIDC_CLIENT_ID` (siehe Abschnitt 1).
 
-Optional kann das Backend freigegebene Registrierungen direkt in Keycloak anlegen („IdP-Provisioning“). Es spricht die Admin-API dann intern an, ohne den Umweg über Traefik und die Admin-Allowlist. Es meldet sich mit einem Benutzer des Realms `master` an (Client `admin-cli`). Dafür einen eigenen Benutzer mit möglichst wenigen Rechten anlegen, nicht den Bootstrap-Admin. Der `production_guard` verlangt alle vier Keycloak-Werte:
+Optional kann das Backend freigegebene Registrierungen direkt in Keycloak anlegen („IdP-Provisioning“). Es spricht die Admin-API dann intern an, ohne den Umweg über Traefik und die Admin-Allowlist. Es meldet sich mit einem Benutzer des Realms `master` an (Client `admin-cli`). Dafür einen eigenen Benutzer anlegen, nicht den Bootstrap-Admin:
+
+1. Im Realm `master` einen Benutzer `nak-provisioning` mit Passwort anlegen.
+2. Unter *Role mapping → Assign role → Client roles* nur die Rolle `manage-users` des Clients `nak-realm` zuweisen. Das reicht zum Suchen und Anlegen von Benutzern im Realm `nak`; andere Realms bleiben gesperrt.
+3. Einladungs-Mails versendet Keycloak selbst, nicht die Anwendung. Dafür im Realm `nak` unter *Realm settings → Email* einen SMTP-Server und eine Absenderadresse eintragen. Ohne SMTP legt Keycloak den Benutzer zwar an, die Einladung scheitert aber, und die Freigabe wird als fehlgeschlagen protokolliert. Wer keine Einladungs-Mails will, setzt `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=false`.
+
+Der `production_guard` verlangt alle vier Keycloak-Werte:
 
 ```dotenv
 IDP_PROVISIONING_ENABLED=true
@@ -216,10 +236,10 @@ Prüfen, was tatsächlich startet: `docker compose config --services`
 - Das Backend verlässt das `idp`-Netz.
 
 1. `AUTH_HOST` auf den Hostnamen des vorhandenen Providers setzen (z. B. `sso.example.org`).
-2. Im vorhandenen Keycloak einen Client `nak-planner` anlegen, wie in Abschnitt „3. Keycloak starten und einrichten“ beschrieben, und `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` in `.env` eintragen.
+2. Im vorhandenen Keycloak einen Client `nak-planner` anlegen, wie in Abschnitt „3. Keycloak starten und einrichten“ beschrieben (einschließlich Audience-Mapper), und `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` in `.env` eintragen.
 3. Der Issuer in der Discovery-Antwort muss über HTTPS mit einem öffentlich gültigen Zertifikat erreichbar sein. Das Backend prüft TLS und übernimmt den Issuer aus der Discovery-Antwort.
 4. `.env.keycloak` und `.env.keycloak-db` werden nicht gebraucht.
-5. Für das IdP-Provisioning die Admin-API des vorhandenen Keycloak verwenden (`IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://sso.example.org`) und einen eigenen Service-Account mit den nötigen Realm-Rechten einrichten.
+5. Für das IdP-Provisioning die Admin-API des vorhandenen Keycloak verwenden (`IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://sso.example.org`) und dort einen Benutzer im Realm `master` mit der Rolle `manage-users` des Clients `<Realm>-realm` anlegen, wie oben beschrieben. Für Einladungs-Mails braucht der Realm einen SMTP-Server.
 
 ### Vorhandener Traefik
 
