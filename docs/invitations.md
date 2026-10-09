@@ -36,7 +36,7 @@ Diese Erweiterung fuehrt ein Einladungsmodell ein, bei dem ein Termin aus einer 
 - `invitation_source_congregation_name` (Anzeige in der eingeladenen Zelle)
 - `is_assignment_editable` (`false` in eingeladenen Zellen)
 
-Damit kann das Frontend den Hinweis "Einladung von &lt;Gemeinde&gt;" anzeigen.
+Damit zeigt das Frontend in der eingeladenen Zelle den Titel "Gottesdienst in &lt;Gemeinde&gt;" (Gastgeber farblich hervorgehoben). Im ICS-Export ist der Gastgeber der Ort (`LOCATION`) des Termins, und der Dienstleiter des Gastgebers steht im Kommentar.
 
 ## Migration
 

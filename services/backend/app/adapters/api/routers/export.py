@@ -227,7 +227,9 @@ async def export_calendar_ics(
         all_slots = [s for s in all_slots if s.is_confirmed]
 
     # Load assignments in one batch query (keyed by planning_slot_id via event_id)
-    assignments = await sa_repo.list_by_planning_slots(slot_ids)
+    # An invitation copy shows the leader of the host's service.
+    host_slot_ids = {s.invitation_source_event_id for s in all_slots if s.invitation_source_event_id}
+    assignments = await sa_repo.list_by_planning_slots(list({*slot_ids, *host_slot_ids}))
 
     # Personal leader feed: only this leader's assignments and their slots
     if export_token.leader_id:
@@ -248,6 +250,10 @@ async def export_calendar_ics(
     # Leader renames change the exported COMMENT without touching the slot
     leader_revision: dict[uuid.UUID, datetime] = {}
     for a in assignments:
+        if _slot_key(a) in host_slot_ids:
+            # The copy itself is not touched when the host's assignment changes.
+            key = _slot_key(a)
+            leader_revision[key] = max(a.updated_at, leader_revision.get(key, a.updated_at))
         display_name: str | None = None
         if a.leader_name:
             display_name = a.leader_name
@@ -309,10 +315,14 @@ async def export_calendar_ics(
         revisions = [slot.updated_at]
         if instance:
             revisions.append(instance.updated_at)
-        if slot.id in leader_revision:
-            revisions.append(leader_revision[slot.id])
+        for key in (slot.id, slot.invitation_source_event_id):
+            if key in leader_revision:
+                revisions.append(leader_revision[key])
         if slot.congregation_id in cong_revision:
             revisions.append(cong_revision[slot.congregation_id])
+        location_id = slot.invitation_source_congregation_id or slot.congregation_id
+        if location_id in cong_revision:
+            revisions.append(cong_revision[location_id])
         last_modified = max(revisions)
         vevent.add("dtstamp", last_modified)
         vevent.add("last-modified", last_modified)
@@ -325,8 +335,9 @@ async def export_calendar_ics(
             vevent.add("status", "TENTATIVE")
             vevent.add("x-nak-approval-status", "PLANNED")
 
-        if slot.congregation_id and slot.congregation_id in cong_map:
-            vevent.add("location", cong_map[slot.congregation_id])
+        # An invitation copy takes place in the host congregation.
+        if location_id in cong_map:
+            vevent.add("location", cong_map[location_id])
 
         if slot.category:
             vevent.add("categories", slot.category)
@@ -335,6 +346,8 @@ async def export_calendar_ics(
             vevent.add("description", instance.description)
 
         leader = assignment_map.get(slot.id)
+        if leader is None and slot.invitation_source_event_id:
+            leader = assignment_map.get(slot.invitation_source_event_id)
         if leader:
             name = leader if show_names else "[Name anonymisiert]"
             vevent.add("comment", f"Dienstleiter: {name}")
