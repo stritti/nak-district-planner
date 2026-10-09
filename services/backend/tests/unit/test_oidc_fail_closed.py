@@ -1,7 +1,9 @@
 """Regression tests for fail-closed OIDC token validation."""
 
-from unittest.mock import AsyncMock
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from app.adapters.auth.oidc import OIDCAdapter, TokenValidationError
@@ -231,13 +233,8 @@ async def test_opaque_userinfo_outage_preserves_validated_introspection(
 
 @pytest.mark.asyncio
 async def test_opaque_introspection_rejects_non_boolean_active(adapter: OIDCAdapter) -> None:
-    from datetime import UTC, datetime
-
     adapter._discovery_cache = {"introspection_endpoint": "https://oidc.example.com/introspect"}
     adapter._discovery_cache_time = datetime.now(UTC)
-    from unittest.mock import MagicMock
-    import httpx
-
     httpx_client = AsyncMock(spec=httpx.AsyncClient)
     provider_response = MagicMock(spec=httpx.Response)
     provider_response.status_code = 200
