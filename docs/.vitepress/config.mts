@@ -57,6 +57,7 @@ export default defineConfig(
             text: 'Betrieb & Entwicklung',
             items: [
               { text: 'Production Runbook', link: '/production-runbook' },
+              { text: 'Produktiv-Stack (Traefik + Keycloak)', link: '/production-compose' },
               { text: 'Release-Prozess', link: '/release-process' },
               { text: 'Release-Review 1.0', link: '/reviews/2026-10-07-release-1.0-review' },
               { text: 'Verbesserungsvorschl\u00e4ge', link: '/improvement-proposals' }

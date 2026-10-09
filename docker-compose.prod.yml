@@ -1,0 +1,288 @@
+# Production stack: Traefik (TLS, Let's Encrypt) + Keycloak + NAK District Planner
+# from the published GHCR images. Nothing is built on the server.
+#
+#   Setup and operation: docs/production-compose.md
+#
+#   docker compose -f docker-compose.prod.yml up -d
+#   (or set COMPOSE_FILE=docker-compose.prod.yml in .env so plain
+#   `docker compose ...`, `make migrate` and scripts/backup.sh use this file)
+#
+# Secrets are split by need-to-know, like docker-compose.yml:
+#   .env              runtime configuration of backend/worker/beat (+ the
+#                     interpolation values below: hosts, image version, ...)
+#   .env.db           PostgreSQL owner password: db + migrate only
+#   .env.keycloak     Keycloak admin bootstrap + its DB password: keycloak only
+#   .env.keycloak-db  Keycloak database owner: keycloak-db only
+#
+# Only Traefik publishes ports (80/443). Traefik does not get the Docker
+# socket: routes are static (deploy/traefik/dynamic/), see docs/security-baseline.md.
+#
+# Existing Traefik or Keycloak on the host: add the overrides in deploy/compose/
+# (docs/production-compose.md, "Bestehenden Traefik oder Keycloak einbinden").
+
+x-app-image: &backend-image ${IMAGE_REGISTRY:-ghcr.io/stritti/nak-district-planner}/backend:${APP_VERSION:?Set APP_VERSION in .env, e.g. 1.0.0-rc.2}
+
+x-defaults: &defaults
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  traefik:
+    <<: *defaults
+    image: traefik:v3.6
+    command:
+      - --global.checkNewVersion=false
+      - --global.sendAnonymousUsage=false
+      - --log.level=INFO
+      - --accesslog=true
+      - --ping=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls.certresolver=letsencrypt
+      # Optional contact address for the Let's Encrypt account.
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      # Static routes from files instead of the Docker provider: no socket mount.
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+    environment:
+      # Read by the Go templates in deploy/traefik/dynamic/*.yml
+      APP_HOST: ${APP_HOST:?Set APP_HOST in .env, e.g. planer.example.org}
+      AUTH_HOST: ${AUTH_HOST:?Set AUTH_HOST in .env, e.g. auth.example.org}
+      # Unset = admin console closed to everyone outside the server itself.
+      KEYCLOAK_ADMIN_ALLOWED_IPS: ${KEYCLOAK_ADMIN_ALLOWED_IPS:-127.0.0.1/32}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # One file per route set, so an override can drop the Keycloak routes.
+      - ./deploy/traefik/dynamic/app.yml:/etc/traefik/dynamic/app.yml:ro
+      - ./deploy/traefik/dynamic/keycloak.yml:/etc/traefik/dynamic/keycloak.yml:ro
+      - traefik_acme:/letsencrypt
+    networks:
+      edge:
+      app:
+        # The backend validates tokens against https://${AUTH_HOST}; resolve
+        # that name to Traefik inside the stack instead of hairpinning out.
+        aliases:
+          - ${AUTH_HOST}
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    <<: *defaults
+    image: ${IMAGE_REGISTRY:-ghcr.io/stritti/nak-district-planner}/frontend:${APP_VERSION:?Set APP_VERSION in .env}
+    env_file:
+      - .env.docker.frontend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      backend:
+        condition: service_started
+    networks:
+      - edge
+      - app
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    <<: *defaults
+    image: *backend-image
+    env_file:
+      - .env
+      - .env.docker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+    networks:
+      - app
+      - data
+      - idp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # One-shot deployment step with the database owner credentials (see
+  # docs/deployment-migrations.md). Runtime services start only after it.
+  migrate:
+    image: *backend-image
+    env_file:
+      - .env
+      - .env.db
+      - .env.docker.migrate
+    command: uv run alembic upgrade head
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - data
+
+  worker:
+    <<: *defaults
+    image: *backend-image
+    command: uv run celery -A app.celery_app worker --loglevel=info
+    env_file:
+      - .env
+      - .env.docker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+    networks:
+      - app
+      - data
+
+  # The only scheduler: exactly one instance, schedule file on a named volume.
+  beat:
+    <<: *defaults
+    image: *backend-image
+    command: uv run celery -A app.celery_app beat --loglevel=info --schedule /app/beat/celerybeat-schedule
+    env_file:
+      - .env
+      - .env.docker
+    volumes:
+      - beat_schedule:/app/beat
+    deploy:
+      replicas: 1
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - app
+      - data
+
+  db:
+    <<: *defaults
+    image: postgres:18.6-alpine
+    # Not .env: it carries the application secrets (SECRET_KEY, OIDC, SMTP, ...).
+    env_file:
+      - .env.db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    <<: *defaults
+    image: valkey/valkey:9.1.2-alpine
+    volumes:
+      - valkey_data:/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    <<: *defaults
+    image: quay.io/keycloak/keycloak:26.5
+    command: start
+    env_file:
+      - .env.keycloak
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-db
+      KC_DB_URL_DATABASE: keycloak
+      KC_HOSTNAME: https://${AUTH_HOST:?Set AUTH_HOST in .env}
+      # TLS ends at Traefik; trust its forwarded headers, and only from the edge network.
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_PROXY_TRUSTED_ADDRESSES: ${EDGE_SUBNET:-172.30.250.0/24}
+      KC_HEALTH_ENABLED: "true"
+      KC_LOG_LEVEL: info
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      - edge
+      - idp
+    healthcheck:
+      # The image ships without curl; probe the management port (9000) with bash.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  keycloak-db:
+    <<: *defaults
+    image: postgres:18.6-alpine
+    env_file:
+      - .env.keycloak-db
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql
+    networks:
+      - idp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  # Traefik <-> frontend/keycloak. Fixed subnet so frontend-nginx
+  # (NGINX_REAL_IP_FROM) and Keycloak (KC_PROXY_TRUSTED_ADDRESSES) trust
+  # exactly the proxy hop.
+  edge:
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:-172.30.250.0/24}
+  # frontend-nginx -> backend; outbound internet for backend/worker (OIDC,
+  # calendar sync, SMTP). Fixed subnet inside TRUSTED_PROXIES (172.16.0.0/12).
+  app:
+    ipam:
+      config:
+        - subnet: ${APP_SUBNET:-172.30.251.0/24}
+  # Databases and cache: no route to the outside.
+  data:
+    internal: true
+  # Keycloak and its database; the backend reaches the Keycloak admin API
+  # here (IDP_PROVISIONING_KEYCLOAK_BASE_URL=http://keycloak:8080).
+  idp:
+    internal: true
+
+volumes:
+  traefik_acme:
+  postgres_data:
+  valkey_data:
+  keycloak_db_data:
+  beat_schedule:

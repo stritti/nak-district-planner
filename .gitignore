@@ -3,6 +3,9 @@
 # ============================================================
 .env
 .env.db
+# Keycloak secrets for docker-compose.prod.yml
+.env.keycloak
+.env.keycloak-db
 .env.local
 .env.*.local
 # Never commit backups of local or IdP environment files.

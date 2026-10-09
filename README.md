@@ -14,6 +14,7 @@ Die Projektdokumentation befindet sich unter `docs/`.
 - Engineering Standards: `docs/engineering-standards.md`
 - Security Baseline: `docs/security-baseline.md`
 - Production Runbook: `docs/production-runbook.md`
+- Produktiv-Stack (Traefik + Keycloak + GHCR-Images): `docs/production-compose.md`
 
 Historische Inhalte wurden in die strukturierte Projektdokumentation ueberfuehrt.
 

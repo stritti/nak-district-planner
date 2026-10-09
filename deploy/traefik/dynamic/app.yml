@@ -1,0 +1,25 @@
+# Traefik routes for the application (docker-compose.prod.yml, file provider,
+# Go template). APP_HOST comes from the traefik service environment (.env).
+http:
+  routers:
+    app:
+      rule: Host(`{{ env "APP_HOST" }}`)
+      entryPoints: [websecure]
+      service: frontend
+      middlewares: [security-headers]
+      tls:
+        certResolver: letsencrypt
+
+  middlewares:
+    # HSTS belongs at the public TLS endpoint (docs/security-baseline.md);
+    # the remaining headers are set by frontend-nginx.
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+
+  services:
+    frontend:
+      loadBalancer:
+        servers:
+          - url: http://frontend:80

@@ -2,6 +2,8 @@
 
 Keycloak is a mature, open-source identity and access management platform. This directory contains everything needed to deploy and configure Keycloak for NAK Planner.
 
+> **Production:** use the complete stack in `docker-compose.prod.yml` (Traefik + Keycloak + released application images, see `docs/production-compose.md`). The compose file in this directory is a standalone example for an existing Traefik setup; its defaults (`changeme` passwords, fixed host name, insecure cookies) are not suitable for production.
+
 ## Quick Start (5 minutes)
 
 ```bash
