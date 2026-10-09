@@ -15,6 +15,8 @@ Planning slots already support a single liturgical service-leader assignment, bu
 ### New Capabilities
 - `event-duty-categories`: district/congregation configuration, inheritance, defaults and category lifecycle.
 - `event-duty-assignments`: optional, validated duty assignment to planning slots.
+- `duty-name-suggestions`: duty-specific remembered free-text names and reversible suppression.
+- `minister-lifecycle`: deactivation, hidden historical records and dated planning eligibility.
 
 ### Modified Capabilities
 - `planning-visibility`: assigned organisational duties in personal calendars only.
