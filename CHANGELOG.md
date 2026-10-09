@@ -1,3 +1,27 @@
+# Changelog
+
+## [1.0.0-rc.2](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2026-10-08)
+
+
+### Bug Fixes
+
+* **auth:** make OIDC token validation fail closed ([#438](https://github.com/stritti/nak-district-planner/issues/438)) ([8ea2612](https://github.com/stritti/nak-district-planner/commit/8ea2612e6caa24b0deb362df06b1e737465ecb9f))
+* **auth:** require verified email for registration auto-linking ([#478](https://github.com/stritti/nak-district-planner/issues/478)) ([05f61e3](https://github.com/stritti/nak-district-planner/commit/05f61e386a1fd04ef8f427794e12883a2e529413))
+* **calendar:** support only ICS and CalDAV for 1.0 ([#487](https://github.com/stritti/nak-district-planner/issues/487)) ([36dc685](https://github.com/stritti/nak-district-planner/commit/36dc68590bf208bf1310394ef2553b18bf6aa41c))
+* **deploy:** run a single Celery beat scheduler and reserve latest for stable releases ([#480](https://github.com/stritti/nak-district-planner/issues/480)) ([942b430](https://github.com/stritti/nak-district-planner/commit/942b430512871172fd4eb0804877ff77d5717c94))
+* **deploy:** stop workers on unreachable DB, route make migrate through .env.db ([#500](https://github.com/stritti/nak-district-planner/issues/500)) ([fe9e545](https://github.com/stritti/nak-district-planner/commit/fe9e5457c9423f3198ecef91ea55c51b7a174afb))
+* **domain:** one assignment per slot, per-leader lock and cross-tenant reference checks ([#484](https://github.com/stritti/nak-district-planner/issues/484)) ([8997ba6](https://github.com/stritti/nak-district-planner/commit/8997ba6c00e0620f2fb0f1c1c0c088f6ac66146e))
+* **planning:** one slot-visibility rule for matrix, event list and ICS export ([#485](https://github.com/stritti/nak-district-planner/issues/485)) ([56eb5bf](https://github.com/stritti/nak-district-planner/commit/56eb5bf251f16bff6c261a4c105bd31d50e74a5e))
+* **planning:** stable generator key prevents re-creating moved draft services ([#491](https://github.com/stritti/nak-district-planner/issues/491)) ([4351210](https://github.com/stritti/nak-district-planner/commit/43512108bc42bbf2b7df63d601da6d7327b632fc))
+* **security:** accept CSRF token only from the request header ([#460](https://github.com/stritti/nak-district-planner/issues/460)) ([32e1f7d](https://github.com/stritti/nak-district-planner/commit/32e1f7dbbe472e0dddd4af9d464dd650e6255d0f))
+* **security:** bump source-map-js to 1.2.2 in all Bun lockfiles ([#459](https://github.com/stritti/nak-district-planner/issues/459)) ([a183f81](https://github.com/stritti/nak-district-planner/commit/a183f816efa7481d71346fb4c91b7b693fc1498d))
+* **security:** prevent SSRF in ICS/CalDAV calendar fetching ([#486](https://github.com/stritti/nak-district-planner/issues/486)) ([9261a4e](https://github.com/stritti/nak-district-planner/commit/9261a4ee438b3042d97d1201f6e873c80c1716c7))
+* **security:** resolve client IP only from trusted proxies ([#479](https://github.com/stritti/nak-district-planner/issues/479)) ([d3c923a](https://github.com/stritti/nak-district-planner/commit/d3c923a46af5025b16b344d408140ec028ecaee0))
+* **sync:** bound sync window, expand recurring events, reconcile ICS deletions ([#483](https://github.com/stritti/nak-district-planner/issues/483)) ([e5d10c0](https://github.com/stritti/nak-district-planner/commit/e5d10c0c70a9117a825597f6e7db6cccedf4533d))
+* **update:** remove in-app update execution, prerelease-aware version check ([#481](https://github.com/stritti/nak-district-planner/issues/481)) ([9914da2](https://github.com/stritti/nak-district-planner/commit/9914da202263aeca6044311b2cab5cf83a3c3f91))
+* **worker:** dispose DB pool before each task's event loop closes ([#477](https://github.com/stritti/nak-district-planner/issues/477)) ([cd4d7e1](https://github.com/stritti/nak-district-planner/commit/cd4d7e1de83066d35cdd9f4a0d2488db8ef8bb33))
+* **worker:** restore the type parameter of _run_as_system_worker (main red) ([#499](https://github.com/stritti/nak-district-planner/issues/499)) ([354245b](https://github.com/stritti/nak-district-planner/commit/354245bb53a05a26833af4ddf365fdfd47872313))
+
 ## [1.0.0-rc.1](https://github.com/stritti/nak-district-planner/compare/v0.34.0...v1.0.0-rc.1) (2026-10-03)
 
 
@@ -22,28 +46,6 @@
 ### Miscellaneous Chores
 
 * **release:** prepare v1.0.0 release candidate ([#416](https://github.com/stritti/nak-district-planner/issues/416)) ([c4ac86e](https://github.com/stritti/nak-district-planner/commit/c4ac86e69b9fa19d4c0770bda44064c8124e9a6c))
-
-## [1.0.0-rc.2](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2026-10-08)
-
-
-### Bug Fixes
-
-* **auth:** make OIDC token validation fail closed ([#438](https://github.com/stritti/nak-district-planner/issues/438)) ([8ea2612](https://github.com/stritti/nak-district-planner/commit/8ea2612e6caa24b0deb362df06b1e737465ecb9f))
-* **auth:** require verified email for registration auto-linking ([#478](https://github.com/stritti/nak-district-planner/issues/478)) ([05f61e3](https://github.com/stritti/nak-district-planner/commit/05f61e386a1fd04ef8f427794e12883a2e529413))
-* **calendar:** support only ICS and CalDAV for 1.0 ([#487](https://github.com/stritti/nak-district-planner/issues/487)) ([36dc685](https://github.com/stritti/nak-district-planner/commit/36dc68590bf208bf1310394ef2553b18bf6aa41c))
-* **deploy:** run a single Celery beat scheduler and reserve latest for stable releases ([#480](https://github.com/stritti/nak-district-planner/issues/480)) ([942b430](https://github.com/stritti/nak-district-planner/commit/942b430512871172fd4eb0804877ff77d5717c94))
-* **deploy:** stop workers on unreachable DB, route make migrate through .env.db ([#500](https://github.com/stritti/nak-district-planner/issues/500)) ([fe9e545](https://github.com/stritti/nak-district-planner/commit/fe9e5457c9423f3198ecef91ea55c51b7a174afb))
-* **domain:** one assignment per slot, per-leader lock and cross-tenant reference checks ([#484](https://github.com/stritti/nak-district-planner/issues/484)) ([8997ba6](https://github.com/stritti/nak-district-planner/commit/8997ba6c00e0620f2fb0f1c1c0c088f6ac66146e))
-* **planning:** one slot-visibility rule for matrix, event list and ICS export ([#485](https://github.com/stritti/nak-district-planner/issues/485)) ([56eb5bf](https://github.com/stritti/nak-district-planner/commit/56eb5bf251f16bff6c261a4c105bd31d50e74a5e))
-* **planning:** stable generator key prevents re-creating moved draft services ([#491](https://github.com/stritti/nak-district-planner/issues/491)) ([4351210](https://github.com/stritti/nak-district-planner/commit/43512108bc42bbf2b7df63d601da6d7327b632fc))
-* **security:** accept CSRF token only from the request header ([#460](https://github.com/stritti/nak-district-planner/issues/460)) ([32e1f7d](https://github.com/stritti/nak-district-planner/commit/32e1f7dbbe472e0dddd4af9d464dd650e6255d0f))
-* **security:** bump source-map-js to 1.2.2 in all Bun lockfiles ([#459](https://github.com/stritti/nak-district-planner/issues/459)) ([a183f81](https://github.com/stritti/nak-district-planner/commit/a183f816efa7481d71346fb4c91b7b693fc1498d))
-* **security:** prevent SSRF in ICS/CalDAV calendar fetching ([#486](https://github.com/stritti/nak-district-planner/issues/486)) ([9261a4e](https://github.com/stritti/nak-district-planner/commit/9261a4ee438b3042d97d1201f6e873c80c1716c7))
-* **security:** resolve client IP only from trusted proxies ([#479](https://github.com/stritti/nak-district-planner/issues/479)) ([d3c923a](https://github.com/stritti/nak-district-planner/commit/d3c923a46af5025b16b344d408140ec028ecaee0))
-* **sync:** bound sync window, expand recurring events, reconcile ICS deletions ([#483](https://github.com/stritti/nak-district-planner/issues/483)) ([e5d10c0](https://github.com/stritti/nak-district-planner/commit/e5d10c0c70a9117a825597f6e7db6cccedf4533d))
-* **update:** remove in-app update execution, prerelease-aware version check ([#481](https://github.com/stritti/nak-district-planner/issues/481)) ([9914da2](https://github.com/stritti/nak-district-planner/commit/9914da202263aeca6044311b2cab5cf83a3c3f91))
-* **worker:** dispose DB pool before each task's event loop closes ([#477](https://github.com/stritti/nak-district-planner/issues/477)) ([cd4d7e1](https://github.com/stritti/nak-district-planner/commit/cd4d7e1de83066d35cdd9f4a0d2488db8ef8bb33))
-* **worker:** restore the type parameter of _run_as_system_worker (main red) ([#499](https://github.com/stritti/nak-district-planner/issues/499)) ([354245b](https://github.com/stritti/nak-district-planner/commit/354245bb53a05a26833af4ddf365fdfd47872313))
 
 ## [0.34.0](https://github.com/stritti/nak-district-planner/compare/v0.33.0...v0.34.0) (2026-10-02)
 
@@ -3062,5 +3064,3 @@
 * chore: standardize markdown formatting and update documentation references across the repository (a75b6a9)
 * chore: clean up whitespace and update yamllint configuration (ba4f5bf)
 * chore: update release-please token to use GITHUB_TOKEN (3936d60)
-
-# Changelog
