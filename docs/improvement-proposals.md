@@ -151,7 +151,7 @@ durchführen – ohne manuelle Aufrufe in jedem Service.
 ### 3.1 ✅ Erledigt: PlanningSlot / PlanningSeries eingeführt
 
 **Status:** Implementiert über den OpenSpec-Change
-[`planning-slot-hybrid-sync`](../openspec/changes/planning-slot-hybrid-sync/proposal.md)
+[`planning-slot-hybrid-sync`](/openspec/changes/archive/2026-10-07-planning-slot-hybrid-sync/proposal)
 
 **Beschreibung:** Das bisherige `Event`-Modell vermischte Planungs- (Soll), Ausführungs- (Ist)
 und Sync-Metadaten. Dafür wurde nun die geplante Trennung eingeführt:
@@ -186,7 +186,7 @@ PlanningSeries
 ### 3.2 🔴 KRITISCH: RBAC-Durchsetzung unvollständig
 
 **Status:** → OpenSpec-Change
-[`introduce-rbac-permissions-model`](/openspec/changes/introduce-rbac-permissions-model/proposal)
+[`introduce-rbac-permissions-model`](/openspec/changes/archive/2026-10-07-introduce-rbac-permissions-model/proposal)
 
 **Beschreibung:** Das RBAC-Modell (`User`, `Membership`, `Role`) ist vorhanden. JWT-Claims
 enthalten Memberships. Jedoch fehlen konsistente Authorization-Guards in den
@@ -211,7 +211,7 @@ Application-Layer-Services.
 ### 3.3 🟠 MITTEL: ExternalEventCandidate & Review-Workflow fehlt
 
 **Status:** → OpenSpec-Change
-[`planning-slot-hybrid-sync`](/openspec/changes/planning-slot-hybrid-sync/proposal)
+[`planning-slot-hybrid-sync`](/openspec/changes/archive/2026-10-07-planning-slot-hybrid-sync/proposal)
 
 **Beschreibung:** Laut Spezifikation sollen neue externe Events nicht automatisch als
 `Event` angelegt werden, sondern zunächst als `ExternalEventCandidate` zur manuellen
@@ -239,7 +239,7 @@ Prüfung bereitstehen.
 ### 3.4 🟠 MITTEL: Benachrichtigungssystem fehlt
 
 **Status:** → OpenSpec-Change
-[`planning-slot-hybrid-sync`](/openspec/changes/planning-slot-hybrid-sync/proposal)
+[`planning-slot-hybrid-sync`](/openspec/changes/archive/2026-10-07-planning-slot-hybrid-sync/proposal)
 (Spec: `in-app-notifications`)
 
 **Beschreibung:** Governance-relevante Ereignisse (externe Erkennung, Sync-Konflikte,
@@ -260,7 +260,7 @@ ausstehende Reviews) sollen als persistente In-App-Benachrichtigungen angezeigt 
 ### 3.5 🟠 MITTEL: Rate-Limiting-Fail-Open benötigt Monitoring
 
 **Status:** 🟡 Teilweise umgesetzt — Rate-Limiting aktiv, Fail-Open-Monitoring wird in PR #313 dokumentiert
-[`introduce-non-functional-baseline`](/openspec/changes/introduce-non-functional-baseline/proposal)
+[`introduce-non-functional-baseline`](/openspec/changes/archive/2026-10-07-introduce-non-functional-baseline/proposal)
 
 **Beschreibung:** Der öffentliche Endpoint `GET /api/v1/export/{token}/calendar.ics` ist
 rate-limitiert. Bei Redis-Ausfall greift bewusst Fail-Open; dieses Ereignis muss operativ
@@ -280,7 +280,7 @@ rate-limitiert. Bei Redis-Ausfall greift bewusst Fail-Open; dieses Ereignis muss
 ### 3.6 🟡 NIEDRIG: ExternalEventCandidate-Review fehlt für v1 bewusst
 
 **Status:** 🟡 Für v1 akzeptierte Einschränkung — Phase 2
-[`planning-slot-hybrid-sync`](/openspec/changes/planning-slot-hybrid-sync/proposal)
+[`planning-slot-hybrid-sync`](/openspec/changes/archive/2026-10-07-planning-slot-hybrid-sync/proposal)
 
 **Beschreibung:** `ExternalEventLink` ist implementiert. Nicht implementiert ist nur
 der optionale manuelle Review-Schritt für unbekannte externe Events (`ExternalEventCandidate`).
@@ -432,7 +432,7 @@ durchgehend E2E abgesichert.
 ### 5.2 🔴 Kalender-Integration: Sync-Status nicht sichtbar
 
 **Status:** → OpenSpec-Change
-[`ux-improvements`](/openspec/changes/ux-improvements/proposal)
+[`ux-improvements`](/openspec/changes/archive/2026-10-07-ux-improvements/proposal)
 
 **Problem:** In der Kalenderintegrationsansicht ist nicht ersichtlich:
 
@@ -454,7 +454,7 @@ durchgehend E2E abgesichert.
 ### 5.3 🟠 Matrix-Ansicht: Keine Ladeanimation / Skeleton-Screen
 
 **Status:** → OpenSpec-Change
-[`ux-improvements`](/openspec/changes/ux-improvements/proposal)
+[`ux-improvements`](/openspec/changes/archive/2026-10-07-ux-improvements/proposal)
 
 **Problem:** Beim Laden der Matrix erscheint nur der Text „Lade…". Bei großen Datensätzen
 (viele Gemeinden, langer Zeitraum) ist dies unzureichend.
@@ -469,7 +469,7 @@ durchgehend E2E abgesichert.
 ### 5.4 🟠 Matrix-Ansicht: Horizontaler Scroll nicht erkennbar
 
 **Status:** → OpenSpec-Change
-[`ux-improvements`](/openspec/changes/ux-improvements/proposal)
+[`ux-improvements`](/openspec/changes/archive/2026-10-07-ux-improvements/proposal)
 
 **Problem:** Bei vielen Spalten (langer Zeitraum) ist horizontales Scrollen nötig, aber
 nicht offensichtlich. Insbesondere auf Touch-Geräten.
@@ -509,7 +509,7 @@ Die Komponente unterstützt Warnung (rot) bei unumkehrbaren Aktionen sowie
 ### 5.6 🟠 Export-Token: Kein „In Zwischenablage kopieren"-Button
 
 **Status:** → OpenSpec-Change
-[`ux-improvements`](/openspec/changes/ux-improvements/proposal)
+[`ux-improvements`](/openspec/changes/archive/2026-10-07-ux-improvements/proposal)
 
 **Problem:** Export-Tokens und ICS-URLs werden angezeigt, müssen aber manuell kopiert
 werden.
@@ -524,7 +524,7 @@ kurzfristiger „Kopiert!"-Feedback-Badge).
 ### 5.7 🟡 Fehlende Leer-Zustände (Empty States)
 
 **Status:** → OpenSpec-Change
-[`ux-improvements`](/openspec/changes/ux-improvements/proposal)
+[`ux-improvements`](/openspec/changes/archive/2026-10-07-ux-improvements/proposal)
 
 **Problem:** Wenn keine Events, keine Integrationen oder keine Leader vorhanden sind,
 erscheinen leere Tabellen ohne erklärenden Text.
@@ -541,7 +541,7 @@ erscheinen leere Tabellen ohne erklärenden Text.
 ### 5.8 🟡 Matrix: Kein Filter nach Gemeinde
 
 **Status:** → OpenSpec-Change
-[`ux-improvements`](/openspec/changes/ux-improvements/proposal)
+[`ux-improvements`](/openspec/changes/archive/2026-10-07-ux-improvements/proposal)
 
 **Problem:** Bei Bezirken mit vielen Gemeinden ist es nicht möglich, die Matrix auf
 eine einzelne Gemeinde zu filtern.
@@ -632,12 +632,12 @@ klarer Instruktion: „Ihre Anfrage wurde eingereicht. Der Bezirksadmin wird ben
 
 | Change | Beschreibung | Priorität |
 | --- | --- | --- |
-| [`planning-slot-hybrid-sync`](/openspec/changes/planning-slot-hybrid-sync/proposal) | PlanningSlot-Modell, EventInstance, ExternalEventCandidate, Notifications | 🔴 Kritisch |
-| [`introduce-rbac-permissions-model`](/openspec/changes/introduce-rbac-permissions-model/proposal) | RBAC-Guards vollständig durchsetzen | 🔴 Kritisch |
-| [`ux-improvements`](/openspec/changes/ux-improvements/proposal) | Toast, Sync-Status, Confirm-Dialoge, Matrix-UX | 🟠 Hoch |
+| [`planning-slot-hybrid-sync`](/openspec/changes/archive/2026-10-07-planning-slot-hybrid-sync/proposal) | PlanningSlot-Modell, EventInstance, ExternalEventCandidate, Notifications | 🔴 Kritisch |
+| [`introduce-rbac-permissions-model`](/openspec/changes/archive/2026-10-07-introduce-rbac-permissions-model/proposal) | RBAC-Guards vollständig durchsetzen | 🔴 Kritisch |
+| [`ux-improvements`](/openspec/changes/archive/2026-10-07-ux-improvements/proposal) | Toast, Sync-Status, Confirm-Dialoge, Matrix-UX | 🟠 Hoch |
 | [`code-quality`](/openspec/changes/code-quality/proposal) | Connector-Registry, HTTP-Client, View-Split, Health-Check | 🟡 Mittel |
-| [`introduce-non-functional-baseline`](/openspec/changes/introduce-non-functional-baseline/proposal) | Rate-Limiting, Audit-Logging, Performance-SLOs | 🟡 Mittel |
-| [`harden-calendar-sync-algorithm`](/openspec/changes/harden-calendar-sync-algorithm/proposal) | Sync-Zustandsmaschine | 🟡 Phase 4 |
+| [`introduce-non-functional-baseline`](/openspec/changes/archive/2026-10-07-introduce-non-functional-baseline/proposal) | Rate-Limiting, Audit-Logging, Performance-SLOs | 🟡 Mittel |
+| [`harden-calendar-sync-algorithm`](/openspec/changes/archive/2026-10-07-harden-calendar-sync-algorithm/proposal) | Sync-Zustandsmaschine | 🟡 Phase 4 |
 
 ---
 
@@ -647,9 +647,9 @@ klarer Instruktion: „Ihre Anfrage wurde eingereicht. Der Bezirksadmin wird ben
 - Implementation Roadmap: `openspec/architecture/implementation-roadmap.md`
 - [Use Cases](./use-cases.md)
 - [Rollenkonzept](./roles.md)
-- OpenSpec Change: [`planning-slot-hybrid-sync`](/openspec/changes/planning-slot-hybrid-sync/proposal)
-- OpenSpec Change: [`introduce-rbac-permissions-model`](/openspec/changes/introduce-rbac-permissions-model/proposal)
-- OpenSpec Change: [`harden-calendar-sync-algorithm`](/openspec/changes/harden-calendar-sync-algorithm/proposal)
-- OpenSpec Change: [`introduce-non-functional-baseline`](/openspec/changes/introduce-non-functional-baseline/proposal)
-- OpenSpec Change: [`ux-improvements`](/openspec/changes/ux-improvements/proposal)
+- OpenSpec Change: [`planning-slot-hybrid-sync`](/openspec/changes/archive/2026-10-07-planning-slot-hybrid-sync/proposal)
+- OpenSpec Change: [`introduce-rbac-permissions-model`](/openspec/changes/archive/2026-10-07-introduce-rbac-permissions-model/proposal)
+- OpenSpec Change: [`harden-calendar-sync-algorithm`](/openspec/changes/archive/2026-10-07-harden-calendar-sync-algorithm/proposal)
+- OpenSpec Change: [`introduce-non-functional-baseline`](/openspec/changes/archive/2026-10-07-introduce-non-functional-baseline/proposal)
+- OpenSpec Change: [`ux-improvements`](/openspec/changes/archive/2026-10-07-ux-improvements/proposal)
 - OpenSpec Change: [`code-quality`](/openspec/changes/code-quality/proposal)
