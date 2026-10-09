@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Optional organisational duties on planning slots
-A `PlanningSlot` SHALL support zero or more organisational duty assignments independently of its existing single liturgical service-leader assignment. Each assignment SHALL reference a configured category and an eligible person belonging to the authorised district/event context. A slot SHALL remain valid, confirmable and publishable with no organisational assignments.
+A `PlanningSlot` SHALL support zero or more organisational duty assignments independently of its existing single liturgical service-leader assignment. Each assignment SHALL reference a configured category and either an eligible linked person belonging to the authorised district/event context or a validated, scoped name-only participant. A slot SHALL remain valid, confirmable and publishable with no organisational assignments.
 
 #### Scenario: Unassigned service
 - **WHEN** a Gottesdienst planning slot is created with no persons selected for Schließdienst, Organist or Dirigent
