@@ -100,8 +100,11 @@ describe('MatrixTable coverage gaps', () => {
     expect(wrapper.text()).toContain('Plan: 09:30')
     expect(wrapper.text()).toContain('Einladungen: 2')
     expect(wrapper.text()).toContain('Max Muster')
-    expect(wrapper.text()).toContain('Eingeladen nach Gemeinde B')
-    expect(wrapper.text()).toContain('Dienstleiterpflege in Host-Gemeinde')
+    expect(wrapper.text()).toContain('Gottesdienst in Gemeinde B')
+    expect(wrapper.get('[data-testid="host-congregation"]').text()).toBe('Gemeinde B')
+    expect(wrapper.text()).not.toContain('Dienstleiterpflege')
+    expect(wrapper.text()).not.toContain('Eingeladen nach')
+    expect(wrapper.find('button[title="Der Dienstleiter wird in der Gastgeber-Gemeinde gepflegt."]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Abweichung')
     expect(wrapper.text()).toContain('–')
 

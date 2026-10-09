@@ -26,7 +26,7 @@ Columns SHALL be the union of dates expected by congregation `service_times`, da
 
 #### Scenario: Invited congregation
 - **WHEN** a congregation has an invitation copy on a date and its own `Gottesdienst` slot there has no assignment
-- **THEN** its cell shows the copy with the host's leader and "Eingeladen nach [Gastgeber]" and is no gap
+- **THEN** its cell shows the copy as "Gottesdienst in [Gastgeber]" (host highlighted) with the host's leader and is no gap; the note that the leader is maintained at the host appears only as a tooltip
 
 #### Scenario: Unassigned service
 - **WHEN** a `Gottesdienst` slot has no service assignment

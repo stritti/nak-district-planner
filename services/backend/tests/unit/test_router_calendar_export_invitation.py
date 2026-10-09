@@ -1255,6 +1255,38 @@ async def test_export_congregation_rename_advances_revision() -> None:
 
 
 @pytest.mark.asyncio
+async def test_export_invitation_copy_location_is_host_congregation() -> None:
+    district_id = uuid.uuid4()
+    host_id = uuid.uuid4()
+    invited_id = uuid.uuid4()
+    host_slot = _planning_slot(district_id=district_id, congregation_id=host_id)
+    copy_slot = _planning_slot(district_id=district_id, congregation_id=invited_id)
+    copy_slot.invitation_source_congregation_id = host_id
+    copy_slot.invitation_source_event_id = host_slot.id
+    token = ExportToken.create(
+        label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=invited_id
+    )
+    db = AsyncMock()
+    result = MagicMock()
+    stamp = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
+    host = MagicMock(id=host_id, updated_at=stamp)
+    host.name = "Gastgeber"
+    invited = MagicMock(id=invited_id, updated_at=stamp)
+    invited.name = "Eingeladen"
+    result.scalars.return_value = [host, invited]
+    db.execute.return_value = result
+    repos = _export_repos(token=token, slots=[copy_slot])
+
+    response = await export_router.export_calendar_ics(
+        token.token, db, approval_status=None, **repos
+    )
+
+    event = _vevents(response.body)[0]
+    assert "LOCATION:Gastgeber" in event
+    assert "Eingeladen" not in event
+
+
+@pytest.mark.asyncio
 async def test_export_leader_feed_contains_only_that_leaders_slots() -> None:
     district_id = uuid.uuid4()
     leader_id = uuid.uuid4()

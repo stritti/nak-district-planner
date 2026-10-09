@@ -313,6 +313,9 @@ async def export_calendar_ics(
             revisions.append(leader_revision[slot.id])
         if slot.congregation_id in cong_revision:
             revisions.append(cong_revision[slot.congregation_id])
+        location_id = slot.invitation_source_congregation_id or slot.congregation_id
+        if location_id in cong_revision:
+            revisions.append(cong_revision[location_id])
         last_modified = max(revisions)
         vevent.add("dtstamp", last_modified)
         vevent.add("last-modified", last_modified)
@@ -325,8 +328,9 @@ async def export_calendar_ics(
             vevent.add("status", "TENTATIVE")
             vevent.add("x-nak-approval-status", "PLANNED")
 
-        if slot.congregation_id and slot.congregation_id in cong_map:
-            vevent.add("location", cong_map[slot.congregation_id])
+        # An invitation copy takes place in the host congregation.
+        if location_id in cong_map:
+            vevent.add("location", cong_map[location_id])
 
         if slot.category:
             vevent.add("categories", slot.category)

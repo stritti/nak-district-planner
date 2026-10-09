@@ -108,6 +108,7 @@
                   v-else
                   class="w-full text-left hover:opacity-75"
                   :disabled="row.cells[date].is_assignment_editable === false"
+                  :title="row.cells[date].is_assignment_editable === false ? 'Der Dienstleiter wird in der Gastgeber-Gemeinde gepflegt.' : undefined"
                   @click="openCellModal(row.cells[date], date, row.congregation_name, row.congregation_id)"
                 >
                   <!-- Deviation Indicator -->
@@ -123,10 +124,14 @@
                   </div>
 
                   <div
-                    v-overflow-title="row.cells[date].event_title ?? ''"
+                    v-overflow-title="cellTitle(row.cells[date])"
                     :class="eventTitleClass"
                   >
-                    {{ row.cells[date].event_title }}
+                    <template v-if="row.cells[date].invitation_source_congregation_name">
+                      Gottesdienst in
+                      <span class="font-semibold text-amber-700 dark:text-amber-300" data-testid="host-congregation">{{ row.cells[date].invitation_source_congregation_name }}</span>
+                    </template>
+                    <template v-else>{{ row.cells[date].event_title }}</template>
                   </div>
                   <div
                     v-if="row.cells[date].leader_name"
@@ -154,22 +159,10 @@
                     </span>
                   </div>
                   <div
-                    v-if="row.cells[date].invitation_source_congregation_name"
-                    class="break-words text-[10px] text-amber-700 dark:text-amber-300"
-                  >
-                    Eingeladen nach {{ row.cells[date].invitation_source_congregation_name }}
-                  </div>
-                  <div
                     v-if="(row.cells[date].invitation_count ?? 0) > 0"
                     class="text-[10px] text-sky-700 dark:text-sky-300"
                   >
                     Einladungen: {{ row.cells[date].invitation_count }}
-                  </div>
-                  <div
-                    v-if="row.cells[date].is_assignment_editable === false"
-                    class="text-[10px] text-amber-600 dark:text-amber-400"
-                  >
-                    Dienstleiterpflege in Host-Gemeinde
                   </div>
                 </button>
               </template>
@@ -352,6 +345,12 @@ function cellClass(cell: MatrixCell | undefined): string {
   if (cell.is_assignment_editable === false) return 'bg-white dark:bg-gray-900 opacity-80'
   if (cell.has_deviation) return 'bg-amber-50 dark:bg-amber-900/10 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/20 ring-1 ring-inset ring-amber-300 dark:ring-amber-700'
   return 'bg-white dark:bg-gray-900 cursor-pointer'
+}
+
+function cellTitle(cell: MatrixCell): string {
+  return cell.invitation_source_congregation_name
+    ? `Gottesdienst in ${cell.invitation_source_congregation_name}`
+    : (cell.event_title ?? '')
 }
 
 function formatTime(iso: string | null | undefined): string {

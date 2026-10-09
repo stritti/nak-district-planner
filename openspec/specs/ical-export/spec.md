@@ -20,6 +20,10 @@ Publishes planning data as subscribable iCalendar feeds (UC-05/UC-06) through un
 - **WHEN** the feed is requested with an unknown token
 - **THEN** the endpoint responds with 404 without revealing whether a token exists
 
+#### Scenario: Invitation copy location
+- **WHEN** a slot is an invitation copy of another congregation's service
+- **THEN** its `LOCATION` is the host congregation, not the invited one
+
 #### Scenario: Default approval filter
 - **WHEN** a public token without leader scope is used without `approval_status`
 - **THEN** only `CONFIRMED` slots are exported; other tokens also export `PLANNED` slots marked `STATUS:TENTATIVE`
