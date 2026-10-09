@@ -62,11 +62,50 @@ def test_image_never_syncs_dev_dependencies_at_start_and_installs_project() -> N
     assert "RUN uv sync --frozen --no-dev\n" in dockerfile
 
 
-def test_main_branch_builds_do_not_publish_latest() -> None:
-    build = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
-    assert "value=latest" not in build
-    assert "type=ref,event=branch" in build
-    assert "type=sha,prefix=sha-" in build
+def test_branch_and_pr_builds_never_publish_images() -> None:
+    build = _yaml(".github/workflows/build.yml")
+    assert build["permissions"].get("packages") != "write"
+    image_builds = []
+    for job in build["jobs"].values():
+        assert job.get("permissions", {}).get("packages") != "write"
+        for step in job.get("steps", []):
+            action = step.get("uses", "")
+            assert not action.startswith("docker/login-action@")
+            if action.startswith("docker/build-push-action@"):
+                image_builds.append(step)
+                assert step["with"]["push"] is False
+                assert "tags" not in step["with"]
+    assert len(image_builds) == 2
+
+
+def test_image_publication_requires_a_release_and_builds_its_tag() -> None:
+    release = _yaml(".github/workflows/release.yml")
+    publish = release["jobs"]["docker-build"]
+    assert publish["needs"] == "release-please"
+    assert publish["if"] == "${{ needs.release-please.outputs.releases_created == 'true' }}"
+    assert set(publish["strategy"]["matrix"]["service"]) == {"backend", "frontend"}
+
+    checkout = next(
+        step for step in publish["steps"]
+        if step.get("uses", "").startswith("actions/checkout@")
+    )
+    assert checkout["with"]["ref"] == "${{ needs.release-please.outputs.tag_name }}"
+    build = next(
+        step for step in publish["steps"]
+        if step.get("uses", "").startswith("docker/build-push-action@")
+    )
+    assert build["with"]["push"] is True
+    metadata = next(
+        step for step in publish["steps"]
+        if step.get("uses", "").startswith("docker/metadata-action@")
+    )
+    tags = metadata["with"]["tags"]
+    assert (
+        "type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}"
+        in tags
+    )
+    assert "type=ref,event=branch" not in tags
+    assert "type=sha" not in tags
 
 
 def test_only_stable_releases_publish_latest() -> None:
