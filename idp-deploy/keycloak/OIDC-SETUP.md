@@ -117,6 +117,19 @@ Logout URIs:
   - https://planner.example.com
 ```
 
+### Audience mapper (required)
+
+Keycloak issues access tokens with `aud=account` by default. The backend validates `aud`
+against `OIDC_CLIENT_ID` (or `OIDC_AUDIENCE`) and answers every API request with
+`401 Invalid or expired token` otherwise, even though the login itself succeeds.
+The setup script therefore adds a mapper to the client automatically. When configuring by hand:
+
+1. Admin Console → Realm → Clients → `nak-planner-frontend` → **Client scopes**
+2. Open `nak-planner-frontend-dedicated` → **Configure a new mapper** → **Audience**
+3. Name `nak-planner-audience`, **Included Client Audience** = `nak-planner-frontend`
+   (the value of `OIDC_CLIENT_ID`), **Add to access token** = on
+4. Do **not** set `OIDC_AUDIENCE=account`
+
 ### Why Public Client with PKCE?
 
 - **Public Client**: No client_secret stored in browser (secure)
