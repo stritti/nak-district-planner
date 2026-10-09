@@ -103,6 +103,35 @@ beforeEach(() => {
 })
 
 describe('MatrixView', () => {
+  it('restores a group that is still accessible and repairs an empty date range', async () => {
+    sessionStorage.setItem('planner.view-settings.v1:' + JSON.stringify(['test-user', 'matrix', 'd1']),
+      JSON.stringify({ group: 'g1', from: '', to: '', sort: 'default' }))
+    const ctx = setup()
+    ctx.districts.groups = [{
+      id: 'g1', name: 'Available', district_id: 'd1',
+      created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
+    }]
+    await flushPromises()
+    expect(ctx.matrix.groupId).toBe('g1')
+    expect(ctx.matrix.fromDt).toMatch(/^\d{4}-\d{2}-01$/)
+    expect(ctx.matrix.toDt).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    ctx.wrapper.unmount()
+  })
+
+  it('clears active filters and sorting on logout', async () => {
+    const ctx = setup()
+    await flushPromises()
+    ctx.matrix.congregationQuery = 'Private'
+    await ctx.wrapper.get('[data-test="grouped"]').trigger('click')
+    useAuthStore().clearAuth()
+    await flushPromises()
+    expect(ctx.matrix.congregationQuery).toBe('')
+    expect(ctx.wrapper.findComponent(MatrixFiltersStub).props('matrixSortMode')).toBe('default')
+    expect(ctx.matrix.districtId).toBe('')
+    expect(sessionStorage.length).toBe(0)
+    ctx.wrapper.unmount()
+  })
+
   it('restores query, dates and sorting after remounting with a fresh store', async () => {
     const first = setup()
     await flushPromises()
