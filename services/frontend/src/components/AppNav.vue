@@ -1,12 +1,17 @@
 <template>
   <nav class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
     <div class="max-w-7xl mx-auto px-4">
-      <div class="flex items-center h-14 gap-1 justify-between">
-        <!-- Left: Logo & Navigation Links -->
+      <!--
+        Two tiers from xl up: logo and user area on top, the navigation links and
+        status badges on a full-width row below (7 links plus badges do not fit
+        next to the user block). Below xl the links live in the hamburger drawer.
+      -->
+      <div class="flex flex-wrap items-center min-h-14 gap-x-2 justify-between">
+        <!-- Left: Hamburger & Logo -->
         <div class="flex items-center gap-1 min-w-0">
           <!-- Hamburger button for mobile -->
           <button
-            class="sm:hidden -ml-2 min-h-11 min-w-11 inline-flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+            class="xl:hidden -ml-2 min-h-11 min-w-11 inline-flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
             aria-label="Navigation öffnen"
             @click.stop="mobileNavOpen = !mobileNavOpen; menuOpen = false"
           >
@@ -14,38 +19,6 @@
           </button>
 
           <span class="font-semibold text-gray-900 dark:text-gray-100 text-sm tracking-tight mr-4 shrink-0 hidden min-[400px]:inline">NAK Bezirksplaner</span>
-
-          <!-- Desktop nav links (hidden on mobile) -->
-          <template v-if="authStore.isAuthenticated">
-            <div class="hidden sm:flex items-center gap-1">
-              <RouterLink
-                v-for="link in links"
-                :key="link.to"
-                :to="link.to"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                active-class="text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400"
-              >
-                <component :is="link.icon" class="h-4 w-4 shrink-0" />
-                {{ link.label }}
-              </RouterLink>
-            </div>
-            <span
-              v-if="authStore.isSuperadmin"
-              class="ml-2 hidden sm:inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"
-            >
-              Superadmin
-            </span>
-            <RouterLink
-              v-if="authStore.pendingRegistrationsCount > 0"
-              to="/admin/leaders"
-              class="ml-2 hidden sm:inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100"
-            >
-              Registrierungen offen
-              <span class="inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] text-white">
-                {{ authStore.pendingRegistrationsCount }}
-              </span>
-            </RouterLink>
-          </template>
         </div>
 
         <!-- Right: Dark mode toggle + User Menu or Login Button -->
@@ -143,6 +116,39 @@
             </div>
           </template>
         </div>
+
+        <!-- Desktop nav links and status badges (xl and up): full-width second row -->
+        <div
+          v-if="authStore.isAuthenticated"
+          class="hidden xl:flex w-full flex-wrap items-center gap-1 pb-1"
+        >
+          <RouterLink
+            v-for="link in links"
+            :key="link.to"
+            :to="link.to"
+            class="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-md text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            active-class="text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400"
+          >
+            <component :is="link.icon" class="h-4 w-4 shrink-0" />
+            {{ link.label }}
+          </RouterLink>
+          <span
+            v-if="authStore.isSuperadmin"
+            class="ml-2 inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"
+          >
+            Superadmin
+          </span>
+          <RouterLink
+            v-if="authStore.pendingRegistrationsCount > 0"
+            to="/admin/leaders"
+            class="ml-2 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100"
+          >
+            Registrierungen offen
+            <span class="inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] text-white">
+              {{ authStore.pendingRegistrationsCount }}
+            </span>
+          </RouterLink>
+        </div>
       </div>
     </div>
 
@@ -157,7 +163,7 @@
     >
       <div
         v-if="mobileNavOpen && authStore.isAuthenticated"
-        class="fixed inset-0 z-40 bg-black/40 sm:hidden"
+        class="fixed inset-0 z-40 bg-black/40 xl:hidden"
         @click="mobileNavOpen = false"
       />
     </Transition>
@@ -173,7 +179,7 @@
     >
       <div
         v-if="mobileNavOpen && authStore.isAuthenticated"
-        class="fixed inset-y-0 left-0 z-50 w-72 max-w-[80vw] bg-white dark:bg-gray-900 shadow-xl sm:hidden overflow-y-auto"
+        class="fixed inset-y-0 left-0 z-50 w-72 max-w-[80vw] bg-white dark:bg-gray-900 shadow-xl xl:hidden overflow-y-auto"
       >
         <div class="flex items-center justify-between px-4 h-14 border-b border-gray-200 dark:border-gray-700">
           <span class="font-semibold text-gray-900 dark:text-gray-100 text-sm tracking-tight">Navigation</span>
