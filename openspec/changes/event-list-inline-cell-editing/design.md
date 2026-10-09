@@ -26,3 +26,15 @@ Show edit affordances only where the effective `PLANNER` role permits writes in 
 - Changing sort/filter values moves rows: reconcile against canonical server result and retain keyboard focus as possible.
 - External calendar authority: do not permit editing protected fields.
 - Sparse responsive table: avoid always-visible controls and preserve accessible full values.
+
+## Shared table-editing architecture
+
+Implement a reusable, framework-idiomatic Vue table-cell editing primitive/composable and a declarative field adapter contract, rather than copying bespoke editing state and keyboard handling into each screen. The shared contract defines display formatting, editor type, editability predicate (role, resource status and field ownership), parse/validate, save adapter, conflict recovery, focus/navigation and accessibility. Each table retains its own domain API and business rules; the shared layer MUST NOT issue unrestricted generic mutations.
+
+Inventory all existing table/list/matrix surfaces before implementation. Classify each column as editable scalar/reference, read-only/derived, link/navigation, or action/workflow. Capture existing permissions and endpoints per surface and use that mapping to phase implementation. Tables without editable columns SHALL still adopt consistent dense read-only rendering and accessible focus semantics, without introducing fake editors. Bulk actions, approvals, deletes and other destructive or multi-step workflows remain explicit and confirmed. Do not interpret a click on a link or selection checkbox as permission to edit.
+
+A shared contract governs click/touch/Enter/F2 activation, Escape cancel, Enter/Tab/Shift+Tab save, blur handling, per-cell saving and recoverable error status. If the current cell cannot save, focus must not silently advance and the draft must survive. Reconcile sort/filter/page refresh after saves, including editors in virtualised or horizontally scrolling tables. Never update a row the user cannot edit, and always enforce tenant/RBAC rules server-side.
+
+## Rollout and acceptance
+
+Do not declare the feature complete after migrating the event overview. Require an explicit inventory with all tabular screens and disposition, shared component tests, and screen-specific integration regressions for every eligible table. If a table is intentionally excluded, record the precise non-editable/domain reason in the inventory and verify it still uses the consistent read-only display. Maintain >80% coverage, including keyboard, async error, concurrency and permissions paths.
