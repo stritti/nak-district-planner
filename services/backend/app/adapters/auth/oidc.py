@@ -187,7 +187,7 @@ class OIDCAdapter:
 
         JWT-shaped tokens are always validated as JWTs and fail closed on every
         validation error. Only non-JWT (opaque) tokens use the provider's
-        UserInfo/introspection endpoints.
+        Introspection endpoint (with optional UserInfo identity enrichment).
         """
         allowed_algorithms = algorithms or list(self.DEFAULT_JWT_ALGORITHMS)
         expected_audience = audience or self.audience or self.client_id
@@ -199,34 +199,30 @@ class OIDCAdapter:
                 algorithms=allowed_algorithms,
             )
 
-        userinfo_error: TokenValidationError | None = None
+        # A successful UserInfo response only proves that a token belongs to a
+        # user at this IdP; it does not prove that it was issued to this client.
+        # RFC 7662 introspection is therefore mandatory for opaque tokens.
+        introspection_claims = await self._introspect_token(token)
+        if introspection_claims.get("client_id") != self.client_id:
+            raise TokenValidationError("Opaque token not issued to this client")
+        self._validate_opaque_claims(introspection_claims, expected_audience)
+
+        # UserInfo may enrich the identity returned by introspection. Its
+        # failure does not undermine the independently validated token.
         try:
             userinfo_claims = await self._fetch_userinfo_claims(token)
-        except TokenValidationError as e:
-            userinfo_error = e
-            logger.info("userinfo validation failed, trying introspection fallback: %s", e)
-        else:
-            self._validate_opaque_claims(userinfo_claims, expected_audience)
-            logger.info(
-                "Opaque token validated through userinfo endpoint for user: %s",
-                userinfo_claims.get("sub"),
-            )
-            return userinfo_claims
+        except TokenValidationError:
+            logger.debug("Opaque token UserInfo enrichment unavailable")
+            return introspection_claims
 
-        try:
-            introspection_claims = await self._introspect_token(token)
-        except TokenValidationError as e:
-            raise TokenValidationError(
-                f"Opaque token validation failed: userinfo ({userinfo_error}); "
-                f"introspection ({e})"
-            ) from e
+        # Conflicting identity/security claims must not be silently combined.
+        self._validate_opaque_claims(userinfo_claims, expected_audience)
+        if userinfo_claims["sub"] != introspection_claims["sub"]:
+            raise TokenValidationError("Opaque token subject mismatch")
 
-        self._validate_opaque_claims(introspection_claims, expected_audience)
-        logger.info(
-            "Opaque token validated through introspection endpoint for user: %s",
-            introspection_claims.get("sub"),
-        )
-        return introspection_claims
+        # Introspection is authoritative for security claims (including sub,
+        # client_id, issuer and audience); UserInfo only enriches the profile.
+        return {**userinfo_claims, **introspection_claims}
 
     @staticmethod
     def _is_jwt_shaped(token: str) -> bool:
@@ -415,7 +411,7 @@ class OIDCAdapter:
 
         if not isinstance(claims, dict):
             raise TokenValidationError("introspection response has invalid shape")
-        if not claims.get("active"):
+        if claims.get("active") is not True:
             raise TokenValidationError("introspection marks token as inactive")
         if not claims.get("sub"):
             raise TokenValidationError("introspection response missing sub claim")

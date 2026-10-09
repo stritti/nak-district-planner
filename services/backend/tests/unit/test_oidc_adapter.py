@@ -187,25 +187,27 @@ class TestJWKSFetching:
 
 class TestTokenClassificationAndFallback:
     @pytest.mark.asyncio
-    async def test_opaque_token_uses_userinfo_without_jwt_attempt(
+    async def test_opaque_token_requires_client_bound_introspection_before_userinfo(
         self,
         oidc_adapter: OIDCAdapter,
     ) -> None:
         oidc_adapter._validate_jwt_token = AsyncMock()
+        oidc_adapter._introspect_token = AsyncMock(
+            return_value={"active": True, "sub": "opaque-user", "client_id": "test-client"}
+        )
         oidc_adapter._fetch_userinfo_claims = AsyncMock(
             return_value={"sub": "opaque-user", "iss": "https://oidc.example.com"}
         )
-        oidc_adapter._introspect_token = AsyncMock()
 
         claims = await oidc_adapter.validate_token("opaque-access-token")
 
         assert claims["sub"] == "opaque-user"
         oidc_adapter._validate_jwt_token.assert_not_awaited()
+        oidc_adapter._introspect_token.assert_awaited_once_with("opaque-access-token")
         oidc_adapter._fetch_userinfo_claims.assert_awaited_once_with("opaque-access-token")
-        oidc_adapter._introspect_token.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_opaque_token_falls_back_to_introspection(
+    async def test_opaque_token_uses_introspection_when_userinfo_fails(
         self,
         oidc_adapter: OIDCAdapter,
     ) -> None:
@@ -240,7 +242,7 @@ class TestTokenClassificationAndFallback:
             side_effect=TokenValidationError("introspection fail")
         )
 
-        with pytest.raises(TokenValidationError, match="Opaque token validation failed"):
+        with pytest.raises(TokenValidationError, match="introspection fail"):
             await oidc_adapter.validate_token("bad-token")
 
         oidc_adapter._validate_jwt_token.assert_not_awaited()
