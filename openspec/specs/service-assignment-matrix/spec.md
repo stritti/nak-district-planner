@@ -21,8 +21,8 @@ Columns SHALL be the union of dates expected by congregation `service_times`, da
 - **THEN** its cell shows the slot and remains assignable instead of being rendered empty
 
 #### Scenario: Assign from the event list
-- **WHEN** the user triggers "Amtstragende:n zuweisen" on an active `Gottesdienst` in the event list
-- **THEN** the matrix opens for that district showing the week around the event, where the assignment modal is available
+- **WHEN** a planner edits an event in the event list and enters a person in the "Dienstleiter:in" (Gottesdienst) or "Verantwortliche:r" (other event) field
+- **THEN** the assignment is created, changed or removed via `/api/v1/events/{event_id}/assignments` with the same conflict handling as in the matrix, and the list shows the name (a Gottesdienst without one shows "Lücke")
 
 #### Scenario: Unassigned service
 - **WHEN** a `Gottesdienst` slot has no service assignment
@@ -52,3 +52,10 @@ The matrix view SHALL show a skeleton while loading, keep the congregation colum
 #### Scenario: Group sorting enabled
 - **WHEN** the user enables group sorting
 - **THEN** congregations are ordered by group and then by their existing order
+
+### Requirement: Responsible person of an event
+Every event, not only a `Gottesdienst`, MAY have one responsible person, stored as its single assignment. `GET /api/v1/events` SHALL expose it as `responsible` (`assignment_id`, `leader_id`, `name`, `status`) and SHALL NOT resolve a leader of another district.
+
+#### Scenario: Non-service event with a responsible person
+- **WHEN** a planner assigns a person to an event of another category
+- **THEN** the event list returns that person as `responsible`

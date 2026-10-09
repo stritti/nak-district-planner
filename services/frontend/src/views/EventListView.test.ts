@@ -3,9 +3,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import * as districtsApi from '../api/districts'
 import * as eventsApi from '../api/events'
+import * as assignmentsApi from '../api/serviceAssignments'
+import * as leadersApi from '../api/leaders'
 import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
-import { useMatrixStore } from '../stores/matrix'
 import EventListView from './EventListView.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -13,16 +14,13 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   exportEvents: vi.fn(),
-  push: vi.fn(),
 }))
 
-vi.mock('vue-router', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('vue-router')>()),
-  useRouter: () => ({ push: mocks.push }),
-}))
 
 vi.mock('../api/districts')
 vi.mock('../api/events')
+vi.mock('../api/serviceAssignments')
+vi.mock('../api/leaders')
 vi.mock('../composables/useConfirm', () => ({
   useConfirm: () => mocks.confirm,
 }))
@@ -127,25 +125,70 @@ beforeEach(() => {
       ? [congregation('c1', 'Gemeinde Eins'), congregation('c2', 'Gemeinde Zwei')]
       : [congregation('c3', 'Gemeinde Drei', 'd2')]
   ))
+  vi.mocked(leadersApi.listLeaders).mockResolvedValue([])
   vi.mocked(districtsApi.listGroups).mockResolvedValue([
     { id: 'g1', name: 'Gruppe Eins', district_id: 'd1', created_at: now, updated_at: now },
   ])
 })
 
 describe('EventListView', () => {
-  it('opens the matrix for the service week via the assign button', async () => {
-    const { wrapper, eventsStore } = setup()
+  it('shows the responsible person and flags services without a Dienstleiter', async () => {
+    const responsible = { assignment_id: 'a1', leader_id: 'l1', name: 'Pr. Muster', status: 'ASSIGNED' as const }
+    const { wrapper } = setup([event({ responsible }), event({ id: 'e9', title: 'Ohne' })])
     await flushPromises()
 
-    const service = eventsStore.items.find((e) => e.is_service && e.status === 'ACTIVE')!
-    expect(service).toBeTruthy()
-    await wrapper.find('[data-testid="assign-in-matrix"]').trigger('click')
-
-    const matrix = useMatrixStore()
-    expect(matrix.districtId).toBe(service.district_id)
-    expect(matrix.fromDt <= matrix.toDt).toBe(true)
-    expect(mocks.push).toHaveBeenCalledWith({ name: 'matrix' })
+    const cells = wrapper.findAll('[data-testid="responsible-cell"]')
+    expect(cells[0].text()).toBe('Pr. Muster')
+    expect(cells[1].text()).toBe('Lücke')
   })
+
+  it('assigns, changes and clears the responsible person from the edit dialog', async () => {
+    vi.mocked(eventsApi.updateEvent).mockImplementation(async () => event())
+    vi.mocked(assignmentsApi.createAssignment).mockResolvedValue({
+      id: 'a1', event_id: 'e1', leader_id: null, leader_name: 'Pr. Frei', status: 'ASSIGNED',
+      created_at: now, updated_at: now,
+    })
+    const { wrapper, eventsStore } = setup([event()])
+    await flushPromises()
+
+    const save = async () => {
+      await wrapper.find('.modal-panel').findAll('button').find((b) => b.text() === 'Speichern')!.trigger('click')
+      await flushPromises()
+    }
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[placeholder="Name eingeben oder auswählen…"]').setValue('Pr. Frei')
+    await save()
+    expect(assignmentsApi.createAssignment).toHaveBeenCalledWith(
+      'e1', { leaderId: null, leaderName: 'Pr. Frei', confirmWarnings: undefined },
+    )
+    expect(eventsStore.items[0].responsible?.name).toBe('Pr. Frei')
+
+    vi.mocked(assignmentsApi.deleteAssignment).mockResolvedValue()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[placeholder="Name eingeben oder auswählen…"]').setValue('')
+    await save()
+    expect(assignmentsApi.deleteAssignment).toHaveBeenCalledWith('e1', 'a1')
+    expect(eventsStore.items[0].responsible).toBeNull()
+  })
+
+  it('keeps the dialog open with the message when the assignment is rejected', async () => {
+    vi.mocked(eventsApi.updateEvent).mockResolvedValue(event())
+    vi.mocked(assignmentsApi.createAssignment).mockRejectedValue(new Error('Zuweisung kaputt'))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[placeholder="Name eingeben oder auswählen…"]').setValue('Pr. Frei')
+    await wrapper.find('.modal-panel').findAll('button').find((b) => b.text() === 'Speichern')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Zuweisung kaputt')
+    expect(wrapper.find('.modal-panel').exists()).toBe(true)
+  })
+
 
   it('loads and renders list events with district, congregation, source and status variants', async () => {
     const { wrapper, eventsStore } = setup()
