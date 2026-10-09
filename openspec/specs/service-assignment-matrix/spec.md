@@ -33,7 +33,7 @@ Columns SHALL be the union of dates expected by congregation `service_times`, da
 - **THEN** the date still appears as a column with the holiday name
 
 ### Requirement: Service assignments API
-Assignments SHALL be managed under `/api/v1/events/{event_id}/assignments` (`POST`, `GET`, `PUT /{id}`, `DELETE /{id}`). Reading SHALL require `VIEWER`, writing `PLANNER` in the slot's district. An assignment SHALL reference a leader ID or a free-text leader name and have status `OPEN`, `ASSIGNED` or `CONFIRMED`. Newly confirming an assignment SHALL publish `ASSIGNMENT_CONFIRMED` after commit. Assignments are not limited to `Gottesdienst` slots: every event may have one responsible person. `GET /api/v1/events` SHALL expose it as `responsible` (`assignment_id`, `leader_id`, `name`, `status`) and SHALL NOT resolve a leader of another district.
+Assignments SHALL be managed under `/api/v1/events/{event_id}/assignments` (`POST`, `GET`, `PUT /{id}`, `DELETE /{id}`). Reading SHALL require `VIEWER`, writing `PLANNER` in the slot's district. An assignment SHALL reference a leader ID or a free-text leader name and have status `OPEN`, `ASSIGNED` or `CONFIRMED`. Newly confirming an assignment SHALL publish `ASSIGNMENT_CONFIRMED` after commit.
 
 #### Scenario: Assignment without leader
 - **WHEN** an assignment is created with neither `leader_id` nor `leader_name`
@@ -52,3 +52,10 @@ The matrix view SHALL show a skeleton while loading, keep the congregation colum
 #### Scenario: Group sorting enabled
 - **WHEN** the user enables group sorting
 - **THEN** congregations are ordered by group and then by their existing order
+
+### Requirement: Responsible person of an event
+Every event, not only a `Gottesdienst`, MAY have one responsible person, stored as its single assignment. `GET /api/v1/events` SHALL expose it as `responsible` (`assignment_id`, `leader_id`, `name`, `status`) and SHALL NOT resolve a leader of another district.
+
+#### Scenario: Non-service event with a responsible person
+- **WHEN** a planner assigns a person to an event of another category
+- **THEN** the event list returns that person as `responsible`
