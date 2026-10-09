@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.0-rc.7](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.6...v1.0.0-rc.7) (2026-10-09)
+
+
+### Bug Fixes
+
+* **idp:** Audience-Mapper im Keycloak-Setup anlegen und dokumentieren ([#526](https://github.com/stritti/nak-district-planner/issues/526)) ([9b08200](https://github.com/stritti/nak-district-planner/commit/9b0820078e520a7f26c1fa21fe608cd6b1606326)), closes [#511](https://github.com/stritti/nak-district-planner/issues/511)
+* **matrix:** eingeladene Gemeinden zeigen 'Eingeladen nach' statt Luecke ([#529](https://github.com/stritti/nak-district-planner/issues/529)) ([79ccd26](https://github.com/stritti/nak-district-planner/commit/79ccd2601c8f37e46a372377ac48aa976ed39705))
+
 ## [1.0.0-rc.6](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.5...v1.0.0-rc.6) (2026-10-09)
 
 
