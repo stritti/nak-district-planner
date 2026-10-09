@@ -157,7 +157,7 @@
                     v-if="row.cells[date].invitation_source_congregation_name"
                     class="break-words text-[10px] text-amber-700 dark:text-amber-300"
                   >
-                    Einladung von {{ row.cells[date].invitation_source_congregation_name }}
+                    Eingeladen nach {{ row.cells[date].invitation_source_congregation_name }}
                   </div>
                   <div
                     v-if="(row.cells[date].invitation_count ?? 0) > 0"

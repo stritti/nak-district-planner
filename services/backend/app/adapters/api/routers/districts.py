@@ -541,12 +541,24 @@ async def get_matrix(
         gottesdienst_slots_by_date.setdefault(slot.planning_date.isoformat(), []).append(slot)
 
     def _cell_slot(congregation_id: uuid.UUID, date_key: str) -> PlanningSlot | None:
-        """Own slot before a distributed district slot; earliest time first."""
+        """Own slot before a distributed district slot; earliest time first.
+
+        An invited congregation attends the host's service instead of holding its
+        own, so the invitation copy wins over its own slots without a leader.
+        """
         visible = [
             slot
             for slot in gottesdienst_slots_by_date.get(date_key, [])
             if slot.is_visible_to(congregation_id)
         ]
+        copies = [s for s in visible if s.invitation_source_event_id is not None]
+        if copies:
+            led_own = [
+                s
+                for s in visible
+                if s.invitation_source_event_id is None and s.id in assignment_by_slot_id
+            ]
+            visible = led_own or copies
         return min(
             visible,
             key=lambda slot: (slot.congregation_id is None, slot.planning_time),

@@ -24,6 +24,10 @@ Columns SHALL be the union of dates expected by congregation `service_times`, da
 - **WHEN** a planner edits an event in the event list and enters a person in the "Dienstleiter:in" (Gottesdienst) or "Verantwortliche:r" (other event) field
 - **THEN** the assignment is created, changed or removed via `/api/v1/events/{event_id}/assignments` with the same conflict handling as in the matrix, and the list shows the name (a Gottesdienst without one shows "Lücke")
 
+#### Scenario: Invited congregation
+- **WHEN** a congregation has an invitation copy on a date and its own `Gottesdienst` slot there has no assignment
+- **THEN** its cell shows the copy with the host's leader and "Eingeladen nach [Gastgeber]" and is no gap
+
 #### Scenario: Unassigned service
 - **WHEN** a `Gottesdienst` slot has no service assignment
 - **THEN** its cell has `is_gap = true` and the UI renders it as a red "LÜCKE" cell that opens the assignment modal
