@@ -32,3 +32,9 @@ Planning slots already support a single liturgical service-leader assignment, bu
 - Shift scheduling, automatic candidate selection, reminders or acceptance workflows.
 - Introducing external calendar provider write-back.
 - Retroactively adding people to existing events.
+
+## Further requirements: remembered duty names and retired ministers
+
+- Allow direct entry of a person's display name for organisational duties, remembering accepted names as scope- and duty-type-specific autocomplete suggestions for future events, without requiring a user account.
+- Allow authorised users to remove a name from autocomplete suggestions without erasing historical duty appointments.
+- Allow ministers/service leaders to be deactivated and hidden from default frontend lists while retaining database records and all historical references; provide an optional inclusive end-of-service date respected by future planning and assignments.
