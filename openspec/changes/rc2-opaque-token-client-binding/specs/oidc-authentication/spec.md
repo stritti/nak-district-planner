@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Opaque token validation is scoped to this application
-The backend MAY accept non-JWT (opaque) access tokens, but MUST validate them through RFC 7662 Introspection before authentication succeeds. The introspection response MUST contain `active` as the boolean `true`, a non-empty `sub` and a `client_id` exactly matching the configured OIDC client. A valid UserInfo response alone MUST NOT authenticate a token. Any present issuer, audience or authorized-party claim MUST also pass normal security claim checks. UserInfo MAY enrich a successfully introspected identity, but its subject MUST agree with the introspected subject; identity and security claim mismatches MUST fail closed.
+The backend MAY support opaque access tokens only when RFC 7662 Introspection confirms boolean `active: true`, a non-empty `sub`, and a `client_id` matching this application. UserInfo alone MUST NOT authenticate. UserInfo MAY enrich identity only if its subject and security claims agree with Introspection. Provided issuer, audience and authorized-party claims MUST be validated.
 
 #### Scenario: Valid UserInfo response without introspection
 - **WHEN** an opaque token receives a successful UserInfo response but introspection is unavailable
