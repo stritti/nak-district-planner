@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.0-rc.6](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.5...v1.0.0-rc.6) (2026-10-09)
+
+
+### Features
+
+* **events:** Verantwortliche:n / Dienstleiter:in in der Eventübersicht zuordnen ([#524](https://github.com/stritti/nak-district-planner/issues/524)) ([1e15047](https://github.com/stritti/nak-district-planner/commit/1e15047bfaa0380f1a7b56c5f77fa83df777c52d))
+
+
+### Bug Fixes
+
+* **frontend:** resolve the backend through Docker DNS per request ([#519](https://github.com/stritti/nak-district-planner/issues/519)) ([474a758](https://github.com/stritti/nak-district-planner/commit/474a7582c0be576f5c36adc8edbab41589fe676a))
+* **frontend:** stop the navigation from overlapping (badges, links, user area) ([#521](https://github.com/stritti/nak-district-planner/issues/521)) ([b0484a0](https://github.com/stritti/nak-district-planner/commit/b0484a0fd678f2cba8f73e8118603e0517ec5935))
+* **matrix:** verschobene Gottesdienste bleiben in der Matrix zuweisbar ([#523](https://github.com/stritti/nak-district-planner/issues/523)) ([62fa6b5](https://github.com/stritti/nak-district-planner/commit/62fa6b5a7c654c22fd898f9b543b91c39e04e226))
+
 ## [1.0.0-rc.5](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.4...v1.0.0-rc.5) (2026-10-09)
 
 
