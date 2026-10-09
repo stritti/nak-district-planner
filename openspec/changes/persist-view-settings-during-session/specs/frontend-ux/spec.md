@@ -13,7 +13,7 @@ When the user leaves and reopens a view, navigates back or forward, or reloads t
 
 #### Scenario: Return to the event list
 
-- **WHEN** the user selects filters and a sort field and direction in the event list, opens another view and returns during the same session
+- **WHEN** the user selects filters and, where provided, a sort field and direction in the event list, opens another view and returns during the same session
 - **THEN** the event list restores those settings and displays the correspondingly filtered and sorted events
 
 #### Scenario: Browser navigation and reload

@@ -22,9 +22,15 @@ Ein Matrix-Zustand und ein Eventlisten-Zustand werden unabhängig geführt. Inne
 
 Filter, Sortierfeld, Sortierrichtung und vorhandene Sortieroptionen werden gemeinsam als letzter Zustand einer Ansicht erfasst. Bei Wiederherstellung müssen die angezeigten Bedienelemente und das angeforderte bzw. dargestellte Ergebnis übereinstimmen. Entfallene oder nicht mehr zugängliche Filterwerte werden auf gültige Standardwerte zurückgesetzt; unveränderte gültige Werte bleiben erhalten. Gespeicherte Einstellungen erweitern niemals Zugriffsrechte.
 
-### Technische Umsetzung später festlegen
+### Gemeinsame Speicherung in sessionStorage
 
-Die Anforderung legt das beobachtbare Verhalten fest. Die konkrete Frontend-Speicherung und Integration werden bei der Umsetzung ausgewählt. Falls Sitzungsspeicherung nicht verfügbar oder beschädigt ist, bleibt die Ansicht mit Standardwerten nutzbar.
+`useSessionViewSettings` bindet die bestehenden reaktiven Controls an versionierte Schlüssel aus Benutzeridentität, Ansicht und Kontext. Kontextwechsel stellen synchron vor der nächsten Datenabfrage wieder her. Feldvalidierung verwirft unbekannte Enum-Werte und ungültige Datumswerte; geladene Gruppen, Gemeinden und Amtsträger bestimmen, ob gespeicherte IDs weiter gültig sind. Fehlender oder beschädigter Speicher führt zu Standardwerten.
+
+Die bisherigen globalen localStorage-Einträge für Matrixfilter, Eventfilter und Bezirksauswahl werden nicht mehr gelesen oder geschrieben. Kompaktansicht und andere dauerhafte Anzeigepräferenzen bleiben gesonderte Einstellungen. Abmeldung oder Identitätswechsel löschen alle Sitzungsschlüssel und setzen auch gebundene Controls zurück.
+
+Angebunden sind Matrix, Eventliste (einschließlich Listen-/Kalenderansicht und Zeitraum), Bezirksnavigation, Kalenderintegrationen, Erinnerungen und der Amtsträgerfilter für Abwesenheiten. Export-Freigabeschalter verändern erzeugte Links statt der angezeigten Ergebnisse und gehören nicht zu diesen Ansichtsfiltern. Bearbeitungsformulare werden nicht gespeichert.
+
+Die Eventliste bietet aktuell kein auswählbares Sortierfeld oder eine Sortierrichtung. Dieser Change erhält bestehende Sortieroptionen, führt aber keine neue Sortierfunktion ein.
 
 ## Risks / Trade-offs
 

@@ -81,6 +81,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   delete: [item: LeaderUnavailabilityResponse]
+  'update:filter-leader-id': [leaderId: string]
 }>()
 
 const selectedLeaderId = ref('')
@@ -92,6 +93,8 @@ watch(
   },
   { immediate: true },
 )
+
+watch(selectedLeaderId, (value) => emit('update:filter-leader-id', value))
 
 const filtered = computed(() =>
   selectedLeaderId.value

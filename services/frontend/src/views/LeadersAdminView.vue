@@ -352,6 +352,7 @@
             :leaders="leaders"
             :loading="unavailabilitiesStore.loading"
             :preset-leader-id="unavailabilityFilterLeaderId"
+            @update:filter-leader-id="unavailabilityFilterLeaderId = $event"
             :can-delete="canManageUnavailabilities"
             @delete="confirmDeleteUnavailability"
           />
@@ -362,6 +363,7 @@
             ref="unavailabilityFormRef"
             :leaders="leaders"
             :preset-leader-id="unavailabilityFilterLeaderId"
+            @update:filter-leader-id="unavailabilityFilterLeaderId = $event"
             :saving="unavailabilitySavingDistrictId === selectedDistrictId"
             @submit="saveUnavailability"
           />
@@ -785,6 +787,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import CopyButton from '../components/CopyButton.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -884,6 +887,9 @@ async function switchToRegistrations() {
 // ── Unavailabilities ─────────────────────────────────────────────
 
 const unavailabilityFilterLeaderId = ref('')
+useSessionViewSettings('leaders', () => authStore.user?.sub ?? null, () => selectedDistrictId.value, {
+  leader: sessionField(unavailabilityFilterLeaderId, () => '', sessionText),
+})
 const unavailabilitySavingDistrictId = ref('')
 let districtLoadGeneration = 0
 const unavailabilityDeleting = ref(false)
@@ -902,7 +908,7 @@ const canManageUnavailabilities = computed(() => {
 
 async function switchToUnavailabilities(leaderId?: string) {
   activeTab.value = 'unavailabilities'
-  unavailabilityFilterLeaderId.value = leaderId ?? ''
+  if (leaderId !== undefined) unavailabilityFilterLeaderId.value = leaderId
   try {
     await unavailabilitiesStore.fetchUnavailabilities(selectedDistrictId.value)
   } catch (e) {
@@ -1140,7 +1146,6 @@ onMounted(async () => {
 async function onDistrictChange() {
   const loadGeneration = ++districtLoadGeneration
   const districtId = selectedDistrictId.value
-  unavailabilityFilterLeaderId.value = ''
   pendingDeleteUnavailability.value = null
   unavailabilityFormRef.value?.reset()
   leaders.value = []
@@ -1160,6 +1165,9 @@ async function onDistrictChange() {
     ])
     if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
     leaders.value = loadedLeaders
+    if (unavailabilityFilterLeaderId.value && !loadedLeaders.some((leader) => leader.id === unavailabilityFilterLeaderId.value)) {
+      unavailabilityFilterLeaderId.value = ''
+    }
     congregations.value = loadedCongregations
     await loadSelfLink()
     if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return

@@ -6,6 +6,7 @@
  * persisted in JavaScript-accessible browser storage.
  */
 
+import { clearSessionViewSettings, setSessionSettingsIdentity } from '../composables/useSessionViewSettings'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { OIDCToken, OIDCUser } from '../composables/oidcTypes'
@@ -29,6 +30,8 @@ export const useAuthStore = defineStore(
     })
 
     function setToken(newToken: OIDCToken | null, newUser: OIDCUser | null = null) {
+      if (user.value && user.value.sub !== newUser?.sub) clearSessionViewSettings()
+      setSessionSettingsIdentity(newUser?.sub ?? null)
       token.value = newToken
       user.value = newUser
     }
@@ -71,6 +74,7 @@ export const useAuthStore = defineStore(
     }
 
     function clearAuth() {
+      clearSessionViewSettings()
       token.value = null
       user.value = null
       isSuperadmin.value = false

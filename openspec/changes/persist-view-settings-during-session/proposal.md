@@ -20,6 +20,6 @@ Filter und Sortierung gehören zum aktuellen Arbeitskontext. Beim Wechsel zwisch
 ## Impact
 
 - OpenSpec-Delta: `specs/frontend-ux/spec.md`.
-- Spätere Umsetzung betrifft die Zustandsverwaltung und Ansichten des Frontends, insbesondere Matrix und Eventliste.
+- Die Umsetzung betrifft die Zustandsverwaltung und Ansichten des Frontends, insbesondere Matrix und Eventliste.
 - Keine Änderung von APIs, Berechtigungen oder fachlichen Sichtbarkeitsregeln.
-- Dieser Change dokumentiert die Anforderung; die Implementierung ist noch offen.
+- Die Umsetzung verwendet tablokales sessionStorage und bindet die vorhandenen Filter und Sortieroptionen an. Die Eventliste hat derzeit keine auswählbare Sortierung; ihre bestehende Reihenfolge bleibt erhalten.
