@@ -115,7 +115,7 @@ async def test_opaque_introspection_rejects_wrong_client_id(
         }
     )
 
-    with pytest.raises(TokenValidationError, match="Invalid client_id"):
+    with pytest.raises(TokenValidationError, match="not issued to this client"):
         await adapter.validate_token("opaque-token")
 
 
@@ -130,6 +130,7 @@ async def test_opaque_introspection_rejects_wrong_audience(
         return_value={
             "active": True,
             "sub": "opaque-user",
+            "client_id": "planner-client",
             "aud": ["some-other-api"],
         }
     )
