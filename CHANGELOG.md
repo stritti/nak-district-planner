@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.0-rc.4](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.3...v1.0.0-rc.4) (2026-10-09)
+
+
+### Bug Fixes
+
+* **auth:** return a real 204 from /oidc/revoke instead of the injected Response ([#512](https://github.com/stritti/nak-district-planner/issues/512)) ([b99f99c](https://github.com/stritti/nak-district-planner/commit/b99f99c30d81f9bdb0095d899c0ba94cddb90079))
+* **auth:** stop signed-out version check from wiping the PKCE verifier ([#513](https://github.com/stritti/nak-district-planner/issues/513)) ([b678401](https://github.com/stritti/nak-district-planner/commit/b6784015c3f9187673d12cd7b0939c8f0a3f6c34))
+
 ## [1.0.0-rc.3](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.2...v1.0.0-rc.3) (2026-10-09)
 
 
