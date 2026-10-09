@@ -49,6 +49,7 @@
       <div class="w-full sm:w-auto">
         <label class="filter-label">Sortierung</label>
         <select
+          id="matrix-sort-filter"
           :value="matrixSortMode"
           class="form-select"
           @change="onSortModeChange"

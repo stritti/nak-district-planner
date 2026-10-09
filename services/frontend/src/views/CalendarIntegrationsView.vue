@@ -499,6 +499,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useAuthStore } from '../stores/auth'
+import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -548,13 +550,18 @@ const {
 } = storeToRefs(integrationsStore)
 
 const filterDistrictId = ref('')
+const auth = useAuthStore()
+const { hasSavedSettings } = useSessionViewSettings('calendar-integrations', () => auth.user?.sub ?? null, () => 'district-filter', {
+  district: sessionField(filterDistrictId, () => '', sessionText),
+})
 const ALL_CAPABILITIES: CalendarCapability[] = ['READ', 'WRITE', 'WEBHOOK']
 const allCongregations = ref<CongregationResponse[]>([])
 
 onMounted(async () => {
   if (districtsStore.districts.length === 0) await districtsStore.fetchDistricts()
-  if (districtsStore.selectedDistrictId) {
-    filterDistrictId.value = districtsStore.selectedDistrictId
+  if (!hasSavedSettings.value) filterDistrictId.value = districtsStore.selectedDistrictId
+  if (filterDistrictId.value && !districtsStore.districts.some((district) => district.id === filterDistrictId.value)) {
+    filterDistrictId.value = ''
   }
   const all = await Promise.all(districtsStore.districts.map((district) => listCongregations(district.id)))
   allCongregations.value = all.flat()

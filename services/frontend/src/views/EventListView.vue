@@ -101,6 +101,7 @@
         <div class="w-full sm:w-auto">
           <label class="filter-label">Gemeinde</label>
           <select
+            id="event-congregation-filter"
             v-model="selectedCongregationId"
             :disabled="!districtsStore.selectedDistrictId"
             class="rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:bg-gray-800"
@@ -118,6 +119,7 @@
         <div v-if="districtsStore.groups.length > 0" class="w-full sm:w-auto">
           <label class="filter-label">Gruppe (optional)</label>
           <select
+            id="event-group-filter"
             v-model="selectedGroupId"
             class="form-select px-2"
             @change="onGroupChange"
@@ -133,6 +135,7 @@
         <div class="w-full sm:w-auto">
           <label class="filter-label">Status</label>
           <select
+            id="event-status-filter"
             v-model="selectedStatus"
             class="form-select px-2"
             @change="onFilterChange"
@@ -147,6 +150,7 @@
         <div class="w-full sm:w-auto">
           <label class="filter-label">Freigabe</label>
           <select
+            id="event-approval-filter"
             v-model="selectedApprovalStatus"
             class="form-select px-2"
             @change="onFilterChange"
@@ -161,6 +165,7 @@
         <div class="w-full sm:w-auto">
           <label class="filter-label">Typ</label>
           <select
+            id="event-type-filter"
             v-model="selectedType"
             class="form-select px-2"
             @change="onFilterChange"
@@ -599,6 +604,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useAuthStore } from '../stores/auth'
+import { useSessionViewSettings, sessionField, sessionText, sessionDate } from '../composables/useSessionViewSettings'
 import {
   ArrowDownTrayIcon,
   BuildingOffice2Icon,
@@ -845,6 +852,34 @@ const selectedApprovalStatus = ref<EventApprovalStatus | ''>('')
 const selectedType           = ref<'' | 'service' | 'other'>('')
 const fromDate               = ref('')
 const toDate                 = ref('')
+const auth = useAuthStore()
+const periodDate = computed({
+  get: () => localDate(currentPeriodStart.value),
+  set: (value: string) => { currentPeriodStart.value = new Date(value + 'T12:00:00') },
+})
+useSessionViewSettings('events', () => auth.user?.sub ?? null, () => districtsStore.selectedDistrictId, {
+  congregation: sessionField(selectedCongregationId, () => '', sessionText),
+  group: sessionField(selectedGroupId, () => '', sessionText),
+  status: sessionField(selectedStatus, () => '', (value) => ['', 'ACTIVE', 'CANCELLED'].includes(typeof value === 'string' ? value : '\u0000')),
+  approval: sessionField(selectedApprovalStatus, () => '', (value) => ['', 'PLANNED', 'CONFIRMED'].includes(typeof value === 'string' ? value : '\u0000')),
+  type: sessionField(selectedType, () => '', (value) => ['', 'service', 'other'].includes(typeof value === 'string' ? value : '\u0000')),
+  from: sessionField(fromDate, () => '', sessionDate),
+  to: sessionField(toDate, () => '', sessionDate),
+  mode: sessionField(viewMode, () => 'list', (value) => ['list', 'week', 'month'].includes(typeof value === 'string' ? value : '\u0000')),
+  period: sessionField(periodDate, () => localDate(new Date()), (value) => value !== '' && sessionDate(value)),
+})
+
+function validateFilters() {
+  if (selectedGroupId.value && !districtsStore.groups.some((group) => group.id === selectedGroupId.value)) {
+    selectedGroupId.value = ''
+  }
+  if (selectedCongregationId.value && selectedCongregationId.value !== 'DISTRICT_ONLY' &&
+      !districtsStore.congregations.some((congregation) => congregation.id === selectedCongregationId.value &&
+        (!selectedGroupId.value || congregation.group_id === selectedGroupId.value))) {
+    selectedCongregationId.value = ''
+  }
+}
+
 
 function monthRange(offset: number) {
   const now = new Date()
@@ -873,12 +908,11 @@ function setPreset(key: string) {
   if (key === 'current') { const r = monthRange(0); fromDate.value = r.from; toDate.value = r.to }
   else if (key === 'next') { const r = monthRange(1); fromDate.value = r.from; toDate.value = r.to }
   else { fromDate.value = ''; toDate.value = '' }
-  applyFilters()
+  onFilterChange()
 }
 
 async function onDistrictChange() {
-  selectedCongregationId.value = ''
-  selectedGroupId.value = ''
+  const districtId = districtsStore.selectedDistrictId
   districtsStore.clearCongregations()
   if (districtsStore.selectedDistrictId) {
     await Promise.all([
@@ -886,6 +920,8 @@ async function onDistrictChange() {
       districtsStore.fetchGroups(districtsStore.selectedDistrictId),
     ])
   }
+  if (districtId !== districtsStore.selectedDistrictId) return
+  validateFilters()
   onFilterChange()
 }
 
@@ -936,7 +972,8 @@ onMounted(async () => {
   }
   const all = await Promise.all(districtsStore.districts.map((d) => listCongregations(d.id)))
   allCongregations.value = all.flat()
-  applyFilters()
+  validateFilters()
+  onFilterChange()
 })
 
 watch(() => eventsStore.filters.offset, () => eventsStore.fetch())

@@ -41,6 +41,4 @@ export const useEventsStore = defineStore('events', () => {
   }
 
   return { items, total, loading, error, filters, currentPage, totalPages, fetch, setFilter, goToPage }
-}, {
-  persist: { pick: ['filters'] },
 })

@@ -17,6 +17,8 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useAuthStore } from '../stores/auth'
+import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import { listDistricts, type DistrictResponse } from '../api/districts'
 import EventHooksPanel from '../components/EventHooksPanel.vue'
 import ReminderConfigsPanel from '../components/ReminderConfigsPanel.vue'
@@ -24,10 +26,16 @@ import ReminderConfigsPanel from '../components/ReminderConfigsPanel.vue'
 const districts = ref<DistrictResponse[]>([])
 const districtId = ref('')
 const loadError = ref<string | null>(null)
+const auth = useAuthStore()
+useSessionViewSettings('reminders', () => auth.user?.sub ?? null, () => 'district-filter', {
+  district: sessionField(districtId, () => '', sessionText),
+})
 onMounted(async () => {
   try {
     districts.value = await listDistricts()
-    districtId.value = districts.value[0]?.id ?? ''
+    if (!districts.value.some((district) => district.id === districtId.value)) {
+      districtId.value = districts.value[0]?.id ?? ''
+    }
   } catch (cause) {
     loadError.value = cause instanceof Error ? cause.message : 'Bezirke konnten nicht geladen werden'
   }

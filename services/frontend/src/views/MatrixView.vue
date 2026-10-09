@@ -43,7 +43,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref, toRef, watch } from 'vue'
+import { useAuthStore } from '../stores/auth'
+import { useSessionViewSettings, sessionField, sessionText, sessionDate } from '../composables/useSessionViewSettings'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
 import { useLeadersStore } from '../stores/leaders'
@@ -62,10 +64,23 @@ const leadersStore = useLeadersStore()
 const toast = useToast()
 
 const COMPACT_MODE_STORAGE_KEY = 'matrix.compactMode'
-const MATRIX_SORT_MODE_STORAGE_KEY = 'matrix.sortMode'
 const compactMode = ref(false)
 const matrixSortMode = ref<'default' | 'grouped'>('default')
 const showReleaseDialog = ref(false)
+const auth = useAuthStore()
+useSessionViewSettings('matrix', () => auth.user?.sub ?? null, () => districtsStore.selectedDistrictId, {
+  group: sessionField(toRef(matrixStore, 'groupId'), () => '', sessionText),
+  query: sessionField(toRef(matrixStore, 'congregationQuery'), () => '', sessionText),
+  from: sessionField(toRef(matrixStore, 'fromDt'), () => monthRange(0).from, sessionDate),
+  to: sessionField(toRef(matrixStore, 'toDt'), () => monthRange(0).to, sessionDate),
+  sort: sessionField(matrixSortMode, () => 'default', (value) => value === 'default' || value === 'grouped'),
+})
+
+function validateGroup() {
+  if (matrixStore.groupId && !districtsStore.groups.some((group) => group.id === matrixStore.groupId)) {
+    matrixStore.groupId = ''
+  }
+}
 
 function onReleaseComplete(count: number) {
   showReleaseDialog.value = false
@@ -78,22 +93,14 @@ function setCompactMode(enabled: boolean) {
   localStorage.setItem(COMPACT_MODE_STORAGE_KEY, enabled ? '1' : '0')
 }
 
-function saveSortMode() {
-  localStorage.setItem(MATRIX_SORT_MODE_STORAGE_KEY, matrixSortMode.value)
-}
-
 function onSortModeChange(value: 'default' | 'grouped') {
   matrixSortMode.value = value
-  saveSortMode()
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
   compactMode.value = localStorage.getItem(COMPACT_MODE_STORAGE_KEY) === '1'
-  matrixSortMode.value = localStorage.getItem(MATRIX_SORT_MODE_STORAGE_KEY) === 'grouped'
-    ? 'grouped'
-    : 'default'
   if (districtsStore.districts.length === 0) await districtsStore.fetchDistricts()
   syncDistrictSelectionFromStore()
   // Pre-select current month if no range set yet
@@ -109,6 +116,7 @@ onMounted(async () => {
       districtsStore.fetchCongregations(matrixStore.districtId),
       leadersStore.fetchLeaders(matrixStore.districtId),
     ])
+    validateGroup()
     matrixStore.fetch()
   }
 })
@@ -116,13 +124,15 @@ onMounted(async () => {
 async function onDistrictChange() {
   matrixStore.districtId = districtsStore.selectedDistrictId
   matrixStore.matrix = null
-  matrixStore.groupId = ''
-  if (matrixStore.districtId) {
+  const districtId = matrixStore.districtId
+  if (districtId) {
     await Promise.allSettled([
       districtsStore.fetchGroups(matrixStore.districtId),
       districtsStore.fetchCongregations(matrixStore.districtId),
       leadersStore.fetchLeaders(matrixStore.districtId),
     ])
+    if (districtId !== districtsStore.selectedDistrictId) return
+    validateGroup()
     if (matrixStore.fromDt && matrixStore.toDt) {
       matrixStore.fetch()
     }
