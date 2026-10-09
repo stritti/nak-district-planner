@@ -650,6 +650,124 @@ async def test_get_matrix_shows_slot_outside_regular_service_times() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_matrix_invited_congregation_shows_invitation_instead_of_gap() -> None:
+    """An invited congregation's own leaderless service gives way to the host's copy."""
+    district_id = uuid.uuid4()
+    host = Congregation.create(name="Gastgeber", district_id=district_id)
+    invited = Congregation.create(
+        name="Eingeladen",
+        district_id=district_id,
+        service_times=[{"weekday": 6, "time": "09:30"}],
+    )
+    sunday = datetime(2030, 4, 14, 9, 30, tzinfo=UTC)
+
+    def _slot(congregation_id: uuid.UUID, **extra) -> PlanningSlot:
+        return PlanningSlot.create(
+            district_id=district_id,
+            congregation_id=congregation_id,
+            planning_date=sunday.date(),
+            planning_time=sunday.time(),
+            category="Gottesdienst",
+            title="Gottesdienst",
+            status=PlanningSlotStatus.ACTIVE,
+            **extra,
+        )
+
+    host_slot = _slot(host.id)
+    own_slot = _slot(invited.id)
+    copy_slot = _slot(
+        invited.id,
+        invitation_source_congregation_id=host.id,
+        invitation_source_event_id=host_slot.id,
+    )
+    assignment = ServiceAssignment.create(
+        event_id=host_slot.id,
+        planning_slot_id=host_slot.id,
+        leader_name="Pr. Muster",
+        status=AssignmentStatus.ASSIGNED,
+    )
+    repos = _matrix_repos(
+        district=District.create(name="D"),
+        congregations=[host, invited],
+        slots=[host_slot, own_slot, copy_slot],
+        assignments=[assignment],
+    )
+    repos["cong_repo"].list_by_ids.return_value = [host]
+
+    result = await r.get_matrix(
+        district_id,
+        _superadmin_auth(),
+        AsyncMock(),
+        from_dt=sunday - timedelta(days=1),
+        to_dt=sunday + timedelta(days=1),
+        group_id=None,
+        **repos,
+    )
+
+    row = next(row for row in result.rows if row.congregation_id == invited.id)
+    cell = row.cells[sunday.date().isoformat()]
+    assert cell.planning_slot_id == copy_slot.id
+    assert cell.is_gap is False
+    assert cell.invitation_source_congregation_name == "Gastgeber"
+    assert cell.leader_name == "Pr. Muster"
+
+
+@pytest.mark.asyncio
+async def test_get_matrix_invited_congregation_keeps_own_led_service() -> None:
+    """A congregation that leads its own service still shows it despite an invitation."""
+    district_id = uuid.uuid4()
+    host = Congregation.create(name="Gastgeber", district_id=district_id)
+    invited = Congregation.create(name="Eingeladen", district_id=district_id)
+    day = datetime(2030, 4, 14, 9, 30, tzinfo=UTC)
+
+    def _slot(congregation_id: uuid.UUID, **extra) -> PlanningSlot:
+        return PlanningSlot.create(
+            district_id=district_id,
+            congregation_id=congregation_id,
+            planning_date=day.date(),
+            planning_time=day.time(),
+            category="Gottesdienst",
+            title="Gottesdienst",
+            status=PlanningSlotStatus.ACTIVE,
+            **extra,
+        )
+
+    host_slot = _slot(host.id)
+    own_slot = _slot(invited.id)
+    copy_slot = _slot(
+        invited.id,
+        invitation_source_congregation_id=host.id,
+        invitation_source_event_id=host_slot.id,
+    )
+    own_assignment = ServiceAssignment.create(
+        event_id=own_slot.id,
+        planning_slot_id=own_slot.id,
+        leader_name="Pr. Eigen",
+        status=AssignmentStatus.ASSIGNED,
+    )
+    repos = _matrix_repos(
+        district=District.create(name="D"),
+        congregations=[host, invited],
+        slots=[host_slot, own_slot, copy_slot],
+        assignments=[own_assignment],
+    )
+    repos["cong_repo"].list_by_ids.return_value = [host]
+
+    result = await r.get_matrix(
+        district_id,
+        _superadmin_auth(),
+        AsyncMock(),
+        from_dt=day - timedelta(days=1),
+        to_dt=day + timedelta(days=1),
+        group_id=None,
+        **repos,
+    )
+
+    row = next(row for row in result.rows if row.congregation_id == invited.id)
+    assert row.cells[day.date().isoformat()].planning_slot_id == own_slot.id
+
+
+@pytest.mark.asyncio
 async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() -> None:
     """Test matrix rendering with holidays (Feiertag PlanningSlots) and invitation fallback."""
     district_id = uuid.uuid4()

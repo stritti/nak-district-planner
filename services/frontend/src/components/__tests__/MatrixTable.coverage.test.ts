@@ -100,7 +100,7 @@ describe('MatrixTable coverage gaps', () => {
     expect(wrapper.text()).toContain('Plan: 09:30')
     expect(wrapper.text()).toContain('Einladungen: 2')
     expect(wrapper.text()).toContain('Max Muster')
-    expect(wrapper.text()).toContain('Gemeinde B')
+    expect(wrapper.text()).toContain('Eingeladen nach Gemeinde B')
     expect(wrapper.text()).toContain('Dienstleiterpflege in Host-Gemeinde')
     expect(wrapper.text()).toContain('Abweichung')
     expect(wrapper.text()).toContain('–')
