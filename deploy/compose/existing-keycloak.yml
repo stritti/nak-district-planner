@@ -4,7 +4,7 @@
 #   COMPOSE_FILE=docker-compose.prod.yml:deploy/compose/existing-keycloak.yml
 #
 # AUTH_HOST stays required and names the existing provider's host; OIDC_* in
-# .env point to it. Needs Docker Compose >= 2.24 (!override).
+# .env point to it. Needs Docker Compose >= 2.24.4 (!override).
 services:
   # Bundled Keycloak and its database only start with this profile.
   keycloak:

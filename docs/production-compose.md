@@ -197,7 +197,7 @@ Das Backend prüft die Token gegen `https://<AUTH_HOST>/realms/nak`. Der Issuer 
 
 ## Bestehenden Traefik oder Keycloak einbinden
 
-Läuft auf dem Server schon ein Traefik oder ein Keycloak, ersetzen zwei Override-Dateien in `deploy/compose/` den jeweils mitgelieferten Dienst. Sie werden über `COMPOSE_FILE` zugeschaltet (Trenner `:`) und brauchen Docker Compose ≥ 2.24.
+Läuft auf dem Server schon ein Traefik oder ein Keycloak, ersetzen zwei Override-Dateien in `deploy/compose/` den jeweils mitgelieferten Dienst. Sie werden über `COMPOSE_FILE` zugeschaltet (Trenner `:`) und brauchen Docker Compose ≥ 2.24.4 (`!override`).
 
 | Vorhanden auf dem Server | `COMPOSE_FILE` in `.env` |
 |---|---|

@@ -32,10 +32,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Pick up POSTGRES_USER/POSTGRES_DB/BACKUP_ENCRYPT_KEY from .env if not already
 # set in the environment, so the key the production guard checks also encrypts.
+# A missing entry is fine (`|| true`): errexit/pipefail must not end the script.
 if [[ -f "$REPO_ROOT/.env" ]]; then
-  POSTGRES_USER="${POSTGRES_USER:-$(grep -m1 '^POSTGRES_USER=' "$REPO_ROOT/.env" | cut -d= -f2-)}"
-  POSTGRES_DB="${POSTGRES_DB:-$(grep -m1 '^POSTGRES_DB=' "$REPO_ROOT/.env" | cut -d= -f2-)}"
-  BACKUP_ENCRYPT_KEY="${BACKUP_ENCRYPT_KEY:-$(grep -m1 '^BACKUP_ENCRYPT_KEY=' "$REPO_ROOT/.env" | cut -d= -f2-)}"
+  POSTGRES_USER="${POSTGRES_USER:-$(grep -m1 '^POSTGRES_USER=' "$REPO_ROOT/.env" | cut -d= -f2- || true)}"
+  POSTGRES_DB="${POSTGRES_DB:-$(grep -m1 '^POSTGRES_DB=' "$REPO_ROOT/.env" | cut -d= -f2- || true)}"
+  BACKUP_ENCRYPT_KEY="${BACKUP_ENCRYPT_KEY:-$(grep -m1 '^BACKUP_ENCRYPT_KEY=' "$REPO_ROOT/.env" | cut -d= -f2- || true)}"
 fi
 
 BACKUP_DIR="${BACKUP_DIR:-$REPO_ROOT/backups}"
