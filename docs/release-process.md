@@ -102,9 +102,11 @@ googleapis/release-please-action
 
 `release.yml` verwendet ausschließlich `RELEASE_PLEASE_TOKEN`. Ein Fallback auf `GITHUB_TOKEN` ist absichtlich nicht erlaubt, weil von `GITHUB_TOKEN` erzeugte Aktualisierungen des Release-PRs die für das Ruleset erforderlichen Pull-Request-Workflows unterdrücken können. Fehlt das Secret, bricht der Workflow mit einer expliziten Fehlermeldung ab.
 
-### 2. `build.yml` – Kontinuierlicher Docker-Build
+### 2. `build.yml` – Docker-Build-Prüfung ohne Veröffentlichung
 
-Dieser Workflow wird bei jedem Push auf `main` oder `develop` sowie bei Pull Requests ausgeführt und veröffentlicht Docker-Images mit Branch- und SHA-Tags (z. B. `main`, `sha-abc1234`).
+Dieser Workflow prüft Docker Compose und die Dockerfiles bei Pushes auf `main` oder `develop` sowie bei Pull Requests. Die Builds verwenden ausdrücklich `push: false`; der Workflow meldet sich nicht bei GHCR an und benötigt keine Schreibrechte für Packages. Es werden keine Branch- oder SHA-Images veröffentlicht. Die Checks `Build Backend Image` und `Build Frontend Image` bleiben für das Release-Gate erhalten.
+
+Nur `release.yml` veröffentlicht Images, nachdem Release Please nach dem Merge eines Release-PRs einen GitHub Release und den zugehörigen Git-Tag erstellt hat. Beide Service-Images werden aus diesem Git-Tag gebaut. Für normale Commits und Pull Requests werden keine zusätzlichen Git-Tags angelegt.
 
 ### 3. `docs.yml` – Dokumentations-Build und Pages-Deployment
 
@@ -258,7 +260,7 @@ Die Release-Pipeline wird durch folgende Dateien konfiguriert:
 | `release-please-config.json` | Ein Paket (Root, `simple`), Versionsdateien aller Services via `extra-files`, gemeinsame Tag- und RC-Konfiguration |
 | `.release-please-manifest.json` | Aktuelle Versions-Stände, nicht manuell bearbeiten |
 | `.github/workflows/release.yml` | Release Please und Release-Docker-Images |
-| `.github/workflows/build.yml` | Kontinuierliche Docker-Builds |
+| `.github/workflows/build.yml` | Docker-Build-Prüfung ohne Veröffentlichung |
 | `.github/workflows/docs.yml` | Dokumentations-Build und Pages-Deployment |
 
 ---

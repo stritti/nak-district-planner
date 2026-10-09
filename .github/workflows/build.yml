@@ -1,4 +1,4 @@
-name: Build & Publish Docker Images
+name: Validate Docker Images
 
 on:
   push:
@@ -13,7 +13,6 @@ concurrency:
 permissions:
   contents: read
   pull-requests: read
-  packages: write
 
 jobs:
   changes:
@@ -87,31 +86,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Docker metadata (backend)
-        id: meta-backend
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ghcr.io/${{ github.repository }}/backend
-          # `latest` is reserved for stable releases (release.yml).
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=sha-
-
-      - name: Build and push backend image
+      - name: Build backend image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: services/backend
-          push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
+          push: false
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend,ignore-error=true
 
@@ -127,30 +106,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Docker metadata (frontend)
-        id: meta-frontend
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ghcr.io/${{ github.repository }}/frontend
-          # `latest` is reserved for stable releases (release.yml).
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=sha-
-
-      - name: Build and push frontend image
+      - name: Build frontend image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: services/frontend
-          push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
+          push: false
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend,ignore-error=true
