@@ -608,6 +608,48 @@ async def test_get_matrix_not_found_and_invalid_range() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_matrix_shows_slot_outside_regular_service_times() -> None:
+    """A Gottesdienst moved to a weekday outside service_times keeps its cell."""
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(
+        name="G",
+        district_id=district_id,
+        service_times=[{"weekday": 6, "time": "09:30"}],  # Sunday only
+    )
+    saturday = datetime(2030, 4, 13, 17, 0, tzinfo=UTC)  # Saturday
+    assert saturday.weekday() == 5
+    slot = PlanningSlot.create(
+        district_id=district_id,
+        congregation_id=congregation.id,
+        planning_date=saturday.date(),
+        planning_time=saturday.time(),
+        category="Gottesdienst",
+        title="Gottesdienst verschoben",
+        status=PlanningSlotStatus.ACTIVE,
+    )
+    repos = _matrix_repos(
+        district=District.create(name="D"),
+        congregations=[congregation],
+        slots=[slot],
+    )
+
+    result = await r.get_matrix(
+        district_id,
+        _superadmin_auth(),
+        AsyncMock(),
+        from_dt=saturday - timedelta(days=1),
+        to_dt=saturday + timedelta(days=2),
+        group_id=None,
+        **repos,
+    )
+
+    cell = result.rows[0].cells[saturday.date().isoformat()]
+    assert cell.planning_slot_id == slot.id
+    assert cell.is_gap is True
+    assert cell.is_assignment_editable is True
+
+
+@pytest.mark.asyncio
 async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() -> None:
     """Test matrix rendering with holidays (Feiertag PlanningSlots) and invitation fallback."""
     district_id = uuid.uuid4()

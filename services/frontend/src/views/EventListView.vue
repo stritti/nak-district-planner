@@ -327,7 +327,16 @@
                   {{ event.source === 'EXTERNAL' ? 'Import' : 'Intern' }}
                 </span>
               </td>
-              <td class="px-4 py-2 text-right">
+              <td class="px-4 py-2 text-right whitespace-nowrap">
+                <button
+                  v-if="event.is_service && event.status === 'ACTIVE'"
+                  class="btn-icon border border-gray-300 dark:border-gray-600 mr-1"
+                  title="Amtstragende:n in der Matrix zuweisen"
+                  data-testid="assign-in-matrix"
+                  @click="openInMatrix(event)"
+                >
+                  <UserPlusIcon class="h-4 w-4" />
+                </button>
                 <button
                   class="btn-icon border border-gray-300 dark:border-gray-600"
                   title="Zuordnung bearbeiten"
@@ -577,16 +586,19 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   ArrowDownTrayIcon,
   BuildingOffice2Icon,
   CalendarDaysIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  UserPlusIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
 import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
+import { useMatrixStore } from '../stores/matrix'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import {
   listEvents,
@@ -605,6 +617,8 @@ import ApplicabilitySelect from '../components/ApplicabilitySelect.vue'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
+const matrixStore = useMatrixStore()
+const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
 
@@ -963,6 +977,17 @@ const editForm = reactive({
   category: '',
   applicability: [] as string[],
 })
+
+/** Opens the matrix for the event's district, showing the week around the event. */
+function openInMatrix(event: EventResponse) {
+  const day = new Date(event.start_at)
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  matrixStore.districtId = event.district_id
+  matrixStore.fromDt = iso(new Date(day.getFullYear(), day.getMonth(), day.getDate() - 3))
+  matrixStore.toDt = iso(new Date(day.getFullYear(), day.getMonth(), day.getDate() + 3))
+  void router.push({ name: 'matrix' })
+}
 
 async function openEdit(event: EventResponse) {
   editTarget.value = event
