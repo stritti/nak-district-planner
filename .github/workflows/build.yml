@@ -57,6 +57,18 @@ jobs:
       - name: Validate Docker Compose configuration
         run: docker compose config --quiet
 
+      - name: Validate production Compose configuration
+        env:
+          APP_VERSION: 0.0.0-ci
+          APP_HOST: planer.example.org
+          AUTH_HOST: auth.example.org
+          ACME_EMAIL: ops@example.org
+          KEYCLOAK_ADMIN_ALLOWED_IPS: 192.0.2.0/24
+        run: |
+          cp .env.keycloak.example .env.keycloak
+          cp .env.keycloak-db.example .env.keycloak-db
+          docker compose -f docker-compose.prod.yml config --quiet
+
   build-backend:
     name: Build Backend Image
     runs-on: ubuntu-latest

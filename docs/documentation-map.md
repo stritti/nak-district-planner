@@ -15,6 +15,7 @@ Diese Dokumente gelten als operative Quelle fuer Entwicklung und Betrieb.
 - `docs/security-baseline.md`: Sicherheits-Baseline und Guardrails
 - `docs/security-analysis.md`: Umfassende Security-Analyse mit Threat Modeling und Massnahmen
 - `docs/production-runbook.md`: Betriebs- und Incident-Grundablaeufe
+- `docs/production-compose.md`: Produktiv-Stack mit Traefik, Keycloak und GHCR-Images (`docker-compose.prod.yml`)
 - `docs/schema.md`: Kritische DB-Constraints (FKs, Unique Constraints), bekannte Schema-Drift
 - `docs/approval-workflow.md`: Benutzer-Onboarding, Freigabe-Workflow und IDP-Provisionierung
 - `openspec/specs/*/spec.md`: Baseline der implementierten Capabilities (Ist-Stand, seit 2026-10-07)

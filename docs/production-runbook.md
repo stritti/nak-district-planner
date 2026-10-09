@@ -79,6 +79,8 @@ Wenn beim Upgrade kein `SUPERADMIN_SUB` gesetzt ist, pinnt die Migration determi
 
 ## 3. Standard-Deployment
 
+> **Empfohlen:** der fertige Produktiv-Stack `docker-compose.prod.yml` mit Traefik (TLS/Let's Encrypt), Keycloak und den veröffentlichten GHCR-Images. Er ersetzt den externen TLS-Proxy aus 1.2 und den Image-Build auf dem Server; Einrichtung und Update siehe `docs/production-compose.md`. Die folgenden Schritte beschreiben den Betrieb mit `docker-compose.yml` und eigenem Reverse Proxy.
+
 1. Release-Tag bzw. freigegebenen `main`-Stand bereitstellen.
 2. Images reproduzierbar mit den committed Lockfiles bauen: `docker compose -f docker-compose.yml build`
 3. Vor jeder Schemaaenderung ein Backup erstellen.

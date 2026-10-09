@@ -1,0 +1,57 @@
+# Traefik routes for docker-compose.prod.yml (file provider, Go template).
+# APP_HOST, AUTH_HOST and KEYCLOAK_ADMIN_ALLOWED_IPS come from the traefik
+# service environment (.env). Traefik reloads this file on change.
+http:
+  routers:
+    app:
+      rule: Host(`{{ env "APP_HOST" }}`)
+      entryPoints: [websecure]
+      service: frontend
+      middlewares: [security-headers]
+      tls:
+        certResolver: letsencrypt
+
+    auth:
+      rule: Host(`{{ env "AUTH_HOST" }}`)
+      entryPoints: [websecure]
+      service: keycloak
+      middlewares: [security-headers]
+      tls:
+        certResolver: letsencrypt
+
+    # Administration (admin console + master realm) only from the allowlist.
+    # The more specific rule wins over the `auth` router.
+    auth-admin:
+      rule: Host(`{{ env "AUTH_HOST" }}`) && (PathPrefix(`/admin`) || PathPrefix(`/realms/master`))
+      entryPoints: [websecure]
+      service: keycloak
+      middlewares: [keycloak-admin-allowlist, security-headers]
+      tls:
+        certResolver: letsencrypt
+
+  middlewares:
+    # HSTS belongs at the public TLS endpoint (docs/security-baseline.md);
+    # the remaining headers are set by frontend-nginx.
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+
+    keycloak-admin-allowlist:
+      ipAllowList:
+        # The template actions sit in comments so this file stays valid YAML
+        # for linters; rendered, one list item per comma-separated CIDR.
+        sourceRange:
+          # {{- range splitList "," (env "KEYCLOAK_ADMIN_ALLOWED_IPS") }}
+          - "{{ trim . }}"
+          # {{- end }}
+
+  services:
+    frontend:
+      loadBalancer:
+        servers:
+          - url: http://frontend:80
+    keycloak:
+      loadBalancer:
+        servers:
+          - url: http://keycloak:8080
