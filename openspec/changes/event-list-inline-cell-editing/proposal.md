@@ -1,6 +1,6 @@
 ## Why
 
-The event overview currently requires more interaction than necessary to update individual fields. Planners need spreadsheet-like inline editing while retaining a dense, readable table when they are not editing.
+Tabular overview screens across the application currently require too much interaction to update individual fields and differ in editing patterns. Planners and administrators need consistent spreadsheet-like inline editing wherever a table field is mutable, while all overview tables remain compact and legible in read mode.
 
 ## What Changes
 
@@ -28,3 +28,7 @@ Frontend event overview and tests are primary. Backend changes only if needed to
 - Bulk paste/fill, spreadsheet formulas or multi-cell transactions.
 - Editing historical read-only metadata or external provider-controlled fields.
 - Replacing the existing full event details/editor for complex operations.
+
+## Scope clarification
+
+This change applies to **all tabular overview/list and matrix screens** in the Vue SPA, not only the event overview. Every existing table SHALL be inventoried and classified by editable cells, read-only cells, navigation cells and domain-specific actions. In-place editing is required for authorised directly mutable data. Read-only, derived, external-authoritative and destructive/workflow operations remain non-inline or use their existing action/dialog, but follow the same compact appearance, focus and feedback rules. The event overview is the first reference implementation, not the only target.
