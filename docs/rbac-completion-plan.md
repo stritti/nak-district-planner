@@ -628,19 +628,19 @@ class TestRBACGuardConsistency:
 
 ## 📚 Related Documents
 
-- [OpenSpec RBAC Change](/openspec/changes/introduce-rbac-permissions-model/)
-- [RBAC Model Spec](/openspec/changes/introduce-rbac-permissions-model/specs/rbac-model/spec.md)
-- [Implementation Tasks](/docs/implementation-tasks.md)
+- [OpenSpec RBAC Change](/openspec/changes/archive/2026-10-07-introduce-rbac-permissions-model/)
+- [RBAC Model Spec](/openspec/specs/rbac-model/)
+- [Implementation Tasks](/implementation-tasks)
 - [Gap Analysis](./archive/openspec-gap-analysis.md)
 
 ---
 
 ## 🔗 Quick Links
 
-- [auth.py router](/services/backend/app/adapters/api/routers/auth.py)
-- [system.py router](/services/backend/app/adapters/api/routers/system.py)
-- [permissions module](/services/backend/app/adapters/auth/permissions.py)
-- [role model](/services/backend/app/domain/models/role.py)
+- [auth.py router](https://github.com/stritti/nak-district-planner/blob/main/services/backend/app/adapters/api/routers/auth.py)
+- [system.py router](https://github.com/stritti/nak-district-planner/blob/main/services/backend/app/adapters/api/routers/system.py)
+- [permissions module](https://github.com/stritti/nak-district-planner/blob/main/services/backend/app/adapters/auth/permissions.py)
+- [role model](https://github.com/stritti/nak-district-planner/blob/main/services/backend/app/domain/models/role.py)
 
 ---
 
