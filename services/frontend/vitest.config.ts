@@ -3,6 +3,9 @@ import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify("0.0.0-test"),
+  },
   plugins: [vue(), tailwindcss()],
   resolve: {
     alias: {

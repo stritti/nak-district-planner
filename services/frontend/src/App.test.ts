@@ -35,6 +35,7 @@ async function mountAt(path: string) {
       stubs: {
         AppNav: { template: '<nav data-test="app-nav" />' },
         UpdateBanner: { template: '<div data-test="update-banner" />' },
+        AppFooter: { template: '<footer data-test="app-footer" />' },
         ToastContainer: { template: '<div data-test="toasts" />' },
         ConfirmHost: { template: '<div data-test="confirm-host" />' },
         ContextualHelp: {
