@@ -90,7 +90,7 @@ Die OIDC-Werte (`OIDC_*`) gibt es erst nach Abschnitt 3. Mit `APP_ENV=production
 Die OIDC-URLs zeigen auf den öffentlichen Keycloak-Host:
 
 ```dotenv
-OIDC_DISCOVERY_URL=https://auth.example.org/realms/nak/.well-known/openid-configuration
+OIDC_DISCOVERY_URL=https://auth.example.org/realms/nak-planner/.well-known/openid-configuration
 OIDC_CLIENT_ID=nak-planner
 OIDC_CLIENT_SECRET=<aus Keycloak, Credentials-Tab>
 ```
@@ -125,7 +125,7 @@ Mit den Overrides aus [Bestehenden Traefik oder Keycloak einbinden](#bestehenden
 
 1. `https://<AUTH_HOST>/admin/` aus einem Netz in `KEYCLOAK_ADMIN_ALLOWED_IPS` öffnen und mit dem Bootstrap-Admin anmelden.
 2. Einen dauerhaften Admin-Benutzer im Realm `master` anlegen, dann den Bootstrap-Admin löschen. Danach `KC_BOOTSTRAP_ADMIN_*` aus `.env.keycloak` entfernen.
-3. Realm `nak` anlegen und darin einen Client `nak-planner`:
+3. Realm `nak-planner` anlegen und darin einen Client `nak-planner`:
    - Client authentication: **an** (confidential; das Backend tauscht den Code mit dem Secret)
    - Standard flow: an
    - PKCE-Methode: `S256`
@@ -133,7 +133,7 @@ Mit den Overrides aus [Bestehenden Traefik oder Keycloak einbinden](#bestehenden
    - Valid post logout redirect URIs: `https://<APP_HOST>/*`
    - Web origins: `https://<APP_HOST>`
    - Unter *Client scopes → nak-planner-dedicated* einen Mapper **Audience** hinzufügen:
-     - Included Client Audience: `nak-planner`
+     - Included Client Audience: die **Client-ID** des Clients, also `nak-planner` (bei einem anderen Client-Namen, z. B. `nak-planner-frontend`, genau dieser Wert und derselbe wie `OIDC_CLIENT_ID`)
      - Add to access token: an
 
      Ohne diesen Mapper enthält das Access-Token nur `aud=account`. Das Backend lehnt dann jede API-Anfrage mit 401 ab, obwohl die Anmeldung klappt.
@@ -142,8 +142,8 @@ Mit den Overrides aus [Bestehenden Traefik oder Keycloak einbinden](#bestehenden
 Optional kann das Backend freigegebene Registrierungen direkt in Keycloak anlegen („IdP-Provisioning“). Es spricht die Admin-API dann intern an, ohne den Umweg über Traefik und die Admin-Allowlist. Es meldet sich mit einem Benutzer des Realms `master` an (Client `admin-cli`). Dafür einen eigenen Benutzer anlegen, nicht den Bootstrap-Admin:
 
 1. Im Realm `master` einen Benutzer `nak-provisioning` mit Passwort anlegen.
-2. Unter *Role mapping → Assign role → Client roles* nur die Rolle `manage-users` des Clients `nak-realm` zuweisen. Das reicht zum Suchen und Anlegen von Benutzern im Realm `nak`; andere Realms bleiben gesperrt.
-3. Einladungs-Mails versendet Keycloak selbst, nicht die Anwendung. Dafür im Realm `nak` unter *Realm settings → Email* einen SMTP-Server und eine Absenderadresse eintragen. Ohne SMTP legt Keycloak den Benutzer zwar an, die Einladung scheitert aber, und die Freigabe wird als fehlgeschlagen protokolliert. Wer keine Einladungs-Mails will, setzt `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=false`.
+2. Unter *Role mapping → Assign role → Client roles* nur die Rolle `manage-users` des Clients `nak-planner-realm` zuweisen (allgemein `<Realm>-realm`). Das reicht zum Suchen und Anlegen von Benutzern im Realm `nak-planner`; andere Realms bleiben gesperrt.
+3. Einladungs-Mails versendet Keycloak selbst, nicht die Anwendung. Dafür im Realm `nak-planner` unter *Realm settings → Email* einen SMTP-Server und eine Absenderadresse eintragen. Ohne SMTP legt Keycloak den Benutzer zwar an, die Einladung scheitert aber, und die Freigabe wird als fehlgeschlagen protokolliert. Wer keine Einladungs-Mails will, setzt `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=false`.
 
 Der `production_guard` verlangt alle vier Keycloak-Werte:
 
@@ -151,7 +151,7 @@ Der `production_guard` verlangt alle vier Keycloak-Werte:
 IDP_PROVISIONING_ENABLED=true
 IDP_PROVISIONING_PROVIDER=keycloak
 IDP_PROVISIONING_KEYCLOAK_BASE_URL=http://keycloak:8080
-IDP_PROVISIONING_KEYCLOAK_REALM=nak
+IDP_PROVISIONING_KEYCLOAK_REALM=nak-planner
 IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME=nak-provisioning
 IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD=<langes Zufallspasswort>
 ```
@@ -209,11 +209,11 @@ Rollback: `APP_VERSION` zurücksetzen. Das klappt nur, wenn die neue Version kei
 curl -I http://<APP_HOST>/                 # 301 nach https
 curl -s https://<APP_HOST>/health          # Backend-Health über nginx
 curl -sI https://<APP_HOST>/ | grep -i strict-transport-security
-curl -s https://<AUTH_HOST>/realms/nak/.well-known/openid-configuration | grep issuer
+curl -s https://<AUTH_HOST>/realms/nak-planner/.well-known/openid-configuration | grep issuer
 curl -o /dev/null -w '%{http_code}\n' https://<AUTH_HOST>/admin/   # 403 von außerhalb der Allowlist
 ```
 
-Das Backend prüft die Token gegen `https://<AUTH_HOST>/realms/nak`. Der Issuer in der Discovery-Antwort muss **genau** diese URL sein. Keycloak leitet sie aus `KC_HOSTNAME` ab.
+Das Backend prüft die Token gegen `https://<AUTH_HOST>/realms/nak-planner`. Der Issuer in der Discovery-Antwort muss **genau** diese URL sein. Keycloak leitet sie aus `KC_HOSTNAME` ab.
 
 ## Bestehenden Traefik oder Keycloak einbinden
 
