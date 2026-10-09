@@ -21,8 +21,8 @@ Columns SHALL be the union of dates expected by congregation `service_times`, da
 - **THEN** its cell shows the slot and remains assignable instead of being rendered empty
 
 #### Scenario: Assign from the event list
-- **WHEN** the user triggers "Amtstragende:n zuweisen" on an active `Gottesdienst` in the event list
-- **THEN** the matrix opens for that district showing the week around the event, where the assignment modal is available
+- **WHEN** a planner edits an event in the event list and enters a person in the "Dienstleiter:in" (Gottesdienst) or "Verantwortliche:r" (other event) field
+- **THEN** the assignment is created, changed or removed via `/api/v1/events/{event_id}/assignments` with the same conflict handling as in the matrix, and the list shows the name (a Gottesdienst without one shows "Lücke")
 
 #### Scenario: Unassigned service
 - **WHEN** a `Gottesdienst` slot has no service assignment
@@ -33,7 +33,7 @@ Columns SHALL be the union of dates expected by congregation `service_times`, da
 - **THEN** the date still appears as a column with the holiday name
 
 ### Requirement: Service assignments API
-Assignments SHALL be managed under `/api/v1/events/{event_id}/assignments` (`POST`, `GET`, `PUT /{id}`, `DELETE /{id}`). Reading SHALL require `VIEWER`, writing `PLANNER` in the slot's district. An assignment SHALL reference a leader ID or a free-text leader name and have status `OPEN`, `ASSIGNED` or `CONFIRMED`. Newly confirming an assignment SHALL publish `ASSIGNMENT_CONFIRMED` after commit.
+Assignments SHALL be managed under `/api/v1/events/{event_id}/assignments` (`POST`, `GET`, `PUT /{id}`, `DELETE /{id}`). Reading SHALL require `VIEWER`, writing `PLANNER` in the slot's district. An assignment SHALL reference a leader ID or a free-text leader name and have status `OPEN`, `ASSIGNED` or `CONFIRMED`. Newly confirming an assignment SHALL publish `ASSIGNMENT_CONFIRMED` after commit. Assignments are not limited to `Gottesdienst` slots: every event may have one responsible person. `GET /api/v1/events` SHALL expose it as `responsible` (`assignment_id`, `leader_id`, `name`, `status`) and SHALL NOT resolve a leader of another district.
 
 #### Scenario: Assignment without leader
 - **WHEN** an assignment is created with neither `leader_id` nor `leader_name`

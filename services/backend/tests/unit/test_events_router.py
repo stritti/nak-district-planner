@@ -20,6 +20,13 @@ from app.domain.models.role import Role
 from app.domain.ports.calendar import CalendarConnectorError
 
 
+@pytest.fixture(autouse=True)
+def _no_responsible_lookup():
+    """Handlers are called directly here; responsible loading is tested separately."""
+    with patch.object(events, "_load_responsible", AsyncMock(return_value={})):
+        yield
+
+
 def _auth(*, is_superadmin: bool = False):
     user = SimpleNamespace(is_superadmin=is_superadmin)
     return SimpleNamespace(user=user, memberships=[], user_sub="test-user")

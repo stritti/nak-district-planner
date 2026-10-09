@@ -19,12 +19,16 @@ from app.adapters.api.deps import (
     DbSession,
     get_congregation_repository,
     get_event_instance_repository,
+    get_leader_repository,
     get_planning_slot_repository,
+    get_service_assignment_repository,
 )
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
+from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
 from app.application.sync_service import push_conflict_resolution, push_deviation_resolution
@@ -43,6 +47,7 @@ from app.domain.models.planning_slot import (
     PlanningSlotStatus,
 )
 from app.domain.models.role import Role
+from app.domain.models.service_assignment import AssignmentStatus
 from app.domain.ports.calendar import CalendarConnectorError, OccurrenceWriteBackError
 from app.domain.services.sync_policy import internal_state, resolve_conflict
 
@@ -53,6 +58,15 @@ SERVICE_CATEGORY = "Gottesdienst"
 
 def _to_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+class EventResponsible(BaseModel):
+    """Person in charge of an event; for a Gottesdienst this is the Dienstleiter."""
+
+    assignment_id: uuid.UUID
+    leader_id: uuid.UUID | None
+    name: str
+    status: AssignmentStatus
 
 
 class EventResponse(BaseModel):
@@ -75,6 +89,7 @@ class EventResponse(BaseModel):
     invitation_source_congregation_id: uuid.UUID | None = None
     invitation_source_event_id: uuid.UUID | None = None
     sync_state: SyncState | None = None
+    responsible: EventResponsible | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -121,7 +136,11 @@ def _slot_start_at(slot: PlanningSlot) -> datetime:
     return datetime.combine(slot.planning_date, slot.planning_time or time.min, tzinfo=UTC)
 
 
-def _slot_to_event(slot: PlanningSlot, instance: EventInstance | None) -> EventResponse:
+def _slot_to_event(
+    slot: PlanningSlot,
+    instance: EventInstance | None,
+    responsible: EventResponsible | None = None,
+) -> EventResponse:
     return EventResponse(
         id=slot.id,
         title=instance.title if instance else (slot.title or ""),
@@ -140,6 +159,7 @@ def _slot_to_event(slot: PlanningSlot, instance: EventInstance | None) -> EventR
         invitation_source_congregation_id=slot.invitation_source_congregation_id,
         invitation_source_event_id=slot.invitation_source_event_id,
         sync_state=instance.sync_state if instance else None,
+        responsible=responsible,
         created_at=slot.created_at,
         updated_at=slot.updated_at,
     )
@@ -150,6 +170,35 @@ async def _load_instances(
 ) -> dict[uuid.UUID, EventInstance]:
     instances = await inst_repo.list_by_planning_slots(slot_ids)
     return {inst.planning_slot_id: inst for inst in instances}
+
+
+async def _load_responsible(
+    assignments_repo: SqlServiceAssignmentRepository,
+    leaders_repo: SqlLeaderRepository,
+    slots: list[PlanningSlot],
+) -> dict[uuid.UUID, EventResponsible]:
+    """Responsible person per slot id (first assignment wins, as in the matrix)."""
+    assignments = await assignments_repo.list_by_planning_slots([s.id for s in slots])
+    district_by_slot = {s.id: s.district_id for s in slots}
+    leader_ids = {a.leader_id for a in assignments if a.leader_id is not None}
+    leaders = {lid: await leaders_repo.get(lid) for lid in leader_ids}
+    result: dict[uuid.UUID, EventResponsible] = {}
+    for a in assignments:
+        slot_id = a.planning_slot_id or a.event_id
+        if slot_id in result or slot_id not in district_by_slot:
+            continue
+        leader = leaders.get(a.leader_id) if a.leader_id is not None else None
+        # Never expose a leader of another tenant, even for inconsistent rows.
+        if leader is not None and leader.district_id != district_by_slot[slot_id]:
+            leader = None
+        if leader is not None:
+            name = f"{leader.rank.value} {leader.name}" if leader.rank else leader.name
+        else:
+            name = a.leader_name or ""
+        result[slot_id] = EventResponsible(
+            assignment_id=a.id, leader_id=a.leader_id, name=name, status=a.status
+        )
+    return result
 
 
 @router.get("", response_model=EventListResponse)
@@ -170,6 +219,8 @@ async def list_events(
     slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> EventListResponse:
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
@@ -219,8 +270,9 @@ async def list_events(
     total = len(all_slots)
     page = all_slots[offset : offset + limit]
     instances = await _load_instances(inst_repo, [s.id for s in page])
+    responsible = await _load_responsible(assignments_repo, leaders_repo, page)
     return EventListResponse(
-        items=[_slot_to_event(s, instances.get(s.id)) for s in page],
+        items=[_slot_to_event(s, instances.get(s.id), responsible.get(s.id)) for s in page],
         total=total,
         limit=limit,
         offset=offset,
@@ -236,6 +288,8 @@ async def update_event(
     slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> EventResponse:
     slot = await slot_repo.get(event_id)
     if slot is None:
@@ -312,7 +366,8 @@ async def update_event(
 
     slot.updated_at = datetime.now(UTC)
     await slot_repo.save(slot)
-    return _slot_to_event(slot, instance)
+    responsible = await _load_responsible(assignments_repo, leaders_repo, [slot])
+    return _slot_to_event(slot, instance, responsible.get(slot.id))
 
 
 def _provider_write_error(exc: CalendarConnectorError, detail: str) -> HTTPException:

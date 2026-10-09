@@ -6,6 +6,13 @@ export type EventSource = 'INTERNAL' | 'EXTERNAL'
 export type EventVisibility = 'INTERNAL' | 'PUBLIC'
 export type SyncState = 'CLEAN' | 'DIRTY_INTERNAL' | 'DIRTY_EXTERNAL' | 'CONFLICT'
 
+export interface EventResponsible {
+  assignment_id: string
+  leader_id: string | null
+  name: string
+  status: 'OPEN' | 'ASSIGNED' | 'CONFIRMED'
+}
+
 export interface EventResponse {
   id: string
   title: string
@@ -24,6 +31,7 @@ export interface EventResponse {
   invitation_source_congregation_id?: string | null
   invitation_source_event_id?: string | null
   sync_state?: SyncState | null
+  responsible?: EventResponsible | null
   created_at: string
   updated_at: string
 }

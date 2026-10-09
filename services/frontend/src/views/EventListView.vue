@@ -234,6 +234,9 @@
             </template>
             <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
           </p>
+          <p v-if="event.responsible" class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+            {{ responsibleLabel(event) }}: {{ event.responsible.name }}
+          </p>
           <p v-if="event.invitation_source_congregation_id" class="mt-1 text-xs text-amber-700 dark:text-amber-300">
             Einladung
           </p>
@@ -261,6 +264,7 @@
               <th class="table-th">Start</th>
               <th class="table-th">Kategorie</th>
               <th class="table-th">Zuordnung</th>
+              <th class="table-th">Verantwortlich</th>
               <th class="table-th">Einladung</th>
               <th class="table-th">Status</th>
               <th class="table-th">Typ</th>
@@ -271,13 +275,13 @@
           </thead>
           <tbody>
             <tr v-if="eventsStore.loading">
-              <td colspan="10" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
+              <td colspan="11" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
             </tr>
             <tr v-else-if="eventsStore.error">
-              <td colspan="10" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
+              <td colspan="11" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
             </tr>
             <tr v-else-if="eventsStore.items.length === 0">
-              <td colspan="10">
+              <td colspan="11">
                 <EmptyState
                   message="Keine Ereignisse gefunden."
                   hint="Filter oder Zeitraum anpassen, um weitere Termine zu sehen."
@@ -301,6 +305,11 @@
                   <span>{{ congregationName(event.congregation_id) }}</span>
                 </template>
                 <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
+              </td>
+              <td class="table-td text-xs" data-testid="responsible-cell">
+                <span v-if="event.responsible">{{ event.responsible.name }}</span>
+                <span v-else-if="event.is_service" class="text-red-600 dark:text-red-400">Lücke</span>
+                <span v-else class="text-gray-400 dark:text-gray-500">—</span>
               </td>
               <td class="table-td text-xs">
                 <span v-if="event.invitation_source_congregation_id" class="text-amber-700 dark:text-amber-300">
@@ -327,16 +336,7 @@
                   {{ event.source === 'EXTERNAL' ? 'Import' : 'Intern' }}
                 </span>
               </td>
-              <td class="px-4 py-2 text-right whitespace-nowrap">
-                <button
-                  v-if="event.is_service && event.status === 'ACTIVE'"
-                  class="btn-icon border border-gray-300 dark:border-gray-600 mr-1"
-                  title="Amtstragende:n in der Matrix zuweisen"
-                  data-testid="assign-in-matrix"
-                  @click="openInMatrix(event)"
-                >
-                  <UserPlusIcon class="h-4 w-4" />
-                </button>
+              <td class="px-4 py-2 text-right">
                 <button
                   class="btn-icon border border-gray-300 dark:border-gray-600"
                   title="Zuordnung bearbeiten"
@@ -531,6 +531,19 @@
             :congregations="editCongregations"
           />
           <div>
+            <label class="form-label">
+              {{ responsibleLabel(editTarget) }}
+              <span class="text-gray-400 dark:text-gray-500 font-normal">(leer = keine Zuordnung)</span>
+            </label>
+            <AutocompleteInput
+              :model-value="editLeader"
+              :options="leaderOptions"
+              :disabled="editSaving"
+              placeholder="Name eingeben oder auswählen…"
+              @update:model-value="editLeader = $event"
+            />
+          </div>
+          <div>
             <label class="form-label">Status</label>
             <select
               v-model="editForm.status"
@@ -586,19 +599,17 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import {
   ArrowDownTrayIcon,
   BuildingOffice2Icon,
   CalendarDaysIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  UserPlusIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
 import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
-import { useMatrixStore } from '../stores/matrix'
+import { useLeadersStore } from '../stores/leaders'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import {
   listEvents,
@@ -614,11 +625,16 @@ import { errorMessage, useToast } from '../composables/useToast'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
 import ApplicabilitySelect from '../components/ApplicabilitySelect.vue'
+import AutocompleteInput, {
+  type AutocompleteOption,
+  type AutocompleteValue,
+} from '../components/AutocompleteInput.vue'
+import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
+import { parseConflictError } from '../api/errors'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
-const matrixStore = useMatrixStore()
-const router = useRouter()
+const leadersStore = useLeadersStore()
 const toast = useToast()
 const confirm = useConfirm()
 
@@ -978,15 +994,58 @@ const editForm = reactive({
   applicability: [] as string[],
 })
 
-/** Opens the matrix for the event's district, showing the week around the event. */
-function openInMatrix(event: EventResponse) {
-  const day = new Date(event.start_at)
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  matrixStore.districtId = event.district_id
-  matrixStore.fromDt = iso(new Date(day.getFullYear(), day.getMonth(), day.getDate() - 3))
-  matrixStore.toDt = iso(new Date(day.getFullYear(), day.getMonth(), day.getDate() + 3))
-  void router.push({ name: 'matrix' })
+const editLeader = ref<AutocompleteValue>({ id: null, text: '' })
+
+const leaderOptions = computed((): AutocompleteOption[] =>
+  leadersStore.activeLeaders().map((l) => ({
+    id: l.id,
+    label: `${l.rank ? l.rank + ' ' : ''}${l.name}`,
+    sublabel: l.congregation_id ? congregationName(l.congregation_id) : undefined,
+    isPriority: l.congregation_id === editForm.congregation_id,
+  })),
+)
+
+/** A Gottesdienst is led by a Dienstleiter; any other event has a Verantwortliche:r. */
+function responsibleLabel(event: EventResponse): string {
+  return event.is_service ? 'Dienstleiter:in' : 'Verantwortliche:r'
+}
+
+/** Applies the edited responsible person via the assignments API; returns the new value. */
+async function saveResponsible(target: EventResponse): Promise<EventResponse['responsible']> {
+  const current = target.responsible ?? null
+  const text = editLeader.value.text.trim()
+  const id = editLeader.value.id
+  if (!text) {
+    if (current) await deleteAssignment(target.id, current.assignment_id)
+    return null
+  }
+  if (current && current.leader_id === id && current.name === text) return current
+
+  const options = { leaderId: id, leaderName: id ? null : text }
+  const send = (confirmWarnings?: boolean) => {
+    const opts = { ...options, confirmWarnings }
+    return current
+      ? updateAssignment(target.id, current.assignment_id, opts)
+      : createAssignment(target.id, opts)
+  }
+  let saved
+  try {
+    saved = await send()
+  } catch (e) {
+    const conflict = parseConflictError(e)
+    if (!conflict || conflict.blocking.length > 0) {
+      throw conflict ? new Error(conflict.conflicts.map((c) => c.message).join(' ')) : e
+    }
+    const ok = await confirm({
+      title: 'Konflikt bei der Zuordnung',
+      message: conflict.warnings.map((c) => c.message).join(' '),
+      confirmText: 'Trotzdem zuordnen',
+      variant: 'warning',
+    })
+    if (!ok) throw new Error('Zuordnung abgebrochen')
+    saved = await send(true)
+  }
+  return { assignment_id: saved.id, leader_id: saved.leader_id, name: text, status: saved.status }
 }
 
 async function openEdit(event: EventResponse) {
@@ -998,6 +1057,10 @@ async function openEdit(event: EventResponse) {
   editForm.category        = event.category ?? ''
   editForm.applicability   = [...event.applicability]
   editCongregations.value  = []
+  editLeader.value = event.responsible
+    ? { id: event.responsible.leader_id, text: event.responsible.name }
+    : { id: null, text: '' }
+  void leadersStore.fetchLeaders(event.district_id)
   listCongregations(event.district_id).then(cs => { editCongregations.value = cs }).catch(() => {})
 }
 
@@ -1028,6 +1091,13 @@ async function saveEdit() {
       // Congregation-level events are never distributed; the backend clears it.
       ...(isDistrictLevel && { applicability: editForm.applicability }),
     })
+    let assignmentError: unknown = null
+    try {
+      updated.responsible = await saveResponsible(target)
+    } catch (e) {
+      assignmentError = e
+      updated.responsible = target.responsible ?? null
+    }
     // In-place update je nach aktiver Ansicht
     if (viewMode.value === 'list') {
       const idx = eventsStore.items.findIndex(e => e.id === updated.id)
@@ -1035,6 +1105,11 @@ async function saveEdit() {
     } else {
       const idx = calendarEvents.value.findIndex(e => e.id === updated.id)
       if (idx !== -1) calendarEvents.value[idx] = updated
+    }
+    if (assignmentError) {
+      editError.value = errorMessage(assignmentError, 'Zuordnung fehlgeschlagen')
+      toast.error('Termin gespeichert, Zuordnung fehlgeschlagen', assignmentError)
+      return
     }
     editTarget.value = null
     toast.success('Termin gespeichert', updated.title)
