@@ -6,6 +6,7 @@ import * as calendarApi from '../api/calendarIntegrations'
 import * as districtsApi from '../api/districts'
 import { useDistrictsStore } from '../stores/districts'
 import CalendarIntegrationsView from './CalendarIntegrationsView.vue'
+import { useAuthStore } from '../stores/auth'
 
 vi.mock('../api/calendarIntegrations')
 vi.mock('../api/districts')
@@ -51,6 +52,7 @@ const EmptyStateStub = defineComponent({
 function setup(items: calendarApi.CalendarIntegrationResponse[] = [integration()]) {
   const pinia = createPinia()
   setActivePinia(pinia)
+  useAuthStore().user = { sub: 'calendar-user' }
   const districts = useDistrictsStore()
   districts.districts = [
     { id: 'd1', name: 'Bezirk Eins' },
@@ -78,9 +80,28 @@ function setup(items: calendarApi.CalendarIntegrationResponse[] = [integration()
 
 beforeEach(() => {
   vi.clearAllMocks()
+  sessionStorage.clear()
 })
 
 describe('CalendarIntegrationsView', () => {
+  it('retains an explicitly cleared filter and rejects an inaccessible district', async () => {
+    const first = setup()
+    await flushPromises()
+    await first.wrapper.get('select.form-select').setValue('')
+    first.wrapper.unmount()
+    const restored = setup()
+    await flushPromises()
+    expect(calendarApi.listIntegrations).toHaveBeenLastCalledWith(undefined)
+    expect((restored.wrapper.get('select.form-select').element as HTMLSelectElement).value).toBe('')
+    restored.wrapper.unmount()
+    sessionStorage.setItem('planner.view-settings.v1:' + JSON.stringify(['calendar-user', 'calendar-integrations', 'district-filter']),
+      JSON.stringify({ district: 'removed' }))
+    const changed = setup()
+    await flushPromises()
+    expect(calendarApi.listIntegrations).toHaveBeenLastCalledWith(undefined)
+    changed.wrapper.unmount()
+  })
+
   it('loads selected-district integrations and resolves district/congregation labels', async () => {
     const { wrapper } = setup([integration({ last_synced_at: '2026-10-05T10:00:00Z' })])
     await flushPromises()

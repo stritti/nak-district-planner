@@ -25,7 +25,6 @@ export function setSessionSettingsIdentity(identity: string | null) {
   try {
     const previous = target?.getItem(IDENTITY_KEY)
     if (previous && previous !== identity) clearSessionViewSettings()
-    if (identity) target?.setItem(IDENTITY_KEY, identity)
   } catch { /* Views remain usable without session storage. */ }
 }
 
@@ -91,7 +90,11 @@ export function useSessionViewSettings(
       () => Object.fromEntries(Object.entries(fields).map(([name, field]) => [name, field.read()])),
       (settings) => {
         if (restoring || !activeKey) return
-        try { storage()?.setItem(activeKey, JSON.stringify(settings)) } catch {
+        try {
+          const target = storage()
+          target?.setItem(IDENTITY_KEY, identity() ?? '')
+          target?.setItem(activeKey, JSON.stringify(settings))
+        } catch {
           /* Saving preferences is optional, never a prerequisite for filtering. */
         }
       },
