@@ -5,6 +5,10 @@
 .env.db
 .env.local
 .env.*.local
+# Never commit backups of local or IdP environment files.
+.env.bak
+.env.*.bak
+*.env.bak
 *.key
 *.pem
 
