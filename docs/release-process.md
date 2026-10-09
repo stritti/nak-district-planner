@@ -280,3 +280,18 @@ Das Secret darf nicht in Dateien, Logs oder Commits gespeichert werden.
 - [Semantic Versioning 2.0.0](https://semver.org/)
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [release-please](https://github.com/googleapis/release-please)
+
+---
+
+## Bestehende CI-Images bereinigen
+
+Der Workflow **Cleanup non-release container images** (`.github/workflows/cleanup-images.yml`) wird ausschließlich manuell gestartet und löscht nur im Branch `main`.
+
+1. Bei beiden GHCR-Paketen unter **Package settings → Manage Actions access** dem Repository `nak-district-planner` die Rolle **Admin** geben. Der Workflow verwendet `GITHUB_TOKEN`; ein persönlicher Token ist nicht erforderlich.
+2. In **Actions → Cleanup non-release container images → Run workflow** den Branch `main` und den Modus `preview` wählen.
+3. Die Kandidaten mit Paket, Versions-ID, Digest und Tags in der Run-Zusammenfassung prüfen.
+4. Zum Bereinigen denselben Workflow mit Modus `delete` starten. Dieser Lauf ermittelt die Kandidaten erneut und prüft vor jeder Löschung nochmals die aktuellen Tags.
+
+Ein Kandidat muss mindestens einen Tag haben; sämtliche Tags müssen `main`, `develop` oder `sha-<7 bis 40 hexadezimale Zeichen>` sein. Ein zusätzlicher Release-Tag oder unbekannter Tag schützt die gesamte Version. Auch Digests, die in der Paketliste unter einer geschützten Version vorkommen, bleiben erhalten. Untagged-Versionen werden grundsätzlich nicht gelöscht: Sie können Plattform-Manifeste oder Attestierungen von Release-Images sein. Deshalb ist dieser Workflow keine vollständige Bereinigung aller ungetaggten Daten.
+
+Beide Pakete werden vollständig und mit Pagination gelesen, bevor Löschungen beginnen. API-Fehler brechen den Lauf ab; bereits ausgeführte Löschungen werden nicht automatisch rückgängig gemacht. Der Workflow startet weder durch Push noch zeitgesteuert. Seine Schutzregeln werden mit simulierten API-Antworten in Pull Requests und vor jedem manuellen Lauf geprüft.
