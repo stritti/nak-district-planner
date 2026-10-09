@@ -17,5 +17,5 @@
 - [x] 3.1 Unit-Tests für unabhängige Ansichten/Kontexte, Abmeldung und ungültige Speicherwerte ergänzen.
 - [x] 3.2 Browser-Tests für Matrix und Eventliste: Seitenwechsel, Zurück-/Vorwärtsnavigation und Reload ergänzen.
 - [x] 3.3 Standardwerte in neuer Sitzung und Isolation bei Benutzer-/Kontextwechsel prüfen.
-- [ ] 3.4 OpenSpec-Baseline strikt validieren und Frontend-Checks inklusive Coverage für den abschließenden Commit bestätigen.
+- [x] 3.4 OpenSpec-Baseline strikt validieren und Frontend-Checks inklusive Coverage bestätigen (GitHub-CI: 690 Unit-Tests, 47 Browser-Tests, ESLint, Build und Mindestabdeckung erfolgreich).
 - [ ] 3.5 Vollständige OpenSpec-Validierung mit `validate --all` ausführen; lokal durch defekten Prozesszugriff blockiert. Der bestehende Docs-Workflow validiert die Baseline strikt, da aktive Änderungen noch separate Validierungsschulden enthalten (siehe Workflow-Kommentar #475/#476).
