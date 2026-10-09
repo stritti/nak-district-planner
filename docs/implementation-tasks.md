@@ -459,8 +459,8 @@ This document provides **actionable implementation tasks** to close the gaps ide
 ## 🔗 Related Documents
 
 - [OpenSpec Gap Analysis](./archive/openspec-gap-analysis.md)
-- [OpenSpec Architecture Overview](/openspec/architecture/overview.md)
-- [Implementation Roadmap](/openspec/architecture/implementation-roadmap.md)
+- [OpenSpec Architecture Overview](https://github.com/stritti/nak-district-planner/blob/main/openspec/architecture/overview.md)
+- [Implementation Roadmap](https://github.com/stritti/nak-district-planner/blob/main/openspec/architecture/implementation-roadmap.md)
 
 ---
 

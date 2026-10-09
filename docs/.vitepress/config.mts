@@ -8,10 +8,13 @@ const repoRoot = resolve(docsDir, '..')
 
 export default defineConfig(
   withOpenSpec({
+    // GitHub Pages serves this project site below /<repo>/; without the base,
+    // every asset and link points to the domain root and 404s.
+    base: '/nak-district-planner/',
     lang: 'de-DE',
     title: 'NAK District Planner',
     description: 'Dokumentation f\u00fcr den Bezirksplaner der Neuapostolischen Kirche',
-    ignoreDeadLinks: true,
+    ignoreDeadLinks: false,
     srcExclude: ['superpowers/**'],
     themeConfig: {
       nav: [
