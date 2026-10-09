@@ -63,6 +63,9 @@ def test_secrets_reach_only_the_services_that_need_them() -> None:
 
     for name in APP_RUNTIME:
         assert "environment" not in _services()[name], f"{name}: use env files"
+    # .env carries the application secrets; the databases must not load it.
+    assert ".env" not in _env_files(_services()["db"])
+    assert ".env" not in _env_files(_services()["keycloak-db"])
 
     assert _env_keys(".env.keycloak.example") == {
         "KC_BOOTSTRAP_ADMIN_USERNAME",

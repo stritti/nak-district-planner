@@ -15,5 +15,5 @@ Production operators had to assemble the stack themselves: `docker-compose.yml` 
 ## Impact
 
 - Affected specs: `production-deployment` (ADDED requirement).
-- Affected files: `docker-compose.prod.yml`, `deploy/traefik/dynamic/{app,keycloak}.yml`, `deploy/compose/existing-{traefik,keycloak}.yml`, `.env.example`, `.env.keycloak.example`, `.env.keycloak-db.example`, `.gitignore`, `.github/workflows/build.yml`, `services/backend/tests/unit/test_production_compose.py`, docs.
+- Affected files: `docker-compose.prod.yml`, `deploy/traefik/dynamic/{app,keycloak}.yml`, `deploy/compose/existing-{traefik,keycloak}.yml`, `.env.example`, `.env.keycloak.example`, `.env.keycloak-db.example`, `.gitignore`, `scripts/backup.sh`, `.github/workflows/build.yml`, `services/backend/tests/unit/test_production_compose.py`, docs.
 - No application code changes; `docker-compose.yml` for development is unchanged.

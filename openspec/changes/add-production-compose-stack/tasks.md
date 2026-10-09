@@ -17,3 +17,5 @@
 
 - [x] 3.1 Operator guide `docs/production-compose.md`, links from runbook, documentation map, README and docs sidebar
 - [x] 3.2 Guide section for integrating an existing Traefik or Keycloak
+- [x] 3.3 Bootstrap order (Keycloak before the application), backup and restore of the Keycloak database, complete IdP-provisioning settings
+- [x] 3.4 `scripts/backup.sh` reads `BACKUP_ENCRYPT_KEY` from `.env`; `db` no longer loads `.env` (application secrets)

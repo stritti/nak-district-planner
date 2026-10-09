@@ -8,7 +8,8 @@
 # Configuration (environment variables, all optional except in production):
 #   BACKUP_DIR             Output directory for backups (default: ./backups)
 #   BACKUP_ENCRYPT_KEY     GPG recipient (key ID, fingerprint, or email) to
-#                          encrypt the dump with. Required in production —
+#                          encrypt the dump with (default: read from .env).
+#                          Required in production —
 #                          see app/config.py::production_guard(). Without it,
 #                          this script stores an UNENCRYPTED dump and prints
 #                          a loud warning (acceptable for local dev only).
@@ -29,10 +30,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Pick up POSTGRES_USER/POSTGRES_DB from .env if not already set in the environment.
+# Pick up POSTGRES_USER/POSTGRES_DB/BACKUP_ENCRYPT_KEY from .env if not already
+# set in the environment, so the key the production guard checks also encrypts.
 if [[ -f "$REPO_ROOT/.env" ]]; then
   POSTGRES_USER="${POSTGRES_USER:-$(grep -m1 '^POSTGRES_USER=' "$REPO_ROOT/.env" | cut -d= -f2-)}"
   POSTGRES_DB="${POSTGRES_DB:-$(grep -m1 '^POSTGRES_DB=' "$REPO_ROOT/.env" | cut -d= -f2-)}"
+  BACKUP_ENCRYPT_KEY="${BACKUP_ENCRYPT_KEY:-$(grep -m1 '^BACKUP_ENCRYPT_KEY=' "$REPO_ROOT/.env" | cut -d= -f2-)}"
 fi
 
 BACKUP_DIR="${BACKUP_DIR:-$REPO_ROOT/backups}"

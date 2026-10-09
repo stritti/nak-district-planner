@@ -47,10 +47,10 @@ Sicherheitsregeln, die die Tests in `tests/unit/test_production_compose.py` absi
 
 ## Einrichtung
 
-Auf dem Server werden nur die Compose-Datei, `deploy/` und die Env-Vorlagen gebraucht. Am einfachsten ist ein Checkout des Release-Tags:
+Auf dem Server werden nur die Compose-Datei, `deploy/`, `scripts/` und die Env-Vorlagen gebraucht. Am einfachsten ist ein Checkout eines Release-Tags, der `docker-compose.prod.yml` enthält. Das ist das erste Release nach `v1.0.0-rc.2`. Bis dahin `main` auschecken; die Images bleiben trotzdem über `APP_VERSION` auf ein Release festgelegt.
 
 ```bash
-git clone --branch v1.0.0-rc.2 https://github.com/stritti/nak-district-planner.git
+git clone --branch <Release-Tag oder main> https://github.com/stritti/nak-district-planner.git
 cd nak-district-planner
 cp .env.example .env
 cp .env.db.example .env.db
@@ -85,7 +85,7 @@ Danach die Anwendungswerte setzen, wie in der Checkliste in `docs/production-run
 - `BACKUP_ENCRYPT_KEY`
 - `SUPERADMIN_SUB` vor der ersten Migration, siehe Runbook Abschnitt 2.1
 
-Für die OIDC-Werte (`OIDC_*`) zuerst Keycloak einrichten (Abschnitt 4).
+Die OIDC-Werte (`OIDC_*`) gibt es erst nach Abschnitt 3. Mit `APP_ENV=production` lehnt die Anwendung Platzhalter ab; vorher startet also auch `migrate` nicht.
 
 Die OIDC-URLs zeigen auf den öffentlichen Keycloak-Host:
 
@@ -103,20 +103,16 @@ Lange Zufallswerte setzen, z. B. mit `openssl rand -base64 32`:
 - `.env.keycloak`: `KC_BOOTSTRAP_ADMIN_PASSWORD` und `KC_DB_PASSWORD`
 - `.env.keycloak-db`: `POSTGRES_PASSWORD`, **derselbe Wert** wie `KC_DB_PASSWORD`
 
-### 3. Start
+### 3. Keycloak starten und einrichten
+
+Zuerst nur Traefik und Keycloak starten (die Keycloak-Datenbank startet mit):
 
 ```bash
 docker compose pull
-docker compose up -d
-docker compose ps
+docker compose up -d traefik keycloak
 ```
 
-Der Ablauf beim Start:
-1. `migrate` läuft einmal durch und beendet sich.
-2. Danach starten Backend, Worker, Beat und Frontend.
-3. Traefik holt die Zertifikate beim ersten Aufruf der Hostnamen.
-
-### 4. Keycloak einrichten
+Traefik holt die Zertifikate beim ersten Aufruf der Hostnamen.
 
 1. `https://<AUTH_HOST>/admin/` aus einem Netz in `KEYCLOAK_ADMIN_ALLOWED_IPS` öffnen und mit dem Bootstrap-Admin anmelden.
 2. Einen dauerhaften Admin-Benutzer im Realm `master` anlegen, dann den Bootstrap-Admin löschen. Danach `KC_BOOTSTRAP_ADMIN_*` aus `.env.keycloak` entfernen.
@@ -127,18 +123,29 @@ Der Ablauf beim Start:
    - Valid redirect URIs: `https://<APP_HOST>/auth/callback`
    - Valid post logout redirect URIs: `https://<APP_HOST>/*`
    - Web origins: `https://<APP_HOST>`
-4. Das Client-Secret in `.env` als `OIDC_CLIENT_SECRET` eintragen und die Anwendung neu starten: `docker compose up -d backend worker beat`
+4. Das Client-Secret in `.env` als `OIDC_CLIENT_SECRET` eintragen, dazu `OIDC_DISCOVERY_URL` und `OIDC_CLIENT_ID` (siehe Abschnitt 1).
 
-Optional kann das Backend freigegebene Registrierungen direkt in Keycloak anlegen („IdP-Provisioning“). Es spricht die Admin-API dann intern an, ohne den Umweg über Traefik und die Admin-Allowlist:
+Optional kann das Backend freigegebene Registrierungen direkt in Keycloak anlegen („IdP-Provisioning“). Es spricht die Admin-API dann intern an, ohne den Umweg über Traefik und die Admin-Allowlist. Es meldet sich mit einem Benutzer des Realms `master` an (Client `admin-cli`). Dafür einen eigenen Benutzer mit möglichst wenigen Rechten anlegen, nicht den Bootstrap-Admin. Der `production_guard` verlangt alle vier Keycloak-Werte:
 
 ```dotenv
 IDP_PROVISIONING_ENABLED=true
 IDP_PROVISIONING_PROVIDER=keycloak
 IDP_PROVISIONING_KEYCLOAK_BASE_URL=http://keycloak:8080
 IDP_PROVISIONING_KEYCLOAK_REALM=nak
+IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME=nak-provisioning
+IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD=<langes Zufallspasswort>
 ```
 
 Details zu Rollen, Mappern und Fehlerbildern stehen in `idp-deploy/keycloak/OIDC-SETUP.md`.
+
+### 4. Anwendung starten
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+`migrate` läuft einmal durch und beendet sich. Danach starten Backend, Worker, Beat und Frontend.
 
 ## Update auf eine neue Version
 
@@ -148,7 +155,31 @@ docker compose pull
 docker compose up -d
 ```
 
-`migrate` läuft vor den Laufzeitdiensten automatisch mit. Vorher ein Backup ziehen (`scripts/backup.sh`, Runbook Abschnitt 4).
+`migrate` läuft vor den Laufzeitdiensten automatisch mit. Vorher beide Datenbanken sichern (Abschnitt „Backup“).
+
+## Backup
+
+`scripts/backup.sh` sichert die Anwendungsdatenbank und verschlüsselt sie mit `BACKUP_ENCRYPT_KEY` aus `.env` (Runbook Abschnitt 4).
+
+Realm, Benutzer und Client-Konfiguration liegen in der Keycloak-Datenbank. Sie wird mit demselben Skript gesichert, nur mit anderem Container und anderen Zugangsdaten (Werte aus `.env.keycloak-db`):
+
+```bash
+./scripts/backup.sh
+DB_CONTAINER="$(docker compose ps -q keycloak-db)" POSTGRES_USER=keycloak POSTGRES_DB=keycloak ./scripts/backup.sh
+```
+
+Die Dateien landen in `backups/` (`nak_planner_*.dump.gpg`, `keycloak_*.dump.gpg`). Beide regelmäßig sichern, z. B. per Cron, und außerhalb des Servers aufbewahren.
+
+Wiederherstellen geht genauso mit `scripts/restore.sh`; vorher Keycloak stoppen:
+
+```bash
+docker compose stop keycloak
+DB_CONTAINER="$(docker compose ps -q keycloak-db)" POSTGRES_USER=keycloak POSTGRES_DB=keycloak \
+  ./scripts/restore.sh backups/keycloak_<Zeitstempel>.dump.gpg
+docker compose start keycloak
+```
+
+Mit `existing-keycloak.yml` entfällt das; dann sichert der Betreiber des vorhandenen Keycloak.
 
 Rollback: `APP_VERSION` zurücksetzen. Das klappt nur, wenn die neue Version keine Migrationen mitgebracht hat; sonst gilt der Restore-Pfad aus dem Runbook.
 
@@ -185,7 +216,7 @@ Prüfen, was tatsächlich startet: `docker compose config --services`
 - Das Backend verlässt das `idp`-Netz.
 
 1. `AUTH_HOST` auf den Hostnamen des vorhandenen Providers setzen (z. B. `sso.example.org`).
-2. Im vorhandenen Keycloak einen Client `nak-planner` anlegen, wie in Abschnitt „4. Keycloak einrichten“ beschrieben, und `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` in `.env` eintragen.
+2. Im vorhandenen Keycloak einen Client `nak-planner` anlegen, wie in Abschnitt „3. Keycloak starten und einrichten“ beschrieben, und `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` in `.env` eintragen.
 3. Der Issuer in der Discovery-Antwort muss über HTTPS mit einem öffentlich gültigen Zertifikat erreichbar sein. Das Backend prüft TLS und übernimmt den Issuer aus der Discovery-Antwort.
 4. `.env.keycloak` und `.env.keycloak-db` werden nicht gebraucht.
 5. Für das IdP-Provisioning die Admin-API des vorhandenen Keycloak verwenden (`IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://sso.example.org`) und einen eigenen Service-Account mit den nötigen Realm-Rechten einrichten.
