@@ -611,6 +611,28 @@ async def get_matrix(
                 invitation
             )
 
+    # Names of invited congregations (they may lie outside the filtered group).
+    missing_target_ids = {
+        invitation.target_congregation_id
+        for invitation in invitations
+        if invitation.target_congregation_id is not None
+        and invitation.target_congregation_id not in source_congregation_names
+    }
+    if missing_target_ids:
+        for target in await cong_repo.list_by_ids(list(missing_target_ids)):
+            source_congregation_names[target.id] = target.name
+
+    def _invitation_target_labels(slot_id: uuid.UUID) -> list[str]:
+        labels: list[str] = []
+        for invitation in invitation_by_source_slot.get(slot_id, []):
+            if invitation.target_congregation_id is not None:
+                label = source_congregation_names.get(invitation.target_congregation_id)
+            else:
+                label = invitation.external_target_note
+            if label and label not in labels:
+                labels.append(label)
+        return labels
+
     for congregation in congregations:
         cells: dict[str, MatrixCell] = {}
 
@@ -654,6 +676,7 @@ async def get_matrix(
 
             # Get invitation count for this slot
             invitation_count: int = len(invitation_by_source_slot.get(slot.id, []))
+            invitation_targets = _invitation_target_labels(slot.id)
 
             cells[date_key] = MatrixCell(
                 event_id=slot.id,
@@ -669,7 +692,10 @@ async def get_matrix(
                 event_end_at=(instance.actual_end_at if instance is not None else None),
                 category=slot.category,
                 approval_status=slot.approval_status,
-                is_gap=(assignment is None and not is_invitation_copy),
+                # A service the congregation is invited away from needs no leader here.
+                is_gap=(
+                    assignment is None and not is_invitation_copy and invitation_count == 0
+                ),
                 planned_time=(
                     datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
                     if slot.planning_time is not None
@@ -684,6 +710,7 @@ async def get_matrix(
                 leader_id=leader_id,
                 leader_name=leader_name,
                 invitation_count=invitation_count,
+                invitation_targets=invitation_targets,
                 deviation_start_diff_minutes=None,
                 deviation_end_diff_minutes=None,
             )

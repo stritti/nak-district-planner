@@ -17,6 +17,7 @@ class MatrixCell(BaseModel):
     assignment_event_id: uuid.UUID | None = None
     invitation_source_congregation_name: str | None = None
     invitation_count: int = 0
+    invitation_targets: list[str] = []  # invited congregations / free-text notes
     event_title: str | None = None
     event_start_at: datetime | None = None
     event_end_at: datetime | None = None

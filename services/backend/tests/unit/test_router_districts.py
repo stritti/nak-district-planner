@@ -650,6 +650,64 @@ async def test_get_matrix_shows_slot_outside_regular_service_times() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_matrix_invited_service_is_no_gap_and_names_targets() -> None:
+    """A service the congregation is invited away from shows the targets, not a gap."""
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(
+        name="G", district_id=district_id, service_times=[{"weekday": 6, "time": "09:30"}]
+    )
+    target = Congregation.create(name="Nachbarort", district_id=district_id)
+    sunday = datetime(2030, 4, 14, 9, 30, tzinfo=UTC)
+    assert sunday.weekday() == 6
+    slot = PlanningSlot.create(
+        district_id=district_id,
+        congregation_id=congregation.id,
+        planning_date=sunday.date(),
+        planning_time=sunday.time(),
+        category="Gottesdienst",
+        title="Gottesdienst",
+        status=PlanningSlotStatus.ACTIVE,
+    )
+    invitations = [
+        CongregationInvitation.create(
+            source_event_id=slot.id,
+            source_planning_slot_id=slot.id,
+            source_congregation_id=congregation.id,
+            target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+            target_congregation_id=target.id,
+        ),
+        CongregationInvitation.create(
+            source_event_id=slot.id,
+            source_planning_slot_id=slot.id,
+            source_congregation_id=congregation.id,
+            target_type=InvitationTargetType.EXTERNAL_NOTE,
+            external_target_note="Nachbarbezirk",
+        ),
+    ]
+    repos = _matrix_repos(
+        district=District.create(name="D"),
+        congregations=[congregation],
+        slots=[slot],
+        invitations=invitations,
+    )
+    repos["cong_repo"].list_by_ids.return_value = [target]
+
+    result = await r.get_matrix(
+        district_id,
+        _superadmin_auth(),
+        AsyncMock(),
+        from_dt=sunday - timedelta(days=1),
+        to_dt=sunday + timedelta(days=1),
+        group_id=None,
+        **repos,
+    )
+
+    cell = result.rows[0].cells[sunday.date().isoformat()]
+    assert cell.is_gap is False
+    assert cell.invitation_targets == ["Nachbarort", "Nachbarbezirk"]
+
+
+@pytest.mark.asyncio
 async def test_get_matrix_handles_holidays_and_invitation_fallback_assignment() -> None:
     """Test matrix rendering with holidays (Feiertag PlanningSlots) and invitation fallback."""
     district_id = uuid.uuid4()

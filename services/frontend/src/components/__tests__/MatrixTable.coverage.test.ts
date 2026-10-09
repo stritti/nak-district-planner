@@ -84,6 +84,42 @@ beforeEach(() => {
 })
 
 describe('MatrixTable coverage gaps', () => {
+  it('shows where an invited service goes instead of a gap', async () => {
+    const matrixStore = useMatrixStore()
+    matrixStore.matrix = {
+      dates: ['2026-10-04'],
+      holidays: {},
+      rows: [
+        {
+          congregation_id: 'c1',
+          congregation_name: 'Gemeinde A',
+          group_name: null,
+          cells: {
+            '2026-10-04': {
+              event_id: 'e1',
+              event_title: 'Gottesdienst',
+              category: 'Gottesdienst',
+              is_gap: false,
+              assignment_id: null,
+              assignment_status: null,
+              leader_id: null,
+              leader_name: null,
+              is_assignment_editable: true,
+              invitation_count: 2,
+              invitation_targets: ['Nachbarort', 'Nachbarbezirk'],
+            },
+          },
+        },
+      ],
+    } as MatrixResponse
+
+    const wrapper = mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).not.toContain('LÜCKE')
+    expect(wrapper.get('[data-testid="invited-to"]').text()).toBe('Eingeladen nach Nachbarort, Nachbarbezirk')
+  })
+
   it('renders gap, holiday, host-managed, invitation and deviation variants', async () => {
     const matrixStore = useMatrixStore()
     const districtsStore = useDistrictsStore()

@@ -161,9 +161,13 @@
                   </div>
                   <div
                     v-if="(row.cells[date].invitation_count ?? 0) > 0"
-                    class="text-[10px] text-sky-700 dark:text-sky-300"
+                    class="break-words text-[10px] text-sky-700 dark:text-sky-300"
+                    data-testid="invited-to"
                   >
-                    Einladungen: {{ row.cells[date].invitation_count }}
+                    <template v-if="row.cells[date].invitation_targets?.length">
+                      Eingeladen nach {{ row.cells[date].invitation_targets!.join(', ') }}
+                    </template>
+                    <template v-else>Einladungen: {{ row.cells[date].invitation_count }}</template>
                   </div>
                   <div
                     v-if="row.cells[date].is_assignment_editable === false"

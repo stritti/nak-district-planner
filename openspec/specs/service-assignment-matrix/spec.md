@@ -14,7 +14,7 @@ Describes the district planning matrix (UC-03) and service-leader assignments: d
 - **THEN** it covers the next 4 weeks starting today
 
 ### Requirement: Matrix columns and cells
-Columns SHALL be the union of dates expected by congregation `service_times`, dates of `Feiertag` slots (always shown, names in `holidays`) and dates of `Gottesdienst` slots. A cell SHALL resolve the congregation's `Gottesdienst` slot (earliest time on that date) or a district-level slot and expose approval status, assignment status and leader, `is_gap` (no assignment and not an invitation copy), deviation flag with minute differences, invitation source and invitation count.
+Columns SHALL be the union of dates expected by congregation `service_times`, dates of `Feiertag` slots (always shown, names in `holidays`) and dates of `Gottesdienst` slots. A cell SHALL resolve the congregation's `Gottesdienst` slot (earliest time on that date) or a district-level slot and expose approval status, assignment status and leader, `is_gap` (no assignment, not an invitation copy and no invitation issued from the slot), deviation flag with minute differences, invitation source and invitation count.
 
 #### Scenario: Service moved outside the regular schedule
 - **WHEN** a `Gottesdienst` slot of a congregation lies on a date that is neither in its `service_times` nor a holiday (e.g. moved from Sunday to Saturday)
@@ -23,6 +23,10 @@ Columns SHALL be the union of dates expected by congregation `service_times`, da
 #### Scenario: Assign from the event list
 - **WHEN** a planner edits an event in the event list and enters a person in the "Dienstleiter:in" (Gottesdienst) or "Verantwortliche:r" (other event) field
 - **THEN** the assignment is created, changed or removed via `/api/v1/events/{event_id}/assignments` with the same conflict handling as in the matrix, and the list shows the name (a Gottesdienst without one shows "Lücke")
+
+#### Scenario: Congregation invited elsewhere
+- **WHEN** an invitation is issued from a `Gottesdienst` slot without assignment (target congregation or free-text note)
+- **THEN** its cell has `is_gap = false` and lists the targets in `invitation_targets`, which the UI renders as "Eingeladen nach [Ziel]" instead of "LÜCKE"
 
 #### Scenario: Unassigned service
 - **WHEN** a `Gottesdienst` slot has no service assignment
