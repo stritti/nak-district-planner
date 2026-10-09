@@ -63,3 +63,11 @@ Every event, not only a `Gottesdienst`, MAY have one responsible person, stored 
 #### Scenario: Non-service event with a responsible person
 - **WHEN** a planner assigns a person to an event of another category
 - **THEN** the event list returns that person as `responsible`
+
+### Requirement: Pinned horizontal scrollbar
+When the matrix is wider than its container, its horizontal scrollbar SHALL stay at the bottom edge of the visible viewport, even while the table extends further down, and SHALL stay in sync with the table's horizontal scroll position.
+
+#### Scenario: Tall and wide matrix on a small screen
+- **WHEN** the matrix is wider and taller than the viewport
+- **THEN** the horizontal scrollbar is visible at the bottom of the viewport without scrolling to the end of the table
+

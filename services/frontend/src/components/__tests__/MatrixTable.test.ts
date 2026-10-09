@@ -75,3 +75,19 @@ describe('MatrixTable scroll shadows', () => {
     expect(wrapper.get('[data-testid="matrix-shadow-left"]').attributes('style')).toContain('left: 120px')
   })
 })
+
+describe('MatrixTable sticky horizontal scrollbar', () => {
+  it('hides the native scrollbar and renders a sticky proxy at the viewport bottom', () => {
+    const { wrapper } = mountTable()
+    expect(wrapper.get('[data-testid="matrix-scroll"]').classes()).toContain('[scrollbar-width:none]')
+    const proxy = wrapper.get('[data-testid="matrix-sticky-scrollbar"]')
+    expect(proxy.classes()).toEqual(expect.arrayContaining(['sticky', 'bottom-0']))
+    expect(proxy.attributes('aria-hidden')).toBe('true')
+  })
+
+  it('is only shown when the table is wider than its container', async () => {
+    const { wrapper } = mountTable()
+    // jsdom has no layout: the container fits, so no proxy is needed
+    expect(wrapper.get('[data-testid="matrix-sticky-scrollbar"]').attributes('style')).toContain('display: none')
+  })
+})
