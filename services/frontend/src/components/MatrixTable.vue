@@ -6,7 +6,7 @@
   >
     <div
       ref="scrollContainer"
-      class="overflow-x-auto overscroll-x-contain touch-auto"
+      class="overflow-x-auto overscroll-x-contain touch-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       data-testid="matrix-scroll"
     >
       <table :class="tableClass" :style="{ width: `max(100%, ${tableWidth}px)` }">
@@ -174,6 +174,17 @@
         </tbody>
       </table>
     </div>
+    <!-- Horizontal scrollbar pinned to the bottom of the viewport while the table extends below it. -->
+    <div
+      ref="stickyScrollbar"
+      v-show="needsStickyScrollbar"
+      class="sticky bottom-0 z-30 overflow-x-auto overflow-y-hidden bg-white/90 dark:bg-gray-900/90"
+      data-testid="matrix-sticky-scrollbar"
+      aria-hidden="true"
+      tabindex="-1"
+    >
+      <div :style="{ width: `${stickyContentWidth}px`, height: '1px' }" />
+    </div>
     <!-- Scroll shadows: hint at hidden columns; the left one starts after the sticky column. -->
     <div
       v-show="showLeftShadow"
@@ -214,6 +225,7 @@ import { useDistrictsStore } from '../stores/districts'
 import type { MatrixCell, MatrixRow } from '../api/matrix'
 import { filterMatrixRows, sortMatrixRows } from '../utils/matrixRows'
 import { useScrollShadow } from '../composables/useScrollShadow'
+import { useStickyScrollbar } from '../composables/useStickyScrollbar'
 import EmptyState from './EmptyState.vue'
 import DeviationIndicator from './DeviationIndicator.vue'
 import EventApprovalStatusBadge from './EventApprovalStatusBadge.vue'
@@ -313,11 +325,20 @@ const {
   showRight: showRightShadow,
   measure: measureScroll,
 } = useScrollShadow(scrollContainer)
+const {
+  proxy: stickyScrollbar,
+  contentWidth: stickyContentWidth,
+  needsScroll: needsStickyScrollbar,
+  measure: measureStickyScrollbar,
+} = useStickyScrollbar(scrollContainer)
 
 // New data or a density switch changes the table width, not the container's.
 watch(
   () => [matrixStore.matrix, props.compactMode],
-  () => nextTick(measureScroll),
+  () => nextTick(() => {
+    measureScroll()
+    measureStickyScrollbar()
+  }),
 )
 
 function congregationName(congregationId: string): string {
