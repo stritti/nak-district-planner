@@ -83,6 +83,106 @@ describe('AutocompleteInput', () => {
     expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
   })
 
+  it('pre-selects the best match while typing so Enter confirms it', async () => {
+    const wrapper = mountInput()
+    const input = wrapper.get('input')
+    await input.trigger('focus')
+
+    await input.setValue('ber')
+
+    const options = wrapper.findAll('[role="option"]')
+    expect(options).toHaveLength(1)
+    expect(options[0].attributes('aria-selected')).toBe('true')
+    await input.trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ id: '2', text: 'Bernd Muster' }])
+  })
+
+  it('does not highlight anything before the user types', async () => {
+    const wrapper = mountInput()
+    await wrapper.get('input').trigger('focus')
+    expect(wrapper.findAll('[role="option"]').every((o) => o.attributes('aria-selected') === 'false')).toBe(true)
+  })
+
+  it('accepts the pre-selected match with Tab', async () => {
+    const wrapper = mountInput()
+    const input = wrapper.get('input')
+    await input.setValue('clar')
+
+    await input.trigger('keydown', { key: 'Tab' })
+
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ id: '3', text: 'Clara Test' }])
+  })
+
+  it('leaves free text alone on Tab and on blur when it matches no name exactly', async () => {
+    vi.useFakeTimers()
+    const wrapper = mountInput()
+    const input = wrapper.get('input')
+
+    await input.setValue('Muster')
+    await input.setValue('')
+    await input.trigger('keydown', { key: 'Tab' })
+    await input.setValue('Gast Prediger')
+    await input.trigger('blur')
+    vi.advanceTimersByTime(200)
+
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ id: null, text: 'Gast Prediger' }])
+  })
+
+  it('selects a typed name that equals a known option when leaving the field', async () => {
+    vi.useFakeTimers()
+    const wrapper = mountInput()
+    const input = wrapper.get('input')
+
+    await input.setValue('clara test')
+    await input.trigger('blur')
+    vi.advanceTimersByTime(200)
+
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ id: '3', text: 'Clara Test' }])
+  })
+
+  it('opens the list upwards when there is no room below the input', async () => {
+    const wrapper = mount(AutocompleteInput, {
+      props: { options, modelValue: { id: null, text: '' } },
+      attachTo: document.body,
+    })
+    const input = wrapper.get('input').element as HTMLInputElement
+    vi.spyOn(input, 'getBoundingClientRect').mockReturnValue({
+      top: 560, bottom: 600, left: 40, right: 340, width: 300, height: 40, x: 40, y: 560,
+      toJSON: () => ({}),
+    })
+    Object.defineProperty(window, 'innerHeight', { value: 640, configurable: true })
+
+    await wrapper.get('input').trigger('focus')
+    await wrapper.vm.$nextTick()
+
+    const style = wrapper.get('[role="listbox"]').attributes('style') ?? ''
+    expect(style).toContain('bottom:')
+    expect(style).not.toContain('top:')
+    expect(style).toContain('width: 300px')
+    wrapper.unmount()
+  })
+
+  it('opens the list below the input and caps its height when there is room', async () => {
+    const wrapper = mount(AutocompleteInput, {
+      props: { options, modelValue: { id: null, text: '' } },
+      attachTo: document.body,
+    })
+    const input = wrapper.get('input').element as HTMLInputElement
+    vi.spyOn(input, 'getBoundingClientRect').mockReturnValue({
+      top: 100, bottom: 140, left: 40, right: 340, width: 300, height: 40, x: 40, y: 100,
+      toJSON: () => ({}),
+    })
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true })
+
+    await wrapper.get('input').trigger('focus')
+    await wrapper.vm.$nextTick()
+
+    const style = wrapper.get('[role="listbox"]').attributes('style') ?? ''
+    expect(style).toContain('top: 142px')
+    expect(style).toContain('max-height: 176px')
+    wrapper.unmount()
+  })
+
   it('handles empty filtered results without moving a highlight', async () => {
     const wrapper = mountInput()
     const input = wrapper.get('input')

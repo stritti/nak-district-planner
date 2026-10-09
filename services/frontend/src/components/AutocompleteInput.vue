@@ -8,7 +8,7 @@
       :placeholder="placeholder"
       autocomplete="off"
       role="combobox"
-      :aria-expanded="showDropdown && indexedSections.flatMap((s) => s.items).length > 0"
+      :aria-expanded="showDropdown && flatFiltered.length > 0"
       aria-haspopup="listbox"
       aria-autocomplete="list"
       class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -18,17 +18,21 @@
       @keydown.down.prevent="moveHighlight(1)"
       @keydown.up.prevent="moveHighlight(-1)"
       @keydown.enter.prevent="confirmHighlighted"
+      @keydown.tab="onTab"
       @keydown.esc.prevent="closeDropdown"
     />
+    <!-- fixed: the modal panel scrolls and would clip or push an absolutely positioned list -->
     <ul
-      v-if="showDropdown && indexedSections.flatMap((s) => s.items).length > 0"
+      v-if="showDropdown && flatFiltered.length > 0"
+      ref="listRef"
       role="listbox"
-      class="absolute z-50 left-0 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-56 overflow-y-auto"
+      class="fixed z-[60] overflow-y-auto rounded border border-gray-200 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-800"
+      :style="listStyle"
     >
       <template v-for="section in indexedSections" :key="section.label ?? '__default__'">
         <li
           v-if="section.label"
-          class="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50 sticky top-0"
+          class="sticky top-0 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:bg-gray-700 dark:text-gray-300"
           aria-hidden="true"
         >
           {{ section.label }}
@@ -37,14 +41,15 @@
           v-for="{ item, index } in section.items"
           :key="item.id"
           role="option"
+          :data-index="index"
           :aria-selected="index === highlightedIndex"
-          class="flex flex-col px-3 py-2 cursor-pointer select-none"
-          :class="index === highlightedIndex ? 'bg-blue-100' : 'hover:bg-gray-50'"
+          class="flex cursor-pointer select-none items-baseline justify-between gap-2 px-2 py-1 text-xs"
+          :class="index === highlightedIndex ? 'bg-blue-100 dark:bg-blue-900/40' : 'hover:bg-gray-50 dark:hover:bg-gray-700'"
           @mousedown.prevent="selectOption(item)"
           @mousemove="highlightedIndex = index"
         >
-          <span class="text-sm text-gray-900">{{ item.label }}</span>
-          <span v-if="item.sublabel" class="text-xs text-gray-400">{{ item.sublabel }}</span>
+          <span class="truncate text-gray-900 dark:text-gray-100">{{ item.label }}</span>
+          <span v-if="item.sublabel" class="shrink-0 text-[10px] text-gray-400 dark:text-gray-400">{{ item.sublabel }}</span>
         </li>
       </template>
     </ul>
@@ -52,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 
 export interface AutocompleteOption {
   id: string
@@ -83,8 +88,53 @@ const emit = defineEmits<{
 // Internal display text used to filter options
 const inputRef = ref<HTMLInputElement | null>(null)
 const inputText = ref(props.modelValue.text)
+const listRef = ref<HTMLElement | null>(null)
 const showDropdown = ref(false)
 const highlightedIndex = ref(-1)
+const listStyle = ref<Record<string, string>>({})
+
+/** Longest the list may grow; it shrinks to the room that is actually visible. */
+const MAX_LIST_PX = 176
+const MIN_LIST_PX = 96
+const VIEWPORT_MARGIN_PX = 8
+
+/**
+ * Pins the list to the input: below it when there is room, otherwise above,
+ * with a height that fits the visible viewport.
+ */
+function positionList() {
+  const input = inputRef.value
+  if (!input) return
+  const rect = input.getBoundingClientRect()
+  const below = window.innerHeight - rect.bottom - VIEWPORT_MARGIN_PX
+  const above = rect.top - VIEWPORT_MARGIN_PX
+  const openUp = below < MIN_LIST_PX && above > below
+  const room = Math.max(openUp ? above : below, 48)
+  const style: Record<string, string> = {
+    left: `${rect.left}px`,
+    width: `${rect.width}px`,
+    maxHeight: `${Math.min(MAX_LIST_PX, room)}px`,
+  }
+  if (openUp) style.bottom = `${window.innerHeight - rect.top + 2}px`
+  else style.top = `${rect.bottom + 2}px`
+  listStyle.value = style
+}
+
+watch(showDropdown, (open) => {
+  if (open) {
+    positionList()
+    window.addEventListener('resize', positionList)
+    window.addEventListener('scroll', positionList, true)
+  } else {
+    window.removeEventListener('resize', positionList)
+    window.removeEventListener('scroll', positionList, true)
+  }
+})
+
+watch(highlightedIndex, (index) => {
+  if (index < 0) return
+  nextTick(() => listRef.value?.querySelector(`[data-index="${index}"]`)?.scrollIntoView?.({ block: 'nearest' }))
+})
 
 // Sync external modelValue → internal text when the parent resets the field (e.g. modal open)
 watch(
@@ -113,6 +163,12 @@ const sections = computed(() => {
 
 const flatFiltered = computed(() => sections.value.flatMap((s) => s.items))
 
+// Reposition when the number of matches changes the list height or the page moved.
+watch(
+  () => flatFiltered.value.length,
+  () => nextTick(positionList),
+)
+
 // Attaches a stable flat index to each option so the template avoids O(n) indexOf calls
 const indexedSections = computed(() => {
   let offset = 0
@@ -126,12 +182,29 @@ const indexedSections = computed(() => {
 const BLUR_DELAY_MS = 150
 let blurTimer: ReturnType<typeof setTimeout> | null = null
 
-// User typed: always free-text (id = null)
+// User typed: free text (id = null) until a match is confirmed. The best match is
+// pre-selected, so Enter or Tab picks it without reaching for arrow keys.
 function onInput(event: Event) {
   const text = (event.target as HTMLInputElement).value
   inputText.value = text
-  highlightedIndex.value = -1
+  showDropdown.value = true
+  highlightedIndex.value = text.trim() !== '' && flatFiltered.value.length > 0 ? 0 : -1
   emit('update:modelValue', { id: null, text })
+}
+
+// Tab accepts the pre-selected match and moves on; without typed text it only leaves.
+function onTab() {
+  if (showDropdown.value && inputText.value.trim() !== '' && highlightedIndex.value >= 0) {
+    selectOption(flatFiltered.value[highlightedIndex.value])
+  }
+}
+
+// Typed text that equals a known name counts as that choice.
+function selectExactMatch() {
+  const text = inputText.value.trim().toLowerCase()
+  if (!text) return
+  const exact = props.options.filter((o) => o.label.toLowerCase() === text)
+  if (exact.length === 1 && props.modelValue.id !== exact[0].id) selectOption(exact[0])
 }
 
 function onFocus() {
@@ -145,6 +218,7 @@ function onFocus() {
 
 function onBlur() {
   blurTimer = setTimeout(() => {
+    selectExactMatch()
     showDropdown.value = false
     blurTimer = null
   }, BLUR_DELAY_MS)
@@ -161,6 +235,8 @@ function closeDropdown() {
 
 onUnmounted(() => {
   if (blurTimer !== null) clearTimeout(blurTimer)
+  window.removeEventListener('resize', positionList)
+  window.removeEventListener('scroll', positionList, true)
 })
 
 function moveHighlight(direction: 1 | -1) {
