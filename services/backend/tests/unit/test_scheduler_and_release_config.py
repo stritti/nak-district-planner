@@ -83,7 +83,12 @@ def test_image_publication_requires_a_release_and_builds_its_tag() -> None:
     publish = release["jobs"]["docker-build"]
     assert publish["needs"] == "release-please"
     assert publish["if"] == "${{ needs.release-please.outputs.releases_created == 'true' }}"
-    assert set(publish["strategy"]["matrix"]["service"]) == {"backend", "frontend"}
+    matrix = publish["strategy"]["matrix"]
+    assert set(matrix["service"]) == {"backend", "frontend"}
+    assert sorted(matrix["include"], key=lambda item: item["service"]) == [
+        {"service": "backend", "context": "services/backend"},
+        {"service": "frontend", "context": "services/frontend"},
+    ]
 
     checkout = next(
         step for step in publish["steps"]
@@ -95,10 +100,13 @@ def test_image_publication_requires_a_release_and_builds_its_tag() -> None:
         if step.get("uses", "").startswith("docker/build-push-action@")
     )
     assert build["with"]["push"] is True
+    assert build["with"]["context"] == "${{ matrix.context }}"
     metadata = next(
         step for step in publish["steps"]
         if step.get("uses", "").startswith("docker/metadata-action@")
     )
+    assert metadata["with"]["images"] == "ghcr.io/${{ github.repository }}/${{ matrix.service }}"
+    assert build["with"]["tags"] == f"${{{{ steps.{metadata['id']}.outputs.tags }}}}"
     tags = metadata["with"]["tags"]
     assert (
         "type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}"
