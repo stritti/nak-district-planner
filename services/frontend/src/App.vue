@@ -14,6 +14,7 @@
       <ContextualHelp v-if="route.name === 'events'" context="events" />
       <RouterView />
     </main>
+    <AppFooter />
     <ToastContainer />
     <ConfirmHost />
   </div>
@@ -24,6 +25,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppNav from './components/AppNav.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
+import AppFooter from './components/AppFooter.vue'
 import ToastContainer from './components/ToastContainer.vue'
 import ContextualHelp from './components/ContextualHelp.vue'
 import ConfirmHost from './components/ConfirmHost.vue'
