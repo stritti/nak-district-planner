@@ -315,6 +315,21 @@ describe('refresh coordination', () => {
 })
 
 describe('session lifecycle', () => {
+  it('does not log out or wipe an in-flight login when refreshing without a session', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    sessionStorage.setItem('oidc_code_verifier', 'verifier')
+    sessionStorage.setItem('oidc_state', 'state')
+    const oidc = createOidc()
+
+    // Signed out, e.g. an unauthenticated request got a 401 on the OIDC callback page.
+    await expect(oidc.refreshToken()).resolves.toBe(false)
+
+    expect(sessionStorage.getItem('oidc_code_verifier')).toBe('verifier')
+    expect(sessionStorage.getItem('oidc_state')).toBe('state')
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/v1/auth/oidc/revoke', expect.anything())
+  })
+
   it('logs out locally and revokes the server-held refresh cookie through the backend', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 204 }))
     vi.stubGlobal('fetch', fetchMock)

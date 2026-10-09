@@ -35,6 +35,17 @@ describe("UpdateBanner", () => {
     localStorage.clear();
   });
 
+  it("does not ask for the version while signed out, but does right after sign-in", async () => {
+    vi.mocked(systemApi.getVersion).mockResolvedValue(versionResponse(false));
+    mount(UpdateBanner);
+    await flushPromises();
+    expect(systemApi.getVersion).not.toHaveBeenCalled();
+
+    useAuthStore().setToken({ accessToken: "t", expiresAt: Date.now() / 1000 + 3600 } as never);
+    await flushPromises();
+    expect(systemApi.getVersion).toHaveBeenCalledTimes(1);
+  });
+
   it("renders nothing when no update available", async () => {
     const wrapper = await mountBanner(false);
     expect(wrapper.find('[data-testid="update-banner"]').exists()).toBe(false);
@@ -79,9 +90,10 @@ describe("UpdateBanner", () => {
     expect(wrapper.find('[data-testid="update-banner"]').exists()).toBe(false)
   })
 
-  it('checks on mount, polls every 30 minutes and clears the timer on unmount', async () => {
+  it('when signed in checks on mount, polls every 30 minutes and clears the timer on unmount', async () => {
     vi.useFakeTimers()
     const store = useVersionStore()
+    useAuthStore().setToken({ accessToken: 't', expiresAt: Date.now() / 1000 + 3600 } as never)
     const checkVersion = vi.spyOn(store, 'checkVersion').mockResolvedValue(undefined)
     const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
 
