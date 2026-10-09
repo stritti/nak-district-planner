@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useBuildInfoStore } from './buildInfo'
+import { toSemver, useBuildInfoStore } from './buildInfo'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status })
@@ -56,6 +56,26 @@ describe('buildInfo store', () => {
     await store.load()
 
     expect(store.backendVersion).toBeNull()
+  })
+
+  it('shows the backend version in SemVer form although Python reports PEP 440', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ version: '1.0.0rc4' })))
+    const store = useBuildInfoStore()
+
+    await store.load()
+
+    expect(store.backendVersion).toBe('1.0.0-rc.4')
+  })
+
+  it.each([
+    ['1.0.0rc4', '1.0.0-rc.4'],
+    ['1.0.0a1', '1.0.0-alpha.1'],
+    ['1.0.0b2', '1.0.0-beta.2'],
+    ['1.0.0', '1.0.0'],
+    ['1.0.0-rc.4', '1.0.0-rc.4'],
+    ['0.0.0', '0.0.0'],
+  ])('toSemver(%s) is %s', (input, expected) => {
+    expect(toSemver(input)).toBe(expected)
   })
 
   it('shows no backend version when the request fails', async () => {
