@@ -39,3 +39,18 @@ Assignments SHALL be bound to `PlanningSlot`; EventInstance creation, replacemen
 #### Scenario: External event time changes
 - **WHEN** an external update changes the linked EventInstance time
 - **THEN** the existing organisational duty assignment remains on the slot and displays using the resolved event time
+
+### Requirement: Names can be entered without a linked account
+Organisational duty assignments SHALL support an authorised linked person or a validated name-only entry. Accepting a new name SHALL remember a suggestion scoped to the event's district/congregation and selected duty category. The system SHALL NOT fabricate user identities or personal calendar access for name-only entries; all historical assignments SHALL retain their display name if a suggestion is suppressed.
+
+#### Scenario: Name-only organist
+- **WHEN** a planner enters "Anna Beispiel" as Organist for an event without choosing a user account
+- **THEN** the name is saved on the event and available as an Organist suggestion for subsequent events in the authorised scope
+
+#### Scenario: Category-specific completion
+- **WHEN** a name was previously used only as Organist
+- **THEN** entering a Schließdienst name does not suggest that person solely because of the Organist history
+
+#### Scenario: No implicit personal feed
+- **WHEN** an assignment is made to a name-only participant without a verified linked user
+- **THEN** no authenticated or token-based personal calendar is created or exposed for that name
