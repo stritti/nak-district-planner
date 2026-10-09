@@ -57,7 +57,9 @@ class OIDCTokenExchangeRequest(BaseModel):
         if self.grant_type == "authorization_code" and (
             not self.code or not self.redirect_uri or not self.code_verifier
         ):
-            raise ValueError("Authorization-code grant requires code, redirect_uri, and code_verifier")
+            raise ValueError(
+                "Authorization-code grant requires code, redirect_uri, and code_verifier"
+            )
         return self
 
 
@@ -206,7 +208,7 @@ async def exchange_oidc_token(
 
 
 @router.post("/oidc/revoke", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_oidc_refresh_token(request: Request, response: Response) -> Response:
+async def revoke_oidc_refresh_token(request: Request) -> Response:
     """Best-effort provider revocation followed by unconditional local logout."""
     refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
     adapter = get_oidc_adapter()
@@ -232,10 +234,13 @@ async def revoke_oidc_refresh_token(request: Request, response: Response) -> Res
         # Local logout must remain available when the provider is unavailable,
         # but failed provider revocation must stay operationally visible.
         logger.warning("OIDC provider refresh-token revocation failed: %s", exc)
-    finally:
-        _clear_refresh_cookie(response)
 
-    return response
+    # Return a real response. FastAPI's injected ``Response`` parameter is only
+    # a header carrier whose status code is unset (``None``); sending it as the
+    # response crashes uvicorn with ``KeyError: None`` and the proxy answers 502.
+    result = Response(status_code=status.HTTP_204_NO_CONTENT)
+    _clear_refresh_cookie(result)
+    return result
 
 
 @router.get("/me", response_model=UserOut)

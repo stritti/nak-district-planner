@@ -7,7 +7,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.testclient import TestClient
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from app.adapters.api.routers import auth as r
@@ -184,17 +186,27 @@ async def test_invalid_provider_success_json_is_mapped_to_bad_gateway(
     assert exc_info.value.detail == "OIDC token endpoint returned invalid JSON"
 
 
-@pytest.mark.asyncio
-async def test_revoke_uses_server_held_refresh_token_and_deletes_cookie(
+def revoke_client() -> TestClient:
+    """App with a ``BaseHTTPMiddleware`` like production: it streams the response."""
+
+    class Passthrough(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):  # type: ignore[no-untyped-def]
+            return await call_next(request)
+
+    app = FastAPI()
+    app.add_middleware(Passthrough)
+    app.include_router(r.router)
+    return TestClient(app)
+
+
+def test_revoke_uses_server_held_refresh_token_and_deletes_cookie(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter, client, _ = adapter_for_response({"access_token": "unused"})
     monkeypatch.setattr(r, "get_oidc_adapter", lambda: adapter)
 
-    response = Response(status_code=204)
-    result = await r.revoke_oidc_refresh_token(
-        request_with_cookie(f"{r.REFRESH_COOKIE_NAME}=provider-refresh"),
-        response,
+    result = revoke_client().post(
+        "/api/v1/auth/oidc/revoke", cookies={r.REFRESH_COOKIE_NAME: "provider-refresh"}
     )
 
     client.post.assert_awaited_once_with(
@@ -207,14 +219,14 @@ async def test_revoke_uses_server_held_refresh_token_and_deletes_cookie(
         },
         timeout=10,
     )
+    # Regression: the status used to be None, which crashed the ASGI server (502).
     assert result.status_code == 204
     cookie_header = result.headers["set-cookie"]
     assert r.REFRESH_COOKIE_NAME in cookie_header
     assert "Max-Age=0" in cookie_header
 
 
-@pytest.mark.asyncio
-async def test_revoke_logs_provider_failure_but_still_deletes_cookie(
+def test_revoke_logs_provider_failure_but_still_deletes_cookie(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -222,14 +234,24 @@ async def test_revoke_logs_provider_failure_but_still_deletes_cookie(
     provider_response.raise_for_status.side_effect = httpx.ConnectError("provider offline")
     monkeypatch.setattr(r, "get_oidc_adapter", lambda: adapter)
 
-    response = Response(status_code=204)
     with caplog.at_level(logging.WARNING):
-        result = await r.revoke_oidc_refresh_token(
-            request_with_cookie(f"{r.REFRESH_COOKIE_NAME}=provider-refresh"),
-            response,
+        result = revoke_client().post(
+            "/api/v1/auth/oidc/revoke", cookies={r.REFRESH_COOKIE_NAME: "provider-refresh"}
         )
 
     assert "revocation failed" in caplog.text
+    assert result.status_code == 204
+    assert "Max-Age=0" in result.headers["set-cookie"]
+
+
+def test_revoke_without_session_cookie_or_adapter_still_returns_204(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(r, "get_oidc_adapter", lambda: None)
+
+    result = revoke_client().post("/api/v1/auth/oidc/revoke")
+
+    assert result.status_code == 204
     assert "Max-Age=0" in result.headers["set-cookie"]
 
 
