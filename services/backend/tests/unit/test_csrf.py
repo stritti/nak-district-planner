@@ -95,7 +95,10 @@ class TestCSRFTokenService:
         age = service.get_token_age(token)
         assert isinstance(age, timedelta)
         assert age.total_seconds() >= 0
-        assert age.total_seconds() < 1  # Should be very recent
+        # The token timestamp is truncated to whole seconds, so a fresh token is
+        # up to 1s + processing time old. `< 1` fails whenever it is generated
+        # just before a second boundary.
+        assert age.total_seconds() < 2  # Should be very recent
 
     def test_get_token_age_invalid_token(self):
         """Test token age returns 0 for invalid tokens."""
