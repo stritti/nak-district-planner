@@ -241,7 +241,10 @@ export function useOIDC(router?: Router, config?: Partial<OIDCConfig>) {
 
     const operation: Promise<boolean> = (async () => {
       const current = authStore.token
-      if (!current?.refreshToken) {
+      // Nothing to refresh while signed out. A full logout here would also wipe
+      // the PKCE verifier/state of a login that is still in flight.
+      if (!current) return false
+      if (!current.refreshToken) {
         await logout()
         return false
       }

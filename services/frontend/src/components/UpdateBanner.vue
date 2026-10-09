@@ -75,7 +75,7 @@ docker compose -f docker-compose.yml up -d</pre>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useVersionStore } from '../stores/version'
 import {
@@ -93,14 +93,23 @@ const visible = computed(() => authStore.isAuthenticated && store.hasUpdate)
 
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
+// The version endpoint requires authentication. Asking while signed out (login
+// page, OIDC callback) is bound to 401, and the failed refresh that follows
+// would log out and wipe the PKCE verifier of a login that is still in flight.
+function checkVersionIfSignedIn(): void {
+  if (authStore.isAuthenticated) store.checkVersion()
+}
+
 onMounted(() => {
-  // Check version on mount (only for admins — determined by auth permissions)
-  store.checkVersion()
+  checkVersionIfSignedIn()
 
   // Poll every 30 minutes
-  pollInterval = setInterval(() => {
-    store.checkVersion()
-  }, 30 * 60 * 1000)
+  pollInterval = setInterval(checkVersionIfSignedIn, 30 * 60 * 1000)
+})
+
+// First check right after signing in.
+watch(() => authStore.isAuthenticated, (signedIn) => {
+  if (signedIn) store.checkVersion()
 })
 
 onUnmounted(() => {
