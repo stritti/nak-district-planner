@@ -22,3 +22,16 @@
 - [ ] 5.1 Run OpenSpec validation and reconcile impacted canonical specs before implementation merge.
 - [ ] 5.2 Run focused backend/frontend tests, Alembic migration and lint/security checks.
 - [ ] 5.3 Maintain >80% test coverage with explicit error-path and tenant-isolation regressions; document CI outcomes.
+
+## 6. Remembered organisational duty names
+- [ ] 6.1 Add tenant-scoped, category-scoped autocomplete records with normalised uniqueness, active/suppressed state and persisted historical name snapshots.
+- [ ] 6.2 Enable validated free-text names as optional duty assignees without requiring a linked account; save/reuse suggestions for the selected duty type.
+- [ ] 6.3 Implement authorised suggestion management and soft removal, avoiding cross-tenant exposure and automatic resurrection.
+- [ ] 6.4 Test case/whitespace deduplication, type isolation, deletion/re-entry, historical views, race conditions and no personal calendar access for unlinked names.
+
+## 7. Minister lifecycle and planning
+- [ ] 7.1 Add additive minister active/hidden status and nullable inclusive service end date; backfill existing records as active/visible.
+- [ ] 7.2 Implement authorised deactivate/reactivate and hide/restore controls; retain all historical references and audit changes.
+- [ ] 7.3 Filter normal minister pickers/lists and enforce eligibility in event, matrix, bulk and other service assignment writes based on active state and target event date.
+- [ ] 7.4 Flag existing appointments beyond a newly set end date, without silently deleting assignments.
+- [ ] 7.5 Test before/on/after end date, role/tenant errors, hidden historical references, stale clients, timezone boundaries and migrated data, preserving >80% coverage.
