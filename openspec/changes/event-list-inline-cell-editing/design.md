@@ -1,0 +1,28 @@
+## Context
+
+The event list is backed by `GET /api/v1/events`, with individual event edits through `PATCH /api/v1/events/{id}`. Responsible-person assignments use `/api/v1/events/{event_id}/assignments` and share the matrix's conflict policy. PlanningSlot stores canonical planning data; EventInstance stores observed/externally synchronised instance details.
+
+## Decisions
+
+### Read mode first
+
+All cells render as short text by default with no persistent input borders or action buttons. Truncate long values visually with accessible full-value reveal, preserve column headings and important status indicators, and keep empty values distinguishable from loading/errors. Focus/click on an editable cell opens a clearly focused input/select/date/time picker; read-only cells never imply editability. Only one cell is in edit mode at a time. Keyboard activation is Enter/F2, then Enter commits (except multiline, if introduced), Escape cancels, Tab commits and advances according to row order, and Shift+Tab commits and moves backwards. Clicking elsewhere attempts validation and save; failure keeps the draft and error visible without silently discarding data. Mobile/touch activation shows an appropriate popover/editor without hover dependence.
+
+### Field schema and safe updates
+
+Use a frontend field-definition registry of explicitly editable fields, with per-field display formatter, control, converter, validator and API adapter. Match the actual fields and restrictions returned by the current events API. Exclude server-generated identifiers, origin, audit/sync metadata and fields not editable by the logged-in role. Updates should be scoped to a single field or the smallest required atomic dependent set; preserve untouched values. For the responsible-person column, route changes through the existing assignments endpoint, including 409 conflict acknowledgement, and never through generic event PATCH. Additional organisational duty roles (if implemented by a separate OpenSpec change) should use their own assignment endpoints and not be silently conflated with the liturgical leader.
+
+### Network state and consistency
+
+Maintain the previously persisted cell value and a separate draft until a successful response. Indicate saving in the active cell; disable reentrant submissions. On 4xx validation or 409 conflict keep editor open with submitted value and message; on transport failures keep it retryable. Do not overwrite another editor's newer data: use existing optimistic concurrency/version support where available; otherwise add a documented conditional-write contract before enabling high-contention edits. Re-fetch row data after successful mutations and reconcile active filters/sorting without losing selection. Restore original display on Escape only before commit. Never silently accept a failed update.
+
+### Permissions and accessibility
+
+Show edit affordances only where the effective `PLANNER` role permits writes in the event scope, while backend checks remain authoritative. Use semantic table cells and accessible labels including row identification and column name, visible keyboard focus, screen-reader announcements of save/error, and minimum touch targets. Confirm destructive or cancellation actions per existing frontend-ux policy rather than treating them as ordinary inline changes.
+
+## Risks
+
+- Lost updates: conditional writes and conflict recovery required.
+- Changing sort/filter values moves rows: reconcile against canonical server result and retain keyboard focus as possible.
+- External calendar authority: do not permit editing protected fields.
+- Sparse responsive table: avoid always-visible controls and preserve accessible full values.
