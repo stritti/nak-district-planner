@@ -5,6 +5,7 @@ Keycloak Realm Setup Script with OIDC Configuration
 Automatisiert den Setup eines Keycloak-Realms für NAK Planner OIDC:
 - Erstellt Realm "nak-planner"
 - Erstellt OIDC Client "nak-planner-frontend" (Public für PKCE)
+- Legt einen Audience-Mapper an (aud = Client-ID, sonst lehnt das Backend die Tokens ab)
 - Konfiguriert Redirect URIs für Auth Callback
 - Konfiguriert Logout URIs
 - Erstellt Test-User
@@ -164,9 +165,9 @@ class KeycloakAdminClient:
         response = requests.post(url, json=payload, headers=self._headers(), timeout=10)
 
         if response.status_code == 201:
-            client_data = response.json()
             print(f"✓ OIDC Client created: {client_id}")
-            return client_data
+            # Keycloak answers 201 with an empty body (Location header only).
+            return self.get_client_by_id(realm_name, client_id)
         elif response.status_code == 409:
             print(f"⚠ Client already exists: {client_id}")
             existing = self.get_client_by_id(realm_name, client_id)
@@ -174,6 +175,41 @@ class KeycloakAdminClient:
         else:
             print(f"✗ Failed to create client: {response.status_code} {response.text}")
             raise Exception(f"Failed to create client: {response.text}")
+
+    AUDIENCE_MAPPER_NAME = "nak-planner-audience"
+
+    def ensure_audience_mapper(self, realm_name: str, client_uuid: str, audience: str) -> None:
+        """Add an audience mapper so access tokens carry ``aud=<audience>``.
+
+        Keycloak issues ``aud=account`` by default; the backend validates ``aud``
+        against OIDC_CLIENT_ID (or OIDC_AUDIENCE) and answers 401 otherwise.
+        Idempotent: an existing mapper of the same name is left untouched.
+        """
+        base = (
+            f"{self.keycloak_url}/admin/realms/{realm_name}/clients/{client_uuid}"
+            f"/protocol-mappers/models"
+        )
+        existing = requests.get(base, headers=self._headers(), timeout=10)
+        existing.raise_for_status()
+        if any(m.get("name") == self.AUDIENCE_MAPPER_NAME for m in existing.json()):
+            print(f"⚠ Audience mapper already exists: {self.AUDIENCE_MAPPER_NAME}")
+            return
+        payload = {
+            "name": self.AUDIENCE_MAPPER_NAME,
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-mapper",
+            "consentRequired": False,
+            "config": {
+                "included.client.audience": audience,
+                "id.token.claim": "false",
+                "access.token.claim": "true",
+            },
+        }
+        response = requests.post(base, json=payload, headers=self._headers(), timeout=10)
+        if response.status_code != 201:
+            print(f"✗ Failed to create audience mapper: {response.status_code} {response.text}")
+            raise Exception(f"Failed to create audience mapper: {response.text}")
+        print(f"✓ Audience mapper created (aud={audience})")
 
     def get_client_by_id(self, realm_name: str, client_id: str) -> dict:
         """Get client by clientId"""
@@ -375,7 +411,10 @@ def main():
             logout_redirect_uris=logout_redirect_uris,
         )
 
-        # 3. Create Test User
+        # 3. Audience mapper: aud must contain the client ID the backend validates
+        admin.ensure_audience_mapper(args.realm_name, client["id"], args.client_id)
+
+        # 4. Create Test User
         admin.create_user(
             realm_name=args.realm_name,
             username=args.test_user,
