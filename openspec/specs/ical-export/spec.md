@@ -22,7 +22,7 @@ Publishes planning data as subscribable iCalendar feeds (UC-05/UC-06) through un
 
 #### Scenario: Invitation copy location
 - **WHEN** a slot is an invitation copy of another congregation's service
-- **THEN** its `LOCATION` is the host congregation, not the invited one
+- **THEN** its `LOCATION` is the host congregation, not the invited one, and the host's Dienstleiter appears in the `COMMENT` (anonymised in public feeds)
 
 #### Scenario: Default approval filter
 - **WHEN** a public token without leader scope is used without `approval_status`

@@ -1255,7 +1255,7 @@ async def test_export_congregation_rename_advances_revision() -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_invitation_copy_location_is_host_congregation() -> None:
+async def test_export_invitation_copy_uses_host_location_and_leader() -> None:
     district_id = uuid.uuid4()
     host_id = uuid.uuid4()
     invited_id = uuid.uuid4()
@@ -1275,7 +1275,10 @@ async def test_export_invitation_copy_location_is_host_congregation() -> None:
     invited.name = "Eingeladen"
     result.scalars.return_value = [host, invited]
     db.execute.return_value = result
-    repos = _export_repos(token=token, slots=[copy_slot])
+    copy_slot.updated_at = stamp
+    assignment = _assignment_stub(host_slot.id, "Pr. Muster")
+    assignment.updated_at = stamp + timedelta(hours=1)
+    repos = _export_repos(token=token, slots=[copy_slot], assignments=[assignment])
 
     response = await export_router.export_calendar_ics(
         token.token, db, approval_status=None, **repos
@@ -1284,6 +1287,11 @@ async def test_export_invitation_copy_location_is_host_congregation() -> None:
     event = _vevents(response.body)[0]
     assert "LOCATION:Gastgeber" in event
     assert "Eingeladen" not in event
+    # The host's leader is exported, and the copy's revision follows the host's assignment
+    assert "COMMENT:Dienstleiter: Pr. Muster" in event
+    assert "LAST-MODIFIED:20260302T103000Z" in event
+    requested = repos["sa_repo"].list_by_planning_slots.call_args.args[0]
+    assert host_slot.id in requested
 
 
 @pytest.mark.asyncio
