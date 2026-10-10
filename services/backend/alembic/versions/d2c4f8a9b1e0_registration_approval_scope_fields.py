@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Add approval scope fields to leader registrations.
 
 Revision ID: d2c4f8a9b1e0

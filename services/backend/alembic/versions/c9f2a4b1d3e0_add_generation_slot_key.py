@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Add generation slot key for auto-generated services.
 
 Revision ID: c9f2a4b1d3e0
