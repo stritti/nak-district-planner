@@ -277,6 +277,8 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
                 continue
             if target.released_at is not None or target.approval_status == EventApprovalStatus.CONFIRMED:
                 target.status = PlanningSlotStatus.CANCELLED
+                target.invitation_source_event_id = None
+                target.invitation_source_congregation_id = None
                 target.updated_at = datetime.now(UTC)
             else:
                 await self.delete(target_id)

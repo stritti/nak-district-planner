@@ -400,3 +400,175 @@ async def test_repository_refuses_reactivation_of_released_cancellation():
     with pytest.raises(ReleasedEventError):
         await SqlPlanningSlotRepository(session).save(event_slot)
     session.flush.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_repo_save_locks_and_refreshes_before_release_guard():
+    """A stale draft must not overwrite a concurrently confirmed DB row."""
+    from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+
+    stale_draft = slot()
+    current_row = SimpleNamespace(
+        district_id=stale_draft.district_id,
+        congregation_id=stale_draft.congregation_id,
+        category=stale_draft.category,
+        released_at=datetime.now(UTC),
+        approval_status=EventApprovalStatus.CONFIRMED,
+        status=PlanningSlotStatus.ACTIVE,
+        generation_key_detached=False,
+    )
+    session = AsyncMock()
+    session.get.return_value = current_row
+
+    with pytest.raises(ReleasedEventError):
+        await SqlPlanningSlotRepository(session).save(stale_draft)
+
+    session.get.assert_awaited_once_with(
+        PlanningSlotORM, stale_draft.id, with_for_update=True, populate_existing=True
+    )
+    session.flush.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reassigned_series_draft_does_not_suppress_original_occurrence():
+    from app.domain.models.planning_slot import planning_series_generation_key
+
+    event = slot()
+    event.series_id = uuid.uuid4()
+    event.generation_key = planning_series_generation_key(event.series_id, event.planning_date)
+    event.forget_generation_key_if_reassigned(
+        district_id=event.district_id,
+        congregation_id=uuid.uuid4(),
+        category=event.category,
+    )
+    assert event.generation_key is None
+    assert event.generation_key_detached is True
+
+    row = SimpleNamespace(
+        id=event.id, district_id=event.district_id, series_id=event.series_id,
+        planning_date=event.planning_date, generation_key=None,
+        generation_key_detached=event.generation_key_detached,
+        released_at=None, approval_status=EventApprovalStatus.PLANNED,
+    )
+    session = MagicMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = row
+    session.execute = AsyncMock(return_value=result)
+    session.delete = AsyncMock()
+    session.flush = AsyncMock()
+
+    await SqlPlanningSlotRepository(session).delete(event.id)
+
+    session.add.assert_not_called()
+    session.delete.assert_awaited_once_with(row)
+
+
+def _query_result(*, row=None, invitations=()):
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = row
+    result.scalars.return_value.all.return_value = list(invitations)
+    return result
+
+
+@pytest.mark.asyncio
+async def test_deleting_invitation_source_removes_unreleased_target_copy():
+    source_id, target_id = uuid.uuid4(), uuid.uuid4()
+    source = SimpleNamespace(
+        id=source_id, generation_key=None, series_id=None, released_at=None,
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    target = SimpleNamespace(
+        id=target_id, generation_key=None, series_id=None, released_at=None,
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    invitation = SimpleNamespace(
+        source_planning_slot_id=source_id, linked_event_id=target_id,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=[
+        _query_result(row=source),
+        _query_result(invitations=[invitation]),
+        _query_result(row=target),
+        _query_result(row=target),
+        _query_result(),
+    ])
+    session.delete = AsyncMock()
+    session.flush = AsyncMock()
+
+    await SqlPlanningSlotRepository(session).delete(source_id)
+
+    assert {id(c.args[0]) for c in session.delete.await_args_list} == {
+        id(source), id(target), id(invitation)
+    }
+    assert session.flush.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_deleting_invitation_source_cancels_released_target_copy():
+    source_id, target_id = uuid.uuid4(), uuid.uuid4()
+    source = SimpleNamespace(
+        id=source_id, generation_key=None, series_id=None, released_at=None,
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    target = SimpleNamespace(
+        id=target_id, released_at=datetime.now(UTC),
+        approval_status=EventApprovalStatus.CONFIRMED,
+        status=PlanningSlotStatus.ACTIVE,
+        invitation_source_event_id=source_id,
+        invitation_source_congregation_id=uuid.uuid4(),
+        updated_at=datetime.now(UTC),
+    )
+    invitation = SimpleNamespace(
+        source_planning_slot_id=source_id, linked_event_id=target_id,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=[
+        _query_result(row=source),
+        _query_result(invitations=[invitation]),
+        _query_result(row=target),
+    ])
+    session.delete = AsyncMock()
+    session.flush = AsyncMock()
+
+    await SqlPlanningSlotRepository(session).delete(source_id)
+
+    assert target.status == PlanningSlotStatus.CANCELLED
+    assert target.invitation_source_event_id is None
+    assert target.invitation_source_congregation_id is None
+    assert {id(c.args[0]) for c in session.delete.await_args_list} == {id(source), id(invitation)}
+
+
+@pytest.mark.asyncio
+async def test_deleting_linked_target_removes_invitation_but_not_source():
+    target_id = uuid.uuid4()
+    target = SimpleNamespace(
+        id=target_id, generation_key=None, series_id=None, released_at=None,
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    invitation = SimpleNamespace(
+        source_planning_slot_id=uuid.uuid4(), linked_event_id=target_id,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=[
+        _query_result(row=target),
+        _query_result(invitations=[invitation]),
+    ])
+    session.delete = AsyncMock()
+    session.flush = AsyncMock()
+
+    await SqlPlanningSlotRepository(session).delete(target_id)
+
+    assert {id(c.args[0]) for c in session.delete.await_args_list} == {id(target), id(invitation)}
+
+
+def test_retention_statement_excludes_both_current_and_former_releases():
+    from sqlalchemy.dialects.postgresql import dialect
+
+    from app.application.tasks import _unreleased_retention_statement
+
+    statement = _unreleased_retention_statement(date(2024, 10, 10))
+    compiled = str(statement.compile(dialect=dialect(), compile_kwargs={"literal_binds": True}))
+    assert "planning_date < '2024-10-10'" in compiled
+    assert "released_at IS NULL" in compiled
+    assert "approval_status IS NULL" in compiled
+    assert "approval_status != 'CONFIRMED'" in compiled

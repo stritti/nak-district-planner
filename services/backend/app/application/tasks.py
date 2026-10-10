@@ -28,7 +28,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import Awaitable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from app.celery_app import celery
 from app.domain.errors import IntegrationNotFoundError, UnsupportedCalendarTypeError
@@ -220,6 +220,23 @@ def sync_all_active_integrations() -> dict:
     return {"dispatched": len(ids)}
 
 
+def _unreleased_retention_statement(cutoff_date: date):
+    """Only never-published slots may be pruned by the retention job."""
+    from sqlalchemy import delete, or_
+
+    from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+    from app.domain.models.planning_slot import EventApprovalStatus
+
+    return delete(PlanningSlotORM).where(
+        PlanningSlotORM.planning_date < cutoff_date,
+        PlanningSlotORM.released_at.is_(None),
+        or_(
+            PlanningSlotORM.approval_status.is_(None),
+            PlanningSlotORM.approval_status != EventApprovalStatus.CONFIRMED,
+        ),
+    )
+
+
 @celery.task(name="cleanup_old_events")
 def cleanup_old_events() -> dict:
     """Delete *never-released* events older than 24 months.
@@ -243,22 +260,12 @@ def cleanup_old_events() -> dict:
             # PlanningSlot uses planning_date (date), not end_at (datetime).
             # Delete slots with planning_date before cutoff date.
             cutoff_date = cutoff.date()
-            from sqlalchemy import delete, insert, or_
-
-            from app.domain.models.planning_slot import EventApprovalStatus
+            from sqlalchemy import insert
 
             from app.adapters.db.domain_audit import bulk_delete_audit_row
             from app.adapters.db.orm_models.audit_log import AuditLogORM
-            from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 
-            stmt = delete(PlanningSlotORM).where(
-                PlanningSlotORM.planning_date < cutoff_date,
-                PlanningSlotORM.released_at.is_(None),
-                or_(
-                    PlanningSlotORM.approval_status.is_(None),
-                    PlanningSlotORM.approval_status != EventApprovalStatus.CONFIRMED,
-                ),
-            )
+            stmt = _unreleased_retention_statement(cutoff_date)
             result = await session.execute(stmt)
             deleted = result.rowcount  # type: ignore[attr-defined]
             if deleted:

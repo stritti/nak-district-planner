@@ -18,3 +18,12 @@
 - [x] 3.2 Add frontend API and interaction tests.
 - [ ] 3.3 Run backend tests, frontend coverage >80%, full CI and OpenSpec validation.
 - [x] 3.4 Add explicit external `HARD_DELETE` after release regression tests.
+
+## 4. Codex review follow-up
+
+- [x] 4.1 Clean up source/target invitations and preserve released target cancellations.
+- [x] 4.2 Use conflict-safe series generation and cover competing inserts.
+- [x] 4.3 Preserve released events during monthly retention cleanup.
+- [x] 4.4 Track deliberately detached generation keys separately from legacy occurrences.
+- [x] 4.5 Lock and refresh updates before checking irreversible publication.
+- [ ] 4.6 Re-run CI, coverage, migration and strict OpenSpec validation after the corrections.
