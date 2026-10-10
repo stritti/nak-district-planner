@@ -301,7 +301,7 @@ async def test_repo_deletes_draft_and_handles_missing():
     repo_session = AsyncMock()
     result = MagicMock()
     result.scalar_one_or_none.side_effect = [
-        SimpleNamespace(released_at=None, approval_status=EventApprovalStatus.PLANNED, generation_key=None),
+        SimpleNamespace(released_at=None, approval_status=EventApprovalStatus.PLANNED, generation_key=None, series_id=None),
         None,
     ]
     repo_session.execute.return_value = result
@@ -352,3 +352,31 @@ async def test_generation_suppression_is_scoped_to_matching_keys_and_district():
         district_id=uuid.uuid4(), generation_keys=[]
     ) == set()
     assert repo_session.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_repo_remembers_deleted_legacy_series_occurrence():
+    from app.adapters.db.orm_models.deleted_generation_key import DeletedGenerationKeyORM
+    from app.domain.models.planning_slot import planning_series_generation_key
+
+    district_id, series_id, event_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    when = date(2026, 12, 20)
+    row = SimpleNamespace(
+        id=event_id, released_at=None, approval_status=EventApprovalStatus.PLANNED,
+        district_id=district_id, series_id=series_id, planning_date=when,
+        generation_key=None,
+    )
+    session = MagicMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = row
+    session.execute = AsyncMock(return_value=result)
+    session.delete = AsyncMock()
+    session.flush = AsyncMock()
+
+    await SqlPlanningSlotRepository(session).delete(event_id)
+
+    ledger = session.add.call_args.args[0]
+    assert isinstance(ledger, DeletedGenerationKeyORM)
+    assert ledger.district_id == district_id
+    assert ledger.generation_key == planning_series_generation_key(series_id, when)
+    session.delete.assert_awaited_once_with(row)
