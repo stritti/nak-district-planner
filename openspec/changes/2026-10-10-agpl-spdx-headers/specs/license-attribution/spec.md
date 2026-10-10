@@ -4,7 +4,7 @@
 Identify the license and copyright owner for every maintained source file, while preserving third-party legal notices.
 
 ### Requirement: SPDX identity for first-party code
-Every tracked first-party source under services/backend/, services/frontend/, idp-deploy/ and scripts/, plus the root compatibility shell script, MUST carry the lines "SPDX-FileCopyrightText: 2026 Stephan Strittmatter" and "SPDX-License-Identifier: AGPL-3.0-only" in a language-appropriate leading comment.
+Every tracked first-party source under services/backend/, services/frontend/, idp-deploy/, scripts/ and docs/.vitepress/, plus the root compatibility shell script, MUST carry the lines "SPDX-FileCopyrightText: 2026 Stephan Strittmatter" and "SPDX-License-Identifier: AGPL-3.0-only" in a language-appropriate leading comment.
 
 #### Scenario: New source file without metadata
 - **WHEN** a new maintained Python, TypeScript, Vue, JavaScript, HTML, CSS, shell or Alembic template source file lacks attribution

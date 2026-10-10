@@ -14,7 +14,7 @@ from pathlib import Path
 
 COPYRIGHT = "SPDX-FileCopyrightText: 2026 Stephan Strittmatter"
 LICENSE = "SPDX-License-Identifier: AGPL-3.0-only"
-SOURCE_PREFIXES = ("services/backend/", "services/frontend/", "idp-deploy/", "scripts/")
+SOURCE_PREFIXES = ("services/backend/", "services/frontend/", "idp-deploy/", "scripts/", "docs/.vitepress/")
 ROOT_SOURCES = {"verify-phase4b-compatibility.sh"}
 COMMENT_STYLES = {
     ".py": "#",

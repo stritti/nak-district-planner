@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { defineConfig } from 'vitepress'
 import { withOpenSpec } from '@stritti/vitepress-plugin-openspec'
 import { dirname, resolve } from 'node:path'

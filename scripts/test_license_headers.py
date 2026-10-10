@@ -19,6 +19,7 @@ class SourceSelectionTests(unittest.TestCase):
             "services/frontend/src/App.vue",
             "services/frontend/src/assets/main.css",
             "services/frontend/vite.config.ts",
+            "docs/.vitepress/config.mts",
             "services/frontend/index.html",
             "idp-deploy/keycloak/setup_keycloak_realm.py",
             "scripts/cleanup-container-images.cjs",
