@@ -6,7 +6,7 @@
   >
     <div
       ref="scrollContainer"
-      class="matrix-scroll-container max-h-[70dvh] overflow-auto overscroll-contain touch-auto"
+      class="matrix-scroll-container max-h-[70dvh] overflow-auto overscroll-x-contain overscroll-y-auto touch-auto"
       data-testid="matrix-scroll"
       role="region"
       aria-label="Dienstplan-Matrix, horizontal und vertikal scrollbar"
@@ -32,7 +32,7 @@
               :class="[
                 compactMode ? 'px-1.5 py-2' : 'px-2.5 py-2',
                 matrixStore.matrix.holidays[date]?.length
-                  ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200'
+                  ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 text-amber-900 dark:text-amber-200'
                   : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300',
               ]"
             >
@@ -182,6 +182,7 @@
       ref="stickyScrollbar"
       v-show="needsStickyScrollbar"
       class="sticky bottom-0 z-30 overflow-x-auto overflow-y-hidden bg-white/90 dark:bg-gray-900/90"
+      :style="{ width: `${stickyViewportWidth}px` }"
       data-testid="matrix-sticky-scrollbar"
       aria-hidden="true"
       tabindex="-1"
@@ -331,6 +332,7 @@ const {
 const {
   proxy: stickyScrollbar,
   contentWidth: stickyContentWidth,
+  viewportWidth: stickyViewportWidth,
   needsScroll: needsStickyScrollbar,
   measure: measureStickyScrollbar,
 } = useStickyScrollbar(scrollContainer)
