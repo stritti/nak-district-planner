@@ -13,6 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import IntegrityError
 
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
@@ -347,8 +348,20 @@ async def create_event(
         source=EventSource.INTERNAL,
         visibility=body.visibility,
     )
-    await slot_repo.save(slot)
-    await inst_repo.save(instance)
+    try:
+        await slot_repo.save(slot)
+        await inst_repo.save(instance)
+    except IntegrityError as exc:
+        # A competing planner may have taken the same congregation/time.
+        # The failing flush poisons the DB transaction until it is rolled back.
+        await session.rollback()
+        sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+        if sqlstate == "23505":
+            raise HTTPException(
+                status_code=409,
+                detail="Für diese Gemeinde besteht bereits ein Termin zu diesem Zeitpunkt.",
+            ) from exc
+        raise
     return _slot_to_event(slot, instance)
 
 
