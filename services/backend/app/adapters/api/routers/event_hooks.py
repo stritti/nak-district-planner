@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """District-scoped management of event-driven mail hooks (district admins only)."""
 
 from __future__ import annotations
