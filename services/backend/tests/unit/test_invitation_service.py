@@ -588,12 +588,10 @@ async def test_apply_overwrite_already_decided():
 
 
 @pytest.mark.asyncio
-async def test_delete_invitation_removes_linked_slot_and_instance():
-    """Deletes linked PlanningSlot + EventInstance when linked_event_id is set."""
+async def test_delete_invitation_removes_unreleased_linked_slot():
+    """Deleting an unpublished invitation target cascades to its EventInstance."""
     session = MagicMock()
     target_slot_id = uuid.uuid4()
-    target_instance_id = uuid.uuid4()
-
     invitation = CongregationInvitation.create(
         source_event_id=uuid.uuid4(),
         source_congregation_id=uuid.uuid4(),
@@ -601,15 +599,11 @@ async def test_delete_invitation_removes_linked_slot_and_instance():
         target_congregation_id=uuid.uuid4(),
         linked_event_id=target_slot_id,
     )
-
-    target_slot = _planning_slot()
-    target_instance = _event_instance(target_slot_id)
-    target_instance.id = target_instance_id
+    target_slot = _planning_slot(approval_status=EventApprovalStatus.PLANNED)
 
     with (
         patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls,
         patch("app.application.invitation_service.SqlPlanningSlotRepository") as slot_repo_cls,
-        patch("app.application.invitation_service.SqlEventInstanceRepository") as instance_repo_cls,
     ):
         inv_repo = MagicMock()
         inv_repo.get = AsyncMock(return_value=invitation)
@@ -621,17 +615,47 @@ async def test_delete_invitation_removes_linked_slot_and_instance():
         slot_repo.delete = AsyncMock()
         slot_repo_cls.return_value = slot_repo
 
-        instance_repo = MagicMock()
-        instance_repo.get_by_planning_slot = AsyncMock(return_value=target_instance)
-        instance_repo.delete = AsyncMock()
-        instance_repo_cls.return_value = instance_repo
-
         result = await delete_invitation(session, invitation_id=invitation.id)
 
     assert result is True
-    instance_repo.delete.assert_called_once_with(target_instance_id)
-    slot_repo.delete.assert_called_once_with(target_slot.id)
-    inv_repo.delete.assert_called_once_with(invitation.id)
+    slot_repo.delete.assert_awaited_once_with(target_slot.id)
+    inv_repo.delete.assert_awaited_once_with(invitation.id)
+
+
+@pytest.mark.asyncio
+async def test_delete_invitation_cancels_released_linked_slot():
+    """Deleting an invitation must not erase an already released event."""
+    session = MagicMock()
+    linked_event_id = uuid.uuid4()
+    invitation = CongregationInvitation.create(
+        source_event_id=uuid.uuid4(),
+        source_congregation_id=uuid.uuid4(),
+        target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+        target_congregation_id=uuid.uuid4(),
+        linked_event_id=linked_event_id,
+    )
+    target_slot = _planning_slot(approval_status=EventApprovalStatus.CONFIRMED)
+
+    with (
+        patch("app.application.invitation_service.SqlInvitationRepository") as inv_repo_cls,
+        patch("app.application.invitation_service.SqlPlanningSlotRepository") as slot_repo_cls,
+    ):
+        inv_repo = MagicMock()
+        inv_repo.get = AsyncMock(return_value=invitation)
+        inv_repo.delete = AsyncMock()
+        inv_repo_cls.return_value = inv_repo
+        slot_repo = MagicMock()
+        slot_repo.get = AsyncMock(return_value=target_slot)
+        slot_repo.save = AsyncMock()
+        slot_repo.delete = AsyncMock()
+        slot_repo_cls.return_value = slot_repo
+
+        assert await delete_invitation(session, invitation_id=invitation.id)
+
+    assert target_slot.status == PlanningSlotStatus.CANCELLED
+    slot_repo.save.assert_awaited_once_with(target_slot)
+    slot_repo.delete.assert_not_awaited()
+    inv_repo.delete.assert_awaited_once_with(invitation.id)
 
 
 @pytest.mark.asyncio
