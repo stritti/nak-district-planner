@@ -26,18 +26,6 @@ District catalogue/configuration changes require `DISTRICT_ADMIN` for the owning
 
 For a person assigned several duties on the same slot, display one calendar entry including all task labels; use the existing `{planning_slot_id}@nak-bezirksplaner` UID where applicable. Add duty information only to that subject's authenticated personal view or a personal opaque-token ICS explicitly bound to the same verified subject and a single authorised district. Extend the existing INTERNAL export-token model with an optional subject binding for duty-only participants; issuance and revocation require authenticated ownership or an authorised district administrator, and the token grants no more than that subject's currently effective assignments within its district and SHALL fail closed when their current role/membership no longer authorises that district or congregation (unless they remain a superadmin). Do not extend PUBLIC or unrestricted district INTERNAL tokens with duty-holder identity or private duty labels. Existing `leader_id`-scoped exports retain their established leader-assignment semantics; do not infer a user subject from the leader name. An existing leader token may expose organisational duties only when its leader is securely linked to that same user subject. Multiple district memberships use separate district-scoped subject tokens; authenticated calendars may combine results without relaxing RLS. A duty assignment qualifies the event for the personal calendar only when it has a verified `linked_user_sub`.  Preserve existing leader-based entries and combine labels when the person is both leader and duty holder. Public/congregation feeds must not expose names or personal responsibilities from this feature. Updates, removal and cancellation must change the next feed response and the calendar view deterministically. Do not create provider-side copies.
 
-## Risks and mitigations
-
-- **Inheritance ambiguity**: record explicit overrides and test district changes before/after local override.
-- **Privacy**: restrict task/person fields to appropriately authenticated/scoped views; test cross-tenant access and token types.
-- **Historical integrity**: disable rather than hard-delete used categories; preserve assignment display labels or immutable catalogue records.
-- **Scheduling**: keep existing leader conflict checks unchanged; explicitly document duty overlap policy as non-blocking for MVP, with optional warnings only.
-- **Release safety**: additive migration and idempotent seeding; test upgrade against existing slots, rollback, concurrency and default inserts.
-
-## Explicit MVP policy
-
-Concurrent organisational duty appointments are permitted and non-blocking. Optional overlap warnings may be displayed, but MUST NOT prevent valid saves. Organisation-duty eligibility, identity binding, existing-assignment retention and private calendar access are specified above; implementation tasks remain open.
-
 ### 6. Typed remembered names and optional linked identities
 
 Organisational duty entries accept either an eligible linked user/person reference or a validated name-only participant. Do not require an account or invent a linked identity for a text name. Persist a separate, tenant-scoped `DutyNameSuggestion` (normalised name/display name, duty category ID and owning district/congregation scope, active/hidden state) and reference its stable ID from name-only assignments where useful; preserve an immutable assignment display-name snapshot. Autocomplete is isolated to the slot's owning scope: a congregation slot reads and writes only its congregation's suggestions, while a district-level slot uses district-level suggestions. District-owned duty category definitions may be inherited, but names never inherit across congregation scopes or from the whole district implicitly. Autocomplete matches the selected organisational duty category, not merely the event category: a name remembered as Organist is not suggested as Schließdienst until entered there as well. Resolve suggestions using the event's effective congregation/district scope; do not leak other tenants' suggestions. Exact duplicates (case/whitespace-normalised) must be prevented within the same scope/category. A name can be re-entered after suppression as a deliberate new activation, but a suppressed suggestion MUST NOT reappear automatically because old assignments are displayed or imported. Deleting a suggestion means soft suppression from new choices, never erasing name-only assignment history. For calendar access, only verified linked user identities can receive personal calendar entries; unlinked plain text names are displayed on the event, but never gain an account, feed or access token implicitly.
@@ -49,3 +37,15 @@ Keep minister/service-leader records and referential keys when deactivating or h
 ### 8. Compatibility and rollout
 
 Add separate management APIs for scoped autocomplete suggestions and lifecycle changes to existing leader/member management, with RBAC and RLS, including the subject-bound INTERNAL export-token policy. Provide additive migrations for `hidden_from_lists`, `service_end_date` and subject-bound INTERNAL personal tokens. Preserve each existing leader's `is_active` value; default only new fields (`hidden_from_lists=false`, `service_end_date=NULL`). Do not equate hiding from frontend lists with irrecoverable deletion. Test historical exports, suggestion suppression, concurrent duplicate-name creation, calendar projection limits for name-only participants, date/time-zone boundaries and all assignment entry points.
+
+## Risks and mitigations
+
+- **Inheritance ambiguity**: record explicit overrides and test district changes before/after local override.
+- **Privacy**: restrict task/person fields to appropriately authenticated/scoped views; test cross-tenant access and token types.
+- **Historical integrity**: disable rather than hard-delete used categories; preserve assignment display labels or immutable catalogue records.
+- **Scheduling**: keep existing leader conflict checks unchanged; explicitly document duty overlap policy as non-blocking for MVP, with optional warnings only.
+- **Release safety**: additive migration and idempotent seeding; test upgrade against existing slots, rollback, concurrency and default inserts.
+
+## Explicit MVP policy
+
+Concurrent organisational duty appointments are permitted and non-blocking. Optional overlap warnings may be displayed, but MUST NOT prevent valid saves. Organisation-duty eligibility, identity binding, existing-assignment retention and private calendar access are specified above; implementation tasks remain open.
