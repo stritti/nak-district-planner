@@ -174,8 +174,6 @@ async def delete_invitation(
     """
     invitation_repo = SqlInvitationRepository(session)
     slot_repo = SqlPlanningSlotRepository(session)
-    event_instance_repo = SqlEventInstanceRepository(session)
-
     invitation = await invitation_repo.get(invitation_id)
     if invitation is None:
         return False
