@@ -1,6 +1,6 @@
 # Lizenzierung und Copyright
 
-Der eigene Quellcode des NAK District Planner wird unter der **GNU Affero General Public License Version 3.0 only (AGPL-3.0-only)** bereitgestellt. Der vollständige, unveränderte Lizenztext steht unter [`LICENSE`](../LICENSE).
+Der eigene Quellcode des NAK District Planner wird unter der **GNU Affero General Public License Version 3.0 only (AGPL-3.0-only)** bereitgestellt. Der vollständige, unveränderte Lizenztext steht unter [`LICENSE`](https://github.com/stritti/nak-district-planner/blob/main/LICENSE).
 
 Für selbst gepflegte Quellcodedateien gelten die maschinenlesbaren Angaben `SPDX-FileCopyrightText: 2026 Stephan Strittmatter` und `SPDX-License-Identifier: AGPL-3.0-only`. Vorhandene Rechte anderer Mitwirkender oder Dritter bleiben unberührt. Die Copyright-Angabe bezeichnet nur solche Inhalte, an denen der Genannte die entsprechenden Rechte hält; Beiträge Dritter müssen mit ihrem eigenen Copyright versehen bleiben. Bei unklarer Herkunft ist die Lizenzzuordnung vor einer Kennzeichnung zu klären.
 
