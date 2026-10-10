@@ -13,4 +13,4 @@
 - [x] 3.2 Component-Unit-Tests: ein/mehrere/keine Bezirke, Sitzung, API-Fehler, Logout.
 - [x] 3.3 Bestehende Ereignis- und Matrix-Tests auf globalen Kontext prüfen.
 - [x] 3.4 E2E: globaler Wechsel und sichtbare Filterreduktion.
-- [ ] 3.5 Vollständige CI inkl. Per-File-Coverage-Gate grün verifizieren.
+- [x] 3.5 Vollständige CI inkl. Per-File-Coverage-Gate grün verifizieren (Frontend Unit/E2E, Lint und Dokumentation am Commit 7d9b36679).
