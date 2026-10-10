@@ -323,7 +323,9 @@ async def _restore_after_snapshot_gap(
     await context.link_repo.save(link)
     if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
         return False
-    if slot is None or slot.status != PlanningSlotStatus.CANCELLED:
+    if slot is None or slot.status != PlanningSlotStatus.CANCELLED or slot.was_released:
+        # Once a released cancellation has been announced to subscribers,
+        # reappearance at the provider must not silently reactivate the slot.
         return False
     slot.status = PlanningSlotStatus.ACTIVE
     slot.updated_at = now
