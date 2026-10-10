@@ -84,6 +84,15 @@ class HeaderTests(unittest.TestCase):
         result = mod.annotate("\ufeffx=1\n", "services/backend/app/x.py")
         self.assertTrue(result.startswith("\ufeff# SPDX"))
 
+    def test_embedded_spdx_strings_are_not_headers(self):
+        source = (
+            'COPYRIGHT = "SPDX-FileCopyrightText: 2026 Stephan Strittmatter"\\n'
+            'LICENSE = "SPDX-License-Identifier: AGPL-3.0-only"\\n'
+        )
+        self.assertFalse(mod.header_is_valid(source))
+        annotated = mod.annotate(source, "services/backend/app/x.py")
+        self.assertTrue(mod.header_is_valid(annotated))
+
     def test_rejects_existing_other_license(self):
         with self.assertRaises(ValueError):
             mod.annotate("# SPDX-License-Identifier: MIT\nx=1\n", "services/backend/app/x.py")

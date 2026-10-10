@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -60,13 +61,20 @@ def header_for(path: str) -> str:
 
 def header_is_valid(text: str) -> bool:
     """Reject missing, conflicting, or incomplete declarations."""
-    top = "\n".join(text.splitlines()[:16])
-    return (
-        COPYRIGHT in top
-        and LICENSE in top
-        and top.count("SPDX-License-Identifier:") == 1
-        and top.count("SPDX-FileCopyrightText:") >= 1
+    # Only interpret leading comment lines, never SPDX strings in program code.
+    identifier = re.compile(
+        r"^\\s*(?:#|//|/\\*|\\*|<!--)?\\s*"
+        r"(SPDX-FileCopyrightText|SPDX-License-Identifier):\\s*"
+        r"(.*?)\\s*(?:\\*/|-->)?\\s*$"
     )
+    parsed = [
+        match.groups()
+        for line in text.removeprefix("\\ufeff").splitlines()[:16]
+        if (match := identifier.match(line)) is not None
+    ]
+    licenses = [value for kind, value in parsed if kind == "SPDX-License-Identifier"]
+    copyrights = [value for kind, value in parsed if kind == "SPDX-FileCopyrightText"]
+    return licenses == ["AGPL-3.0-only"] and "2026 Stephan Strittmatter" in copyrights
 
 
 def annotate(text: str, path: str) -> str:
