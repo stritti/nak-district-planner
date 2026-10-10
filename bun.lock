@@ -5,7 +5,7 @@
     "": {
       "name": "nak-district-planner",
       "devDependencies": {
-        "@stritti/vitepress-plugin-openspec": "^0.7.0",
+        "@stritti/vitepress-plugin-openspec": "^0.7.1",
         "vitepress": "^1.6.3",
         "vue": "^3.5.43",
       },
@@ -180,7 +180,7 @@
 
     "@shikijs/vscode-textmate": ["@shikijs/vscode-textmate@10.0.2", "", {}, "sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg=="],
 
-    "@stritti/vitepress-plugin-openspec": ["@stritti/vitepress-plugin-openspec@0.7.0", "", { "dependencies": { "js-yaml": "^4.1.1", "picocolors": "^1.1.1" }, "peerDependencies": { "vite": ">=5.0.0", "vitepress": ">=1.0.0" }, "optionalPeers": ["vitepress"] }, "sha512-7hohZtJenmqZWpaHn4GV7cn6ge1G1YoLp/sQKDjRInCctUUYwWLXB4IaQImQki7YjTFfz1zKejENYRnvJCC1QQ=="],
+    "@stritti/vitepress-plugin-openspec": ["@stritti/vitepress-plugin-openspec@0.7.1", "", { "dependencies": { "js-yaml": "^5.4.2", "picocolors": "^1.1.1" }, "peerDependencies": { "vite": ">=5.0.0", "vitepress": ">=1.0.0" }, "optionalPeers": ["vitepress"] }, "sha512-CgLD/1ruFN623B9vWfmHIYRGOTpyiHLjsyki0GqUs7KivoG0K3dOpQ+s9raG8m2izZ+nlILz4Iw4ul6NOwx/Rw=="],
 
     "@types/estree": ["@types/estree@1.0.8", "", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
 
@@ -278,7 +278,7 @@
 
     "is-what": ["is-what@5.5.0", "", {}, "sha512-oG7cgbmg5kLYae2N5IVd3jm2s+vldjxJzK1pcu9LfpGuQ93MQSzo0okvRna+7y5ifrD+20FE8FvjusyGaz14fw=="],
 
-    "js-yaml": ["js-yaml@4.1.1", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA=="],
+    "js-yaml": ["js-yaml@5.4.3", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.mjs" } }, "sha512-yzzNtgczwgoVHNigCyKTXcQJU4Y8t/ikU4UxXW0BvrLfHTGWZhsNcOT2s/a7vn81/4KqVnNmHjaUEPlvWnNwVw=="],
 
     "magic-string": ["magic-string@0.30.21", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5" } }, "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ=="],
 
