@@ -7,11 +7,13 @@
       "devDependencies": {
         "@stritti/vitepress-plugin-openspec": "^0.7.1",
         "vitepress": "^1.6.3",
+        "vitepress-plugin-mermaid-diagram": "0.3.2",
         "vue": "^3.5.43",
       },
     },
   },
   "packages": {
+    "vitepress-plugin-mermaid-diagram": ["vitepress-plugin-mermaid-diagram@0.3.2", "", { "peerDependencies": { "markdown-it": ">=13.0.0" } }],
     "@algolia/abtesting": ["@algolia/abtesting@1.16.0", "", { "dependencies": { "@algolia/client-common": "5.50.0", "@algolia/requester-browser-xhr": "5.50.0", "@algolia/requester-fetch": "5.50.0", "@algolia/requester-node-http": "5.50.0" } }, "sha512-alHFZ68/i9qLC/muEB07VQ9r7cB8AvCcGX6dVQi2PNHhc/ZQRmmFAv8KK1ay4UiseGSFr7f0nXBKsZ/jRg7e4g=="],
 
     "@algolia/autocomplete-core": ["@algolia/autocomplete-core@1.17.7", "", { "dependencies": { "@algolia/autocomplete-plugin-algolia-insights": "1.17.7", "@algolia/autocomplete-shared": "1.17.7" } }, "sha512-BjiPOW6ks90UKl7TwMv7oNQMnzU+t/wk9mgIDi6b1tXpUek7MW0lbNOUHpvam9pe3lVCf4xPFT+lK7s+e+fs7Q=="],

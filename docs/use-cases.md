@@ -1,6 +1,6 @@
 # Use-Case Dokumentation
 
-Diese Seite dokumentiert die detaillierten Anwendungsfälle (Use-Cases) des NAK District Planners.
+Diese Seite dokumentiert die fachlichen Detailregeln (UC-01 bis UC-06). Den durchgehenden Anwendungsablauf erklärt [So funktioniert der Bezirksplaner](/workflows).
 
 ## UC-01: Kalender-Anbindung (Ingest)
 
@@ -51,17 +51,7 @@ Nutzung des Strategy-Patterns für verschiedene Provider mit einheitlichem Sync-
 - Eine exakte Zuordnung erstellt direkt ein `ExternalEventLink` ohne Candidate.
 - Für einen noch ausstehenden Candidate aktualisiert ein erneuter Sync die Candidate-Daten und den Content-Hash, statt einen zweiten Candidate anzulegen.
 
-### V1-Entscheidung: Direkte Übernahme externer Events
-
-Für Version 1 werden Events aus konfigurierten, vertrauenswürdigen
-Quellen nach erfolgreicher Hash-Prüfung direkt übernommen. Ein
-manueller Review-Schritt für unbekannte externe Events (`ExternalEventCandidate`)
-ist nicht Bestandteil von v1. `SyncState` und `ExternalEventLink` dienen weiterhin
-der Änderungs- und Zuordnungsverfolgung.
-
-Diese Entscheidung setzt voraus, dass nur fachlich freigegebene Kalenderquellen
-konfiguriert werden. Ein Review-Workflow für neue oder nicht vertrauenswürdige
-Quellen bleibt als Phase 2 geplant.
+Die **V1-Abgrenzung** ist unter UC-01 als Trust Policy beschrieben: Konfigurierte, vertrauenswürdige Quellen werden direkt übernommen. Der allgemeine Candidate-Review bleibt eine spätere Ausbaustufe. `SyncState` und `ExternalEventLink` sichern die Zuordnung und Änderungsverfolgung.
 
 ## UC-03: Dienstplanung & Lücken-Visualisierung
 
