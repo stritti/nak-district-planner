@@ -117,7 +117,10 @@ class RepositoryTests(unittest.TestCase):
             file = root / "services/backend/app/example.py"
             file.parent.mkdir(parents=True)
             file.write_text("x=1\n")
-            with patch.object(mod, "tracked_sources", return_value=["services/backend/app/example.py"]):
+            with (
+                patch.object(mod, "tracked_sources", return_value=["services/backend/app/example.py"]),
+                patch.object(mod, "executable_mode_errors", return_value=[]),
+            ):
                 errors = mod.run(root, fix=False)
             self.assertEqual(len(errors), 1)
             self.assertEqual(file.read_text(), "x=1\n")
@@ -128,7 +131,10 @@ class RepositoryTests(unittest.TestCase):
             file = root / "services/backend/app/example.py"
             file.parent.mkdir(parents=True)
             file.write_text("x=1\n")
-            with patch.object(mod, "tracked_sources", return_value=["services/backend/app/example.py"]):
+            with (
+                patch.object(mod, "tracked_sources", return_value=["services/backend/app/example.py"]),
+                patch.object(mod, "executable_mode_errors", return_value=[]),
+            ):
                 self.assertEqual(mod.run(root, fix=True), [])
                 self.assertEqual(mod.run(root, fix=False), [])
             self.assertTrue(mod.header_is_valid(file.read_text(), "services/backend/app/example.py"))
@@ -139,7 +145,10 @@ class RepositoryTests(unittest.TestCase):
             file = root / "scripts/example.py"
             file.parent.mkdir(parents=True)
             file.write_text("# Copyright 2019 Original Author\n")
-            with patch.object(mod, "tracked_sources", return_value=["scripts/example.py"]):
+            with (
+                patch.object(mod, "tracked_sources", return_value=["scripts/example.py"]),
+                patch.object(mod, "executable_mode_errors", return_value=[]),
+            ):
                 errors = mod.run(root, fix=True)
             self.assertEqual(len(errors), 1)
             self.assertIn("Original Author", file.read_text())
