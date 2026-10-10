@@ -218,6 +218,9 @@ class GenerateDraftServicesUseCase:
                 district_id=district_id, generation_keys=keyed.keys()
             )
         }
+        existing_keys.update(await self._slot_repo.list_deleted_generation_keys(
+            district_id=district_id, generation_keys=keyed.keys()
+        ))
         legacy_by_date_time = {
             (slot.planning_date, slot.planning_time): slot
             for slot in await self._slot_repo.list_for_date_range(
