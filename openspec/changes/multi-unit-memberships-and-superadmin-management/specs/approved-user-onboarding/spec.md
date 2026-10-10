@@ -2,7 +2,7 @@
 
 ### Requirement: Registration approval SHALL activate user access explicitly
 
-The system SHALL treat self-registration and access activation as separate steps. A registered non-superadmin user MUST NOT gain access to protected business endpoints until an authorized administrator approves the registration and assigns an authorization scope. A user explicitly granted superadmin status by an existing superadmin SHALL have global access without an approval-created membership, consistent with the existing superadmin exception.
+The system SHALL treat self-registration and access activation as separate steps. A registered non-superadmin user MUST NOT gain access to protected business endpoints until an authorized administrator approves the registration and assigns an authorization scope. A user explicitly granted superadmin status by an existing superadmin SHALL have global access without an approval-created membership, consistent with the existing superadmin exception. If that status is later revoked and no approved effective membership exists, protected business access SHALL revert to 403 and the pending/no-access client state, regardless of any earlier registration state.
 
 #### Scenario: Registered but not approved user logs in
 
@@ -26,12 +26,16 @@ The system SHALL treat self-registration and access activation as separate steps
 
 ### Requirement: Administrators can manage additional unit assignments
 
-Superadmins SHALL be able to add, update and remove district and congregation memberships of registered, securely linked users across all units. Other authorized administrators SHALL be able to manage assignments only within their existing management permissions. Additional assignments SHALL use the existing role, scope_type and scope_id fields and SHALL preserve the user's existing account and other memberships. Secure user-linkage requirements SHALL remain applicable.
+Superadmins SHALL be able to add, update and remove district and congregation memberships of registered, securely linked users across all units. Non-superadmins MAY grant only roles no higher than their own within the same authorised scope; a congregation administrator MUST NOT grant a district-scoped membership. Other authorized administrators SHALL be able to manage assignments only within their existing management permissions. Additional assignments SHALL use the existing role, scope_type and scope_id fields and SHALL preserve the user's existing account and other memberships. Secure user-linkage requirements SHALL remain applicable.
 
 #### Scenario: Superadmin adds a second assignment
 
 - **WHEN** a superadmin adds a membership in another congregation or district to an already linked user
 - **THEN** both the previous and new assignments remain available for that same user account
+
+#### Scenario: Congregation administrator attempts district membership
+- **WHEN** a congregation administrator attempts to grant a district-scoped role even inside the parent district
+- **THEN** the request is rejected with 403 and no membership is modified
 
 #### Scenario: Administrator assigns outside their authority
 
