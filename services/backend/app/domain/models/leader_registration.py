@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """LeaderRegistration domain model — represents a self-registration request from a
 new Amtstragender (service person) awaiting district-admin review.
 """
