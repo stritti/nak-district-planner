@@ -8,6 +8,7 @@
 - [ ] 2.2 Add event duty assignment CRUD and batch reads; validate event category, district/person references and capacity.
 - [ ] 2.3 Test unknown/foreign references, scope escalation, disabled categories, duplicates, concurrent updates and missing EventInstance.
 - [ ] 2.4 Test slot category/congregation changes retaining and flagging now-ineligible existing duties, with no implicit duty deletion.
+- [ ] 2.5 Test capacity reduction below existing assignee count, over-capacity flags and rejection of further assignments.
 
 ## 3. Frontend
 - [ ] 3.1 Add district/congregation configuration screens with effective/inherited/overridden state.
@@ -32,10 +33,11 @@
 - [ ] 6.3 Implement authorised suggestion management and soft removal, avoiding cross-tenant exposure and automatic resurrection.
 - [ ] 6.4 Test case/whitespace deduplication, type isolation, deletion/re-entry, historical views, race conditions and no personal calendar access for unlinked names.
 - [ ] 6.5 Use `duty-name-suggestions` as the only OpenSpec capability for suggestions; enforce scoped `PLANNER` suppression/restoration and reject viewers.
+- [ ] 6.6 Test exact owning-congregation/district suggestion isolation even when duty definitions are inherited.
 
 ## 7. Minister lifecycle and planning
 - [ ] 7.1 Add additive minister active/hidden status and nullable inclusive service end date; backfill existing records as active/visible.
 - [ ] 7.2 Implement authorised deactivate/reactivate and hide/restore controls; retain all historical references and audit changes.
 - [ ] 7.3 Filter normal minister pickers/lists and enforce eligibility in event, matrix, bulk and other service assignment writes based on active state and target event date.
 - [ ] 7.4 Flag existing appointments beyond a newly set end date, without silently deleting assignments.
-- [ ] 7.5 Test before/on/after end date, role/tenant errors, hidden historical references, stale clients, timezone boundaries and migrated data, preserving >80% coverage.
+- [ ] 7.5 Test before/on/after end date, role/tenant errors, hidden historical references, stale clients, timezone boundaries, typed former-leader names and migrated data, preserving >80% coverage.
