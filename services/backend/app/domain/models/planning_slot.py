@@ -61,8 +61,6 @@ class PlanningSlot:
     generation_key: str | None = None
     # Irreversible publication marker: once set, the event may only be cancelled.
     released_at: datetime | None = None
-    # Generator tombstone: prevent deleted drafts from reappearing on the next run.
-    deleted_at: datetime | None = None
 
     @classmethod
     def create(
