@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Daily scan that reports newly opened service gaps (SLOT_UNASSIGNED).
 
 Gaps exist only implicitly (a slot without assignment), so there is no state

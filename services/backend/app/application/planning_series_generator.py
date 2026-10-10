@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Planning series generator service.
 
 Generates PlanningSlot + EventInstance pairs from active PlanningSeries

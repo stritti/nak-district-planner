@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Feiertags-Import — zwei Quellen:
 
 1. Nager.Date (öffentliche API): gesetzliche Feiertage pro Bundesland
