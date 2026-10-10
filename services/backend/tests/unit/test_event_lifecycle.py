@@ -385,18 +385,18 @@ async def test_repo_remembers_deleted_legacy_series_occurrence():
 
 @pytest.mark.asyncio
 async def test_repository_refuses_reactivation_of_released_cancellation():
-    slot = slot(confirmed=True)
-    slot.status = PlanningSlotStatus.ACTIVE
+    event_slot = slot(confirmed=True)
+    event_slot.status = PlanningSlotStatus.ACTIVE
     saved = SimpleNamespace(
-        released_at=slot.released_at,
+        released_at=event_slot.released_at,
         approval_status=EventApprovalStatus.CONFIRMED,
         status=PlanningSlotStatus.CANCELLED,
-        district_id=slot.district_id,
-        congregation_id=slot.congregation_id,
-        category=slot.category,
+        district_id=event_slot.district_id,
+        congregation_id=event_slot.congregation_id,
+        category=event_slot.category,
     )
     session = AsyncMock()
     session.get.return_value = saved
     with pytest.raises(ReleasedEventError):
-        await SqlPlanningSlotRepository(session).save(slot)
+        await SqlPlanningSlotRepository(session).save(event_slot)
     session.flush.assert_not_awaited()
