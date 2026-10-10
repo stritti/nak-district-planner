@@ -79,10 +79,28 @@ test.describe('Matrix horizontal scrollbar', () => {
       return Math.abs(widths[0] - widths[1])
     }).toBeLessThanOrEqual(1)
 
+    // Chromium can reserve a scrollbar gutter inside scrollWidth. In that
+    // case scrollWidth - clientWidth is larger than the *reachable* native
+    // scrollLeft maximum, so compare the two actual endpoints instead.
+    const nativeEnd = await scroll.evaluate((element) => {
+      element.scrollLeft = element.scrollWidth
+      const end = element.scrollLeft
+      element.scrollLeft = 0
+      return end
+    })
+    await expect.poll(() => scroll.evaluate((element) => element.scrollLeft)).toBe(0)
     await proxy.evaluate((element) => { element.scrollLeft = element.scrollWidth })
     await expect.poll(() => scroll.evaluate((element) =>
-      Math.abs((element.scrollWidth - element.clientWidth) - element.scrollLeft),
+      Math.abs(nativeEnd - element.scrollLeft),
     )).toBeLessThanOrEqual(1)
+
+    const lastColumn = await scroll.evaluate((element) => {
+      const right = element.getBoundingClientRect().right
+      const lastDate = element.querySelector('thead th:last-child')!.getBoundingClientRect()
+      return { left: lastDate.left, right: lastDate.right, viewportRight: right }
+    })
+    expect(lastColumn.left).toBeLessThan(lastColumn.viewportRight)
+    expect(lastColumn.right).toBeLessThanOrEqual(lastColumn.viewportRight + 1)
   })
 
   test('passes vertical wheel scrolling to the page at the matrix boundary', async ({ page }) => {
