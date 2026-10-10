@@ -7,15 +7,15 @@ Planning slots already support a single liturgical service-leader assignment, bu
 - Add an independently configurable organisational duty catalogue at district and congregation scope, with event-category applicability and explicit congregation overrides.
 - Seed default duty categories for Gottesdienst (Schließdienst, Organist, Dirigent) and every other event category (Schließdienst only). All assignments are optional.
 - Allow zero or more user/person assignments to configured duties on PlanningSlots, without changing the existing single service-leader assignment.
-- Show assigned duties in event editing and in each assignee's personal calendar and personal ICS export. Keep public feeds free of personal duty data.
-- Preserve historical assignments after catalogue changes, and enforce tenant isolation and scoped authorisation.
+- Show assigned duties in event editing. Only securely account-linked assignees receive personal calendar and district-scoped subject-bound ICS access; name-only entries remain event display data. Keep public feeds free of personal duty data.
+- Preserve stored assignments after catalogue, event-category or congregation changes (flagging ineligible duties for review), and enforce tenant isolation and scoped authorisation.
 
 ## Capabilities
 
 ### New Capabilities
 - `event-duty-categories`: district/congregation configuration, inheritance, defaults and category lifecycle.
 - `event-duty-assignments`: optional, validated duty assignment to planning slots.
-- `duty-name-suggestions`: duty-specific remembered free-text names and reversible suppression.
+- `duty-name-suggestions`: the sole canonical delta for duty-specific remembered free-text names and reversible suppression.
 - `minister-lifecycle`: deactivation, hidden historical records and dated planning eligibility.
 
 ### Modified Capabilities
