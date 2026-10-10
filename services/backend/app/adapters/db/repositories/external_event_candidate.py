@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """SQLAlchemy persistence for governed external-event candidates."""
 
 from __future__ import annotations
