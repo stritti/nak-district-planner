@@ -7,7 +7,7 @@
 - [ ] 2.1 Add district and congregation catalogue/configuration read/write APIs with existing membership and RLS checks.
 - [ ] 2.2 Add event duty assignment CRUD and batch reads; validate event category, district/person references and capacity.
 - [ ] 2.3 Test unknown/foreign references, scope escalation, disabled categories, duplicates, concurrent updates and missing EventInstance.
-- [ ] 2.4 Test slot category/congregation changes retaining and flagging now-ineligible existing duties, with no implicit duty deletion.
+- [ ] 2.4 Test slot category/congregation changes retaining and flagging now-ineligible existing duties, with no implicit duty deletion; quarantine prior-congregation identities until dual-scope revalidation and verify no privacy leak in views/feeds.
 - [ ] 2.5 Test capacity reduction below existing assignee count, over-capacity flags and rejection of further assignments.
 
 ## 3. Frontend
