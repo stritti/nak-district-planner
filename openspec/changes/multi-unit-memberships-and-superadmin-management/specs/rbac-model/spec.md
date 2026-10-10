@@ -4,7 +4,7 @@
 
 A registered user SHALL be assignable to multiple districts and congregations under the same authenticated subject. Each membership SHALL retain its own scope and role. Memberships MAY include congregations in different districts and a combination of district and congregation scopes.
 
-Adding a membership SHALL NOT replace existing memberships. Changing or removing one membership SHALL NOT modify others. Reassigning the same user and scope SHALL update the existing membership instead of creating duplicate memberships. Effective permissions of a non-superadmin SHALL be evaluated for the target scope using the existing role hierarchy and scope rules.
+Adding a membership SHALL NOT replace existing memberships. Changing or removing one membership SHALL NOT modify others. Reassigning the same user and scope SHALL update the existing membership instead of creating duplicate memberships. The database SHALL enforce uniqueness of `(user_sub, scope_type, scope_id)`; repeated or concurrent requests SHALL be transactional and idempotent, without affecting memberships of another scope. Effective permissions of a non-superadmin SHALL be evaluated for the target scope using the existing role hierarchy and scope rules.
 
 #### Scenario: One user belongs to multiple congregations
 
@@ -36,9 +36,13 @@ Adding a membership SHALL NOT replace existing memberships. Changing or removing
 - **THEN** the existing membership is updated without creating duplicates
 - **AND** memberships in other scopes are unchanged
 
+#### Scenario: Concurrent repeated assignment to the same scope
+- **WHEN** two authorised requests concurrently assign a role to the same user, scope type and scope ID
+- **THEN** only one membership row exists and other scopes remain unchanged
+
 ### Requirement: Superadmins can appoint additional superadmins
 
-An authenticated existing superadmin SHALL be able to grant superadmin status to a registered user securely linked to an authenticated subject through user administration. This SHALL set the global is_superadmin status independently of unit memberships. Non-superadmins SHALL NOT grant superadmin status, including through registration or membership payloads. Successful appointments SHALL be recorded according to the existing audit rules.
+An authenticated existing superadmin SHALL be able to grant superadmin status to a registered user securely linked to an authenticated subject through user administration. This SHALL set the global is_superadmin status independently of unit memberships. Non-superadmins SHALL NOT grant superadmin status, including through registration or membership payloads. Successful appointments SHALL be recorded according to the existing audit rules. Grant and revoke operations SHALL be separate, authenticated, explicit administrative actions using database-reconciled `is_superadmin`, never values from OIDC claims, registration or membership payloads. Existing superadmins SHALL also be able to revoke superadmin status, except when doing so would leave zero superadmins. The final-superadmin guard SHALL be transactional and concurrency safe. Revocation SHALL take effect on the next authorised request, including middleware, API and RLS, without depending on client cache or logout; ordinary memberships remain intact.
 
 #### Scenario: Appoint another superadmin
 
@@ -56,6 +60,19 @@ An authenticated existing superadmin SHALL be able to grant superadmin status to
 
 - **WHEN** a non-superadmin attempts to set superadmin status through registration or membership assignment
 - **THEN** no superadmin status is granted
+
+#### Scenario: Revoke an additional superadmin
+- **WHEN** an existing superadmin revokes another superadmin while at least one superadmin will remain
+- **THEN** the target immediately loses global privileges and retains only independently authorised memberships
+- **AND** the change is audited
+
+#### Scenario: Cannot remove last superadmin
+- **WHEN** an administrator attempts to revoke the sole remaining superadmin, including concurrent revocations
+- **THEN** the operation is rejected atomically and a superadmin remains
+
+#### Scenario: Role change while session is active
+- **WHEN** a former superadmin uses a still-valid authenticated session after revocation and has no effective memberships
+- **THEN** protected business endpoints return 403 and PostgreSQL RLS does not allow cross-tenant access
 
 ### Requirement: Administration exposes all assignments and global status
 
@@ -76,7 +93,7 @@ User administration SHALL display all memberships of a user within the administr
 
 ### Requirement: Superadmin
 
-Users with is_superadmin SHALL have global access to all districts, congregations, business data and administrative functions, including management of registered users and appointment of further superadmins. They SHALL pass all role and scope checks without requiring memberships. This global access SHALL be applied consistently in API authorization, data access including row-level security, and frontend navigation and action visibility. Authentication and business validation rules SHALL remain applicable.
+Users with is_superadmin SHALL have global access to all districts, congregations, business data and administrative functions, including management of registered users and appointment of further superadmins. They SHALL pass all role and scope checks without requiring memberships, including the pre-router `TenantValidationMiddleware`. The flag MUST be loaded from the trusted current database user record for the authenticated subject and set in transaction-local RLS context; unverified token claims or stale frontend state SHALL NOT grant global access. This global access SHALL be applied consistently in API authorization, data access including row-level security, and frontend navigation and action visibility. Authentication and business validation rules SHALL remain applicable.
 
 Superadmins SHALL be the only users allowed to create districts and to list cross-district resources without a district filter. The initial superadmin SHALL continue to be granted through the bootstrap function grant_bootstrap_superadmin configured by subject.
 
