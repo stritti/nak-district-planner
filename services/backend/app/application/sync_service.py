@@ -209,7 +209,7 @@ async def _handle_external_cancel(
         instance.sync_state = SyncState.CONFLICT
         await context.instance_repo.save(instance)
         return SyncOutcome.SKIPPED
-    if slot and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
+    if slot and not slot.was_released and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
         now = datetime.now(UTC)
         existing_link.event_instance_id = None
         existing_link.last_synced_hash = new_content_hash
@@ -502,7 +502,7 @@ async def _reconcile_missing_provider_events(
             outcomes[SyncOutcome.SKIPPED] += 1
             continue
         now = datetime.now(UTC)
-        if slot and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
+        if slot and not slot.was_released and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
             link.event_instance_id = None
             link.state = ExternalEventLinkState.SYNC_TOMBSTONE
             link.deletion_origin = "EXTERNAL"
