@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.0-rc.8](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.7...v1.0.0-rc.8) (2026-10-10)
+
+
+### Features
+
+* **frontend:** retain filters and sorting during a session ([#537](https://github.com/stritti/nak-district-planner/issues/537)) ([eca8294](https://github.com/stritti/nak-district-planner/commit/eca82945107ea0a74864a5204177e19c0e088fa2))
+* **matrix,export:** Gastgeber als Titel und Ort eingeladener Gottesdienste ([#531](https://github.com/stritti/nak-district-planner/issues/531)) ([9fc3f50](https://github.com/stritti/nak-district-planner/commit/9fc3f50179fe540e2888db5d10032191ef8357df))
+* **matrix:** horizontale Scrollleiste immer am unteren Rand des sichtbaren Bereichs ([#532](https://github.com/stritti/nak-district-planner/issues/532)) ([abf8e79](https://github.com/stritti/nak-district-planner/commit/abf8e79dffc42a60aee9af4c221bdb6c68dc0ab2))
+* **matrix:** kompakte Dienstleiter-Auswahl mit automatischem Treffer ([#534](https://github.com/stritti/nak-district-planner/issues/534)) ([09d7907](https://github.com/stritti/nak-district-planner/commit/09d7907f9458be938a0c15c46f0947eb762b99bd))
+* **ux:** globalen Bezirkskontext in die Hauptnavigation verlegen ([#542](https://github.com/stritti/nak-district-planner/issues/542)) ([c8d7b7f](https://github.com/stritti/nak-district-planner/commit/c8d7b7f3f4c424101cc9416a216ecfa03d588129))
+
+
+### Bug Fixes
+
+* **ci:** align image policy tests with release-only publication ([#541](https://github.com/stritti/nak-district-planner/issues/541)) ([8309b74](https://github.com/stritti/nak-district-planner/commit/8309b7494c54fc58ec329117f7cffaf6bbe868b7))
+* **ci:** publish Docker images only for releases ([#535](https://github.com/stritti/nak-district-planner/issues/535)) ([eb04b5f](https://github.com/stritti/nak-district-planner/commit/eb04b5f71c8bcd54b784545bf03367c28f7ab00b))
+* **pwa:** keep calendar exports out of navigation fallback ([#540](https://github.com/stritti/nak-district-planner/issues/540)) ([2d55109](https://github.com/stritti/nak-district-planner/commit/2d551093263563d70b84368a4099e9ba20b11435))
+
 ## [1.0.0-rc.7](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.6...v1.0.0-rc.7) (2026-10-09)
 
 
