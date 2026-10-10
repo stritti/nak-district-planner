@@ -1,7 +1,7 @@
 # Rollenkonzept
 
 Dieses Dokument beschreibt die verbindlichen fachlichen Rollengrenzen des NAK Bezirksplaners.
-Der OpenSpec-Change [multi-unit-memberships-and-superadmin-management](../openspec/changes/multi-unit-memberships-and-superadmin-management/proposal.md)
+Der OpenSpec-Change `openspec/changes/multi-unit-memberships-and-superadmin-management/`
 erweitert das Modell um mehrere unabhängige Mitgliedschaften und die Ernennung weiterer
 Superadmins. Er definiert ein **Zielmodell**; die Umsetzung ist noch nicht abgeschlossen.
 
