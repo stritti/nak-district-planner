@@ -36,11 +36,11 @@ RecurringEventDecision:
 - id, district_id, template_id, occurrence_local_date (ursprünglicher Soll-Termin als lokales Datum), status (ACCEPTED oder SKIPPED), planning_slot_id optional, created_by, created_at, updated_at
 - eindeutiger Schlüssel (template_id, occurrence_local_date), zusätzlich district_id für Tenant/RLS
 - ACCEPTED referenziert den entstandenen oder bewusst zugeordneten PlanningSlot; SKIPPED besitzt keine slot_id
-- Fremdschlüssel mit geprüfter Bezirkszugehörigkeit; ein nicht mehr existentes Ziel wird als Prüfbedarf angezeigt, nie ungeprüft neu angelegt
+- Fremdschlüssel mit geprüfter Bezirkszugehörigkeit; planning_slot_id ist nullable und verwendet ON DELETE SET NULL, damit eine gelöschte Slot-Referenz (auch durch Retention Cleanup) die Entscheidung nicht löscht. ACCEPTED + null wird als NEEDS_REVIEW projiziert, nie ungeprüft neu angelegt
 
 Die Darstellung unterscheidet OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW. CONFLICT ist ein aus der aktuellen Planungsrealität abgeleiteter Zustand und keine automatische Ablehnung. Entscheidungen bleiben erhalten, wenn eine Vorlage später inaktiv wird oder ihre Regel bearbeitet wird; der Monatsstatus kann weiterhin als historischer Eintrag angezeigt werden. Ein verschobener akzeptierter Termin bleibt dem ursprünglichen Vorkommen zugeordnet, auch wenn er einen anderen Monat erreicht.
 
-Ein übersprungener Vorschlag kann explizit wieder geöffnet werden (Entscheidung entfernen); ACCEPTED wird dagegen durch Bearbeitung oder Stornierung des verknüpften Events verwaltet. Wird ein Event endgültig gelöscht, meldet die Checkliste NEEDS_REVIEW und verlangt eine bewusste Neuzuordnung oder Freigabe der Entscheidung; sie generiert nicht automatisch nach.
+Ein übersprungener Vorschlag kann explizit wieder geöffnet werden (Entscheidung entfernen); ACCEPTED mit existierendem Slot wird durch dessen normale Event-Bearbeitung oder Stornierung verwaltet. Wird der Slot endgültig gelöscht, zeigt die Checkliste NEEDS_REVIEW. Ein dedizierter Resolve-Use-Case erlaubt dann nur explizit und atomar: LINK_EXISTING (einen passenden, noch nicht anders zugeordneten Slot derselben Gemeinde bzw. desselben Bezirksscopes verknüpfen), MARK_SKIPPED (Entscheidung behalten, slot_id null) oder REOPEN (Entscheidung löschen, nur falls die aktuell aktive Vorlage das ursprüngliche Vorkommen weiterhin erzeugt). Vor jedem Schritt werden Scope, bestehende Verknüpfung und Revisionskonflikte geprüft. Ohne Entscheidung bleibt NEEDS_REVIEW und es erfolgt keine automatische Neuanlage.
 
 ### 4. Übernahme, Konflikte und Freigabe
 
@@ -49,12 +49,12 @@ Accept ist eine explizite Transaktion:
 2. Ein vorhandenes ACCEPTED idempotent mit der verknüpften slot_id beantworten, ein SKIPPED nur nach bewusstem Wiederöffnen übernehmen.
 3. Bestehende aktive Terminslots in derselben Gemeinde, am selben Datum und zur selben Uhrzeit auf Konflikte prüfen. District-Level-Termine werden anhand gleicher organisatorischer Zuordnung und identifizierter Vorlage geprüft, ohne parallele Bezirksveranstaltungen pauschal zu verbieten.
 4. Bei Kollision CONFLICT ohne Veränderung fremder/manueller Termine zurückgeben. Ein bereits vorhandener passender Termin kann nur durch eine separate, ausdrückliche Zuordnung übernommen werden.
-5. PlanningSlot (ACTIVE, approval_status=PLANNED, kein Dienstleiter) und EventInstance (INTERNAL origin, für die spätere Freigabe geeignete Sichtbarkeit und UTC-Zeiten) erzeugen, Decision ACCEPTED mit slot_id speichern; alles atomar.
+5. PlanningSlot (ACTIVE, approval_status=PLANNED, kein Dienstleiter) anlegen: bei Bezirksterminen applicability aus der zum Accept-Zeitpunkt geprüften Vorlage übernehmen (kanonisch, inkl. ["all"]), bei Gemeindeterminen applicability=[]. EventInstance mit source=INTERNAL, visibility=PUBLIC und UTC-Zeiten erzeugen; Decision ACCEPTED mit slot_id speichern. Diese Änderungen sind **pro Vorkommen** atomar. PUBLIC alleine macht Entwürfe nicht öffentlich: bestehende PUBLIC-ICS- und District-Verteilungsregeln verlangen zusätzlich CONFIRMED.
 6. Für gleichzeitige Requests DB-Unique-Constraint auf Entscheidung und die bestehenden aktiven Slot-Constraints nutzen. Eine verletzte Constraint ergibt eine idempotente Antwort oder HTTP 409, niemals einen zusätzlichen Slot.
 
 Der geplante Termin nimmt anschließend unverändert am bestehenden Monatsfreigabe-Workflow teil. Das bloße Abhaken eines Vorschlags bestätigt/veröffentlicht noch keinen Monatsplan. Abweichende Uhrzeit oder Beschreibung können bei der Übernahme gezielt überschrieben werden; die Entscheidung bleibt an der ursprünglichen lokalen Vorkommens-ID hängen. Die Vorlage wird durch einmalige Änderungen nicht verändert.
 
-Ein Bulk-Accept nimmt explizit selektierte Vorkommen und verarbeitet sie mit per-item-Ergebnis, sodass Konflikte für einzelne Termine die anderen nicht stillschweigend verhindern. Für jeden Versuch gilt dasselbe idempotente Verhalten.
+Ein Bulk-Accept nimmt explizit selektierte Vorkommen und verarbeitet jedes Vorkommen in einer eigenen abgeschlossenen DB-Transaktion oder in einem isolierten Savepoint mit definiertem Commit pro erfolgreich verarbeitetem Item. Ein konkurrierender Unique-Constraint-Konflikt wird **innerhalb** der Item-Grenze abgefangen und als per-item-Konflikt/idempotentes Ergebnis gemeldet. Ein Fehler darf nicht die Erfolge anderer Items zurückrollen oder den Session-Transaktionszustand für weitere Items vergiften. Die API liefert pro Item Status und ggf. slot_id/Fehlergrund. Für jeden Versuch gilt dieselbe Idempotenz.
 
 ### 5. Berechtigungen und Isolation
 
@@ -63,6 +63,7 @@ Die APIs sind unter /api/v1/districts/{district_id}/recurring-event-templates un
 - Bezirkstemplate anlegen/bearbeiten/deaktivieren sowie dessen Vorkommen annehmen/auslassen: DISTRICT_ADMIN des Bezirks.
 - Gemeindetemplate und seine Vorkommen ändern: CONGREGATION_ADMIN genau dieser Gemeinde oder DISTRICT_ADMIN des Bezirks.
 - PLANNER/VIEWER erhalten dadurch keine zusätzlichen Event-Erstellrechte; nur für ihren Scope autorisierte Benutzer dürfen Entscheidungen ändern.
+- **Monatsfreigabe (bewusste, begrenzte Änderung des bestehenden API-Guards):** `POST /api/v1/events/bulk-approval-status?district_id=...` mit gesetztem `body.congregation_id` erlaubt einen Gemeindeadmin genau dieser Gemeinde (oder berechtigtem Bezirksakteur) zu bestätigen. Die Congregation-ID muss dem District angehören und vor Abfrage/Mutation auf die Berechtigung geprüft werden. Ohne `congregation_id` bleibt die Bezirksfreigabe nur für mindestens PLANNER auf Bezirksebene zugänglich. Gemeindeadmin darf keine Bezirks- oder fremden Gemeindeslots freigeben. Ein Gemeinde-Teilrelease löst kein bezirksweites PLAN_FINALIZED aus; die bestehende Bezirks-Monatsfreigabe bleibt unverändert.
 - Ein Monatsfilter auf eine fremde Gemeinde, ein fremdes template_id, fremde applicability-Einträge oder eine unzulässige slot_id ist serverseitig abzulehnen.
 - Neue Tabellen unterliegen PostgreSQL-RLS, Audit-Logging sowie derselben Datenzugriffsstruktur wie die bestehenden Planungstabellen.
 
@@ -70,7 +71,7 @@ Alle Endpunkte sind in Backend-Ports, Domänenservices und API-Adapter getrennt.
 
 ### 6. UI und Fehlerführung
 
-Die Monatsplanung zeigt einen Abschnitt "Wiederkehrende Termine" mit Monatsnavigation, Scope-/Gemeindefilter, Fortschritt offen/übernommen/ausgelassen und Checkboxen bzw. Aktionen zur bewussten Übernahme. Ein Vorschau-Dialog ermöglicht das Ändern einzelner konkreter Termindaten vor dem Bestätigen. Konflikte und ungültige lokale Zeiten haben eine eigene erkennbare Darstellung und blockieren ausschließlich die betroffenen Übernahmen. Eine Statusänderung wird erst nach erfolgreicher API-Antwort angezeigt; API-Fehler lassen die Auswahl bearbeitbar.
+Die Monatsplanung zeigt einen Abschnitt "Wiederkehrende Termine" mit Monatsnavigation, Scope-/Gemeindefilter, serverseitiger Freitextsuche (Titel/Beschreibung), Kategorie- und Statusfilter, Fortschritt offen/übernommen/ausgelassen und Checkboxen bzw. Aktionen zur bewussten Übernahme. Ein Vorschau-Dialog ermöglicht das Ändern einzelner konkreter Termindaten vor dem Bestätigen. Konflikte und ungültige lokale Zeiten haben eine eigene erkennbare Darstellung und blockieren ausschließlich die betroffenen Übernahmen. Eine Statusänderung wird erst nach erfolgreicher API-Antwort angezeigt; API-Fehler lassen die Auswahl bearbeitbar.
 
 Die Vorlagenverwaltung nutzt denselben globalen Bezirkskontext wie die übrigen geschützten Ansichten. Liste und Checkliste sind auf schmalen Bildschirmen nutzbar. Bestehende Eventliste, Monatsansicht und Export erhalten nach Übernahme ihre Daten über die vorhandene API, ohne neue Anzeige-Logik für virtuelle Vorschläge.
 
@@ -78,13 +79,15 @@ Die Vorlagenverwaltung nutzt denselben globalen Bezirkskontext wie die übrigen 
 
 - GET/POST /api/v1/districts/{district_id}/recurring-event-templates
 - PATCH /api/v1/districts/{district_id}/recurring-event-templates/{template_id}
-- GET /api/v1/districts/{district_id}/recurring-event-checklist?year=2026&month=11&congregation_id=...
+- GET /api/v1/districts/{district_id}/recurring-event-checklist?year=2026&month=11&congregation_id=...&q=Chor&category=Musik&status=OPEN&limit=50&offset=0
 - POST /api/v1/districts/{district_id}/recurring-event-checklist/accept
 - POST /api/v1/districts/{district_id}/recurring-event-checklist/skip
-- POST /api/v1/districts/{district_id}/recurring-event-checklist/reopen
+- POST /api/v1/districts/{district_id}/recurring-event-checklist/reopen (nur SKIPPED)
+- POST /api/v1/districts/{district_id}/recurring-event-checklist/resolve (ACCEPTED + fehlender Slot: LINK_EXISTING, MARK_SKIPPED oder REOPEN)
 - POST /api/v1/districts/{district_id}/recurring-event-checklist/bulk-accept
+- POST /api/v1/events/bulk-approval-status?district_id=... (bestehende API: Ergänzung der gemeindespezifischen Berechtigungsprüfung, nur mit gesetzter congregation_id)
 
-Mutationen identifizieren ein Vorkommen mit template_id, occurrence_local_date und erwarteter template_revision. Bearbeitungsdaten sind streng validiert und auf die eigene Scope beschränkt. Veraltete Vorschauen führen zu HTTP 409 mit aktualisierbarem Konflikthinweis. Die exakten Payload-Typen werden vor der Implementierung im OpenAPI-Kontrakt festgeschrieben.
+GET filtert die vollständig berechnete, berechtigte Monatsmenge vor Limit/Offset; `total` zählt die gefilterten Ergebnisse. Statusfilter berücksichtigen auch dynamische Konflikt- und Prüfzustände und historische Entscheidungen. Mutationen identifizieren ein Vorkommen mit template_id, occurrence_local_date und erwarteter template_revision. Bearbeitungsdaten sind streng validiert und auf die eigene Scope beschränkt. Veraltete Vorschauen führen zu HTTP 409 mit aktualisierbarem Konflikthinweis. Die exakten Payload-Typen werden vor der Implementierung im OpenAPI-Kontrakt festgeschrieben.
 
 ## Trade-offs und Risiken
 
@@ -92,4 +95,4 @@ Mutationen identifizieren ein Vorkommen mit template_id, occurrence_local_date u
 - Berechnete statt persistierte OPEN-Einträge: wenig Daten und keine Hintergrundjobs, aber dynamische Vorschau muss performant und deterministisch sein.
 - SKIPPED-Entscheidungen sind erforderlich, sonst tauchen bewusst ausgelassene Termine bei jedem Aufruf erneut auf.
 - Ein Scope mit vielen Vorlagen erhält serverseitig begrenzte, paginierte Ergebnisse; Auswertung bleibt auf genau einen Monat begrenzt.
-- Die Trennung von Übernahme und Veröffentlichung ist fachlich zwingend: ein CHECKBOX-Klick ersetzt keine Monatsfreigabe.
+- Die Trennung von Übernahme und Veröffentlichung ist fachlich zwingend: ein CHECKBOX-Klick ersetzt keine Monatsfreigabe. `visibility=PUBLIC` ist ein Freigabe-Potenzial, nicht die Freigabeentscheidung; `PLANNED` bleibt im PUBLIC-ICS gesperrt.
