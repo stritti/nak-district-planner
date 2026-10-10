@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Fail-fast verification that the runtime database matches the Alembic head."""
 
 from pathlib import Path

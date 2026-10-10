@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Publish domain events only after the surrounding transaction commits.
 
 Services record events while they write; the events reach the

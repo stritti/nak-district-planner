@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """UserRepository — SQLAlchemy implementation for User persistence.
 
 Handles CRUD operations for User entities extracted from OIDC tokens.
