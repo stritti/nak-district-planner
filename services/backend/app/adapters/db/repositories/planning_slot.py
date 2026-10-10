@@ -16,6 +16,7 @@ from app.domain.models.planning_slot import (
     PlanningSlot,
     PlanningSlotStatus,
     ReleasedEventError,
+    planning_series_generation_key,
 )
 from app.domain.ports.repositories import PlanningSlotRepository
 
@@ -210,12 +211,15 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
             return
         if row.released_at is not None or row.approval_status == EventApprovalStatus.CONFIRMED:
             raise ReleasedEventError("Freigegebene Ereignisse dürfen nur abgesagt werden.")
-        if row.generation_key is not None:
-            # The key survives in a separate ledger: the draft itself (and its
-            # dependent occurrence/assignments) is physically deleted.
+        suppression_key = row.generation_key
+        if suppression_key is None and row.series_id is not None:
+            # Legacy series instances predate generation keys. Suppress by the
+            # recurring series and the event's UTC planning date.
+            suppression_key = planning_series_generation_key(row.series_id, row.planning_date)
+        if suppression_key is not None:
             self._session.add(DeletedGenerationKeyORM(
                 district_id=row.district_id,
-                generation_key=row.generation_key,
+                generation_key=suppression_key,
                 deleted_at=datetime.now(UTC),
             ))
         await self._session.delete(row)
