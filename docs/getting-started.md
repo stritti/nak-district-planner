@@ -1,46 +1,31 @@
-# Erste Schritte
+# Lokaler Einstieg für Entwickler
 
-Diese Anleitung hilft beim schnellen Einstieg in Entwicklung und Dokumentation.
+Die fachlichen Abläufe stehen unter [So funktioniert der Bezirksplaner](/workflows). Diese Seite behandelt nur die **lokale Dokumentation**. Die Anwendung selbst wird im [Repository-README](https://github.com/stritti/nak-district-planner#entwicklung) eingerichtet.
 
-## Quelle der Wahrheit
+## VitePress starten
 
-Starten Sie mit der Dokumentationslandkarte: [`documentation-map.md`](./documentation-map.md).
-Dort ist definiert, welche Dokumente verbindlich, geplant oder historisch sind.
-
-## Installation
-
-Im Projekt wird fuer JavaScript-Tooling standardmaessig **bun** verwendet.
-Installieren Sie die Abhaengigkeiten im Repository-Root:
+Im Repository-Root mit Bun:
 
 ```bash
-bun install
-```
-
-## Lokale Entwicklung
-
-Starten Sie den Entwicklungs-Server mit folgendem Befehl:
-
-```bash
+bun install --frozen-lockfile
 bun run docs:dev
 ```
 
-Die Dokumentation ist dann unter `http://localhost:5173` (oder dem nächsten freien Port) erreichbar.
+VitePress meldet die lokale Adresse, üblicherweise `http://localhost:5173`.
 
-## Dokumentation bauen
-
-Um die Dokumentation fuer den Produktiveinsatz zu bauen:
+## Dokumentation bauen und Links prüfen
 
 ```bash
 bun run docs:build
 ```
 
-Die erzeugten Dateien befinden sich im Ordner `docs/.vitepress/dist`.
+Die statische Website wird nach `docs/.vitepress/dist` geschrieben. Der Build prüft interne Links und rendert Mermaid-Diagramme als SVG.
 
-## Inhaltlicher Einstieg
+## Weiterführende Quellen
 
-Empfohlene Reihenfolge fuer neue Entwickler:
+- Fachliche Regeln: [Use Cases](/use-cases), [Rollen](/roles)
+- Implementierung: [Architekturstatus](/architecture-status), [Engineering Standards](/engineering-standards)
+- Betrieb: [Production Runbook](/production-runbook), [Security Baseline](/security-baseline)
+- Spezifikationen und Dokumentstatus: [Dokumentationslandkarte](/documentation-map)
 
-1. `README.md` (Setup, Laufzeit, Deployment-Basis)
-2. `docs/documentation-map.md` (Dokumentstatus)
-3. `openspec/architecture/overview.md` (Zielarchitektur)
-4. `docs/use-cases.md` und `docs/roles.md` (fachliche Regeln)
+Verhaltensänderungen werden über OpenSpec spezifiziert; Einstiegstexte ersetzen keine normativen Anforderungen.
