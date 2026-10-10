@@ -212,7 +212,7 @@ async def _handle_external_cancel(
         instance.sync_state = SyncState.CONFLICT
         await context.instance_repo.save(instance)
         return SyncOutcome.SKIPPED
-    if slot and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
+    if slot and not slot.was_released and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
         now = datetime.now(UTC)
         existing_link.event_instance_id = None
         existing_link.last_synced_hash = new_content_hash
@@ -326,7 +326,9 @@ async def _restore_after_snapshot_gap(
     await context.link_repo.save(link)
     if instance.sync_state in (SyncState.DIRTY_INTERNAL, SyncState.CONFLICT):
         return False
-    if slot is None or slot.status != PlanningSlotStatus.CANCELLED:
+    if slot is None or slot.status != PlanningSlotStatus.CANCELLED or slot.was_released:
+        # Once a released cancellation has been announced to subscribers,
+        # reappearance at the provider must not silently reactivate the slot.
         return False
     slot.status = PlanningSlotStatus.ACTIVE
     slot.updated_at = now
@@ -505,7 +507,7 @@ async def _reconcile_missing_provider_events(
             outcomes[SyncOutcome.SKIPPED] += 1
             continue
         now = datetime.now(UTC)
-        if slot and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
+        if slot and not slot.was_released and context.integration.delete_behavior == SyncDeleteMode.HARD_DELETE:
             link.event_instance_id = None
             link.state = ExternalEventLinkState.SYNC_TOMBSTONE
             link.deletion_origin = "EXTERNAL"

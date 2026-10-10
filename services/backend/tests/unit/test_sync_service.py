@@ -181,6 +181,82 @@ class TestRunSync:
         else:
             assert slot.status == PlanningSlotStatus.CANCELLED
 
+    async def test_released_event_survives_provider_hard_delete(self, mocks):
+        from app.domain.models.calendar_integration import SyncDeleteMode
+        from app.domain.models.planning_slot import EventApprovalStatus
+
+        integration = _integration()
+        integration.delete_behavior = SyncDeleteMode.HARD_DELETE
+        slot = _make_slot()
+        slot.approval_status = EventApprovalStatus.CONFIRMED
+        slot.released_at = datetime.now(UTC)
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=_hash("uid@test"))
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw(is_cancelled=True)]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        result = await run_sync(_INT_ID, mocks["session"])
+        assert result.cancelled == 1
+        assert slot.status == PlanningSlotStatus.CANCELLED
+        assert link.event_instance_id == instance.id
+        mocks["slot_repo"].delete.assert_not_awaited()
+        mocks["slot_repo"].save.assert_awaited()
+
+    async def test_provider_hard_delete_keeps_confirmed_event_as_cancelled(self, mocks):
+        from app.domain.models.calendar_integration import SyncDeleteMode
+        from app.domain.models.planning_slot import EventApprovalStatus
+
+        integration = _integration()
+        integration.delete_behavior = SyncDeleteMode.HARD_DELETE
+        slot = _make_slot()
+        slot.approval_status = EventApprovalStatus.CONFIRMED
+        slot.released_at = datetime.now(UTC)
+        instance = _make_event_instance(planning_slot_id=slot.id)
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=_hash("uid@test"))
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].fetch_events.return_value = [_raw(is_cancelled=True)]
+        mocks["link_repo"].get_by_external_event.return_value = link
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        result = await run_sync(_INT_ID, mocks["session"])
+        assert result.cancelled == 1
+        assert slot.status == PlanningSlotStatus.CANCELLED
+        assert link.event_instance_id == instance.id
+        mocks["slot_repo"].delete.assert_not_awaited()
+        mocks["slot_repo"].save.assert_awaited_once_with(slot)
+
+    async def test_snapshot_hard_delete_keeps_confirmed_event_as_cancelled(self, mocks):
+        from app.domain.models.calendar_integration import SyncDeleteMode
+        from app.domain.models.planning_slot import EventApprovalStatus
+
+        integration = _integration()
+        integration.delete_behavior = SyncDeleteMode.HARD_DELETE
+        slot = _make_slot()
+        slot.approval_status = EventApprovalStatus.CONFIRMED
+        slot.released_at = datetime.now(UTC)
+        start = _NOW + timedelta(days=30)
+        instance = _make_event_instance(
+            planning_slot_id=slot.id, actual_start_at=start,
+            actual_end_at=start + timedelta(hours=1),
+        )
+        link = _make_link(event_instance_id=instance.id)
+        mocks["integration_repo"].get.return_value = integration
+        mocks["connector"].authoritative_snapshot = True
+        mocks["link_repo"].list_active_by_integration.return_value = [link]
+        mocks["instance_repo"].get.return_value = instance
+        mocks["slot_repo"].get.return_value = slot
+
+        result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert result.cancelled == 1
+        assert slot.status == PlanningSlotStatus.CANCELLED
+        assert link.event_instance_id == instance.id
+        mocks["slot_repo"].delete.assert_not_awaited()
+        mocks["slot_repo"].save.assert_awaited_once_with(slot)
+
     async def test_connector_error_isolates_event_and_continues(self, mocks):
         integration = _integration()
         integration.capabilities.append(CalendarCapability.WRITE)
@@ -905,6 +981,20 @@ class TestWindowBoundedProvider:
         result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
         assert (result.cancelled, slot.status) == (0, PlanningSlotStatus.ACTIVE)
         mocks["connector"].resource_exists.assert_awaited_once()
+
+    async def test_published_deleted_resource_survives_hard_delete_setting(self, mocks):
+        from app.domain.models.calendar_integration import SyncDeleteMode
+        from app.domain.models.planning_slot import EventApprovalStatus
+
+        slot = self._setup(mocks)
+        slot.approval_status = EventApprovalStatus.CONFIRMED
+        slot.released_at = datetime.now(UTC)
+        mocks["integration_repo"].get.return_value.delete_behavior = SyncDeleteMode.HARD_DELETE
+        mocks["connector"].resource_exists.return_value = False
+        result = await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert result.cancelled == 1
+        assert slot.status == PlanningSlotStatus.CANCELLED
+        mocks["slot_repo"].delete.assert_not_awaited()
 
     async def test_deleted_resource_is_cancelled(self, mocks):
         slot = self._setup(mocks)

@@ -447,7 +447,7 @@ async def test_update_event_persists_instance_and_slot_changes() -> None:
     assert result.status == PlanningSlotStatus.CANCELLED
     assert slot.planning_date == new_start.date()
     assert slot.planning_time == new_start.timetz()
-    slot_repo.save.assert_awaited_once_with(slot)
+    slot_repo.save.assert_awaited_once_with(slot, require_existing=True)
     instance_repo.save.assert_awaited_once_with(instance)
 
 
@@ -556,7 +556,7 @@ async def test_update_event_moves_slot_without_instance_and_rejects_invalid_rang
     assert slot.planning_date == new_start.date()
     assert slot.planning_time == new_start.timetz()
     assert result.end_at == new_start  # duration not representable without instance
-    slot_repo.save.assert_awaited_once_with(slot)
+    slot_repo.save.assert_awaited_once_with(slot, require_existing=True)
     instance_repo.save.assert_not_awaited()
 
 
@@ -621,7 +621,7 @@ async def test_update_event_distributes_district_event_to_congregations() -> Non
 
     assert result.applicability == [str(c.id) for c in congregations]
     congregation_repo.list_by_district.assert_awaited_once_with(slot.district_id)
-    slot_repo.save.assert_awaited_once_with(slot)
+    slot_repo.save.assert_awaited_once_with(slot, require_existing=True)
 
 
 @pytest.mark.asyncio
@@ -709,7 +709,7 @@ async def test_bulk_approval_status_updates_month_slots() -> None:
         slot_repo.list_for_date_range.await_args.kwargs["to_date"],
     )
     assert (start, end) == (date(2026, 12, 1), date(2026, 12, 31))
-    slot_repo.save.assert_awaited_once_with(slot)
+    slot_repo.save.assert_awaited_once_with(slot, require_existing=True)
 
 
 @pytest.mark.asyncio

@@ -455,6 +455,19 @@ def test_calendar_and_export_routes_return_403(auth_client, method, path_templat
     [
         # PLANNER-required routes -> role-based 403 (resource in district1)
         ("patch", "/api/v1/events/{resource_id}", {}, None, "planner"),
+        ("delete", "/api/v1/events/{resource_id}", None, None, "planner"),
+        (
+            "post",
+            "/api/v1/events",
+            {
+                "district_id": "{district_id}",
+                "title": "Test",
+                "start_at": "2026-12-11T09:00:00Z",
+                "end_at": "2026-12-11T10:00:00Z",
+            },
+            None,
+            "planner",
+        ),
         (
             "post",
             "/api/v1/events/bulk-approval-status",
@@ -541,7 +554,10 @@ def test_events_and_related_routes_return_403(
         path = path_template.format(resource_id=resource_id, assignment_id=assignment_id)
         kwargs = {}
         if body is not None:
-            kwargs["json"] = body
+            kwargs["json"] = {
+                key: str(resource_district) if value == "{district_id}" else value
+                for key, value in body.items()
+            }
         if query is not None:
             kwargs["params"] = {k: str(resource_district) for k in query}
         kwargs["headers"] = auth_headers()

@@ -111,6 +111,7 @@ function setup(items = baseEvents) {
   const pinia = createPinia()
   setActivePinia(pinia)
   useAuthStore().user = { sub: 'event-test-user' }
+  useAuthStore().memberships = [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'd1' }]
   const districtsStore = useDistrictsStore()
   const eventsStore = useEventsStore()
   const wrapper = mount(EventListView, { global: { plugins: [pinia] } })
@@ -380,6 +381,79 @@ describe('EventListView', () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Termin gespeichert', 'Geändert')
   })
 
+  it('creates an event through the form and reloads the list', async () => {
+    vi.mocked(eventsApi.createEvent).mockResolvedValue(event({ id: 'new', title: 'Gemeindeabend' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await wrapper.get('[data-testid="create-event-button"]').trigger('click')
+    await wrapper.get('#new-event-title').setValue('Gemeindeabend')
+    await wrapper.get('#new-event-start').setValue('2026-10-12T10:00')
+    await wrapper.get('#new-event-end').setValue('2026-10-12T11:00')
+    await wrapper.get('#new-event-congregation').setValue('c1')
+    await wrapper.get('form.modal-panel').trigger('submit')
+    await flushPromises()
+    expect(eventsApi.createEvent).toHaveBeenCalledWith(expect.objectContaining({
+      district_id: 'd1', congregation_id: 'c1', title: 'Gemeindeabend',
+      start_at: expect.any(String), end_at: expect.any(String),
+    }))
+    expect(wrapper.find('#new-event-title').exists()).toBe(false)
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Ereignis angelegt', 'Gemeindeabend')
+  })
+
+  it('validates the creation time range before sending a request', async () => {
+    const { wrapper } = setup()
+    await flushPromises()
+    await wrapper.get('[data-testid="create-event-button"]').trigger('click')
+    await wrapper.get('#new-event-title').setValue('Test')
+    await wrapper.get('#new-event-start').setValue('2026-10-12T11:00')
+    await wrapper.get('#new-event-end').setValue('2026-10-12T10:00')
+    await wrapper.get('form.modal-panel').trigger('submit')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Ende muss nach dem Beginn liegen.')
+    expect(eventsApi.createEvent).not.toHaveBeenCalled()
+  })
+
+  it('deletes an unpublished draft only after confirmation', async () => {
+    vi.mocked(eventsApi.deleteEvent).mockResolvedValue(undefined)
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    mocks.confirm.mockResolvedValueOnce(false)
+    await wrapper.get('[data-testid="delete-event-button"]').trigger('click')
+    await flushPromises()
+    expect(eventsApi.deleteEvent).not.toHaveBeenCalled()
+    mocks.confirm.mockResolvedValueOnce(true)
+    await wrapper.get('[data-testid="delete-event-button"]').trigger('click')
+    await flushPromises()
+    expect(eventsApi.deleteEvent).toHaveBeenCalledWith('e1')
+    expect(wrapper.find('[data-testid="delete-event-button"]').exists()).toBe(false)
+  })
+
+  it('does not expose deletion or unpublication for released events', async () => {
+    const { wrapper } = setup([event({ approval_status: 'CONFIRMED', was_released: true })])
+    await flushPromises()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="delete-event-button"]').exists()).toBe(false)
+    const approval = wrapper.find('.modal-panel').findAll('select').find(
+      (select) => select.find('option[value="CONFIRMED"]').exists(),
+    )
+    expect(approval?.attributes('disabled')).toBeDefined()
+  })
+
+  it('keeps the edit dialog open when deletion fails', async () => {
+    vi.mocked(eventsApi.deleteEvent).mockRejectedValue(new Error('Bereits veröffentlicht'))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="delete-event-button"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Bereits veröffentlicht')
+    expect(wrapper.find('.modal-panel').exists()).toBe(true)
+  })
+
   it('exports all matching events and warns when the safety cap truncates the result', async () => {
     const { wrapper, eventsStore } = setup([event()])
     await flushPromises()
@@ -392,5 +466,40 @@ describe('EventListView', () => {
     expect(eventsApi.listEvents).toHaveBeenCalledWith(expect.objectContaining({ limit: 500, offset: 0 }))
     expect(mocks.exportEvents).toHaveBeenCalledWith([expect.objectContaining({ id: 'e1' })], 'Ereignisse.xlsx')
     expect(wrapper.text()).toContain('ersten 500 von 501')
+  })
+})
+
+
+
+describe('Create event district selection', () => {
+  it('clears selected congregation after creating an event', async () => {
+    vi.mocked(eventsApi.createEvent).mockResolvedValue(event({ id: 'created' }))
+    const { wrapper } = setup()
+    await flushPromises()
+    await wrapper.get('[data-testid="create-event-button"]').trigger('click')
+    await wrapper.get('#new-event-title').setValue('Termin')
+    await wrapper.get('#new-event-start').setValue('2026-10-12T10:00')
+    await wrapper.get('#new-event-end').setValue('2026-10-12T11:00')
+    await wrapper.get('#new-event-congregation').setValue('c1')
+    await wrapper.get('form.modal-panel').trigger('submit')
+    await flushPromises()
+    await wrapper.get('[data-testid="create-event-button"]').trigger('click')
+    expect((wrapper.get('#new-event-congregation').element as HTMLSelectElement).value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('drops the previous district congregation even with the creation form open', async () => {
+    const { wrapper, districtsStore } = setup()
+    await flushPromises()
+    useAuthStore().memberships.push({
+      role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'd2',
+    })
+    await wrapper.get('[data-testid="create-event-button"]').trigger('click')
+    await wrapper.get('#new-event-congregation').setValue('c1')
+    districtsStore.selectedDistrictId = 'd2'
+    await flushPromises()
+    expect((wrapper.get('#new-event-congregation').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.find('#new-event-congregation').text()).toContain('Gemeinde Drei')
+    wrapper.unmount()
   })
 })

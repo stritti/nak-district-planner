@@ -16,6 +16,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import IntegrityError
 
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
@@ -44,10 +45,12 @@ from app.domain.models.event_instance import (
     SyncState,
 )
 from app.domain.models.planning_slot import (
+    DeletedPlanningSlotError,
     EventApprovalStatus,
     InvalidApplicabilityError,
     PlanningSlot,
     PlanningSlotStatus,
+    ReleasedEventError,
 )
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus
@@ -87,6 +90,7 @@ class EventResponse(BaseModel):
     source: EventSource
     status: PlanningSlotStatus
     approval_status: EventApprovalStatus | None
+    was_released: bool
     visibility: EventVisibility
     applicability: list[str]
     invitation_source_congregation_id: uuid.UUID | None = None
@@ -102,6 +106,24 @@ class EventListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class EventCreate(BaseModel):
+    """Create a manual, initially unpublished planning slot and occurrence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    district_id: uuid.UUID
+    congregation_id: uuid.UUID | None = None
+    title: str = Field(min_length=1, max_length=500)
+    description: str | None = None
+    category: str | None = Field(default=None, max_length=255)
+    start_at: datetime
+    end_at: datetime
+    visibility: EventVisibility = EventVisibility.PUBLIC
+    applicability: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(
+        default_factory=list, max_length=500
+    )
 
 
 class EventUpdate(BaseModel):
@@ -157,6 +179,7 @@ def _slot_to_event(
         source=instance.source if instance else EventSource.INTERNAL,
         status=slot.status,
         approval_status=slot.approval_status,
+        was_released=slot.was_released,
         visibility=instance.visibility if instance else EventVisibility.PUBLIC,
         applicability=list(slot.applicability or []),
         invitation_source_congregation_id=slot.invitation_source_congregation_id,
@@ -282,6 +305,90 @@ async def list_events(
     )
 
 
+@router.post("", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
+async def create_event(
+    body: EventCreate,
+    auth: CurrentUserWithMemberships,
+    session: DbSession,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+) -> EventResponse:
+    require_role_in_district(auth, Role.PLANNER, body.district_id)
+    start_at = _to_utc(body.start_at).astimezone(UTC)
+    end_at = _to_utc(body.end_at).astimezone(UTC)
+    if end_at <= start_at:
+        raise HTTPException(status_code=400, detail="end_at muss nach start_at liegen.")
+
+    if body.congregation_id is not None:
+        congregation = await cong_repo.get(body.congregation_id)
+        if congregation is None or congregation.district_id != body.district_id:
+            raise HTTPException(status_code=400, detail="Gemeinde gehört nicht zum Bezirk.")
+        if body.applicability:
+            raise HTTPException(status_code=400, detail="Gemeindetermine dürfen nicht verteilt werden.")
+
+    slot = PlanningSlot.create(
+        district_id=body.district_id,
+        congregation_id=body.congregation_id,
+        title=body.title,
+        category=body.category,
+        approval_status=EventApprovalStatus.PLANNED,
+        planning_date=start_at.date(),
+        planning_time=start_at.timetz().replace(tzinfo=None),
+    )
+    if body.congregation_id is None and body.applicability:
+        congregations = await cong_repo.list_by_district(body.district_id)
+        try:
+            slot.distribute_to(body.applicability, {c.id for c in congregations})
+        except InvalidApplicabilityError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    instance = EventInstance.create(
+        planning_slot_id=slot.id,
+        title=body.title,
+        description=body.description,
+        actual_start_at=start_at,
+        actual_end_at=end_at,
+        source=EventSource.INTERNAL,
+        visibility=body.visibility,
+    )
+    try:
+        await slot_repo.save(slot)
+        await inst_repo.save(instance)
+    except IntegrityError as exc:
+        # A competing planner may have taken the same congregation/time.
+        # The failing flush poisons the DB transaction until it is rolled back.
+        await session.rollback()
+        sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+        if sqlstate == "23505":
+            raise HTTPException(
+                status_code=409,
+                detail="Für diese Gemeinde besteht bereits ein Termin zu diesem Zeitpunkt.",
+            ) from exc
+        raise
+    return _slot_to_event(slot, instance)
+
+
+@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_event(
+    event_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+) -> None:
+    slot = await slot_repo.get(event_id)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    if slot.was_released:
+        raise HTTPException(status_code=409, detail="Freigegebene Ereignisse dürfen nur abgesagt werden.")
+    try:
+        # Repository rechecks publication under a row lock; FK cascades remove
+        # EventInstance and linked assignments in the same transaction.
+        await slot_repo.delete(event_id)
+    except ReleasedEventError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.patch("/{event_id}", response_model=EventResponse)
 async def update_event(
     event_id: uuid.UUID,
@@ -299,6 +406,10 @@ async def update_event(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
 
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    if slot.was_released and "approval_status" in body.model_fields_set and body.approval_status != EventApprovalStatus.CONFIRMED:
+        raise HTTPException(status_code=409, detail="Eine Freigabe kann nicht zurückgenommen werden.")
+    if slot.was_released and slot.status == PlanningSlotStatus.CANCELLED and body.status == PlanningSlotStatus.ACTIVE:
+        raise HTTPException(status_code=409, detail="Eine veröffentlichte Absage kann nicht zurückgenommen werden.")
     instance = await inst_repo.get_by_planning_slot(event_id)
 
     if "congregation_id" in body.model_fields_set:
@@ -368,7 +479,10 @@ async def update_event(
         await inst_repo.save(instance)
 
     slot.updated_at = datetime.now(UTC)
-    await slot_repo.save(slot)
+    try:
+        await slot_repo.save(slot, require_existing=True)
+    except (ReleasedEventError, DeletedPlanningSlotError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     responsible = await _load_responsible(assignments_repo, leaders_repo, [slot])
     return _slot_to_event(slot, instance, responsible.get(slot.id))
 
@@ -498,11 +612,17 @@ async def bulk_update_approval_status(
     if body.congregation_id is not None:
         all_slots = [s for s in all_slots if s.congregation_id == body.congregation_id]
 
+    if body.approval_status == EventApprovalStatus.PLANNED and any(slot.was_released for slot in all_slots):
+        raise HTTPException(status_code=409, detail="Bereits freigegebene Ereignisse können nicht zurückgestuft werden.")
+
     now_dt = datetime.now(UTC)
     for slot in all_slots:
         slot.approval_status = body.approval_status
         slot.updated_at = now_dt
-        await slot_repo.save(slot)
+        try:
+            await slot_repo.save(slot, require_existing=True)
+        except (ReleasedEventError, DeletedPlanningSlotError) as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     if (
         district_id is not None

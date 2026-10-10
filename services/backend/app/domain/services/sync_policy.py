@@ -31,7 +31,7 @@ FIELD_AUTHORITY = {
          "invitation_source_event_id", "applicability", "planning_slot_id", "visibility",
          "created_at", "updated_at", "source", "sync_state", "external_uid", "content_hash",
          "calendar_integration_id", "last_external_modified_at", "last_internal_modified_at",
-         "deviation_flag", "generation_key"),
+         "deviation_flag", "generation_key", "generation_key_detached", "released_at"),
         SyncFieldAuthority.STRUCTURAL,
     ),
     "title": SyncFieldAuthority.SOFT,

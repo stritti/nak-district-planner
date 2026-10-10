@@ -11,7 +11,11 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from app.domain.models.planning_series import PlanningSeries
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import (
+    PlanningSlot,
+    PlanningSlotStatus,
+    planning_series_generation_key,
+)
 from app.domain.ports.planning_series_service import PlanningSeriesSlotGenerator
 from app.domain.ports.repositories import (
     PlanningSeriesRepository,
@@ -191,6 +195,7 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
             category=series.category or "Gottesdienst",
             title=None,  # Will be set from EventInstance or default
             status=PlanningSlotStatus.ACTIVE,
+            generation_key=planning_series_generation_key(series.id, start_utc.date()),
         )
 
     async def generate_slots_for_series(
@@ -223,23 +228,46 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
         if effective_from > effective_to:
             return {"generated": 0, "skipped": 0, "updated": 0}
 
+        # Serialize generator reads and inserts against draft deletion.
+        await self._slot_repo.lock_district_for_generation(series.district_id)
+
         # Expand series to dates
         dates = self._expand_series_dates(series, effective_from, effective_to)
 
         generated = 0
         skipped = 0
+        projected = [self._create_slot_from_series(series, occurrence) for occurrence in dates]
+        keys = {slot.generation_key for slot in projected if slot.generation_key is not None}
+        # A deletion committed between the reads appears in the later ledger
+        # query under PostgreSQL READ COMMITTED.
+        keyed_slots = await self._slot_repo.list_by_generation_keys(
+            district_id=series.district_id, generation_keys=keys
+        )
+        suppressed_keys = await self._slot_repo.list_deleted_generation_keys(
+            district_id=series.district_id, generation_keys=keys
+        )
+        occupied_keys = suppressed_keys | {
+            slot.generation_key for slot in keyed_slots if slot.generation_key is not None
+        }
 
-        for date_obj in dates:
-            # Check if slot already exists for this series and date
-            existing = await self._slot_repo.get_by_series_and_date(series.id, date_obj)
-
-            if existing:
+        for slot in projected:
+            if slot.generation_key in occupied_keys:
                 skipped += 1
                 continue
 
-            # Create new slot
-            slot = self._create_slot_from_series(series, date_obj)
-            await self._slot_repo.save(slot)
+            # Compare UTC planning dates; local dates can cross UTC midnight.
+            existing = await self._slot_repo.get_by_series_and_date(
+                series.id, slot.planning_date
+            )
+            if existing and not existing.generation_key_detached:
+                skipped += 1
+                continue
+
+            # A concurrent scheduler can insert the same key after the precheck.
+            # Use the repository SAVEPOINT path to skip the conflict safely.
+            if not await self._slot_repo.add_if_absent(slot):
+                skipped += 1
+                continue
             generated += 1
 
         return {"generated": generated, "skipped": skipped, "updated": 0}
@@ -255,7 +283,9 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
         """Generate PlanningSlots for all active series in a district."""
         # Get all active series for this district
         all_series = await self._series_repo.list_by_district(district_id)
-        active_series = [s for s in all_series if s.is_active]
+        active_series = sorted(
+            (s for s in all_series if s.is_active), key=lambda s: s.id
+        )
 
         total_generated = 0
         total_skipped = 0
@@ -288,7 +318,10 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
     ) -> dict[str, int]:
         """Generate PlanningSlots for all active series across all districts."""
         # Get all active series
-        all_series = await self._series_repo.list_all_active()
+        all_series = sorted(
+            await self._series_repo.list_all_active(),
+            key=lambda s: (s.district_id, s.id),
+        )
 
         total_generated = 0
         total_skipped = 0

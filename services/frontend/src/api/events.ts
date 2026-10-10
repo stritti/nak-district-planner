@@ -29,6 +29,7 @@ export interface EventResponse {
   source: EventSource
   status: PlanningSlotStatus
   approval_status: EventApprovalStatus | null
+  was_released?: boolean
   visibility: EventVisibility
   applicability: string[]
   invitation_source_congregation_id?: string | null
@@ -58,6 +59,29 @@ export interface EventListParams {
   to_dt?: string
   limit?: number
   offset?: number
+}
+
+export interface EventCreate {
+  district_id: string
+  congregation_id?: string | null
+  title: string
+  description?: string | null
+  start_at: string
+  end_at: string
+  category?: string | null
+  visibility?: EventVisibility
+  applicability?: string[]
+}
+
+export function createEvent(data: EventCreate): Promise<EventResponse> {
+  return apiFetch('/api/v1/events', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function deleteEvent(id: string): Promise<void> {
+  return apiFetch(`/api/v1/events/${id}`, { method: 'DELETE' })
 }
 
 export interface EventUpdate {

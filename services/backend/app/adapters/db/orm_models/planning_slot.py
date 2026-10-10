@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, time
 
-from sqlalchemy import ARRAY, Date, DateTime, ForeignKey, Index, String, Time, text
+from sqlalchemy import ARRAY, Boolean, Date, DateTime, ForeignKey, Index, String, Time, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -68,6 +68,10 @@ class PlanningSlotORM(Base):
     # Supports "all" sentinel string for district-wide applicability
     applicability: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
     generation_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    generation_key_detached: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     planning_date: Mapped[date] = mapped_column(Date, nullable=False)
     planning_time: Mapped[time] = mapped_column(Time(timezone=False), nullable=False)
     status: Mapped[PlanningSlotStatus] = mapped_column(

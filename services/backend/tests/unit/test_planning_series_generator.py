@@ -176,6 +176,9 @@ class MockRepos:
     def __init__(self):
         self.series_repo = AsyncMock()
         self.slot_repo = AsyncMock()
+        self.slot_repo.list_deleted_generation_keys.return_value = set()
+        self.slot_repo.list_by_generation_keys.return_value = []
+        self.slot_repo.add_if_absent.return_value = True
         self.instance_repo = AsyncMock()
         self.district_repo = AsyncMock()
         self.congregation_repo = AsyncMock()
@@ -188,6 +191,30 @@ class MockRepos:
             district_repo=self.district_repo,
             congregation_repo=self.congregation_repo,
         )
+
+
+class TestSeriesDeletionSuppression:
+    @pytest.mark.asyncio
+    async def test_deleted_occurrence_is_skipped_by_background_generator(self):
+        series = PlanningSeries.create(
+            district_id=uuid.uuid4(), default_planning_time=time(9),
+            recurrence_pattern={"type": "weekly", "days": [0]},
+        )
+        m = MockRepos()
+        m.series_repo.list_active.return_value = [series]
+        m.slot_repo.get_by_series_date.return_value = None
+        from app.domain.models.planning_slot import planning_series_generation_key
+
+        m.slot_repo.list_deleted_generation_keys.return_value = {
+            planning_series_generation_key(series.id, date(2026, 6, 1))
+        }
+        result = await m.build().run_for_window(
+            from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2)
+        )
+        assert result["slots_created"] == 0
+        assert result["slots_skipped"] == 1
+        m.slot_repo.add_if_absent.assert_not_awaited()
+        m.instance_repo.save.assert_not_awaited()
 
 
 class TestRunForWindow:
@@ -233,7 +260,7 @@ class TestRunForWindow:
         )
         m.series_repo.list_active = AsyncMock(return_value=[series_a, series_b])
         m.slot_repo.get_by_series_date = AsyncMock(return_value=None)
-        m.slot_repo.save = AsyncMock()
+        m.slot_repo.add_if_absent = AsyncMock()
         m.instance_repo.save = AsyncMock()
         gen = m.build()
 
@@ -243,7 +270,7 @@ class TestRunForWindow:
             district_ids={district_a},
         )
         assert result["series_processed"] == 1
-        m.slot_repo.save.assert_called_once()
+        m.slot_repo.add_if_absent.assert_called_once()
         m.instance_repo.save.assert_called_once()
 
     @pytest.mark.asyncio
@@ -263,7 +290,7 @@ class TestRunForWindow:
         )
         m.series_repo.list_active = AsyncMock(return_value=[series])
         m.slot_repo.get_by_series_date = AsyncMock(return_value=None)
-        m.slot_repo.save = AsyncMock()
+        m.slot_repo.add_if_absent = AsyncMock()
         m.instance_repo.save = AsyncMock()
         gen = m.build()
 
@@ -273,11 +300,11 @@ class TestRunForWindow:
         )
         assert result["slots_created"] == 1
         assert result["series_processed"] == 1
-        m.slot_repo.save.assert_awaited_once()
+        m.slot_repo.add_if_absent.assert_awaited_once()
         m.instance_repo.save.assert_awaited_once()
 
         # Verify the slot was saved with correct params
-        saved_slot = m.slot_repo.save.call_args[0][0]
+        saved_slot = m.slot_repo.add_if_absent.call_args[0][0]
         assert isinstance(saved_slot, PlanningSlot)
         assert saved_slot.series_id == series.id
         assert saved_slot.district_id == district_id
@@ -312,7 +339,7 @@ class TestRunForWindow:
         )
         m.series_repo.list_active = AsyncMock(return_value=[series])
         m.slot_repo.get_by_series_date = AsyncMock(return_value=existing_slot)
-        m.slot_repo.save = AsyncMock()
+        m.slot_repo.add_if_absent = AsyncMock()
         m.instance_repo.save = AsyncMock()
         gen = m.build()
 
@@ -322,7 +349,7 @@ class TestRunForWindow:
         )
         assert result["slots_created"] == 0
         assert result["slots_skipped"] == 1
-        m.slot_repo.save.assert_not_called()
+        m.slot_repo.add_if_absent.assert_not_called()
         m.instance_repo.save.assert_not_called()
 
     @pytest.mark.asyncio
@@ -337,7 +364,7 @@ class TestRunForWindow:
             active_from=date(2027, 1, 1),  # far in the future
         )
         m.series_repo.list_active = AsyncMock(return_value=[series])
-        m.slot_repo.save = AsyncMock()
+        m.slot_repo.add_if_absent = AsyncMock()
         m.instance_repo.save = AsyncMock()
         gen = m.build()
 
@@ -362,7 +389,7 @@ class TestRunForWindow:
         )
         m.series_repo.list_active = AsyncMock(return_value=[series])
         m.slot_repo.get_by_series_date = AsyncMock(return_value=None)
-        m.slot_repo.save = AsyncMock()
+        m.slot_repo.add_if_absent = AsyncMock()
         m.instance_repo.save = AsyncMock()
         gen = m.build()
 
@@ -410,7 +437,7 @@ class TestRunForWindow:
         )
         m.series_repo.list_active = AsyncMock(return_value=[series1, series2])
         m.slot_repo.get_by_series_date = AsyncMock(return_value=None)
-        m.slot_repo.save = AsyncMock()
+        m.slot_repo.add_if_absent = AsyncMock()
         m.instance_repo.save = AsyncMock()
         gen = m.build()
 
@@ -421,3 +448,108 @@ class TestRunForWindow:
         assert result["series_processed"] == 2
         # series1 creates 2 slots (5th, 12th), series2 creates 2 slots (7th, 14th)
         assert result["slots_created"] == 4
+
+
+class TestConcurrentGeneration:
+    @pytest.mark.asyncio
+    async def test_competing_insert_is_skipped_without_creating_an_instance(self):
+        """The savepoint conflict path must not persist an orphan EventInstance."""
+        series = PlanningSeries.create(
+            district_id=uuid.uuid4(),
+            default_planning_time=time(9),
+            recurrence_pattern={"type": "weekly", "days": [0]},
+        )
+        m = MockRepos()
+        m.series_repo.list_active.return_value = [series]
+        m.slot_repo.get_by_series_date.return_value = None
+        m.slot_repo.add_if_absent.return_value = False
+
+        outcome = await m.build().run_for_window(
+            from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2)
+        )
+
+        assert outcome == {"series_processed": 1, "slots_created": 0, "slots_skipped": 1}
+        m.slot_repo.add_if_absent.assert_awaited_once()
+        m.instance_repo.save.assert_not_awaited()
+
+
+
+@pytest.mark.asyncio
+async def test_scheduled_generator_checks_deletion_ledger_after_existing_slots():
+    from app.domain.models.planning_slot import planning_series_generation_key
+
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(9),
+        recurrence_pattern={"type": "weekly", "days": [0]},
+    )
+    key = planning_series_generation_key(series.id, date(2026, 6, 1))
+    repos = MockRepos()
+    repos.series_repo.list_active.return_value = [series]
+    order = []
+
+    async def existing(**kwargs):
+        order.append("slots")
+        return []
+
+    async def deleted(**kwargs):
+        order.append("ledger")
+        return {key}
+
+    repos.slot_repo.list_by_generation_keys.side_effect = existing
+    repos.slot_repo.list_deleted_generation_keys.side_effect = deleted
+    result = await repos.build().run_for_window(
+        from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2),
+    )
+    assert order == ["slots", "ledger"]
+    assert result["slots_created"] == 0
+    repos.slot_repo.add_if_absent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_scheduled_generator_does_not_block_on_detached_legacy_occurrence():
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(9),
+        recurrence_pattern={"type": "weekly", "days": [0]},
+    )
+    detached = PlanningSlot.create(
+        district_id=series.district_id,
+        planning_date=date(2026, 6, 1), planning_time=time(9),
+        series_id=series.id, congregation_id=series.congregation_id,
+    )
+    detached.generation_key_detached = True
+    repos = MockRepos()
+    repos.series_repo.list_active.return_value = [series]
+    repos.slot_repo.get_by_series_date.return_value = detached
+    result = await repos.build().run_for_window(
+        from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2),
+    )
+    assert result["slots_created"] == 1
+    repos.slot_repo.add_if_absent.assert_awaited_once()
+
+
+
+@pytest.mark.asyncio
+async def test_scheduled_generator_locks_district_before_reading_generation_keys():
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(10),
+        recurrence_pattern={"type": "weekly", "days": [0]},
+    )
+    m = MockRepos()
+    m.series_repo.list_active.return_value = [series]
+    order = []
+
+    async def lock(district):
+        order.append("lock")
+
+    async def existing(**kwargs):
+        order.append("read")
+        return []
+
+    m.slot_repo.lock_district_for_generation.side_effect = lock
+    m.slot_repo.list_by_generation_keys.side_effect = existing
+    m.slot_repo.get_by_series_date.return_value = None
+    await m.build().run_for_window(
+        from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2),
+    )
+    assert order[:2] == ["lock", "read"]
+    m.slot_repo.lock_district_for_generation.assert_awaited_once_with(series.district_id)

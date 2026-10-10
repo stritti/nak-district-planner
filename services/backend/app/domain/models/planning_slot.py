@@ -13,6 +13,11 @@ APPLICABILITY_ALL = "all"
 """Sentinel: a district-level slot applies to every congregation of the district."""
 
 
+def planning_series_generation_key(series_id: uuid.UUID, planning_date: date) -> str:
+    """Stable occurrence identity for generated series slots (UTC planning date)."""
+    return f"planning-series:{series_id}:{planning_date.isoformat()}"
+
+
 class InvalidApplicabilityError(ValueError):
     """The requested congregation distribution violates the UC-04 rules."""
 
@@ -62,6 +67,11 @@ class PlanningSlot:
     # date/time so a re-run never re-creates a moved, cancelled slot. Unique per
     # district; None for manually created or imported slots.
     generation_key: str | None = None
+    # True once a generated occurrence is reassigned to another congregation/category.
+    # Distinguishes detached occurrences from legacy series rows without a key.
+    generation_key_detached: bool = False
+    # Irreversible publication marker: once set, the event may only be cancelled.
+    released_at: datetime | None = None
 
     @classmethod
     def create(
@@ -121,8 +131,9 @@ class PlanningSlot:
             district_id,
             congregation_id,
             category,
-        ):
+        ) and self.generation_key is not None:
             self.generation_key = None
+            self.generation_key_detached = True
 
 
     def is_visible_to(self, congregation_id: uuid.UUID) -> bool:
@@ -140,6 +151,10 @@ class PlanningSlot:
             APPLICABILITY_ALL in self.applicability
             or str(congregation_id) in self.applicability
         )
+
+    @property
+    def was_released(self) -> bool:
+        return self.released_at is not None or self.is_confirmed
 
     @property
     def is_confirmed(self) -> bool:
@@ -198,3 +213,11 @@ def _congregation_in_district(
     if congregation_id not in district_congregation_ids:
         raise InvalidApplicabilityError("Gemeinde gehört nicht zum Bezirk des Ereignisses.")
     return congregation_id
+
+
+class ReleasedEventError(ValueError):
+    """A previously published event must remain available as a cancellation."""
+
+
+class DeletedPlanningSlotError(ValueError):
+    """A stale edit must never recreate an already-deleted planning slot."""

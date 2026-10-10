@@ -17,7 +17,11 @@ from zoneinfo import ZoneInfo
 
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_series import PlanningSeries
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import (
+    PlanningSlot,
+    PlanningSlotStatus,
+    planning_series_generation_key,
+)
 from app.domain.ports.repositories import (
     CongregationRepository,
     DistrictRepository,
@@ -133,7 +137,10 @@ class PlanningSeriesGenerator:
         if to_date_exclusive <= from_date:
             return {"series_processed": 0, "slots_created": 0, "slots_skipped": 0}
 
-        series_list = await self._series_repo.list_active()
+        series_list = sorted(
+            await self._series_repo.list_active(),
+            key=lambda series: (series.district_id, series.id),
+        )
         created = 0
         skipped = 0
         processed_series = 0
@@ -149,6 +156,9 @@ class PlanningSeriesGenerator:
                 skipped += 1
                 continue
 
+            # Share the district transaction lock with deletions and the
+            # other generator. Lock order is stable even across districts.
+            await self._slot_repo.lock_district_for_generation(series.district_id)
             generated = _expand_recurrence(
                 series,
                 from_date=effective_from,
@@ -156,6 +166,7 @@ class PlanningSeriesGenerator:
                 timezone_name=self._timezone_name,
             )
 
+            projected = []
             for gslot in generated:
                 # The recurrence time is local wall-clock time; the slot
                 # stores the UTC instant (DST-aware per date).
@@ -165,13 +176,34 @@ class PlanningSeriesGenerator:
                 start_utc = datetime.combine(
                     gslot.planning_date, local_time, tzinfo=ZoneInfo(self._timezone_name)
                 ).astimezone(UTC)
+                key = planning_series_generation_key(series.id, start_utc.date())
+                projected.append((gslot, start_utc, key))
+
+            keys = {key for _, _, key in projected}
+            # Read slots before deletion markers: a deletion committed between
+            # the reads must remain visible under READ COMMITTED.
+            existing_keys = {
+                slot.generation_key
+                for slot in await self._slot_repo.list_by_generation_keys(
+                    district_id=series.district_id, generation_keys=keys
+                )
+            }
+            deleted_keys = await self._slot_repo.list_deleted_generation_keys(
+                district_id=series.district_id, generation_keys=keys
+            )
+            blocked_keys = deleted_keys | existing_keys
+
+            for gslot, start_utc, key in projected:
+                if key in blocked_keys:
+                    skipped += 1
+                    continue
                 # Check if slot already exists for this date/series/congregation
                 existing_slot = await self._slot_repo.get_by_series_date(
                     series_id=series.id,
                     planning_date=start_utc.date(),
                     congregation_id=series.congregation_id,
                 )
-                if existing_slot is not None:
+                if existing_slot is not None and not existing_slot.generation_key_detached:
                     skipped += 1
                     continue
 
@@ -184,8 +216,13 @@ class PlanningSeriesGenerator:
                     planning_date=start_utc.date(),
                     planning_time=start_utc.timetz().replace(tzinfo=None),
                     status=PlanningSlotStatus.ACTIVE,
+                    generation_key=key,
                 )
-                await self._slot_repo.save(slot)
+                # The unique generation key/slot index is the final arbiter
+                # when two schedulers race after their initial existence checks.
+                if not await self._slot_repo.add_if_absent(slot):
+                    skipped += 1
+                    continue
 
                 # Create EventInstance
                 instance = EventInstance.create(

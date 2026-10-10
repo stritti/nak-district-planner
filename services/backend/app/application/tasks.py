@@ -31,7 +31,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import Awaitable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from app.celery_app import celery
 from app.domain.errors import IntegrationNotFoundError, UnsupportedCalendarTypeError
@@ -223,12 +223,66 @@ def sync_all_active_integrations() -> dict:
     return {"dispatched": len(ids)}
 
 
+def _unreleased_retention_conditions(cutoff_date: date):
+    """Shared conditions for identifying drafts eligible for retention."""
+    from sqlalchemy import or_
+
+    from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+    from app.domain.models.planning_slot import EventApprovalStatus
+
+    return (
+        PlanningSlotORM.planning_date < cutoff_date,
+        PlanningSlotORM.released_at.is_(None),
+        or_(
+            PlanningSlotORM.approval_status.is_(None),
+            PlanningSlotORM.approval_status != EventApprovalStatus.CONFIRMED,
+        ),
+    )
+
+
+def _unreleased_retention_statement(cutoff_date: date):
+    """Retain the set-based predicate for integration and policy checks."""
+    from sqlalchemy import delete
+
+    from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+
+    return delete(PlanningSlotORM).where(*_unreleased_retention_conditions(cutoff_date))
+
+
+async def _delete_expired_drafts(session, cutoff_date: date) -> int:
+    """Delete eligible slots via aggregate cleanup, not a raw bulk DELETE.
+
+    Linked invitations and target copies are reconciled by the repository;
+    a concurrent publication is skipped without failing the monthly job.
+    """
+    from sqlalchemy import select
+
+    from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+    from app.domain.models.planning_slot import ReleasedEventError
+
+    rows = await session.execute(
+        select(PlanningSlotORM.id)
+        .where(*_unreleased_retention_conditions(cutoff_date))
+        .order_by(PlanningSlotORM.id)
+    )
+    repo = SqlPlanningSlotRepository(session)
+    deleted = 0
+    for slot_id in rows.scalars().all():
+        try:
+            deleted += int(await repo.delete(slot_id))
+        except ReleasedEventError:
+            # A candidate can be confirmed after the initial select.
+            continue
+    return deleted
+
+
 @celery.task(name="cleanup_old_events")
 def cleanup_old_events() -> dict:
-    """Delete events older than 24 months.
+    """Delete *never-released* events older than 24 months.
 
-    Runs on the 1st of each month via Celery beat.  All events whose *end_at*
-    is before the cutoff (now - 24 months) are permanently removed.
+    Released and cancelled events retain their stable identifiers indefinitely.
+    The retention job runs monthly via Celery beat.
     """
     from app.adapters.db.session import AsyncSessionLocal
 
@@ -246,15 +300,12 @@ def cleanup_old_events() -> dict:
             # PlanningSlot uses planning_date (date), not end_at (datetime).
             # Delete slots with planning_date before cutoff date.
             cutoff_date = cutoff.date()
-            from sqlalchemy import delete, insert
+            from sqlalchemy import insert
 
             from app.adapters.db.domain_audit import bulk_delete_audit_row
             from app.adapters.db.orm_models.audit_log import AuditLogORM
-            from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 
-            stmt = delete(PlanningSlotORM).where(PlanningSlotORM.planning_date < cutoff_date)
-            result = await session.execute(stmt)
-            deleted = result.rowcount  # type: ignore[attr-defined]
+            deleted = await _delete_expired_drafts(session, cutoff_date)
             if deleted:
                 await session.execute(
                     insert(AuditLogORM.__table__),
