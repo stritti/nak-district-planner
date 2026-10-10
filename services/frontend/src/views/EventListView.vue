@@ -7,6 +7,12 @@
         <span v-if="viewMode === 'list'" class="text-sm text-gray-400 dark:text-gray-500">{{ eventsStore.total }} gesamt</span>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
+        <button
+          v-if="canManageEvents"
+          class="btn-primary px-3 py-1.5 text-sm"
+          data-testid="create-event-button"
+          @click="createOpen = true"
+        >Ereignis anlegen</button>
         <!-- Excel Export (list mode only) -->
         <div v-if="viewMode === 'list'" class="flex flex-col items-end gap-1">
           <button
@@ -483,6 +489,42 @@
       </div>
     </template>
 
+
+    <div v-if="createOpen" class="modal-backdrop" @click.self="createOpen = false">
+      <form class="modal-panel max-w-md space-y-3" @submit.prevent="submitCreate">
+        <div class="flex items-center justify-between">
+          <h2 class="modal-title">Ereignis anlegen</h2>
+          <button type="button" class="modal-close" @click="createOpen = false"><XMarkIcon class="h-5 w-5" /></button>
+        </div>
+        <label class="form-label" for="new-event-title">Titel</label>
+        <input id="new-event-title" v-model.trim="createForm.title" class="form-input" maxlength="500" required />
+        <label class="form-label" for="new-event-start">Beginn</label>
+        <input id="new-event-start" v-model="createForm.start" type="datetime-local" class="form-input" required />
+        <label class="form-label" for="new-event-end">Ende</label>
+        <input id="new-event-end" v-model="createForm.end" type="datetime-local" class="form-input" required />
+        <label class="form-label" for="new-event-category">Kategorie</label>
+        <input id="new-event-category" v-model.trim="createForm.category" class="form-input" maxlength="255" />
+        <label class="form-label" for="new-event-congregation">Gemeinde</label>
+        <select id="new-event-congregation" v-model="createForm.congregation_id" class="form-input">
+          <option value="">Bezirksebene</option>
+          <option v-for="c in districtsStore.congregations" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
+        <label class="form-label" for="new-event-description">Beschreibung</label>
+        <textarea id="new-event-description" v-model="createForm.description" class="form-input" rows="2" />
+        <label class="form-label" for="new-event-visibility">Sichtbarkeit</label>
+        <select id="new-event-visibility" v-model="createForm.visibility" class="form-input">
+          <option value="PUBLIC">Öffentlich nach Freigabe</option>
+          <option value="INTERNAL">Nur intern</option>
+        </select>
+        <p class="text-xs text-gray-500">Neue Ereignisse werden immer als Entwurf angelegt.</p>
+        <p v-if="createError" role="alert" class="text-sm text-red-600">{{ createError }}</p>
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn-secondary px-3" @click="createOpen = false">Abbrechen</button>
+          <button type="submit" class="btn-primary px-3" :disabled="createSaving">{{ createSaving ? 'Speichern…' : 'Anlegen' }}</button>
+        </div>
+      </form>
+    </div>
+
     <!-- ── Zuordnungs-Modal (alle Ansichten) ──────────────────────────────── -->
     <div
       v-if="editTarget"
@@ -541,7 +583,7 @@
               v-model="editForm.status"
               class="form-input"
             >
-              <option value="ACTIVE">Aktiv</option>
+              <option value="ACTIVE" :disabled="editTarget.was_released && editTarget.status === 'CANCELLED'">Aktiv</option>
               <option value="CANCELLED">Abgesagt</option>
             </select>
           </div>
@@ -550,6 +592,7 @@
             <select
               v-model="editForm.approval_status"
               class="form-input"
+              :disabled="editTarget.was_released || editTarget.approval_status === 'CONFIRMED'"
             >
               <option value="PLANNED">Geplant</option>
               <option value="CONFIRMED">Bestätigt</option>
@@ -576,6 +619,13 @@
           >
             Abbrechen
           </button>
+          <button
+            v-if="canManageEvents && !editTarget.was_released && editTarget.approval_status !== 'CONFIRMED'"
+            class="btn-secondary px-3 py-2 text-red-700 dark:text-red-400"
+            :disabled="editSaving"
+            data-testid="delete-event-button"
+            @click="removeEditTarget"
+          >Löschen</button>
           <button
             class="btn-primary px-4 py-2"
             :disabled="editSaving"
@@ -607,6 +657,8 @@ import { useLeadersStore } from '../stores/leaders'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import {
   listEvents,
+  createEvent,
+  deleteEvent,
   updateEvent,
   type EventApprovalStatus,
   type EventListParams,
@@ -631,6 +683,12 @@ const districtsStore = useDistrictsStore()
 const leadersStore = useLeadersStore()
 const toast = useToast()
 const confirm = useConfirm()
+
+const auth = useAuthStore()
+const canManageEvents = computed(() => auth.isSuperadmin || auth.memberships.some((m) =>
+  m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId &&
+  ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role),
+))
 
 // ── Ansichts-Modus ───────────────────────────────────────────────────────────
 
@@ -839,7 +897,6 @@ const selectedApprovalStatus = ref<EventApprovalStatus | ''>('')
 const selectedType           = ref<'' | 'service' | 'other'>('')
 const fromDate               = ref('')
 const toDate                 = ref('')
-const auth = useAuthStore()
 const periodDate = computed({
   get: () => localDate(currentPeriodStart.value),
   set: (value: string) => { currentPeriodStart.value = new Date(value + 'T12:00:00') },
@@ -1003,6 +1060,58 @@ function eventPillClass(event: EventResponse): string {
   return 'bg-gray-100 text-gray-700'
 }
 
+// ── Manual event creation ────────────────────────────────────────────────────
+
+const createOpen = ref(false)
+const createSaving = ref(false)
+const createError = ref('')
+const createForm = reactive({
+  title: '',
+  start: '',
+  end: '',
+  category: 'Gottesdienst',
+  congregation_id: '',
+  description: '',
+  visibility: 'PUBLIC' as 'PUBLIC' | 'INTERNAL',
+})
+
+async function submitCreate() {
+  const districtId = districtsStore.selectedDistrictId
+  if (!districtId || !canManageEvents.value) return
+  const start = new Date(createForm.start)
+  const end = new Date(createForm.end)
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+    createError.value = 'Ende muss nach dem Beginn liegen.'
+    return
+  }
+  createSaving.value = true
+  createError.value = ''
+  try {
+    const saved = await createEvent({
+      district_id: districtId,
+      congregation_id: createForm.congregation_id || null,
+      title: createForm.title,
+      category: createForm.category || null,
+      description: createForm.description || null,
+      visibility: createForm.visibility,
+      start_at: start.toISOString(),
+      end_at: end.toISOString(),
+    })
+    createOpen.value = false
+    createForm.title = ''
+    createForm.start = ''
+    createForm.end = ''
+    createForm.description = ''
+    onFilterChange()
+    toast.success('Ereignis angelegt', saved.title)
+  } catch (e) {
+    createError.value = errorMessage(e, 'Ereignis konnte nicht angelegt werden')
+    toast.error('Ereignis konnte nicht angelegt werden', e)
+  } finally {
+    createSaving.value = false
+  }
+}
+
 // ── Edit-Modal ───────────────────────────────────────────────────────────────
 
 const editTarget       = ref<EventResponse | null>(null)
@@ -1086,6 +1195,31 @@ async function openEdit(event: EventResponse) {
     : { id: null, text: '' }
   void leadersStore.fetchLeaders(event.district_id)
   listCongregations(event.district_id).then(cs => { editCongregations.value = cs }).catch(() => {})
+}
+
+async function removeEditTarget() {
+  const target = editTarget.value
+  if (!target || target.was_released || target.approval_status === 'CONFIRMED' || !canManageEvents.value) return
+  const confirmed = await confirm({
+    title: 'Entwurf löschen?',
+    message: `„${target.title}“ wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`,
+    confirmText: 'Endgültig löschen',
+    variant: 'danger',
+  })
+  if (!confirmed) return
+  editSaving.value = true
+  editError.value = ''
+  try {
+    await deleteEvent(target.id)
+    editTarget.value = null
+    onFilterChange()
+    toast.success('Entwurf gelöscht', target.title)
+  } catch (e) {
+    editError.value = errorMessage(e, 'Entwurf konnte nicht gelöscht werden')
+    toast.error('Entwurf konnte nicht gelöscht werden', e)
+  } finally {
+    editSaving.value = false
+  }
 }
 
 async function saveEdit() {
