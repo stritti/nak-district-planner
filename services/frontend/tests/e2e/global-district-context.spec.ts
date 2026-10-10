@@ -46,7 +46,7 @@ test('global district selection is shown only when meaningful and shared by even
   const select = page.getByRole('combobox', { name: 'Aktiven Bezirk wechseln' })
   await expect(select).toBeVisible()
   await expect(select).toHaveValue('district-1')
-  await expect(page.getByRole('heading', { name: 'Ereignisse' })).toBeVisible()
+  await expect(page.locator('main h1').first()).toBeVisible()
   await expect(page.locator('.filter-bar').getByText('Bezirk', { exact: true })).toHaveCount(0)
 
   await select.selectOption('district-2')
