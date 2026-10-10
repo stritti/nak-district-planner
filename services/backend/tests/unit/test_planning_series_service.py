@@ -40,6 +40,7 @@ class MockPlanningSlotRepository:
     def __init__(self):
         self.slots: list[PlanningSlot] = []
         self.slots_by_id: dict[uuid.UUID, PlanningSlot] = {}
+        self.deleted_keys: set[tuple[uuid.UUID, str]] = set()
 
     async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None:
         return self.slots_by_id.get(slot_id)
@@ -65,6 +66,28 @@ class MockPlanningSlotRepository:
             for s in self.slots
             if s.district_id == district_id and from_date <= s.planning_date <= to_date
         ]
+
+    async def list_by_generation_keys(
+        self, *, district_id: uuid.UUID, generation_keys
+    ) -> list[PlanningSlot]:
+        return [
+            slot for slot in self.slots
+            if slot.district_id == district_id and slot.generation_key in generation_keys
+        ]
+
+    async def list_deleted_generation_keys(
+        self, *, district_id: uuid.UUID, generation_keys
+    ) -> set[str]:
+        return {
+            key for tenant, key in self.deleted_keys
+            if tenant == district_id and key in generation_keys
+        }
+
+    async def delete(self, slot_id: uuid.UUID) -> None:
+        slot = self.slots_by_id.pop(slot_id)
+        self.slots.remove(slot)
+        if slot.generation_key is not None:
+            self.deleted_keys.add((slot.district_id, slot.generation_key))
 
     async def save(self, slot: PlanningSlot) -> None:
         self.slots.append(slot)
@@ -557,3 +580,30 @@ class TestPlanningSeriesSlotGenerationService:
         assert result["series_processed"] == 1
         assert result["districts_processed"] == 1
         assert result["generated"] > 0
+
+
+@pytest.mark.asyncio
+async def test_deleted_generated_series_slot_does_not_return():
+    series_repo = MockPlanningSeriesRepository()
+    slot_repo = MockPlanningSlotRepository()
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(),
+        default_planning_time=time(9, 30),
+        recurrence_pattern={"frequency": "weekly", "interval": 1, "by_weekday": [6]},
+    )
+    await series_repo.save(series)
+    service = PlanningSeriesSlotGenerationService(
+        series_repo=series_repo, slot_repo=slot_repo
+    )
+    period = {"series_id": series.id, "from_date": date(2026, 1, 4),
+              "to_date": date(2026, 1, 4)}
+    first = await service.generate_slots_for_series(**period)
+    assert first["generated"] == 1
+    (original,) = slot_repo.slots
+    assert original.generation_key is not None
+    await slot_repo.delete(original.id)
+
+    second = await service.generate_slots_for_series(**period)
+    assert second["generated"] == 0
+    assert second["skipped"] == 1
+    assert slot_repo.slots == []
