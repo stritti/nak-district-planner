@@ -97,11 +97,11 @@ describe('DistrictContextSwitcher', () => {
     await flushPromises()
     expect(store.selectedDistrictId).toBe('')
     expect(wrapper.find('[data-testid="global-district-context"]').exists()).toBe(false)
+    vi.mocked(districtApi.listDistricts).mockResolvedValue([district('d2', 'Konstanz')])
     auth.setToken(
       { accessToken: 'test2', idToken: 'test2', expiresAt: Date.now() / 1000 + 3600 },
       { sub: 'user-2' },
     )
-    vi.mocked(districtApi.listDistricts).mockResolvedValue([district('d2', 'Konstanz')])
     await flushPromises()
     expect(store.selectedDistrictId).toBe('d2')
     wrapper.unmount()
