@@ -40,11 +40,48 @@ describe('useStickyScrollbar', () => {
     await nextTick()
     expect(wide.api.needsScroll.value).toBe(true)
     expect(wide.api.contentWidth.value).toBe(2000)
+    expect(wide.api.viewportWidth.value).toBe(800)
 
     const narrow = mountHost({ scrollWidth: 800, clientWidth: 800 })
     narrow.api.measure()
     await nextTick()
     expect(narrow.api.needsScroll.value).toBe(false)
+  })
+
+  it('tracks a smaller client viewport when a classic vertical scrollbar appears', async () => {
+    const { api, container, wrapper } = mountHost({ scrollWidth: 2000, clientWidth: 800 })
+    api.measure()
+    expect(api.viewportWidth.value).toBe(800)
+
+    // The scrollbar uses 15px of the content width without shrinking scrollWidth.
+    Object.defineProperty(container, 'clientWidth', { value: 785, configurable: true })
+    api.measure()
+    await nextTick()
+    expect(api.viewportWidth.value).toBe(785)
+    expect(api.contentWidth.value - api.viewportWidth.value).toBe(1215)
+    expect(api.needsScroll.value).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('maps unequal horizontal ranges to the same fractional position in both directions', async () => {
+    const { wrapper, container, proxy } = mountHost({ scrollWidth: 2000, clientWidth: 785 })
+    Object.defineProperty(proxy, 'scrollWidth', { value: 1985, configurable: true })
+    Object.defineProperty(proxy, 'clientWidth', { value: 785, configurable: true })
+    await nextTick()
+
+    // Proxy: 1985 - 785 = 1200; matrix: 2000 - 785 = 1215.
+    proxy.scrollLeft = 1200
+    proxy.dispatchEvent(new Event('scroll'))
+    expect(container.scrollLeft).toBe(1215)
+
+    container.scrollLeft = 607
+    container.dispatchEvent(new Event('scroll'))
+    expect(proxy.scrollLeft).toBe(Math.round(607 * 1200 / 1215))
+
+    container.scrollLeft = 1215
+    container.dispatchEvent(new Event('scroll'))
+    expect(proxy.scrollLeft).toBe(1200)
+    wrapper.unmount()
   })
 
   it('keeps container and proxy scroll positions in sync both ways', async () => {

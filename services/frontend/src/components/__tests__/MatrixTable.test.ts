@@ -79,15 +79,59 @@ describe('MatrixTable scroll shadows', () => {
 describe('MatrixTable sticky horizontal scrollbar', () => {
   it('hides the native scrollbar and renders a sticky proxy at the viewport bottom', () => {
     const { wrapper } = mountTable()
-    expect(wrapper.get('[data-testid="matrix-scroll"]').classes()).toContain('[scrollbar-width:none]')
+    const scroll = wrapper.get('[data-testid="matrix-scroll"]')
+    expect(scroll.classes()).toEqual(expect.arrayContaining(['max-h-[70dvh]', 'overflow-auto', 'overscroll-x-contain', 'overscroll-y-auto']))
+    expect(scroll.attributes('tabindex')).toBe('0')
+    expect(scroll.attributes('role')).toBe('region')
     const proxy = wrapper.get('[data-testid="matrix-sticky-scrollbar"]')
     expect(proxy.classes()).toEqual(expect.arrayContaining(['sticky', 'bottom-0']))
     expect(proxy.attributes('aria-hidden')).toBe('true')
+    expect(proxy.attributes('style')).toContain('width: 0px')
   })
 
   it('is only shown when the table is wider than its container', async () => {
     const { wrapper } = mountTable()
     // jsdom has no layout: the container fits, so no proxy is needed
     expect(wrapper.get('[data-testid="matrix-sticky-scrollbar"]').attributes('style')).toContain('display: none')
+  })
+})
+
+
+describe('MatrixTable sticky date header', () => {
+  it('fixes every date heading vertically, congregation cells horizontally and the corner in both directions', () => {
+    const { wrapper } = mountTable()
+    const corner = wrapper.get('thead th:first-child')
+    const date = wrapper.get('thead th:nth-child(2)')
+    const congregation = wrapper.get('tbody td:first-child')
+
+    expect(corner.classes()).toEqual(expect.arrayContaining(['sticky', 'top-0', 'left-0', 'z-30']))
+    expect(date.classes()).toEqual(expect.arrayContaining(['sticky', 'top-0', 'z-20', 'bg-white', 'dark:bg-gray-900']))
+    expect(congregation.classes()).toEqual(expect.arrayContaining(['sticky', 'left-0', 'z-10']))
+    expect(wrapper.get('[data-testid="matrix-date-header"]').findAll('th')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="matrix-scroll"]').attributes('aria-label')).toContain('vertikal')
+    wrapper.unmount()
+  })
+
+  it('preserves a solid holiday background and sticky positioning in compact mode', () => {
+    const store = useMatrixStore()
+    store.matrix = { dates: ['2026-10-04', '2026-10-05'], rows: [row('Stockach')], holidays: { '2026-10-04': ['Erntedank', 'Langer Gedenktag'] } }
+    const wrapper = mount(MatrixTable, { props: { compactMode: true, matrixSortMode: 'default' } })
+    const holidayHeader = wrapper.get('thead th:nth-child(2)')
+    const normalHeader = wrapper.get('thead th:nth-child(3)')
+    expect(holidayHeader.classes()).toEqual(expect.arrayContaining(['top-0', 'z-20', 'bg-amber-50', 'dark:bg-amber-950']))
+    expect(holidayHeader.text()).toContain('Langer Gedenktag')
+    expect(normalHeader.classes()).toEqual(expect.arrayContaining(['top-0', 'bg-white', 'dark:bg-gray-900']))
+    expect(wrapper.get('table').classes()).toContain('matrix-table--compact')
+    expect(wrapper.get('thead th:first-child').classes()).toContain('px-2')
+    wrapper.unmount()
+  })
+
+  it('does not create a scrollable header when there are no dates', () => {
+    const store = useMatrixStore()
+    store.matrix = { dates: [], rows: [], holidays: {} }
+    const wrapper = mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
+    expect(wrapper.find('[data-testid="matrix-scroll"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Keine Ereignisse im gewählten Zeitraum.')
+    wrapper.unmount()
   })
 })

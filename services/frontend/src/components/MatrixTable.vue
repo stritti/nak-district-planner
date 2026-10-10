@@ -6,18 +6,21 @@
   >
     <div
       ref="scrollContainer"
-      class="overflow-x-auto overscroll-x-contain touch-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      class="matrix-scroll-container max-h-[70dvh] overflow-auto overscroll-x-contain overscroll-y-auto touch-auto"
       data-testid="matrix-scroll"
+      role="region"
+      aria-label="Dienstplan-Matrix, horizontal und vertikal scrollbar"
+      tabindex="0"
     >
       <table :class="tableClass" :style="{ width: `max(100%, ${tableWidth}px)` }">
         <colgroup>
           <col :style="{ width: `${congregationColumnWidth}px` }" />
           <col v-for="date in matrixStore.matrix.dates" :key="date" :style="{ width: `${dateColumnWidth}px` }" />
         </colgroup>
-        <thead>
+        <thead data-testid="matrix-date-header">
           <tr>
             <th
-              class="sticky left-0 z-10 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-left font-medium text-gray-700 dark:text-gray-300"
+              class="sticky top-0 left-0 z-30 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-left font-medium text-gray-700 dark:text-gray-300"
               :class="compactMode ? 'px-2 py-2' : 'px-3 py-2'"
             >
               Gemeinde
@@ -25,12 +28,12 @@
             <th
               v-for="date in matrixStore.matrix.dates"
               :key="date"
-              class="border text-center font-medium"
+              class="sticky top-0 z-20 border text-center font-medium"
               :class="[
                 compactMode ? 'px-1.5 py-2' : 'px-2.5 py-2',
                 matrixStore.matrix.holidays[date]?.length
-                  ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200'
-                  : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300',
+                  ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 text-amber-900 dark:text-amber-200'
+                  : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300',
               ]"
             >
               <div class="text-[11px] font-normal" :class="matrixStore.matrix.holidays[date]?.length ? 'text-amber-500 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'">
@@ -174,11 +177,12 @@
         </tbody>
       </table>
     </div>
-    <!-- Horizontal scrollbar pinned to the bottom of the viewport while the table extends below it. -->
+    <!-- Synced horizontal scrollbar remains reachable independently of vertical matrix scrolling. -->
     <div
       ref="stickyScrollbar"
       v-show="needsStickyScrollbar"
       class="sticky bottom-0 z-30 overflow-x-auto overflow-y-hidden bg-white/90 dark:bg-gray-900/90"
+      :style="{ width: `${stickyViewportWidth}px` }"
       data-testid="matrix-sticky-scrollbar"
       aria-hidden="true"
       tabindex="-1"
@@ -328,6 +332,7 @@ const {
 const {
   proxy: stickyScrollbar,
   contentWidth: stickyContentWidth,
+  viewportWidth: stickyViewportWidth,
   needsScroll: needsStickyScrollbar,
   measure: measureStickyScrollbar,
 } = useStickyScrollbar(scrollContainer)
@@ -390,6 +395,11 @@ function openCellModal(cell: MatrixCell, date: string, congregationName: string,
 </script>
 
 <style scoped>
+/* Keep the native vertical scrollbar usable without duplicating the horizontal proxy in WebKit. */
+.matrix-scroll-container::-webkit-scrollbar:horizontal {
+  height: 0;
+}
+
 .matrix-ellipsis {
   display: block;
   overflow: hidden;
