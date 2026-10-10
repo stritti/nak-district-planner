@@ -4,7 +4,7 @@
 
 A registered user SHALL be assignable to multiple districts and congregations under the same authenticated subject. Each membership SHALL retain its own scope and role. Memberships MAY include congregations in different districts and a combination of district and congregation scopes.
 
-Adding a membership SHALL NOT replace existing memberships. Changing or removing one membership SHALL NOT modify others. Reassigning the same user and scope SHALL update the existing membership instead of creating duplicate memberships. The database SHALL enforce uniqueness of `(user_sub, scope_type, scope_id)`; repeated or concurrent requests SHALL be transactional and idempotent, without affecting memberships of another scope. Effective permissions of a non-superadmin SHALL be evaluated for the target scope using the existing role hierarchy and scope rules.
+Adding a membership SHALL NOT replace existing memberships. Changing or removing one membership SHALL NOT modify others. Reassigning the same user and scope SHALL update the existing membership instead of creating duplicate memberships. The database SHALL enforce uniqueness of `(user_sub, scope_type, scope_id)`; repeated or concurrent requests SHALL be transactional and idempotent, without affecting memberships of another scope. Existing rows duplicated by the current `(user_sub, role, scope_type, scope_id)` constraint SHALL be consolidated before the new constraint is applied, retaining the highest role already effective in that scope. A tie SHALL be resolved deterministically by `updated_at` and membership ID; removed records SHALL be archived for audit and safe migration downgrade. Effective permissions of a non-superadmin SHALL be evaluated for the target scope using the existing role hierarchy and scope rules.
 
 #### Scenario: One user belongs to multiple congregations
 
@@ -39,6 +39,10 @@ Adding a membership SHALL NOT replace existing memberships. Changing or removing
 #### Scenario: Concurrent repeated assignment to the same scope
 - **WHEN** two authorised requests concurrently assign a role to the same user, scope type and scope ID
 - **THEN** only one membership row exists and other scopes remain unchanged
+
+#### Scenario: Legacy memberships with different roles in one scope
+- **WHEN** the migration sees VIEWER and PLANNER for the same user, scope type and scope ID
+- **THEN** it retains one PLANNER membership and archives the redundant row without changing access to any other scope
 
 ### Requirement: Superadmins can appoint additional superadmins
 
