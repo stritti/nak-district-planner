@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.9...v1.0.0) (2026-10-10)
+
+
+### Bug Fixes
+
+* **release:** promote 1.0.0 from rc.9 to stable ([#563](https://github.com/stritti/nak-district-planner/issues/563)) ([a260c5b](https://github.com/stritti/nak-district-planner/commit/a260c5ba76878aafd9d66fa43c18706b5cd81657))
+
 ## [1.0.0-rc.9](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.8...v1.0.0-rc.9) (2026-10-10)
 
 

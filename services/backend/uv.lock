@@ -679,7 +679,7 @@ wheels = [
 
 [[package]]
 name = "nak-district-planner-backend"
-version = "1.0.0-rc.9"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
