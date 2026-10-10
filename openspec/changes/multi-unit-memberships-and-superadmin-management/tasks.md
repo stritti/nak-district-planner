@@ -17,4 +17,4 @@
 - [ ] 3.1 Tests für mehrere Gemeinden/Bezirke, unterschiedliche Rollen, zusätzliche Zuordnung, Scope-Duplikate und gezieltes Entfernen ergänzen.
 - [ ] 3.2 Negative Tests für Scope-Überschreitung und Superadmin-Vergabe durch Nicht-Superadmins ergänzen; Rollen-Eskalation und Gemeinde-zu-Bezirk-Vergabe abweisen.
 - [ ] 3.3 Globalen Superadmin-Zugriff ohne Mitgliedschaften einschließlich RLS und UI testen, ebenso Revocation mit bestehender Session, Pending-Fallback, konkurrierenden Entzug des letzten Superadmins und Audit.
-- [ ] 3.4 OpenSpec strikt validieren und relevante Backend-/Frontend-Checks ausführen.
+- [ ] 3.4 OpenSpec strikt validieren, relevante Backend-/Frontend-Checks und RLS-Integrationstests ausführen; >80 % Coverage erhalten und Ausnahmefälle, Race Conditions, 403-/Audit-Fehlerpfade abdecken.
