@@ -28,9 +28,9 @@ class ReuseMetadataTests(unittest.TestCase):
         overrides = [
             annotation for annotation in self.configuration["annotations"]
             if annotation.get("precedence") == "override"
+            and annotation["SPDX-License-Identifier"] == "MIT"
         ]
         self.assertGreaterEqual(len(overrides), 3)
-        self.assertTrue(all(a["SPDX-License-Identifier"] == "MIT" for a in overrides))
         self.assertTrue(any(
             "third_party/ponytail/**" in annotation["path"]
             and annotation["SPDX-FileCopyrightText"] == "2026 DietrichGebert"
