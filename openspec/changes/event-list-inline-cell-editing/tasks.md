@@ -1,6 +1,6 @@
 ## 1. Specification and integration
 - [ ] 1.1 Inventory event overview columns, actual writable API fields and special workflow actions; record explicit editable field mapping.
-- [ ] 1.2 Verify authoritative PATCH/assignment contracts, conflict handling and optimistic concurrency; specify backend extension only if required.
+- [ ] 1.2 Implement/verify strong ETag `If-Match` (or an existing equivalent explicit server-side version) for every inline mutation, including assignments: 428 missing precondition, 412 stale revision, 409 business conflict; disable editing for endpoints lacking a safe conditional write.
 - [ ] 1.3 Validate OpenSpec delta and align other affected canonical specifications.
 
 ## 2. Frontend inline editing
@@ -12,8 +12,8 @@
 
 ## 3. Verification
 - [ ] 3.1 Unit and component tests: read mode, editor activation, keyboard/focus, empty/long values, permissions and no accidental edits.
-- [ ] 3.2 API interaction tests: successful save, validation failure, 403, 404, 409, network failure, retry, double submit, stale response and concurrent edits.
-- [ ] 3.3 Regression tests: leader conflicts, protected fields, cancelled events, external events, filters/sorting and responsive behaviour.
+- [ ] 3.2 API interaction tests: successful save, validation failure, 403, 404, 409, 412, 428, network failure, retry, double submit, stale response and concurrent edits.
+- [ ] 3.3 Regression tests: leader conflicts, protected fields, cancelled events, external events, category/congregation changes that invalidate duties, minister service-end-date checks, removal confirmation, filters/sorting and responsive behaviour.
 - [ ] 3.4 Run frontend tests, lint, build and OpenSpec validation; maintain >80% coverage with edge-path coverage.
 
 ## 4. Cross-application consistency
