@@ -63,13 +63,13 @@ def header_is_valid(text: str) -> bool:
     """Reject missing, conflicting, or incomplete declarations."""
     # Only interpret leading comment lines, never SPDX strings in program code.
     identifier = re.compile(
-        r"^\\s*(?:#|//|/\\*|\\*|<!--)?\\s*"
-        r"(SPDX-FileCopyrightText|SPDX-License-Identifier):\\s*"
-        r"(.*?)\\s*(?:\\*/|-->)?\\s*$"
+        r"^\s*(?:#|//|/\*|\*|<!--)?\s*"
+        r"(SPDX-FileCopyrightText|SPDX-License-Identifier):\s*"
+        r"(.*?)\s*(?:\*/|-->)?\s*$"
     )
     parsed = [
         match.groups()
-        for line in text.removeprefix("\\ufeff").splitlines()[:16]
+        for line in text.removeprefix("\ufeff").splitlines()[:16]
         if (match := identifier.match(line)) is not None
     ]
     licenses = [value for kind, value in parsed if kind == "SPDX-License-Identifier"]

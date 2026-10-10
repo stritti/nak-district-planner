@@ -86,8 +86,8 @@ class HeaderTests(unittest.TestCase):
 
     def test_embedded_spdx_strings_are_not_headers(self):
         source = (
-            'COPYRIGHT = "SPDX-FileCopyrightText: 2026 Stephan Strittmatter"\\n'
-            'LICENSE = "SPDX-License-Identifier: AGPL-3.0-only"\\n'
+            'COPYRIGHT = "SPDX-FileCopyrightText: 2026 Stephan Strittmatter"\n'
+            'LICENSE = "SPDX-License-Identifier: AGPL-3.0-only"\n'
         )
         self.assertFalse(mod.header_is_valid(source))
         annotated = mod.annotate(source, "services/backend/app/x.py")
