@@ -5,7 +5,7 @@
 - [x] 1.3 Persist first-release marker and migrate existing confirmed records.
 - [x] 1.4 Disallow unpublication and reopening of published cancellations.
 - [x] 1.5 Prevent published hard deletes from sync and invitation paths.
-- [x] 1.6 Preserve generated-draft deletion suppression across recurring auto-generation using a tenant-scoped suppression ledger.
+- [x] 1.6 Preserve deleted drafts across eight-week service and PlanningSeries auto-generation, including legacy series slots, using a tenant-scoped suppression ledger.
 
 ## 2. Frontend and exports
 
