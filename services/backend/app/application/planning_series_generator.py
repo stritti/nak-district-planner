@@ -171,15 +171,17 @@ class PlanningSeriesGenerator:
                 projected.append((gslot, start_utc, key))
 
             keys = {key for _, _, key in projected}
-            deleted_keys = await self._slot_repo.list_deleted_generation_keys(
-                district_id=series.district_id, generation_keys=keys
-            )
+            # Read slots before deletion markers: a deletion committed between
+            # the reads must remain visible under READ COMMITTED.
             existing_keys = {
                 slot.generation_key
                 for slot in await self._slot_repo.list_by_generation_keys(
                     district_id=series.district_id, generation_keys=keys
                 )
             }
+            deleted_keys = await self._slot_repo.list_deleted_generation_keys(
+                district_id=series.district_id, generation_keys=keys
+            )
             blocked_keys = deleted_keys | existing_keys
 
             for gslot, start_utc, key in projected:
@@ -192,7 +194,7 @@ class PlanningSeriesGenerator:
                     planning_date=start_utc.date(),
                     congregation_id=series.congregation_id,
                 )
-                if existing_slot is not None:
+                if existing_slot is not None and not existing_slot.generation_key_detached:
                     skipped += 1
                     continue
 

@@ -232,10 +232,12 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
         skipped = 0
         projected = [self._create_slot_from_series(series, occurrence) for occurrence in dates]
         keys = {slot.generation_key for slot in projected if slot.generation_key is not None}
-        suppressed_keys = await self._slot_repo.list_deleted_generation_keys(
+        # A deletion committed between the reads appears in the later ledger
+        # query under PostgreSQL READ COMMITTED.
+        keyed_slots = await self._slot_repo.list_by_generation_keys(
             district_id=series.district_id, generation_keys=keys
         )
-        keyed_slots = await self._slot_repo.list_by_generation_keys(
+        suppressed_keys = await self._slot_repo.list_deleted_generation_keys(
             district_id=series.district_id, generation_keys=keys
         )
         occupied_keys = suppressed_keys | {
@@ -251,7 +253,7 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
             existing = await self._slot_repo.get_by_series_and_date(
                 series.id, slot.planning_date
             )
-            if existing:
+            if existing and not existing.generation_key_detached:
                 skipped += 1
                 continue
 

@@ -80,6 +80,7 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
             .where(
                 PlanningSlotORM.series_id == series_id,
                 PlanningSlotORM.planning_date == planning_date,
+                PlanningSlotORM.generation_key_detached.is_(False),
             )
             .limit(1)
         )
@@ -99,6 +100,7 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
                 PlanningSlotORM.series_id == series_id,
                 PlanningSlotORM.planning_date == planning_date,
                 PlanningSlotORM.congregation_id == congregation_id,
+                PlanningSlotORM.generation_key_detached.is_(False),
             )
         )
         row = result.scalar_one_or_none()
@@ -226,7 +228,14 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row.updated_at = slot.updated_at
 
     async def delete(self, slot_id: uuid.UUID) -> bool:
-        # Lock before checking publication: a concurrent release must not race a deletion.
+        # Lock order: district advisory -> slot row -> invitations -> targets.
+        # Otherwise deleting an invitation source and target may deadlock.
+        snapshot = await self._session.get(PlanningSlotORM, slot_id)
+        if snapshot is None:
+            return False
+        await self.lock_district_for_generation(snapshot.district_id)
+        # Recheck after the lock: deletion/publication may have occurred while
+        # waiting, and the unlocked snapshot could be stale.
         row = (await self._session.execute(
             select(PlanningSlotORM).where(PlanningSlotORM.id == slot_id).with_for_update()
             .execution_options(populate_existing=True)

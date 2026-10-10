@@ -185,6 +185,10 @@ async def delete_invitation(
         # Lock and refresh the target *before* deciding between delete/cancel.
         # A concurrent publication cannot turn a draft into a released event
         # between the check and the write in the same transaction.
+        initial_target = await slot_repo.get(invitation.linked_event_id)
+        if initial_target is not None:
+            # Maintain the same district-first lock order as repository.delete.
+            await slot_repo.lock_district_for_generation(initial_target.district_id)
         target_slot = await slot_repo.get_for_update(invitation.linked_event_id)
         if target_slot is not None:
             if target_slot.was_released:
