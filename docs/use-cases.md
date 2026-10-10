@@ -53,7 +53,7 @@ Nutzung des Strategy-Patterns für verschiedene Provider mit einheitlichem Sync-
 
 Die **V1-Abgrenzung** ist unter UC-01 als Trust Policy beschrieben: Konfigurierte, vertrauenswürdige Quellen werden direkt übernommen. Der allgemeine Candidate-Review bleibt eine spätere Ausbaustufe. `SyncState` und `ExternalEventLink` sichern die Zuordnung und Änderungsverfolgung.
 
-## UC-03: Dienstplanung & Lücken-Visualisierung
+## UC-03: Dienstplanung & Lücken-Visualisierung {#uc-03-matrix}
 
 **Ziel:** Bezirksebene sieht alle Gottesdienste und deren Besetzung.
 
@@ -72,7 +72,7 @@ Die Spalten der Matrix setzen sich zusammen aus:
 ### Feiertags-Anzeige
 Im Spaltenkopf werden Feiertags-Namen grau und kursiv unter dem Datum angezeigt. Ein Feiertag wird als Spalte eingeblendet, auch wenn keine Gemeinde an diesem Tag regulären Gottesdienst hat.
 
-## UC-04: Bezirks-Events verteilen
+## UC-04: Bezirks-Events verteilen {#uc-04-events}
 
 **Ziel:** Ein Termin im Bezirk (z.B. Ämterstunde) soll in den Gemeindekalendern erscheinen.
 
@@ -82,7 +82,7 @@ Im Spaltenkopf werden Feiertags-Namen grau und kursiv unter dem Datum angezeigt.
 Nur Events mit `status=PUBLISHED` werden an die Gemeinden delegiert.
 :::
 
-## UC-05: Sicherer Export (iCal)
+## UC-05: Sicherer Export (iCal) {#uc-05-export}
 
 **Ziel:** Abonnierbare URLs für Mitglieder und Amtsträger.
 
