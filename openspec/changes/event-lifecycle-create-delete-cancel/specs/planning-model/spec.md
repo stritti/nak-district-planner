@@ -1,5 +1,16 @@
 ## MODIFIED Requirements
 
+### Requirement: Retention cleanup
+The beat task `cleanup_old_events` SHALL delete only never-released planning slots whose `planning_date` is older than 24 months on the first day of each month and SHALL record one bulk-delete audit entry. Previously released events (including cancelled events) SHALL NOT be permanently removed by retention.
+
+#### Scenario: Old unreleased slots removed
+- **WHEN** the cleanup runs
+- **THEN** never-released slots older than the cutoff and their dependent rows are removed and an audit row with reason `retention` exists
+
+#### Scenario: Old released slots retained
+- **WHEN** the cleanup runs and older released or cancelled events exist
+- **THEN** the released event identities and their dependent occurrences remain intact
+
 ### Requirement: Events API over planning slots
 `GET /api/v1/events` SHALL list slots of a district for `VIEWER` (superadmins MAY omit `district_id`) with filters for congregation, group, district level, status, approval status, `is_service`, time range (default one year back to two years ahead) and pagination. `PATCH /api/v1/events/{id}`, `POST /api/v1/events` and `DELETE /api/v1/events/{id}` SHALL require `PLANNER` in the relevant district. On creation, a new `PlanningSlot` and `EventInstance` SHALL be saved atomically with status `ACTIVE` and approval `PLANNED`. Creation and updates SHALL reject foreign-district congregations and invalid time ranges. A manually deleted event SHALL be absent from subsequent event listings.
 

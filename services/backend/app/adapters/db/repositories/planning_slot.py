@@ -252,6 +252,7 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
             .where(
                 or_(
                     CongregationInvitationORM.source_planning_slot_id == slot_id,
+                    CongregationInvitationORM.source_event_id == slot_id,
                     CongregationInvitationORM.linked_event_id == slot_id,
                 )
             )
@@ -264,7 +265,11 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
 
         for invitation in invitations:
             target_id = invitation.linked_event_id
-            if invitation.source_planning_slot_id != slot_id or target_id in (None, slot_id):
+            is_source = (
+                invitation.source_planning_slot_id == slot_id
+                or invitation.source_event_id == slot_id
+            )
+            if not is_source or target_id in (None, slot_id):
                 continue
             target = (
                 await self._session.execute(

@@ -21,9 +21,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.session import _set_tenant_gucs
-from app.application.tasks import _run_as_system_worker
+from app.application.tasks import _run_as_system_worker, _unreleased_retention_statement
 from app.domain.models.event_instance import EventSource, EventVisibility, SyncState
-from app.domain.models.planning_slot import PlanningSlotStatus
+from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlotStatus
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL is not configured"
@@ -43,6 +43,8 @@ async def test_retention_delete_cascades_instances_and_keeps_cutoff_boundary(ses
     cutoff = date(2024, 1, 1)
     slot_dates = {
         "expired": cutoff - timedelta(days=1),
+        "released": cutoff - timedelta(days=2),
+        "cancelled": cutoff - timedelta(days=3),
         "boundary": cutoff,
         "current": cutoff + timedelta(days=1),
     }
@@ -78,7 +80,15 @@ async def test_retention_delete_cascades_instances_and_keeps_cutoff_boundary(ses
                             applicability=[],
                             planning_date=planning_date,
                             planning_time=time(10, 0),
-                            status=PlanningSlotStatus.ACTIVE,
+                            status=(
+                                PlanningSlotStatus.CANCELLED if name == "cancelled"
+                                else PlanningSlotStatus.ACTIVE
+                            ),
+                            approval_status=(
+                                EventApprovalStatus.CONFIRMED
+                                if name in ("released", "cancelled") else None
+                            ),
+                            released_at=(now if name in ("released", "cancelled") else None),
                             created_at=now,
                             updated_at=now,
                         )
@@ -105,7 +115,7 @@ async def test_retention_delete_cascades_instances_and_keeps_cutoff_boundary(ses
 
             async with sessions() as db:
                 result = await db.execute(
-                    delete(PlanningSlotORM).where(PlanningSlotORM.planning_date < cutoff)
+                    _unreleased_retention_statement(cutoff)
                 )
                 assert result.rowcount == 1
                 await db.commit()
@@ -136,6 +146,10 @@ async def test_retention_delete_cascades_instances_and_keeps_cutoff_boundary(ses
 
                 assert slot_ids["expired"] not in remaining_slots
                 assert instance_ids["expired"] not in remaining_instances
+                assert slot_ids["released"] in remaining_slots
+                assert instance_ids["released"] in remaining_instances
+                assert slot_ids["cancelled"] in remaining_slots
+                assert instance_ids["cancelled"] in remaining_instances
                 assert slot_ids["boundary"] in remaining_slots
                 assert instance_ids["boundary"] in remaining_instances
                 assert slot_ids["current"] in remaining_slots

@@ -482,7 +482,7 @@ async def test_deleting_invitation_source_removes_unreleased_target_copy():
         approval_status=EventApprovalStatus.PLANNED,
     )
     invitation = SimpleNamespace(
-        source_planning_slot_id=source_id, linked_event_id=target_id,
+        source_planning_slot_id=source_id, source_event_id=source_id, linked_event_id=target_id,
     )
     session = MagicMock()
     session.execute = AsyncMock(side_effect=[
@@ -519,7 +519,7 @@ async def test_deleting_invitation_source_cancels_released_target_copy():
         updated_at=datetime.now(UTC),
     )
     invitation = SimpleNamespace(
-        source_planning_slot_id=source_id, linked_event_id=target_id,
+        source_planning_slot_id=source_id, source_event_id=source_id, linked_event_id=target_id,
     )
     session = MagicMock()
     session.execute = AsyncMock(side_effect=[
@@ -546,7 +546,8 @@ async def test_deleting_linked_target_removes_invitation_but_not_source():
         approval_status=EventApprovalStatus.PLANNED,
     )
     invitation = SimpleNamespace(
-        source_planning_slot_id=uuid.uuid4(), linked_event_id=target_id,
+        source_planning_slot_id=uuid.uuid4(), source_event_id=uuid.uuid4(),
+        linked_event_id=target_id,
     )
     session = MagicMock()
     session.execute = AsyncMock(side_effect=[
@@ -559,6 +560,40 @@ async def test_deleting_linked_target_removes_invitation_but_not_source():
     await SqlPlanningSlotRepository(session).delete(target_id)
 
     assert {id(c.args[0]) for c in session.delete.await_args_list} == {id(target), id(invitation)}
+
+
+@pytest.mark.asyncio
+async def test_deleting_legacy_invitation_source_cleans_orphaned_link():
+    source_id, target_id = uuid.uuid4(), uuid.uuid4()
+    source = SimpleNamespace(
+        id=source_id, generation_key=None, series_id=None, released_at=None,
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    target = SimpleNamespace(
+        id=target_id, released_at=datetime.now(UTC),
+        approval_status=EventApprovalStatus.CONFIRMED,
+        status=PlanningSlotStatus.ACTIVE,
+        invitation_source_event_id=source_id,
+        invitation_source_congregation_id=uuid.uuid4(),
+        updated_at=datetime.now(UTC),
+    )
+    legacy_link = SimpleNamespace(
+        source_planning_slot_id=None, source_event_id=source_id,
+        linked_event_id=target_id,
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=[
+        _query_result(row=source),
+        _query_result(invitations=[legacy_link]),
+        _query_result(row=target),
+    ])
+    session.delete = AsyncMock()
+    session.flush = AsyncMock()
+
+    await SqlPlanningSlotRepository(session).delete(source_id)
+
+    assert target.status == PlanningSlotStatus.CANCELLED
+    assert {id(c.args[0]) for c in session.delete.await_args_list} == {id(source), id(legacy_link)}
 
 
 def test_retention_statement_excludes_both_current_and_former_releases():
