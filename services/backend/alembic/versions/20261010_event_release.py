@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Preserve publication history before allowing draft deletion.
 
 Revision ID: 20261010_event_release
