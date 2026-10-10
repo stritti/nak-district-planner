@@ -37,6 +37,8 @@ class SourceSelectionTests(unittest.TestCase):
             "services/frontend/node_modules/a/index.js",
             "services/backend/.venv/script.py",
             "services/backend/app/data.json",
+            "docs/.vitepress/dist/build.js",
+            "docs/.vitepress/cache/generated.mts",
             "README.md",
         ):
             with self.subTest(path=path):
@@ -197,6 +199,17 @@ class ReviewRegressionTests(unittest.TestCase):
             with self.subTest(notice=notice):
                 with self.assertRaises(ValueError):
                     mod.annotate(notice + "x = 1\n", path)
+
+    def test_rejects_license_docstring_after_shebang(self):
+        path = "services/backend/app/vendor.py"
+        source = (
+            "#!/usr/bin/env python3\n"
+            "# coding=utf-8\n"
+            '"""Licensed under the Apache License, Version 2.0."""\n'
+            "print('test')\n"
+        )
+        with self.assertRaises(ValueError):
+            mod.annotate(source, path)
 
     def test_rejects_bad_header_in_other_language(self):
         html = "services/frontend/index.html"

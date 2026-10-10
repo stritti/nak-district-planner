@@ -9,3 +9,5 @@ Unter `third_party/` und in importierten Agent-Skills können andere Lizenzen ge
 Neue oder geänderte Quelldateien müssen die SPDX-Header tragen. Zum Prüfen: `python3 scripts/license_headers.py --check`. Zum Ergänzen fehlender Header in eigenem Code: `python3 scripts/license_headers.py --fix`. Der Fixer verweigert eine automatische Änderung bei vorhandenen abweichenden Lizenz- oder Copyright-Hinweisen und verlangt eine Prüfung der Rechteinhaberschaft. Die CI testet den Prüfer und validiert die Header für alle erfassten getrackten Quellcodedateien.
 
 Die CI prüft zusätzlich die ursprünglichen Ausführungsrechte (`100755`) der Shell- und Setup-Skripte. Der Prüfer akzeptiert nur sprachgültige Kommentarheader und verweigert das Überschreiben vorhandener Angaben zu anderen Lizenzen. Python-Encoding-Cookies und CSS-`@charset`-Direktiven bleiben an ihrer vorgeschriebenen Position.
+
+Generierte VitePress-Dateien unter `docs/.vitepress/dist/` sowie der Cache werden nicht als eigene Quelldateien klassifiziert; die gepflegten VitePress-Konfigurationsdateien bleiben prüfpflichtig.

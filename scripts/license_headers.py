@@ -38,6 +38,8 @@ EXCLUDED_PREFIXES = (
     "services/frontend/node_modules/",
     "services/backend/.venv/",
     "services/backend/.pytest_cache/",
+    "docs/.vitepress/dist/",
+    "docs/.vitepress/cache/",
 )
 
 
@@ -102,14 +104,15 @@ def split_preamble(text: str, path: str) -> tuple[str, str]:
     return bom + "".join(lines[:keep]), "".join(lines[keep:])
 
 
-def _leading_notice(text: str) -> bool:
+def _leading_notice(text: str, path: str) -> bool:
     """Prevent an automatic relicense if any prior legal notice exists."""
     for line in text.removeprefix("\ufeff").splitlines()[:50]:
         comment = _COMMENT.match(line)
         if comment and _LEGAL_NOTICE.search(comment.group(1)):
             return True
     # A Python module-level docstring can also contain the original license.
-    document = text.removeprefix("\ufeff").lstrip()
+    _, body = split_preamble(text, path)
+    document = body.lstrip()
     if document.startswith(('"""', "'''")):
         quote = document[:3]
         end = document.find(quote, 3)
@@ -139,7 +142,7 @@ def annotate(text: str, path: str) -> str:
     """Idempotently annotate a source without overwriting existing notices."""
     if header_is_valid(text, path):
         return text
-    if _leading_notice(text):
+    if _leading_notice(text, path):
         raise ValueError(f"Existing copyright or license notice in {path}; review manually")
     preamble, body = split_preamble(text, path)
     return preamble + header_for(path) + body

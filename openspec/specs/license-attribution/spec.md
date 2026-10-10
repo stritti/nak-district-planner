@@ -62,3 +62,5 @@ Header addition MUST retain PEP 263 encoding cookies with either `coding:` or `c
 #### Scenario: Source has an encoding directive
 - **WHEN** a Python or CSS source starts with a valid encoding directive
 - **THEN** the generated attribution follows that directive without changing its position.
+
+Generated VitePress output in `docs/.vitepress/dist/` and the associated cache directory MUST be excluded from source attribution checks while maintained `docs/.vitepress/*.mts` sources remain in scope.
