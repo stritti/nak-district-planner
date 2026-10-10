@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.0-rc.9](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.8...v1.0.0-rc.9) (2026-10-10)
+
+
+### Features
+
+* **events:** manually create drafts, delete unreleased events, preserve cancellations ([#545](https://github.com/stritti/nak-district-planner/issues/545)) ([67c8f22](https://github.com/stritti/nak-district-planner/commit/67c8f22daa0070bd8c443efcfc933b6efc735ab4))
+
+
+### Bug Fixes
+
+* **license:** preserve modes and harden SPDX checks ([#560](https://github.com/stritti/nak-district-planner/issues/560)) ([11420de](https://github.com/stritti/nak-district-planner/commit/11420de3e31017dc38bccb3f48b03554a20b7e6d))
+* **matrix:** Datums-Header beim Scrollen fixieren ([#543](https://github.com/stritti/nak-district-planner/issues/543)) ([#544](https://github.com/stritti/nak-district-planner/issues/544)) ([27b5092](https://github.com/stritti/nak-district-planner/commit/27b5092f8843f9a56bd8c1a9d8e12c3dda6f0f5f))
+
 ## [1.0.0-rc.8](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.7...v1.0.0-rc.8) (2026-10-10)
 
 
