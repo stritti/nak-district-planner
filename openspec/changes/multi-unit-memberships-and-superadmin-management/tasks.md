@@ -1,7 +1,7 @@
 ## 1. Mehrfachzuordnungen
 
 - [ ] 1.1 Mitgliedschafts- und Benutzerverwaltung auf mehrere unabhängige Bezirk-/Gemeindezuordnungen pro Benutzer prüfen und vervollständigen.
-- [ ] 1.2 Hinzufügen, Aktualisieren und Entfernen einzelner Zuordnungen ohne Verlust anderer Zuordnungen ermöglichen; eindeutige DB-Constraint und parallele Upserts prüfen.
+- [ ] 1.2 Hinzufügen, Aktualisieren und Entfernen einzelner Zuordnungen ohne Verlust anderer Zuordnungen ermöglichen; alte rollenbasierte Unique-Constraint durch `(user_sub, scope_type, scope_id)` ersetzen. Vorher rollenverschiedene Same-Scope-Dubletten deterministisch auf höchste Rolle konsolidieren, entfallende Zeilen für Audit/Downgrade sichern und parallele Upserts testen.
 - [ ] 1.3 Alle effektiven Mitgliedschaften und Rollen in Benutzerverwaltung und Zugriffskontext anzeigen.
 - [ ] 1.4 Auswahl und Zugriff auf mehrere berechtigte Einheiten im Frontend prüfen.
 
