@@ -9,8 +9,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.locks import acquire_advisory_xact_lock
-from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.deleted_generation_key import DeletedGenerationKeyORM
+from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
     PlanningSlot,
