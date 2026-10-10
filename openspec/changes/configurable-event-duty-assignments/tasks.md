@@ -1,5 +1,5 @@
 ## 1. Persistence and domain
-- [ ] 1.1 Add scoped duty category/configuration/override/assignment models, constraints and indexes without modifying service-leader uniqueness.
+- [ ] 1.1 Add scoped duty category/configuration/override/assignment models with separate partial uniqueness for linked users and name-only normalized names plus transactional duty-capacity locks; do not modify service-leader uniqueness.
 - [ ] 1.2 Add an additive Alembic migration, idempotent defaults (Gottesdienst: Schließdienst, Organist, Dirigent; others: Schließdienst) and downgrade/legacy data tests.
 - [ ] 1.3 Implement deterministic inherited configuration resolution, category lifecycle and historical assignment preservation.
 
@@ -19,7 +19,7 @@
 - [ ] 4.1 Include duty-only assignments in authenticated personal event lists and private personal ICS; aggregate multiple roles into one event.
 - [ ] 4.2 Keep UID stable, apply cancellation and timing updates, and ensure public feeds never disclose duty-person data.
 - [ ] 4.3 Test assignment add/remove, dual leader+duty roles, token privacy, distributed slots and absence of EventInstance.
-- [ ] 4.4 Implement and test subject-bound district-scoped INTERNAL personal tokens, issuance/revocation, cross-subject rejection, stale role changes and RLS; preserve legacy leader token semantics.
+- [ ] 4.4 Implement and test subject-bound district-scoped INTERNAL personal tokens, issuance/revocation, cross-subject rejection, lost membership while token remains valid, stale role changes and RLS; preserve legacy leader token semantics.
 - [ ] 4.5 Test authenticated duty-only personal calendars without leader records, and refusal of unlinked/forged identities.
 
 ## 5. Verification
