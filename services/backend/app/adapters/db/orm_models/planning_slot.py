@@ -66,6 +66,7 @@ class PlanningSlotORM(Base):
     applicability: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
     generation_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     planning_date: Mapped[date] = mapped_column(Date, nullable=False)
     planning_time: Mapped[time] = mapped_column(Time(timezone=False), nullable=False)
     status: Mapped[PlanningSlotStatus] = mapped_column(
