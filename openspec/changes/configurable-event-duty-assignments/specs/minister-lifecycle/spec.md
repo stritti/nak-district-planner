@@ -16,7 +16,7 @@ The system SHALL support an active status and a separate reversible hidden-from-
 - **THEN** the administrative list can show the minister again, without implicitly changing the active status
 
 ### Requirement: Inclusive end date limits future service eligibility
-A minister SHALL support an optional local-calendar `service_end_date`. Assignment eligibility SHALL be checked against the target planning slot's local date across all individual, matrix and bulk assignment entry points. A minister SHALL be eligible on the end date if active and visible, but SHALL NOT be eligible on any later date. An absent end date SHALL impose no date limit.
+A minister SHALL support an optional local-calendar `service_end_date`. Assignment eligibility SHALL be checked against the target planning slot's local date across all individual, matrix and bulk assignment entry points. A minister SHALL be eligible on the end date if active and visible, but SHALL NOT be eligible on any later date. The server SHALL apply the same eligibility check to all assignment entry points, including free-text leader names that match a known ineligible leader of the district. Such input MUST NOT silently bypass retirement checks; a distinct guest with the same name requires an explicit guest-only assignment flow that does not claim the retired person's ID. An absent end date SHALL impose no date limit.
 
 #### Scenario: Last day of service
 - **WHEN** an active, visible minister has an end date of 2026-12-31 and a slot is dated 2026-12-31
@@ -25,6 +25,10 @@ A minister SHALL support an optional local-calendar `service_end_date`. Assignme
 #### Scenario: Planning beyond end date
 - **WHEN** a planner assigns that minister to a slot dated 2027-01-01
 - **THEN** the server rejects the new assignment and the frontend excludes the minister from suggested candidates
+
+#### Scenario: Retired leader entered as free-text
+- **WHEN** a planner types the name of a known ineligible leader instead of selecting their record
+- **THEN** the server rejects any implicit assignment to that leader and requires an explicit separate guest flow if a different person shares the same name
 
 #### Scenario: Stale client
 - **WHEN** the minister's end date is changed after a planner loads the page
