@@ -64,7 +64,41 @@ def header_for(path: str) -> str:
 # PEP 263 allows an encoding cookie on either of the first two lines.
 _PYTHON_ENCODING = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*[-_.a-zA-Z0-9]+")
 _CSS_CHARSET = re.compile(r'^@charset\s+["\x27][^"\x27]+["\x27]\s*;')
-_COMMENT = re.compile(r"^\s*(?:#|//|/\*+|\*|<!--)\s*(.*)$")
+def comment_texts(text: str, *, limit: int = 50) -> list[str]:
+    """Extract line and multiline comment bodies without HTML-filter regexes."""
+    bodies: list[str] = []
+    close: str | None = None
+    block: list[str] = []
+    for line in text.removeprefix("\ufeff").splitlines()[:limit]:
+        stripped = line.lstrip()
+        if close is not None:
+            end = stripped.find(close)
+            if end < 0:
+                block.append(stripped)
+            else:
+                block.append(stripped[:end])
+                bodies.append(" ".join(block))
+                block = []
+                close = None
+            continue
+        for opening, ending in (("<!--", "-->"), ("/*", "*/")):
+            if stripped.startswith(opening):
+                content = stripped[len(opening):]
+                end = content.find(ending)
+                if end >= 0:
+                    bodies.append(content[:end])
+                else:
+                    close = ending
+                    block = [content]
+                break
+        else:
+            if stripped.startswith("//"):
+                bodies.append(stripped[2:])
+            elif stripped.startswith("#"):
+                bodies.append(stripped[1:])
+    if block:
+        bodies.append(" ".join(block))
+    return bodies
 _LEGAL_NOTICE = re.compile(
     r"SPDX-(?:License-Identifier|FileCopyrightText):"
     r"|\bcopyright\b|\blicensed under\b|\blicen[cs]e\s*:"
@@ -106,10 +140,8 @@ def split_preamble(text: str, path: str) -> tuple[str, str]:
 
 def _leading_notice(text: str, path: str) -> bool:
     """Prevent an automatic relicense if any prior legal notice exists."""
-    for line in text.removeprefix("\ufeff").splitlines()[:50]:
-        comment = _COMMENT.match(line)
-        if comment and _LEGAL_NOTICE.search(comment.group(1)):
-            return True
+    if any(_LEGAL_NOTICE.search(comment) for comment in comment_texts(text)):
+        return True
     # A Python module-level docstring can also contain the original license.
     _, body = split_preamble(text, path)
     document = body.lstrip()
@@ -132,9 +164,8 @@ def header_is_valid(text: str, path: str) -> bool:
     # Duplicate SPDX metadata in a nearby comment creates ambiguous attribution.
     tail = contents[len(header):]
     return not any(
-        (comment := _COMMENT.match(line))
-        and re.match(r"SPDX-(?:License-Identifier|FileCopyrightText):", comment.group(1))
-        for line in tail.splitlines()[:16]
+        re.match(r"\s*SPDX-(?:License-Identifier|FileCopyrightText):", comment)
+        for comment in comment_texts(tail, limit=16)
     )
 
 

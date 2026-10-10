@@ -26,3 +26,7 @@ The project SHALL preserve the Git executable mode of its tracked executable scr
 #### Scenario: Backup script mode regression
 - **WHEN** `scripts/backup.sh` is tracked with `100644`
 - **THEN** the SPDX checker SHALL report an error.
+
+### Scenario: Multiline upstream license notice
+- **WHEN** a file contains a multiline HTML or CSS comment with an upstream license declaration
+- **THEN** the auto-fixer SHALL refuse to add an AGPL declaration without manual review.

@@ -64,3 +64,5 @@ Header addition MUST retain PEP 263 encoding cookies with either `coding:` or `c
 - **THEN** the generated attribution follows that directive without changing its position.
 
 Generated VitePress output in `docs/.vitepress/dist/` and the associated cache directory MUST be excluded from source attribution checks while maintained `docs/.vitepress/*.mts` sources remain in scope.
+
+Existing upstream copyright or license declarations in multiline HTML or CSS block comments MUST also prevent automatic relicensing.

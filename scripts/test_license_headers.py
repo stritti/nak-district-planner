@@ -200,6 +200,40 @@ class ReviewRegressionTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     mod.annotate(notice + "x = 1\n", path)
 
+    def test_rejects_multiline_html_license_notice(self):
+        path = "services/frontend/index.html"
+        source = (
+            "<!--\n"
+            "Licensed under the Apache License,\n"
+            "Version 2.0\n"
+            "-->\n"
+            "<!DOCTYPE html>\n<html/>\n"
+        )
+        with self.assertRaises(ValueError):
+            mod.annotate(source, path)
+
+    def test_rejects_multiline_css_license_notice(self):
+        path = "services/frontend/src/main.css"
+        source = (
+            "/*\n"
+            " * Copyright (c) 2025 External Author\n"
+            " * MIT License\n"
+            " */\nbody { color: black; }\n"
+        )
+        with self.assertRaises(ValueError):
+            mod.annotate(source, path)
+
+    def test_extracted_multiline_comments_are_not_code_strings(self):
+        source = (
+            'message = "Licensed under Apache License, Version 2.0"\n'
+            "// Licensed under the MIT License\n"
+            "<!--\nCopyright 2025 Example\n-->\n"
+        )
+        self.assertEqual(
+            mod.comment_texts(source),
+            [" Licensed under the MIT License", " Copyright 2025 Example"],
+        )
+
     def test_rejects_license_docstring_after_shebang(self):
         path = "services/backend/app/vendor.py"
         source = (
