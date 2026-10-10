@@ -7,6 +7,7 @@
 - [ ] 2.1 Add district and congregation catalogue/configuration read/write APIs with existing membership and RLS checks.
 - [ ] 2.2 Add event duty assignment CRUD and batch reads; validate event category, district/person references and capacity.
 - [ ] 2.3 Test unknown/foreign references, scope escalation, disabled categories, duplicates, concurrent updates and missing EventInstance.
+- [ ] 2.4 Test slot category/congregation changes retaining and flagging now-ineligible existing duties, with no implicit duty deletion.
 
 ## 3. Frontend
 - [ ] 3.1 Add district/congregation configuration screens with effective/inherited/overridden state.
@@ -17,6 +18,8 @@
 - [ ] 4.1 Include duty-only assignments in authenticated personal event lists and private personal ICS; aggregate multiple roles into one event.
 - [ ] 4.2 Keep UID stable, apply cancellation and timing updates, and ensure public feeds never disclose duty-person data.
 - [ ] 4.3 Test assignment add/remove, dual leader+duty roles, token privacy, distributed slots and absence of EventInstance.
+- [ ] 4.4 Implement and test subject-bound district-scoped INTERNAL personal tokens, issuance/revocation, cross-subject rejection, stale role changes and RLS; preserve legacy leader token semantics.
+- [ ] 4.5 Test authenticated duty-only personal calendars without leader records, and refusal of unlinked/forged identities.
 
 ## 5. Verification
 - [ ] 5.1 Run OpenSpec validation and reconcile impacted canonical specs before implementation merge.
@@ -28,6 +31,7 @@
 - [ ] 6.2 Enable validated free-text names as optional duty assignees without requiring a linked account; save/reuse suggestions for the selected duty type.
 - [ ] 6.3 Implement authorised suggestion management and soft removal, avoiding cross-tenant exposure and automatic resurrection.
 - [ ] 6.4 Test case/whitespace deduplication, type isolation, deletion/re-entry, historical views, race conditions and no personal calendar access for unlinked names.
+- [ ] 6.5 Use `duty-name-suggestions` as the only OpenSpec capability for suggestions; enforce scoped `PLANNER` suppression/restoration and reject viewers.
 
 ## 7. Minister lifecycle and planning
 - [ ] 7.1 Add additive minister active/hidden status and nullable inclusive service end date; backfill existing records as active/visible.
