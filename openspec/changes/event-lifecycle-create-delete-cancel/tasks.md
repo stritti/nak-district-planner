@@ -27,3 +27,10 @@
 - [x] 4.4 Track deliberately detached generation keys separately from legacy occurrences.
 - [x] 4.5 Lock and refresh updates before checking irreversible publication.
 - [ ] 4.6 Re-run CI, coverage, migration and strict OpenSpec validation after the corrections.
+
+## 5. Second Codex review follow-up
+
+- [x] 5.1 Map release races during PATCH and bulk approval writes to HTTP 409.
+- [x] 5.2 Use conflict-safe insertion in PlanningSeriesSlotGenerationService as well as PlanningSeriesGenerator.
+- [x] 5.3 Add regression tests for stale updates, monthly release races and concurrent/manual series generation.
+- [ ] 5.4 Verify changed branch with full CI and active OpenSpec change validation.

@@ -255,7 +255,11 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
                 skipped += 1
                 continue
 
-            await self._slot_repo.save(slot)
+            # A concurrent scheduler can insert the same key after the precheck.
+            # Use the repository SAVEPOINT path to skip the conflict safely.
+            if not await self._slot_repo.add_if_absent(slot):
+                skipped += 1
+                continue
             generated += 1
 
         return {"generated": generated, "skipped": skipped, "updated": 0}

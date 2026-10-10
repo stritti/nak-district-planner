@@ -93,6 +93,23 @@ class MockPlanningSlotRepository:
         self.slots.append(slot)
         self.slots_by_id[slot.id] = slot
 
+    async def add_if_absent(self, slot: PlanningSlot) -> bool:
+        """Mirror the repository's generation-key and ACTIVE-slot constraints."""
+        for current in self.slots:
+            if (current.district_id == slot.district_id
+                    and slot.generation_key is not None
+                    and current.generation_key == slot.generation_key):
+                return False
+            if (slot.congregation_id is not None
+                    and current.congregation_id == slot.congregation_id
+                    and current.planning_date == slot.planning_date
+                    and current.planning_time == slot.planning_time
+                    and current.status == PlanningSlotStatus.ACTIVE
+                    and slot.status == PlanningSlotStatus.ACTIVE):
+                return False
+        await self.save(slot)
+        return True
+
 
 class TestPlanningSeriesSlotGenerationService:
     """Tests for PlanningSeriesSlotGenerationService."""
@@ -607,3 +624,71 @@ async def test_deleted_generated_series_slot_does_not_return():
     assert second["generated"] == 0
     assert second["skipped"] == 1
     assert slot_repo.slots == []
+
+
+
+class TestSeriesGenerationConflicts:
+    @pytest.mark.asyncio
+    async def test_competing_insert_is_skipped_without_aborting_batch(self):
+        """A duplicate inserted by another request is skipped while siblings persist."""
+        class CompetingSlotRepository(MockPlanningSlotRepository):
+            def __init__(self):
+                super().__init__()
+                self.attempts = 0
+
+            async def add_if_absent(self, slot: PlanningSlot) -> bool:
+                self.attempts += 1
+                if self.attempts == 2:
+                    return False  # competing transaction claimed the second key
+                return await super().add_if_absent(slot)
+
+        series_repo = MockPlanningSeriesRepository()
+        slot_repo = CompetingSlotRepository()
+        series = PlanningSeries.create(
+            district_id=uuid.uuid4(),
+            default_planning_time=time(10),
+            recurrence_pattern={"frequency": "weekly", "interval": 1, "by_weekday": [0]},
+            active_from=date(2026, 6, 1),
+        )
+        await series_repo.save(series)
+        result = await PlanningSeriesSlotGenerationService(
+            series_repo=series_repo, slot_repo=slot_repo,
+        ).generate_slots_for_series(
+            series_id=series.id,
+            from_date=date(2026, 6, 1),
+            to_date=date(2026, 6, 15),
+        )
+
+        assert result == {"generated": 2, "skipped": 1, "updated": 0}
+        assert slot_repo.attempts == 3
+        assert len(slot_repo.slots) == 2
+        assert {s.planning_date for s in slot_repo.slots} == {
+            date(2026, 6, 1), date(2026, 6, 15)
+        }
+
+    @pytest.mark.asyncio
+    async def test_concurrent_uniqueness_conflict_is_counted_as_skipped(self):
+        series_repo = MockPlanningSeriesRepository()
+        slot_repo = MockPlanningSlotRepository()
+        series = PlanningSeries.create(
+            district_id=uuid.uuid4(),
+            default_planning_time=time(10),
+            recurrence_pattern={"frequency": "weekly", "interval": 1, "by_weekday": [0]},
+            active_from=date(2026, 6, 1),
+        )
+        await series_repo.save(series)
+        # Simulate a competing writer that claimed the unique key after prechecks.
+        from unittest.mock import AsyncMock
+
+        slot_repo.add_if_absent = AsyncMock(return_value=False)
+        result = await PlanningSeriesSlotGenerationService(
+            series_repo=series_repo, slot_repo=slot_repo,
+        ).generate_slots_for_series(
+            series_id=series.id,
+            from_date=date(2026, 6, 1),
+            to_date=date(2026, 6, 1),
+        )
+
+        assert result == {"generated": 0, "skipped": 1, "updated": 0}
+        assert slot_repo.slots == []
+        slot_repo.add_if_absent.assert_awaited_once()

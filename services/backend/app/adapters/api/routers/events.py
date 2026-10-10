@@ -475,7 +475,10 @@ async def update_event(
         await inst_repo.save(instance)
 
     slot.updated_at = datetime.now(UTC)
-    await slot_repo.save(slot)
+    try:
+        await slot_repo.save(slot)
+    except ReleasedEventError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     responsible = await _load_responsible(assignments_repo, leaders_repo, [slot])
     return _slot_to_event(slot, instance, responsible.get(slot.id))
 
@@ -612,7 +615,10 @@ async def bulk_update_approval_status(
     for slot in all_slots:
         slot.approval_status = body.approval_status
         slot.updated_at = now_dt
-        await slot_repo.save(slot)
+        try:
+            await slot_repo.save(slot)
+        except ReleasedEventError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     if (
         district_id is not None

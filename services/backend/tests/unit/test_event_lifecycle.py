@@ -607,3 +607,55 @@ def test_retention_statement_excludes_both_current_and_former_releases():
     assert "released_at IS NULL" in compiled
     assert "approval_status IS NULL" in compiled
     assert "approval_status != 'CONFIRMED'" in compiled
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("new_status", [None, EventApprovalStatus.PLANNED])
+async def test_patch_stale_draft_release_race_returns_http_409(new_status):
+    """The locked repository's publication error must become a client conflict."""
+    event_slot = slot()
+    repo, instances = AsyncMock(), AsyncMock()
+    repo.get.return_value = event_slot
+    repo.save.side_effect = ReleasedEventError("Freigabe zwischenzeitlich erfolgt")
+    instances.get_by_planning_slot.return_value = None
+
+    with patch.object(events, "require_role_in_district"):
+        with pytest.raises(HTTPException) as exc:
+            await events.update_event(
+                event_slot.id,
+                events.EventUpdate(approval_status=new_status),
+                auth(), AsyncMock(), slot_repo=repo, inst_repo=instances,
+            )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == "Freigabe zwischenzeitlich erfolgt"
+    repo.save.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("new_status", [
+    EventApprovalStatus.PLANNED, EventApprovalStatus.CONFIRMED,
+])
+async def test_bulk_approval_race_returns_http_409(new_status):
+    """A concurrent release/cancellation discovered during a bulk save is 409."""
+    event_slot = slot()
+    repo = AsyncMock()
+    repo.list_for_date_range.return_value = [event_slot]
+    repo.save.side_effect = ReleasedEventError("Freigabe zwischenzeitlich erfolgt")
+
+    with patch.object(events, "require_role_in_district"), patch.object(
+        events, "publish_after_commit"
+    ) as publish:
+        with pytest.raises(HTTPException) as exc:
+            await events.bulk_update_approval_status(
+                events.BulkApprovalStatusRequest(
+                    year=2026, month=10, approval_status=new_status,
+                ),
+                auth(), AsyncMock(), district_id=event_slot.district_id, slot_repo=repo,
+            )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == "Freigabe zwischenzeitlich erfolgt"
+    repo.save.assert_awaited_once()
+    publish.assert_not_called()
