@@ -138,6 +138,8 @@ describe('EventListView', () => {
   it('restores controls and the matching API query after remounting with fresh stores', async () => {
     const first = setup()
     await flushPromises()
+    expect(first.wrapper.find('#global-district-select').exists()).toBe(false)
+    expect(first.wrapper.find('select[aria-label="Aktiven Bezirk wechseln"]').exists()).toBe(false)
     await first.wrapper.get('#event-status-filter').setValue('CANCELLED')
     await first.wrapper.get('#event-approval-filter').setValue('CONFIRMED')
     await first.wrapper.get('#event-type-filter').setValue('other')
@@ -263,27 +265,24 @@ describe('EventListView', () => {
     expect(eventsStore.filters.from_dt).toBeUndefined()
     expect(eventsStore.filters.to_dt).toBeUndefined()
 
-    let selects = wrapper.findAll('select')
-    await selects[1].setValue('DISTRICT_ONLY')
+    await wrapper.get('#event-congregation-filter').setValue('DISTRICT_ONLY')
     expect(eventsStore.filters.only_district_level).toBe(true)
     expect(eventsStore.filters.congregation_id).toBeUndefined()
 
-    selects = wrapper.findAll('select')
-    await selects[2].setValue('g1')
+    await wrapper.get('#event-group-filter').setValue('g1')
     expect(eventsStore.filters.group_id).toBe('g1')
     expect(eventsStore.filters.only_district_level).toBe(false)
 
-    selects = wrapper.findAll('select')
-    await selects[3].setValue('CANCELLED')
-    await selects[4].setValue('CONFIRMED')
-    await selects[5].setValue('service')
+    await wrapper.get('#event-status-filter').setValue('CANCELLED')
+    await wrapper.get('#event-approval-filter').setValue('CONFIRMED')
+    await wrapper.get('#event-type-filter').setValue('service')
     expect(eventsStore.filters.status).toBe('CANCELLED')
     expect(eventsStore.filters.approval_status).toBe('CONFIRMED')
     expect(eventsStore.filters.is_service).toBe(true)
 
-    await wrapper.findAll('select')[5].setValue('other')
+    await wrapper.get('#event-type-filter').setValue('other')
     expect(eventsStore.filters.is_service).toBe(false)
-    await wrapper.findAll('select')[5].setValue('')
+    await wrapper.get('#event-type-filter').setValue('')
     expect(eventsStore.filters.is_service).toBeUndefined()
   })
 
@@ -291,7 +290,7 @@ describe('EventListView', () => {
     const { wrapper } = setup()
     await flushPromises()
 
-    await wrapper.findAll('select')[1].setValue('c1')
+    await wrapper.get('#event-congregation-filter').setValue('c1')
     vi.mocked(eventsApi.listEvents).mockResolvedValue(response([
       ...baseEvents,
       event({ id: 'e3', title: 'Termin Drei', category: 'Sonstiges', is_service: false }),

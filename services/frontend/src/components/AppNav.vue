@@ -21,6 +21,9 @@
           <span class="font-semibold text-gray-900 dark:text-gray-100 text-sm tracking-tight mr-4 shrink-0 hidden min-[400px]:inline">NAK Bezirksplaner</span>
         </div>
 
+        <!-- District is an application-wide context, not a per-view filter. -->
+        <DistrictContextSwitcher v-if="authStore.isAuthenticated" />
+
         <!-- Right: Dark mode toggle + User Menu or Login Button -->
         <div class="flex items-center gap-2 shrink-0">
           <!-- Notification Bell (authenticated, requires selected district) -->
@@ -256,6 +259,7 @@ import { useOIDC } from '../composables/useOIDC'
 import { notificationDestination } from '../utils/notificationLinks'
 import type { NotificationItem } from '../api/notifications'
 import NotificationBell from './NotificationBell.vue'
+import DistrictContextSwitcher from './DistrictContextSwitcher.vue'
 
 const router = useRouter()
 const route = useRoute()
