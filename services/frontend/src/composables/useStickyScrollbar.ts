@@ -10,7 +10,8 @@ import { useEventListener, useResizeObserver } from '@vueuse/core'
  * container) in sync with the container's `scrollLeft`. Hide the container's
  * own scrollbar and size the proxy viewport to `viewportWidth` and its inner
  * content to `contentWidth`. This preserves the full scroll range even when a
- * classic vertical scrollbar reduces the container's usable width.
+ * classic vertical scrollbar reduces the container's usable width. Synchronize
+ * scroll progress, not just pixel offsets, if browser scroll ranges differ.
  * Call `measure()` after the content changed without the container resizing.
  */
 export function useStickyScrollbar(target: MaybeRefOrGetter<HTMLElement | null | undefined>) {
@@ -26,7 +27,18 @@ export function useStickyScrollbar(target: MaybeRefOrGetter<HTMLElement | null |
   }
 
   function sync(from: HTMLElement | null | undefined, to: HTMLElement | null | undefined) {
-    if (from && to && to.scrollLeft !== from.scrollLeft) to.scrollLeft = from.scrollLeft
+    if (!from || !to) return
+
+    // The effective scroll ranges can differ even at equal client widths:
+    // classic scrollbar gutters and late layout updates may add extra space.
+    // Synchronize progress instead of raw pixels so both ends are reachable.
+    const fromRange = Math.max(0, from.scrollWidth - from.clientWidth)
+    const toRange = Math.max(0, to.scrollWidth - to.clientWidth)
+    const nextLeft = fromRange > 0 && toRange > 0
+      ? Math.round(Math.min(1, Math.max(0, from.scrollLeft / fromRange)) * toRange)
+      : from.scrollLeft
+
+    if (to.scrollLeft !== nextLeft) to.scrollLeft = nextLeft
   }
 
   useResizeObserver(target, measure)

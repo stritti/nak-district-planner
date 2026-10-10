@@ -1,5 +1,17 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 import { FRONTEND_URL, matrixResponse, setupAuthAndMatrix } from './helpers'
+
+/** Checks opacity by rendering the CSS color, independently of rgb/oklch serialization. */
+async function backgroundAlpha(element: Locator): Promise<number> {
+  return element.evaluate((node) => {
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Canvas 2D context unavailable')
+    context.fillStyle = getComputedStyle(node).backgroundColor
+    context.fillRect(0, 0, 1, 1)
+    return context.getImageData(0, 0, 1, 1).data[3]
+  })
+}
 
 /** 40 congregations x 30 days: wider and taller than a small screen. */
 function bigMatrix() {
@@ -40,7 +52,7 @@ test.describe('Matrix horizontal scrollbar', () => {
 
     // Dragging the bar scrolls the table horizontally, and the bar stays visible after scrolling down.
     await bar.evaluate((el) => { el.scrollLeft = 400 })
-    await expect.poll(() => scroll.evaluate((el) => el.scrollLeft)).toBe(400)
+    await expect.poll(() => scroll.evaluate((el) => Math.abs(el.scrollLeft - 400))).toBeLessThanOrEqual(3)
     await page.mouse.wheel(0, 1500)
     const after = await bar.boundingBox()
     expect(after!.y + after!.height).toBeLessThanOrEqual(600 + 1)
@@ -165,9 +177,9 @@ test.describe('Matrix fixed date header', () => {
     const top = await scroll.evaluate((element) => element.getBoundingClientRect().top)
     expect(Math.abs((await corner.boundingBox())!.y - top)).toBeLessThanOrEqual(2)
     expect(Math.abs((await day.boundingBox())!.y - top)).toBeLessThanOrEqual(2)
-    expect(await corner.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/^rgb\(/)
+    expect(await backgroundAlpha(corner)).toBe(255)
     const holiday = scroll.locator('thead th').nth(10)
-    expect(await holiday.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/^rgb\(/)
+    expect(await backgroundAlpha(holiday)).toBe(255)
   })
 
   test('does not add vertical scrolling for a short matrix', async ({ page }) => {

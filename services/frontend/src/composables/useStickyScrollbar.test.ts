@@ -63,6 +63,27 @@ describe('useStickyScrollbar', () => {
     wrapper.unmount()
   })
 
+  it('maps unequal horizontal ranges to the same fractional position in both directions', async () => {
+    const { wrapper, container, proxy } = mountHost({ scrollWidth: 2000, clientWidth: 785 })
+    Object.defineProperty(proxy, 'scrollWidth', { value: 1985, configurable: true })
+    Object.defineProperty(proxy, 'clientWidth', { value: 785, configurable: true })
+    await nextTick()
+
+    // Proxy: 1985 - 785 = 1200; matrix: 2000 - 785 = 1215.
+    proxy.scrollLeft = 1200
+    proxy.dispatchEvent(new Event('scroll'))
+    expect(container.scrollLeft).toBe(1215)
+
+    container.scrollLeft = 607
+    container.dispatchEvent(new Event('scroll'))
+    expect(proxy.scrollLeft).toBe(Math.round(607 * 1200 / 1215))
+
+    container.scrollLeft = 1215
+    container.dispatchEvent(new Event('scroll'))
+    expect(proxy.scrollLeft).toBe(1200)
+    wrapper.unmount()
+  })
+
   it('keeps container and proxy scroll positions in sync both ways', async () => {
     const { container, proxy } = mountHost({ scrollWidth: 2000, clientWidth: 800 })
     await nextTick() // listeners attach once the template refs are set
