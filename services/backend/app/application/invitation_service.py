@@ -180,14 +180,18 @@ async def delete_invitation(
     if invitation is None:
         return False
 
-    # Remove the target PlanningSlot + EventInstance that was created for this invitation
+    # Published invitation copies must survive as cancelled calendar entries.
+    # Deleting the slot also cascades to its occurrence, so deleting the
+    # instance first would destroy a published event's exported details.
     if invitation.linked_event_id is not None:
-        target_instance = await event_instance_repo.get_by_planning_slot(invitation.linked_event_id)
-        if target_instance is not None:
-            await event_instance_repo.delete(target_instance.id)
         target_slot = await slot_repo.get(invitation.linked_event_id)
         if target_slot is not None:
-            await slot_repo.delete(target_slot.id)
+            if target_slot.was_released:
+                target_slot.status = PlanningSlotStatus.CANCELLED
+                target_slot.updated_at = datetime.now(UTC)
+                await slot_repo.save(target_slot)
+            else:
+                await slot_repo.delete(target_slot.id)
 
     await invitation_repo.delete(invitation.id)
     return True
