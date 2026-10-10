@@ -50,7 +50,7 @@ Changing active status, visibility or end date SHALL NOT erase historical minist
 - **THEN** authorised historical views still display the minister's identity and assignment
 
 ### Requirement: Secure lifecycle management and migration
-Minister lifecycle changes SHALL require the appropriate scoped administration permission, enforce tenant isolation and be auditable. An additive migration SHALL initialise existing ministers to active, visible and with no end date, preserving all keys and references.
+Minister lifecycle changes SHALL require the appropriate scoped administration permission, enforce tenant isolation and be auditable. An additive migration SHALL preserve existing `leaders.is_active` values (including previously deactivated records), set only the new `hidden_from_lists` flag to false and `service_end_date` to NULL for existing records, and preserve all keys and references.
 
 #### Scenario: Cross-district change
 - **WHEN** an administrator in district A tries to deactivate a minister from district B
@@ -58,4 +58,4 @@ Minister lifecycle changes SHALL require the appropriate scoped administration p
 
 #### Scenario: Migrated minister
 - **WHEN** an existing minister record is migrated
-- **THEN** it remains eligible under previous rules until an administrator explicitly changes status, visibility or end date
+- **THEN** its previous `is_active` status remains unchanged, with new visibility and end-date fields defaulted; previously inactive leaders remain ineligible
