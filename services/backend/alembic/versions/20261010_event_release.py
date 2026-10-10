@@ -17,6 +17,30 @@ depends_on = None
 def upgrade() -> None:
     op.add_column("planning_slots", sa.Column("released_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("planning_slots", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
+    op.create_table(
+        "deleted_generation_keys",
+        sa.Column("district_id", sa.UUID(as_uuid=True), sa.ForeignKey("districts.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column("generation_key", sa.String(255), primary_key=True),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=False),
+    )
+    scope = """(
+        current_setting('app.is_system_worker', true) = 'true'
+        OR EXISTS (
+            SELECT 1 FROM users
+            WHERE sub = current_setting('app.current_user_sub', true)
+              AND is_superadmin
+        )
+        OR EXISTS (
+            SELECT 1 FROM memberships
+            WHERE user_sub = current_setting('app.current_user_sub', true)
+              AND scope_type = 'DISTRICT'
+              AND scope_id = deleted_generation_keys.district_id
+              AND role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+        )
+    )"""
+    op.execute(f"CREATE POLICY deleted_generation_keys_tenant ON deleted_generation_keys FOR ALL USING {scope} WITH CHECK {scope}")
+    op.execute("ALTER TABLE deleted_generation_keys ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE deleted_generation_keys FORCE ROW LEVEL SECURITY")
     # Existing confirmed slots were already distributed before this migration.
     op.execute("""
         UPDATE planning_slots SET released_at = updated_at
