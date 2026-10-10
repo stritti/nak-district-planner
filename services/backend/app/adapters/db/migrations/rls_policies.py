@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL Row-Level Security (RLS) Policies for Tenant Isolation.
 
 This module contains SQL statements for creating RLS policies on tenant-specific tables.

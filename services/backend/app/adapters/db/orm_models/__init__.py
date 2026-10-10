@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Side-effect imports: register all ORM models on Base.metadata (required for Alembic autogenerate)
 from app.adapters.db.orm_models.audit_log import AuditLogORM
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM

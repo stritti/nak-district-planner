@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Domain audit hooks: record governance-relevant changes in the same transaction.
 
 The HTTP ``AuditMiddleware`` only knows that a request hit a route. This hook

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Microsoft Graph Calendar connector.
 
 Fetches events from Microsoft Graph API and converts them into
