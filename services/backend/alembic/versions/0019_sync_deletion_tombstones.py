@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Retain sync mappings after hard deletion to prevent re-import loops."""
 
 import sqlalchemy as sa

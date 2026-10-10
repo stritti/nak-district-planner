@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Normalize planning_slots.planning_time to UTC
 
 Before this change, the slot generators stored planning_time as local

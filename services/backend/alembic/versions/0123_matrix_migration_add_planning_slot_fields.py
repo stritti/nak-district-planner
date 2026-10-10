@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Matrix Rendering Migration: Add fields to PlanningSlot and Invitation
 
 This migration adds the following fields to support the matrix rendering migration

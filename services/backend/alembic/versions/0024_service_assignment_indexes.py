@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Index the foreign keys of service_assignments.
 
 The table only had its primary key. Every matrix request looks assignments up
