@@ -33,6 +33,8 @@ describe('useDistrictsStore', () => {
     expect(store.selectedDistrictId).toBe('d2')
 
     store.setSelectedDistrict('missing')
+    expect(store.selectedDistrictId).toBe('d2')
+    store.selectedDistrictId = 'missing' // Simulate a stale ID restored from a session.
     store.ensureSelectedDistrict()
     expect(store.selectedDistrictId).toBe('d1')
     expect(store.loading).toBe(false)
@@ -53,6 +55,8 @@ describe('useDistrictsStore', () => {
     expect(store.selectedDistrict?.name).toBe('Konstanz')
     store.setSelectedDistrict('foreign')
     expect(store.selectedDistrictId).toBe('d2')
+    store.setSelectedDistrict('')
+    expect(store.selectedDistrictId).toBe('')
   })
 
   it('clears districts and cached subresources on logout', () => {
