@@ -16,6 +16,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("planning_slots", sa.Column("released_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("planning_slots", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
     # Existing confirmed slots were already distributed before this migration.
     op.execute("""
         UPDATE planning_slots SET released_at = updated_at
@@ -24,4 +25,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_column("planning_slots", "deleted_at")
     op.drop_column("planning_slots", "released_at")
