@@ -39,7 +39,7 @@ The system SHALL retain stored event duty assignments and their display informat
 - **THEN** existing assignments remain readable but the category cannot be selected for new assignments
 
 ### Requirement: Scoped catalogue authorisation
-District-level configuration writes SHALL require `DISTRICT_ADMIN` for that district; congregation-level writes SHALL require `CONGREGATION_ADMIN` for that congregation. Reads and writes SHALL enforce tenant boundaries.
+District-level configuration writes SHALL require `DISTRICT_ADMIN` for that district; congregation-level writes SHALL require `CONGREGATION_ADMIN` for that congregation or `DISTRICT_ADMIN` for its parent district; authenticated superadmins bypass scope restrictions. Reads and writes SHALL enforce tenant boundaries.
 
 #### Scenario: Foreign district mutation
 - **WHEN** an administrator for district A attempts to modify a category belonging to district B
