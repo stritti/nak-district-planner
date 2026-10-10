@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Accessible progressive editing in event tables
-All tabular overview screens SHALL keep input controls hidden in read mode and provide visible keyboard focus, accessible cell/editor labels and announced save/errors when a cell is edited. Edit controls SHALL work with touch, mouse and keyboard and SHALL not depend exclusively on hovering.
+All tabular overview screens SHALL keep input controls hidden in read mode and provide visible keyboard focus, accessible cell/editor labels and announced save/errors when a cell is edited. Edit controls SHALL work with touch, mouse and keyboard and SHALL not depend exclusively on hovering. Saving with a stale revision SHALL offer an accessible conflict explanation and a comparison/reload action; the draft MUST remain available until the user explicitly resolves or cancels it.
 
 #### Scenario: Keyboard-only edit
 - **WHEN** a keyboard user focuses an editable cell and activates it with Enter
 - **THEN** the editor becomes focused and announces its field label and current value
+
+#### Scenario: Stale-version feedback
+- **WHEN** the server rejects a save with HTTP 412 due to a newer row revision
+- **THEN** the editor announces the conflict and retains the draft for comparison or explicit cancellation
 
 #### Scenario: Save feedback
 - **WHEN** an inline cell change succeeds or fails
