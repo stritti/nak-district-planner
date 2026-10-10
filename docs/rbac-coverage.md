@@ -67,6 +67,8 @@ Legende:
 | | `/{district_id}/feiertage/states` | GET | 🔐 Auth | – | RL |
 | | `/{district_id}/feiertage` | POST | R(DISTRICT_ADMIN) | AUDIT | RL |
 | **events_compat** | `/api/v1/events?district_id=...` | GET | R(VIEWER) | – | RL |
+| | `/api/v1/events` | POST | R(PLANNER) | AUDIT | RL |
+| | `/api/v1/events/{event_id}` | DELETE | R(PLANNER) | AUDIT | RL |
 | | `/api/v1/events/{event_id}` | PATCH | R(PLANNER) | AUDIT | RL |
 | | `/api/v1/events/{event_id}/resolve-deviation` | POST | R(PLANNER) | AUDIT | RL |
 | | `/api/v1/events/bulk-approval-status` | POST | R(PLANNER) | AUDIT | RL |
@@ -191,7 +193,9 @@ Nicht manuell bearbeiten — neu erzeugen mit
 | DELETE | `/api/v1/districts/{district_id}/reminder-configs/{config_id}` | `reminder_configs.deactivate_reminder_config` | 🔐 Auth | `require_role_in_district` |
 | PUT | `/api/v1/districts/{district_id}/reminder-configs/{config_id}` | `reminder_configs.update_reminder_config` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/events` | `events.list_events` | 🔐 Auth | `is_superadmin`, `require_role_in_district` |
+| POST | `/api/v1/events` | `events.create_event` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/events/bulk-approval-status` | `events.bulk_update_approval_status` | 🔐 Auth | `is_superadmin`, `require_role_in_district` |
+| DELETE | `/api/v1/events/{event_id}` | `events.delete_event` | 🔐 Auth | `require_role_in_district` |
 | PATCH | `/api/v1/events/{event_id}` | `events.update_event` | 🔐 Auth | `require_role_in_district` |
 | GET | `/api/v1/events/{event_id}/assignments` | `service_assignments.list_assignments` | 🔐 Auth | `require_role_in_district` |
 | POST | `/api/v1/events/{event_id}/assignments` | `service_assignments.create_assignment` | 🔐 Auth | `require_role_in_district` |
