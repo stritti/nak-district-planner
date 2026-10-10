@@ -82,6 +82,17 @@ Im Spaltenkopf werden Feiertags-Namen grau und kursiv unter dem Datum angezeigt.
 Nur Events mit `status=PUBLISHED` werden an die Gemeinden delegiert.
 :::
 
+## UC-05: Sicherer Export (iCal)
+
+**Ziel:** Abonnierbare URLs für Mitglieder und Amtsträger.
+
+**Endpoint:** `/api/v1/export/{token}/calendar.ics`
+
+**Filter-Logik:**
+
+- **Token-Typ "Öffentlich":** Nur `visibility=PUBLIC` und `status=PUBLISHED`. Namen in `ServiceAssignment` anonymisieren (z.B. nur "Dienstleiter").
+- **Token-Typ "Intern":** Zeige `visibility=INTERNAL` und volle Namen.
+
 ## UC-06: Feiertags-Import
 
 **Ziel:** Gesetzliche und kirchliche Feiertage im System verfügbar machen, damit sie in der Dienstmatrix sichtbar sind.
@@ -122,14 +133,3 @@ UIDs sind stabil: `feiertag-DE-{district_id}-{datum}-{name-slug}`. Wiederholter 
 
 ### Konfiguration am Bezirk
 Das Feld `state_code` (2-stellig, z.B. `BY`, `NW`) steuert den bundeslandspezifischen Import. Wird in "Bezirke & Gemeinden" beim Anlegen oder nachträglich gesetzt.
-
-## UC-05: Sicherer Export (iCal)
-
-**Ziel:** Abonnierbare URLs für Mitglieder und Amtsträger.
-
-**Endpoint:** `/api/v1/export/{token}/calendar.ics`
-
-**Filter-Logik:**
-
-- **Token-Typ "Öffentlich":** Nur `visibility=PUBLIC` und `status=PUBLISHED`. Namen in `ServiceAssignment` anonymisieren (z.B. nur "Dienstleiter").
-- **Token-Typ "Intern":** Zeige `visibility=INTERNAL` und volle Namen.
