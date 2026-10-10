@@ -36,7 +36,7 @@
 - [ ] 6.6 Test exact owning-congregation/district suggestion isolation even when duty definitions are inherited.
 
 ## 7. Minister lifecycle and planning
-- [ ] 7.1 Add additive minister active/hidden status and nullable inclusive service end date; backfill existing records as active/visible.
+- [ ] 7.1 Reuse existing `leaders.is_active` unchanged (including inactive records); migrate only nullable inclusive `service_end_date` and `hidden_from_lists` (default false), and verify no reactivation on migration.
 - [ ] 7.2 Implement authorised deactivate/reactivate and hide/restore controls; retain all historical references and audit changes.
 - [ ] 7.3 Filter normal minister pickers/lists and enforce eligibility in event, matrix, bulk and other service assignment writes based on active state and target event date.
 - [ ] 7.4 Flag existing appointments beyond a newly set end date, without silently deleting assignments.
