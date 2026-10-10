@@ -499,3 +499,4 @@ describe('Create event district selection', () => {
     expect(wrapper.find('#new-event-congregation').text()).toContain('Gemeinde Drei')
     wrapper.unmount()
   })
+})
