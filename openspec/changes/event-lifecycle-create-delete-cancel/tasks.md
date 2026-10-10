@@ -17,4 +17,4 @@
 - [x] 3.1 Add targeted backend lifecycle validation and repository unit tests.
 - [x] 3.2 Add frontend API and interaction tests.
 - [ ] 3.3 Run backend tests, frontend coverage >80%, full CI and OpenSpec validation.
-- [ ] 3.4 Add explicit external `HARD_DELETE` after release regression tests.
+- [x] 3.4 Add explicit external `HARD_DELETE` after release regression tests.
