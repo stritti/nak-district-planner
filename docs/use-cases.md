@@ -1,6 +1,6 @@
 # Use-Case Dokumentation
 
-Diese Seite dokumentiert die detaillierten Anwendungsfälle (Use-Cases) des NAK District Planners.
+Diese Seite dokumentiert die fachlichen Detailregeln (UC-01 bis UC-06). Den durchgehenden Anwendungsablauf erklärt [So funktioniert der Bezirksplaner](/workflows).
 
 ## UC-01: Kalender-Anbindung (Ingest)
 
@@ -51,19 +51,9 @@ Nutzung des Strategy-Patterns für verschiedene Provider mit einheitlichem Sync-
 - Eine exakte Zuordnung erstellt direkt ein `ExternalEventLink` ohne Candidate.
 - Für einen noch ausstehenden Candidate aktualisiert ein erneuter Sync die Candidate-Daten und den Content-Hash, statt einen zweiten Candidate anzulegen.
 
-### V1-Entscheidung: Direkte Übernahme externer Events
+Die **V1-Abgrenzung** ist unter UC-01 als Trust Policy beschrieben: Konfigurierte, vertrauenswürdige Quellen werden direkt übernommen. Der allgemeine Candidate-Review bleibt eine spätere Ausbaustufe. `SyncState` und `ExternalEventLink` sichern die Zuordnung und Änderungsverfolgung.
 
-Für Version 1 werden Events aus konfigurierten, vertrauenswürdigen
-Quellen nach erfolgreicher Hash-Prüfung direkt übernommen. Ein
-manueller Review-Schritt für unbekannte externe Events (`ExternalEventCandidate`)
-ist nicht Bestandteil von v1. `SyncState` und `ExternalEventLink` dienen weiterhin
-der Änderungs- und Zuordnungsverfolgung.
-
-Diese Entscheidung setzt voraus, dass nur fachlich freigegebene Kalenderquellen
-konfiguriert werden. Ein Review-Workflow für neue oder nicht vertrauenswürdige
-Quellen bleibt als Phase 2 geplant.
-
-## UC-03: Dienstplanung & Lücken-Visualisierung
+## UC-03: Dienstplanung & Lücken-Visualisierung {#uc-03-matrix}
 
 **Ziel:** Bezirksebene sieht alle Gottesdienste und deren Besetzung.
 
@@ -82,7 +72,7 @@ Die Spalten der Matrix setzen sich zusammen aus:
 ### Feiertags-Anzeige
 Im Spaltenkopf werden Feiertags-Namen grau und kursiv unter dem Datum angezeigt. Ein Feiertag wird als Spalte eingeblendet, auch wenn keine Gemeinde an diesem Tag regulären Gottesdienst hat.
 
-## UC-04: Bezirks-Events verteilen
+## UC-04: Bezirks-Events verteilen {#uc-04-events}
 
 **Ziel:** Ein Termin im Bezirk (z.B. Ämterstunde) soll in den Gemeindekalendern erscheinen.
 
@@ -91,6 +81,17 @@ Im Spaltenkopf werden Feiertags-Namen grau und kursiv unter dem Datum angezeigt.
 ::: warning Filter
 Nur Events mit `status=PUBLISHED` werden an die Gemeinden delegiert.
 :::
+
+## UC-05: Sicherer Export (iCal) {#uc-05-export}
+
+**Ziel:** Abonnierbare URLs für Mitglieder und Amtsträger.
+
+**Endpoint:** `/api/v1/export/{token}/calendar.ics`
+
+**Filter-Logik:**
+
+- **Token-Typ "Öffentlich":** Nur `visibility=PUBLIC` und `status=PUBLISHED`. Namen in `ServiceAssignment` anonymisieren (z.B. nur "Dienstleiter").
+- **Token-Typ "Intern":** Zeige `visibility=INTERNAL` und volle Namen.
 
 ## UC-06: Feiertags-Import
 
@@ -132,14 +133,3 @@ UIDs sind stabil: `feiertag-DE-{district_id}-{datum}-{name-slug}`. Wiederholter 
 
 ### Konfiguration am Bezirk
 Das Feld `state_code` (2-stellig, z.B. `BY`, `NW`) steuert den bundeslandspezifischen Import. Wird in "Bezirke & Gemeinden" beim Anlegen oder nachträglich gesetzt.
-
-## UC-05: Sicherer Export (iCal)
-
-**Ziel:** Abonnierbare URLs für Mitglieder und Amtsträger.
-
-**Endpoint:** `/api/v1/export/{token}/calendar.ics`
-
-**Filter-Logik:**
-
-- **Token-Typ "Öffentlich":** Nur `visibility=PUBLIC` und `status=PUBLISHED`. Namen in `ServiceAssignment` anonymisieren (z.B. nur "Dienstleiter").
-- **Token-Typ "Intern":** Zeige `visibility=INTERNAL` und volle Namen.

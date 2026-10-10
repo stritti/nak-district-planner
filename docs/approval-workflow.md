@@ -26,16 +26,18 @@ Dieses Dokument beschreibt den produktiven Onboarding-Ablauf fuer Benutzer, die 
 Nachfolgend wird Schritt für Schritt beschrieben, was im Backend passiert, wenn ein Bezirksadministrator eine Registrierung freigibt.
 
 ```mermaid
-Approval-Request
-    │
-    ├─ 1. Leader-Datensatz anlegen
-    ├─ 2. Registration auf APPROVED setzen
-    ├─ 3. Membership anlegen (wenn user_sub bekannt)
-    ├─ 4. IdP-Provisioning (optional)
-    │      ├─ 4a. User im IdP suchen (per E-Mail)
-    │      ├─ 4b. Ggf. neu anlegen
-    │      └─ 4c. Einladungsmail senden (VERIFY_EMAIL + UPDATE_PASSWORD)
-    └─ 5. Ergebnis in Registration speichern (idp_provision_status)
+flowchart TD
+  A[Freigabeantrag] --> B[Leader-Datensatz anlegen]
+  B --> C[Registrierung genehmigen]
+  C --> D{OIDC-Sub bekannt?}
+  D -->|Ja| E[Membership anlegen]
+  D -->|Nein| F[Membership beim Login zuordnen]
+  E --> G{IdP-Provisionierung aktiv?}
+  F --> G
+  G -->|Ja| H[IdP-Benutzer suchen oder anlegen]
+  H --> I[Einladungsmail optional senden]
+  G -->|Nein| J[Provisionierungsstatus speichern]
+  I --> J
 ```
 
 ### Schritt 1–3: Leader, Status, Membership
@@ -84,32 +86,18 @@ Falls kein Provider konfiguriert ist (`get_idp_provisioner()` gibt `None` zurü
 **Datei:** `services/backend/app/adapters/idp/keycloak_provisioner.py`
 
 ```mermaid
-provision_user(email, name, ...)
-    │
-    ├─ _get_admin_token()
-    │   POST /realms/master/protocol/openid-connect/token
-    │   → Admin-Access-Token (Client: admin-cli, Password-Grant)
-    │
-    ├─ _find_user_by_email(token, email)
-    │   GET /admin/realms/{realm}/users?email=...&exact=true
-    │   → Vorhandenen User suchen; gebunden wird nur bei emailVerified=true
-    │
-    ├─ _create_user(token, email, name)  [nur wenn nicht vorhanden]
-    │   POST /admin/realms/{realm}/users
-    │   {
-    │     "username": email,
-    │     "email": email,
-    │     "enabled": true,
-    │     "emailVerified": false,
-    │     "firstName": "Vorname",
-    │     "lastName": "Nachname"
-    │   }
-    │   → User-ID (aus Location-Header oder Lookup)
-    │
-    └─ _trigger_invite(token, user_id)  [nur wenn invite_on_approval=true]
-        PUT /admin/realms/{realm}/users/{id}/execute-actions-email
-        ["VERIFY_EMAIL", "UPDATE_PASSWORD"]
-        → Keycloak sendet E-Mail mit Link zum Passwort-Setzen
+flowchart TD
+  A[Admin-Token abrufen] --> B[Benutzer per E-Mail suchen]
+  B --> C{Benutzer vorhanden?}
+  C -->|Nein| D[Benutzer anlegen]
+  C -->|Ja und verifiziert| E[Vorhandenen Benutzer berücksichtigen]
+  C -->|Ja, unverifiziert| F[Keine automatische Verknüpfung]
+  D --> G{Einladung aktiviert?}
+  E --> G
+  G -->|Ja| H[VERIFY_EMAIL und UPDATE_PASSWORD auslösen]
+  G -->|Nein| I[Ergebnis dokumentieren]
+  H --> I
+  F --> I
 ```
 
 **Wichtig:** Die `_trigger_invite`-Methode sendet die Keycloak-eigene Einladungsmail. Der Benutzer muss darin:
@@ -216,34 +204,21 @@ Dies ist für den Fall gedacht, dass die Registration ohne vorherigen Login (un
 ### Vollständiger Login-Ablauf (Sequenz)
 
 ```mermaid
-Benutzer                         Browser/Frontend                   Backend                        Keycloak/IDP
-   │                                    │                              │                              │
-   │  1. E-Mail-Link (Passwort setzen)  │                              │                              │
-   │◄────────────────────────────────────│                              │                              │
-   │                                    │                              │                              │
-   │  2. Passwort vergeben              │                              │                              │
-   │────────────────────────────────────►                              │                              │
-   │                                    │                              │                              │
-   │  3. Login                          │                              │                              │
-   │────────────────────────────────────►                              │                              │
-   │                                    │  4. OIDC Authorization       │                              │
-   │                                    │─────────────────────────────────────────────────────────────►│
-   │                                    │◄─────────────────────────────────────────────────────────────│
-   │                                    │  5. Token austauschen                                       │
-   │                                    │─────────────────────────────────────────────────────────────►│
-   │                                    │◄── JWT (access_token + refresh_token) ──────────────────────│
-   │                                    │                              │                              │
-   │                                    │  6. API-Call mit Bearer-Token│                              │
-   │                                    │──────────────────────────────►                              │
-   │                                    │                              │  7. Token validieren (JWKS)  │
-   │                                    │                              │──────────────────────────────►│
-   │                                    │                              │◄─────────────────────────────│
-   │                                    │                              │  8. User auto-createn (wenn  │
-   │                                    │                              │     nicht vorhanden)         │
-   │                                    │                              │  9. Registration verknüpfen  │
-   │                                    │                              │     (wenn 1 unlinked match)  │
-   │                                    │◄── 200 OK + Membership ──────│                              │
-   │◄────────────────────────────────────│                              │                              │
+sequenceDiagram
+  participant U as Benutzer
+  participant B as Browser
+  participant I as Keycloak
+  participant A as Backend
+  I->>U: Einladungs-E-Mail (optional)
+  U->>I: E-Mail bestätigen und Passwort setzen
+  U->>B: Anmeldung starten
+  B->>I: OIDC mit PKCE
+  I-->>B: Autorisierungscode
+  B->>I: Code gegen Token tauschen
+  I-->>B: Token
+  B->>A: API-Aufruf mit Access-Token
+  A->>A: Token und Membership prüfen
+  A-->>B: Antwort gemäß Berechtigung
 ```
 
 ## Konfiguration

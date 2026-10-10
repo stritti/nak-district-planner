@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { defineConfig } from 'vitepress'
+import { diagramPlugin } from 'vitepress-plugin-mermaid-diagram'
 import { withOpenSpec } from '@stritti/vitepress-plugin-openspec'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,53 +20,51 @@ export default defineConfig(
     description: 'Dokumentation f\u00fcr den Bezirksplaner der Neuapostolischen Kirche',
     ignoreDeadLinks: false,
     srcExclude: ['superpowers/**'],
+    markdown: {
+      config(md) {
+        md.use(diagramPlugin)
+      }
+    },
     themeConfig: {
       nav: [
-        { text: 'Home', link: '/' },
-        { text: 'Doku-Map', link: '/documentation-map' },
-        { text: 'Erste Schritte', link: '/getting-started' },
+        { text: 'Überblick', link: '/' },
+        { text: 'Abläufe', link: '/workflows' },
         { text: 'Use Cases', link: '/use-cases' },
-        { text: 'Rollenkonzept', link: '/roles' },
-        { text: 'Verbesserungen', link: '/improvement-proposals' },
-        { text: 'Release', link: '/release-process' }
+        { text: 'Entwicklung', link: '/getting-started' },
+        { text: 'Betrieb', link: '/production-runbook' }
       ],
 
       sidebar: {
         '/': [
-          {
-            text: 'Einf\u00fchrung',
-            items: [
-              { text: 'Dokumentationslandkarte', link: '/documentation-map' },
-              { text: 'Erste Schritte', link: '/getting-started' },
-              { text: 'Use Cases', link: '/use-cases' },
-              { text: 'Glossar', link: '/glossary' }
-            ]
-          },
-          {
-            text: 'Architektur & Standards',
-            items: [
-              { text: 'Architekturstatus', link: '/architecture-status' },
-              { text: 'Engineering Standards', link: '/engineering-standards' },
-              { text: 'Test- & Coverage-Strategie', link: '/coverage-strategy' }
-            ]
-          },
-          {
-            text: 'Sicherheit & Berechtigungen',
-            items: [
-              { text: 'Rollenkonzept', link: '/roles' },
-              { text: 'Security Baseline', link: '/security-baseline' }
-            ]
-          },
-          {
-            text: 'Betrieb & Entwicklung',
-            items: [
-              { text: 'Production Runbook', link: '/production-runbook' },
-              { text: 'Produktiv-Stack (Traefik + Keycloak)', link: '/production-compose' },
-              { text: 'Release-Prozess', link: '/release-process' },
-              { text: 'Release-Review 1.0', link: '/reviews/2026-10-07-release-1.0-review' },
-              { text: 'Verbesserungsvorschl\u00e4ge', link: '/improvement-proposals' }
-            ]
-          }
+          { text: 'Einstieg', items: [
+            { text: 'Projektüberblick', link: '/' },
+            { text: 'So funktioniert es', link: '/workflows' },
+            { text: 'Use Cases', link: '/use-cases' }
+          ] },
+          { text: 'Funktionen und Zusammenarbeit', items: [
+            { text: 'Rollenkonzept', link: '/roles' },
+            { text: 'Freigabe-Workflow', link: '/approval-workflow' },
+            { text: 'Einladungen', link: '/invitations' },
+            { text: 'Konfliktregeln', link: '/conflict-rules' }
+          ] },
+          { text: 'Entwicklung und Architektur', items: [
+            { text: 'Lokaler Einstieg', link: '/getting-started' },
+            { text: 'Architekturstatus', link: '/architecture-status' },
+            { text: 'Engineering Standards', link: '/engineering-standards' },
+            { text: 'Tests und Coverage', link: '/coverage-strategy' }
+          ] },
+          { text: 'Betrieb und Sicherheit', items: [
+            { text: 'Production Runbook', link: '/production-runbook' },
+            { text: 'Produktiv-Stack', link: '/production-compose' },
+            { text: 'Security Baseline', link: '/security-baseline' },
+            { text: 'Release-Prozess', link: '/release-process' }
+          ] },
+          { text: 'Referenz', items: [
+            { text: 'Glossar', link: '/glossary' },
+            { text: 'Dokumentationslandkarte', link: '/documentation-map' },
+            { text: 'Lizenzierung', link: '/licensing' },
+            { text: 'Verbesserungsvorschläge', link: '/improvement-proposals' }
+          ] }
         ]
       },
 
