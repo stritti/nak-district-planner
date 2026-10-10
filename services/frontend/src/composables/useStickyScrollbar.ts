@@ -8,7 +8,9 @@ import { useEventListener, useResizeObserver } from '@vueuse/core'
  * and is out of sight while the container extends below the viewport. This
  * keeps a proxy scrollbar (`proxy`, rendered `sticky bottom-0` after the
  * container) in sync with the container's `scrollLeft`. Hide the container's
- * own scrollbar and render the proxy with an inner element of `contentWidth`.
+ * own scrollbar and size the proxy viewport to `viewportWidth` and its inner
+ * content to `contentWidth`. This preserves the full scroll range even when a
+ * classic vertical scrollbar reduces the container's usable width.
  * Call `measure()` after the content changed without the container resizing.
  */
 export function useStickyScrollbar(target: MaybeRefOrGetter<HTMLElement | null | undefined>) {
@@ -34,6 +36,7 @@ export function useStickyScrollbar(target: MaybeRefOrGetter<HTMLElement | null |
   return {
     proxy,
     contentWidth,
+    viewportWidth,
     needsScroll: computed(() => contentWidth.value > viewportWidth.value),
     measure,
   }
