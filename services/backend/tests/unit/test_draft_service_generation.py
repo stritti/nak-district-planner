@@ -44,6 +44,7 @@ class InMemoryPlanningSlotRepo(PlanningSlotRepository):
         # Tenant of each slot as last persisted, to mirror the SQL repository's save().
         self._stored: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID | None]] = {}
         self.locked_districts: list[uuid.UUID] = []
+        self._deleted_generation_keys: dict[uuid.UUID, set[str]] = {}
 
     async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None:
         return self._slots.get(slot_id)
@@ -95,8 +96,15 @@ class InMemoryPlanningSlotRepo(PlanningSlotRepository):
             if slot.district_id == district_id and slot.generation_key in keys
         ]
 
+    async def list_deleted_generation_keys(
+        self, *, district_id: uuid.UUID, generation_keys: Collection[str]
+    ) -> set[str]:
+        return self._deleted_generation_keys.get(district_id, set()) & set(generation_keys)
+
     async def delete(self, slot_id: uuid.UUID) -> None:
-        self._slots.pop(slot_id, None)
+        value = self._slots.pop(slot_id, None)
+        if value is not None and value.generation_key:
+            self._deleted_generation_keys.setdefault(value.district_id, set()).add(value.generation_key)
 
     async def save(self, slot: PlanningSlot) -> None:
         stored = self._stored.get(slot.id)
@@ -664,3 +672,34 @@ async def test_generated_slot_changed_to_other_category_loses_key_and_is_regener
 
     assert freed["created"] == 1
     assert changed.generation_key is None
+
+
+async def test_manually_deleted_generated_draft_does_not_reappear() -> None:
+    district = _make_district()
+    congregation = _make_congregation(district.id)
+    slot_repo = InMemoryPlanningSlotRepo()
+    use_case = _use_case(district, congregation, slot_repo, InMemoryEventInstanceRepo())
+    first = await use_case.run_for_window(**ONE_WEEK)
+    assert first["created"] == 1
+    (generated,) = slot_repo._slots.values()
+    generation_key = generated.generation_key
+    await slot_repo.delete(generated.id)
+
+    second = await use_case.run_for_window(**ONE_WEEK)
+    assert second["created"] == 0
+    assert second["skipped_existing"] == 1
+    assert slot_repo._slots == {}
+    assert generation_key in slot_repo._deleted_generation_keys[district.id]
+
+
+async def test_deleted_draft_suppression_is_district_scoped() -> None:
+    one_id = uuid.uuid4()
+    other_id = uuid.uuid4()
+    repo = InMemoryPlanningSlotRepo()
+    repo._deleted_generation_keys[one_id] = {"draft-service:1"}
+    assert await repo.list_deleted_generation_keys(
+        district_id=one_id, generation_keys={"draft-service:1"}
+    ) == {"draft-service:1"}
+    assert await repo.list_deleted_generation_keys(
+        district_id=other_id, generation_keys={"draft-service:1"}
+    ) == set()
