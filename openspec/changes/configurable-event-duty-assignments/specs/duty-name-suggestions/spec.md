@@ -16,7 +16,7 @@ The system SHALL accept validated free-text display names as organisational duty
 - **THEN** the suggestion store contains a single normalised candidate without a duplicate
 
 ### Requirement: Explicitly suppress and restore autocomplete suggestions
-An authorised planner SHALL be able to remove a suggestion from the autocomplete list through a dedicated management action, independently of historical event assignments. Removal SHALL be a reversible suppression, not deletion of referenced records. Previously suppressed suggestions SHALL NOT become visible merely through reading, importing or re-saving historical assignments. A deliberate manual re-add or authorised restoration MAY reactivate the suggestion.
+An authorised `PLANNER` in the effective event/duty scope (or a higher scoped role) SHALL be able to suppress or restore a suggestion from the autocomplete list through a dedicated management action, independently of historical event assignments. Removal SHALL be a reversible suppression, not deletion of referenced records. Previously suppressed suggestions SHALL NOT become visible merely through reading, importing or re-saving historical assignments. A deliberate manual re-add or authorised restoration MAY reactivate the suggestion.
 
 #### Scenario: Person moved away
 - **WHEN** an authorised planner removes Anna Beispiel from Organist suggestions
@@ -32,6 +32,10 @@ An authorised planner SHALL be able to remove a suggestion from the autocomplete
 
 ### Requirement: Scoped suggestion access and privacy
 The system SHALL restrict suggestion listing and management to the user's authorised planning scope and SHALL not expose another tenant's suggestions. Name-only entries SHALL NOT implicitly create authenticated identities, personal calendar feeds or tokens.
+
+#### Scenario: Viewer cannot manage suggestions
+- **WHEN** a user with only `VIEWER` permission tries to hide a suggestion
+- **THEN** the request is rejected and the suggestion remains unchanged
 
 #### Scenario: Cross-tenant lookup
 - **WHEN** a planner in district A queries a duty suggestion known only to district B
