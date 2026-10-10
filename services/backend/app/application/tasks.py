@@ -222,10 +222,10 @@ def sync_all_active_integrations() -> dict:
 
 @celery.task(name="cleanup_old_events")
 def cleanup_old_events() -> dict:
-    """Delete events older than 24 months.
+    """Delete *never-released* events older than 24 months.
 
-    Runs on the 1st of each month via Celery beat.  All events whose *end_at*
-    is before the cutoff (now - 24 months) are permanently removed.
+    Released and cancelled events retain their stable identifiers indefinitely.
+    The retention job runs monthly via Celery beat.
     """
     from app.adapters.db.session import AsyncSessionLocal
 
@@ -243,13 +243,22 @@ def cleanup_old_events() -> dict:
             # PlanningSlot uses planning_date (date), not end_at (datetime).
             # Delete slots with planning_date before cutoff date.
             cutoff_date = cutoff.date()
-            from sqlalchemy import delete, insert
+            from sqlalchemy import delete, insert, or_
+
+            from app.domain.models.planning_slot import EventApprovalStatus
 
             from app.adapters.db.domain_audit import bulk_delete_audit_row
             from app.adapters.db.orm_models.audit_log import AuditLogORM
             from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 
-            stmt = delete(PlanningSlotORM).where(PlanningSlotORM.planning_date < cutoff_date)
+            stmt = delete(PlanningSlotORM).where(
+                PlanningSlotORM.planning_date < cutoff_date,
+                PlanningSlotORM.released_at.is_(None),
+                or_(
+                    PlanningSlotORM.approval_status.is_(None),
+                    PlanningSlotORM.approval_status != EventApprovalStatus.CONFIRMED,
+                ),
+            )
             result = await session.execute(stmt)
             deleted = result.rowcount  # type: ignore[attr-defined]
             if deleted:

@@ -64,6 +64,9 @@ class PlanningSlot:
     # date/time so a re-run never re-creates a moved, cancelled slot. Unique per
     # district; None for manually created or imported slots.
     generation_key: str | None = None
+    # True once a generated occurrence is reassigned to another congregation/category.
+    # Distinguishes detached occurrences from legacy series rows without a key.
+    generation_key_detached: bool = False
     # Irreversible publication marker: once set, the event may only be cancelled.
     released_at: datetime | None = None
 
@@ -125,8 +128,9 @@ class PlanningSlot:
             district_id,
             congregation_id,
             category,
-        ):
+        ) and self.generation_key is not None:
             self.generation_key = None
+            self.generation_key_detached = True
 
 
     def is_visible_to(self, congregation_id: uuid.UUID) -> bool:

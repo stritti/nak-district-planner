@@ -4,12 +4,13 @@ import uuid
 from collections.abc import Collection
 from datetime import UTC, date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.orm_models.deleted_generation_key import DeletedGenerationKeyORM
+from app.adapters.db.orm_models.invitation import CongregationInvitationORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
@@ -44,6 +45,7 @@ def _orm_to_domain(row: PlanningSlotORM) -> PlanningSlot:
         invitation_source_event_id=row.invitation_source_event_id,
         applicability=row.applicability or [],
         generation_key=row.generation_key,
+        generation_key_detached=row.generation_key_detached,
         released_at=row.released_at,
         planning_date=row.planning_date,
         planning_time=row.planning_time,
@@ -139,8 +141,16 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         return set(result.scalars().all())
 
     async def save(self, slot: PlanningSlot) -> None:
-        existing = await self._session.get(PlanningSlotORM, slot.id)
+        # Refresh under a row lock: a release committed after a prior GET must
+        # not be overwritten by a stale PLANNED update.
+        existing = await self._session.get(
+            PlanningSlotORM, slot.id, with_for_update=True, populate_existing=True
+        )
         if existing is not None:
+            slot.generation_key_detached = (
+                slot.generation_key_detached
+                or getattr(existing, "generation_key_detached", False) is True
+            )
             slot.forget_generation_key_if_reassigned(
                 district_id=existing.district_id,
                 congregation_id=existing.congregation_id,
@@ -197,6 +207,7 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row.invitation_source_event_id = slot.invitation_source_event_id
         row.applicability = slot.applicability
         row.generation_key = slot.generation_key
+        row.generation_key_detached = slot.generation_key_detached
         row.released_at = slot.released_at or (datetime.now(UTC) if slot.is_confirmed else None)
         row.planning_date = slot.planning_date
         row.planning_time = slot.planning_time
@@ -214,7 +225,8 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         if row.released_at is not None or row.approval_status == EventApprovalStatus.CONFIRMED:
             raise ReleasedEventError("Freigegebene Ereignisse dürfen nur abgesagt werden.")
         suppression_key = row.generation_key
-        if suppression_key is None and row.series_id is not None:
+        if (suppression_key is None and row.series_id is not None
+                and not getattr(row, "generation_key_detached", False)):
             # Legacy series instances predate generation keys. Suppress by the
             # recurring series and the event's UTC planning date.
             suppression_key = planning_series_generation_key(row.series_id, row.planning_date)
@@ -224,5 +236,47 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
                 generation_key=suppression_key,
                 deleted_at=datetime.now(UTC),
             ))
+        await self._remove_invitation_links(slot_id)
         await self._session.delete(row)
         await self._session.flush()
+
+    async def _remove_invitation_links(self, slot_id: uuid.UUID) -> None:
+        """Remove invitation links and retire their target copies before draft deletion.
+
+        Linked target events are independent slots: retain released ones as
+        cancellations while deleting unreleased copies. Deleting a target
+        directly removes the dangling invitation without touching its source.
+        """
+        result = await self._session.execute(
+            select(CongregationInvitationORM)
+            .where(
+                or_(
+                    CongregationInvitationORM.source_planning_slot_id == slot_id,
+                    CongregationInvitationORM.linked_event_id == slot_id,
+                )
+            )
+            .with_for_update()
+        )
+        invitations = result.scalars().all()
+        # Delete link rows first so a recursive child deletion cannot revisit them.
+        for invitation in invitations:
+            await self._session.delete(invitation)
+
+        for invitation in invitations:
+            target_id = invitation.linked_event_id
+            if invitation.source_planning_slot_id != slot_id or target_id in (None, slot_id):
+                continue
+            target = (
+                await self._session.execute(
+                    select(PlanningSlotORM)
+                    .where(PlanningSlotORM.id == target_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if target is None:
+                continue
+            if target.released_at is not None or target.approval_status == EventApprovalStatus.CONFIRMED:
+                target.status = PlanningSlotStatus.CANCELLED
+                target.updated_at = datetime.now(UTC)
+            else:
+                await self.delete(target_id)

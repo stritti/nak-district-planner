@@ -207,7 +207,11 @@ class PlanningSeriesGenerator:
                     status=PlanningSlotStatus.ACTIVE,
                     generation_key=key,
                 )
-                await self._slot_repo.save(slot)
+                # The unique generation key/slot index is the final arbiter
+                # when two schedulers race after their initial existence checks.
+                if not await self._slot_repo.add_if_absent(slot):
+                    skipped += 1
+                    continue
 
                 # Create EventInstance
                 instance = EventInstance.create(

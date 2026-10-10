@@ -17,6 +17,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("planning_slots", sa.Column("released_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("planning_slots", sa.Column("generation_key_detached", sa.Boolean(), server_default=sa.false(), nullable=False))
     op.create_table(
         "deleted_generation_keys",
         sa.Column("district_id", sa.UUID(as_uuid=True), sa.ForeignKey("districts.id", ondelete="CASCADE"), primary_key=True),
@@ -50,4 +51,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("deleted_generation_keys")
+    op.drop_column("planning_slots", "generation_key_detached")
     op.drop_column("planning_slots", "released_at")
