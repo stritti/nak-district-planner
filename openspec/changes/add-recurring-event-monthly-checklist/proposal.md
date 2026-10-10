@@ -6,7 +6,7 @@ Die bereits vorhandene PlanningSeries erzeugt PlanningSlots automatisch für ein
 
 ## What Changes
 
-- Wiederverwendbare Terminvorlagen mit Geltungsbereich Gemeinde oder Bezirk, Titel, Kategorie, Beschreibung, Ort, Dauer, lokaler Uhrzeit, optionaler Laufzeit und Wiederholungsregel.
+- Wiederverwendbare Terminvorlagen mit Geltungsbereich Gemeinde oder Bezirk, Titel, Kategorie, Beschreibung, Dauer, lokaler Uhrzeit, optionaler Laufzeit und Wiederholungsregel.
 - Regeln für wöchentliche Wiederholung (auch alle N Wochen), monatliche Kalendertage und n-ten bzw. letzten Wochentag eines Monats.
 - Monatsbezogene, nach Gemeinde oder Bezirk filterbare Planungscheckliste: Offen, Übernommen, Ausgelassen sowie Konflikt/Prüfbedarf.
 - Einzelne oder mehrere Vorschläge werden bewusst zu regulären PlanningSlots mit EventInstance im Status PLANNED übernommen, nicht sofort veröffentlicht. Übernommene Termine können anschließend wie bisher bearbeitet und freigegeben werden.
@@ -36,5 +36,5 @@ Die bereits vorhandene PlanningSeries erzeugt PlanningSlots automatisch für ein
 
 - Keine automatische Veröffentlichung, Einladungen oder Erinnerungen.
 - Keine Änderungen an der automatischen Gottesdienst- oder PlanningSeries-Generierung.
-- Kein externer RRULE-/Kalender-Synchronisationseditor und kein massenhaftes Vorab-Anlegen für zukünftige Monate.
+- Kein eigener Veranstaltungsort im Event-Datenmodell oder externer RRULE-/Kalender-Synchronisationseditor und kein massenhaftes Vorab-Anlegen für zukünftige Monate.
 - Keine Änderung des bestehenden Rollenmodells oder seiner Berechtigungsgrenzen.
