@@ -6,4 +6,4 @@
 - [x] Extend the service-assignment-matrix baseline OpenSpec and provide the delta
 - [x] Add component tests for sticky layers, holidays, compact mode and empty dates
 - [x] Add browser regression tests for real vertical/horizontal scroll positions, mobile/dark mode and short tables
-- [ ] Validate full unit, E2E, build, lint, coverage gates and OpenSpec in CI
+- [x] Validate frontend unit/E2E tests, lint, coverage gates, and OpenSpec in CI (PR #544)
