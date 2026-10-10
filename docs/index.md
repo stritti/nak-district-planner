@@ -29,7 +29,7 @@ features:
     linkText: Einladungen verstehen
   - title: "Termine veröffentlichen"
     details: "Öffentliche und interne iCalendar-Abonnements mit abgestufter Datensichtbarkeit."
-    link: /use-cases#uc-05-sicherer-export-ical
+    link: /use-cases#uc-05-export
     linkText: Exportregeln lesen
 ---
 
