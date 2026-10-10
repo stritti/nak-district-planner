@@ -28,7 +28,7 @@ Eine Kalenderintegration ist optional: Termine und Dienste können auch innerhal
 2. Sie prüft unbesetzte Gottesdienste und ordnet Dienstleiter zu.
 3. Berechtigte Personen sehen die aktualisierte Planung.
 
-Die Regeln der Matrix einschließlich Feiertagsspalten stehen in [UC-03](/use-cases#uc-03-dienstplanung-lucken-visualisierung). Berechtigungen und Scope werden im [Rollenkonzept](/roles) erklärt.
+Die Regeln der Matrix einschließlich Feiertagsspalten stehen in [UC-03](/use-cases#uc-03-matrix). Berechtigungen und Scope werden im [Rollenkonzept](/roles) erklärt.
 
 ## Kalender synchronisieren
 
@@ -52,11 +52,11 @@ flowchart LR
 
 Bezirksveranstaltungen können in ausgewählten Gemeinden sichtbar werden. Bei Einladungen zwischen Gemeinden bleibt der Gastgeber erkennbar; Überschreibungen folgen festgelegten Regeln.
 
-Fachliche Details: [UC-04: Bezirks-Events](/use-cases#uc-04-bezirks-events-verteilen) und [Einladungen zwischen Gemeinden](/invitations).
+Fachliche Details: [UC-04: Bezirks-Events](/use-cases#uc-04-events) und [Einladungen zwischen Gemeinden](/invitations).
 
 ## Termine veröffentlichen
 
-Abonnierbare ICS-Feeds stellen freigegebene Termine für andere Kalender bereit. Öffentliche Exporte enthalten nur veröffentlichte öffentliche Daten; interne Exporte können zusätzliche Informationen enthalten. Verbindlich ist [UC-05: Export](/use-cases#uc-05-sicherer-export-ical).
+Abonnierbare ICS-Feeds stellen freigegebene Termine für andere Kalender bereit. Öffentliche Exporte enthalten nur veröffentlichte öffentliche Daten; interne Exporte können zusätzliche Informationen enthalten. Verbindlich ist [UC-05: Export](/use-cases#uc-05-export).
 
 ## Zugang und Freigabe
 
