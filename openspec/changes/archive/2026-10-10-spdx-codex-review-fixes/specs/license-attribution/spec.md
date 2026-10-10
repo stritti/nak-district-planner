@@ -11,7 +11,7 @@ The system SHALL accept SPDX attribution only in the exact leading source-langua
 
 #### Scenario: Python encoding or CSS charset directive
 - **WHEN** a Python source begins with `coding:` or `coding=`, or CSS begins with `@charset`
-- **THEN** generated attribution SHALL follow the declaration without invalidating it.
+- **THEN** generated attribution SHALL follow the declaration without invalidating it. Maintained VitePress config files are scanned; generated VitePress output and cache are excluded.
 
 ### Requirement: Existing licenses must not be replaced
 The automatic annotation tool SHALL refuse to modify sources containing third-party copyright or license notices, including conventional `Licensed under ...` comments and docstrings.

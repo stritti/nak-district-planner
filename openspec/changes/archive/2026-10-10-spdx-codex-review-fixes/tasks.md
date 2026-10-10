@@ -7,4 +7,4 @@
 - [x] Preserve Python `coding=` and CSS `@charset`.
 - [x] Confirm VitePress source tree participates in checks.
 - [x] Update license-attribution OpenSpec and unit tests.
-- [ ] Complete CI verification and resolve review comments.
+- [x] Complete CI verification and respond to the original review comments.
