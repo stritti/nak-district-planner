@@ -38,7 +38,11 @@ The editor SHALL validate the draft and commit a changed value with Enter, Tab, 
 - **THEN** the cell remains editable, the validation error is visible and the draft is preserved
 
 ### Requirement: Field-specific, authorised mutation
-The table SHALL expose editing only for supported mutable event fields and SHALL use their established mutation paths: event properties via scoped event PATCH and responsible-person assignments via the existing assignments API. Authorisation, event scope, status rules, conflict checks, protected external fields and confirmation of destructive actions SHALL be identical to the full editor. Each successful save SHALL update only the intended field/dependent atomic set and refresh the canonical display.
+The table SHALL expose editing only for supported mutable event fields and SHALL use their established mutation paths: event properties via scoped event PATCH and responsible-person assignments via the existing assignments API. Authorisation, event scope, status rules, conflict checks, protected external fields and confirmation of destructive actions SHALL be identical to the full editor. Each successful save SHALL update only the intended field/dependent atomic set and refresh the canonical display. Category, congregation and planning-date changes SHALL preserve and flag (not erase) now-ineligible organisational duties and minister appointments according to their dedicated OpenSpec rules. Clearing an assignment that implies deletion SHALL use the existing confirmation workflow.
+
+#### Scenario: Category becomes incompatible with an assigned duty
+- **WHEN** a planner changes an event's category and an existing Organist duty is no longer permitted
+- **THEN** the duty is retained and flagged for review, rather than silently removed by the field PATCH
 
 #### Scenario: Responsible person changed inline
 - **WHEN** an authorised planner changes a responsible-person cell
@@ -49,7 +53,15 @@ The table SHALL expose editing only for supported mutable event fields and SHALL
 - **THEN** it is not inline editable and no write is attempted
 
 ### Requirement: Safe asynchronous save and error recovery
-The table SHALL show an in-cell saving state, prevent duplicate submissions, and handle 403, 404, validation failures, 409 conflicts and network failures without silently losing the user's draft. Stale or concurrent writes SHALL be detected or resolved through an explicit conditional-write strategy before overwrite; the interface SHALL not assert success until the server confirms it.
+The table SHALL show an in-cell saving state, prevent duplicate submissions, and handle 403, 404, validation failures, 409 conflicts and network failures without silently losing the user's draft. Stale or concurrent writes SHALL be prevented by a server-enforced revision precondition (`If-Match` with strong ETag or an existing equivalent explicit version) for every inline mutation. Endpoints without conditional writes SHALL be extended before their columns become inline editable. Missing required revisions SHALL yield 428, mismatches SHALL yield 412, and domain conflicts SHALL continue using 409; the interface SHALL not assert success until the server confirms it.
+
+#### Scenario: Concurrent row changed by another user
+- **WHEN** another user saves a newer revision after the inline editor loaded the row
+- **THEN** saving with the stale revision is rejected with 412, and the user's draft is preserved for compare/reload rather than blindly overwriting
+
+#### Scenario: No conditional-write contract
+- **WHEN** an eligible field has no server-enforced revision precondition
+- **THEN** that field is not enabled for inline writing until the backend provides one
 
 #### Scenario: Server conflict
 - **WHEN** the server responds with 409 to an inline edit
