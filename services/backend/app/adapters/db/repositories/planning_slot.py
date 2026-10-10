@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
-from datetime import date
+from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import (
+    EventApprovalStatus,
+    PlanningSlot,
+    PlanningSlotStatus,
+    ReleasedEventError,
+)
 from app.domain.ports.repositories import PlanningSlotRepository
 
 _UNIQUE_VIOLATION = "23505"
@@ -37,6 +42,7 @@ def _orm_to_domain(row: PlanningSlotORM) -> PlanningSlot:
         invitation_source_event_id=row.invitation_source_event_id,
         applicability=row.applicability or [],
         generation_key=row.generation_key,
+        released_at=row.released_at,
         planning_date=row.planning_date,
         planning_time=row.planning_time,
         status=PlanningSlotStatus(row.status),
@@ -125,6 +131,12 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
                 congregation_id=existing.congregation_id,
                 category=existing.category,
             )
+        if existing is not None and (existing.released_at is not None or existing.approval_status == EventApprovalStatus.CONFIRMED):
+            if slot.approval_status != EventApprovalStatus.CONFIRMED:
+                raise ReleasedEventError("Freigegebene Ereignisse können nicht zurückgestuft werden.")
+            slot.released_at = existing.released_at or existing.updated_at
+        elif slot.approval_status == EventApprovalStatus.CONFIRMED:
+            slot.released_at = datetime.now(UTC)
         row = existing or PlanningSlotORM()
         self._apply(row, slot)
         if existing is None:
@@ -168,6 +180,7 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row.invitation_source_event_id = slot.invitation_source_event_id
         row.applicability = slot.applicability
         row.generation_key = slot.generation_key
+        row.released_at = slot.released_at or (datetime.now(UTC) if slot.is_confirmed else None)
         row.planning_date = slot.planning_date
         row.planning_time = slot.planning_time
         row.status = slot.status
@@ -175,7 +188,13 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row.updated_at = slot.updated_at
 
     async def delete(self, slot_id: uuid.UUID) -> None:
-        row = await self._session.get(PlanningSlotORM, slot_id)
-        if row:
-            await self._session.delete(row)
-            await self._session.flush()
+        # Lock before checking publication: a concurrent release must not race a deletion.
+        row = (await self._session.execute(
+            select(PlanningSlotORM).where(PlanningSlotORM.id == slot_id).with_for_update()
+        )).scalar_one_or_none()
+        if row is None:
+            return
+        if row.released_at is not None or row.approval_status == EventApprovalStatus.CONFIRMED:
+            raise ReleasedEventError("Freigegebene Ereignisse dürfen nur abgesagt werden.")
+        await self._session.delete(row)
+        await self._session.flush()
