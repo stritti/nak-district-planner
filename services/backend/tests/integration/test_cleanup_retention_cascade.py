@@ -10,6 +10,7 @@ TEST_DATABASE_URL must identify a migrated disposable PostgreSQL test database.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
@@ -264,6 +265,99 @@ async def test_retention_removes_draft_invitation_relationships_and_cancels_rele
                     PlanningSlotORM.district_id == district_id
                 ))
                 await db.execute(text("DELETE FROM districts WHERE id = :id"), {"id": district_id})
+                await db.commit()
+
+    await _run_as_system_worker(scenario())
+
+
+
+async def test_concurrent_invitation_source_and_target_deletion_has_no_deadlock(sessions):
+    """Independent planners deleting source and linked target use one lock order."""
+    from app.adapters.db.orm_models.congregation import CongregationORM
+    from app.adapters.db.orm_models.invitation import CongregationInvitationORM
+    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+    from app.domain.models.invitation import InvitationTargetType
+
+    district_id, congregation_id = uuid.uuid4(), uuid.uuid4()
+    source_id, target_id, invitation_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    now = datetime.now(UTC)
+
+    async def scenario():
+        try:
+            async with sessions() as db:
+                await db.execute(
+                    text(
+                        "INSERT INTO districts (id, name, created_at, updated_at) "
+                        "VALUES (:id, :name, :created_at, :updated_at)"
+                    ),
+                    {
+                        "id": district_id, "name": "Concurrent Deletion District",
+                        "created_at": now, "updated_at": now,
+                    },
+                )
+                db.add(CongregationORM(
+                    id=congregation_id, district_id=district_id,
+                    name="Concurrent Deletion Congregation",
+                    created_at=now, updated_at=now,
+                ))
+                for slot_id in (source_id, target_id):
+                    db.add(PlanningSlotORM(
+                        id=slot_id, district_id=district_id,
+                        congregation_id=None, category="Gottesdienst", applicability=[],
+                        planning_date=date(2026, 10, 10), planning_time=time(10),
+                        status=PlanningSlotStatus.ACTIVE,
+                        approval_status=EventApprovalStatus.PLANNED,
+                        released_at=None, created_at=now, updated_at=now,
+                    ))
+                await db.flush()
+                db.add(CongregationInvitationORM(
+                    id=invitation_id, source_event_id=source_id,
+                    source_planning_slot_id=source_id,
+                    source_congregation_id=congregation_id,
+                    target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+                    target_congregation_id=congregation_id,
+                    linked_event_id=target_id, created_at=now, updated_at=now,
+                ))
+                await db.commit()
+
+            async def delete_candidate(slot_id):
+                async with sessions() as db:
+                    removed = await SqlPlanningSlotRepository(db).delete(slot_id)
+                    await db.commit()
+                    return removed
+
+            # The source may cascade-delete the target. Both orders are valid;
+            # deadlock or an uncaught database exception is not.
+            await asyncio.wait_for(
+                asyncio.gather(
+                    delete_candidate(source_id),
+                    delete_candidate(target_id),
+                ),
+                timeout=30,
+            )
+
+            async with sessions() as db:
+                assert (await db.execute(
+                    select(PlanningSlotORM.id).where(
+                        PlanningSlotORM.id.in_([source_id, target_id])
+                    )
+                )).scalars().all() == []
+                assert (await db.execute(
+                    select(CongregationInvitationORM.id).where(
+                        CongregationInvitationORM.id == invitation_id
+                    )
+                )).scalars().all() == []
+        finally:
+            async with sessions() as db:
+                await db.execute(delete(CongregationInvitationORM).where(
+                    CongregationInvitationORM.id == invitation_id
+                ))
+                await db.execute(delete(PlanningSlotORM).where(
+                    PlanningSlotORM.id.in_([source_id, target_id])
+                ))
+                await db.execute(
+                    text("DELETE FROM districts WHERE id = :id"), {"id": district_id}
+                )
                 await db.commit()
 
     await _run_as_system_worker(scenario())
