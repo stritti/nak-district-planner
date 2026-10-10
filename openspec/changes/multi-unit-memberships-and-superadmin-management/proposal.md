@@ -17,7 +17,8 @@ Ein registrierter Benutzer kann für mehrere Gemeinden oder Bezirke zuständig s
 
 - `rbac-model`: Mehrfachmitgliedschaften, Vergabe des Superadmin-Status und globaler Zugriff.
 - `approved-user-onboarding`: Verwaltung zusätzlicher Zuordnungen und explizite Superadmin-Ausnahme.
+- `tenant-isolation`: Autorisierung mit verifiziertem Subject durch API-RBAC/RLS statt entfernter TenantValidationMiddleware; Superadmins ohne Membership ausdrücklich zulassen.
 
 ## Impact
 
-Benutzerverwaltung, Mitgliedschaftsverwaltung, Zugriffskontext und Frontend-Auswahl der Einheiten sind bei der Umsetzung abzugleichen. Bestehende Bootstrap-Vergabe, verifizierte Kontoverknüpfung, Rollen und fachliche Validierungen bleiben gültig. Dieser Change dokumentiert Anforderungen; Implementierung und Prüfung sind offene Aufgaben.
+Benutzerverwaltung, Mitgliedschaftsverwaltung, Zugriffskontext und Frontend-Auswahl der Einheiten sind bei der Umsetzung abzugleichen. Die bestehende Bootstrap-Reconciliation muss zu einer einmaligen Initialvergabe ohne Überschreibung delegierter Grants umgestellt werden. Verifizierte Kontoverknüpfung, bestehende Rollen und fachliche Validierungen bleiben gültig. Dieser Change dokumentiert Anforderungen; Implementierung und Prüfung sind offene Aufgaben.
