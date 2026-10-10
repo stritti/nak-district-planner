@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { REFRESH_SESSION_COORDINATION_ID } from './oidcToken'
 import { restoreRefreshSession } from './oidcSessionRestore'

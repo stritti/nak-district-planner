@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Restore a NAK District Planner PostgreSQL backup created by scripts/backup.sh.
 #
 # Decrypts (if needed), verifies archive integrity via `pg_restore --list`,

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { expect, test } from '@playwright/test'
 import { FRONTEND_URL, matrixResponse, setupAuthAndMatrix } from './helpers'
 

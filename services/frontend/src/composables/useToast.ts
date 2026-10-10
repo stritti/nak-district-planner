@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useToastStore } from '../stores/toast'
 
 /** Human-readable message of an unknown thrown value. */

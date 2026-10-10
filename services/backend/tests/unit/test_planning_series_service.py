@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """tests/unit/test_planning_series_service.py: Unit tests for PlanningSeriesSlotGenerationService."""
 
 from __future__ import annotations

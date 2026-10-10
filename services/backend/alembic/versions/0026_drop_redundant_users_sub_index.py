@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Drop ix_users_sub, which duplicates the index behind uq_users_sub.
 
 Revision ID: 0026

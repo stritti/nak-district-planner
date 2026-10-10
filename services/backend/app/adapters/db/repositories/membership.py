@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """MembershipRepository — SQLAlchemy implementation for Membership persistence.
 
 Handles CRUD operations for Membership entities (role assignments).

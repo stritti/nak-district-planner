@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for app/telemetry.py.
 
 All OTel SDK components are mocked so no real OTLP endpoint is needed.

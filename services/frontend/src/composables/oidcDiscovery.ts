@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { ref } from 'vue'
 import type { OIDCDiscovery } from './oidcTypes'
 

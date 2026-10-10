@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Regression tests for monthly reminder semantics and outbound mail transports."""
 
 from __future__ import annotations

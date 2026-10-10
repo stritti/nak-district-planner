@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Integration tests for CSRF middleware."""
 
 from unittest.mock import AsyncMock, patch

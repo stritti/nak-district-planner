@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Add ACCESS_DENIED to the audit action enum.
 
 Denied requests (HTTP 403) are audited for every method, including reads, so

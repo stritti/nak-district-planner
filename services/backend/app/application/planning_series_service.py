@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/application/planning_series_service.py: PlanningSeries slot generation service."""
 
 from __future__ import annotations

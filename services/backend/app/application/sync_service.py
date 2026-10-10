@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Calendar sync service — UC-02, hardened for M3 with governed ingestion.
 
 Existing linked events follow the #375 sync state machine. New events are

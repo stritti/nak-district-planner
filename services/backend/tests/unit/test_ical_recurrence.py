@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Recurrence, timezone and identity handling for ICS/CalDAV feeds (#465).
 
 The fixtures under ``tests/fixtures/ics`` mirror a congregation calendar as

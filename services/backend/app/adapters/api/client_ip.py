@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Single source of truth for the client IP used by rate limiting and audit."""
 
 from __future__ import annotations

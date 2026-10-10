@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Authorization guards and permission checks for role-based access control.
 
 Enforces permission boundaries at the application service level based on:

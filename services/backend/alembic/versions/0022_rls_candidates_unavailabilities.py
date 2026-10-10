@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Enable RLS on external_event_candidates and leader_unavailabilities.
 
 Both tables were added after the tenant-isolation baseline (0014) and hold

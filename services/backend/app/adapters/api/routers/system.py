@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """FastAPI router for the system version endpoint.
 
 The application only *reports* available updates; it never executes them

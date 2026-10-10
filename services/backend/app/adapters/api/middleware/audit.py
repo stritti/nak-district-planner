@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Audit Logging Middleware for FastAPI.
 
 This middleware automatically logs audit events for all requests.

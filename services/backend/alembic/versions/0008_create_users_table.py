@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Create users table for OIDC authentication.
 
 Revision ID: 1f8a9b0c3d10

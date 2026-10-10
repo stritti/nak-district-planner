@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Audit Log ORM model — SQLAlchemy representation of AuditLog in the database.
 
 Stores immutable audit logs for all write operations and security-relevant events.

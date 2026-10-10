@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <section class="space-y-4" aria-label="Ereignis-Benachrichtigungen">
     <h2 class="text-lg font-semibold">Ereignis-Benachrichtigungen</h2>

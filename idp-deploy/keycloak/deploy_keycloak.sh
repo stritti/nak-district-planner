@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Keycloak Deployment & Setup Script
 # Automatisiert Schritte 1.4–1.8 für VPS-Deployment
 

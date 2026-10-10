@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """SQLAlchemy mapping for leader unavailability periods."""
 
 from __future__ import annotations

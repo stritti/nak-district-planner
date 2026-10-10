@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Router for the /api/v1/events endpoints.
 
 Exposes PlanningSlot + EventInstance under the events API using typed

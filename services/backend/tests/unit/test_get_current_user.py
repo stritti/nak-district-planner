@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tests for user authentication dependencies (get_current_user, user auto-creation).
 
 Tests cover JWT validation, user creation, and dependency injection.

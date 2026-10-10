@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Integration tests for applicability-based event distribution (UC-04).
 
 District-level planning slots (congregation_id=None) with a matching

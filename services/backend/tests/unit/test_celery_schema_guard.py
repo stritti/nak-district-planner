@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Celery processes refuse to start against a stale database schema."""
 
 from unittest.mock import AsyncMock, patch

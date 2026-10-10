@@ -5,6 +5,10 @@ Verwaltet Gemeinden, Termine und Dienstzuweisungen; exportiert Kalender als ICS-
 Externe Kalender werden in Version 1.0 per **ICS** und **CalDAV** angebunden;
 Google Calendar und Microsoft 365 sind geplant (OAuth-Flow mit Token-Refresh fehlt noch).
 
+## Lizenz
+
+Der eigene Quellcode steht unter der [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Copyright- und SPDX-Hinweise sowie Ausnahmen für Drittanbieter sind in [Lizenzierung und Copyright](docs/licensing.md) dokumentiert.
+
 ## Dokumentation
 
 Die Projektdokumentation befindet sich unter `docs/`.

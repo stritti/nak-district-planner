@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Persist calendar deletion policy and explicit sync tombstone state."""
 
 import sqlalchemy as sa

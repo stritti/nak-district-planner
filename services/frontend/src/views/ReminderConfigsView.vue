@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <main class="p-6 max-w-3xl space-y-4">
     <h1 class="text-xl font-semibold">Erinnerungen und Benachrichtigungen</h1>

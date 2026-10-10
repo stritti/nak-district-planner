@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/domain/ports/planning_series_service.py: Ports for PlanningSeries slot generation."""
 
 from __future__ import annotations

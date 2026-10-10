@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Create the Celery broker and result tables as the database owner.
 
 Celery uses PostgreSQL as broker (kombu SQLAlchemy transport) and result

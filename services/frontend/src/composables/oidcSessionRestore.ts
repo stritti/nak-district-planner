@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { OIDCToken, OIDCUser } from './oidcTypes'
 import { identityFromTokenExchange, isValidTokenExchangeResponse } from './oidcToken'
 import { getCurrentCSRFHeaders } from './useCSRF'

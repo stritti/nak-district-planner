@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/db/session.py: Module."""
 
 from collections.abc import AsyncGenerator

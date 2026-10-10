@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Let congregation export tokens read district slots distributed to them.
 
 Issue #466: the SELECT policies on planning_slots (and the event_instances /

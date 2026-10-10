@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Let export tokens read the leaders their feed names.
 
 Issue #466 / PR #485: the leaders SELECT policy only allowed user memberships,

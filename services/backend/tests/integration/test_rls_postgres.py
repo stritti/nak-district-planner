@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tenant isolation enforced by PostgreSQL row-level security (real database).
 
 These tests connect as the NOBYPASSRLS application role and set the same GUCs

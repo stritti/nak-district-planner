@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Create slot_gap_alerts, the ledger of reported service gaps.
 
 Only the daily scan (system worker) reads and writes it; RLS is forced so the

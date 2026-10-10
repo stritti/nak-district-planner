@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Static regression tests for the scheduler service and image tag policy (#455)."""
 
 from pathlib import Path

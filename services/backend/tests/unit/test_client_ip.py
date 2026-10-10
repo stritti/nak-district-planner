@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Client IP resolution behind the trusted nginx proxy (issue #462)."""
 
 from unittest.mock import MagicMock

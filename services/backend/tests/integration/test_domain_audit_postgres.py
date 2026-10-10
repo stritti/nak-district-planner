@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Domain audit hook against a real, migrated PostgreSQL with active RLS.
 
 The audited writes run as the NOBYPASSRLS application role with the same GUCs

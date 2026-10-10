@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """idp-deploy/keycloak/setup_keycloak_realm.py: the client needs an audience mapper."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <footer
     class="px-4 py-3 text-center text-xs text-gray-500 dark:text-gray-400"

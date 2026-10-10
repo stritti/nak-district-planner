@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Check that FK constraint names in Alembic migrations don't exceed 63 chars.
 
 PostgreSQL truncates identifiers longer than 63 characters, which can cause

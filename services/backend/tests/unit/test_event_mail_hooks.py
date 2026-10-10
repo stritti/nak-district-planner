@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """HookEvaluator (EventMailHookDispatcher), serialisation and bus wiring."""
 
 from __future__ import annotations

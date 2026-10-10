@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Provider-specific regression tests for calendar sync echo suppression.
 
 Task 4.5 requires more than parametrizing a shared connector mock. These tests

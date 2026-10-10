@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tests for leaders and service-assignments routers (Event-free architecture).
 
 Replaces the legacy Event-based tests with PlanningSlot/EventInstance patterns.

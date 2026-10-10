@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """publish_after_commit: events reach the bus only for committed work."""
 
 from __future__ import annotations

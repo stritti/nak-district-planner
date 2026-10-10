@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/idp/keycloak_provisioner.py: Module."""
 
 from __future__ import annotations

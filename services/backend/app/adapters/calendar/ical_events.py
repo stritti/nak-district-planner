@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Expand iCalendar VEVENTs into window-bounded occurrences (#465).
 
 Shared by the ICS and CalDAV connectors. Recurring series (RRULE/RDATE with

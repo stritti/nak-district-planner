@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Typed constructors for domain events emitted by the application.
 
 Each constructor produces exactly the placeholders declared for its event type

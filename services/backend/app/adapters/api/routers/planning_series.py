@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/api/routers/planning_series.py: API endpoints for PlanningSeries management."""
 
 from __future__ import annotations

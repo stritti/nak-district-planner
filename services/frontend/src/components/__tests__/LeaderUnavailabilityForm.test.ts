@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import LeaderUnavailabilityForm from '@/components/LeaderUnavailabilityForm.vue'

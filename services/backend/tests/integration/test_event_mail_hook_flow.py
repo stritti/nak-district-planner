@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Database-backed event → hook → mail flow with real repositories.
 
 TEST_DATABASE_URL must identify a migrated disposable PostgreSQL test database.

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div v-if="open" class="modal-backdrop" @click.self="cancel">
     <div class="modal-panel max-w-sm">

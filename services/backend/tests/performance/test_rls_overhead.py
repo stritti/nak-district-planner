@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """RLS overhead and tenant validation latency (OpenSpec improve-tenant-isolation).
 
 Compares the matrix's hot queries as table owner (RLS bypassed) and as the

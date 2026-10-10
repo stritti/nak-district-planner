@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Ledger of reported service gaps (one open report per planning slot)."""
 
 from __future__ import annotations

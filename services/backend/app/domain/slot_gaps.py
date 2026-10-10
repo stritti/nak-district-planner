@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unassigned service slots (LÜCKEN) and which of them still need a notification.
 
 A gap is reportable once while it stays open. Its identity is the business

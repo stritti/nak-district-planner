@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Phase 4b Backward Compatibility Verification Script
 # Verifies that Phase 4b maintains compatibility with Phase 4a
 

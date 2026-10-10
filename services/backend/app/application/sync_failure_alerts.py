@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Alert district administrators when calendar synchronisation keeps failing.
 
 The Celery task retries a failing sync with exponential backoff. Only when all

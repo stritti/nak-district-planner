@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Isolated regression tests for monthly reminder dispatch orchestration."""
 
 from __future__ import annotations

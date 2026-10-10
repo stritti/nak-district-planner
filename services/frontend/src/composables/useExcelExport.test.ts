@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { exportMatrixToExcel, exportEventsToExcel } from './useExcelExport'
 import type { MatrixResponse } from '../api/matrix'

@@ -32,6 +32,14 @@ Dieses Dokument definiert verbindliche Entwicklungsstandards fuer den NAK Distri
 
 Siehe auch `docs/coverage-strategy.md`.
 
+## 5. Lizenzierung und Attribution
+
+- Neuer oder geänderter eigener Quellcode trägt `SPDX-License-Identifier: AGPL-3.0-only` und den zutreffenden `SPDX-FileCopyrightText`-Vermerk.
+- Drittanbieterdateien, bestehende Copyright-Vermerke und abweichende Lizenzen werden nicht automatisch überschrieben.
+- Bei unklarer Rechteinhaberschaft ist vor der Kennzeichnung eine manuelle Prüfung erforderlich.
+- `python3 scripts/license_headers.py --check` und `python3 -m unittest discover -s scripts -p 'test_license_headers.py'` müssen erfolgreich sein.
+- Umfang und Ausnahmen: `docs/licensing.md` und OpenSpec `license-attribution`.
+
 ## 5. Definition of Done (DoD)
 
 Ein Ticket gilt als fertig, wenn:

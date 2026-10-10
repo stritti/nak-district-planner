@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Add leader_registrations table for self-registration workflow
 
 Revision ID: 0010_leader_registrations

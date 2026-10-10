@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """merge 0125 (with e5a2 dependency) and 0012 branches
 
 Revision ID: ae6c055cc051

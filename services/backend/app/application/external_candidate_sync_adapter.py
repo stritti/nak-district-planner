@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Bridge candidate ingestion to the hardened sync's per-event failure channel."""
 
 from __future__ import annotations

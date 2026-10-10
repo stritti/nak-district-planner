@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Release imported holiday slots (category Feiertag) to all congregations.
 
 Holidays are reference data; since issue #466 district slots are only

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Regression for #464: consecutive asyncio.run task bodies share one pooled engine.
 
 Celery tasks bridge into async code with ``asyncio.run`` per execution. Pooled

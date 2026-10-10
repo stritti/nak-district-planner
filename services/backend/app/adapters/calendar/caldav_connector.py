@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """CalDAV calendar connector.
 
 Fetches events from a CalDAV server and converts them into

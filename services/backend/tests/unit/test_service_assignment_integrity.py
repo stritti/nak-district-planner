@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Service assignments are serialized per leader and unique per planning slot (#468)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Shared mapping rules for automatic ingestion and explicit candidate approval."""
 
 from __future__ import annotations

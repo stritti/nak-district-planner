@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Candidate ingestion failures must be rolled back without stopping other events."""
 
 from datetime import UTC, datetime, timedelta

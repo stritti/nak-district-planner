@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Regression tests for idempotent, district-authorized notification dismissal."""
 
 from __future__ import annotations

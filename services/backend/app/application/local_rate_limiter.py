@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Bounded in-process fallback rate limiter for security-sensitive endpoints.
 
 The primary limiter remains Valkey-backed and horizontally consistent. This

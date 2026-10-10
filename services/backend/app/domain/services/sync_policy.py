@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Field ownership and deterministic transitions for calendar synchronization."""
 
 from __future__ import annotations

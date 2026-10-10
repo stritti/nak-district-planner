@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Persist external event candidates after the sync-policy migration."""
 
 import sqlalchemy as sa

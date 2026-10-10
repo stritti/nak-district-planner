@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Deployment migration gates against a real, migrated PostgreSQL database.
 
 Uses the same configuration as ``test_rls_postgres.py``:

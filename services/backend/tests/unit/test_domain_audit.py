@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Domain audit hook: which changes are recorded and what an entry contains."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Automated RBAC coverage: every API route is authenticated and role-guarded.
 
 Adding an endpoint without ``get_current_user`` in its dependency graph, or
