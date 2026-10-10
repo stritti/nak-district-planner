@@ -51,11 +51,14 @@ When an assignment references a `leader_id`, the system SHALL evaluate configure
 - **THEN** the API responds with 409 listing the warning
 
 ### Requirement: Matrix usability
-The matrix view SHALL show a skeleton while loading, keep the congregation column sticky during horizontal scroll, and keep all date headings (weekday, date and holiday names) sticky during vertical scroll within a viewport-bounded matrix scroll region. The top-left congregation heading SHALL remain fixed on both axes above date and congregation cells. Sticky headings SHALL have opaque backgrounds in light/dark and compact modes. The matrix SHALL offer a congregation text filter and an optional group-based secondary sort, and mark external time deviations with an indicator.
+The matrix view SHALL show a skeleton while loading, keep the congregation column sticky during horizontal scroll, offer a congregation text filter and an optional group-based secondary sort, and mark external time deviations with an indicator.
 
 #### Scenario: Group sorting enabled
 - **WHEN** the user enables group sorting
 - **THEN** congregations are ordered by group and then by their existing order
+
+### Requirement: Sticky matrix date headings
+The matrix SHALL keep weekday, date and holiday headings visible at the top during vertical scrolling in its bounded two-axis scroll region. Congregation names SHALL remain pinned to the left. The top-left corner SHALL stay above both axes, with opaque header backgrounds in light, dark and compact modes.
 
 #### Scenario: Two-axis matrix scrolling
 - **WHEN** the user scrolls a tall and wide matrix vertically and horizontally
