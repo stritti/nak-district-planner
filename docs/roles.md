@@ -1,11 +1,15 @@
 # Rollenkonzept
 
-Dieses Dokument definiert das Rollenkonzept fuer den NAK Bezirksplaner und ist die
-verbindliche Grundlage fuer die Implementierung in Phase 4 (Authentifizierung &
-Autorisierung).
+Dieses Dokument beschreibt die verbindlichen fachlichen Rollengrenzen des NAK Bezirksplaners.
+Der OpenSpec-Change `openspec/changes/multi-unit-memberships-and-superadmin-management/`
+erweitert das Modell um mehrere unabhängige Mitgliedschaften und die Ernennung weiterer
+Superadmins. Er definiert ein **Zielmodell**; die Umsetzung ist noch nicht abgeschlossen.
 
-::: info Status
-Alle Designentscheidungen sind getroffen. Dieses Dokument ist implementierungsbereit.
+::: info Implementierungsstand
+Der Bestand nutzt `users.is_superadmin` und `memberships` mit
+`(user_sub, role, scope_type, scope_id)` als Eindeutigkeits-Constraint.
+Die Umstellung auf genau eine Rolle je Scope, sichere Delegation des Superadmin-Status und
+die neuen Verwaltungsfunktionen sind offene OpenSpec-Aufgaben.
 :::
 
 ## 1. Übersicht
@@ -20,7 +24,12 @@ System (globaler Admin)
         └── Gemeinde (Congregation)
 ```
 
-Jede Rolle ist an genau einen Mandanten gebunden (Bezirk oder Gemeinde), mit Ausnahme der systemweiten `system_admin`-Rolle. Ein Benutzer gehört immer zu **genau einem Bezirk** und kann darin mehrere Rollen besitzen.
+Eine Mitgliedschaft besitzt genau einen Scope (Bezirk oder Gemeinde) und eine Rolle.
+Ein Benutzer kann **mehrere Mitgliedschaften über beliebig viele Bezirke und Gemeinden**
+besitzen, auch gleichzeitig in unterschiedlichen Bezirken. Berechtigungen gelten nur innerhalb
+des jeweiligen effektiven Scopes. Der in dieser Matrix historisch als `system_admin`
+bezeichnete Systemzugriff wird technisch über den globalen Benutzerstatus
+`users.is_superadmin` abgebildet und benötigt keine Mitgliedschaft.
 
 **Überblick der Rollen:**
 
@@ -211,77 +220,52 @@ Das Backend verifiziert ausschließlich JWT-Access-Tokens, die von Keycloak ausg
 
 ### 4.2 Datenbankmodell
 
+Das vorhandene Datenmodell speichert OIDC-Identitäten und Scope-Berechtigungen getrennt:
+
 ```text
-User
-  id, keycloak_sub (UNIQUE), email, display_name, is_active, created_at,
-  district_id (FK → District, nullable — nur NULL für system_admin)
+users
+  id, sub (UNIQUE), email, username, name, is_superadmin, created_at, updated_at
 
-UserRole
-  id, user_id (FK → User), role (enum), congregation_id (FK → Congregation, nullable)
-  -- congregation_id = NULL  → Rolle gilt für den gesamten Bezirk des Benutzers
-  -- congregation_id = <uuid> → Rolle ist auf diese Gemeinde eingeschränkt
+memberships
+  id, user_sub (FK -> users.sub), role, scope_type, scope_id,
+  created_at, updated_at
+  -- scope_type = DISTRICT     -> scope_id referenziert einen Bezirk
+  -- scope_type = CONGREGATION -> scope_id referenziert eine Gemeinde
 ```
 
-**Constraints:**
+Eine Benutzeridentität kann beliebig viele Mitgliedschaften in unterschiedlichen Bezirken
+und Gemeinden besitzen. Die Bezirkszuordnung steht **nicht** als einzelnes `district_id`
+auf dem Benutzer. Der Superadmin-Status ist ein globales Attribut von `users` und
+keine zusätzliche Rolle innerhalb einer Mitgliedschaft.
 
-Ein Benutzer kann innerhalb seines Bezirks **mehrere Rollen** haben (z. B. gleichzeitig `district_admin` und `planner`). Derselbe Rollen-Typ darf aber nicht doppelt vergeben werden. Da `congregation_id` nullable ist und PostgreSQL `NULL ≠ NULL` behandelt (eine einfache UNIQUE-Constraint würde mehrere Zeilen mit `congregation_id = NULL` erlauben), werden **partielle Unique-Indizes** benötigt:
-
-```sql
--- Bezirksweite Rollen (keine Gemeinde-Einschränkung): kein Duplikat pro Rolle
-CREATE UNIQUE INDEX uq_userrole_district
-  ON user_role (user_id, role)
-  WHERE congregation_id IS NULL;
-
--- Gemeindebezogene Rollen: kein Duplikat pro Rolle+Gemeinde
-CREATE UNIQUE INDEX uq_userrole_congregation
-  ON user_role (user_id, role, congregation_id)
-  WHERE congregation_id IS NOT NULL;
-
--- Verhindert ungültige Kombination: Gemeinde ohne Bezirkszuordnung am User
-ALTER TABLE user_role ADD CONSTRAINT chk_congregation_in_district
-  CHECK (
-    congregation_id IS NULL OR EXISTS (
-      SELECT 1 FROM congregation c
-      JOIN "user" u ON u.district_id = c.district_id
-      WHERE c.id = congregation_id AND u.id = user_id
-    )
-  );
-```
-
-Weitere Regeln:
-- `district_id` wird auf dem `User`-Datensatz gespeichert (ein Benutzer gehört immer zu einem Bezirk).
-- Ausnahme: `system_admin` hat `district_id = NULL` und keinen `UserRole`-Eintrag (oder einen mit `role = 'system_admin'`).
-- `keycloak_sub` ersetzt `hashed_password` — Passwort-Management liegt vollständig bei Keycloak.
+**Migration im OpenSpec-Change:**
+Die aktuelle Unique-Constraint `(user_sub, role, scope_type, scope_id)` lässt
+verschiedene Rollen desselben Benutzers im gleichen Scope zu. Das Zielmodell hat
+genau **eine** effektive Rollen-Zuordnung je Kombination aus
+`(user_sub, scope_type, scope_id)`. Eine Migration konsolidiert vorhandene
+Dubletten deterministisch auf die höchste effektive Rolle und sichert die
+entfallenden Datensätze für Audit und Downgrade. Anschließend erzwingt eine
+Datenbank-Unique-Constraint diese Eindeutigkeit. Gleichzeitige Zuweisungen
+müssen transaktional und idempotent sein.
 
 ### 4.3 Rollen-Speicherung und JWT-Token-Inhalt
 
-**Empfehlung: Rollen ausschließlich in der Datenbank (`UserRole`) speichern.**
+Die OIDC-Authentifizierung liefert eine verifizierte Benutzeridentität (`sub`).
+Die Autorisierung basiert auf den aktuellen Datenbankwerten in `users` und
+`memberships`, **nicht** auf frei eingebrachten Rollen-/Superadmin-Claims
+oder der von der Clientoberfläche ausgewählten Einheit.
 
-Es gibt drei Varianten — die Empfehlung ist fett markiert:
+Bei jeder relevanten Request-Autorisierung müssen Rollen und Superadmin-Status
+aus vertrauenswürdigen aktuellen Daten stammen. Insbesondere darf ein Entzug
+des Superadmin-Status nicht durch veraltete Cache-Einträge, laufende Sessions
+oder die Bootstrap-Funktion rückgängig gemacht werden.
 
-| Variante | Beschreibung | Vorteile | Nachteile |
-|----------|-------------|----------|-----------|
-| JWT-only | Rollen als Keycloak Realm Roles im JWT-Claim | Kein DB-Zugriff bei jeder Anfrage | Rollenänderungen wirken erst nach Token-Ablauf (bis zu 15 min) — Sicherheitsrisiko |
-| **DB-only (empfohlen)** | **JWT enthält nur Identität (`sub`), Rollen kommen aus `UserRole`** | **Sofortige Wirksamkeit, volle Kontrolle im Backend** | **Minimaler DB-Zugriff pro Request (mit Redis-Cache vernachlässigbar)** |
-| Hybrid | Rollen im JWT als Hinweis, DB ist authoritative | Flexibel | Komplexe Synchronisierung, zwei Quellen der Wahrheit |
-
-**Begründung für DB-only:** Für einen Bezirksplaner (kein hochfrequentes System) ist die Redis-Cache-Latenz von ~60 Sekunden akzeptabel. Wichtiger ist, dass ein `district_admin` einem Benutzer eine Rolle entziehen kann und dies sofort Wirkung zeigt — z. B. wenn ein Amt wechselt. Mit JWT-Rollen hätte der deaktivierte Benutzer für bis zu 15 Minuten noch Zugriff.
-
-**Rollenmanagement im Frontend:** Das Frontend ruft eine eigene API (`PATCH /api/v1/users/{id}/roles`) auf, die die `UserRole`-Tabelle direkt schreibt. Keycloak wird **nicht** für die Rollenverwaltung verwendet — Keycloak kennt nur die Identität des Benutzers.
-
-Das JWT enthält damit ausschließlich:
-
-```json
-{
-  "sub": "keycloak-user-uuid",
-  "email": "user@example.com",
-  "exp": 1234567890
-}
-```
-
-::: tip Performance
-Um die Datenbanklast zu minimieren, werden die geladenen Rollen pro Request in Redis mit einer TTL von ~60 Sekunden zwischengespeichert. Der Cache-Key ist `roles:{user_id}` und wird bei jeder Rollenänderung aktiv invalidiert (sodass Änderungen in der Praxis sofort wirken).
-:::
+Die Benutzerverwaltung bearbeitet Zuordnungen pro Scope; neue Zuordnungen
+ersetzen keine vorhandenen in anderen Einheiten. Ein bestehender Superadmin
+kann den globalen Status eines sicher verknüpften Kontos vergeben und entziehen;
+der letzte verbleibende Superadmin bleibt geschützt. Die Runtime-Datenbankrolle
+erhält dafür keine uneingeschränkten Schreibrechte auf `users.is_superadmin`.
+Details und Negativszenarien stehen in den verlinkten OpenSpec-Anforderungen.
 
 ### 4.4 Middleware / Permission-Guard
 
@@ -368,8 +352,8 @@ Die folgenden Entscheidungen wurden im Rahmen der Konzeptentwicklung getroffen u
 
 | # | Frage | Entscheidung |
 |---|-------|-------------|
-| 1 | Rollenvererbung | Rollen sind **strikt getrennt**. `district_admin` erbt keine `congregation_admin`-Rechte automatisch. Ein Benutzer kann mehrere Rollen innerhalb seines Bezirks haben (z. B. gleichzeitig `district_admin` und `planner`). |
-| 2 | Bezirkszuordnung | Jeder Benutzer (außer `system_admin`) ist **genau einem Bezirk** zugeordnet. Innerhalb dieses Bezirks kann er mehrere Rollen besitzen. Die Bezirkszuordnung wird auf dem `User`-Datensatz gespeichert, nicht in `UserRole`. |
+| 1 | Rollenvererbung | Die maßgebliche RBAC-Hierarchie lautet `DISTRICT_ADMIN > CONGREGATION_ADMIN > PLANNER > VIEWER`. Höhere Rollen schließen niedrigere Berechtigungen nur innerhalb des nach den Scope-Regeln wirksamen Bereichs ein; Rechte übertragen sich nicht auf fremde Einheiten. |
+| 2 | Bezirkszuordnung | Ein Benutzer kann mehrere Bezirks- und Gemeindemitgliedschaften besitzen, auch über Bezirksgrenzen hinweg. Jede Mitgliedschaft speichert Scope und Rolle in `memberships`. `users.is_superadmin` ist davon unabhängig. Die neue Ein-Rolle-pro-Scope-Constraint wird im zugehörigen OpenSpec-Change eingeführt. |
 | 3 | Gemeindegruppen | Keine eigene Berechtigungsstufe für Gruppen. Gruppen dienen der Kooperation (gemeinsame Gottesdienste, gegenseitige Unterstützung) und werden vollständig durch `district_admin` verwaltet. |
 | 4 | Einladungsworkflow | **Alle drei Varianten** werden unterstützt: E-Mail-Einladung (durch `district_admin`), Selbstregistrierung mit Freigabe, manuelle Anlage durch `system_admin`. Technisch über Keycloak abgebildet. |
 | 5 | Sichtbarkeit ServiceAssignments | **Ja.** `congregation_admin` kann die Dienstleiter-Namen aller Gemeinden im gleichen Bezirk in der Matrixansicht sehen. |
