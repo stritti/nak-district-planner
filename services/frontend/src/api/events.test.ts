@@ -5,6 +5,8 @@ vi.mock('./client')
 import * as client from './client'
 import {
   bulkUpdateApprovalStatus,
+  createEvent,
+  deleteEvent,
   listEvents,
   resolveEventConflict,
   updateEvent,
@@ -54,6 +56,26 @@ describe('events api', () => {
   it('omits false-only and undefined list filters', async () => {
     await listEvents({ only_district_level: false, congregation_id: undefined })
     expect(client.apiFetch).toHaveBeenCalledWith('/api/v1/events')
+  })
+
+  it('creates a new draft event with the typed POST API', async () => {
+    const input = {
+      district_id: 'district-1', congregation_id: 'congregation-1',
+      title: 'Gemeindeabend', start_at: '2026-10-11T18:00:00.000Z',
+      end_at: '2026-10-11T19:00:00.000Z',
+    }
+    await createEvent(input)
+    expect(client.apiFetch).toHaveBeenCalledWith('/api/v1/events', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  })
+
+  it('deletes an unpublished event using DELETE', async () => {
+    await deleteEvent('event-1')
+    expect(client.apiFetch).toHaveBeenCalledWith('/api/v1/events/event-1', {
+      method: 'DELETE',
+    })
   })
 
   it('sends PATCH to /api/v1/events/:id with body', async () => {
