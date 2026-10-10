@@ -5,7 +5,7 @@ The events overview supports only reading and editing existing planning slots. P
 ## What Changes
 
 - Add `POST /api/v1/events` to create an INTERNAL event with a planning slot and occurrence, initially `PLANNED` and `ACTIVE`.
-- Add `DELETE /api/v1/events/{id}` only for events which have never been published; the server returns 409 for released events, including formerly published ones.
+- Add `DELETE /api/v1/events/{id}` only for events which have never been published; the server returns 409 for released events, including formerly published ones. Deleted generated drafts persist their identity in a separate suppression ledger to prevent regeneration.
 - Persist `released_at` as an irreversible first-publication marker, backfilled from existing confirmed events.
 - Prevent single-event and monthly unpublication and reopening published cancellations.
 - Keep released events when a linked external calendar or invitation is deleted; mark them `CANCELLED` instead of hard deletion even under the provider's `HARD_DELETE` policy.
