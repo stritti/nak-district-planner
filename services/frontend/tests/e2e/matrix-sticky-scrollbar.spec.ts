@@ -90,9 +90,9 @@ test.describe('Matrix horizontal scrollbar', () => {
     })
     await expect.poll(() => scroll.evaluate((element) => element.scrollLeft)).toBe(0)
     await proxy.evaluate((element) => { element.scrollLeft = element.scrollWidth })
-    await expect.poll(() => scroll.evaluate((element) =>
-      Math.abs(nativeEnd - element.scrollLeft),
-    )).toBeLessThanOrEqual(1)
+    await expect.poll(() => scroll.evaluate((element, expectedEnd) =>
+      Math.abs(expectedEnd - element.scrollLeft),
+    nativeEnd)).toBeLessThanOrEqual(1)
 
     const lastColumn = await scroll.evaluate((element) => {
       const right = element.getBoundingClientRect().right
