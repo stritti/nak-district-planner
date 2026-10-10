@@ -5,10 +5,19 @@ import { strict as assert } from 'node:assert'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-for (const page of ['workflows.html', 'approval-workflow.html']) {
+// Rendered VitePress pages may contain unrelated icons: assert all Mermaid blocks.
+for (const [page, expectedDiagrams] of [
+  ['workflows.html', 3],
+  ['approval-workflow.html', 3]
+]) {
   const html = readFileSync(resolve('docs/.vitepress/dist', page), 'utf8')
-  assert.match(html, /<svg[\s>]/i, `${page}: expected an SVG diagram`)
-  assert.match(html, /vp-diagram/, `${page}: expected rendered Mermaid container`)
+  const svgDiagrams = [...html.matchAll(/<div class="vp-diagram"[^>]*>\s*<div[^>]*>\s*<svg\b/gi)]
+  assert.equal(
+    svgDiagrams.length,
+    expectedDiagrams,
+    `${page}: expected ${expectedDiagrams} rendered Mermaid diagrams`
+  )
+  assert.doesNotMatch(html, /language-mermaid/, `${page}: Mermaid source remained unrendered`)
 }
 
-console.log('Mermaid SVG output verified.')
+console.log('All six Mermaid diagrams rendered to SVG.')
