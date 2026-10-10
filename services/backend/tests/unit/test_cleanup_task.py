@@ -7,12 +7,13 @@ The async DB session is patched so no real database access is performed.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timezone
+from datetime import UTC, date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application.tasks import cleanup_old_events
+from app.application.tasks import _delete_expired_drafts, cleanup_old_events
+from app.domain.models.planning_slot import ReleasedEventError
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -140,9 +141,6 @@ class TestCleanupOldEvents:
 class TestAggregateRetentionCleanup:
     @pytest.mark.asyncio
     async def test_each_candidate_uses_relationship_safe_repository_delete(self):
-        from datetime import date
-        from app.application.tasks import _delete_expired_drafts
-
         ids = [uuid.uuid4(), uuid.uuid4()]
         result = MagicMock()
         result.scalars.return_value.all.return_value = ids
@@ -159,9 +157,6 @@ class TestAggregateRetentionCleanup:
 
     @pytest.mark.asyncio
     async def test_skips_candidate_released_or_deleted_during_cleanup(self):
-        from datetime import date
-        from app.application.tasks import _delete_expired_drafts
-        from app.domain.models.planning_slot import ReleasedEventError
 
         ids = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
         result = MagicMock()

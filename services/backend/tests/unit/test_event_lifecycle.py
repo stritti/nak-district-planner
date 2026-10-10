@@ -664,8 +664,8 @@ async def test_bulk_approval_race_returns_http_409(new_status):
 
 @pytest.mark.asyncio
 async def test_repository_prevents_recreating_concurrently_deleted_draft():
-    from app.domain.models.planning_slot import DeletedPlanningSlotError
     from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+    from app.domain.models.planning_slot import DeletedPlanningSlotError
 
     previous_draft = slot()
     session = AsyncMock()
