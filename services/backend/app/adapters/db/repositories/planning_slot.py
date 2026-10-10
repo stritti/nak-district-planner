@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+from app.adapters.db.orm_models.deleted_generation_key import DeletedGenerationKeyORM
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
     PlanningSlot,
@@ -124,6 +125,19 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
             )
         )
         return [_orm_to_domain(row) for row in result.scalars().all()]
+
+    async def list_deleted_generation_keys(
+        self, *, district_id: uuid.UUID, generation_keys: Collection[str]
+    ) -> set[str]:
+        if not generation_keys:
+            return set()
+        result = await self._session.execute(
+            select(DeletedGenerationKeyORM.generation_key).where(
+                DeletedGenerationKeyORM.district_id == district_id,
+                DeletedGenerationKeyORM.generation_key.in_(list(generation_keys)),
+            )
+        )
+        return set(result.scalars().all())
 
     async def save(self, slot: PlanningSlot) -> None:
         existing = await self._session.get(PlanningSlotORM, slot.id)
