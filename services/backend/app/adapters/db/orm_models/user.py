@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """User ORM model — SQLAlchemy representation of User in the database.
 
 Stores user information extracted from OIDC tokens.
