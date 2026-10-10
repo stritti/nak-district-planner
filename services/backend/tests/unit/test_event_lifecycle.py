@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from app.adapters.api.routers import events
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
@@ -122,6 +123,42 @@ async def test_create_rejects_invalid_distribution():
                                   inst_repo=instances, cong_repo=congs)
     assert exc.value.status_code == 400
     slots.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_returns_conflict_for_duplicate_active_congregation_slot():
+    request = body(congregation_id=uuid.uuid4())
+    slot_repo, instance_repo, congregation_repo = AsyncMock(), AsyncMock(), AsyncMock()
+    congregation_repo.get.return_value = SimpleNamespace(
+        district_id=request.district_id, id=request.congregation_id,
+    )
+    reason = RuntimeError("unique violation")
+    reason.sqlstate = "23505"
+    slot_repo.save.side_effect = IntegrityError("insert", {}, reason)
+    session = AsyncMock()
+    with patch.object(events, "require_role_in_district"), pytest.raises(HTTPException) as exc:
+        await events.create_event(
+            request, auth(), session, slot_repo=slot_repo,
+            inst_repo=instance_repo, cong_repo=congregation_repo,
+        )
+    assert exc.value.status_code == 409
+    session.rollback.assert_awaited_once()
+    instance_repo.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_does_not_mask_unrelated_database_error():
+    request = body()
+    slot_repo = AsyncMock()
+    failure = IntegrityError("insert", {}, RuntimeError("foreign key"))
+    slot_repo.save.side_effect = failure
+    session = AsyncMock()
+    with patch.object(events, "require_role_in_district"), pytest.raises(IntegrityError):
+        await events.create_event(
+            request, auth(), session, slot_repo=slot_repo,
+            inst_repo=AsyncMock(),
+        )
+    session.rollback.assert_awaited_once()
 
 
 @pytest.mark.asyncio
