@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAuthStore } from './auth'
 import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import {
@@ -18,6 +18,26 @@ export const useDistrictsStore = defineStore('districts', () => {
   const selectedDistrictId = ref('')
   const loading = ref(false)
   const auth = useAuthStore()
+  const selectedDistrict = computed(() =>
+    districts.value.find((district) => district.id === selectedDistrictId.value) ?? null,
+  )
+  const canSwitchDistrict = computed(() => districts.value.length > 1)
+  let fetchVersion = 0
+
+  // An identity change or logout must invalidate in-flight requests and cached tenant data.
+  watch(
+    () => [auth.isAuthenticated, auth.user?.sub] as const,
+    ([authenticated, identity], previous) => {
+      if (!authenticated || (previous?.[1] && previous[1] !== identity)) {
+        fetchVersion++
+        districts.value = []
+        selectedDistrictId.value = ''
+        clearCongregations()
+        loading.value = false
+      }
+    },
+    { flush: 'sync' },
+  )
   useSessionViewSettings('navigation', () => auth.user?.sub ?? null, () => 'district', {
     district: sessionField(selectedDistrictId, () => '', sessionText),
   })
@@ -35,16 +55,29 @@ export const useDistrictsStore = defineStore('districts', () => {
   }
 
   function setSelectedDistrict(districtId: string) {
+    if (districts.value.length > 0 && !districts.value.some((district) => district.id === districtId)) {
+      return
+    }
     selectedDistrictId.value = districtId
   }
 
   async function fetchDistricts() {
+    const version = ++fetchVersion
+    const identity = auth.user?.sub
     loading.value = true
     try {
-      districts.value = await listDistricts()
+      const allowedDistricts = await listDistricts()
+      if (version !== fetchVersion || identity !== auth.user?.sub) return
+      districts.value = allowedDistricts
       ensureSelectedDistrict()
+    } catch (error) {
+      if (version === fetchVersion && identity === auth.user?.sub) {
+        districts.value = []
+        ensureSelectedDistrict()
+      }
+      throw error
     } finally {
-      loading.value = false
+      if (version === fetchVersion) loading.value = false
     }
   }
 
@@ -66,6 +99,8 @@ export const useDistrictsStore = defineStore('districts', () => {
     congregations,
     groups,
     selectedDistrictId,
+    selectedDistrict,
+    canSwitchDistrict,
     loading,
     ensureSelectedDistrict,
     setSelectedDistrict,

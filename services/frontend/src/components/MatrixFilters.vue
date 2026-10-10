@@ -18,20 +18,8 @@
       </button>
     </div>
 
-    <!-- Bezirk + Datumsfelder -->
+    <!-- Group, display and date filters within the active district -->
     <div class="flex flex-wrap items-end gap-3">
-      <div class="w-full sm:w-auto">
-        <label class="filter-label">Bezirk</label>
-        <select
-          v-model="districtsStore.selectedDistrictId"
-          class="form-select"
-        >
-          <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
-            {{ d.name }}
-          </option>
-        </select>
-      </div>
-
       <div v-if="districtsStore.groups.length > 0" class="w-full sm:w-auto">
         <label class="filter-label">Gruppe</label>
         <select

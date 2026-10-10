@@ -84,19 +84,6 @@
 
       <!-- Zeile 2: Filter-Felder -->
       <div class="flex flex-wrap gap-3">
-        <!-- Bezirk -->
-        <div class="w-full sm:w-auto">
-          <label class="filter-label">Bezirk</label>
-          <select
-            v-model="districtsStore.selectedDistrictId"
-            class="form-select px-2"
-          >
-            <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
-              {{ d.name }}
-            </option>
-          </select>
-        </div>
-
         <!-- Gemeinde -->
         <div class="w-full sm:w-auto">
           <label class="filter-label">Gemeinde</label>

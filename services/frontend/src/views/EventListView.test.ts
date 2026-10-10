@@ -138,6 +138,8 @@ describe('EventListView', () => {
   it('restores controls and the matching API query after remounting with fresh stores', async () => {
     const first = setup()
     await flushPromises()
+    expect(first.wrapper.find('#global-district-select').exists()).toBe(false)
+    expect(first.wrapper.find('select[aria-label="Aktiven Bezirk wechseln"]').exists()).toBe(false)
     await first.wrapper.get('#event-status-filter').setValue('CANCELLED')
     await first.wrapper.get('#event-approval-filter').setValue('CONFIRMED')
     await first.wrapper.get('#event-type-filter').setValue('other')
