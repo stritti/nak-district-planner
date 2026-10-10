@@ -47,6 +47,50 @@ test.describe('Matrix horizontal scrollbar', () => {
     expect(after!.y).toBeGreaterThanOrEqual(0)
   })
 
+  test('reaches the final column with a classic vertical scrollbar', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 600 })
+    await setupAuthAndMatrix(page, bigMatrix())
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    // Even on systems with overlay scrollbars, reserve the classic scrollbar gutter.
+    await page.addStyleTag({ content: '[data-testid="matrix-scroll"] { scrollbar-gutter: stable; }' })
+    const scroll = page.getByTestId('matrix-scroll')
+    const proxy = page.getByTestId('matrix-sticky-scrollbar')
+    await expect(proxy).toBeVisible()
+
+    await expect.poll(() => scroll.evaluate((element) =>
+      element.getBoundingClientRect().width - element.clientWidth,
+    )).toBeGreaterThan(0)
+    await expect.poll(async () => {
+      const widths = await Promise.all([scroll, proxy].map((item) =>
+        item.evaluate((element) => element.clientWidth),
+      ))
+      return Math.abs(widths[0] - widths[1])
+    }).toBeLessThanOrEqual(1)
+
+    await proxy.evaluate((element) => { element.scrollLeft = element.scrollWidth })
+    await expect.poll(() => scroll.evaluate((element) =>
+      Math.abs((element.scrollWidth - element.clientWidth) - element.scrollLeft),
+    )).toBeLessThanOrEqual(1)
+  })
+
+  test('passes vertical wheel scrolling to the page at the matrix boundary', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 })
+    await setupAuthAndMatrix(page, bigMatrix())
+    await page.goto(`${FRONTEND_URL}/matrix`)
+    const scroll = page.getByTestId('matrix-scroll')
+    await expect(scroll).toBeVisible({ timeout: 10000 })
+    expect(await scroll.evaluate((element) => getComputedStyle(element).overscrollBehaviorX)).toBe('contain')
+    expect(await scroll.evaluate((element) => getComputedStyle(element).overscrollBehaviorY)).toBe('auto')
+
+    // Ensure that the document can scroll further after the matrix.
+    await page.evaluate(() => { document.body.style.paddingBottom = '1200px' })
+    await scroll.hover({ position: { x: 25, y: 50 } })
+    await scroll.evaluate((element) => { element.scrollTop = element.scrollHeight })
+    const before = await page.evaluate(() => window.scrollY)
+    await page.mouse.wheel(0, 400)
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before)
+  })
+
   test('is hidden when the table fits', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 })
     await setupAuthAndMatrix(page, matrixResponse({ isGap: false }))
@@ -104,7 +148,9 @@ test.describe('Matrix fixed date header', () => {
 
   test('keeps the header in the scroll region in compact dark mode', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 })
-    await setupAuthAndMatrix(page, bigMatrix())
+    const fixture = bigMatrix()
+    fixture.holidays = { '2026-04-10': ['Langer Gedenktag'] }
+    await setupAuthAndMatrix(page, fixture)
     await page.addInitScript(() => { localStorage.setItem('matrix.compactMode', '1') })
     await page.goto(`${FRONTEND_URL}/matrix`)
     await page.evaluate(() => { document.documentElement.classList.add('dark') })
@@ -119,7 +165,9 @@ test.describe('Matrix fixed date header', () => {
     const top = await scroll.evaluate((element) => element.getBoundingClientRect().top)
     expect(Math.abs((await corner.boundingBox())!.y - top)).toBeLessThanOrEqual(2)
     expect(Math.abs((await day.boundingBox())!.y - top)).toBeLessThanOrEqual(2)
-    expect(await corner.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
+    expect(await corner.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/^rgb\\(/)
+    const holiday = scroll.locator('thead th').nth(10)
+    expect(await holiday.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/^rgb\\(/)
   })
 
   test('does not add vertical scrolling for a short matrix', async ({ page }) => {
