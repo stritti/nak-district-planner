@@ -27,7 +27,12 @@ The system SHALL provide Schließdienst, Organist and Dirigent as enabled defaul
 - **THEN** no duplicate categories or overrides are created
 
 ### Requirement: Safe category lifecycle
-The system SHALL retain stored event duty assignments and their display information when a category is disabled or renamed; a used category SHALL NOT be hard-deleted in a way that loses assignment history.
+The system SHALL retain stored event duty assignments and their display information when a category is disabled or renamed; a used category SHALL NOT be hard-deleted in a way that loses assignment history. Reducing effective capacity below the number of already stored assignees SHALL preserve and flag those assignees, while rejecting additions exceeding the new capacity.
+
+#### Scenario: Capacity reduced below existing assignments
+- **WHEN** an administrator reduces a duty's capacity from two to one while two persons are already assigned
+- **THEN** both records remain visible and the duty is flagged as over capacity
+- **AND** a new third person is rejected until the number of assignments allows it
 
 #### Scenario: Disable an assigned category
 - **WHEN** an administrator disables a category already used on a planning slot
