@@ -284,6 +284,14 @@ async def test_repo_sets_release_once_and_refuses_reset():
         await repo.save(value)
 
 
+
+async def _delete_with_mocked_district_lock(session, slot_id):
+    session.get = AsyncMock(return_value=SimpleNamespace(district_id=uuid.uuid4()))
+    repo = SqlPlanningSlotRepository(session)
+    repo.lock_district_for_generation = AsyncMock()
+    return await repo.delete(slot_id)
+
+
 @pytest.mark.asyncio
 async def test_repo_refuses_direct_delete_after_release():
     repo_session = AsyncMock()
@@ -293,7 +301,7 @@ async def test_repo_refuses_direct_delete_after_release():
     )
     repo_session.execute.return_value = result
     with pytest.raises(ReleasedEventError):
-        await SqlPlanningSlotRepository(repo_session).delete(uuid.uuid4())
+        await _delete_with_mocked_district_lock(repo_session, uuid.uuid4())
     repo_session.delete.assert_not_awaited()
 
 
@@ -307,8 +315,12 @@ async def test_repo_deletes_draft_and_handles_missing():
     ]
     repo_session.execute.return_value = result
     repo = SqlPlanningSlotRepository(repo_session)
-    await repo.delete(uuid.uuid4())
-    await repo.delete(uuid.uuid4())
+    repo_session.get = AsyncMock(side_effect=[
+        SimpleNamespace(district_id=uuid.uuid4()), None,
+    ])
+    repo.lock_district_for_generation = AsyncMock()
+    assert await repo.delete(uuid.uuid4()) is True
+    assert await repo.delete(uuid.uuid4()) is False
     repo_session.delete.assert_awaited_once()
 
 
@@ -328,7 +340,7 @@ async def test_deleting_generated_draft_writes_ledger_and_removes_event():
     result.scalar_one_or_none.return_value = row
     repo_session.execute.return_value = result
 
-    await SqlPlanningSlotRepository(repo_session).delete(uuid.uuid4())
+    await _delete_with_mocked_district_lock(repo_session, uuid.uuid4())
 
     marker = repo_session.add.call_args.args[0]
     assert marker.district_id == row.district_id
@@ -374,7 +386,7 @@ async def test_repo_remembers_deleted_legacy_series_occurrence():
     session.delete = AsyncMock()
     session.flush = AsyncMock()
 
-    await SqlPlanningSlotRepository(session).delete(event_id)
+    await _delete_with_mocked_district_lock(session,event_id)
 
     ledger = session.add.call_args.args[0]
     assert isinstance(ledger, DeletedGenerationKeyORM)
@@ -457,7 +469,7 @@ async def test_reassigned_series_draft_does_not_suppress_original_occurrence():
     session.delete = AsyncMock()
     session.flush = AsyncMock()
 
-    await SqlPlanningSlotRepository(session).delete(event.id)
+    await _delete_with_mocked_district_lock(session,event.id)
 
     session.add.assert_not_called()
     session.delete.assert_awaited_once_with(row)
@@ -495,7 +507,7 @@ async def test_deleting_invitation_source_removes_unreleased_target_copy():
     session.delete = AsyncMock()
     session.flush = AsyncMock()
 
-    await SqlPlanningSlotRepository(session).delete(source_id)
+    await _delete_with_mocked_district_lock(session,source_id)
 
     assert {id(c.args[0]) for c in session.delete.await_args_list} == {
         id(source), id(target), id(invitation)
@@ -530,7 +542,7 @@ async def test_deleting_invitation_source_cancels_released_target_copy():
     session.delete = AsyncMock()
     session.flush = AsyncMock()
 
-    await SqlPlanningSlotRepository(session).delete(source_id)
+    await _delete_with_mocked_district_lock(session,source_id)
 
     assert target.status == PlanningSlotStatus.CANCELLED
     assert target.invitation_source_event_id is None
@@ -557,7 +569,7 @@ async def test_deleting_linked_target_removes_invitation_but_not_source():
     session.delete = AsyncMock()
     session.flush = AsyncMock()
 
-    await SqlPlanningSlotRepository(session).delete(target_id)
+    await _delete_with_mocked_district_lock(session,target_id)
 
     assert {id(c.args[0]) for c in session.delete.await_args_list} == {id(target), id(invitation)}
 
@@ -590,7 +602,7 @@ async def test_deleting_legacy_invitation_source_cleans_orphaned_link():
     session.delete = AsyncMock()
     session.flush = AsyncMock()
 
-    await SqlPlanningSlotRepository(session).delete(source_id)
+    await _delete_with_mocked_district_lock(session,source_id)
 
     assert target.status == PlanningSlotStatus.CANCELLED
     assert {id(c.args[0]) for c in session.delete.await_args_list} == {id(source), id(legacy_link)}
@@ -720,3 +732,53 @@ async def test_bulk_after_concurrent_delete_returns_conflict_without_publishing(
     assert exc.value.status_code == 409
     repo.save.assert_awaited_once_with(draft, require_existing=True)
     publish.assert_not_called()
+
+
+
+@pytest.mark.asyncio
+async def test_legacy_series_queries_exclude_detached_rows():
+    from sqlalchemy.dialects.postgresql import dialect
+
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    session.execute.return_value = result
+    repo = SqlPlanningSlotRepository(session)
+    await repo.get_by_series_and_date(uuid.uuid4(), date(2026, 6, 1))
+    await repo.get_by_series_date(
+        series_id=uuid.uuid4(), planning_date=date(2026, 6, 1),
+        congregation_id=uuid.uuid4(),
+    )
+    for call in session.execute.await_args_list:
+        assert "generation_key_detached IS false" in str(
+            call.args[0].compile(dialect=dialect())
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_uses_district_lock_before_slot_and_invitation():
+    row = SimpleNamespace(
+        id=uuid.uuid4(), district_id=uuid.uuid4(),
+        released_at=None, approval_status=EventApprovalStatus.PLANNED,
+        generation_key=None, series_id=None,
+    )
+    session = MagicMock()
+    session.get = AsyncMock(return_value=row)
+    session.delete = AsyncMock()
+    session.flush = AsyncMock()
+    result = _query_result(row=row)
+    calls = []
+
+    async def execute(*args, **kwargs):
+        calls.append("sql")
+        return result
+
+    async def lock(district):
+        calls.append("district")
+
+    session.execute = AsyncMock(side_effect=execute)
+    repo = SqlPlanningSlotRepository(session)
+    repo.lock_district_for_generation = AsyncMock(side_effect=lock)
+    assert await repo.delete(row.id) is True
+    assert calls[0] == "district"
+    repo.lock_district_for_generation.assert_awaited_once_with(row.district_id)

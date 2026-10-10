@@ -42,3 +42,10 @@
 - [x] 6.3 Route retention cleanup through relationship-safe repository deletion and test released copies.
 - [x] 6.4 Reset the creation form's congregation after save and across district switches.
 - [ ] 6.5 Verify full CI, coverage and strict active OpenSpec change validation.
+
+## 7. Fourth Codex review follow-up
+
+- [x] 7.1 Read live series slots before deletion markers; test the race in both generators.
+- [x] 7.2 Acquire district transaction lock before invitation source and target row locks.
+- [x] 7.3 Exclude detached series slots from legacy existence checks.
+- [ ] 7.4 Verify backend, PostgreSQL, CI and strict OpenSpec validation.

@@ -468,3 +468,57 @@ class TestConcurrentGeneration:
         assert outcome == {"series_processed": 1, "slots_created": 0, "slots_skipped": 1}
         m.slot_repo.add_if_absent.assert_awaited_once()
         m.instance_repo.save.assert_not_awaited()
+
+
+
+@pytest.mark.asyncio
+async def test_scheduled_generator_checks_deletion_ledger_after_existing_slots():
+    from app.domain.models.planning_slot import planning_series_generation_key
+
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(9),
+        recurrence_pattern={"type": "weekly", "days": [0]},
+    )
+    key = planning_series_generation_key(series.id, date(2026, 6, 1))
+    repos = MockRepos()
+    repos.series_repo.list_active.return_value = [series]
+    order = []
+
+    async def existing(**kwargs):
+        order.append("slots")
+        return []
+
+    async def deleted(**kwargs):
+        order.append("ledger")
+        return {key}
+
+    repos.slot_repo.list_by_generation_keys.side_effect = existing
+    repos.slot_repo.list_deleted_generation_keys.side_effect = deleted
+    result = await repos.build().run_for_window(
+        from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2),
+    )
+    assert order == ["slots", "ledger"]
+    assert result["slots_created"] == 0
+    repos.slot_repo.add_if_absent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_scheduled_generator_does_not_block_on_detached_legacy_occurrence():
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(9),
+        recurrence_pattern={"type": "weekly", "days": [0]},
+    )
+    detached = PlanningSlot.create(
+        district_id=series.district_id,
+        planning_date=date(2026, 6, 1), planning_time=time(9),
+        series_id=series.id, congregation_id=series.congregation_id,
+    )
+    detached.generation_key_detached = True
+    repos = MockRepos()
+    repos.series_repo.list_active.return_value = [series]
+    repos.slot_repo.get_by_series_date.return_value = detached
+    result = await repos.build().run_for_window(
+        from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2),
+    )
+    assert result["slots_created"] == 1
+    repos.slot_repo.add_if_absent.assert_awaited_once()

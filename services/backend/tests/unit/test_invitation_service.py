@@ -611,6 +611,8 @@ async def test_delete_invitation_removes_unreleased_linked_slot():
         inv_repo_cls.return_value = inv_repo
 
         slot_repo = MagicMock()
+        slot_repo.get = AsyncMock(return_value=target_slot)
+        slot_repo.lock_district_for_generation = AsyncMock()
         slot_repo.get_for_update = AsyncMock(return_value=target_slot)
         slot_repo.delete = AsyncMock()
         slot_repo_cls.return_value = slot_repo
@@ -645,6 +647,8 @@ async def test_delete_invitation_cancels_released_linked_slot():
         inv_repo.delete = AsyncMock()
         inv_repo_cls.return_value = inv_repo
         slot_repo = MagicMock()
+        slot_repo.get = AsyncMock(return_value=target_slot)
+        slot_repo.lock_district_for_generation = AsyncMock()
         slot_repo.get_for_update = AsyncMock(return_value=target_slot)
         slot_repo.save = AsyncMock()
         slot_repo.delete = AsyncMock()
@@ -919,6 +923,8 @@ async def test_invitation_delete_refreshes_concurrently_released_target_under_lo
         invitation_repo.delete = AsyncMock()
         inv_cls.return_value = invitation_repo
         slot_repo = MagicMock()
+        slot_repo.get = AsyncMock(return_value=released_target)
+        slot_repo.lock_district_for_generation = AsyncMock()
         slot_repo.get_for_update = AsyncMock(return_value=released_target)
         slot_repo.save = AsyncMock()
         slot_repo.delete = AsyncMock()
@@ -931,3 +937,45 @@ async def test_invitation_delete_refreshes_concurrently_released_target_under_lo
     slot_repo.save.assert_awaited_once_with(released_target, require_existing=True)
     slot_repo.delete.assert_not_awaited()
     invitation_repo.delete.assert_awaited_once_with(invitation.id)
+
+
+
+@pytest.mark.asyncio
+async def test_invitation_removal_locks_district_before_target_row():
+    session = MagicMock()
+    target = _planning_slot(approval_status=EventApprovalStatus.CONFIRMED)
+    invitation = CongregationInvitation.create(
+        source_event_id=uuid.uuid4(),
+        source_congregation_id=uuid.uuid4(),
+        target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+        target_congregation_id=uuid.uuid4(),
+        linked_event_id=target.id,
+    )
+    with (
+        patch("app.application.invitation_service.SqlInvitationRepository") as inv_cls,
+        patch("app.application.invitation_service.SqlPlanningSlotRepository") as slot_cls,
+    ):
+        invitations = MagicMock()
+        invitations.get = AsyncMock(return_value=invitation)
+        invitations.delete = AsyncMock()
+        inv_cls.return_value = invitations
+        slots = MagicMock()
+        slots.get = AsyncMock(return_value=target)
+        slots.get_for_update = AsyncMock(return_value=target)
+        slots.lock_district_for_generation = AsyncMock()
+        slots.save = AsyncMock()
+        slot_cls.return_value = slots
+        calls = []
+
+        async def lock(district):
+            calls.append("district")
+
+        async def get_locked(target_id):
+            calls.append("row")
+            return target
+
+        slots.lock_district_for_generation.side_effect = lock
+        slots.get_for_update.side_effect = get_locked
+        assert await delete_invitation(session, invitation_id=invitation.id)
+        assert calls == ["district", "row"]
+        slots.lock_district_for_generation.assert_awaited_once_with(target.district_id)

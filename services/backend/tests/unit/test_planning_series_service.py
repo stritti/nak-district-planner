@@ -50,7 +50,8 @@ class MockPlanningSlotRepository:
     ) -> PlanningSlot | None:
         # Check if any slot exists for this series and date
         for slot in self.slots:
-            if slot.series_id == series_id and slot.planning_date == planning_date:
+            if (slot.series_id == series_id and slot.planning_date == planning_date
+                    and not slot.generation_key_detached):
                 return slot
         return None
 
@@ -692,3 +693,70 @@ class TestSeriesGenerationConflicts:
         assert result == {"generated": 0, "skipped": 1, "updated": 0}
         assert slot_repo.slots == []
         slot_repo.add_if_absent.assert_awaited_once()
+
+
+
+@pytest.mark.asyncio
+async def test_explicit_generator_checks_tombstones_after_existing_slots():
+    from app.domain.models.planning_slot import planning_series_generation_key
+
+    series_repo = MockPlanningSeriesRepository()
+    slots = MockPlanningSlotRepository()
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(10),
+        recurrence_pattern={"frequency": "weekly", "by_weekday": [0]},
+        active_from=date(2026, 6, 1),
+    )
+    await series_repo.save(series)
+    key = planning_series_generation_key(series.id, date(2026, 6, 1))
+    original = slots.list_by_generation_keys
+    order = []
+
+    async def existing(**kwargs):
+        order.append("slots")
+        slots.deleted_keys.add((series.district_id, key))
+        return await original(**kwargs)
+
+    original_deleted = slots.list_deleted_generation_keys
+
+    async def deleted(**kwargs):
+        order.append("ledger")
+        return await original_deleted(**kwargs)
+
+    slots.list_by_generation_keys = existing
+    slots.list_deleted_generation_keys = deleted
+    result = await PlanningSeriesSlotGenerationService(
+        series_repo=series_repo, slot_repo=slots,
+    ).generate_slots_for_series(
+        series.id, from_date=date(2026, 6, 1), to_date=date(2026, 6, 1),
+    )
+    assert order == ["slots", "ledger"]
+    assert result["skipped"] == 1
+    assert result["generated"] == 0
+
+
+@pytest.mark.asyncio
+async def test_explicit_generator_ignores_detached_series_slot():
+    series_repo = MockPlanningSeriesRepository()
+    slots = MockPlanningSlotRepository()
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), congregation_id=uuid.uuid4(),
+        default_planning_time=time(10),
+        recurrence_pattern={"frequency": "weekly", "by_weekday": [0]},
+        active_from=date(2026, 6, 1),
+    )
+    await series_repo.save(series)
+    detached = PlanningSlot.create(
+        district_id=series.district_id, series_id=series.id,
+        congregation_id=uuid.uuid4(), category="Andacht",
+        planning_date=date(2026, 6, 1), planning_time=time(10),
+    )
+    detached.generation_key_detached = True
+    await slots.save(detached)
+    result = await PlanningSeriesSlotGenerationService(
+        series_repo=series_repo, slot_repo=slots,
+    ).generate_slots_for_series(
+        series.id, from_date=date(2026, 6, 1), to_date=date(2026, 6, 1),
+    )
+    assert result["generated"] == 1
+    assert len(slots.slots) == 2
