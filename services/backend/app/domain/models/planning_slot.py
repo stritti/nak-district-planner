@@ -59,6 +59,8 @@ class PlanningSlot:
     # date/time so a re-run never re-creates a moved, cancelled slot. Unique per
     # district; None for manually created or imported slots.
     generation_key: str | None = None
+    # Irreversible publication marker: once set, the event may only be cancelled.
+    released_at: datetime | None = None
 
     @classmethod
     def create(
@@ -139,6 +141,10 @@ class PlanningSlot:
         )
 
     @property
+    def was_released(self) -> bool:
+        return self.released_at is not None or self.is_confirmed
+
+    @property
     def is_confirmed(self) -> bool:
         """Approval policy: only CONFIRMED slots are released to outside audiences."""
         return self.approval_status == EventApprovalStatus.CONFIRMED
@@ -195,3 +201,7 @@ def _congregation_in_district(
     if congregation_id not in district_congregation_ids:
         raise InvalidApplicabilityError("Gemeinde gehört nicht zum Bezirk des Ereignisses.")
     return congregation_id
+
+
+class ReleasedEventError(ValueError):
+    """A previously published event must remain available as a cancellation."""
