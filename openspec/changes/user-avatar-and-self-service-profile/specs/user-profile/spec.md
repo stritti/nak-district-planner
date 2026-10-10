@@ -71,7 +71,7 @@ Die Anwendung SHALL Änderungen an E-Mail, Anmeldekennung und Passwort nicht als
 #### Scenario: E-Mail oder Passwort ändern
 - **WHEN** der Benutzer seine E-Mail oder sein Passwort ändern möchte
 - **THEN** bietet die SPA dafür keine lokale Schreiboperation an
-- **AND** bei konfigurertem Provider-Konto-Link kann er zur externen Kontoverwaltung wechseln
+- **AND** bei konfiguriertem Provider-Konto-Link kann er zur externen Kontoverwaltung wechseln
 
 #### Scenario: Provider ändert den Namen nach lokalem Override
 - **WHEN** IdP-Namensclaims sich bei einer späteren Anmeldung ändern, aber ein lokaler Override besteht
