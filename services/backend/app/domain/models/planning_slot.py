@@ -10,6 +10,11 @@ APPLICABILITY_ALL = "all"
 """Sentinel: a district-level slot applies to every congregation of the district."""
 
 
+def planning_series_generation_key(series_id: uuid.UUID, planning_date: date) -> str:
+    """Stable occurrence identity for generated series slots (UTC planning date)."""
+    return f"planning-series:{series_id}:{planning_date.isoformat()}"
+
+
 class InvalidApplicabilityError(ValueError):
     """The requested congregation distribution violates the UC-04 rules."""
 
