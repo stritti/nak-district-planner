@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """User domain model — represents an authenticated user in the system.
 
 Extracted from OIDC token claims (sub, email, preferred_username, etc.)
