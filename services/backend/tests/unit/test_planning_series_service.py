@@ -41,6 +41,10 @@ class MockPlanningSlotRepository:
         self.slots: list[PlanningSlot] = []
         self.slots_by_id: dict[uuid.UUID, PlanningSlot] = {}
         self.deleted_keys: set[tuple[uuid.UUID, str]] = set()
+        self.locked_districts: list[uuid.UUID] = []
+
+    async def lock_district_for_generation(self, district_id: uuid.UUID) -> None:
+        self.locked_districts.append(district_id)
 
     async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None:
         return self.slots_by_id.get(slot_id)
@@ -760,3 +764,23 @@ async def test_explicit_generator_ignores_detached_series_slot():
     )
     assert result["generated"] == 1
     assert len(slots.slots) == 2
+
+
+
+@pytest.mark.asyncio
+async def test_explicit_generator_locks_district_before_insertion():
+    series_repo = MockPlanningSeriesRepository()
+    slots = MockPlanningSlotRepository()
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(10),
+        recurrence_pattern={"frequency": "weekly", "by_weekday": [0]},
+        active_from=date(2026, 6, 1),
+    )
+    await series_repo.save(series)
+    result = await PlanningSeriesSlotGenerationService(
+        series_repo=series_repo, slot_repo=slots,
+    ).generate_slots_for_series(
+        series.id, from_date=date(2026, 6, 1), to_date=date(2026, 6, 1)
+    )
+    assert result["generated"] == 1
+    assert slots.locked_districts == [series.district_id]

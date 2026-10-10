@@ -522,3 +522,31 @@ async def test_scheduled_generator_does_not_block_on_detached_legacy_occurrence(
     )
     assert result["slots_created"] == 1
     repos.slot_repo.add_if_absent.assert_awaited_once()
+
+
+
+@pytest.mark.asyncio
+async def test_scheduled_generator_locks_district_before_reading_generation_keys():
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(10),
+        recurrence_pattern={"type": "weekly", "days": [0]},
+    )
+    m = MockRepos()
+    m.series_repo.list_active.return_value = [series]
+    order = []
+
+    async def lock(district):
+        order.append("lock")
+
+    async def existing(**kwargs):
+        order.append("read")
+        return []
+
+    m.slot_repo.lock_district_for_generation.side_effect = lock
+    m.slot_repo.list_by_generation_keys.side_effect = existing
+    m.slot_repo.get_by_series_date.return_value = None
+    await m.build().run_for_window(
+        from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2),
+    )
+    assert order[:2] == ["lock", "read"]
+    m.slot_repo.lock_district_for_generation.assert_awaited_once_with(series.district_id)

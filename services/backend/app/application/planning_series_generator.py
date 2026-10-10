@@ -134,7 +134,10 @@ class PlanningSeriesGenerator:
         if to_date_exclusive <= from_date:
             return {"series_processed": 0, "slots_created": 0, "slots_skipped": 0}
 
-        series_list = await self._series_repo.list_active()
+        series_list = sorted(
+            await self._series_repo.list_active(),
+            key=lambda series: (series.district_id, series.id),
+        )
         created = 0
         skipped = 0
         processed_series = 0
@@ -150,6 +153,9 @@ class PlanningSeriesGenerator:
                 skipped += 1
                 continue
 
+            # Share the district transaction lock with deletions and the
+            # other generator. Lock order is stable even across districts.
+            await self._slot_repo.lock_district_for_generation(series.district_id)
             generated = _expand_recurrence(
                 series,
                 from_date=effective_from,

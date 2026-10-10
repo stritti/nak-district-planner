@@ -225,6 +225,9 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
         if effective_from > effective_to:
             return {"generated": 0, "skipped": 0, "updated": 0}
 
+        # Serialize generator reads and inserts against draft deletion.
+        await self._slot_repo.lock_district_for_generation(series.district_id)
+
         # Expand series to dates
         dates = self._expand_series_dates(series, effective_from, effective_to)
 
@@ -277,7 +280,9 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
         """Generate PlanningSlots for all active series in a district."""
         # Get all active series for this district
         all_series = await self._series_repo.list_by_district(district_id)
-        active_series = [s for s in all_series if s.is_active]
+        active_series = sorted(
+            (s for s in all_series if s.is_active), key=lambda s: s.id
+        )
 
         total_generated = 0
         total_skipped = 0
@@ -310,7 +315,10 @@ class PlanningSeriesSlotGenerationService(PlanningSeriesSlotGenerator):
     ) -> dict[str, int]:
         """Generate PlanningSlots for all active series across all districts."""
         # Get all active series
-        all_series = await self._series_repo.list_all_active()
+        all_series = sorted(
+            await self._series_repo.list_all_active(),
+            key=lambda s: (s.district_id, s.id),
+        )
 
         total_generated = 0
         total_skipped = 0
