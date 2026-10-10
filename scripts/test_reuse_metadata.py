@@ -53,6 +53,13 @@ class ReuseMetadataTests(unittest.TestCase):
             (ROOT / "third_party/ponytail/LICENSE").read_bytes(),
         )
 
+    def test_literal_spdx_example_files_are_not_misinterpreted(self) -> None:
+        last = self.configuration["annotations"][-1]
+        self.assertEqual(last["precedence"], "override")
+        self.assertEqual(last["SPDX-License-Identifier"], "AGPL-3.0-only")
+        self.assertIn("scripts/test_license_headers.py", last["path"])
+        self.assertIn("docs/engineering-standards.md", last["path"])
+
     def test_license_files_only_for_actual_licenses(self) -> None:
         self.assertEqual(
             {p.name for p in (ROOT / "LICENSES").iterdir()},

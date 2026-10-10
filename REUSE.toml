@@ -71,3 +71,16 @@ path = [
 precedence = "closest"
 SPDX-FileCopyrightText = "OpenCode contributors"
 SPDX-License-Identifier = "MIT"
+
+# These files contain literal SPDX example strings. They are project-owned
+# AGPL-3.0-only source/docs, but examples must not be interpreted as licenses.
+# The strict source-header checker validates the actual SPDX headers separately.
+[[annotations]]
+path = [
+  "scripts/license_headers.py",
+  "scripts/test_license_headers.py",
+  "docs/engineering-standards.md",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Stephan Strittmatter"
+SPDX-License-Identifier = "AGPL-3.0-only"
