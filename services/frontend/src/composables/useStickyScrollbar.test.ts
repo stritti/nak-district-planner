@@ -40,11 +40,27 @@ describe('useStickyScrollbar', () => {
     await nextTick()
     expect(wide.api.needsScroll.value).toBe(true)
     expect(wide.api.contentWidth.value).toBe(2000)
+    expect(wide.api.viewportWidth.value).toBe(800)
 
     const narrow = mountHost({ scrollWidth: 800, clientWidth: 800 })
     narrow.api.measure()
     await nextTick()
     expect(narrow.api.needsScroll.value).toBe(false)
+  })
+
+  it('tracks a smaller client viewport when a classic vertical scrollbar appears', async () => {
+    const { api, container, wrapper } = mountHost({ scrollWidth: 2000, clientWidth: 800 })
+    api.measure()
+    expect(api.viewportWidth.value).toBe(800)
+
+    // The scrollbar uses 15px of the content width without shrinking scrollWidth.
+    Object.defineProperty(container, 'clientWidth', { value: 785, configurable: true })
+    api.measure()
+    await nextTick()
+    expect(api.viewportWidth.value).toBe(785)
+    expect(api.contentWidth.value - api.viewportWidth.value).toBe(1215)
+    expect(api.needsScroll.value).toBe(true)
+    wrapper.unmount()
   })
 
   it('keeps container and proxy scroll positions in sync both ways', async () => {
