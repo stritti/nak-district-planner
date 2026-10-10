@@ -12,7 +12,7 @@ Ministers/service leaders SHALL support independent active and frontend-list vis
 - **THEN** no database hard delete occurs, historical references remain valid, and the minister can be retrieved with an authorised include-inactive query
 
 ### Requirement: Minister service end date affects planning
-A minister with an end-of-service date SHALL be eligible for new service assignments only through that local calendar date, inclusive, and only when active and not hidden. Server-side validation SHALL enforce the date and status for event-list, matrix and bulk assignment paths. Earlier assignments SHALL not be silently deleted when the end date changes; future ineligible ones SHALL be flagged for review.
+A minister with an end-of-service date SHALL be eligible for new service assignments only through that local calendar date, inclusive, and only when active and not hidden. Server-side validation SHALL enforce the date and status for event-list, matrix and bulk assignment paths. Free-text assignment paths SHALL NOT implicitly bypass an ineligible known leader: an exact matching retired name requires an explicit unlinked guest choice, and MUST NOT silently re-link the retired person. Earlier assignments SHALL not be silently deleted when the end date changes; future ineligible ones SHALL be flagged for review.
 
 #### Scenario: Before or on end date
 - **WHEN** an active visible minister with an end date of 2026-12-31 is assigned a service on 2026-12-31
@@ -25,6 +25,10 @@ A minister with an end-of-service date SHALL be eligible for new service assignm
 #### Scenario: End date moved earlier
 - **WHEN** a minister's end date is changed to precede already planned services
 - **THEN** those assignments remain historically referentially intact and are flagged as requiring planner review
+
+#### Scenario: Retired minister matched by name-only entry
+- **WHEN** a free-text service-leader entry matches an ineligible existing leader in the same district
+- **THEN** the server refuses to treat that name as an eligible linked leader without the explicit independent guest workflow
 
 #### Scenario: Stale client tries inactive minister
 - **WHEN** a stale client submits a new service assignment for an inactive or hidden minister
