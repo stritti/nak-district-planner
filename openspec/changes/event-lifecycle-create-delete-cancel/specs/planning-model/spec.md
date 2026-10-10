@@ -1,0 +1,37 @@
+## MODIFIED Requirements
+
+### Requirement: Events API over planning slots
+`GET /api/v1/events` SHALL list slots of a district for `VIEWER` (superadmins MAY omit `district_id`) with filters for congregation, group, district level, status, approval status, `is_service`, time range (default one year back to two years ahead) and pagination. `PATCH /api/v1/events/{id}`, `POST /api/v1/events` and `DELETE /api/v1/events/{id}` SHALL require `PLANNER` in the relevant district. On creation, a new `PlanningSlot` and `EventInstance` SHALL be saved atomically with status `ACTIVE` and approval `PLANNED`. Creation and updates SHALL reject foreign-district congregations and invalid time ranges. A manually deleted event SHALL be absent from subsequent event listings.
+
+#### Scenario: New draft event
+- **WHEN** a planner creates a valid event with start, end and title
+- **THEN** the server returns 201, saves a `PLANNED` slot and INTERNAL-sourced instance, and returns its stable ID
+
+#### Scenario: Invalid event
+- **WHEN** a planner provides an end earlier than or equal to start, an unrecognized congregation or an invalid distribution
+- **THEN** the server rejects the request without saving an event
+
+#### Scenario: Congregation from another district
+- **WHEN** a planner moves an event to a congregation of another district
+- **THEN** the API responds with 400
+
+## ADDED Requirements
+
+### Requirement: Irreversible event publication boundary
+The first release of a slot SHALL be recorded in `released_at` and SHALL never be forgotten. Existing `CONFIRMED` slots SHALL be treated as previously released. A slot which was ever released SHALL NOT be hard-deleted or reverted to `PLANNED`; instead it MAY be marked `CANCELLED` and SHALL retain its stable ID. Repository-level delete checks SHALL guard against concurrent release and stale UI state. A published cancellation SHALL NOT be reopened to `ACTIVE`.
+
+#### Scenario: Draft deleted
+- **WHEN** a planner deletes an event that has never been confirmed
+- **THEN** the slot and dependent instance/assignments are removed and the endpoint returns 204
+
+#### Scenario: Released event deletion blocked
+- **WHEN** deletion of a current or formerly confirmed event is requested
+- **THEN** the endpoint returns 409 and the event remains available for cancellation exports
+
+#### Scenario: Attempt to withdraw publication
+- **WHEN** a single or bulk approval request attempts to return a released event to `PLANNED`
+- **THEN** it returns 409 without applying the downgrade
+
+#### Scenario: Provider hard delete after release
+- **WHEN** a linked provider removes a released event configured for `HARD_DELETE`
+- **THEN** the slot survives with `CANCELLED` status and the original event identity
