@@ -10,8 +10,8 @@ Die Events-API, die bestehenden PLANNED/CONFIRMED-Freigaben, District-applicabil
 
 Ein neues Domänenmodell RecurringEventTemplate enthält:
 - id, district_id, congregation_id optional (null = Bezirkstermin)
-- title, description optional, location optional, category (kein Gottesdienst im ersten Ausbauschritt), start_time als lokale Uhrzeit, duration_minutes > 0
-- recurrence als validierte, versionierte Regel; active_from, active_until optional; is_active; revision / updated_at
+- title, description optional, category (kein Gottesdienst im ersten Ausbauschritt), start_time als lokale Uhrzeit, duration_minutes > 0
+- recurrence als validierte, versionierte Regel mit verpflichtendem anchor_date; active_from, active_until optional; is_active; revision / updated_at
 - applicability nur bei Bezirksterminen: [] = nur auf Bezirksebene, ["all"] oder eine eindeutige Menge bezirkszugehöriger Gemeinden; niemals bei Gemeindeterminen
 - timezone = Europe/Berlin in der ersten Ausbaustufe
 
@@ -20,11 +20,11 @@ Die Vorlage ist keine PlanningSeries und wird nicht von deren Celery-Generatoren
 ### 2. Typisierte Wiederholungsregeln
 
 Die persistierte Rule definiert genau eine Variante:
-- WEEKLY: weekdays (ISO 1=Montag bis 7=Sonntag, eindeutige Liste), interval >=1, Anker active_from bzw. ein expliziter start_date für Wochenparität
+- WEEKLY: weekdays (ISO 1=Montag bis 7=Sonntag, eindeutige Liste), interval >=1, Anker anchor_date für Wochenparität
 - MONTHLY_DAY: day_of_month von 1 bis 31, interval >=1
 - MONTHLY_WEEKDAY: weekday ISO 1..7, ordinal 1..5 oder -1 für letzter, interval >=1
 
-Alle Regeln werden am Vorlagenanker ausgerichtet; das Auswerten eines isolierten Monats muss dasselbe Ergebnis liefern wie die Betrachtung mehrerer Monate. Fehlt z. B. der 31. oder der fünfte Dienstag, gibt es in diesem Monat kein Vorkommen (kein Verschieben auf Monatsende). Die Grenze active_from/active_until ist inklusiv; inaktive Vorlagen erzeugen keine neuen offenen Vorschläge.
+Alle Regeln werden am unveränderlichen anchor_date ausgerichtet; das Auswerten eines isolierten Monats muss dasselbe Ergebnis liefern wie die Betrachtung mehrerer Monate. Fehlt z. B. der 31. oder der fünfte Dienstag, gibt es in diesem Monat kein Vorkommen (kein Verschieben auf Monatsende). Die Grenze active_from/active_until ist inklusiv; inaktive Vorlagen erzeugen keine neuen offenen Vorschläge.
 
 Serverseitig werden alle Vorkommen aus lokalem Datum und Uhrzeit in Europe/Berlin berechnet. Sommer-/Winterzeit wird erst beim Erzeugen des konkreten EventInstance-Zeitpunkts auf UTC aufgelöst. Für nicht existierende oder doppeldeutige lokale Uhrzeiten wird eine explizite Prüfung/Entscheidung verlangt, statt stillschweigend um eine Stunde zu verschieben oder eine UTC-Variante zu wählen. Eine lokale Vorlage um 19:30 bleibt ganzjährig um 19:30 lokal.
 
@@ -52,7 +52,7 @@ Accept ist eine explizite Transaktion:
 5. PlanningSlot (ACTIVE, approval_status=PLANNED, kein Dienstleiter) und EventInstance (INTERNAL origin, für die spätere Freigabe geeignete Sichtbarkeit und UTC-Zeiten) erzeugen, Decision ACCEPTED mit slot_id speichern; alles atomar.
 6. Für gleichzeitige Requests DB-Unique-Constraint auf Entscheidung und die bestehenden aktiven Slot-Constraints nutzen. Eine verletzte Constraint ergibt eine idempotente Antwort oder HTTP 409, niemals einen zusätzlichen Slot.
 
-Der geplante Termin nimmt anschließend unverändert am bestehenden Monatsfreigabe-Workflow teil. Das bloße Abhaken eines Vorschlags bestätigt/veröffentlicht noch keinen Monatsplan. Abweichende Uhrzeit, Beschreibung oder Ort können bei der Übernahme gezielt überschrieben werden; die Entscheidung bleibt an der ursprünglichen lokalen Vorkommens-ID hängen. Die Vorlage wird durch einmalige Änderungen nicht verändert.
+Der geplante Termin nimmt anschließend unverändert am bestehenden Monatsfreigabe-Workflow teil. Das bloße Abhaken eines Vorschlags bestätigt/veröffentlicht noch keinen Monatsplan. Abweichende Uhrzeit oder Beschreibung können bei der Übernahme gezielt überschrieben werden; die Entscheidung bleibt an der ursprünglichen lokalen Vorkommens-ID hängen. Die Vorlage wird durch einmalige Änderungen nicht verändert.
 
 Ein Bulk-Accept nimmt explizit selektierte Vorkommen und verarbeitet sie mit per-item-Ergebnis, sodass Konflikte für einzelne Termine die anderen nicht stillschweigend verhindern. Für jeden Versuch gilt dasselbe idempotente Verhalten.
 
