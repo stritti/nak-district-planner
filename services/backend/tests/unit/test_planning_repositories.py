@@ -143,6 +143,8 @@ class TestSqlPlanningSlotRepository:
                 category="Gottesdienst",
                 title=None,
                 approval_status=None,
+                released_at=None,
+                generation_key=None,
                 invitation_source_congregation_id=None,
                 invitation_source_event_id=None,
                 applicability=None,
@@ -171,6 +173,8 @@ class TestSqlPlanningSlotRepository:
             category="Gottesdienst",
             title=None,
             approval_status=None,
+                released_at=None,
+                generation_key=None,
             invitation_source_congregation_id=None,
             invitation_source_event_id=None,
             applicability=[],
@@ -223,7 +227,7 @@ class TestSqlPlanningSlotRepository:
             planning_date=date(2026, 6, 1),
             planning_time=time(10, 0),
         )
-        session.get = AsyncMock(return_value=MagicMock())
+        session.get = AsyncMock(return_value=MagicMock(released_at=None, approval_status=None))
         session.add = MagicMock()
         session.flush = AsyncMock()
         await repo.save(slot)
@@ -240,6 +244,8 @@ class TestSqlPlanningSlotRepository:
             category="Gottesdienst",
             title=None,
             approval_status=None,
+                released_at=None,
+                generation_key=None,
             invitation_source_congregation_id=None,
             invitation_source_event_id=None,
             applicability=[],
