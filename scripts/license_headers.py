@@ -81,10 +81,16 @@ def annotate(text: str, path: str) -> str:
     """Preserve shebang, Python encoding declarations and HTML doctype."""
     if header_is_valid(text):
         return text
-    top = "\n".join(text.splitlines()[:16])
-    if "SPDX-License-Identifier:" in top or "SPDX-FileCopyrightText:" in top:
+    comment_lines = text.removeprefix("\ufeff").splitlines()[:16]
+    if any(
+        re.match(r"^\s*(?:#|//|/\*|\*|<!--)?\s*SPDX-(?:License-Identifier|FileCopyrightText):", line)
+        for line in comment_lines
+    ):
         raise ValueError(f"Conflicting SPDX metadata in {path}; review manually")
-    if "Copyright" in top or "copyright" in top:
+    if any(
+        re.match(r"^\s*(?:#|//|/\*|\*|<!--)\s*Copyright\b", line, re.IGNORECASE)
+        for line in comment_lines
+    ):
         raise ValueError(f"Existing copyright in {path}; review manually")
     bom = "\ufeff" if text.startswith("\ufeff") else ""
     if bom:
