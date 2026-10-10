@@ -23,7 +23,7 @@ from app.domain.models.invitation import (
     InvitationTargetType,
     OverwriteDecisionStatus,
 )
-from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
+from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot, PlanningSlotStatus
 
 # ---------------------------------------------------------------------------
 # Helpers
