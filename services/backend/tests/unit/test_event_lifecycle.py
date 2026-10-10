@@ -247,7 +247,7 @@ async def test_repo_refuses_direct_delete_after_release():
     repo_session = AsyncMock()
     result = MagicMock()
     result.scalar_one_or_none.return_value = SimpleNamespace(
-        released_at=datetime.now(UTC), approval_status=EventApprovalStatus.CONFIRMED
+        released_at=datetime.now(UTC), approval_status=EventApprovalStatus.CONFIRMED, generation_key=None
     )
     repo_session.execute.return_value = result
     with pytest.raises(ReleasedEventError):
@@ -260,7 +260,7 @@ async def test_repo_deletes_draft_and_handles_missing():
     repo_session = AsyncMock()
     result = MagicMock()
     result.scalar_one_or_none.side_effect = [
-        SimpleNamespace(released_at=None, approval_status=EventApprovalStatus.PLANNED),
+        SimpleNamespace(released_at=None, approval_status=EventApprovalStatus.PLANNED, generation_key=None),
         None,
     ]
     repo_session.execute.return_value = result
@@ -268,3 +268,28 @@ async def test_repo_deletes_draft_and_handles_missing():
     await repo.delete(uuid.uuid4())
     await repo.delete(uuid.uuid4())
     repo_session.delete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_deleting_generated_draft_retains_invisible_generation_tombstone():
+    repo_session = AsyncMock()
+    row = SimpleNamespace(
+        generation_key="draft-service:sample:2026-10-11",
+        released_at=None, approval_status=EventApprovalStatus.PLANNED,
+        status=PlanningSlotStatus.ACTIVE, deleted_at=None, updated_at=datetime.now(UTC),
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = row
+    repo_session.execute.return_value = result
+    await SqlPlanningSlotRepository(repo_session).delete(uuid.uuid4())
+    assert row.deleted_at is not None
+    assert row.status == PlanningSlotStatus.CANCELLED
+    repo_session.delete.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_deleted_generated_slot_is_hidden_on_direct_lookup():
+    repo_session = AsyncMock()
+    row = SimpleNamespace(deleted_at=datetime.now(UTC))
+    repo_session.get.return_value = row
+    assert await SqlPlanningSlotRepository(repo_session).get(uuid.uuid4()) is None
