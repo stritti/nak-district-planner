@@ -4,11 +4,11 @@ Ein registrierter Benutzer kann für mehrere Gemeinden oder Bezirke zuständig s
 
 ## What Changes
 
-- Mehrere Mitgliedschaften desselben Benutzers in Bezirken und Gemeinden ausdrücklich festlegen, jeweils mit eigener Rolle.
+- Mehrere Mitgliedschaften desselben Benutzers in Bezirken und Gemeinden ausdrücklich festlegen, jeweils mit eigener Rolle und datenbankseitiger Eindeutigkeit pro Scope.
 - Zusätzliche Zuordnungen nach der Registrierung ermöglichen, ohne vorhandene Zuordnungen zu ersetzen oder ein zweites Konto anzulegen.
-- Superadmins können registrierte, eindeutig verknüpfte Benutzer zu weiteren Superadmins ernennen.
+- Superadmins können registrierte, eindeutig verknüpfte Benutzer zu weiteren Superadmins ernennen und den Status wieder entziehen, ohne den letzten Superadmin entfernen zu können.
 - Superadmins haben globalen Zugriff auf alle Einheiten, fachlichen Daten und Verwaltungsfunktionen, auch ohne Mitgliedschaften.
-- Benutzerverwaltung und Zugriffskontext zeigen sämtliche Zuordnungen sowie den Superadmin-Status.
+- Benutzerverwaltung und Zugriffskontext zeigen sämtliche Zuordnungen sowie den Superadmin-Status. Statusentzug wird ohne neue Anmeldung in Middleware/API/RLS wirksam.
 - Freigaberegeln ausdrücklich mit der bestehenden Ausnahme für Superadmins vereinbaren.
 
 ## Capabilities
