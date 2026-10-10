@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div class="p-2 sm:p-4">
     <h1 class="page-title">Dienstplan-Matrix</h1>

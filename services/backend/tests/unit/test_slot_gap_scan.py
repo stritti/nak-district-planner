@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Daily SLOT_UNASSIGNED scan: report each open gap once, again after reopening."""
 
 from __future__ import annotations

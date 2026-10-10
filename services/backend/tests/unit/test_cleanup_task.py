@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for the cleanup_old_events Celery task.
 
 The task deletes PlanningSlot records older than 24 months.

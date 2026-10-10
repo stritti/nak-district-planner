@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Cross-tenant isolation tests for the RBAC permission layer.
 
 Verifies that users from one district/tenant CANNOT access resources

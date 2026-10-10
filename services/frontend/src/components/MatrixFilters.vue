@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <!-- Filter-Leiste -->
   <div class="filter-bar mb-4">

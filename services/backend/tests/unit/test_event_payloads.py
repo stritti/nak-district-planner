@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Event constructors produce exactly the placeholders their templates may use."""
 
 from __future__ import annotations

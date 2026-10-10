@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PlanningSlot.distribute_to: UC-04 congregation distribution rules."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for Audit Middleware.
 
 Tests cover the AuditMiddleware class and its methods.

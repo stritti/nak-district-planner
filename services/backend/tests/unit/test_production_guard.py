@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tests for the production_guard startup validator.
 
 NOTE: the ``validate_oidc_settings`` model-validator inside ``Settings`` catches

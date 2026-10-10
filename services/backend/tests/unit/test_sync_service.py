@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Regression tests for the hardened sync state machine and candidate handoff.
 
 New-event governance and exact matching have focused coverage in

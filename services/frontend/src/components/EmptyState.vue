@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div
     class="flex flex-col items-center justify-center text-center gap-2"

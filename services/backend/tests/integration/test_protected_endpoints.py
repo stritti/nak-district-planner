@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Integration tests for protected API endpoints with JWT authentication.
 
 Tests verify that endpoints require valid Bearer tokens and work with authenticated users.

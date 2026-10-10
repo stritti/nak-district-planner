@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Mocks for ``asyncio.run`` that never leak un-awaited coroutines.
 
 Celery tasks call ``asyncio.run(_run_as_system_worker(_run()))``.  Patching

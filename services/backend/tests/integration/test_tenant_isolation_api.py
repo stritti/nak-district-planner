@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """End-to-end tenant isolation through the HTTP API (real PostgreSQL with RLS).
 
 Requests pass the full stack: tenant and CSRF middleware, OIDC authentication

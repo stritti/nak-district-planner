@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Minimal XLSX (.xlsx) writer — no external dependencies.
  * Generates a ZIP archive (Store method, no compression) with OOXML SpreadsheetML XML.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Occurrences of recurring series must never be written back (Codex 0d600122).
 
 Links store only the composed occurrence key, so push paths rebuild events

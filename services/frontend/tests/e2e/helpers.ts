@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { expect, type Page } from '@playwright/test'
 
 export const FRONTEND_URL = 'http://localhost:5173'

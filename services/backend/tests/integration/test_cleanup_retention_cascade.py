@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL regression tests for planning retention cleanup.
 
 The unit tests assert that ``cleanup_old_events`` issues a delete against

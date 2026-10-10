@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'

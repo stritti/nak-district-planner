@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Parses the payload of a JWT without verifying its signature. */
 export function parseJwt(token: string): Record<string, unknown> {
   try {

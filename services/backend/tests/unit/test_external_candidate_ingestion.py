@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Regression coverage for the new-event governance boundary."""
 
 from datetime import UTC, datetime, time, timedelta

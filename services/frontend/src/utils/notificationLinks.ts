@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { NotificationItem } from '../api/notifications'
 
 /** Allow only known internal destinations; never navigate to untrusted payload URLs. */

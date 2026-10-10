@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Performance baseline (OpenSpec introduce-non-functional-baseline, tasks 3.1/3.2).
 
 Runs against a real, migrated PostgreSQL as the NOBYPASSRLS application role,

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]

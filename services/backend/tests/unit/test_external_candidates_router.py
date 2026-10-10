@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4

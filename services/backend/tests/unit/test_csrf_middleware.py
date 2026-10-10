@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """CSRFMiddleware: no client-controlled header may skip the token check."""
 
 from __future__ import annotations

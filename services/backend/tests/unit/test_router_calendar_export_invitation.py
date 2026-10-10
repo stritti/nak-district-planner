@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tests for calendar-integration, export, and invitation routers.
 
 Event-free architecture: uses PlanningSlot + EventInstance instead of Event.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for PlanningSeriesGenerator — expansion, run_for_window, _add_months."""
 
 from __future__ import annotations

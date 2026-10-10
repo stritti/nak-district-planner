@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 export type HelpRole = 'guest' | 'viewer' | 'planner'
 export type HelpContext = 'login' | 'registration' | 'events' | 'matrix'
 

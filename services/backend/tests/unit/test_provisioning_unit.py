@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for app/adapters/idp/provisioning.py — get_idp_provisioner factory."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Event hook endpoints: RBAC, district isolation, validation and soft delete."""
 
 from __future__ import annotations

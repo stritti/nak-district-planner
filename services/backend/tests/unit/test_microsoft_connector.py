@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for MicrosoftGraphCalendarConnector.
 
 All HTTP calls are intercepted via a mock httpx.AsyncClient — no network needed.

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div class="rounded-lg border p-4 shadow-sm" :class="borderClass">
     <div class="flex items-start justify-between gap-3">

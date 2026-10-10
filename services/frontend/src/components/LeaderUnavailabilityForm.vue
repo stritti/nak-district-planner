@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <form class="space-y-3" @submit.prevent="submit">
     <p v-if="leaders.length === 0" class="text-sm text-gray-500 dark:text-gray-400" data-testid="unavailability-no-leaders">

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tables created by migrations without an ORM model must be excluded from autogenerate."""
 
 from __future__ import annotations

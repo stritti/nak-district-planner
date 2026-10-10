@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Request-body references (congregation_id, leader_id) must belong to the district (#468).
 
 Every endpoint that stores such an ID from a request body rejects IDs that are

@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Writes one `set_real_ip_from` per network in NGINX_REAL_IP_FROM (space or
 # comma separated). Only these peers may set the client IP via X-Forwarded-For.
 # Run by the official nginx image entrypoint from /docker-entrypoint.d/.

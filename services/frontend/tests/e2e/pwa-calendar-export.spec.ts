@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { test, expect } from '@playwright/test'
 import { createServer, type Server } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'

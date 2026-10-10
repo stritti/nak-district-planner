@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """SSRF hardening for outbound calendar fetching (issue #463).
 
 No network: DNS resolution is injected and the real socket transport is
