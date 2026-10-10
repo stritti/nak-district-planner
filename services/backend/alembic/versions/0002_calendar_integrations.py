@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Phase 2: calendar_integrations table + extend events for external sync
 
 Revision ID: 0002

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Add planning model foundation tables for prospective rollout.
 
 Revision ID: 0011_planning_model_foundation
