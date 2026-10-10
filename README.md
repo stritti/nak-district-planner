@@ -1,9 +1,8 @@
 # NAK Bezirksplaner
 
-Planungswerkzeug für Gottesdienste und Veranstaltungen in NAK-Bezirken.
-Verwaltet Gemeinden, Termine und Dienstzuweisungen; exportiert Kalender als ICS-Feed.
-Externe Kalender werden in Version 1.0 per **ICS** und **CalDAV** angebunden;
-Google Calendar und Microsoft 365 sind geplant (OAuth-Flow mit Token-Refresh fehlt noch).
+Der NAK Bezirksplaner verbindet die **Gottesdienst- und Terminplanung mehrerer Gemeinden** in einer gemeinsamen Dienstmatrix. Offene Dienstleitungen werden sichtbar, können zugewiesen und freigegebene Termine als ICS-Kalender geteilt werden.
+
+Vertrauenswürdige externe Kalender lassen sich in Version 1.0 per **ICS (HTTPS)** und **CalDAV (HTTPS)** synchronisieren. Google Calendar und Microsoft 365 sind noch nicht als produktive Integrationen freigegeben.
 
 ## Lizenz
 
@@ -11,16 +10,14 @@ Der eigene Quellcode steht unter der [GNU Affero General Public License v3.0 onl
 
 ## Dokumentation
 
-Die Projektdokumentation befindet sich unter `docs/`.
+Die VitePress-Dokumentation ist nach Aufgaben strukturiert. Der Einstieg beschreibt zuerst den fachlichen Nutzen und verweist von dort auf verbindliche Detailregeln.
 
-- Einstieg: `docs/documentation-map.md`
-- Architekturstatus: `docs/architecture-status.md`
-- Engineering Standards: `docs/engineering-standards.md`
-- Security Baseline: `docs/security-baseline.md`
-- Production Runbook: `docs/production-runbook.md`
-- Produktiv-Stack (Traefik + Keycloak + GHCR-Images): `docs/production-compose.md`
-
-Historische Inhalte wurden in die strukturierte Projektdokumentation ueberfuehrt.
+- [So funktioniert die Planung](docs/workflows.md): Matrix, Kalenderanbindung, Zusammenarbeit, Veröffentlichung und Freigabe.
+- [Fachliche Use Cases](docs/use-cases.md): Regeln und Sonderfälle.
+- [Rollenkonzept](docs/roles.md): Berechtigungen für Bezirk und Gemeinden.
+- [Entwicklereinstieg](docs/getting-started.md): Dokumentation lokal starten.
+- [Betrieb](docs/production-runbook.md) und [Produktiv-Stack](docs/production-compose.md).
+- [Quellen und Verbindlichkeit](docs/documentation-map.md): OpenSpec, Referenzdokumente und historische Unterlagen.
 
 ---
 
