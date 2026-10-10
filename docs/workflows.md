@@ -6,16 +6,16 @@ Der NAK District Planner bündelt **Dienstplanung, Termine und Kalenderverteilun
 
 ```mermaid
 flowchart TD
-  A["Bezirk und Gemeinden einrichten"] --> B["Gottesdienstzeiten und Termine pflegen"]
-  C["Vertrauenswürdige ICS- und CalDAV-Quellen"] --> D["Termine synchronisieren"]
-  B --> E["Gemeinsame Dienstmatrix"]
+  A[Bezirk und Gemeinden einrichten] --> B[Gottesdienstzeiten und Termine pflegen]
+  C[Vertrauenswürdige ICS- und CalDAV-Quellen] --> D[Termine synchronisieren]
+  B --> E[Gemeinsame Dienstmatrix]
   D --> E
-  E --> F{"Dienstleitung zugewiesen?"}
-  F -->|Nein| G["Offene Besetzung erkennen und zuweisen"]
-  F -->|Ja| H["Planung vervollständigen"]
+  E --> F{Dienstleitung zugewiesen?}
+  F -->|Nein| G[Offene Besetzung erkennen und zuweisen]
+  F -->|Ja| H[Planung vervollständigen]
   G --> H
-  H --> I["Termine verteilen oder Gemeinden einladen"]
-  I --> J["ICS-Kalender abonnieren"]
+  H --> I[Termine verteilen oder Gemeinden einladen]
+  I --> J[ICS-Kalender abonnieren]
 ```
 
 Eine Kalenderintegration ist optional: Termine und Dienste können auch innerhalb der Anwendung verwaltet werden.
@@ -36,12 +36,12 @@ In Version 1 können konfigurierte, vertrauenswürdige **ICS- und CalDAV-Kalende
 
 ```mermaid
 flowchart LR
-  A["Vertrauenswürdige ICS- oder CalDAV-Quelle"] --> B["Synchronisierung"]
-  B --> C{"Änderung"}
-  C -->|Neu| D["Termin übernehmen"]
-  C -->|Geändert| E["Verknüpften Termin aktualisieren"]
-  C -->|Entfernt| F["Planungsslot stornieren"]
-  D --> G["Dienstmatrix"]
+  A[Vertrauenswürdige ICS- oder CalDAV-Quelle] --> B[Synchronisierung]
+  B --> C{Änderung}
+  C -->|Neu| D[Termin übernehmen]
+  C -->|Geändert| E[Verknüpften Termin aktualisieren]
+  C -->|Entfernt| F[Planungsslot stornieren]
+  D --> G[Dienstmatrix]
   E --> G
   F --> G
 ```
@@ -64,12 +64,12 @@ Ein erfolgreicher OIDC-Login allein berechtigt noch nicht zu fachlichen Änderun
 
 ```mermaid
 flowchart TD
-  A["Registrierung beantragen"] --> B["Antrag wartet auf Freigabe"]
-  B --> C{"Bezirksadministration entscheidet"}
-  C -->|Genehmigung| D["Rolle und Scope zuordnen"]
-  C -->|Keine Genehmigung| E["Kein fachlicher Zugriff"]
-  D --> F["OIDC-Anmeldung"]
-  F --> G["Zugriff gemäß Membership"]
+  A[Registrierung beantragen] --> B[Antrag wartet auf Freigabe]
+  B --> C{Bezirksadministration entscheidet}
+  C -->|Genehmigung| D[Rolle und Scope zuordnen]
+  C -->|Keine Genehmigung| E[Kein fachlicher Zugriff]
+  D --> F[OIDC-Anmeldung]
+  F --> G[Zugriff gemäß Membership]
 ```
 
 Technische Details: [Freigabe-Workflow](/approval-workflow), [Rollenkonzept](/roles).

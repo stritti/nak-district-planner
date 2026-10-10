@@ -27,16 +27,16 @@ Nachfolgend wird Schritt für Schritt beschrieben, was im Backend passiert, wen
 
 ```mermaid
 flowchart TD
-  A["Freigabeantrag"] --> B["Leader-Datensatz anlegen"]
-  B --> C["Registrierung genehmigen"]
-  C --> D{"OIDC-Sub bekannt?"}
-  D -->|Ja| E["Membership anlegen"]
-  D -->|Nein| F["Membership beim Login zuordnen"]
-  E --> G{"IdP-Provisionierung aktiv?"}
+  A[Freigabeantrag] --> B[Leader-Datensatz anlegen]
+  B --> C[Registrierung genehmigen]
+  C --> D{OIDC-Sub bekannt?}
+  D -->|Ja| E[Membership anlegen]
+  D -->|Nein| F[Membership beim Login zuordnen]
+  E --> G{IdP-Provisionierung aktiv?}
   F --> G
-  G -->|Ja| H["IdP-Benutzer suchen oder anlegen"]
-  H --> I["Einladungsmail optional senden"]
-  G -->|Nein| J["Provisionierungsstatus speichern"]
+  G -->|Ja| H[IdP-Benutzer suchen oder anlegen]
+  H --> I[Einladungsmail optional senden]
+  G -->|Nein| J[Provisionierungsstatus speichern]
   I --> J
 ```
 
@@ -87,15 +87,15 @@ Falls kein Provider konfiguriert ist (`get_idp_provisioner()` gibt `None` zurü
 
 ```mermaid
 flowchart TD
-  A["Admin-Token abrufen"] --> B["Benutzer per E-Mail suchen"]
-  B --> C{"Benutzer vorhanden?"}
-  C -->|Nein| D["Benutzer anlegen"]
-  C -->|Ja und verifiziert| E["Vorhandenen Benutzer berücksichtigen"]
-  C -->|Ja, unverifiziert| F["Keine automatische Verknüpfung"]
-  D --> G{"Einladung aktiviert?"}
+  A[Admin-Token abrufen] --> B[Benutzer per E-Mail suchen]
+  B --> C{Benutzer vorhanden?}
+  C -->|Nein| D[Benutzer anlegen]
+  C -->|Ja und verifiziert| E[Vorhandenen Benutzer berücksichtigen]
+  C -->|Ja, unverifiziert| F[Keine automatische Verknüpfung]
+  D --> G{Einladung aktiviert?}
   E --> G
-  G -->|Ja| H["VERIFY_EMAIL und UPDATE_PASSWORD auslösen"]
-  G -->|Nein| I["Ergebnis dokumentieren"]
+  G -->|Ja| H[VERIFY_EMAIL und UPDATE_PASSWORD auslösen]
+  G -->|Nein| I[Ergebnis dokumentieren]
   H --> I
   F --> I
 ```
