@@ -59,51 +59,111 @@ def header_for(path: str) -> str:
     return f"{style} {COPYRIGHT}\n{style} {LICENSE}\n\n"
 
 
-def header_is_valid(text: str) -> bool:
-    """Reject missing, conflicting, or incomplete declarations."""
-    # Only interpret leading comment lines, never SPDX strings in program code.
-    identifier = re.compile(
-        r"^\s*(?:#|//|/\*|\*|<!--)?\s*"
-        r"(SPDX-FileCopyrightText|SPDX-License-Identifier):\s*"
-        r"(.*?)\s*(?:\*/|-->)?\s*$"
+# PEP 263 allows an encoding cookie on either of the first two lines.
+_PYTHON_ENCODING = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*[-_.a-zA-Z0-9]+")
+_CSS_CHARSET = re.compile(r'^@charset\s+["\x27][^"\x27]+["\x27]\s*;')
+_COMMENT = re.compile(r"^\s*(?:#|//|/\*+|\*|<!--)\s*(.*)$")
+_LEGAL_NOTICE = re.compile(
+    r"SPDX-(?:License-Identifier|FileCopyrightText):"
+    r"|\bcopyright\b|\blicensed under\b|\blicen[cs]e\s*:"
+    r"|\b(?:MIT|Apache|BSD|GPL|AGPL)\s+licen[cs]e\b",
+    re.IGNORECASE,
+)
+# These original file modes existed before the AGPL header migration.
+EXECUTABLE_SCRIPTS = (
+    "idp-deploy/authentik/deploy_authentik.sh",
+    "idp-deploy/authentik/import_blueprint.py",
+    "idp-deploy/authentik/setup_authentik_oauth2.py",
+    "idp-deploy/keycloak/deploy_keycloak.sh",
+    "idp-deploy/keycloak/setup_keycloak_realm.py",
+    "idp-deploy/test-oidc-integration.sh",
+    "scripts/backup.sh",
+    "scripts/restore.sh",
+    "services/frontend/15-real-ip-from.sh",
+    "verify-phase4b-compatibility.sh",
+)
+
+
+def split_preamble(text: str, path: str) -> tuple[str, str]:
+    """Retain the required initial directives before adding a source comment."""
+    bom = "\ufeff" if text.startswith("\ufeff") else ""
+    content = text.removeprefix(bom) if bom else text
+    lines = content.splitlines(keepends=True)
+    keep = 1 if lines and lines[0].startswith("#!") else 0
+    if path.endswith(".py"):
+        for position in range(min(2, len(lines))):
+            if _PYTHON_ENCODING.match(lines[position]):
+                keep = max(keep, position + 1)
+                break
+    if path.endswith(".html") and lines and lines[0].lower().startswith("<!doctype"):
+        keep = 1
+    if path.endswith(".css") and lines and _CSS_CHARSET.match(lines[0]):
+        keep = 1
+    return bom + "".join(lines[:keep]), "".join(lines[keep:])
+
+
+def _leading_notice(text: str) -> bool:
+    """Prevent an automatic relicense if any prior legal notice exists."""
+    for line in text.removeprefix("\ufeff").splitlines()[:50]:
+        comment = _COMMENT.match(line)
+        if comment and _LEGAL_NOTICE.search(comment.group(1)):
+            return True
+    # A Python module-level docstring can also contain the original license.
+    document = text.removeprefix("\ufeff").lstrip()
+    if document.startswith(('"""', "'''")):
+        quote = document[:3]
+        end = document.find(quote, 3)
+        if end > 0 and _LEGAL_NOTICE.search(document[3:end]):
+            return True
+    return False
+
+
+def header_is_valid(text: str, path: str) -> bool:
+    """Validate the exact SPDX header in this source language's comment syntax."""
+    if Path(path).suffix not in COMMENT_STYLES:
+        return False
+    _, contents = split_preamble(text, path)
+    header = header_for(path)
+    if not contents.startswith(header):
+        return False
+    # Duplicate SPDX metadata in a nearby comment creates ambiguous attribution.
+    tail = contents[len(header):]
+    return not any(
+        (comment := _COMMENT.match(line))
+        and re.match(r"SPDX-(?:License-Identifier|FileCopyrightText):", comment.group(1))
+        for line in tail.splitlines()[:16]
     )
-    parsed = [
-        match.groups()
-        for line in text.removeprefix("\ufeff").splitlines()[:16]
-        if (match := identifier.match(line)) is not None
-    ]
-    licenses = [value for kind, value in parsed if kind == "SPDX-License-Identifier"]
-    copyrights = [value for kind, value in parsed if kind == "SPDX-FileCopyrightText"]
-    return licenses == ["AGPL-3.0-only"] and "2026 Stephan Strittmatter" in copyrights
 
 
 def annotate(text: str, path: str) -> str:
-    """Preserve shebang, Python encoding declarations and HTML doctype."""
-    if header_is_valid(text):
+    """Idempotently annotate a source without overwriting existing notices."""
+    if header_is_valid(text, path):
         return text
-    comment_lines = text.removeprefix("\ufeff").splitlines()[:16]
-    if any(
-        re.match(r"^\s*(?:#|//|/\*|\*|<!--)?\s*SPDX-(?:License-Identifier|FileCopyrightText):", line)
-        for line in comment_lines
-    ):
-        raise ValueError(f"Conflicting SPDX metadata in {path}; review manually")
-    if any(
-        re.match(r"^\s*(?:#|//|/\*|\*|<!--)\s*Copyright\b", line, re.IGNORECASE)
-        for line in comment_lines
-    ):
-        raise ValueError(f"Existing copyright in {path}; review manually")
-    bom = "\ufeff" if text.startswith("\ufeff") else ""
-    if bom:
-        text = text.removeprefix(bom)
-    lines = text.splitlines(keepends=True)
-    n = 0
-    if lines and lines[0].startswith("#!"):
-        n = 1
-    if path.endswith(".py") and n < len(lines) and "coding:" in lines[n]:
-        n += 1
-    if path.endswith(".html") and lines and lines[0].lower().startswith("<!doctype"):
-        n = 1
-    return bom + "".join(lines[:n]) + header_for(path) + "".join(lines[n:])
+    if _leading_notice(text):
+        raise ValueError(f"Existing copyright or license notice in {path}; review manually")
+    preamble, body = split_preamble(text, path)
+    return preamble + header_for(path) + body
+
+
+def executable_mode_errors(root: Path) -> list[str]:
+    """Ensure executable scripts remain executable in Git's index."""
+    output = subprocess.run(
+        ["git", "ls-files", "--stage", "-z", "--", *EXECUTABLE_SCRIPTS],
+        cwd=root,
+        capture_output=True,
+        check=True,
+    ).stdout
+    actual = {}
+    for entry in output.split(b"\0"):
+        if not entry:
+            continue
+        mode_and_hash, file = entry.split(b"\t", 1)
+        actual[file.decode("utf-8")] = mode_and_hash.split(b" ", 1)[0].decode("ascii")
+    return [
+        f"{path}: executable mode 100755 required (found {actual.get(path, 'missing')})"
+        for path in EXECUTABLE_SCRIPTS
+        if actual.get(path) != "100755"
+    ]
 
 
 def tracked_sources(root: Path) -> list[str]:
@@ -126,7 +186,7 @@ def run(root: Path, *, fix: bool) -> list[str]:
         file = root / name
         try:
             original = file.read_bytes().decode("utf-8")
-            if header_is_valid(original):
+            if header_is_valid(original, name):
                 continue
             if not fix:
                 errors.append(f"{name}: missing or invalid SPDX copyright/license")
@@ -135,6 +195,7 @@ def run(root: Path, *, fix: bool) -> list[str]:
             file.write_bytes(updated.encode("utf-8"))
         except (UnicodeError, OSError, ValueError) as error:
             errors.append(f"{name}: {error}")
+    errors.extend(executable_mode_errors(root))
     return errors
 
 
