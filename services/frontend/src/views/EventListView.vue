@@ -972,6 +972,8 @@ async function onDistrictChange() {
 watch(
   () => districtsStore.selectedDistrictId,
   async () => {
+    // The form may still contain a congregation from the previous district.
+    createForm.congregation_id = ''
     await onDistrictChange()
   },
 )
@@ -1101,6 +1103,7 @@ async function submitCreate() {
     createForm.title = ''
     createForm.start = ''
     createForm.end = ''
+    createForm.congregation_id = ''
     createForm.description = ''
     onFilterChange()
     toast.success('Ereignis angelegt', saved.title)

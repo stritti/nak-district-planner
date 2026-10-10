@@ -182,12 +182,15 @@ async def delete_invitation(
     # Deleting the slot also cascades to its occurrence, so deleting the
     # instance first would destroy a published event's exported details.
     if invitation.linked_event_id is not None:
-        target_slot = await slot_repo.get(invitation.linked_event_id)
+        # Lock and refresh the target *before* deciding between delete/cancel.
+        # A concurrent publication cannot turn a draft into a released event
+        # between the check and the write in the same transaction.
+        target_slot = await slot_repo.get_for_update(invitation.linked_event_id)
         if target_slot is not None:
             if target_slot.was_released:
                 target_slot.status = PlanningSlotStatus.CANCELLED
                 target_slot.updated_at = datetime.now(UTC)
-                await slot_repo.save(target_slot)
+                await slot_repo.save(target_slot, require_existing=True)
             else:
                 await slot_repo.delete(target_slot.id)
 

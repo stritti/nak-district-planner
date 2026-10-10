@@ -42,6 +42,7 @@ from app.domain.models.event_instance import (
     SyncState,
 )
 from app.domain.models.planning_slot import (
+    DeletedPlanningSlotError,
     EventApprovalStatus,
     InvalidApplicabilityError,
     PlanningSlot,
@@ -476,8 +477,8 @@ async def update_event(
 
     slot.updated_at = datetime.now(UTC)
     try:
-        await slot_repo.save(slot)
-    except ReleasedEventError as exc:
+        await slot_repo.save(slot, require_existing=True)
+    except (ReleasedEventError, DeletedPlanningSlotError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     responsible = await _load_responsible(assignments_repo, leaders_repo, [slot])
     return _slot_to_event(slot, instance, responsible.get(slot.id))
@@ -616,8 +617,8 @@ async def bulk_update_approval_status(
         slot.approval_status = body.approval_status
         slot.updated_at = now_dt
         try:
-            await slot_repo.save(slot)
-        except ReleasedEventError as exc:
+            await slot_repo.save(slot, require_existing=True)
+        except (ReleasedEventError, DeletedPlanningSlotError) as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     if (

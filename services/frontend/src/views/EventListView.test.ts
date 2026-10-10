@@ -465,3 +465,37 @@ describe('EventListView', () => {
     expect(wrapper.text()).toContain('ersten 500 von 501')
   })
 })
+
+
+
+describe('Create event district selection', () => {
+  it('clears selected congregation after creating an event', async () => {
+    vi.mocked(eventsApi.createEvent).mockResolvedValue(event({ id: 'created' }))
+    const { wrapper } = setup()
+    await flushPromises()
+    await wrapper.get('[data-testid="create-event-button"]').trigger('click')
+    await wrapper.get('#new-event-title').setValue('Termin')
+    await wrapper.get('#new-event-start').setValue('2026-10-12T10:00')
+    await wrapper.get('#new-event-end').setValue('2026-10-12T11:00')
+    await wrapper.get('#new-event-congregation').setValue('c1')
+    await wrapper.get('form.modal-panel').trigger('submit')
+    await flushPromises()
+    await wrapper.get('[data-testid="create-event-button"]').trigger('click')
+    expect((wrapper.get('#new-event-congregation').element as HTMLSelectElement).value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('drops the previous district congregation even with the creation form open', async () => {
+    const { wrapper, districtsStore } = setup()
+    await flushPromises()
+    useAuthStore().memberships.push({
+      role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'd2',
+    })
+    await wrapper.get('[data-testid="create-event-button"]').trigger('click')
+    await wrapper.get('#new-event-congregation').setValue('c1')
+    districtsStore.selectedDistrictId = 'd2'
+    await flushPromises()
+    expect((wrapper.get('#new-event-congregation').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.find('#new-event-congregation').text()).toContain('Gemeinde Drei')
+    wrapper.unmount()
+  })

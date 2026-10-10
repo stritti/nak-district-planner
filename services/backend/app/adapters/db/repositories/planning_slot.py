@@ -13,6 +13,7 @@ from app.adapters.db.orm_models.deleted_generation_key import DeletedGenerationK
 from app.adapters.db.orm_models.invitation import CongregationInvitationORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.domain.models.planning_slot import (
+    DeletedPlanningSlotError,
     EventApprovalStatus,
     PlanningSlot,
     PlanningSlotStatus,
@@ -61,6 +62,13 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
 
     async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None:
         row = await self._session.get(PlanningSlotORM, slot_id)
+        return _orm_to_domain(row) if row else None
+
+    async def get_for_update(self, slot_id: uuid.UUID) -> PlanningSlot | None:
+        """Read the latest state while holding a row lock through the transaction."""
+        row = await self._session.get(
+            PlanningSlotORM, slot_id, with_for_update=True, populate_existing=True
+        )
         return _orm_to_domain(row) if row else None
 
     async def get_by_series_and_date(
@@ -140,12 +148,14 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         )
         return set(result.scalars().all())
 
-    async def save(self, slot: PlanningSlot) -> None:
+    async def save(self, slot: PlanningSlot, *, require_existing: bool = False) -> None:
         # Refresh under a row lock: a release committed after a prior GET must
         # not be overwritten by a stale PLANNED update.
         existing = await self._session.get(
             PlanningSlotORM, slot.id, with_for_update=True, populate_existing=True
         )
+        if existing is None and require_existing:
+            raise DeletedPlanningSlotError("Ereignis wurde zwischenzeitlich gelöscht.")
         if existing is not None:
             slot.generation_key_detached = (
                 slot.generation_key_detached
@@ -219,6 +229,7 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         # Lock before checking publication: a concurrent release must not race a deletion.
         row = (await self._session.execute(
             select(PlanningSlotORM).where(PlanningSlotORM.id == slot_id).with_for_update()
+            .execution_options(populate_existing=True)
         )).scalar_one_or_none()
         if row is None:
             return
@@ -276,6 +287,7 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
                     select(PlanningSlotORM)
                     .where(PlanningSlotORM.id == target_id)
                     .with_for_update()
+                    .execution_options(populate_existing=True)
                 )
             ).scalar_one_or_none()
             if target is None:

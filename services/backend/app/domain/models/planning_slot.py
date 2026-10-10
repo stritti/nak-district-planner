@@ -214,3 +214,7 @@ def _congregation_in_district(
 
 class ReleasedEventError(ValueError):
     """A previously published event must remain available as a cancellation."""
+
+
+class DeletedPlanningSlotError(ValueError):
+    """A stale edit must never recreate an already-deleted planning slot."""

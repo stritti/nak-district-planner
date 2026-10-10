@@ -630,7 +630,7 @@ async def test_patch_stale_draft_release_race_returns_http_409(new_status):
 
     assert exc.value.status_code == 409
     assert exc.value.detail == "Freigabe zwischenzeitlich erfolgt"
-    repo.save.assert_awaited_once()
+    repo.save.assert_awaited_once_with(event_slot, require_existing=True)
 
 
 @pytest.mark.asyncio
@@ -657,5 +657,66 @@ async def test_bulk_approval_race_returns_http_409(new_status):
 
     assert exc.value.status_code == 409
     assert exc.value.detail == "Freigabe zwischenzeitlich erfolgt"
-    repo.save.assert_awaited_once()
+    repo.save.assert_awaited_once_with(event_slot, require_existing=True)
+    publish.assert_not_called()
+
+
+
+@pytest.mark.asyncio
+async def test_repository_prevents_recreating_concurrently_deleted_draft():
+    from app.domain.models.planning_slot import DeletedPlanningSlotError
+    from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+
+    previous_draft = slot()
+    session = AsyncMock()
+    session.get.return_value = None
+    with pytest.raises(DeletedPlanningSlotError, match="zwischenzeitlich gelöscht"):
+        await SqlPlanningSlotRepository(session).save(
+            previous_draft, require_existing=True
+        )
+    session.get.assert_awaited_once_with(
+        PlanningSlotORM, previous_draft.id, with_for_update=True, populate_existing=True
+    )
+    session.add.assert_not_called()
+    session.flush.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("new_approval", [None, EventApprovalStatus.CONFIRMED])
+async def test_patch_after_concurrent_delete_returns_conflict(new_approval):
+    from app.domain.models.planning_slot import DeletedPlanningSlotError
+
+    draft = slot()
+    slot_repo, instances = AsyncMock(), AsyncMock()
+    slot_repo.get.return_value = draft
+    slot_repo.save.side_effect = DeletedPlanningSlotError("Ereignis wurde zwischenzeitlich gelöscht.")
+    instances.get_by_planning_slot.return_value = None
+    with patch.object(events, "require_role_in_district"), pytest.raises(HTTPException) as exc:
+        await events.update_event(
+            draft.id, events.EventUpdate(approval_status=new_approval),
+            auth(), AsyncMock(), slot_repo=slot_repo, inst_repo=instances
+        )
+    assert exc.value.status_code == 409
+    slot_repo.save.assert_awaited_once_with(draft, require_existing=True)
+
+
+@pytest.mark.asyncio
+async def test_bulk_after_concurrent_delete_returns_conflict_without_publishing():
+    from app.domain.models.planning_slot import DeletedPlanningSlotError
+
+    draft = slot()
+    repo = AsyncMock()
+    repo.list_for_date_range.return_value = [draft]
+    repo.save.side_effect = DeletedPlanningSlotError("Ereignis wurde zwischenzeitlich gelöscht.")
+    with patch.object(events, "require_role_in_district"), patch.object(
+        events, "publish_after_commit"
+    ) as publish, pytest.raises(HTTPException) as exc:
+        await events.bulk_update_approval_status(
+            events.BulkApprovalStatusRequest(
+                year=2026, month=10, approval_status=EventApprovalStatus.CONFIRMED
+            ),
+            auth(), AsyncMock(), district_id=draft.district_id, slot_repo=repo
+        )
+    assert exc.value.status_code == 409
+    repo.save.assert_awaited_once_with(draft, require_existing=True)
     publish.assert_not_called()

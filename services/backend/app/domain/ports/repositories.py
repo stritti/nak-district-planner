@@ -160,8 +160,8 @@ class PlanningSlotRepository(ABC):
         pass
 
     @abstractmethod
-    async def save(self, slot: PlanningSlot) -> None:
-        """Insert or update; clears ``generation_key`` when the slot changed tenant."""
+    async def save(self, slot: PlanningSlot, *, require_existing: bool = False) -> None:
+        """Insert or update, optionally rejecting stale edits of deleted slots."""
         pass
 
     @abstractmethod
