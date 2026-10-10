@@ -77,7 +77,7 @@ def comment_texts(text: str, *, limit: int = 50) -> list[str]:
                 block.append(stripped)
             else:
                 block.append(stripped[:end])
-                bodies.append(" ".join(block))
+                bodies.append(" ".join(block).strip())
                 block = []
                 close = None
             continue
@@ -86,18 +86,18 @@ def comment_texts(text: str, *, limit: int = 50) -> list[str]:
                 content = stripped[len(opening):]
                 end = content.find(ending)
                 if end >= 0:
-                    bodies.append(content[:end])
+                    bodies.append(content[:end].strip())
                 else:
                     close = ending
                     block = [content]
                 break
         else:
             if stripped.startswith("//"):
-                bodies.append(stripped[2:])
+                bodies.append(stripped[2:].strip())
             elif stripped.startswith("#"):
-                bodies.append(stripped[1:])
+                bodies.append(stripped[1:].strip())
     if block:
-        bodies.append(" ".join(block))
+        bodies.append(" ".join(block).strip())
     return bodies
 _LEGAL_NOTICE = re.compile(
     r"SPDX-(?:License-Identifier|FileCopyrightText):"

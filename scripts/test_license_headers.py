@@ -231,7 +231,7 @@ class ReviewRegressionTests(unittest.TestCase):
         )
         self.assertEqual(
             mod.comment_texts(source),
-            [" Licensed under the MIT License", " Copyright 2025 Example"],
+            ["Licensed under the MIT License", "Copyright 2025 Example"],
         )
 
     def test_rejects_license_docstring_after_shebang(self):
