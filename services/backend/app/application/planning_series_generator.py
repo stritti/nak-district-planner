@@ -14,7 +14,11 @@ from zoneinfo import ZoneInfo
 
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_series import PlanningSeries
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import (
+    PlanningSlot,
+    PlanningSlotStatus,
+    planning_series_generation_key,
+)
 from app.domain.ports.repositories import (
     CongregationRepository,
     DistrictRepository,
@@ -153,6 +157,7 @@ class PlanningSeriesGenerator:
                 timezone_name=self._timezone_name,
             )
 
+            projected = []
             for gslot in generated:
                 # The recurrence time is local wall-clock time; the slot
                 # stores the UTC instant (DST-aware per date).
@@ -162,6 +167,25 @@ class PlanningSeriesGenerator:
                 start_utc = datetime.combine(
                     gslot.planning_date, local_time, tzinfo=ZoneInfo(self._timezone_name)
                 ).astimezone(UTC)
+                key = planning_series_generation_key(series.id, start_utc.date())
+                projected.append((gslot, start_utc, key))
+
+            keys = {key for _, _, key in projected}
+            deleted_keys = await self._slot_repo.list_deleted_generation_keys(
+                district_id=series.district_id, generation_keys=keys
+            )
+            existing_keys = {
+                slot.generation_key
+                for slot in await self._slot_repo.list_by_generation_keys(
+                    district_id=series.district_id, generation_keys=keys
+                )
+            }
+            blocked_keys = deleted_keys | existing_keys
+
+            for gslot, start_utc, key in projected:
+                if key in blocked_keys:
+                    skipped += 1
+                    continue
                 # Check if slot already exists for this date/series/congregation
                 existing_slot = await self._slot_repo.get_by_series_date(
                     series_id=series.id,
@@ -181,6 +205,7 @@ class PlanningSeriesGenerator:
                     planning_date=start_utc.date(),
                     planning_time=start_utc.timetz().replace(tzinfo=None),
                     status=PlanningSlotStatus.ACTIVE,
+                    generation_key=key,
                 )
                 await self._slot_repo.save(slot)
 
