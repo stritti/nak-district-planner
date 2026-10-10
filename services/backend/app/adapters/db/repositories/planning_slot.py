@@ -149,6 +149,8 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         if existing is not None and (existing.released_at is not None or existing.approval_status == EventApprovalStatus.CONFIRMED):
             if slot.approval_status != EventApprovalStatus.CONFIRMED:
                 raise ReleasedEventError("Freigegebene Ereignisse können nicht zurückgestuft werden.")
+            if existing.status == PlanningSlotStatus.CANCELLED and slot.status != PlanningSlotStatus.CANCELLED:
+                raise ReleasedEventError("Eine veröffentlichte Absage darf nicht reaktiviert werden.")
             slot.released_at = existing.released_at or existing.updated_at
         elif slot.approval_status == EventApprovalStatus.CONFIRMED:
             slot.released_at = datetime.now(UTC)
