@@ -13,7 +13,10 @@ from pydantic import ValidationError
 from app.adapters.api.routers import events
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.domain.models.planning_slot import (
-    EventApprovalStatus, PlanningSlot, PlanningSlotStatus, ReleasedEventError,
+    EventApprovalStatus,
+    PlanningSlot,
+    PlanningSlotStatus,
+    ReleasedEventError,
 )
 from app.domain.models.role import Role
 
@@ -35,11 +38,12 @@ def slot(confirmed=False):
 
 
 def body(**kw):
-    data = dict(
-        district_id=uuid.uuid4(), title="Gemeindeabend",
-        start_at=datetime(2026, 10, 11, 20, tzinfo=UTC),
-        end_at=datetime(2026, 10, 11, 21, tzinfo=UTC),
-    )
+    data = {
+        "district_id": uuid.uuid4(),
+        "title": "Gemeindeabend",
+        "start_at": datetime(2026, 10, 11, 20, tzinfo=UTC),
+        "end_at": datetime(2026, 10, 11, 21, tzinfo=UTC),
+    }
     return events.EventCreate(**(data | kw))
 
 
