@@ -8,10 +8,10 @@ Die bereits vorhandene PlanningSeries erzeugt PlanningSlots automatisch für ein
 
 - Wiederverwendbare Terminvorlagen mit Geltungsbereich Gemeinde oder Bezirk, Titel, Kategorie, Beschreibung, Dauer, lokaler Uhrzeit, optionaler Laufzeit und Wiederholungsregel.
 - Regeln für wöchentliche Wiederholung (auch alle N Wochen), monatliche Kalendertage und n-ten bzw. letzten Wochentag eines Monats.
-- Monatsbezogene, nach Gemeinde oder Bezirk filterbare Planungscheckliste: Offen, Übernommen, Ausgelassen sowie Konflikt/Prüfbedarf.
-- Einzelne oder mehrere Vorschläge werden bewusst zu regulären PlanningSlots mit EventInstance im Status PLANNED übernommen, nicht sofort veröffentlicht. Übernommene Termine können anschließend wie bisher bearbeitet und freigegeben werden.
+- Monatsbezogene, serverseitig nach Text, Kategorie, Status sowie Gemeinde/Bezirk filterbare Planungscheckliste: Offen, Übernommen, Ausgelassen sowie Konflikt/Prüfbedarf.
+- Einzelne oder mehrere Vorschläge werden bewusst als reguläre PlanningSlots (PLANNED, Bezirk-applicability übernommen) plus EventInstance (visibility=PUBLIC, aber bis zur Freigabe nicht öffentlich) gespeichert. Übernommene Termine können anschließend bearbeitet und freigegeben werden.
 - Auslassen ist eine persistierte Entscheidung je Vorlagen-Vorkommen und Kalendermonat. Wiederholte Vorschau bzw. Übernahme darf keine Duplikate erzeugen.
-- Prüfung auf bestehende Termine, Rechte, Ausnahmefälle und stabile Verknüpfung bei späteren Terminänderungen.
+- Prüfung auf bestehende Termine, Rechte, Ausnahmefälle und stabile Verknüpfung bei späteren Terminänderungen. Ein gelöschter angenommener Slot kann per expliziter Resolve-Aktion zugeordnet, übersprungen oder erneut geöffnet werden. Mehrfachübernahmen sind pro Vorkommen transaktional isoliert.
 - Terminvorlagen werden nicht vom täglichen PlanningSeries-Generator und nicht vom Gottesdienst-Entwurfsgenerator verarbeitet.
 
 ## Capabilities
@@ -22,13 +22,14 @@ Die bereits vorhandene PlanningSeries erzeugt PlanningSlots automatisch für ein
 
 ### Modified Capabilities
 
-- Keine bestehenden Requirements werden aufgehoben oder stillschweigend geändert. Die neue Capability integriert sich in planning-model, planning-visibility, rbac-model und tenant-isolation, ohne deren bisherige Automatismen oder Rechte zu erweitern.
+- `planning-model`: Der bestehende Monatsfreigabe-Endpunkt erhält eine ausdrücklich auf die eigene Gemeinde begrenzte Berechtigungsprüfung für CONGREGATION_ADMIN mit gesetzter congregation_id. Der Bezirksfreigabe-Pfad bleibt unverändert.
+- `planning-visibility`, `rbac-model`, `tenant-isolation`: Die neue Capability beachtet diese bestehenden Spezifikationen ohne Änderung an Rollen-Hierarchie, Veröffentlichungsregeln oder Mandantengrenzen.
 
 ## Impact
 
 - Backend: neues Vorlagen- und Entscheidungsmodell, Migration mit Mandantenschutz/RLS, dedizierter Application-Service und API-Endpunkte für Vorlagen und Monatscheckliste.
 - Frontend: Vorlagenverwaltung sowie Checklistenbereich in der Monatsplanung, einschließlich Lade-, Konflikt- und Fehlerzuständen.
-- Bestehende Events-API, EventInstance, PlanningSlot, Monatsfreigabe, Kalenderansichten und ICS-Export werden wiederverwendet.
+- Bestehende Events-API, EventInstance, PlanningSlot, Monatsfreigabe, Kalenderansichten und ICS-Export werden wiederverwendet; der bestehende Monatsfreigabe-Endpunkt erhält nur den gemeindebezogenen Berechtigungsfall.
 - Qualitätsanforderung für die spätere Umsetzung: gezielte Unit-, Integrations- und UI-Tests einschließlich Ausnahmefällen, Code Coverage >80 % und bestehende CI-Gates unverändert.
 - Tracking: #557.
 
@@ -37,4 +38,4 @@ Die bereits vorhandene PlanningSeries erzeugt PlanningSlots automatisch für ein
 - Keine automatische Veröffentlichung, Einladungen oder Erinnerungen.
 - Keine Änderungen an der automatischen Gottesdienst- oder PlanningSeries-Generierung.
 - Kein eigener Veranstaltungsort im Event-Datenmodell oder externer RRULE-/Kalender-Synchronisationseditor und kein massenhaftes Vorab-Anlegen für zukünftige Monate.
-- Keine Änderung des bestehenden Rollenmodells oder seiner Berechtigungsgrenzen.
+- Keine Änderung der Rollen-Hierarchie oder Erweiterung von Bezirksrechten für gemeindebezogene Rollen.
