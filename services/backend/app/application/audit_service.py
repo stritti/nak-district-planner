@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Audit Service — Business logic for audit logging.
 
 Provides a high-level interface for creating audit log entries.

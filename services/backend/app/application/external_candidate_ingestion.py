@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Governance-safe ingestion of new external calendar events.
 
 Existing mapped events remain owned by the hardened sync state machine.

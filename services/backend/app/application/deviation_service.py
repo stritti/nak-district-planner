@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/application/deviation_service.py: Service for detecting and managing deviations."""
 
 from __future__ import annotations

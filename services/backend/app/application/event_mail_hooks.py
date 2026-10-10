@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Event-driven mail hooks: the HookEvaluator and its wiring to the event bus.
 
 Bus handlers run synchronously inside the emitting request or task, while
