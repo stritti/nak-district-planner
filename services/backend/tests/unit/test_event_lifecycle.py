@@ -275,25 +275,43 @@ async def test_repo_deletes_draft_and_handles_missing():
 
 
 @pytest.mark.asyncio
-async def test_deleting_generated_draft_retains_invisible_generation_tombstone():
-    repo_session = AsyncMock()
+async def test_deleting_generated_draft_writes_ledger_and_removes_event():
+    repo_session = MagicMock()
+    repo_session.execute = AsyncMock()
+    repo_session.delete = AsyncMock()
+    repo_session.flush = AsyncMock()
     row = SimpleNamespace(
+        district_id=uuid.uuid4(),
         generation_key="draft-service:sample:2026-10-11",
-        released_at=None, approval_status=EventApprovalStatus.PLANNED,
-        status=PlanningSlotStatus.ACTIVE, deleted_at=None, updated_at=datetime.now(UTC),
+        released_at=None,
+        approval_status=EventApprovalStatus.PLANNED,
     )
     result = MagicMock()
     result.scalar_one_or_none.return_value = row
     repo_session.execute.return_value = result
+
     await SqlPlanningSlotRepository(repo_session).delete(uuid.uuid4())
-    assert row.deleted_at is not None
-    assert row.status == PlanningSlotStatus.CANCELLED
-    repo_session.delete.assert_not_awaited()
+
+    marker = repo_session.add.call_args.args[0]
+    assert marker.district_id == row.district_id
+    assert marker.generation_key == row.generation_key
+    assert marker.deleted_at is not None
+    repo_session.delete.assert_awaited_once_with(row)
 
 
 @pytest.mark.asyncio
-async def test_deleted_generated_slot_is_hidden_on_direct_lookup():
+async def test_generation_suppression_is_scoped_to_matching_keys_and_district():
     repo_session = AsyncMock()
-    row = SimpleNamespace(deleted_at=datetime.now(UTC))
-    repo_session.get.return_value = row
-    assert await SqlPlanningSlotRepository(repo_session).get(uuid.uuid4()) is None
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = ["key-1"]
+    repo_session.execute.return_value = result
+    repo = SqlPlanningSlotRepository(repo_session)
+
+    found = await repo.list_deleted_generation_keys(
+        district_id=uuid.uuid4(), generation_keys=["key-1", "key-2"]
+    )
+    assert found == {"key-1"}
+    assert await repo.list_deleted_generation_keys(
+        district_id=uuid.uuid4(), generation_keys=[]
+    ) == set()
+    assert repo_session.execute.await_count == 1
