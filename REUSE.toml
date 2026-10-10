@@ -1,0 +1,86 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
+version = 1
+
+# The fallback covers non-commentable assets, lockfiles, infrastructure,
+# documentation and historical OpenSpec artifacts. Explicit SPDX file headers
+# win over this fallback. Imported upstream assets are overridden below.
+[[annotations]]
+path = "**"
+precedence = "closest"
+SPDX-FileCopyrightText = "2026 Stephan Strittmatter"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+# OpenSpec-installed agent instructions are upstream MIT content.
+[[annotations]]
+path = [
+  ".agent/skills/openspec-*/**",
+  ".claude/skills/openspec-*/**",
+  ".codex/skills/openspec-*/**",
+  ".gemini/skills/openspec-*/**",
+  ".github/skills/openspec-*/**",
+  ".opencode/skills/openspec-*/**",
+  ".qwen/skills/openspec-*/**",
+  ".agent/workflows/opsx-*.md",
+  ".claude/commands/opsx/**",
+  ".gemini/commands/opsx/**",
+  ".github/prompts/opsx-*.prompt.md",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "OpenSpec contributors"
+SPDX-License-Identifier = "MIT"
+
+# Ponytail skills are mirrored from DietrichGebert/ponytail.
+[[annotations]]
+path = [
+  ".agent/skills/ponytail*/**",
+  ".claude/skills/ponytail*/**",
+  ".codex/skills/ponytail*/**",
+  ".gemini/skills/ponytail*/**",
+  ".github/skills/ponytail*/**",
+  ".opencode/skills/ponytail*/**",
+  ".qwen/skills/ponytail*/**",
+  "third_party/ponytail/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 DietrichGebert"
+SPDX-License-Identifier = "MIT"
+
+# Additional imported agent skills with an explicit upstream MIT declaration.
+[[annotations]]
+path = [
+  ".claude/skills/python-expert/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "awesome-llm-apps"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = [
+  ".claude/skills/vue-best-practices/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "vuejs-ai contributors"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = [
+  ".opencode/skills/**",
+]
+precedence = "closest"
+SPDX-FileCopyrightText = "OpenCode contributors"
+SPDX-License-Identifier = "MIT"
+
+# These files contain literal SPDX example strings. They are project-owned
+# AGPL-3.0-only source/docs, but examples must not be interpreted as licenses.
+# The strict source-header checker validates the actual SPDX headers separately.
+[[annotations]]
+path = [
+  "scripts/license_headers.py",
+  "scripts/test_license_headers.py",
+  "docs/engineering-standards.md",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Stephan Strittmatter"
+SPDX-License-Identifier = "AGPL-3.0-only"

@@ -66,3 +66,23 @@ Header addition MUST retain PEP 263 encoding cookies with either `coding:` or `c
 Generated VitePress output in `docs/.vitepress/dist/` and the associated cache directory MUST be excluded from source attribution checks while maintained `docs/.vitepress/*.mts` sources remain in scope.
 
 Existing upstream copyright or license declarations in multiline HTML or CSS block comments MUST also prevent automatic relicensing.
+
+
+### Requirement: Full repository REUSE compliance
+All tracked files MUST carry valid, machine-readable copyright and licensing information per REUSE Specification 3.3. `REUSE.toml` MUST supply fallback annotations for non-commentable and configuration files without overriding canonical in-file SPDX headers. License texts MUST be present under `LICENSES/<SPDX-ID>.txt`.
+
+#### Scenario: A newly added tracked file has no inline header
+- **WHEN** a project-owned Markdown, JSON, configuration, lock or asset file is added
+- **THEN** `reuse lint` SHALL identify a valid AGPL license and copyright attribution through the fallback configuration.
+
+#### Scenario: Imported agent skill
+- **WHEN** an OpenSpec or Ponytail skill is mirrored into a supported host
+- **THEN** its REUSE attribution SHALL remain MIT and use the upstream holder rather than asserting a new AGPL copyright.
+
+#### Scenario: Incomplete license text set
+- **WHEN** a new SPDX license identifier is used without a corresponding file in `LICENSES/`
+- **THEN** `reuse lint` SHALL fail until the correct text is supplied.
+
+#### Scenario: Independent enforcement
+- **WHEN** a pull request modifies project files
+- **THEN** CI SHALL run both `reuse lint` and the existing strict first-party source header/mode check.

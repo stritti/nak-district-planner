@@ -17,6 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install REUSE 6.2.0
+        run: python3 -m pip install --disable-pip-version-check 'reuse==6.2.0'
+
+      - name: Validate REUSE metadata for tracked files
+        run: reuse lint
+
+      - name: Run REUSE configuration tests
+        run: python3 -m unittest discover -s scripts -p 'test_reuse_metadata.py' -v
+
       - name: Run license-header unit tests
         run: python3 -m unittest discover -s scripts -p 'test_license_headers.py' -v
       - name: Check tracked source license headers

@@ -7,7 +7,7 @@ Google Calendar und Microsoft 365 sind geplant (OAuth-Flow mit Token-Refresh feh
 
 ## Lizenz
 
-Der eigene Quellcode steht unter der [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Copyright- und SPDX-Hinweise sowie Ausnahmen für Drittanbieter sind in [Lizenzierung und Copyright](docs/licensing.md) dokumentiert.
+Der eigene Quellcode steht unter der [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Copyright- und SPDX-Hinweise, REUSE-Nachweise sowie Ausnahmen für Drittanbieter sind in [Lizenzierung und Copyright](docs/licensing.md) dokumentiert. Die vollständige Datei-Zuordnung wird mit `reuse lint` geprüft.
 
 ## Dokumentation
 
