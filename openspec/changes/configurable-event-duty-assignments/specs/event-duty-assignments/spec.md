@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Optional organisational duties on planning slots
-A `PlanningSlot` SHALL support zero or more organisational duty assignments independently of its existing single liturgical service-leader assignment. Each assignment SHALL reference a configured category and either an eligible linked person belonging to the authorised district/event context or a validated, scoped name-only participant. A slot SHALL remain valid, confirmable and publishable with no organisational assignments.
+A `PlanningSlot` SHALL support zero or more organisational duty assignments independently of its existing single liturgical service-leader assignment. Each assignment SHALL reference a configured category and exactly one of: a securely resolved registered-user subject (`linked_user_sub`) within the authorised district/event context, or a validated scoped name-only participant and immutable display-name snapshot. A linked leader/person record is eligible for personal feeds only if its `user_sub` is securely verified. A plain-text name or unlinked leader record SHALL NOT be treated as a user account. A slot SHALL remain valid, confirmable and publishable with no organisational assignments.
 
 #### Scenario: Unassigned service
 - **WHEN** a Gottesdienst planning slot is created with no persons selected for Schließdienst, Organist or Dirigent
@@ -12,7 +12,7 @@ A `PlanningSlot` SHALL support zero or more organisational duty assignments inde
 - **THEN** assigning multiple organisational duty types does not violate the unique service-leader constraint
 
 ### Requirement: Validate category, person and capacity
-The system SHALL reject unknown or cross-tenant category/person identifiers, assignments to categories not enabled for the slot's effective event category, duplicate person-duty pairs and assignments exceeding configured duty capacity. Checks and writes SHALL be concurrency safe, with no partial writes on failure.
+The system SHALL reject unknown or cross-tenant category/person identifiers, assignments to categories not enabled for the slot's effective event category, duplicate person-duty pairs and assignments exceeding configured duty capacity. Checks and writes SHALL be concurrency safe, with no partial writes on failure. Changing the planning slot's category or effective congregation SHALL NOT silently delete existing duty assignments; newly incompatible assignments SHALL be visibly flagged for review and SHALL NOT be newly added or reassigned until valid for the new category and scope.
 
 #### Scenario: Concurrent final-place assignment
 - **WHEN** two requests concurrently fill the last available position in a duty category
@@ -25,6 +25,15 @@ The system SHALL reject unknown or cross-tenant category/person identifiers, ass
 #### Scenario: Multiple tasks for one person
 - **WHEN** the same person is assigned Organist and Schließdienst on the same slot
 - **THEN** two task assignments are persisted and can be projected as one calendar event with both task labels
+
+#### Scenario: Category changes after an existing assignment
+- **WHEN** a planner changes a slot from Gottesdienst to a category where Organist is not enabled
+- **THEN** the previous Organist assignment and historical display remain stored and are flagged for review
+- **AND** the server rejects a new Organist assignment for that slot until that duty is explicitly enabled
+
+#### Scenario: Unverified user-submitted identity
+- **WHEN** a planner submits an arbitrary `linked_user_sub` or both name-only and linked identities
+- **THEN** the server rejects the assignment without creating an account, personal feed or token
 
 ### Requirement: Scoped assignment management
 Only planners with edit permissions for the relevant planning slot SHALL create, replace or remove organisational duty assignments. The system SHALL enforce membership and district isolation for event and person lookups.
