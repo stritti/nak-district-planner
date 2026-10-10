@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Create event_mail_hooks with tenant isolation.
 
 Revision ID: 20260930_event_hooks

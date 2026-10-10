@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Allow only one service assignment per planning slot (#468).
 
 The matrix shows one leader per slot, but nothing prevented a second

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Create notifications table for in-app notification system.
 
 Task Group 2.1 of M2 — Notification System.

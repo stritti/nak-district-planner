@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Create district reminders, delivery ledger, and tenant isolation policies.
 
 Revision ID: 20260930_reminder

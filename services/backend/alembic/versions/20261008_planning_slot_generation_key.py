@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Add planning_slots.generation_key, the stable identity of generated drafts.
 
 The draft generator used to recognise its own slots by (date, time) only, so a
