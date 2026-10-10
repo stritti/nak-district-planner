@@ -209,7 +209,7 @@ services:
 
   keycloak:
     <<: *defaults
-    image: quay.io/keycloak/keycloak:26.5
+    image: quay.io/keycloak/keycloak:26.8
     command: start
     env_file:
       - .env.keycloak
