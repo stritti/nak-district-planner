@@ -63,7 +63,13 @@ Das System SHALL WEEKLY (ein oder mehrere ISO-Wochentage mit ganzzahligem Wochen
 
 ### Requirement: Monatliche To-do-Liste vor Anlage konkreter Termine
 
-Das System SHALL für einen angefragten Kalendermonat eine nach Datum und Uhrzeit geordnete Checkliste berechnen, deren offene Einträge zunächst keine PlanningSlots oder EventInstances sind. Die Liste SHALL inhaltlich und nach Organisationseinheit filterbar und mit den Zuständen OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW darstellbar sein. Die Auswahl und jede Änderung SHALL serverseitig gegen den aktuellen Bezirk und die Vorlage geprüft werden.
+Das System SHALL für einen angefragten Kalendermonat eine nach Datum und Uhrzeit geordnete Checkliste berechnen, deren offene Einträge zunächst keine PlanningSlots oder EventInstances sind. Die Liste SHALL serverseitig vor Pagination nach Suchtext (Titel/Beschreibung), Kategorie, Entscheidungsstatus und Organisationseinheit filterbar und mit den Zuständen OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW darstellbar sein. Die Auswahl und jede Änderung SHALL serverseitig gegen den aktuellen Bezirk und die Vorlage geprüft werden.
+
+#### Scenario: Filter vor Pagination
+- **GIVEN** mehr Vorschläge als auf eine Ergebnis-Seite passen
+- **WHEN** die Checkliste mit q=Chor, category=Musik und status=OPEN angefragt wird
+- **THEN** filtert der Server die gesamte Monatsmenge vor der Seitenauswahl
+- **AND** total und Pagination zählen nur passende Vorschläge
 
 #### Scenario: Neue Monatsplanung
 - **GIVEN** eine wöchentliche und eine monatliche aktive Vorlage
@@ -89,12 +95,24 @@ Das System SHALL für einen angefragten Kalendermonat eine nach Datum und Uhrzei
 
 ### Requirement: Explizite, idempotente Übernahme in die Event-Planung
 
-Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter Bestätigung als PlanningSlot und EventInstance anlegen. Der Slot SHALL ACTIVE mit approval_status PLANNED sein und zunächst keine ServiceAssignment besitzen. Die Übernahme SHALL die vorliegende Template-Revision prüfen und je (template_id, occurrence_local_date) genau eine persistierte Entscheidung ACCEPTED mit Verweis auf den konkreten Slot atomar speichern. Wiederholte oder parallele Aufrufe SHALL keine doppelten Termine anlegen.
+Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter Bestätigung als PlanningSlot und EventInstance anlegen. Der Slot SHALL ACTIVE mit approval_status PLANNED sein und zunächst keine ServiceAssignment besitzen. Bei Bezirksterminen SHALL der neue Slot die zum Übernahmezeitpunkt validierte template.applicability vollständig und kanonisch übernehmen; bei Gemeindeterminen SHALL slot.applicability leer sein. Die EventInstance SHALL source=INTERNAL und visibility=PUBLIC erhalten. Die PUBLIC-Einstellung SHALL den Entwurf nicht veröffentlichen: Öffentliche Feeds zeigen weiterhin nur CONFIRMED-Slots, und Bezirksverteilung bleibt an ACTIVE und CONFIRMED gebunden. Die Übernahme SHALL die vorliegende Template-Revision prüfen und je (template_id, occurrence_local_date) genau eine persistierte Entscheidung ACCEPTED mit Verweis auf den konkreten Slot atomar speichern. Wiederholte oder parallele Aufrufe SHALL keine doppelten Termine anlegen.
 
 #### Scenario: Übernahme ohne Veröffentlichung
 - **WHEN** eine offene Chorprobe übernommen wird
 - **THEN** erscheint sie als regulärer Termin mit approval_status PLANNED
-- **AND** sie wird erst durch den bestehenden Freigabeprozess öffentlich bzw. an betroffene Gemeinden verteilt
+- **AND** `EventInstance.visibility=PUBLIC` ist bereits gesetzt, aber PUBLIC-ICS-Feeds und bezirksweite Gemeindeverteilung bleiben bis CONFIRMED gesperrt
+
+#### Scenario: Bezirkstermin übernimmt die Gemeindeverteilung
+- **GIVEN** eine Bezirksterminvorlage mit applicability=["all"]
+- **WHEN** ein Vorkommen angenommen und danach freigegeben wird
+- **THEN** speichert der erzeugte PlanningSlot applicability=["all"] unverändert
+- **AND** der Termin ist nach CONFIRMED für alle Gemeinden des Bezirks sichtbar, vorher nicht
+
+#### Scenario: Öffentlicher Export nach Freigabe
+- **GIVEN** eine übernommene Chorprobe mit EventInstance.visibility=PUBLIC
+- **WHEN** deren Slot zunächst PLANNED und später CONFIRMED ist
+- **THEN** fehlt sie im PUBLIC-ICS-Feed vor der Freigabe
+- **AND** sie erscheint danach gemäß den geltenden Sichtbarkeitsregeln
 
 #### Scenario: Doppelte Bestätigung
 - **WHEN** dasselbe Vorkommen zweimal oder gleichzeitig angenommen wird
@@ -110,7 +128,8 @@ Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter
 #### Scenario: Auswahl mehrerer Vorschläge
 - **WHEN** drei Vorschläge gemeinsam angenommen werden und einer mit einem vorhandenen Termin kollidiert
 - **THEN** erhält jeder Vorschlag ein eigenes nachvollziehbares Ergebnis
-- **AND** erfolgreiche Übernahmen bleiben gespeichert, während der Konflikt keine zusätzlichen Slots erzeugt
+- **AND** jedes Vorkommen wird in einer eigenen Transaktion oder durch isolierte Savepoints verarbeitet
+- **AND** erfolgreiche Übernahmen bleiben auch nach konkurrierenden Constraint-Konflikten anderer Einträge gespeichert, während der Konflikt keine zusätzlichen Slots erzeugt
 
 #### Scenario: Veraltete Vorschau
 - **WHEN** ein Benutzer ein Vorkommen mit überholter template_revision bestätigen will
@@ -119,13 +138,25 @@ Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter
 
 ### Requirement: Dauerhafte Zuordnung und bewusste Abweichungen
 
-Das System SHALL die Identität eines vorgeschlagenen Vorkommens durch Vorlagen-ID und ursprünglich lokal berechnetes Datum erhalten, unabhängig von späteren Verschiebungen eines übernommenen Termins. Ein gelöschter referenzierter Termin SHALL nicht automatisch neu erzeugt werden. Übernommene Slots SHALL ansonsten den bestehenden Bearbeitungs-, Freigabe-, Sichtbarkeits- und Exportregeln folgen.
+Das System SHALL die Identität eines vorgeschlagenen Vorkommens durch Vorlagen-ID und ursprünglich lokal berechnetes Datum erhalten, unabhängig von späteren Verschiebungen eines übernommenen Termins. Ein gelöschter referenzierter Termin SHALL nicht automatisch neu erzeugt werden. Ist eine ACCEPTED-Entscheidung durch Löschung (einschließlich Retention Cleanup) ohne gültigen Slot-Verweis, SHALL die Checkliste NEEDS_REVIEW anzeigen und eine explizite, berechtigte Auflösung durch Zuordnung zu einem passenden existierenden Slot, Markierung als SKIPPED oder erneutes Öffnen anbieten. Erneutes Öffnen SHALL nur zulässig sein, wenn das Vorkommen weiterhin zur aktiven Vorlage passt. Übernommene Slots SHALL ansonsten den bestehenden Bearbeitungs-, Freigabe-, Sichtbarkeits- und Exportregeln folgen.
 
 #### Scenario: Chorprobe verschoben
 - **GIVEN** die Chorprobe am 10.11. wurde übernommen
 - **WHEN** der konkrete Termin auf den 11.11. verschoben wird
 - **THEN** bleibt die Checklistenentscheidung für das ursprüngliche Vorkommen vom 10.11. ACCEPTED
 - **AND** beim nächsten Öffnen entsteht keine zweite Chorprobe am 10.11.
+
+#### Scenario: Checklistenentscheidung nach Löschung auflösen
+- **GIVEN** eine ACCEPTED-Entscheidung zeigt NEEDS_REVIEW wegen eines gelöschten Slots
+- **WHEN** eine berechtigte Person sie explizit einem anderen passenden, noch nicht verknüpften Slot desselben Scopes zuordnet
+- **THEN** wird die bestehende Entscheidung atomar auf diesen Slot umgebucht und als ACCEPTED angezeigt
+- **AND** der bereits existierende Slot wird nicht überschrieben
+
+#### Scenario: Gelöschten Slot nicht automatisch regenerieren
+- **GIVEN** eine ACCEPTED-Entscheidung zeigt NEEDS_REVIEW wegen eines gelöschten Slots
+- **WHEN** die Checkliste erneut geöffnet wird
+- **THEN** wird kein neuer Termin erzeugt
+- **AND** ein ausdrückliches SKIPPED oder REOPEN kann den Zustand auflösen; REOPEN nur für aktuell gültige Vorkommen
 
 #### Scenario: Konkreter Termin endgültig gelöscht
 - **GIVEN** ein übernommener Slot ist nicht mehr vorhanden
@@ -135,7 +166,7 @@ Das System SHALL die Identität eines vorgeschlagenen Vorkommens durch Vorlagen-
 
 ### Requirement: Organisationsrechte und Mandantenschutz
 
-Das System SHALL die bestehenden Scope-Rechte unverändert nutzen: VIEWER dürfen nur berechtigte Vorlagen und Checklisten lesen; DISTRICT_ADMIN dürfen Vorlagen und Entscheidungen des Bezirks ändern; CONGREGATION_ADMIN dürfen dies nur für ihre Gemeinde. Eine eigene PLANNER-Rolle SHALL dadurch keine bislang fehlenden Event-Erstellrechte erhalten. RLS und API-Guards SHALL fremde Bezirke, Gemeinden und Slot-Verknüpfungen schützen.
+Das System SHALL die bestehenden Rollen und Scope-Grenzen nutzen: VIEWER dürfen nur berechtigte Vorlagen und Checklisten lesen; DISTRICT_ADMIN dürfen Vorlagen und Entscheidungen des Bezirks ändern; CONGREGATION_ADMIN dürfen dies nur für ihre Gemeinde. Die bestehende Monatsfreigabe SHALL für CONGREGATION_ADMIN mit expliziter congregation_id die Slots genau ihrer Gemeinde bestätigen können; ohne congregation_id bleibt für die bezirksweite Freigabe mindestens die bisherige Bezirks-PLANNER-Berechtigung erforderlich. Eine eigenständige PLANNER-Rolle SHALL dadurch keine bislang fehlenden Event-Erstellrechte erhalten. RLS und API-Guards SHALL fremde Bezirke, Gemeinden und Slot-Verknüpfungen schützen.
 
 #### Scenario: Gemeinde A darf Gemeinde B nicht verändern
 - **GIVEN** ein Benutzer ist nur CONGREGATION_ADMIN für Gemeinde A
@@ -146,6 +177,17 @@ Das System SHALL die bestehenden Scope-Rechte unverändert nutzen: VIEWER dürfe
 - **WHEN** Template, Scope, Verteilung oder Slot-Referenz einem anderen Bezirk zugehört
 - **THEN** verweigert API und Datenbank-RLS den unzulässigen Zugriff
 - **AND** keine fremden Vorlagen-, Entscheidungs- oder Slot-Daten werden offengelegt
+
+#### Scenario: Gemeindeadministrator bestätigt nur die eigene Gemeinde
+- **GIVEN** ein Benutzer besitzt ausschließlich CONGREGATION_ADMIN für Gemeinde A
+- **WHEN** er die Monatsfreigabe mit congregation_id=A anfordert
+- **THEN** werden nur die Slots von Gemeinde A bestätigt
+- **AND** kein Bezirks- oder Gemeinde-B-Slot wird freigegeben
+
+#### Scenario: Gemeindeadministrator darf keine Bezirksfreigabe auslösen
+- **GIVEN** ein Benutzer besitzt ausschließlich CONGREGATION_ADMIN für Gemeinde A
+- **WHEN** er die Monatsfreigabe ohne congregation_id oder für Gemeinde B anfordert
+- **THEN** antwortet der Server mit HTTP 403, ohne Slots zu verändern
 
 #### Scenario: Unberechtigte Checklisten-Übernahme
 - **WHEN** ein VIEWER oder ein PLANNER ohne Event-Erstellberechtigung einen Vorschlag annimmt oder auslässt
