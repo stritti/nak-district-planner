@@ -2,7 +2,7 @@
 
 ### Requirement: Wiederkehrende Terminvorlagen auf Gemeinde- und Bezirksebene
 
-Das System SHALL eine unabhängig von PlanningSeries verwaltete RecurringEventTemplate unterstützen. Jede Vorlage SHALL genau einem Bezirk und optional einer Gemeinde dieses Bezirks zugeordnet sein und Titel, Kategorie (außer Gottesdienst), lokale Startzeit, positive Dauer, optional Beschreibung/Ort, Aktivitätszeitraum, is_active sowie eine validierte Wiederholungsregel besitzen. Bezirkstermine MAY per bestehender applicability-Semantik an Gemeinden verteilt werden; Gemeindetermine SHALL keine applicability besitzen.
+Das System SHALL eine unabhängig von PlanningSeries verwaltete RecurringEventTemplate unterstützen. Jede Vorlage SHALL genau einem Bezirk und optional einer Gemeinde dieses Bezirks zugeordnet sein und Titel, Kategorie (außer Gottesdienst), lokale Startzeit, positive Dauer, optional Beschreibung, verpflichtendes anchor_date, Aktivitätszeitraum, is_active sowie eine validierte Wiederholungsregel besitzen. Bezirkstermine MAY per bestehender applicability-Semantik an Gemeinden verteilt werden; Gemeindetermine SHALL keine applicability besitzen.
 
 #### Scenario: Wöchentliche Chorprobe einer Gemeinde
 - **GIVEN** eine aktive Vorlage Chorprobe für Gemeinde A, jeden Dienstag 19:30 Uhr für 90 Minuten
@@ -28,7 +28,7 @@ Das System SHALL eine unabhängig von PlanningSeries verwaltete RecurringEventTe
 
 ### Requirement: Kalenderfeste, deterministische Wiederholungsregeln
 
-Das System SHALL WEEKLY (ein oder mehrere ISO-Wochentage mit ganzzahligem Wochenintervall), MONTHLY_DAY (Tag 1..31 mit Monatsintervall) und MONTHLY_WEEKDAY (Wochentag mit 1. bis 5. oder letztem Vorkommen, Monatsintervall) anbieten. Das Startdatum bzw. der Regelanker SHALL die Intervallphase bestimmen; die Berechnung SHALL unabhängig vom angefragten Fenster sein und SHALL die inklusiven Aktivitätsgrenzen einhalten.
+Das System SHALL WEEKLY (ein oder mehrere ISO-Wochentage mit ganzzahligem Wochenintervall), MONTHLY_DAY (Tag 1..31 mit Monatsintervall) und MONTHLY_WEEKDAY (Wochentag mit 1. bis 5. oder letztem Vorkommen, Monatsintervall) anbieten. Ein verpflichtendes, stabiles anchor_date SHALL die Intervallphase bestimmen; die Berechnung SHALL unabhängig vom angefragten Fenster sein und SHALL die inklusiven Aktivitätsgrenzen einhalten.
 
 #### Scenario: Letzter Dienstag statt vierter Dienstag
 - **GIVEN** eine Vorlage für den letzten Dienstag eines Monats
