@@ -277,6 +277,7 @@ async def test_repo_sets_release_once_and_refuses_reset():
     repo_session.get.return_value = SimpleNamespace(
         released_at=value.released_at, approval_status=EventApprovalStatus.CONFIRMED,
         district_id=value.district_id, congregation_id=None, category=None,
+        status=PlanningSlotStatus.ACTIVE,
     )
     value.approval_status = EventApprovalStatus.PLANNED
     with pytest.raises(ReleasedEventError):
@@ -380,3 +381,22 @@ async def test_repo_remembers_deleted_legacy_series_occurrence():
     assert ledger.district_id == district_id
     assert ledger.generation_key == planning_series_generation_key(series_id, when)
     session.delete.assert_awaited_once_with(row)
+
+
+@pytest.mark.asyncio
+async def test_repository_refuses_reactivation_of_released_cancellation():
+    slot = slot(confirmed=True)
+    slot.status = PlanningSlotStatus.ACTIVE
+    saved = SimpleNamespace(
+        released_at=slot.released_at,
+        approval_status=EventApprovalStatus.CONFIRMED,
+        status=PlanningSlotStatus.CANCELLED,
+        district_id=slot.district_id,
+        congregation_id=slot.congregation_id,
+        category=slot.category,
+    )
+    session = AsyncMock()
+    session.get.return_value = saved
+    with pytest.raises(ReleasedEventError):
+        await SqlPlanningSlotRepository(session).save(slot)
+    session.flush.assert_not_awaited()
