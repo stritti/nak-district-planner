@@ -6,6 +6,7 @@ Revises: 20261008_slot_gen_key
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "20261010_event_release"
@@ -49,5 +50,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_table("deleted_generation_keys")
     op.drop_column("planning_slots", "deleted_at")
     op.drop_column("planning_slots", "released_at")
