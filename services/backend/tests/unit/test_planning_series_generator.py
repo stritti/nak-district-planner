@@ -173,6 +173,8 @@ class MockRepos:
     def __init__(self):
         self.series_repo = AsyncMock()
         self.slot_repo = AsyncMock()
+        self.slot_repo.list_deleted_generation_keys.return_value = set()
+        self.slot_repo.list_by_generation_keys.return_value = []
         self.instance_repo = AsyncMock()
         self.district_repo = AsyncMock()
         self.congregation_repo = AsyncMock()
@@ -185,6 +187,30 @@ class MockRepos:
             district_repo=self.district_repo,
             congregation_repo=self.congregation_repo,
         )
+
+
+class TestSeriesDeletionSuppression:
+    @pytest.mark.asyncio
+    async def test_deleted_occurrence_is_skipped_by_background_generator(self):
+        series = PlanningSeries.create(
+            district_id=uuid.uuid4(), default_planning_time=time(9),
+            recurrence_pattern={"type": "weekly", "days": [0]},
+        )
+        m = MockRepos()
+        m.series_repo.list_active.return_value = [series]
+        m.slot_repo.get_by_series_date.return_value = None
+        from app.domain.models.planning_slot import planning_series_generation_key
+
+        m.slot_repo.list_deleted_generation_keys.return_value = {
+            planning_series_generation_key(series.id, date(2026, 6, 1))
+        }
+        result = await m.build().run_for_window(
+            from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2)
+        )
+        assert result["slots_created"] == 0
+        assert result["slots_skipped"] == 1
+        m.slot_repo.save.assert_not_awaited()
+        m.instance_repo.save.assert_not_awaited()
 
 
 class TestRunForWindow:
