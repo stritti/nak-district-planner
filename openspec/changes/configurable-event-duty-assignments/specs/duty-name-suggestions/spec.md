@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Remember duty-specific names from free-text entry
-The system SHALL accept validated free-text display names as organisational duty assignees without requiring an application account. After an assignment is saved, the system SHALL remember the normalised name and display name for autocomplete only within the authorised district/congregation scope and the specific duty category. Suggestions SHALL be deduplicated by normalised name within that scope and category.
+The system SHALL accept validated free-text display names as organisational duty assignees without requiring an application account. After an assignment is saved, the system SHALL remember the normalised name and display name for autocomplete only within the slot's owning scope and the specific duty category: congregation slots use that congregation's suggestion store; district-level slots use the district store. Inherited district duty definitions SHALL NOT implicitly expose district or other congregation names in a congregation's autocomplete. Suggestions SHALL be deduplicated by normalised name within that scope and category.
 
 #### Scenario: Save name for Organist
 - **WHEN** a planner saves "Anna Beispiel" as Organist in congregation A
