@@ -49,9 +49,7 @@ jobs:
         run: npx -y @fission-ai/openspec@1.14.1 validate --specs --strict --no-interactive
 
       - name: Install dependencies
-        run: |
-          bun install --prefer-offline
-          git diff -- bun.lock
+        run: bun install --frozen-lockfile --prefer-offline
 
       - name: Build docs
         run: bun run docs:build
