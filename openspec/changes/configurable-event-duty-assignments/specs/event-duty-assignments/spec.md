@@ -12,7 +12,7 @@ A `PlanningSlot` SHALL support zero or more organisational duty assignments inde
 - **THEN** assigning multiple organisational duty types does not violate the unique service-leader constraint
 
 ### Requirement: Validate category, person and capacity
-The system SHALL reject unknown or cross-tenant category/person identifiers, assignments to categories not enabled for the slot's effective event category, duplicate linked-subject/duty pairs or duplicate normalised name-only/duty pairs within a slot, and assignments exceeding configured duty capacity. These two identity types SHALL use separate database-backed uniqueness constraints that correctly handle nullable fields; capacity checks SHALL be serialised per slot/duty. Checks and writes SHALL be concurrency safe, with no partial writes on failure. Changing the planning slot's category or effective congregation SHALL NOT silently delete existing duty assignments; newly incompatible assignments SHALL be visibly flagged for review and SHALL NOT be newly added or reassigned until valid for the new category and scope.
+The system SHALL reject unknown or cross-tenant category/person identifiers, assignments to categories not enabled for the slot's effective event category, duplicate linked-subject/duty pairs or duplicate normalised name-only/duty pairs within a slot, and assignments exceeding configured duty capacity. These two identity types SHALL use separate database-backed uniqueness constraints that correctly handle nullable fields; capacity checks SHALL be serialised per slot/duty. Checks and writes SHALL be concurrency safe, with no partial writes on failure. Changing the planning slot's category or effective congregation SHALL NOT silently delete existing duty assignments; newly incompatible assignments SHALL be visibly flagged for review and SHALL NOT be newly added or reassigned until valid for the new category and scope. An assignment SHALL retain its original owning scope. Moving a slot to another congregation SHALL quarantine old-scope assignments until explicit revalidation by an administrator/planner authorised in both scopes, and SHALL prevent private names or duties from being exposed in the new congregation's normal views or personal feeds before revalidation.
 
 #### Scenario: Repeated name-only participant
 - **WHEN** a planner adds two name-only assignments to the same duty on the same slot with case/whitespace-equivalent names
@@ -29,6 +29,11 @@ The system SHALL reject unknown or cross-tenant category/person identifiers, ass
 #### Scenario: Multiple tasks for one person
 - **WHEN** the same person is assigned Organist and Schließdienst on the same slot
 - **THEN** two task assignments are persisted and can be projected as one calendar event with both task labels
+
+#### Scenario: Slot moves to another congregation
+- **WHEN** an event with a name-only Organist from congregation A moves to congregation B
+- **THEN** the assignment remains in the audit/history record but is flagged for review
+- **AND** congregation B's ordinary views and personal feeds do not expose the original private name without authorised revalidation
 
 #### Scenario: Category changes after an existing assignment
 - **WHEN** a planner changes a slot from Gottesdienst to a category where Organist is not enabled
