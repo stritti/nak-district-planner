@@ -16,15 +16,15 @@ Eine Einheit ist ein Bezirk (`DISTRICT`) oder eine Gemeinde (`CONGREGATION`). De
 
 ### Zuordnungen unabhängig verwalten
 
-Eine neue Zuordnung ergänzt die bisherigen Mitgliedschaften. Änderung oder Entfernung einer Zuordnung betrifft nur diese. Eine erneute Zuweisung desselben Scopes aktualisiert die bestehende Zuordnung statt Duplikate anzulegen. Superadmins verwalten Zuordnungen global; andere berechtigte Administratoren bleiben auf ihre bestehenden Verwaltungsrechte beschränkt.
+Eine neue Zuordnung ergänzt die bisherigen Mitgliedschaften. Änderung oder Entfernung einer Zuordnung betrifft nur diese. Eine erneute Zuweisung desselben Scopes aktualisiert die bestehende Zuordnung statt Duplikate anzulegen. Eine DB-Unique-Constraint auf `(user_sub, scope_type, scope_id)` verhindert Duplikate auch bei parallelen Requests; Zuweisungen erfolgen transaktional. Nicht-Superadmins dürfen nur Rollen bis zur eigenen Berechtigungsstufe im verwalteten Scope vergeben; Gemeindeadmins können keine Bezirksmitgliedschaften erstellen. Superadmins verwalten Zuordnungen global; andere berechtigte Administratoren bleiben auf ihre bestehenden Verwaltungsrechte beschränkt.
 
 ### Superadmin ist ein globaler Benutzerstatus
 
-`is_superadmin` ist unabhängig von Mitgliedschaften. Nur ein authentifizierter bestehender Superadmin darf den Status für einen registrierten, sicher mit einem Subject verknüpften Benutzer vergeben. Die bestehende Bootstrap-Funktion bleibt für die initiale Einrichtung gültig. Der Status ist in Benutzerverwaltung und Zugriffskontext sichtbar und Änderungen werden gemäß bestehender Audit-Regeln erfasst.
+`is_superadmin` ist unabhängig von Mitgliedschaften. Nur ein authentifizierter bestehender Superadmin darf den Status für einen registrierten, sicher mit einem Subject verknüpften Benutzer vergeben. Bestehende Superadmins können diesen Status auch wieder entziehen. Die letzte verbleibende Superadmin-Berechtigung darf nicht entzogen werden; die Prüfung muss parallele Entzüge transaktional absichern. Die bestehende Bootstrap-Funktion bleibt für die initiale Einrichtung gültig. Der Status ist in Benutzerverwaltung und Zugriffskontext sichtbar und Vergabe sowie Entzug werden gemäß bestehender Audit-Regeln erfasst. Maßgeblich ist nur der nach OIDC-Authentifizierung anhand des Subjects aus der Datenbank ermittelte Status, nie ein unverifizierter Token-Claim oder Frontend-Cache.
 
 ### Globalen Zugriff durchgängig anwenden
 
-Superadmins können alle Einheiten, fachlichen Daten und Verwaltungsfunktionen lesen bzw. bedienen, auch ohne Mitgliedschaften. Das gilt für Backend-Berechtigungsprüfungen, Datenzugriff einschließlich RLS und die Anzeige im Frontend. Ein ausgewählter Bezirk kann die Ansicht filtern, beschränkt aber keine Superadmin-Berechtigung. Authentifizierung und fachliche Validierungen gelten weiterhin.
+Superadmins können alle Einheiten, fachlichen Daten und Verwaltungsfunktionen lesen bzw. bedienen, auch ohne Mitgliedschaften. Das gilt für TenantValidationMiddleware vor dem Router, Backend-Berechtigungsprüfungen, Datenzugriff einschließlich transaktionslokaler RLS-Kontexte und die Anzeige im Frontend. Entzüge müssen spätestens bei der nächsten Request-Autorisierung gelten, ohne erneuten Login; bestehende normale Mitgliedschaften bleiben dabei erhalten. Ein ausgewählter Bezirk kann die Ansicht filtern, beschränkt aber keine Superadmin-Berechtigung. Authentifizierung und fachliche Validierungen gelten weiterhin.
 
 ## Risks / Trade-offs
 
@@ -32,6 +32,8 @@ Superadmins können alle Einheiten, fachlichen Daten und Verwaltungsfunktionen l
 - Hohe Rolle in Einheit A wirkt in Einheit B: positive und negative Tests je Scope.
 - Frontend zeigt globalen Zugriff, Backend/RLS blockiert ihn: beide Ebenen prüfen.
 - Registrierungspayload setzt Superadmin-Status: nicht autorisierte Vergabe mit 403 ablehnen.
+- Letzter Superadmin wird entzogen: transaktionale Sperre und negativer Paralleltest.
+- Widerruf wirkt bei laufender Session nicht: jede Request-Autorisierung mit aktuellem Datenbankstatus und RLS absichern.
 - Unverknüpfte Registrierung wird über uneindeutige E-Mail erhöht: sichere Kontoverknüpfung beibehalten.
 
 ## Validation
