@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from app.domain.models.calendar_integration import (
     CalendarCapability,
     CalendarIntegration,
