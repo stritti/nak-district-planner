@@ -165,9 +165,9 @@ test.describe('Matrix fixed date header', () => {
     const top = await scroll.evaluate((element) => element.getBoundingClientRect().top)
     expect(Math.abs((await corner.boundingBox())!.y - top)).toBeLessThanOrEqual(2)
     expect(Math.abs((await day.boundingBox())!.y - top)).toBeLessThanOrEqual(2)
-    expect(await corner.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/^rgb\\(/)
+    expect(await corner.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/^rgb\(/)
     const holiday = scroll.locator('thead th').nth(10)
-    expect(await holiday.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/^rgb\\(/)
+    expect(await holiday.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/^rgb\(/)
   })
 
   test('does not add vertical scrolling for a short matrix', async ({ page }) => {
