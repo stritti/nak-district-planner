@@ -223,8 +223,9 @@ async def test_bulk_release_cannot_reset_published_month():
 
 @pytest.mark.asyncio
 async def test_repo_sets_release_once_and_refuses_reset():
-    repo_session = AsyncMock()
-    repo_session.get.return_value = None
+    repo_session = MagicMock()
+    repo_session.get = AsyncMock(return_value=None)
+    repo_session.flush = AsyncMock()
     repo = SqlPlanningSlotRepository(repo_session)
     value = slot(confirmed=True)
     await repo.save(value)
