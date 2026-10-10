@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 'use strict';
 
 const CI_TAG = /^(?:main|develop|sha-[0-9a-f]{7,40})$/;

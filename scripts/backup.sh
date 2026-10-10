@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Create an encrypted PostgreSQL backup of the NAK District Planner database.
 #
 # Runs pg_dump inside the running `db` container (avoids requiring PostgreSQL
