@@ -100,6 +100,4 @@ export const useMatrixStore = defineStore('matrix', () => {
     clearAssignment,
     generateDraftsForCurrentRange,
   }
-}, {
-  persist: { pick: ['districtId', 'groupId', 'fromDt', 'toDt'] },
 })

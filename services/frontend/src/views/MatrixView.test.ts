@@ -7,6 +7,7 @@ import { useDistrictsStore } from '../stores/districts'
 import { useLeadersStore } from '../stores/leaders'
 import { useMatrixStore } from '../stores/matrix'
 import MatrixView from './MatrixView.vue'
+import { useAuthStore } from '../stores/auth'
 
 const assignmentOpen = vi.fn()
 
@@ -61,6 +62,7 @@ const MonthlyReleaseDialogStub = defineComponent({
 function setup(options: { districtId?: string; range?: boolean } = {}) {
   const pinia = createPinia()
   setActivePinia(pinia)
+  useAuthStore().user = { sub: 'test-user' }
   const districts = useDistrictsStore()
   const leaders = useLeadersStore()
   const matrix = useMatrixStore()
@@ -97,12 +99,77 @@ function setup(options: { districtId?: string; range?: boolean } = {}) {
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
+  sessionStorage.clear()
 })
 
 describe('MatrixView', () => {
+  it('restores a group that is still accessible and repairs an empty date range', async () => {
+    sessionStorage.setItem('planner.view-settings.v1:' + JSON.stringify(['test-user', 'matrix', 'd1']),
+      JSON.stringify({ group: 'g1', from: '', to: '', sort: 'default' }))
+    const ctx = setup()
+    ctx.districts.groups = [{
+      id: 'g1', name: 'Available', district_id: 'd1',
+      created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
+    }]
+    await flushPromises()
+    expect(ctx.matrix.groupId).toBe('g1')
+    expect(ctx.matrix.fromDt).toMatch(/^\d{4}-\d{2}-01$/)
+    expect(ctx.matrix.toDt).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    ctx.wrapper.unmount()
+  })
+
+  it('clears active filters and sorting on logout', async () => {
+    const ctx = setup()
+    await flushPromises()
+    ctx.matrix.congregationQuery = 'Private'
+    await ctx.wrapper.get('[data-test="grouped"]').trigger('click')
+    useAuthStore().clearAuth()
+    await flushPromises()
+    expect(ctx.matrix.congregationQuery).toBe('')
+    expect(ctx.wrapper.findComponent(MatrixFiltersStub).props('matrixSortMode')).toBe('default')
+    expect(ctx.matrix.districtId).toBe('')
+    expect(sessionStorage.length).toBe(0)
+    ctx.wrapper.unmount()
+  })
+
+  it('restores query, dates and sorting after remounting with a fresh store', async () => {
+    const first = setup()
+    await flushPromises()
+    first.matrix.congregationQuery = 'Gemeinde A'
+    first.matrix.fromDt = '2026-11-01'
+    first.matrix.toDt = '2026-11-30'
+    await first.wrapper.get('[data-test="grouped"]').trigger('click')
+    first.wrapper.unmount()
+
+    const second = setup()
+    await flushPromises()
+    expect(second.matrix.congregationQuery).toBe('Gemeinde A')
+    expect(second.matrix.fromDt).toBe('2026-11-01')
+    expect(second.matrix.toDt).toBe('2026-11-30')
+    expect(second.wrapper.findComponent(MatrixFiltersStub).props('matrixSortMode')).toBe('grouped')
+    expect(second.matrix.fetch).toHaveBeenCalled()
+    second.wrapper.unmount()
+  })
+
+  it('keeps district filters independent and removes unavailable groups', async () => {
+    const ctx = setup()
+    await flushPromises()
+    ctx.matrix.congregationQuery = 'District one'
+    ctx.matrix.groupId = 'deleted-group'
+    ctx.districts.selectedDistrictId = 'd2'
+    await flushPromises()
+    expect(ctx.matrix.congregationQuery).toBe('')
+    ctx.matrix.congregationQuery = 'District two'
+    ctx.districts.selectedDistrictId = 'd1'
+    await flushPromises()
+    expect(ctx.matrix.congregationQuery).toBe('District one')
+    expect(ctx.matrix.groupId).toBe('')
+    ctx.wrapper.unmount()
+  })
+
   it('hydrates persisted view preferences and loads district dependencies on mount', async () => {
     localStorage.setItem('matrix.compactMode', '1')
-    localStorage.setItem('matrix.sortMode', 'grouped')
+    sessionStorage.setItem('planner.view-settings.v1:' + JSON.stringify(['test-user', 'matrix', 'd1']), JSON.stringify({ sort: 'grouped' }))
     const ctx = setup()
     await flushPromises()
 
@@ -130,7 +197,8 @@ describe('MatrixView', () => {
     await ctx.wrapper.get('[data-test="grouped"]').trigger('click')
 
     expect(localStorage.getItem('matrix.compactMode')).toBe('1')
-    expect(localStorage.getItem('matrix.sortMode')).toBe('grouped')
+    expect(JSON.parse(sessionStorage.getItem('planner.view-settings.v1:' + JSON.stringify(['test-user', 'matrix', 'd1']))!).sort).toBe('grouped')
+    expect(localStorage.getItem('matrix.sortMode')).toBeNull()
   })
 
   it('reloads district data when the global selection changes', async () => {

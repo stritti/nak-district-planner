@@ -21,6 +21,30 @@
         <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
       </p>
 
+      <label class="form-label">Amtstragende:r</label>
+      <AutocompleteInput
+        ref="autocompleteRef"
+        :model-value="modal.leaderInput"
+        @update:model-value="updateLeaderSelection"
+        :options="autocompleteOptions"
+        :disabled="modal.saving"
+        placeholder="Name eingeben oder auswählen…"
+        class="mb-3"
+      />
+
+      <ConflictBanner
+        v-if="conflictStore.conflicts.length > 0"
+        :conflicts="conflictStore.conflicts"
+        class="mb-3"
+      />
+      <p
+        v-if="hasBlockingConflicts"
+        id="submit-conflict-description"
+        class="sr-only"
+      >
+        {{ conflictStore.blocking.map((c) => c.message).join(' ') }}
+      </p>
+
       <div class="mb-4 rounded border border-gray-200 dark:border-gray-700 p-3">
         <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Einladung fuer diesen Gottesdienst</p>
         <div class="grid grid-cols-1 gap-2">
@@ -114,29 +138,6 @@
         <p v-if="modal.moveError" class="text-xs text-red-600 dark:text-red-400 mt-2">{{ modal.moveError }}</p>
       </div>
 
-      <label class="form-label">Amtstragende:r</label>
-      <AutocompleteInput
-        ref="autocompleteRef"
-        :model-value="modal.leaderInput"
-        @update:model-value="updateLeaderSelection"
-        :options="autocompleteOptions"
-        :disabled="modal.saving"
-        placeholder="Name eingeben oder auswählen…"
-        class="mb-3"
-      />
-
-      <ConflictBanner
-        v-if="conflictStore.conflicts.length > 0"
-        :conflicts="conflictStore.conflicts"
-        class="mb-3"
-      />
-      <p
-        v-if="hasBlockingConflicts"
-        id="submit-conflict-description"
-        class="sr-only"
-      >
-        {{ conflictStore.blocking.map((c) => c.message).join(' ') }}
-      </p>
       <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modal.error }}</p>
 
       <div class="flex justify-end gap-3 mt-5">

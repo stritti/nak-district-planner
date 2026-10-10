@@ -45,6 +45,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Direct API/ICS navigations must reach the backend, not the app shell (#539).
+        navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/health(?:\?|$)/],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith("/api"),

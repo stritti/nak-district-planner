@@ -313,7 +313,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     })
     await page.goto(`${FRONTEND_URL}/matrix`)
     await page.getByRole('button', { name: /LÜCKE/i }).click()
-    await page.getByRole('combobox').last().fill('Max Beispiel')
+    await page.getByPlaceholder(/Name eingeben/i).fill('Max Beispiel')
     await page.getByRole('option', { name: /Max Beispiel/i }).click()
     await page.getByTestId('submit-assignment').click()
     await expect(page.getByTestId('conflict-banner')).toBeVisible()

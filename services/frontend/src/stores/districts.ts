@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useAuthStore } from './auth'
+import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import {
   listCongregations,
   listDistricts,
@@ -15,6 +17,10 @@ export const useDistrictsStore = defineStore('districts', () => {
   const groups = ref<CongregationGroupResponse[]>([])
   const selectedDistrictId = ref('')
   const loading = ref(false)
+  const auth = useAuthStore()
+  useSessionViewSettings('navigation', () => auth.user?.sub ?? null, () => 'district', {
+    district: sessionField(selectedDistrictId, () => '', sessionText),
+  })
 
   function ensureSelectedDistrict() {
     if (districts.value.length === 0) {
@@ -68,6 +74,4 @@ export const useDistrictsStore = defineStore('districts', () => {
     fetchGroups,
     clearCongregations,
   }
-}, {
-  persist: { pick: ['selectedDistrictId'] },
 })

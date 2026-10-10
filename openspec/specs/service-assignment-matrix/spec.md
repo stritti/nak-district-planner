@@ -71,3 +71,10 @@ When the matrix is wider than its container, its horizontal scrollbar SHALL stay
 - **WHEN** the matrix is wider and taller than the viewport
 - **THEN** the horizontal scrollbar is visible at the bottom of the viewport without scrolling to the end of the table
 
+### Requirement: Compact leader selection
+The leader field of the assignment modal SHALL be the first input of the modal. Its suggestion list SHALL be compact, SHALL stay inside the visible viewport (opening upwards when there is no room below) and SHALL pre-select the best match while the user types, so that Enter or Tab confirms it. Text that equals a known name SHALL count as that choice when the field is left; other text SHALL remain a free-text entry.
+
+#### Scenario: Long leader list on a small screen
+- **WHEN** the district has dozens of leaders and the modal is open on a small screen
+- **THEN** the suggestion list is fully visible, and typing part of a name highlights the first match, which Enter selects
+

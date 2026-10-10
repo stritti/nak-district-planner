@@ -8,6 +8,7 @@ import * as leadersApi from '../api/leaders'
 import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
 import EventListView from './EventListView.vue'
+import { useAuthStore } from '../stores/auth'
 
 const mocks = vi.hoisted(() => ({
   confirm: vi.fn(),
@@ -106,6 +107,7 @@ function setup(items = baseEvents) {
   vi.mocked(eventsApi.listEvents).mockResolvedValue(response(items))
   const pinia = createPinia()
   setActivePinia(pinia)
+  useAuthStore().user = { sub: 'event-test-user' }
   const districtsStore = useDistrictsStore()
   const eventsStore = useEventsStore()
   const wrapper = mount(EventListView, { global: { plugins: [pinia] } })
@@ -114,6 +116,7 @@ function setup(items = baseEvents) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  sessionStorage.clear()
   mocks.confirm.mockResolvedValue(true)
   mocks.exportEvents.mockResolvedValue(undefined)
   vi.mocked(districtsApi.listDistricts).mockResolvedValue([
@@ -132,6 +135,47 @@ beforeEach(() => {
 })
 
 describe('EventListView', () => {
+  it('restores controls and the matching API query after remounting with fresh stores', async () => {
+    const first = setup()
+    await flushPromises()
+    await first.wrapper.get('#event-status-filter').setValue('CANCELLED')
+    await first.wrapper.get('#event-approval-filter').setValue('CONFIRMED')
+    await first.wrapper.get('#event-type-filter').setValue('other')
+    await first.wrapper.get('#event-congregation-filter').setValue('DISTRICT_ONLY')
+    first.wrapper.unmount()
+
+    const second = setup()
+    await flushPromises()
+    expect((second.wrapper.get('#event-status-filter').element as HTMLSelectElement).value).toBe('CANCELLED')
+    expect((second.wrapper.get('#event-approval-filter').element as HTMLSelectElement).value).toBe('CONFIRMED')
+    expect(second.eventsStore.filters).toMatchObject({
+      district_id: 'd1', status: 'CANCELLED', approval_status: 'CONFIRMED',
+      is_service: false, only_district_level: true,
+    })
+    expect(eventsApi.listEvents).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: 'CANCELLED', approval_status: 'CONFIRMED', is_service: false,
+    }))
+    second.wrapper.unmount()
+  })
+
+  it('restores each district and drops unavailable IDs without losing valid filters', async () => {
+    sessionStorage.setItem('planner.view-settings.v1:' + JSON.stringify(['event-test-user', 'events', 'd1']),
+      JSON.stringify({ group: 'deleted', congregation: 'deleted', status: 'ACTIVE' }))
+    const ctx = setup()
+    await flushPromises()
+    expect(ctx.eventsStore.filters.group_id).toBeUndefined()
+    expect(ctx.eventsStore.filters.congregation_id).toBeUndefined()
+    expect(ctx.eventsStore.filters.status).toBe('ACTIVE')
+    ctx.districtsStore.selectedDistrictId = 'd2'
+    await flushPromises()
+    expect(ctx.eventsStore.filters.status).toBeUndefined()
+    await ctx.wrapper.get('#event-status-filter').setValue('CANCELLED')
+    ctx.districtsStore.selectedDistrictId = 'd1'
+    await flushPromises()
+    expect(ctx.eventsStore.filters.status).toBe('ACTIVE')
+    ctx.wrapper.unmount()
+  })
+
   it('shows the responsible person and flags services without a Dienstleiter', async () => {
     const responsible = { assignment_id: 'a1', leader_id: 'l1', name: 'Pr. Muster', status: 'ASSIGNED' as const }
     const { wrapper } = setup([event({ responsible }), event({ id: 'e9', title: 'Ohne' })])
