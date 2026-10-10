@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Static inventory of API routes and their authentication/authorization guards.
 
 Used by the permission-coverage test and the RBAC coverage report

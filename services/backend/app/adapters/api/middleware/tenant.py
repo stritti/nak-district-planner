@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tenant routing context middleware for FastAPI.
 
 Tenant routing information may be derived from request paths, query parameters,
