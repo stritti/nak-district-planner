@@ -44,7 +44,6 @@ def _orm_to_domain(row: PlanningSlotORM) -> PlanningSlot:
         applicability=row.applicability or [],
         generation_key=row.generation_key,
         released_at=row.released_at,
-        deleted_at=row.deleted_at,
         planning_date=row.planning_date,
         planning_time=row.planning_time,
         status=PlanningSlotStatus(row.status),
@@ -59,7 +58,7 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
 
     async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None:
         row = await self._session.get(PlanningSlotORM, slot_id)
-        return _orm_to_domain(row) if row is not None and row.deleted_at is None else None
+        return _orm_to_domain(row) if row else None
 
     async def get_by_series_and_date(
         self, series_id: uuid.UUID, planning_date: date
@@ -107,7 +106,6 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
                 PlanningSlotORM.district_id == district_id,
                 PlanningSlotORM.planning_date >= from_date,
                 PlanningSlotORM.planning_date <= to_date,
-                PlanningSlotORM.deleted_at.is_(None),
             )
             .order_by(PlanningSlotORM.planning_date, PlanningSlotORM.planning_time)
         )
@@ -197,7 +195,6 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row.applicability = slot.applicability
         row.generation_key = slot.generation_key
         row.released_at = slot.released_at or (datetime.now(UTC) if slot.is_confirmed else None)
-        row.deleted_at = slot.deleted_at
         row.planning_date = slot.planning_date
         row.planning_time = slot.planning_time
         row.status = slot.status
@@ -214,11 +211,12 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         if row.released_at is not None or row.approval_status == EventApprovalStatus.CONFIRMED:
             raise ReleasedEventError("Freigegebene Ereignisse dürfen nur abgesagt werden.")
         if row.generation_key is not None:
-            # Preserve the generator key as a tombstone: a nightly generation
-            # must not recreate a draft intentionally deleted by a planner.
-            row.deleted_at = datetime.now(UTC)
-            row.status = PlanningSlotStatus.CANCELLED
-            row.updated_at = row.deleted_at
-        else:
-            await self._session.delete(row)
+            # The key survives in a separate ledger: the draft itself (and its
+            # dependent occurrence/assignments) is physically deleted.
+            self._session.add(DeletedGenerationKeyORM(
+                district_id=row.district_id,
+                generation_key=row.generation_key,
+                deleted_at=datetime.now(UTC),
+            ))
+        await self._session.delete(row)
         await self._session.flush()
