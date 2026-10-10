@@ -55,7 +55,7 @@ export const useDistrictsStore = defineStore('districts', () => {
   }
 
   function setSelectedDistrict(districtId: string) {
-    if (districts.value.length > 0 && !districts.value.some((district) => district.id === districtId)) {
+    if (districtId && districts.value.length > 0 && !districts.value.some((district) => district.id === districtId)) {
       return
     }
     selectedDistrictId.value = districtId
