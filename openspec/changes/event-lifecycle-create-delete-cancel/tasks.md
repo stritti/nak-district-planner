@@ -34,3 +34,11 @@
 - [x] 5.2 Use conflict-safe insertion in PlanningSeriesSlotGenerationService as well as PlanningSeriesGenerator.
 - [x] 5.3 Add regression tests for stale updates, monthly release races and concurrent/manual series generation.
 - [ ] 5.4 Verify changed branch with full CI and active OpenSpec change validation.
+
+## 6. Third Codex review follow-up
+
+- [x] 6.1 Require persisted row on PATCH and bulk update; reject concurrent deletes without recreation.
+- [x] 6.2 Lock and refresh invitation targets before deleting or cancelling.
+- [x] 6.3 Route retention cleanup through relationship-safe repository deletion and test released copies.
+- [x] 6.4 Reset the creation form's congregation after save and across district switches.
+- [ ] 6.5 Verify full CI, coverage and strict active OpenSpec change validation.

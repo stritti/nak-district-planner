@@ -1,11 +1,15 @@
 ## MODIFIED Requirements
 
 ### Requirement: Retention cleanup
-The beat task `cleanup_old_events` SHALL delete only never-released planning slots whose `planning_date` is older than 24 months on the first day of each month and SHALL record one bulk-delete audit entry. Previously released events (including cancelled events) SHALL NOT be permanently removed by retention.
+The beat task `cleanup_old_events` SHALL delete only never-released planning slots whose `planning_date` is older than 24 months on the first day of each month and SHALL record one bulk-delete audit entry. Previously released events (including cancelled events) SHALL NOT be permanently removed by retention. Retention SHALL use the relationship-aware PlanningSlot repository deletion to clear invitation links, delete unreleased target copies, and retain released target copies as cancellations.
 
 #### Scenario: Old unreleased slots removed
 - **WHEN** the cleanup runs
 - **THEN** never-released slots older than the cutoff and their dependent rows are removed and an audit row with reason `retention` exists
+
+#### Scenario: Retention of an invited draft
+- **WHEN** a never-released invitation source passes the retention cutoff
+- **THEN** its invitations and unpublished target copies are removed and any released target copy survives as `CANCELLED`
 
 #### Scenario: Old released slots retained
 - **WHEN** the cleanup runs and older released or cancelled events exist
@@ -29,7 +33,7 @@ The beat task `cleanup_old_events` SHALL delete only never-released planning slo
 ## ADDED Requirements
 
 ### Requirement: Irreversible event publication boundary
-The first release of a slot SHALL be recorded in `released_at` and SHALL never be forgotten. Existing `CONFIRMED` slots SHALL be treated as previously released. A slot which was ever released SHALL NOT be hard-deleted or reverted to `PLANNED`; instead it MAY be marked `CANCELLED` and SHALL retain its stable ID. Repository-level delete and update checks SHALL lock and refresh persisted rows so a concurrent release cannot be removed or downgraded by stale writes. The monthly retention cleanup SHALL preserve all previously released events, including cancellations. Deleting an unreleased source or target event SHALL also remove linked invitations; unreleased invitation target copies SHALL be deleted, while released target copies SHALL survive with `CANCELLED` status. A published cancellation SHALL NOT be reopened to `ACTIVE`.
+The first release of a slot SHALL be recorded in `released_at` and SHALL never be forgotten. Existing `CONFIRMED` slots SHALL be treated as previously released. A slot which was ever released SHALL NOT be hard-deleted or reverted to `PLANNED`; instead it MAY be marked `CANCELLED` and SHALL retain its stable ID. Repository-level delete and update checks SHALL lock and refresh persisted rows so a concurrent release cannot be removed or downgraded by stale writes. The monthly retention cleanup SHALL preserve all previously released events, including cancellations. Deleting an unreleased source or target event SHALL also remove linked invitations; unreleased invitation target copies SHALL be deleted, while released target copies SHALL survive with `CANCELLED` status. A published cancellation SHALL NOT be reopened to `ACTIVE`. Editing or bulk-updating a draft that has been concurrently deleted SHALL return HTTP 409 and SHALL NOT re-create the removed event ID. Removal of a linked invitation SHALL lock the target state before choosing between deleting an unreleased copy and cancelling a released copy.
 
 #### Scenario: Draft deleted
 - **WHEN** a planner deletes an event that has never been confirmed
@@ -42,6 +46,14 @@ The first release of a slot SHALL be recorded in `released_at` and SHALL never b
 #### Scenario: Attempt to withdraw publication
 - **WHEN** a single or bulk approval request attempts to return a released event to `PLANNED`
 - **THEN** it returns 409 without applying the downgrade
+
+#### Scenario: Concurrent deletion during event update
+- **WHEN** a PATCH or monthly bulk approval update loaded a draft that another transaction subsequently deleted
+- **THEN** the update returns HTTP 409, never recreates the event, and publishes no partially applied monthly result
+
+#### Scenario: Concurrent release during invitation removal
+- **WHEN** an invitation target becomes released while the invitation removal starts
+- **THEN** the locked latest target is cancelled rather than deleted and the invitation is removed without HTTP 500
 
 #### Scenario: Invitation source deletion
 - **WHEN** a planner deletes an unreleased invitation source event

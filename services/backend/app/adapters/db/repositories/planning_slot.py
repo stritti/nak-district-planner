@@ -225,14 +225,14 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row.created_at = slot.created_at
         row.updated_at = slot.updated_at
 
-    async def delete(self, slot_id: uuid.UUID) -> None:
+    async def delete(self, slot_id: uuid.UUID) -> bool:
         # Lock before checking publication: a concurrent release must not race a deletion.
         row = (await self._session.execute(
             select(PlanningSlotORM).where(PlanningSlotORM.id == slot_id).with_for_update()
             .execution_options(populate_existing=True)
         )).scalar_one_or_none()
         if row is None:
-            return
+            return False
         if row.released_at is not None or row.approval_status == EventApprovalStatus.CONFIRMED:
             raise ReleasedEventError("Freigegebene Ereignisse dürfen nur abgesagt werden.")
         suppression_key = row.generation_key
@@ -250,6 +250,7 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         await self._remove_invitation_links(slot_id)
         await self._session.delete(row)
         await self._session.flush()
+        return True
 
     async def _remove_invitation_links(self, slot_id: uuid.UUID) -> None:
         """Remove invitation links and retire their target copies before draft deletion.

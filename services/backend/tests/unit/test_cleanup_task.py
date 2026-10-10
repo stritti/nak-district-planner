@@ -6,8 +6,11 @@ The async DB session is patched so no real database access is performed.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.application.tasks import cleanup_old_events
 
@@ -20,7 +23,7 @@ def _make_session_cm(deleted: int = 0) -> tuple[MagicMock, MagicMock]:
     The session's execute() returns a result with the given rowcount.
     """
     result = MagicMock()
-    result.rowcount = deleted
+    result.scalars.return_value.all.return_value = [uuid.uuid4() for _ in range(deleted)]
 
     session = MagicMock()
     session.execute = AsyncMock(return_value=result)
@@ -45,10 +48,11 @@ class TestCleanupOldEvents:
         """
         cm, session = _make_session_cm(deleted)
 
-        with patch(
-            "app.adapters.db.session.AsyncSessionLocal",
-            return_value=cm,
+        with (
+            patch("app.adapters.db.session.AsyncSessionLocal", return_value=cm),
+            patch("app.adapters.db.repositories.planning_slot.SqlPlanningSlotRepository") as repo_cls,
         ):
+            repo_cls.return_value.delete = AsyncMock(return_value=True)
             result = cleanup_old_events()
 
         return result, session
@@ -76,7 +80,7 @@ class TestCleanupOldEvents:
 
     def test_calls_execute_with_delete_statement(self):
         _, session = self._run_task(deleted=3)
-        # The first statement is the SQLAlchemy Delete, the second its audit entry
+        # The first statement selects candidates; deletion uses the repository.
         call_arg = session.execute.call_args_list[0][0][0]
         assert "planning_slot" in str(call_arg).lower() or "planningdate" in str(call_arg)
         assert "<" in str(call_arg) or "where" in str(call_arg).lower()
@@ -105,7 +109,9 @@ class TestCleanupOldEvents:
                 return_value=cm,
             ),
             patch("app.application.tasks.datetime", _FakeDatetime),
+            patch("app.adapters.db.repositories.planning_slot.SqlPlanningSlotRepository") as repo_cls,
         ):
+            repo_cls.return_value.delete = AsyncMock(return_value=True)
             result = cleanup_old_events()
 
         cutoff = datetime.fromisoformat(result["cutoff"])
@@ -129,3 +135,44 @@ class TestCleanupOldEvents:
     def test_no_audit_entry_when_nothing_was_deleted(self):
         _, session = self._run_task(deleted=0)
         session.execute.assert_called_once()
+
+
+class TestAggregateRetentionCleanup:
+    @pytest.mark.asyncio
+    async def test_each_candidate_uses_relationship_safe_repository_delete(self):
+        from datetime import date
+        from app.application.tasks import _delete_expired_drafts
+
+        ids = [uuid.uuid4(), uuid.uuid4()]
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = ids
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=result)
+        with patch(
+            "app.adapters.db.repositories.planning_slot.SqlPlanningSlotRepository"
+        ) as repo_cls:
+            repo_cls.return_value.delete = AsyncMock(return_value=True)
+            count = await _delete_expired_drafts(session, date(2024, 1, 1))
+            assert count == 2
+            assert [call.args[0] for call in repo_cls.return_value.delete.await_args_list] == ids
+        assert session.execute.await_args.args[0].is_select
+
+    @pytest.mark.asyncio
+    async def test_skips_candidate_released_or_deleted_during_cleanup(self):
+        from datetime import date
+        from app.application.tasks import _delete_expired_drafts
+        from app.domain.models.planning_slot import ReleasedEventError
+
+        ids = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = ids
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=result)
+        with patch(
+            "app.adapters.db.repositories.planning_slot.SqlPlanningSlotRepository"
+        ) as repo_cls:
+            repo_cls.return_value.delete = AsyncMock(side_effect=[
+                True, ReleasedEventError("confirmed"), False,
+            ])
+            assert await _delete_expired_drafts(session, date(2024, 1, 1)) == 1
+            assert repo_cls.return_value.delete.await_count == 3

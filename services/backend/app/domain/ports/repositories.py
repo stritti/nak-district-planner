@@ -181,8 +181,8 @@ class PlanningSlotRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, slot_id: uuid.UUID) -> None:
-        """Delete a PlanningSlot by its ID."""
+    async def delete(self, slot_id: uuid.UUID) -> bool:
+        """Delete a draft with invitation cleanup; False if already absent."""
         pass
 
 

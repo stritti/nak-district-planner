@@ -21,7 +21,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.session import _set_tenant_gucs
-from app.application.tasks import _run_as_system_worker, _unreleased_retention_statement
+from app.application.tasks import (
+    _delete_expired_drafts,
+    _run_as_system_worker,
+    _unreleased_retention_statement,
+)
 from app.domain.models.event_instance import EventSource, EventVisibility, SyncState
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlotStatus
 
@@ -159,6 +163,106 @@ async def test_retention_delete_cascades_instances_and_keeps_cutoff_boundary(ses
                 await db.execute(
                     delete(PlanningSlotORM).where(PlanningSlotORM.district_id == district_id)
                 )
+                await db.execute(text("DELETE FROM districts WHERE id = :id"), {"id": district_id})
+                await db.commit()
+
+    await _run_as_system_worker(scenario())
+
+
+async def test_retention_removes_draft_invitation_relationships_and_cancels_released_copy(sessions):
+    """Retention uses aggregate deletion, preserving published invitation copies."""
+    from app.adapters.db.orm_models.congregation import CongregationORM
+    from app.adapters.db.orm_models.invitation import CongregationInvitationORM
+    from app.domain.models.invitation import InvitationTargetType
+
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    source_id = uuid.uuid4()
+    draft_target_id = uuid.uuid4()
+    released_target_id = uuid.uuid4()
+    invitation_ids = [uuid.uuid4(), uuid.uuid4()]
+    now = datetime.now(UTC)
+    old_date = date(2023, 10, 1)
+    cutoff = date(2024, 1, 1)
+
+    async def scenario():
+        try:
+            async with sessions() as db:
+                await db.execute(
+                    text(
+                        "INSERT INTO districts (id, name, created_at, updated_at) "
+                        "VALUES (:id, :name, :created_at, :updated_at)"
+                    ),
+                    {
+                        "id": district_id, "name": "Invitation Retention",
+                        "created_at": now, "updated_at": now,
+                    },
+                )
+                db.add(CongregationORM(
+                    id=congregation_id, name="Retention Gemeinde",
+                    district_id=district_id, created_at=now, updated_at=now,
+                ))
+                await db.flush()
+                for slot_id, approved in (
+                    (source_id, False), (draft_target_id, False), (released_target_id, True),
+                ):
+                    db.add(PlanningSlotORM(
+                        id=slot_id, district_id=district_id,
+                        congregation_id=None, planning_date=old_date if slot_id == source_id
+                        else cutoff + timedelta(days=1),
+                        planning_time=time(10),
+                        category="Gottesdienst", applicability=[],
+                        approval_status=EventApprovalStatus.CONFIRMED if approved else None,
+                        released_at=now if approved else None,
+                        status=PlanningSlotStatus.ACTIVE,
+                        invitation_source_event_id=source_id if slot_id != source_id else None,
+                        invitation_source_congregation_id=congregation_id
+                        if slot_id != source_id else None,
+                        created_at=now, updated_at=now,
+                    ))
+                await db.flush()
+                for invitation_id, target_id in zip(
+                    invitation_ids, [draft_target_id, released_target_id], strict=True
+                ):
+                    db.add(CongregationInvitationORM(
+                        id=invitation_id, source_event_id=source_id,
+                        source_planning_slot_id=source_id,
+                        source_congregation_id=congregation_id,
+                        target_type=InvitationTargetType.DISTRICT_CONGREGATION,
+                        target_congregation_id=congregation_id,
+                        linked_event_id=target_id, created_at=now, updated_at=now,
+                    ))
+                await db.commit()
+
+            async with sessions() as db:
+                assert await _delete_expired_drafts(db, cutoff) == 1
+                await db.commit()
+
+            async with sessions() as db:
+                slots = {
+                    slot.id: slot for slot in (
+                        await db.execute(select(PlanningSlotORM).where(
+                            PlanningSlotORM.district_id == district_id
+                        ))
+                    ).scalars().all()
+                }
+                invitations = (await db.execute(
+                    select(CongregationInvitationORM).where(
+                        CongregationInvitationORM.id.in_(invitation_ids)
+                    )
+                )).scalars().all()
+                assert source_id not in slots
+                assert draft_target_id not in slots
+                assert released_target_id in slots
+                assert slots[released_target_id].status == PlanningSlotStatus.CANCELLED
+                assert slots[released_target_id].approval_status == EventApprovalStatus.CONFIRMED
+                assert slots[released_target_id].invitation_source_event_id is None
+                assert invitations == []
+        finally:
+            async with sessions() as db:
+                await db.execute(delete(PlanningSlotORM).where(
+                    PlanningSlotORM.district_id == district_id
+                ))
                 await db.execute(text("DELETE FROM districts WHERE id = :id"), {"id": district_id})
                 await db.commit()
 

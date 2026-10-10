@@ -220,14 +220,14 @@ def sync_all_active_integrations() -> dict:
     return {"dispatched": len(ids)}
 
 
-def _unreleased_retention_statement(cutoff_date: date):
-    """Only never-published slots may be pruned by the retention job."""
-    from sqlalchemy import delete, or_
+def _unreleased_retention_conditions(cutoff_date: date):
+    """Shared conditions for identifying drafts eligible for retention."""
+    from sqlalchemy import or_
 
     from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
     from app.domain.models.planning_slot import EventApprovalStatus
 
-    return delete(PlanningSlotORM).where(
+    return (
         PlanningSlotORM.planning_date < cutoff_date,
         PlanningSlotORM.released_at.is_(None),
         or_(
@@ -235,6 +235,43 @@ def _unreleased_retention_statement(cutoff_date: date):
             PlanningSlotORM.approval_status != EventApprovalStatus.CONFIRMED,
         ),
     )
+
+
+def _unreleased_retention_statement(cutoff_date: date):
+    """Retain the set-based predicate for integration and policy checks."""
+    from sqlalchemy import delete
+
+    from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+
+    return delete(PlanningSlotORM).where(*_unreleased_retention_conditions(cutoff_date))
+
+
+async def _delete_expired_drafts(session, cutoff_date: date) -> int:
+    """Delete eligible slots via aggregate cleanup, not a raw bulk DELETE.
+
+    Linked invitations and target copies are reconciled by the repository;
+    a concurrent publication is skipped without failing the monthly job.
+    """
+    from sqlalchemy import select
+
+    from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+    from app.domain.models.planning_slot import ReleasedEventError
+
+    rows = await session.execute(
+        select(PlanningSlotORM.id)
+        .where(*_unreleased_retention_conditions(cutoff_date))
+        .order_by(PlanningSlotORM.id)
+    )
+    repo = SqlPlanningSlotRepository(session)
+    deleted = 0
+    for slot_id in rows.scalars().all():
+        try:
+            deleted += int(await repo.delete(slot_id))
+        except ReleasedEventError:
+            # A candidate can be confirmed after the initial select.
+            continue
+    return deleted
 
 
 @celery.task(name="cleanup_old_events")
@@ -265,9 +302,7 @@ def cleanup_old_events() -> dict:
             from app.adapters.db.domain_audit import bulk_delete_audit_row
             from app.adapters.db.orm_models.audit_log import AuditLogORM
 
-            stmt = _unreleased_retention_statement(cutoff_date)
-            result = await session.execute(stmt)
-            deleted = result.rowcount  # type: ignore[attr-defined]
+            deleted = await _delete_expired_drafts(session, cutoff_date)
             if deleted:
                 await session.execute(
                     insert(AuditLogORM.__table__),
