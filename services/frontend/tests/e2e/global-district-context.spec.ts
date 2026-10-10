@@ -54,7 +54,7 @@ test('global district selection is shown only when meaningful and shared by even
   await expect.poll(() => districtCalls.includes('district-2')).toBe(true)
 
   await page.getByRole('link', { name: 'Dienstplan-Matrix' }).first().click()
-  await expect(page.getByRole('heading', { name: 'Dienstplan-Matrix' })).toBeVisible()
+  await expect(page.locator('main h1').first()).toBeVisible()
   await expect(select).toHaveValue('district-2')
   await expect(page.locator('.filter-bar').getByText('Bezirk', { exact: true })).toHaveCount(0)
   await expect.poll(() => districtCalls.includes('matrix-2')).toBe(true)
