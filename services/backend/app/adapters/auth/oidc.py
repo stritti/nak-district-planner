@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """OIDCAdapter — Provider-agnostic OIDC/OAuth2 integration.
 
 Handles OIDC discovery, JWKS fetching/caching, and JWT validation.

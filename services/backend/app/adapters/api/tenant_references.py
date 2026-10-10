@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Check that IDs taken from a request body belong to the addressed district.
 
 Path parameters are resolved and authorized by the routers; IDs inside request
