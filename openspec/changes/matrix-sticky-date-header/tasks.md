@@ -14,4 +14,4 @@
 - [x] Size proxy scrollbar from matrix client width and cover the last date column
 - [x] Restore vertical scroll chaining and cover boundary wheel events
 - [x] Add unit/browser regression tests and update OpenSpec baseline, delta and design
-- [ ] Verify final CI and coverage on review fix commits
+- [x] Verify frontend E2E, unit tests, coverage and all CI workflows on the corrected PR head
