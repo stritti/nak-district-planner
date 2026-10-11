@@ -800,7 +800,11 @@ async def test_moved_series_slot_keeps_occurrence_key_in_api_generator() -> None
         recurrence_pattern={"frequency": "weekly", "by_weekday": [6]},
     )
     await series_repo.save(series)
-    period = dict(series_id=series.id, from_date=date(2026, 1, 4), to_date=date(2026, 1, 4))
+    period = {
+        "series_id": series.id,
+        "from_date": date(2026, 1, 4),
+        "to_date": date(2026, 1, 4),
+    }
     first = await service.generate_slots_for_series(**period)
     assert first["generated"] == 1
     original = slot_repo.slots[0]
