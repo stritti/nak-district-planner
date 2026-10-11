@@ -105,7 +105,7 @@ Das System SHALL für einen angefragten Kalendermonat eine nach Datum und Uhrzei
 
 ### Requirement: Explizite, idempotente Übernahme in die Event-Planung
 
-Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter Bestätigung als PlanningSlot und EventInstance anlegen. Der Slot SHALL ACTIVE mit approval_status PLANNED sein und zunächst keine ServiceAssignment besitzen. applicability leer sein. Die EventInstance SHALL source=INTERNAL und visibility=PUBLIC erhalten. Wiederholte oder parallele Aufrufe SHALL keine doppelten Termine anlegen.
+Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter Bestätigung als PlanningSlot und EventInstance anlegen. Der Slot SHALL ACTIVE mit approval_status PLANNED sein und zunächst keine ServiceAssignment besitzen. Bei Bezirksterminen SHALL der neue Slot die zum Übernahmezeitpunkt validierte template.applicability vollständig und kanonisch übernehmen; bei Gemeindeterminen SHALL slot.applicability leer sein. Die EventInstance SHALL source=INTERNAL und visibility=PUBLIC erhalten. Wiederholte oder parallele Aufrufe SHALL keine doppelten Termine anlegen.
 
 #### Scenario: Additional constraints for Explizite, idempotente Übernahme in die Event-Planung
 - **GIVEN** this requirement is applicable
