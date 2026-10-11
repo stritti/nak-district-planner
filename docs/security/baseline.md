@@ -138,7 +138,7 @@ Das Ruleset arbeitet strict und ohne Bypass. Die aktuellen Branch-Schutz- und Ap
 
 ## 11. Sicherheits-Nacharbeiten nach v1.0.0
 
-Die RC-2-Freigabeprüfung ist historisch abgeschlossen. Neue Releases folgen [Release-Prozess](/release-process), Pflicht-CI und [Roadmap](/roadmap). Opaque-Token-, JWKS-, PII- und Export-Token-Härtungen sind in [#471](https://github.com/stritti/nak-district-planner/issues/471) nachverfolgbar; Betriebs-Härtung in [#472](https://github.com/stritti/nak-district-planner/issues/472).
+Die RC-2-Freigabeprüfung ist historisch abgeschlossen. Neue Releases folgen [Release-Prozess](/operations/release-process), Pflicht-CI und [Roadmap](/roadmap). Opaque-Token-, JWKS-, PII- und Export-Token-Härtungen sind in [#471](https://github.com/stritti/nak-district-planner/issues/471) nachverfolgbar; Betriebs-Härtung in [#472](https://github.com/stritti/nak-district-planner/issues/472).
 
 ## 12. Referenzen
 

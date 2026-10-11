@@ -1,6 +1,6 @@
 # Production Runbook
 
-Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deployments des NAK District Planner. Maßgeblich sind die tatsächlich ausgerollte Image-Version, der [Produktiv-Stack](/production-compose) und das [stabile Release v1.0.0](https://github.com/stritti/nak-district-planner/releases/tag/v1.0.0).
+Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deployments des NAK District Planner. Maßgeblich sind die tatsächlich ausgerollte Image-Version, der [Produktiv-Stack](/operations/production-compose) und das [stabile Release v1.0.0](https://github.com/stritti/nak-district-planner/releases/tag/v1.0.0).
 
 ## 1. Voraussetzungen
 
