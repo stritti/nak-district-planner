@@ -79,6 +79,17 @@ celery.conf.update(
 setup_telemetry(sqlalchemy_engine=engine)
 
 
+async def assert_legacy_broker_drained(db_engine) -> None:
+    """Fail closed if the deprecated SQL transport still holds messages."""
+    async with db_engine.connect() as conn:
+        exists = await conn.scalar(text("SELECT to_regclass('public.kombu_message') IS NOT NULL"))
+        if exists and await conn.scalar(text("SELECT COUNT(*) FROM public.kombu_message")):
+            raise SchemaVersionError(
+                "Legacy SQL Celery broker has queued messages: drain the previous "
+                "worker before switching to Valkey (see production runbook)."
+            )
+
+
 @signals.worker_init.connect
 @signals.beat_init.connect
 def assert_schema_current_on_startup(**_kwargs) -> None:
@@ -99,22 +110,7 @@ def assert_schema_current_on_startup(**_kwargs) -> None:
         check_engine = create_async_engine(settings.database_url, poolclass=NullPool)
         try:
             await assert_database_schema_current(check_engine)
-            # Reject broker cutover while SQL Kombu tasks remain pending.
-            # Older installations retain these tables via Alembic.
-            async with check_engine.connect() as conn:
-                has_table = await conn.scalar(
-                    text("SELECT to_regclass('public.kombu_message') IS NOT NULL")
-                )
-                if has_table:
-                    pending = await conn.scalar(
-                        text("SELECT COUNT(*) FROM public.kombu_message")
-                    )
-                    if pending:
-                        raise SchemaVersionError(
-                            "Legacy SQL Celery broker contains queued messages. "
-                            "Drain the old worker before switching to Valkey "
-                            "(see production runbook)."
-                        )
+            await assert_legacy_broker_drained(check_engine)
         finally:
             await check_engine.dispose()
 
