@@ -1112,3 +1112,15 @@ class TestUnsupportedProviders:
         with pytest.raises(UnsupportedCalendarTypeError, match="ICS"):
             await run_sync(_INT_ID, mocks["session"])
         mocks["connector"].fetch_events.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sync_skips_busy_advisory_lock_without_provider_calls(mocks):
+    """Concurrent sync must free its worker rather than wait for HTTP-bound lock."""
+    mocks["session"].scalar.return_value = False
+
+    result = await run_sync(_INT_ID, mocks["session"])
+
+    assert result == SyncResult(skipped=1)
+    mocks["integration_repo"].get.assert_not_awaited()
+    mocks["connector"].fetch_events.assert_not_awaited()
