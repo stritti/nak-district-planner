@@ -26,12 +26,12 @@ Internet ──80/443──> traefik ──┬─ Host(APP_HOST)  ──> fronte
 
 Sicherheitsregeln, die die Tests in `tests/unit/test_production_compose.py` absichern:
 
-- Nur Traefik veröffentlicht Ports (80/443). Kein Container bekommt den Docker-Socket: Die Routen stehen statisch in `deploy/traefik/dynamic/` (`app.yml`, `keycloak.yml`), siehe `docs/security-baseline.md`.
+- Nur Traefik veröffentlicht Ports (80/443). Kein Container bekommt den Docker-Socket: Die Routen stehen statisch in `deploy/traefik/dynamic/` (`app.yml`, `keycloak.yml`), siehe `docs/security/baseline.md`.
 - Jedes Secret erreicht nur den Container, der es braucht:
   - `.env.db` (PostgreSQL-Owner): nur `db` und `migrate`
   - `.env.keycloak`: nur `keycloak`
   - `.env.keycloak-db`: nur `keycloak-db`
-- Die Laufzeitdienste starten erst nach dem einmaligen Migrationsschritt (siehe `docs/deployment-migrations.md`).
+- Die Laufzeitdienste starten erst nach dem einmaligen Migrationsschritt (siehe `docs/operations/deployment-migrations.md`).
 - Die Images werden über `APP_VERSION` auf ein Release festgelegt, nie `latest` oder `main`.
 - Für alle Container gilt `no-new-privileges`, die Logs werden rotiert (5 × 10 MB).
 - HSTS setzt Traefik. CSP und die übrigen Header setzt das Frontend-nginx.
@@ -76,7 +76,7 @@ Mit `COMPOSE_FILE` benutzen auch `docker compose ...`, `make migrate` und `scrip
 
 `ACME_EMAIL` ist optional; Let's Encrypt stellt auch ohne Kontaktadresse aus. `KEYCLOAK_ADMIN_ALLOWED_IPS` ist ebenfalls optional: Ohne Wert gilt `127.0.0.1/32`, die Adminkonsole ist dann von außen gesperrt.
 
-Danach die Anwendungswerte setzen, wie in der Checkliste in `docs/production-runbook.md`, Abschnitt 1.1:
+Danach die Anwendungswerte setzen, wie in der Checkliste in `docs/operations/production-runbook.md`, Abschnitt 1.1:
 
 - `APP_ENV=production`
 - `SECRET_KEY` (mindestens 32 Zeichen)

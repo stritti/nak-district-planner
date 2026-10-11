@@ -30,7 +30,7 @@ Dieses Dokument definiert verbindliche Entwicklungsstandards fuer den NAK Distri
 - Frontend-Komponententests fuer zentrale Interaktionen.
 - E2E-Tests fuer kritische Auth- und Planungsfluesse.
 
-Siehe auch `docs/coverage-strategy.md`.
+Siehe auch `docs/development/coverage-strategy.md`.
 
 ## 5. Lizenzierung und Attribution
 
