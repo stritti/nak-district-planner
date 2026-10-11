@@ -17,19 +17,6 @@ from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
 
 
-def _make_sync_db_url(async_url: str) -> str:
-    """Convert an asyncpg database URL to a psycopg2 sync URL for Celery."""
-    prefix = "postgresql+asyncpg://"
-    if not async_url.startswith(prefix):
-        raise ValueError(
-            f"DATABASE_URL must start with '{prefix}' for Celery broker derivation "
-            f"(got scheme: {async_url.split('://')[0]!r})"
-        )
-    return "postgresql+psycopg2://" + async_url[len(prefix) :]
-
-
-_sync_db_url = _make_sync_db_url(settings.database_url)
-
 celery = Celery(
     "nak_planner",
     broker=settings.valkey_url.replace("valkey://", "redis://", 1),
