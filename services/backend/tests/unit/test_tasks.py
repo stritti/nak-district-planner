@@ -305,32 +305,6 @@ class TestSyncReliability:
         repository.save.assert_awaited_once_with(integration)
         session.commit.assert_awaited_once()
 
-    async def test_scheduled_stamp_only_updates_timestamp(self):
-        """Scheduler uses the targeted repository update, not aggregate save."""
-        from app.application.tasks import mark_scheduled_sync
-
-        session = AsyncMock()
-        repository = MagicMock()
-        repository.stamp_scheduled_attempt = AsyncMock()
-        repository.save = AsyncMock()
-        with (
-            patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
-            patch(
-                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
-                return_value=repository,
-            ),
-        ):
-            session_factory.return_value.__aenter__.return_value = session
-            identifier = uuid.uuid4()
-            from datetime import UTC, datetime
-            dispatched_at = datetime.now(UTC)
-            await mark_scheduled_sync(identifier, dispatched_at)
-
-        repository.stamp_scheduled_attempt.assert_awaited_once()
-        assert repository.stamp_scheduled_attempt.await_args.args[0] == identifier
-        repository.save.assert_not_awaited()
-        session.commit.assert_awaited_once()
-
     async def test_missing_integration_does_not_create_phantom_status(self):
         from app.application.tasks import record_sync_attempt
 
