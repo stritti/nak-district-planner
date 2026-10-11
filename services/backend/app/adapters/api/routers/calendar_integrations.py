@@ -40,7 +40,7 @@ from app.application.services.calendar_integration_commands import (
 )
 from app.application.services.calendar_integration_service import CalendarIntegrationService
 from app.application.sync_service import run_sync
-from app.application.tasks import record_sync_attempt
+from app.adapters.worker.tasks import record_sync_attempt
 from app.domain.errors import UnsupportedCalendarTypeError
 from app.domain.models.calendar_integration import (
     SUPPORTED_CALENDAR_TYPES,

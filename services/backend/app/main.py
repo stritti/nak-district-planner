@@ -46,7 +46,7 @@ from app.adapters.db.session import AsyncSessionLocal, engine
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
-from app.application.event_mail_hook_tasks import register_event_mail_hooks
+from app.adapters.worker.event_mail_hook_tasks import register_event_mail_hooks
 from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry

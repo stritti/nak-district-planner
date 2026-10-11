@@ -22,7 +22,7 @@ def scan_slot_gaps() -> dict[str, int]:
     from app.adapters.db.session import AsyncSessionLocal
     from app.adapters.db.transactional_events import publish_after_commit
     from app.application.slot_gap_scan import SlotGapScanner
-    from app.application.tasks import _run_as_system_worker
+    from app.adapters.worker.tasks import _run_as_system_worker
     from app.config import settings
 
     async def _run() -> dict[str, int]:
