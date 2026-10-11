@@ -2,13 +2,13 @@
 
 > **Generated:** 2026-06-19  
 > **Status:** ⚠️ HISTORISCH (archiviert 2026-10-07, #475) — Der aktuelle Ist-Stand steht in den
-> Baseline-Specs unter `openspec/specs/`; siehe auch `docs/architecture-status.md`
+> Baseline-Specs unter `openspec/specs/`; siehe auch `docs/architecture/status.md`
 > **Scope:** All active OpenSpec changes vs. current implementation  
 >
 > **Hinweis:** Dieses Dokument ist in wesentlichen Punkten veraltet. Aussagen zu "0 RBAC-Checks in
 > auth.py/system.py", "kein Rate-Limiting", "kein Audit-Logging" und "kein Toast-System"
 > sind überholt — diese Komponenten existieren inzwischen. Für den aktuellen Stand siehe
-> `docs/architecture-status.md`, `docs/improvement-proposals.md` und `docs/rbac-coverage.md`.
+> `docs/architecture/status.md`, `docs/archive/improvement-proposals.md` und `docs/rbac-coverage.md`.
 
 ---
 
