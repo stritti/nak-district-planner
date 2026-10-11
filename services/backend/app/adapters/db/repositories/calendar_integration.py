@@ -33,6 +33,7 @@ def _orm_to_domain(row: CalendarIntegrationORM) -> CalendarIntegration:
         is_active=row.is_active,
         last_synced_at=row.last_synced_at,
         last_sync_error=row.last_sync_error,
+        last_attempt_at=row.last_attempt_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
         default_category=row.default_category,
@@ -55,6 +56,7 @@ def _domain_to_orm(
     row.is_active = integration.is_active
     row.last_synced_at = integration.last_synced_at
     row.last_sync_error = integration.last_sync_error
+    row.last_attempt_at = integration.last_attempt_at
     row.created_at = integration.created_at
     row.updated_at = integration.updated_at
     row.default_category = integration.default_category
