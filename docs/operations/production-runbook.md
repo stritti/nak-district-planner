@@ -271,7 +271,7 @@ Vor RC-2 pruefen:
 ## Calendar sync diagnostics (#470)
 
 Celery uses VALKEY_URL as its Redis-protocol broker and result backend. The
-worker has a 240-second soft limit, 300-second hard limit, late task ACKs and
+calendar sync task has a 240-second soft limit, 300-second hard limit, late task ACKs and
 prefetch multiplier 1. Valkey availability is required for dispatch and results.
 
 For a calendar integration, `last_attempt_at` denotes the latest scheduled or
