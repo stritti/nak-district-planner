@@ -14,10 +14,8 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from app.adapters.calendar.microsoft_connector import (
-    MicrosoftGraphCalendarConnector,
-    _content_hash,
-)
+from app.adapters.calendar.microsoft_connector import MicrosoftGraphCalendarConnector
+from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 from app.domain.ports.calendar import CalendarConnectorError
 
 CREDS = {"access_token": "test_token"}

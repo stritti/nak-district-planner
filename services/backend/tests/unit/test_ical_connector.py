@@ -15,8 +15,8 @@ import httpx
 import pytest
 
 from app.adapters.calendar.ical_connector import ICalConnector
-from app.adapters.calendar.ical_events import content_hash as _content_hash
 from app.adapters.calendar.ical_events import to_utc as _to_utc
+from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 from app.domain.ports.calendar import CalendarConnectorError
 
 # ── ICS helpers ───────────────────────────────────────────────────────────────

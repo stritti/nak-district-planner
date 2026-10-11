@@ -9,7 +9,6 @@ matched only when governance-safe; otherwise they become review candidates.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import uuid
 from collections import Counter
@@ -44,7 +43,8 @@ from app.domain.models.calendar_integration import (
 from app.domain.models.event_instance import EventInstance, EventSource, SyncState
 from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
-from app.domain.models.raw_calendar_event import RawCalendarEvent, is_occurrence_key
+from app.domain.models.raw_calendar_event import RawCalendarEvent
+from app.domain.services.external_event_fingerprint import compute_content_hash, is_occurrence_key
 from app.domain.ports.calendar import (
     CalendarConnector,
     CalendarConnectorError,
@@ -102,12 +102,15 @@ def _get_connector(calendar_type: CalendarType) -> CalendarConnector:
 
 
 def _compute_content_hash(raw_event: RawCalendarEvent) -> str:
-    """Compute deterministic SHA-256 hash for external event change detection."""
-    raw_str = (
-        f"{raw_event.uid}|{raw_event.start_at}|{raw_event.end_at}"
-        f"|{raw_event.title}|{raw_event.description}|{raw_event.is_cancelled}"
+    """Delegate to the single canonical synchronization fingerprint."""
+    return compute_content_hash(
+        raw_event.uid,
+        raw_event.start_at,
+        raw_event.end_at,
+        raw_event.title,
+        raw_event.description,
+        raw_event.is_cancelled,
     )
-    return hashlib.sha256(raw_str.encode()).hexdigest()
 
 
 def _sync_window(now: datetime) -> tuple[datetime, datetime]:
@@ -572,7 +575,6 @@ async def push_deviation_resolution(instance: EventInstance, session: AsyncSessi
             start_at=instance.actual_start_at,
             end_at=instance.actual_end_at,
             description=instance.description,
-            content_hash="",
             is_cancelled=False,
             revision_marker=link.revision_marker,
             resource_id=link.provider_resource_id,
@@ -627,7 +629,6 @@ async def push_conflict_resolution(instance: EventInstance, session: AsyncSessio
             start_at=instance.actual_start_at,
             end_at=instance.actual_end_at,
             description=instance.description,
-            content_hash="",
             is_cancelled=False,
             revision_marker=None,
             resource_id=link.provider_resource_id,
