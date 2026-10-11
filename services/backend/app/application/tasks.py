@@ -123,18 +123,6 @@ async def record_sync_attempt(integration_id: uuid.UUID, error: str | None = Non
         await session.commit()
 
 
-async def mark_scheduled_sync(integration_id: uuid.UUID, dispatched_at: datetime) -> None:
-    """Update only the attempt timestamp once the broker accepted the task."""
-    from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
-    from app.adapters.db.session import AsyncSessionLocal
-
-    async with AsyncSessionLocal() as session:
-        await SqlCalendarIntegrationRepository(session).stamp_scheduled_attempt(
-            integration_id, dispatched_at
-        )
-        await session.commit()
-
-
 class SyncIntegrationTask(celery.Task):
     """Celery hooks that log each failed attempt and alert once retries are exhausted."""
 
