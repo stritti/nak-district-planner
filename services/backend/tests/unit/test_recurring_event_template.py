@@ -13,6 +13,7 @@ import pytest
 
 from app.domain.models.recurring_event_template import (
     AmbiguousLocalTimeError,
+    ChecklistStatus,
     DecisionStatus,
     NonexistentLocalTimeError,
     RecurrenceKind,
@@ -21,6 +22,7 @@ from app.domain.models.recurring_event_template import (
     RecurringEventTemplate,
     expand_month,
     local_start_utc,
+    project_checklist_status,
     utc_interval,
 )
 
@@ -263,3 +265,69 @@ def test_decisions_keep_occurrence_identity_when_slot_is_later_moved() -> None:
     assert replace(accepted, planning_slot_id=None).occurrence_key == (identifier, selected)
     with pytest.raises(ValueError):
         replace(accepted, status=DecisionStatus.SKIPPED)
+
+def test_checklist_projection_never_automatically_accepts_a_proposal() -> None:
+    entry = template(rule(RecurrenceKind.WEEKLY, weekdays=(2,)))
+    date_of_occurrence = date(2026, 10, 27)
+    assert project_checklist_status(entry, date_of_occurrence) is ChecklistStatus.OPEN
+    assert (
+        project_checklist_status(entry, date_of_occurrence, has_conflict=True)
+        is ChecklistStatus.CONFLICT
+    )
+
+
+@pytest.mark.parametrize(
+    ("decision_status", "slot", "slot_exists", "expected"),
+    [
+        (DecisionStatus.SKIPPED, None, False, ChecklistStatus.SKIPPED),
+        (DecisionStatus.ACCEPTED, uuid.uuid4(), True, ChecklistStatus.ACCEPTED),
+        (DecisionStatus.ACCEPTED, uuid.uuid4(), False, ChecklistStatus.NEEDS_REVIEW),
+        (DecisionStatus.ACCEPTED, None, True, ChecklistStatus.NEEDS_REVIEW),
+    ],
+)
+def test_checklist_decisions_keep_historical_acceptance(
+    decision_status, slot, slot_exists, expected
+) -> None:
+    entry = template(rule(RecurrenceKind.MONTHLY_DAY, day_of_month=27))
+    selected = date(2026, 10, 27)
+    decision = RecurringEventDecision(
+        id=uuid.uuid4(),
+        district_id=entry.district_id,
+        template_id=entry.id,
+        occurrence_local_date=selected,
+        status=decision_status,
+        created_by="oidc|author",
+        planning_slot_id=slot,
+    )
+    assert (
+        project_checklist_status(
+            entry,
+            selected,
+            decision=decision,
+            has_conflict=True,
+            linked_slot_exists=slot_exists,
+        )
+        is expected
+    )
+
+
+def test_checklist_rejects_decisions_from_other_tenants_dates_or_templates() -> None:
+    entry = template(rule(RecurrenceKind.WEEKLY, weekdays=(2,)))
+    selected = date(2026, 10, 27)
+    decision = RecurringEventDecision(
+        id=uuid.uuid4(),
+        district_id=entry.district_id,
+        template_id=entry.id,
+        occurrence_local_date=selected,
+        status=DecisionStatus.SKIPPED,
+        created_by="oidc|author",
+    )
+    for foreign in (
+        replace(decision, district_id=uuid.uuid4()),
+        replace(decision, template_id=uuid.uuid4()),
+        replace(decision, occurrence_local_date=date(2026, 10, 20)),
+    ):
+        with pytest.raises(ValueError, match="does not belong"):
+            project_checklist_status(entry, selected, decision=foreign)
+    with pytest.raises(ValueError, match="Unknown decision status"):
+        replace(decision, status="HIDDEN")
