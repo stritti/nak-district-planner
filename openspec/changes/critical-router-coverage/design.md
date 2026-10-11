@@ -8,4 +8,4 @@ Die bestehende CI-Backend-Unit-Suite erzeugt `coverage.xml`. Direkt nach dem glo
 
 ## Kompatibilität
 
-Keine Änderung an Produktionscode, Datenbank oder API; das Gate ist additiv. Die bestehenden Integrations- und E2E-Gates laufen unverändert.
+Die Tests deckten einen nicht zeitzonenbewussten `updated_at`-Wert beim Patchen einer Planungsserie auf. Der Router verwendet jetzt wie das Domain-Modell UTC-bewusste Zeitstempel. Die API-Signatur und Datenbankstruktur bleiben unverändert. Das Coverage-Gate ist additiv; bestehende Integrations- und E2E-Gates bleiben bestehen.
