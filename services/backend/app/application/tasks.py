@@ -171,6 +171,9 @@ class SyncIntegrationTask(celery.Task):
     retry_backoff=SYNC_RETRY_BACKOFF_SECONDS,
     retry_backoff_max=SYNC_RETRY_BACKOFF_MAX_SECONDS,
     retry_jitter=True,
+    soft_time_limit=240,
+    time_limit=300,
+    acks_late=True,
 )
 def sync_calendar_integration(self, integration_id: str) -> dict:
     """Sync a single CalendarIntegration by ID.
@@ -249,21 +252,18 @@ def sync_all_active_integrations() -> dict:
     async def _run() -> list[str]:
         async with AsyncSessionLocal() as session:
             repo = SqlCalendarIntegrationRepository(session)
-            now = datetime.now(UTC)
-            integrations = await repo.list_active()
-            ids = _due_integration_ids(integrations, now)
-            for integration in integrations:
-                if str(integration.id) in ids:
-                    integration.last_attempt_at = now
-                    await repo.save(integration)
-            await session.commit()
-            return ids
+            return _due_integration_ids(await repo.list_active(), datetime.now(UTC))
 
     ids = asyncio.run(_run_as_system_worker(_run()))
+    dispatched = 0
     for integration_id in ids:
         sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
-    logger.info("Dispatched sync for %d integration(s)", len(ids))
-    return {"dispatched": len(ids)}
+        # Only successful broker publishes count as attempted. A failed publish
+        # must leave the integration due for the next Beat cycle.
+        asyncio.run(_run_as_system_worker(record_sync_attempt(uuid.UUID(integration_id))))
+        dispatched += 1
+    logger.info("Dispatched sync for %d integration(s)", dispatched)
+    return {"dispatched": dispatched}
 
 
 def _unreleased_retention_conditions(cutoff_date: date):
