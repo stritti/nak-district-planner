@@ -19,7 +19,7 @@ from app.adapters.idp.base import IdpProvisioningError
 from app.adapters.idp.keycloak_provisioner import KeycloakProvisioningAdapter
 from app.adapters.idp.webhook_provisioner import HttpIdpProvisioningAdapter
 from app.application.init import seed_canonical_roles
-from app.celery_app import _make_sync_db_url
+from app.celery_app import celery
 from app.config import Settings
 from app.domain.models.invitation import (
     CongregationInvitation,
@@ -358,10 +358,13 @@ def test_congregation_invitation_create_validation() -> None:
         )
 
 
-def test_make_sync_db_url_valid() -> None:
-    """_make_sync_db_url converts async URL to sync URL."""
-    result = _make_sync_db_url("postgresql+asyncpg://user:pass@localhost:5432/db")
-    assert result == "postgresql+psycopg2://user:pass@localhost:5432/db"
+def test_celery_uses_valkey_redis_transport() -> None:
+    """Celery must use Redis-compatible Valkey, never the experimental SQL broker."""
+    assert celery.conf.broker_url.startswith("redis://")
+    assert celery.conf.result_backend.startswith("redis://")
+    assert celery.conf.task_acks_late is True
+    assert celery.conf.task_soft_time_limit == 240
+    assert celery.conf.task_time_limit == 300
 
 
 def test_settings_production_oidc_discovery_url_must_be_http() -> None:
@@ -406,11 +409,6 @@ def test_settings_app_version_package_not_found() -> None:
         s = Settings(app_env="development", oidc_scopes="openid profile")
         assert s.app_version == "0.0.0"
 
-
-def test_make_sync_db_url_invalid() -> None:
-    """_make_sync_db_url raises ValueError for non-asyncpg URLs."""
-    with pytest.raises(ValueError, match="DATABASE_URL must start with"):
-        _make_sync_db_url("sqlite:///db.sqlite3")
 
 
 def test_congregation_invitation_external_note_validation() -> None:
