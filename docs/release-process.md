@@ -186,7 +186,9 @@ Werden nach `v1.0.0-rc.1` releaserelevante Stabilisierungskorrekturen gemergt, e
 
 ### Promotion auf `v1.0.0`
 
-Die finale Promotion ist ein eigener überprüfbarer Change:
+**Abgeschlossen am 10. Oktober 2026:** Die Promotion erfolgte über [PR #563](https://github.com/stritti/nak-district-planner/pull/563) mit `Release-As: 1.0.0` und den grünen [Release-PR #564](https://github.com/stritti/nak-district-planner/pull/564). Der [stabile Release](https://github.com/stritti/nak-district-planner/releases/tag/v1.0.0) und die [GHCR-Images](https://github.com/stritti/nak-district-planner/actions/runs/38087662984) wurden veröffentlicht.
+
+Der dokumentierte Ablauf der finalen Promotion war:
 
 1. Prerelease-Versionierung in `release-please-config.json` deaktivieren und auf die normale Versionierung zurückstellen.
 2. Den vollständigen v1-Gate-Lauf auf diesem finalen Stand durchführen.
@@ -203,6 +205,16 @@ Laufzeit- und CI-Toolchain müssen identisch sein. Ein Dependabot-Update eines B
 | Python | `services/backend/Dockerfile` (`python:3.14.7-slim`) | `PYTHON_VERSION` in `ci.yml` und `alembic-check.yml`, `python-version` in `security.yml`, `requires-python` und ruff `target-version` in `services/backend/pyproject.toml`, `uv.lock` |
 | bun | `services/frontend/Dockerfile` (`oven/bun:1.4.2-alpine`) | `BUN_VERSION` in `ci.yml`, `docs.yml` und `security.yml`; Lockfiles bestehen `bun install --frozen-lockfile` |
 | uv | `version` von `astral-sh/setup-uv` in `ci.yml` | `alembic-check.yml`, `security.yml` |
+
+---
+
+## Post-1.0: Abhängigkeiten der Dokumentation
+
+Die VitePress-Dokumentation wird aus dem Root-`package.json` und Root-`bun.lock` gebaut. Ein Wechsel von VitePress 1.x auf einen neuen Major ist **kein** Bestandteil der Release-Promotion. Er erfolgt in einem gesonderten Dependency-PR erst, nachdem sowohl `@stritti/vitepress-plugin-openspec` als auch `vitepress-plugin-mermaid-diagram` kompatibel sind, `bun audit --audit-level=moderate` sauber ist, die Mermaid-SVG-Prüfung besteht und der Pages-Build grünes Licht gibt. Zur Vermeidung eines ungeprüften Toolchain-Wechsels bleibt bis dahin die per Lockfile fixierte 1.x-Version gültig. Dependabot prüft die Root-Dependencies wöchentlich.
+
+Für Bun 1.4.2 verwenden sowohl das Root-Lockfile als auch `services/frontend/bun.lock` `lockfileVersion: 1` und `configVersion: 1`; CI erzwingt an beiden Orten `bun install --frozen-lockfile`. Ein Lockfile-Formatwechsel darf keine impliziten Dependency-Upgrades auslösen.
+
+Die OpenSpec-Dokumentationsprüfung validiert die **Baseline und alle aktiven Changes** mit `openspec validate --all --strict --no-interactive`. Ungültige aktive Spezifikationen müssen vor dem Merge korrigiert oder vollständig archiviert werden.
 
 ---
 

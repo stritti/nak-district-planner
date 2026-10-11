@@ -28,11 +28,11 @@ Security scans SHALL run CodeQL, `pip-audit` on the exported lock and `bun audit
 - **THEN** the security workflow fails
 
 ### Requirement: Documentation and OpenSpec gate
-The `docs` workflow SHALL run on every pull request to `main`, strictly validate the OpenSpec baseline specs with a pinned OpenSpec CLI, and build the VitePress site from the root lockfile.
+The `docs` workflow SHALL run on every pull request to `main`, strictly validate the OpenSpec baseline specs **and all active change proposals** (`validate --all --strict --no-interactive`) with a pinned OpenSpec CLI, and build the VitePress site from the root lockfile.
 
 #### Scenario: Invalid spec delta
-- **WHEN** a pull request adds a baseline requirement without a scenario
-- **THEN** the `Build documentation` check fails
+- **WHEN** a pull request adds an invalid baseline requirement or active change specification (e.g., a requirement without a scenario)
+- **THEN** the `Build documentation` check fails; the gate MUST NOT silently ignore active changes
 
 ### Requirement: Caches are accelerators only
 Dependency and Playwright caches SHALL NOT change which lockfile versions are installed or which gates run; a cache miss SHALL fall back to normal installation.
