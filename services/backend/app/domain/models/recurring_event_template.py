@@ -30,6 +30,14 @@ class DecisionStatus(StrEnum):
     SKIPPED = "SKIPPED"
 
 
+class ChecklistStatus(StrEnum):
+    OPEN = "OPEN"
+    ACCEPTED = "ACCEPTED"
+    SKIPPED = "SKIPPED"
+    CONFLICT = "CONFLICT"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+
+
 class NonexistentLocalTimeError(ValueError):
     """A wall-clock time falls inside a daylight-saving clock jump."""
 
@@ -154,6 +162,8 @@ class RecurringEventDecision:
 
     def __post_init__(self) -> None:
         """Enforce skipped-decision consistency while allowing deleted slots."""
+        if not isinstance(self.status, DecisionStatus):
+            raise ValueError("Unknown decision status")
         if self.status is DecisionStatus.SKIPPED and self.planning_slot_id is not None:
             raise ValueError("Skipped occurrences must not reference a planning slot")
 
@@ -161,6 +171,35 @@ class RecurringEventDecision:
     def occurrence_key(self) -> tuple[uuid.UUID, date]:
         """Stable identity even when the accepted planning slot is moved."""
         return self.template_id, self.occurrence_local_date
+
+
+
+def project_checklist_status(
+    template: RecurringEventTemplate,
+    occurrence_date: date,
+    *,
+    decision: RecurringEventDecision | None = None,
+    has_conflict: bool = False,
+    linked_slot_exists: bool = False,
+) -> ChecklistStatus:
+    """Project current state without mutating the template or planning slots.
+
+    ACCEPTED decisions whose slot was removed require explicit resolution;
+    never silently re-open or recreate a deleted accepted occurrence.
+    """
+    if decision is None:
+        return ChecklistStatus.CONFLICT if has_conflict else ChecklistStatus.OPEN
+    if (
+        decision.district_id != template.district_id
+        or decision.template_id != template.id
+        or decision.occurrence_local_date != occurrence_date
+    ):
+        raise ValueError("Decision does not belong to this template occurrence")
+    if decision.status is DecisionStatus.SKIPPED:
+        return ChecklistStatus.SKIPPED
+    if decision.planning_slot_id is not None and linked_slot_exists:
+        return ChecklistStatus.ACCEPTED
+    return ChecklistStatus.NEEDS_REVIEW
 
 
 def expand_month(template: RecurringEventTemplate, year: int, month: int) -> list[date]:
