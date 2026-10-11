@@ -30,15 +30,15 @@ def rule(kind: RecurrenceKind, anchor: date = date(2026, 9, 1), **options) -> Re
 
 
 def template(recurrence: RecurrenceRule, **overrides) -> RecurringEventTemplate:
-    params = dict(
-        id=uuid.uuid4(),
-        district_id=uuid.uuid4(),
-        title="Chorprobe",
-        category="Musik",
-        start_time=time(19, 30),
-        duration_minutes=90,
-        recurrence=recurrence,
-    )
+    params = {
+        "id": uuid.uuid4(),
+        "district_id": uuid.uuid4(),
+        "title": "Chorprobe",
+        "category": "Musik",
+        "start_time": time(19, 30),
+        "duration_minutes": 90,
+        "recurrence": recurrence,
+    }
     params.update(overrides)
     return RecurringEventTemplate(**params)
 
