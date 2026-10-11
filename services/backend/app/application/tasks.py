@@ -223,7 +223,7 @@ def _due_integration_ids(integrations, now: datetime) -> list[str]:
             continue
         # Allow time for the complete retry chain before Beat dispatches again.
         # A retry refreshes last_attempt_at so concurrent chains are suppressed.
-        last_attempt = integration.last_attempt_at
+        last_attempt = getattr(integration, "last_attempt_at", None)
         last_success = integration.last_synced_at
         if last_attempt and (last_success is None or last_attempt > last_success):
             if (now - last_attempt).total_seconds() < max(integration.sync_interval * 60, 1800):
@@ -249,7 +249,15 @@ def sync_all_active_integrations() -> dict:
     async def _run() -> list[str]:
         async with AsyncSessionLocal() as session:
             repo = SqlCalendarIntegrationRepository(session)
-            return _due_integration_ids(await repo.list_active(), datetime.now(UTC))
+            now = datetime.now(UTC)
+            integrations = await repo.list_active()
+            ids = _due_integration_ids(integrations, now)
+            for integration in integrations:
+                if str(integration.id) in ids:
+                    integration.last_attempt_at = now
+                    await repo.save(integration)
+            await session.commit()
+            return ids
 
     ids = asyncio.run(_run_as_system_worker(_run()))
     for integration_id in ids:
