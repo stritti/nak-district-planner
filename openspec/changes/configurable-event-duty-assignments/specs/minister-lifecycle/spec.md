@@ -16,7 +16,12 @@ The system SHALL support an active status and a separate reversible hidden-from-
 - **THEN** the administrative list can show the minister again, without implicitly changing the active status
 
 ### Requirement: Inclusive end date limits future service eligibility
-A minister SHALL support an optional local-calendar `service_end_date`. Assignment eligibility SHALL be checked against the target planning slot's local date across all individual, matrix and bulk assignment entry points. A minister SHALL be eligible on the end date if active and visible, but SHALL NOT be eligible on any later date. The server SHALL apply the same eligibility check to all assignment entry points, including free-text leader names that match a known ineligible leader of the district. Such input MUST NOT silently bypass retirement checks; a distinct guest with the same name requires an explicit guest-only assignment flow that does not claim the retired person's ID. An absent end date SHALL impose no date limit.
+A minister SHALL support an optional local-calendar `service_end_date`. Assignment eligibility SHALL be checked against the target planning slot's local date across all individual, matrix and bulk assignment entry points. A minister SHALL be eligible on the end date if active and visible, but SHALL NOT be eligible on any later date. An absent end date SHALL impose no date limit.
+
+#### Scenario: Additional constraints for Inclusive end date limits future service eligibility
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** The server SHALL apply the same eligibility check to all assignment entry points, including free-text leader names that match a known ineligible leader of the district. Such input MUST NOT silently bypass retirement checks; a distinct guest with the same name requires an explicit guest-only assignment flow that does not claim the retired person's ID.
 
 #### Scenario: Last day of service
 - **WHEN** an active, visible minister has an end date of 2026-12-31 and a slot is dated 2026-12-31
