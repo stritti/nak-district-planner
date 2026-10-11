@@ -89,8 +89,41 @@ class TestSyncAllActiveIntegrationsTask:
 
         assert result is not None
         assert result["dispatched"] == len(fake_ids)
-        mock_asyncio_run.assert_called_once()
+        assert mock_asyncio_run.call_count == len(fake_ids) + 1
         assert mock_task.delay.call_count == len(fake_ids)
+
+
+    def test_failed_broker_publish_does_not_mark_undispatched_integrations(self):
+        """A failed publish must not mark this or later IDs as attempted."""
+        from app.application.tasks import sync_all_active_integrations
+
+        fake_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+        with (
+            patch("app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock) as run,
+            patch("app.application.tasks.sync_calendar_integration") as task,
+            pytest.raises(ConnectionError, match="broker unavailable"),
+        ):
+            run.return_value = fake_ids
+            task.delay.side_effect = ConnectionError("broker unavailable")
+            sync_all_active_integrations()
+        run.assert_called_once()
+        task.delay.assert_called_once_with(fake_ids[0])
+
+    def test_mark_only_after_successful_publish(self):
+        """The timestamp write follows the broker acknowledgement."""
+        from app.application.tasks import sync_all_active_integrations
+
+        integration_id = str(uuid.uuid4())
+        with (
+            patch("app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock) as run,
+            patch("app.application.tasks.sync_calendar_integration") as task,
+        ):
+            run.return_value = [integration_id]
+            task.delay.return_value = MagicMock()
+            result = sync_all_active_integrations()
+        assert result["dispatched"] == 1
+        assert run.call_count == 2
+        task.delay.assert_called_once_with(integration_id)
 
 
 class TestImportFeiertageTask:
