@@ -11,6 +11,7 @@ from datetime import date, datetime, time, timedelta
 import pytest
 
 from app.application.matrix_service import MatrixService
+from app.config import settings
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 
@@ -91,6 +92,28 @@ class TestMatrixService:
 
         assert start_diff == -30  # -30 minutes
         assert end_diff == -30  # -30 minutes
+
+    def test_uses_configured_expected_duration(self, matrix_service, monkeypatch):
+        """Use configured duration, while retaining explicit call-site overrides."""
+        monkeypatch.setattr(settings, "sync_expected_duration_minutes", 60)
+        slot = PlanningSlot.create(
+            district_id=uuid.uuid4(),
+            planning_date=date(2026, 6, 22),
+            planning_time=time(9, 30),
+        )
+        instance = EventInstance.create(
+            planning_slot_id=slot.id,
+            title="Gottesdienst",
+            actual_start_at=datetime(2026, 6, 22, 9, 30),
+            actual_end_at=datetime(2026, 6, 22, 10, 30),
+            source=EventSource.INTERNAL,
+            visibility=EventVisibility.INTERNAL,
+        )
+
+        assert matrix_service.calculate_deviation_minutes(slot, instance) == (None, None)
+        assert matrix_service.has_deviation(slot, instance) is False
+        assert matrix_service.calculate_deviation_minutes(slot, instance, 90) == (0, -30)
+        assert matrix_service.has_deviation(slot, instance, 90) is True
 
     def test_has_deviation_true(self, matrix_service):
         """Test has_deviation returns True when there's a deviation."""

@@ -50,6 +50,12 @@ describe('router', () => {
     expect(resolved.matched).toHaveLength(1)
   })
 
+  it('resolves unknown URLs to the public 404 page', () => {
+    const route = router.resolve('/does-not-exist')
+    expect(route.name).toBe('not-found')
+    expect(route.matched).toHaveLength(1)
+  })
+
   it('reuses one standalone Pinia instance for router guards', () => {
     expect(getRouterPinia()).toBe(getRouterPinia())
   })

@@ -36,7 +36,6 @@ from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.application.crypto import CryptoError, encrypt_credentials
 from app.application.services.calendar_integration_service import CalendarIntegrationService
 from app.application.sync_service import run_sync
-from app.application.tasks import record_sync_attempt
 from app.domain.errors import UnsupportedCalendarTypeError
 from app.domain.models.calendar_integration import (
     SUPPORTED_CALENDAR_TYPES,
@@ -73,7 +72,6 @@ def _to_response(integration: CalendarIntegration) -> CalendarIntegrationRespons
         is_active=integration.is_active,
         last_synced_at=integration.last_synced_at,
         last_sync_error=integration.last_sync_error,
-        last_attempt_at=integration.last_attempt_at,
         created_at=integration.created_at,
         updated_at=integration.updated_at,
         default_category=integration.default_category,
@@ -176,22 +174,12 @@ async def trigger_sync(
     # Check if user has DISTRICT_ADMIN role in the district (sync requires admin access)
     require_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
 
-    await record_sync_attempt(integration_id)
     try:
         summary = await run_sync(integration_id, db)
-    except Exception as exc:
-        # The sync session contains uncommitted event changes. Roll it back
-        # before persisting the error using a separate, independent session.
-        await db.rollback()
-        if not isinstance(exc, UnsupportedCalendarTypeError):
-            await record_sync_attempt(
-                integration_id, f"Synchronisierung fehlgeschlagen ({type(exc).__name__})"
-            )
-        if isinstance(exc, UnsupportedCalendarTypeError):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-        if isinstance(exc, (ValueError, CryptoError, CalendarConnectorError)):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-        raise
+    except UnsupportedCalendarTypeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (ValueError, CryptoError, CalendarConnectorError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return SyncResult(
         integration_id=integration_id,
         created=summary.created,

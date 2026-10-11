@@ -22,7 +22,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../stores/auth', () => ({ useAuthStore: () => mocks.authStore }))
 vi.mock('../composables/useOIDC', () => ({ useOIDC: () => mocks.oidc }))
 vi.mock('../composables/useCSRF', () => ({
-  useCSRF: () => ({ getCSRFHeaders: () => ({ 'X-CSRF-Token': 'csrf' }) }),
+  getCurrentCSRFHeaders: () => ({ 'X-CSRF-Token': 'csrf' }),
+  useCSRF: () => { throw new Error('apiFetch must not call a lifecycle composable') },
 }))
 vi.mock('../router', () => ({ router: { push: mocks.routerPush } }))
 
@@ -117,12 +118,15 @@ describe('apiFetch coverage gaps', () => {
     expect(mocks.routerPush).toHaveBeenCalledWith('/login')
   })
 
-  it('reloads on CSRF validation failures', async () => {
-    const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => undefined)
+  it('preserves form state when CSRF validation fails and reports the HTTP error', async () => {
     vi.mocked(fetch).mockResolvedValue(response('CSRF validation failed', 403))
 
-    await expect(apiFetch('/api/v1/test')).rejects.toThrow('CSRF validation failed')
-    expect(reload).toHaveBeenCalledTimes(1)
+    const error = await apiFetch('/api/v1/test').catch((value: unknown) => value)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).status).toBe(403)
+    expect((error as ApiError).body).toBe('CSRF validation failed')
+    expect(mocks.routerPush).not.toHaveBeenCalled()
   })
 
   it('keeps plain text error bodies when JSON parsing fails', async () => {

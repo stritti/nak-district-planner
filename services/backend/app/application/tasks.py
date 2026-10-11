@@ -100,26 +100,6 @@ async def _alert_sync_failure(integration_id: str, exc: BaseException, attempts:
             await session.commit()
 
 
-
-
-async def record_sync_attempt(integration_id: uuid.UUID, error: str | None = None) -> None:
-    """Commit attempt metadata in its own transaction after failed sync rollback.
-
-    Callers must not pass provider-controlled messages: exception class names and
-    curated constant strings are safe; URLs, HTTP response bodies and tokens are not.
-    """
-    from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
-    from app.adapters.db.session import AsyncSessionLocal
-
-    at = datetime.now(UTC)
-    async with AsyncSessionLocal() as session:
-        repo = SqlCalendarIntegrationRepository(session)
-        # Targeted UPDATE: a concurrent success must not be overwritten by a
-        # stale aggregate snapshot (same reasoning as stamp_scheduled_attempt).
-        await repo.record_attempt(integration_id, at, error)
-        await session.commit()
-
-
 class SyncIntegrationTask(celery.Task):
     """Celery hooks that log each failed attempt and alert once retries are exhausted."""
 
@@ -168,10 +148,6 @@ class SyncIntegrationTask(celery.Task):
     retry_backoff=SYNC_RETRY_BACKOFF_SECONDS,
     retry_backoff_max=SYNC_RETRY_BACKOFF_MAX_SECONDS,
     retry_jitter=True,
-    soft_time_limit=240,
-    time_limit=300,
-    acks_late=True,
-    reject_on_worker_lost=True,
 )
 def sync_calendar_integration(self, integration_id: str) -> dict:
     """Sync a single CalendarIntegration by ID.
@@ -185,25 +161,17 @@ def sync_calendar_integration(self, integration_id: str) -> dict:
     from app.application.sync_service import run_sync
 
     async def _run() -> dict:
-        sync_id = uuid.UUID(integration_id)
-        await record_sync_attempt(sync_id)
-        try:
-            async with AsyncSessionLocal() as session:
-                result = await run_sync(sync_id, session)
-                await session.commit()
-        except Exception as exc:
-            await record_sync_attempt(
-                sync_id, f"Synchronisierung fehlgeschlagen ({type(exc).__name__})"
-            )
-            raise
-        return {
-            "created": result.created,
-            "updated": result.updated,
-            "cancelled": result.cancelled,
-            "auto_matched": result.auto_matched,
-            "skipped": result.skipped,
-            "failed": result.failed,
-        }
+        async with AsyncSessionLocal() as session:
+            result = await run_sync(uuid.UUID(integration_id), session)
+            await session.commit()
+            return {
+                "created": result.created,
+                "updated": result.updated,
+                "cancelled": result.cancelled,
+                "auto_matched": result.auto_matched,
+                "skipped": result.skipped,
+                "failed": result.failed,
+            }
 
     summary = asyncio.run(_run_as_system_worker(_run()))
     logger.info("Sync %s completed: %s", integration_id, summary)
@@ -222,15 +190,11 @@ def _due_integration_ids(integrations, now: datetime) -> list[str]:
                 integration.id,
             )
             continue
-        # Allow time for the complete retry chain before Beat dispatches again.
-        # A retry refreshes last_attempt_at so concurrent chains are suppressed.
-        last_attempt = getattr(integration, "last_attempt_at", None)
-        last_success = integration.last_synced_at
-        if last_attempt and (last_success is None or last_attempt > last_success):
-            if (now - last_attempt).total_seconds() < max(integration.sync_interval * 60, 1800):
-                continue
-        last_run = max((value for value in (last_success, last_attempt) if value), default=None)
-        if last_run is None or (now - last_run).total_seconds() >= integration.sync_interval * 60:
+        if integration.last_synced_at is None:
+            ids.append(str(integration.id))
+            continue
+        elapsed = (now - integration.last_synced_at).total_seconds() / 60
+        if elapsed >= integration.sync_interval:
             ids.append(str(integration.id))
     return ids
 
@@ -252,38 +216,12 @@ def sync_all_active_integrations() -> dict:
             repo = SqlCalendarIntegrationRepository(session)
             return _due_integration_ids(await repo.list_active(), datetime.now(UTC))
 
-    async def _publish_and_stamp(ids: list[str]) -> int:
-        # One event loop and one database session for all accepted publishes.
-        # Each stamp is committed independently, preserving progress on failure.
-        from app.adapters.db.repositories.calendar_integration import (
-            SqlCalendarIntegrationRepository,
-        )
+    ids = asyncio.run(_run_as_system_worker(_run()))
+    for integration_id in ids:
+        sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
+    logger.info("Dispatched sync for %d integration(s)", len(ids))
+    return {"dispatched": len(ids)}
 
-        async with AsyncSessionLocal() as session:
-            repo = SqlCalendarIntegrationRepository(session)
-            dispatched = 0
-            for integration_id in ids:
-                dispatched_at = datetime.now(UTC)
-                try:
-                    sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
-                except Exception:
-                    # One flaky publish must not block the remaining due
-                    # integrations; the skipped one stays due for the next tick.
-                    logger.exception("Calendar sync dispatch failed for %s", integration_id)
-                    await session.rollback()
-                    continue
-                await repo.stamp_scheduled_attempt(uuid.UUID(integration_id), dispatched_at)
-                await session.commit()
-                dispatched += 1
-            return dispatched
-
-    async def _dispatch() -> int:
-        ids = await _run()
-        return await _publish_and_stamp(ids)
-
-    dispatched = asyncio.run(_run_as_system_worker(_dispatch()))
-    logger.info("Dispatched sync for %d integration(s)", dispatched)
-    return {"dispatched": dispatched}
 
 def _unreleased_retention_conditions(cutoff_date: date):
     """Shared conditions for identifying drafts eligible for retention."""

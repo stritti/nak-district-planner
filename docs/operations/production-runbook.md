@@ -266,38 +266,3 @@ Vor RC-2 pruefen:
 4. CodeQL und Dependency Audits ohne blockierende Findings;
 5. OpenSpec-Changes fuer den Releaseumfang verifiziert und erledigte Changes archiviert;
 6. Architektur- und Security-Dokumentation entspricht dem ausgelieferten Code.
-
-
-## Calendar sync diagnostics (#470)
-
-Celery uses VALKEY_URL as its Redis-protocol broker and result backend. The
-calendar sync task has a 240-second soft limit, 300-second hard limit, late task ACKs and
-prefetch multiplier 1. Valkey availability is required for dispatch and results.
-
-For a calendar integration, `last_attempt_at` denotes the latest scheduled or
-started attempt, `last_synced_at` the most recent successful run, and
-`last_sync_error` a sanitized failure class. Failed event changes roll back,
-while the error is committed separately. Success clears the error.
-
-Beat avoids scheduling a second retry chain for at least 30 minutes after a
-failed attempt. Running integrations are protected by a transaction-scoped
-`pg_try_advisory_xact_lock`; a busy lock causes an immediate logged skip.
-Manual triggers still use the lock but bypass Beat's cooldown. Check logs for
-`Calendar sync skipped` and `Calendar sync failed` when investigating errors.
-
-
-## Upgrade: SQL-Celery-Broker auf Valkey umstellen (#470)
-
-Der bisherige PostgreSQL-Kombu-Broker kann noch nicht verarbeitete Nachrichten in
-`public.kombu_message` enthalten. Die neue Celery-Version liest ausschließlich
-Valkey. **Vor dem Upgrade** müssen deshalb alte Aufträge abgearbeitet werden.
-
-1. Vor dem Umschalten den **alten Beat-Prozess anhalten**, damit keine neuen SQL-Aufträge entstehen. Die alten SQL-basierten Worker zunächst weiterlaufen lassen.
-2. Mit einer Datenbankverbindung mit Leserecht auf `kombu_message` prüfen:
-   `SELECT COUNT(*) FROM public.kombu_message;` Die Zahl muss **0** sein.
-   Auch unsichtbare/reservierte Einträge zählen: Sie dürfen bei einer Umstellung nicht verloren gehen.
-3. Wenn Nachrichten verbleiben, die alten Worker weiterarbeiten lassen und laufende Aufgaben abschließen. Zustellung, Fehler und Wiederholungsversuche anhand der alten Worker-Logs abgleichen. Bei festhängenden Aufgaben die Arbeit anhand des bestehenden fachlichen Status sicher wiederherstellen; SQL-Nachrichten nicht blind löschen oder ungeprüft in Valkey importieren, insbesondere nicht für E-Mails.
-4. **Erst bei leerer Tabelle** alte Worker stoppen, das Datenbank-Backup anfertigen, Migrationen ausführen und die neuen Valkey-Worker und Beat starten.
-5. Kontrollieren, dass keine Nachricht verloren ging (insbesondere E-Mail-Aufträge und synchronisierte Kalender). Bei nicht leerem Legacy-Broker verweigern neue Worker und Beat den Start mit einem eindeutigen Fehler.
-
-Die Tabellen bleiben vorerst zur forensischen Prüfung bestehen; ein Downgrade darf keine wartenden Aufträge still löschen.

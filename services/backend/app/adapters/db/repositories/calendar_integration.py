@@ -6,9 +6,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
@@ -34,7 +33,6 @@ def _orm_to_domain(row: CalendarIntegrationORM) -> CalendarIntegration:
         is_active=row.is_active,
         last_synced_at=row.last_synced_at,
         last_sync_error=row.last_sync_error,
-        last_attempt_at=row.last_attempt_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
         default_category=row.default_category,
@@ -57,7 +55,6 @@ def _domain_to_orm(
     row.is_active = integration.is_active
     row.last_synced_at = integration.last_synced_at
     row.last_sync_error = integration.last_sync_error
-    row.last_attempt_at = integration.last_attempt_at
     row.created_at = integration.created_at
     row.updated_at = integration.updated_at
     row.default_category = integration.default_category
@@ -98,45 +95,6 @@ class SqlCalendarIntegrationRepository(CalendarIntegrationRepository):
             .order_by(CalendarIntegrationORM.id)
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
-
-    async def stamp_scheduled_attempt(self, integration_id: uuid.UUID, at: datetime) -> None:
-        """Write only the scheduler timestamp, preserving concurrent edits."""
-        await self._session.execute(
-            update(CalendarIntegrationORM)
-            .where(CalendarIntegrationORM.id == integration_id)
-            .values(last_attempt_at=at)
-        )
-
-    async def record_attempt(
-        self, integration_id: uuid.UUID, at: datetime, error: str | None = None
-    ) -> bool:
-        """Persist attempt metadata without touching other aggregate columns.
-
-        The attempt timestamp is monotonic: an out-of-order (stale) attempt
-        never rewinds it. A failed attempt records the sanitized error class;
-        a successful or retried attempt clears it only if no newer error was
-        stored.
-        """
-        error = error[:500] if error else None
-        result = await self._session.execute(
-            update(CalendarIntegrationORM)
-            .where(CalendarIntegrationORM.id == integration_id)
-            .values(
-                last_attempt_at=func.greatest(
-                    CalendarIntegrationORM.last_attempt_at, at
-                ),
-                last_sync_error=case(
-                    (error is not None, error),
-                    (
-                        CalendarIntegrationORM.last_attempt_at.is_(None)
-                        | (CalendarIntegrationORM.last_attempt_at <= at),
-                        None,
-                    ),
-                    else_=CalendarIntegrationORM.last_sync_error,
-                ),
-            )
-        )
-        return bool(result.rowcount)
 
     async def save(self, integration: CalendarIntegration) -> None:
         existing = await self._session.get(CalendarIntegrationORM, integration.id)
