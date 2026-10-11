@@ -7,6 +7,12 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
+  --animate-progress: progress 1s linear forwards;
+  @keyframes progress {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+
   /* NAK Bezirksplaner brand colour (blue-indigo) */
   --color-brand-50: oklch(0.97 0.02 263);
   --color-brand-100: oklch(0.93 0.05 263);
