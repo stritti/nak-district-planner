@@ -2,7 +2,17 @@
 
 ### Requirement: Monthly approval workflow
 
-`POST /api/v1/events/bulk-approval-status` SHALL change the approval status only for eligible slots of the requested district and month. A district-scoped `PLANNER` (or higher role) SHALL retain the existing district-wide approval permission; a request without `congregation_id` SHALL require this district-level permission. When a specific `congregation_id` is supplied, a `CONGREGATION_ADMIN` scoped to that congregation (or an authorized district-level actor) SHALL also be allowed to approve only that congregation's slots. The requested congregation SHALL belong to the district and authorization SHALL be enforced before reading or changing any planning slot. A congregation-scoped actor SHALL NOT approve district-level slots or another congregation's slots. Confirming a district-wide month SHALL publish a `PLAN_FINALIZED` domain event after commit; a congregation-scoped partial approval SHALL NOT publish this district-wide event. Existing prohibition of demoting previously released slots SHALL remain in force.
+`POST /api/v1/events/bulk-approval-status` SHALL change the approval status only for eligible slots of the requested district and month. A district-scoped `PLANNER` (or higher role) SHALL retain the existing district-wide approval permission; a request without `congregation_id` SHALL require this district-level permission. A congregation-scoped actor SHALL NOT approve district-level slots or another congregation's slots.
+
+#### Scenario: Additional constraints for Monthly approval workflow
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** When a specific `congregation_id` is supplied, a `CONGREGATION_ADMIN` scoped to that congregation (or an authorized district-level actor) SHALL also be allowed to approve only that congregation's slots. The requested congregation SHALL belong to the district and authorization SHALL be enforced before reading or changing any planning slot. Confirming a district-wide month SHALL publish a `PLAN_FINALIZED` domain event after commit; a congregation-scoped partial approval SHALL NOT publish this district-wide event. Existing prohibition of demoting previously released slots SHALL remain in force.
+
+#### Scenario: Month confirmed
+
+- **WHEN** a planner sets a month to `CONFIRMED`
+- **THEN** all slots of that month are confirmed and `PLAN_FINALIZED` is emitted
 
 #### Scenario: Month confirmed for district
 
