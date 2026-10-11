@@ -31,13 +31,7 @@ services:
     command: uv run alembic upgrade head
     restart: "no"
     depends_on:
-        healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  db:
+      db:
         condition: service_healthy
 
   worker:
@@ -50,7 +44,7 @@ services:
       migrate:
         condition: service_completed_successfully
       valkey:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d celery@$(hostname) --timeout=5 | grep -q pong"]
@@ -94,6 +88,11 @@ services:
       backend:
         condition: service_started
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   db:
     # NOTE: PG18+ requires mount at /var/lib/postgresql (not /data) so it can
