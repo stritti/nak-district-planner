@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import case, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
@@ -112,15 +112,19 @@ class SqlCalendarIntegrationRepository(CalendarIntegrationRepository):
     ) -> bool:
         """Persist attempt metadata without touching other aggregate columns.
 
-        A failed attempt records the sanitized error class; a successful or
-        retried attempt clears it only if no newer error was stored.
+        The attempt timestamp is monotonic: an out-of-order (stale) attempt
+        never rewinds it. A failed attempt records the sanitized error class;
+        a successful or retried attempt clears it only if no newer error was
+        stored.
         """
         error = error[:500] if error else None
         result = await self._session.execute(
             update(CalendarIntegrationORM)
             .where(CalendarIntegrationORM.id == integration_id)
             .values(
-                last_attempt_at=at,
+                last_attempt_at=func.greatest(
+                    CalendarIntegrationORM.last_attempt_at, at
+                ),
                 last_sync_error=case(
                     (error is not None, error),
                     (
