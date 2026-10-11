@@ -176,6 +176,7 @@ async def test_calendar_integration_routes_success_and_errors() -> None:
 
     with (
         patch("app.adapters.api.routers.calendar_integrations.require_role_in_district"),
+        patch("app.adapters.api.routers.calendar_integrations.record_sync_attempt", new_callable=AsyncMock),
         patch(
             "app.adapters.api.routers.calendar_integrations.encrypt_credentials",
             return_value="enc",

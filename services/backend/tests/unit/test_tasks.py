@@ -67,30 +67,73 @@ class TestSyncCalendarIntegrationTask:
 
 
 class TestSyncAllActiveIntegrationsTask:
-    """Tests for sync_all_active_integrations Celery task (integration discovery)."""
+    """Dispatch only due integrations; persist each accepted publish."""
 
-    def test_sync_all_active_integrations_queues_tasks(self):
-        """sync_all_active_integrations should discover and queue sync tasks."""
-        # This is more of an integration test, but we can test the basic flow
+    def _run(self, ids: list[str], *, fail_at: int | None = None) -> tuple:
         from app.application.tasks import sync_all_active_integrations
 
-        fake_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+        session = AsyncMock()
+        repo = MagicMock()
+        repo.list_active = AsyncMock(return_value=[])
+        repo.stamp_scheduled_attempt = AsyncMock()
+        engine = MagicMock()
+        engine.dispose = AsyncMock()
 
         with (
+            patch("app.adapters.db.session.AsyncSessionLocal") as factory,
+            patch("app.adapters.db.session.engine", engine),
             patch(
-                "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
-            ) as mock_asyncio_run,
-            patch("app.application.tasks.sync_calendar_integration") as mock_task,
+                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
+                return_value=repo,
+            ),
+            patch("app.application.tasks._due_integration_ids", return_value=ids),
+            patch("app.application.tasks.sync_calendar_integration") as task,
         ):
-            mock_asyncio_run.return_value = fake_ids
-            mock_task.delay = MagicMock()
+            factory.return_value.__aenter__.return_value = session
+            if fail_at is not None:
+                calls = [None] * fail_at + [ConnectionError("broker unavailable")] + [None] * (
+                    len(ids) - fail_at - 1
+                )
+                task.delay.side_effect = calls
+                result = sync_all_active_integrations()
+            else:
+                result = sync_all_active_integrations()
+            assert task.delay.call_count == len(ids)
+        return result, repo, session, engine
 
-            result = sync_all_active_integrations()
+    def test_sync_all_active_integrations_queues_tasks(self):
+        ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+        result, repo, session, engine = self._run(ids)
+        assert result == {"dispatched": 2}
+        assert repo.stamp_scheduled_attempt.await_count == 2
+        assert session.commit.await_count == 2
+        engine.dispose.assert_awaited_once()
 
-        assert result is not None
-        assert result["dispatched"] == len(fake_ids)
-        mock_asyncio_run.assert_called_once()
-        assert mock_task.delay.call_count == len(fake_ids)
+    def test_failed_broker_publish_does_not_mark_undispatched_integrations(self):
+        ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+        result, repo, session, _ = self._run(ids, fail_at=0)
+        assert result == {"dispatched": 1}
+        repo.stamp_scheduled_attempt.assert_awaited_once()
+        assert repo.stamp_scheduled_attempt.await_args.args[0] == uuid.UUID(ids[1])
+        assert session.commit.await_count == 1
+        assert session.rollback.await_count == 1
+
+    def test_prior_successful_publish_remains_stamped_after_later_failure(self):
+        ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+        result, repo, session, _ = self._run(ids, fail_at=1)
+        assert result == {"dispatched": 1}
+        repo.stamp_scheduled_attempt.assert_awaited_once()
+        assert repo.stamp_scheduled_attempt.await_args.args[0] == uuid.UUID(ids[0])
+        assert session.commit.await_count == 1
+        assert session.rollback.await_count == 1
+
+    def test_dispatch_timestamp_precedes_published_task_completion(self):
+        ids = [str(uuid.uuid4())]
+        result, repo, _, _ = self._run(ids)
+        assert result == {"dispatched": 1}
+        timestamp = repo.stamp_scheduled_attempt.await_args.args[1]
+        from datetime import UTC, datetime
+        assert timestamp <= datetime.now(UTC)
 
 
 class TestImportFeiertageTask:
@@ -218,3 +261,136 @@ class TestRunAsSystemWorker:
             await _run_as_system_worker(work())
 
         engine.dispose.assert_awaited_once()
+
+
+class TestSyncReliability:
+    """Retry suppression and independent error persistence (#470)."""
+
+    def test_due_integrations_backoff_blocks_duplicate_retry_chain(self):
+        from datetime import UTC, datetime, timedelta
+        from types import SimpleNamespace
+
+        from app.application.tasks import _due_integration_ids
+        from app.domain.models.calendar_integration import CalendarType
+
+        now = datetime.now(UTC)
+        integration = SimpleNamespace(
+            id=uuid.uuid4(), type=CalendarType.ICS,
+            last_synced_at=now - timedelta(hours=2),
+            last_attempt_at=now - timedelta(minutes=10), sync_interval=5,
+        )
+        assert _due_integration_ids([integration], now) == []
+        integration.last_attempt_at = now - timedelta(minutes=31)
+        assert _due_integration_ids([integration], now) == [str(integration.id)]
+
+    async def test_record_error_commits_sanitized_text_in_new_session(self):
+        from app.application.tasks import record_sync_attempt
+
+        repo = MagicMock()
+        repo.record_attempt = AsyncMock()
+        session = AsyncMock()
+        session.commit = AsyncMock()
+
+        with (
+            patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
+            patch(
+                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
+                return_value=repo,
+            ),
+        ):
+            session_factory.return_value.__aenter__.return_value = session
+            await record_sync_attempt(uuid.uuid4(), "failure " + "x" * 800)
+
+        assert repo.record_attempt.await_count == 1
+        args = repo.record_attempt.await_args.args
+        assert args[2] == "failure " + "x" * 800
+        repo.record_attempt.assert_awaited_once()
+        session.commit.assert_awaited_once()
+
+    async def test_record_attempt_truncates_error_text(self):
+        from datetime import UTC, datetime
+
+        from app.adapters.db.repositories.calendar_integration import (
+            SqlCalendarIntegrationRepository,
+        )
+
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=MagicMock(rowcount=1))
+        repo = SqlCalendarIntegrationRepository(session)
+        integration_id = uuid.uuid4()
+        at = datetime.now(UTC)
+        long_error = "x" * 800
+
+        await repo.record_attempt(integration_id, at, long_error)
+
+        statement = session.execute.await_args.args[0]
+        compiled = statement.compile(compile_kwargs={"literal_binds": False})
+        assert "last_attempt_at" in str(compiled)
+        assert "last_sync_error" in str(compiled)
+        error_params = [
+            value for value in compiled.params.values() if isinstance(value, str)
+        ]
+        assert error_params and len(error_params[0]) == 500
+
+    async def test_record_attempt_targeted_update_only(self):
+        from datetime import UTC, datetime
+
+        from app.adapters.db.repositories.calendar_integration import (
+            SqlCalendarIntegrationRepository,
+        )
+
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=MagicMock(rowcount=1))
+        repo = SqlCalendarIntegrationRepository(session)
+        integration_id = uuid.uuid4()
+        at = datetime.now(UTC)
+
+        await repo.record_attempt(integration_id, at, "Synchronisierung fehlgeschlagen (X)")
+
+        statement = session.execute.await_args.args[0]
+        compiled = str(statement.compile())
+        for column in (
+            "last_synced_at",
+            "updated_at",
+            "is_active",
+            "sync_interval",
+            "name",
+            "credentials_enc",
+        ):
+            assert column not in compiled, f"targeted update must not touch {column}"
+
+    async def test_record_attempt_returns_row_updated_flag(self):
+        from datetime import UTC, datetime
+
+        from app.adapters.db.repositories.calendar_integration import (
+            SqlCalendarIntegrationRepository,
+        )
+
+        session = MagicMock()
+        result = MagicMock(rowcount=1)
+        session.execute = AsyncMock(return_value=result)
+        repo = SqlCalendarIntegrationRepository(session)
+
+        assert await repo.record_attempt(uuid.uuid4(), datetime.now(UTC), None) is True
+
+        result.rowcount = 0
+        assert await repo.record_attempt(uuid.uuid4(), datetime.now(UTC), None) is False
+
+    async def test_missing_integration_does_not_create_phantom_status(self):
+        from app.application.tasks import record_sync_attempt
+
+        repo = MagicMock()
+        repo.record_attempt = AsyncMock()
+        session = AsyncMock()
+        with (
+            patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
+            patch(
+                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
+                return_value=repo,
+            ),
+        ):
+            session_factory.return_value.__aenter__.return_value = session
+            await record_sync_attempt(uuid.uuid4(), "unavailable")
+
+        repo.record_attempt.assert_awaited_once()
+        session.commit.assert_awaited_once()
