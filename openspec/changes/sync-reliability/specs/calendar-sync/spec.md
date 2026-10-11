@@ -30,3 +30,11 @@ Periodic dispatch SHALL consider both the previous success and latest attempt, a
 #### Scenario: Integration edited while scheduling
 - **WHEN** a user modifies integration configuration during scheduling
 - **THEN** scheduling does not overwrite those changes or successful sync status
+
+#### Scenario: Fast worker completes before dispatch timestamp is committed
+- **WHEN** a sync task completes between successful broker publish and scheduler timestamp commit
+- **THEN** the stored scheduled timestamp does not exceed the publish time and the successful sync is not misclassified as a pending attempt
+
+#### Scenario: Worker process exits abruptly
+- **WHEN** the worker process exits after accepting a sync task but before completion
+- **THEN** the broker requeues the late-acknowledged sync task rather than silently dropping it
