@@ -123,14 +123,14 @@ async def record_sync_attempt(integration_id: uuid.UUID, error: str | None = Non
         await session.commit()
 
 
-async def mark_scheduled_sync(integration_id: uuid.UUID) -> None:
+async def mark_scheduled_sync(integration_id: uuid.UUID, dispatched_at: datetime) -> None:
     """Update only the attempt timestamp once the broker accepted the task."""
     from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
     from app.adapters.db.session import AsyncSessionLocal
 
     async with AsyncSessionLocal() as session:
         await SqlCalendarIntegrationRepository(session).stamp_scheduled_attempt(
-            integration_id, datetime.now(UTC)
+            integration_id, dispatched_at
         )
         await session.commit()
 
@@ -186,6 +186,7 @@ class SyncIntegrationTask(celery.Task):
     soft_time_limit=240,
     time_limit=300,
     acks_late=True,
+    reject_on_worker_lost=True,
 )
 def sync_calendar_integration(self, integration_id: str) -> dict:
     """Sync a single CalendarIntegration by ID.
@@ -269,10 +270,11 @@ def sync_all_active_integrations() -> dict:
     ids = asyncio.run(_run_as_system_worker(_run()))
     dispatched = 0
     for integration_id in ids:
+        dispatched_at = datetime.now(UTC)
         sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
         # Only successful broker publishes count as attempted. A failed publish
         # must leave the integration due for the next Beat cycle.
-        asyncio.run(_run_as_system_worker(mark_scheduled_sync(uuid.UUID(integration_id))))
+        asyncio.run(_run_as_system_worker(mark_scheduled_sync(uuid.UUID(integration_id), dispatched_at)))
         dispatched += 1
     logger.info("Dispatched sync for %d integration(s)", dispatched)
     return {"dispatched": dispatched}
