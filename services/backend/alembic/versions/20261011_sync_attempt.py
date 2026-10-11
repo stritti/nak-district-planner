@@ -6,8 +6,9 @@
 Revision ID: 20261011_sync_attempt
 Revises: 20261010_event_release
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "20261011_sync_attempt"
 down_revision = "20261010_event_release"
