@@ -1,7 +1,12 @@
 ## ADDED Requirements
 
 ### Requirement: Personal ICS includes organisational duties without duplicates
-Personal calendar feeds for an authenticated, securely linked participant or a subject-bound, district-scoped INTERNAL personal export token SHALL include slots assigned through organisational duties, aggregating all of that person's tasks per slot into a single VEVENT. The UID SHALL remain `{planning_slot_id}@nak-bezirksplaner`. A person who is also the service leader SHALL still receive only one VEVENT. Updates to appointments, time and cancellation SHALL be reflected in subsequent feed responses; public or unscoped district INTERNAL exports SHALL not reveal personal duty-holder identities or private duty labels. Export token reads SHALL be limited by the bound subject and district through RLS and require the subject's current effective scope authorization on every feed request; existing PUBLIC/INTERNAL leader tokens SHALL retain legacy leader visibility and MUST NOT infer a duty owner from unlinked leader names. No token SHALL be issued for an unlinked free-text name.
+Personal calendar feeds for an authenticated, securely linked participant or a subject-bound, district-scoped INTERNAL personal export token SHALL include slots assigned through organisational duties, aggregating all of that person's tasks per slot into a single VEVENT. The UID SHALL remain `{planning_slot_id}@nak-bezirksplaner`. A person who is also the service leader SHALL still receive only one VEVENT.
+
+#### Scenario: Additional constraints for Personal ICS includes organisational duties without duplicates
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Updates to appointments, time and cancellation SHALL be reflected in subsequent feed responses; public or unscoped district INTERNAL exports SHALL not reveal personal duty-holder identities or private duty labels. Export token reads SHALL be limited by the bound subject and district through RLS and require the subject's current effective scope authorization on every feed request; existing PUBLIC/INTERNAL leader tokens SHALL retain legacy leader visibility and MUST NOT infer a duty owner from unlinked leader names. No token SHALL be issued for an unlinked free-text name.
 
 #### Scenario: Bound subject token
 - **WHEN** a verified user obtains a personal INTERNAL export token bound to their subject for district A

@@ -1,7 +1,12 @@
 ## ADDED Requirements
 
 ### Requirement: Minister retirement and visibility lifecycle
-Ministers/service leaders SHALL support independent active and frontend-list visibility states and an optional inclusive service end date. Deactivation and hide-from-list operations SHALL retain database rows, IDs and historical references. Default person selection and visible management lists SHALL exclude hidden or deactivated ministers, while authorised historical/administrative views MAY explicitly include them. Restoring visibility and reactivation SHALL require authorised, audited operations.
+Ministers/service leaders SHALL support independent active and frontend-list visibility states and an optional inclusive service end date. Deactivation and hide-from-list operations SHALL retain database rows, IDs and historical references. Default person selection and visible management lists SHALL exclude hidden or deactivated ministers, while authorised historical/administrative views MAY explicitly include them.
+
+#### Scenario: Additional constraints for Minister retirement and visibility lifecycle
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Restoring visibility and reactivation SHALL require authorised, audited operations.
 
 #### Scenario: Deactivate minister
 - **WHEN** an administrator deactivates a minister
@@ -12,7 +17,12 @@ Ministers/service leaders SHALL support independent active and frontend-list vis
 - **THEN** no database hard delete occurs, historical references remain valid, and the minister can be retrieved with an authorised include-inactive query
 
 ### Requirement: Minister service end date affects planning
-A minister with an end-of-service date SHALL be eligible for new service assignments only through that local calendar date, inclusive, and only when active and not hidden. Server-side validation SHALL enforce the date and status for event-list, matrix and bulk assignment paths. Free-text assignment paths SHALL NOT implicitly bypass an ineligible known leader: an exact matching retired name requires an explicit unlinked guest choice, and MUST NOT silently re-link the retired person. Earlier assignments SHALL not be silently deleted when the end date changes; future ineligible ones SHALL be flagged for review.
+A minister with an end-of-service date SHALL be eligible for new service assignments only through that local calendar date, inclusive, and only when active and not hidden. Server-side validation SHALL enforce the date and status for event-list, matrix and bulk assignment paths. Earlier assignments SHALL not be silently deleted when the end date changes; future ineligible ones SHALL be flagged for review.
+
+#### Scenario: Additional constraints for Minister service end date affects planning
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Free-text assignment paths SHALL NOT implicitly bypass an ineligible known leader: an exact matching retired name requires an explicit unlinked guest choice, and MUST NOT silently re-link the retired person.
 
 #### Scenario: Before or on end date
 - **WHEN** an active visible minister with an end date of 2026-12-31 is assigned a service on 2026-12-31

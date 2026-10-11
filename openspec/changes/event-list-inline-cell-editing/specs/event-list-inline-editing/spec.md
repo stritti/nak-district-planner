@@ -38,7 +38,12 @@ The editor SHALL validate the draft and commit a changed value with Enter, Tab, 
 - **THEN** the cell remains editable, the validation error is visible and the draft is preserved
 
 ### Requirement: Field-specific, authorised mutation
-The table SHALL expose editing only for supported mutable event fields and SHALL use their established mutation paths: event properties via scoped event PATCH and responsible-person assignments via the existing assignments API. Authorisation, event scope, status rules, conflict checks, protected external fields and confirmation of destructive actions SHALL be identical to the full editor. Each successful save SHALL update only the intended field/dependent atomic set and refresh the canonical display. Category, congregation and planning-date changes SHALL preserve and flag (not erase) now-ineligible organisational duties and minister appointments according to their dedicated OpenSpec rules; a move between congregations SHALL quarantine private prior-scope duties until authorised revalidation, without leaking them to the destination on row refresh. Clearing an assignment that implies deletion SHALL use the existing confirmation workflow.
+The table SHALL expose editing only for supported mutable event fields and SHALL use their established mutation paths: event properties via scoped event PATCH and responsible-person assignments via the existing assignments API. Authorisation, event scope, status rules, conflict checks, protected external fields and confirmation of destructive actions SHALL be identical to the full editor.
+
+#### Scenario: Additional constraints for Field-specific, authorised mutation
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Each successful save SHALL update only the intended field/dependent atomic set and refresh the canonical display. Category, congregation and planning-date changes SHALL preserve and flag (not erase) now-ineligible organisational duties and minister appointments according to their dedicated OpenSpec rules; a move between congregations SHALL quarantine private prior-scope duties until authorised revalidation, without leaking them to the destination on row refresh. Clearing an assignment that implies deletion SHALL use the existing confirmation workflow.
 
 #### Scenario: Category becomes incompatible with an assigned duty
 - **WHEN** a planner changes an event's category and an existing Organist duty is no longer permitted
@@ -53,7 +58,12 @@ The table SHALL expose editing only for supported mutable event fields and SHALL
 - **THEN** it is not inline editable and no write is attempted
 
 ### Requirement: Safe asynchronous save and error recovery
-The table SHALL show an in-cell saving state, prevent duplicate submissions, and handle 403, 404, validation failures, 409 conflicts and network failures without silently losing the user's draft. Stale or concurrent writes SHALL be prevented by a server-enforced revision precondition (`If-Match` with strong ETag or an existing equivalent explicit version) for every inline mutation. Endpoints without conditional writes SHALL be extended before their columns become inline editable. Missing required revisions SHALL yield 428, mismatches SHALL yield 412, and domain conflicts SHALL continue using 409; the interface SHALL not assert success until the server confirms it.
+The table SHALL show an in-cell saving state, prevent duplicate submissions, and handle 403, 404, validation failures, 409 conflicts and network failures without silently losing the user's draft. Stale or concurrent writes SHALL be prevented by a server-enforced revision precondition (`If-Match` with strong ETag or an existing equivalent explicit version) for every inline mutation.
+
+#### Scenario: Additional constraints for Safe asynchronous save and error recovery
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Endpoints without conditional writes SHALL be extended before their columns become inline editable. Missing required revisions SHALL yield 428, mismatches SHALL yield 412, and domain conflicts SHALL continue using 409; the interface SHALL not assert success until the server confirms it.
 
 #### Scenario: Concurrent row changed by another user
 - **WHEN** another user saves a newer revision after the inline editor loaded the row
@@ -76,7 +86,12 @@ The table SHALL show an in-cell saving state, prevent duplicate submissions, and
 - **THEN** at most one request for that mutation remains in flight
 
 ### Requirement: Consistent editing across all tabular overviews
-Every table, list-style overview and planning matrix in the application SHALL use the same compact read-mode appearance and shared inline-edit interaction for directly mutable, authorised cells. Domain-specific API adapters SHALL preserve existing validations, permission scopes and business workflows. Read-only/derived columns SHALL never become editable merely to achieve consistency. Explicit actions, links, approvals and destructive operations SHALL retain their dedicated semantics and required confirmations.
+Every table, list-style overview and planning matrix in the application SHALL use the same compact read-mode appearance and shared inline-edit interaction for directly mutable, authorised cells. Domain-specific API adapters SHALL preserve existing validations, permission scopes and business workflows. Read-only/derived columns SHALL never become editable merely to achieve consistency.
+
+#### Scenario: Additional constraints for Consistent editing across all tabular overviews
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Explicit actions, links, approvals and destructive operations SHALL retain their dedicated semantics and required confirmations.
 
 #### Scenario: Mutable cell in another overview
 - **WHEN** an authorised administrator activates a writable field in a non-event table

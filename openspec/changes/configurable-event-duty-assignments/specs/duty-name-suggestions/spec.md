@@ -1,7 +1,12 @@
 ## ADDED Requirements
 
 ### Requirement: Remember duty-specific names from free-text entry
-The system SHALL accept validated free-text display names as organisational duty assignees without requiring an application account. After an assignment is saved, the system SHALL remember the normalised name and display name for autocomplete only within the slot's owning scope and the specific duty category: congregation slots use that congregation's suggestion store; district-level slots use the district store. Inherited district duty definitions SHALL NOT implicitly expose district or other congregation names in a congregation's autocomplete. Suggestions SHALL be deduplicated by normalised name within that scope and category.
+The system SHALL accept validated free-text display names as organisational duty assignees without requiring an application account. After an assignment is saved, the system SHALL remember the normalised name and display name for autocomplete only within the slot's owning scope and the specific duty category: congregation slots use that congregation's suggestion store; district-level slots use the district store.
+
+#### Scenario: Additional constraints for Remember duty-specific names from free-text entry
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Inherited district duty definitions SHALL NOT implicitly expose district or other congregation names in a congregation's autocomplete. Suggestions SHALL be deduplicated by normalised name within that scope and category.
 
 #### Scenario: Save name for Organist
 - **WHEN** a planner saves "Anna Beispiel" as Organist in congregation A
@@ -16,7 +21,12 @@ The system SHALL accept validated free-text display names as organisational duty
 - **THEN** the suggestion store contains a single normalised candidate without a duplicate
 
 ### Requirement: Explicitly suppress and restore autocomplete suggestions
-An authorised `PLANNER` in the effective event/duty scope (or a higher scoped role) SHALL be able to suppress or restore a suggestion from the autocomplete list through a dedicated management action, independently of historical event assignments. Removal SHALL be a reversible suppression, not deletion of referenced records. Previously suppressed suggestions SHALL NOT become visible merely through reading, importing or re-saving historical assignments. A deliberate manual re-add or authorised restoration MAY reactivate the suggestion.
+An authorised `PLANNER` in the effective event/duty scope (or a higher scoped role) SHALL be able to suppress or restore a suggestion from the autocomplete list through a dedicated management action, independently of historical event assignments. Removal SHALL be a reversible suppression, not deletion of referenced records. A deliberate manual re-add or authorised restoration MAY reactivate the suggestion.
+
+#### Scenario: Additional constraints for Explicitly suppress and restore autocomplete suggestions
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Previously suppressed suggestions SHALL NOT become visible merely through reading, importing or re-saving historical assignments.
 
 #### Scenario: Person moved away
 - **WHEN** an authorised planner removes Anna Beispiel from Organist suggestions

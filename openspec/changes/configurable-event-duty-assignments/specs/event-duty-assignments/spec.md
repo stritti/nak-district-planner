@@ -1,7 +1,12 @@
 ## ADDED Requirements
 
 ### Requirement: Optional organisational duties on planning slots
-A `PlanningSlot` SHALL support zero or more organisational duty assignments independently of its existing single liturgical service-leader assignment. Each assignment SHALL reference a configured category and exactly one of: a securely resolved registered-user subject (`linked_user_sub`) within the authorised district/event context, or a validated scoped name-only participant and immutable display-name snapshot. A linked leader/person record is eligible for personal feeds only if its `user_sub` is securely verified. A plain-text name or unlinked leader record SHALL NOT be treated as a user account. A slot SHALL remain valid, confirmable and publishable with no organisational assignments.
+A `PlanningSlot` SHALL support zero or more organisational duty assignments independently of its existing single liturgical service-leader assignment. Each assignment SHALL reference a configured category and exactly one of: a securely resolved registered-user subject (`linked_user_sub`) within the authorised district/event context, or a validated scoped name-only participant and immutable display-name snapshot.
+
+#### Scenario: Additional constraints for Optional organisational duties on planning slots
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** A linked leader/person record is eligible for personal feeds only if its `user_sub` is securely verified. A plain-text name or unlinked leader record SHALL NOT be treated as a user account. A slot SHALL remain valid, confirmable and publishable with no organisational assignments.
 
 #### Scenario: Unassigned service
 - **WHEN** a Gottesdienst planning slot is created with no persons selected for Schließdienst, Organist or Dirigent
@@ -12,7 +17,12 @@ A `PlanningSlot` SHALL support zero or more organisational duty assignments inde
 - **THEN** assigning multiple organisational duty types does not violate the unique service-leader constraint
 
 ### Requirement: Validate category, person and capacity
-The system SHALL reject unknown or cross-tenant category/person identifiers, assignments to categories not enabled for the slot's effective event category, duplicate linked-subject/duty pairs or duplicate normalised name-only/duty pairs within a slot, and assignments exceeding configured duty capacity. These two identity types SHALL use separate database-backed uniqueness constraints that correctly handle nullable fields; capacity checks SHALL be serialised per slot/duty. Checks and writes SHALL be concurrency safe, with no partial writes on failure. Changing the planning slot's category or effective congregation SHALL NOT silently delete existing duty assignments; newly incompatible assignments SHALL be visibly flagged for review and SHALL NOT be newly added or reassigned until valid for the new category and scope. An assignment SHALL retain its original owning scope. Moving a slot to another congregation SHALL quarantine old-scope assignments until explicit revalidation by an administrator/planner authorised in both scopes, and SHALL prevent private names or duties from being exposed in the new congregation's normal views or personal feeds before revalidation.
+The system SHALL reject unknown or cross-tenant category/person identifiers, assignments to categories not enabled for the slot's effective event category, duplicate linked-subject/duty pairs or duplicate normalised name-only/duty pairs within a slot, and assignments exceeding configured duty capacity. Checks and writes SHALL be concurrency safe, with no partial writes on failure.
+
+#### Scenario: Additional constraints for Validate category, person and capacity
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** These two identity types SHALL use separate database-backed uniqueness constraints that correctly handle nullable fields; capacity checks SHALL be serialised per slot/duty. Changing the planning slot's category or effective congregation SHALL NOT silently delete existing duty assignments; newly incompatible assignments SHALL be visibly flagged for review and SHALL NOT be newly added or reassigned until valid for the new category and scope. An assignment SHALL retain its original owning scope. Moving a slot to another congregation SHALL quarantine old-scope assignments until explicit revalidation by an administrator/planner authorised in both scopes, and SHALL prevent private names or duties from being exposed in the new congregation's normal views or personal feeds before revalidation.
 
 #### Scenario: Repeated name-only participant
 - **WHEN** a planner adds two name-only assignments to the same duty on the same slot with case/whitespace-equivalent names
