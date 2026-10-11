@@ -8,6 +8,7 @@ import NotFoundView from './NotFoundView.vue'
 describe('NotFoundView', () => {
   it('shows a useful heading and a link to the event overview', () => {
     const wrapper = mount(NotFoundView, { global: { stubs: ['RouterLink'] } })
+    expect(wrapper.get('[data-testid="not-found-page"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Seite nicht gefunden')
     expect(wrapper.get('router-link-stub').attributes('to')).toBe('/events')
   })

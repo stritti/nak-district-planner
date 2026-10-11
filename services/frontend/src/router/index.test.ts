@@ -56,6 +56,13 @@ describe('router', () => {
     expect(route.matched).toHaveLength(1)
   })
 
+  it('loads the catch-all view when requested', async () => {
+    const route = router.getRoutes().find((candidate) => candidate.name === 'not-found')
+    const loader = route?.components?.default as (() => Promise<unknown>) | undefined
+    expect(loader).toBeTypeOf('function')
+    await expect(loader!()).resolves.toBeTruthy()
+  })
+
   it('reuses one standalone Pinia instance for router guards', () => {
     expect(getRouterPinia()).toBe(getRouterPinia())
   })

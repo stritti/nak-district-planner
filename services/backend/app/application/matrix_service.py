@@ -57,7 +57,7 @@ class MatrixService:
     def calculate_deviation_minutes(
         slot: PlanningSlot,
         instance: EventInstance,
-        default_duration_minutes: int = 90,
+        default_duration_minutes: int | None = None,
     ) -> tuple[int | None, int | None]:
         """Calculate deviation in minutes between PlanningSlot and EventInstance.
 
@@ -99,7 +99,7 @@ class MatrixService:
     def has_deviation(
         slot: PlanningSlot,
         instance: EventInstance | None,
-        default_duration_minutes: int = 90,
+        default_duration_minutes: int | None = None,
     ) -> bool:
         """Check if there's a deviation between slot and instance."""
         if not instance:
