@@ -258,7 +258,9 @@ def sync_all_active_integrations() -> dict:
     async def _publish_and_stamp(ids: list[str]) -> int:
         # One event loop and one database session for all accepted publishes.
         # Each stamp is committed independently, preserving progress on failure.
-        from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+        from app.adapters.db.repositories.calendar_integration import (
+            SqlCalendarIntegrationRepository,
+        )
 
         async with AsyncSessionLocal() as session:
             repo = SqlCalendarIntegrationRepository(session)
