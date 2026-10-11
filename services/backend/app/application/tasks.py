@@ -100,6 +100,29 @@ async def _alert_sync_failure(integration_id: str, exc: BaseException, attempts:
             await session.commit()
 
 
+
+
+async def _record_sync_attempt(integration_id: uuid.UUID, error: str | None = None) -> None:
+    """Persist a sync attempt independently of provider event writes.
+
+    On failure the main sync transaction has already rolled back. Never persist
+    provider exception text: URLs and tokens can occur in error messages.
+    """
+    from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+    from app.adapters.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        repo = SqlCalendarIntegrationRepository(session)
+        integration = await repo.get(integration_id)
+        if integration is None:
+            return
+        integration.last_attempt_at = datetime.now(UTC)
+        if error is not None:
+            integration.last_sync_error = error[:500]
+        await repo.save(integration)
+        await session.commit()
+
+
 class SyncIntegrationTask(celery.Task):
     """Celery hooks that log each failed attempt and alert once retries are exhausted."""
 
@@ -161,17 +184,25 @@ def sync_calendar_integration(self, integration_id: str) -> dict:
     from app.application.sync_service import run_sync
 
     async def _run() -> dict:
-        async with AsyncSessionLocal() as session:
-            result = await run_sync(uuid.UUID(integration_id), session)
-            await session.commit()
-            return {
-                "created": result.created,
-                "updated": result.updated,
-                "cancelled": result.cancelled,
-                "auto_matched": result.auto_matched,
-                "skipped": result.skipped,
-                "failed": result.failed,
-            }
+        sync_id = uuid.UUID(integration_id)
+        await _record_sync_attempt(sync_id)
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await run_sync(sync_id, session)
+                await session.commit()
+        except Exception as exc:
+            await _record_sync_attempt(
+                sync_id, f"Synchronisierung fehlgeschlagen ({type(exc).__name__})"
+            )
+            raise
+        return {
+            "created": result.created,
+            "updated": result.updated,
+            "cancelled": result.cancelled,
+            "auto_matched": result.auto_matched,
+            "skipped": result.skipped,
+            "failed": result.failed,
+        }
 
     summary = asyncio.run(_run_as_system_worker(_run()))
     logger.info("Sync %s completed: %s", integration_id, summary)
@@ -190,11 +221,15 @@ def _due_integration_ids(integrations, now: datetime) -> list[str]:
                 integration.id,
             )
             continue
-        if integration.last_synced_at is None:
-            ids.append(str(integration.id))
-            continue
-        elapsed = (now - integration.last_synced_at).total_seconds() / 60
-        if elapsed >= integration.sync_interval:
+        # Allow time for the complete retry chain before Beat dispatches again.
+        # A retry refreshes last_attempt_at so concurrent chains are suppressed.
+        last_attempt = integration.last_attempt_at
+        last_success = integration.last_synced_at
+        if last_attempt and (last_success is None or last_attempt > last_success):
+            if (now - last_attempt).total_seconds() < max(integration.sync_interval * 60, 1800):
+                continue
+        last_run = max((value for value in (last_success, last_attempt) if value), default=None)
+        if last_run is None or (now - last_run).total_seconds() >= integration.sync_interval * 60:
             ids.append(str(integration.id))
     return ids
 
