@@ -2,7 +2,12 @@
 
 ### Requirement: Wiederkehrende Terminvorlagen auf Gemeinde- und Bezirksebene
 
-Das System SHALL eine unabhängig von PlanningSeries verwaltete RecurringEventTemplate unterstützen. Jede Vorlage SHALL genau einem Bezirk und optional einer Gemeinde dieses Bezirks zugeordnet sein und Titel, Kategorie (außer Gottesdienst), lokale Startzeit, positive Dauer, optional Beschreibung, verpflichtendes anchor_date, Aktivitätszeitraum, is_active sowie eine validierte Wiederholungsregel besitzen. Bezirkstermine MAY per bestehender applicability-Semantik an Gemeinden verteilt werden; Gemeindetermine SHALL keine applicability besitzen.
+Das System SHALL eine unabhängig von PlanningSeries verwaltete RecurringEventTemplate unterstützen. Jede Vorlage SHALL genau einem Bezirk und optional einer Gemeinde dieses Bezirks zugeordnet sein und Titel, Kategorie (außer Gottesdienst), lokale Startzeit, positive Dauer, optional Beschreibung, verpflichtendes anchor_date, Aktivitätszeitraum, is_active sowie eine validierte Wiederholungsregel besitzen.
+
+#### Scenario: Additional constraints for Wiederkehrende Terminvorlagen auf Gemeinde- und Bezirksebene
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Bezirkstermine MAY per bestehender applicability-Semantik an Gemeinden verteilt werden; Gemeindetermine SHALL keine applicability besitzen.
 
 #### Scenario: Wöchentliche Chorprobe einer Gemeinde
 - **GIVEN** eine aktive Vorlage Chorprobe für Gemeinde A, jeden Dienstag 19:30 Uhr für 90 Minuten
@@ -63,7 +68,12 @@ Das System SHALL WEEKLY (ein oder mehrere ISO-Wochentage mit ganzzahligem Wochen
 
 ### Requirement: Monatliche To-do-Liste vor Anlage konkreter Termine
 
-Das System SHALL für einen angefragten Kalendermonat eine nach Datum und Uhrzeit geordnete Checkliste berechnen, deren offene Einträge zunächst keine PlanningSlots oder EventInstances sind. Die Liste SHALL serverseitig vor Pagination nach Suchtext (Titel/Beschreibung), Kategorie, Entscheidungsstatus und Organisationseinheit filterbar und mit den Zuständen OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW darstellbar sein. Die Auswahl und jede Änderung SHALL serverseitig gegen den aktuellen Bezirk und die Vorlage geprüft werden.
+Das System SHALL für einen angefragten Kalendermonat eine nach Datum und Uhrzeit geordnete Checkliste berechnen, deren offene Einträge zunächst keine PlanningSlots oder EventInstances sind. Die Liste SHALL serverseitig vor Pagination nach Suchtext (Titel/Beschreibung), Kategorie, Entscheidungsstatus und Organisationseinheit filterbar und mit den Zuständen OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW darstellbar sein.
+
+#### Scenario: Additional constraints for Monatliche To-do-Liste vor Anlage konkreter Termine
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Die Auswahl und jede Änderung SHALL serverseitig gegen den aktuellen Bezirk und die Vorlage geprüft werden.
 
 #### Scenario: Filter vor Pagination
 - **GIVEN** mehr Vorschläge als auf eine Ergebnis-Seite passen
@@ -95,7 +105,12 @@ Das System SHALL für einen angefragten Kalendermonat eine nach Datum und Uhrzei
 
 ### Requirement: Explizite, idempotente Übernahme in die Event-Planung
 
-Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter Bestätigung als PlanningSlot und EventInstance anlegen. Der Slot SHALL ACTIVE mit approval_status PLANNED sein und zunächst keine ServiceAssignment besitzen. Bei Bezirksterminen SHALL der neue Slot die zum Übernahmezeitpunkt validierte template.applicability vollständig und kanonisch übernehmen; bei Gemeindeterminen SHALL slot.applicability leer sein. Die EventInstance SHALL source=INTERNAL und visibility=PUBLIC erhalten. Die PUBLIC-Einstellung SHALL den Entwurf nicht veröffentlichen: Öffentliche Feeds zeigen weiterhin nur CONFIRMED-Slots, und Bezirksverteilung bleibt an ACTIVE und CONFIRMED gebunden. Die Übernahme SHALL die vorliegende Template-Revision prüfen und je (template_id, occurrence_local_date) genau eine persistierte Entscheidung ACCEPTED mit Verweis auf den konkreten Slot atomar speichern. Wiederholte oder parallele Aufrufe SHALL keine doppelten Termine anlegen.
+Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter Bestätigung als PlanningSlot und EventInstance anlegen. Der Slot SHALL ACTIVE mit approval_status PLANNED sein und zunächst keine ServiceAssignment besitzen. applicability leer sein. Die EventInstance SHALL source=INTERNAL und visibility=PUBLIC erhalten. Wiederholte oder parallele Aufrufe SHALL keine doppelten Termine anlegen.
+
+#### Scenario: Additional constraints for Explizite, idempotente Übernahme in die Event-Planung
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Die PUBLIC-Einstellung SHALL den Entwurf nicht veröffentlichen: Öffentliche Feeds zeigen weiterhin nur CONFIRMED-Slots, und Bezirksverteilung bleibt an ACTIVE und CONFIRMED gebunden. Die Übernahme SHALL die vorliegende Template-Revision prüfen und je (template_id, occurrence_local_date) genau eine persistierte Entscheidung ACCEPTED mit Verweis auf den konkreten Slot atomar speichern.
 
 #### Scenario: Übernahme ohne Veröffentlichung
 - **WHEN** eine offene Chorprobe übernommen wird
@@ -138,7 +153,12 @@ Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter
 
 ### Requirement: Dauerhafte Zuordnung und bewusste Abweichungen
 
-Das System SHALL die Identität eines vorgeschlagenen Vorkommens durch Vorlagen-ID und ursprünglich lokal berechnetes Datum erhalten, unabhängig von späteren Verschiebungen eines übernommenen Termins. Ein gelöschter referenzierter Termin SHALL nicht automatisch neu erzeugt werden. Ist eine ACCEPTED-Entscheidung durch Löschung (einschließlich Retention Cleanup) ohne gültigen Slot-Verweis, SHALL die Checkliste NEEDS_REVIEW anzeigen und eine explizite, berechtigte Auflösung durch Zuordnung zu einem passenden existierenden Slot, Markierung als SKIPPED oder erneutes Öffnen anbieten. Erneutes Öffnen SHALL nur zulässig sein, wenn das Vorkommen weiterhin zur aktiven Vorlage passt. Übernommene Slots SHALL ansonsten den bestehenden Bearbeitungs-, Freigabe-, Sichtbarkeits- und Exportregeln folgen.
+Das System SHALL die Identität eines vorgeschlagenen Vorkommens durch Vorlagen-ID und ursprünglich lokal berechnetes Datum erhalten, unabhängig von späteren Verschiebungen eines übernommenen Termins. Ein gelöschter referenzierter Termin SHALL nicht automatisch neu erzeugt werden. Erneutes Öffnen SHALL nur zulässig sein, wenn das Vorkommen weiterhin zur aktiven Vorlage passt.
+
+#### Scenario: Additional constraints for Dauerhafte Zuordnung und bewusste Abweichungen
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Ist eine ACCEPTED-Entscheidung durch Löschung (einschließlich Retention Cleanup) ohne gültigen Slot-Verweis, SHALL die Checkliste NEEDS_REVIEW anzeigen und eine explizite, berechtigte Auflösung durch Zuordnung zu einem passenden existierenden Slot, Markierung als SKIPPED oder erneutes Öffnen anbieten. Übernommene Slots SHALL ansonsten den bestehenden Bearbeitungs-, Freigabe-, Sichtbarkeits- und Exportregeln folgen.
 
 #### Scenario: Chorprobe verschoben
 - **GIVEN** die Chorprobe am 10.11. wurde übernommen
@@ -166,7 +186,12 @@ Das System SHALL die Identität eines vorgeschlagenen Vorkommens durch Vorlagen-
 
 ### Requirement: Organisationsrechte und Mandantenschutz
 
-Das System SHALL die bestehenden Rollen und Scope-Grenzen nutzen: VIEWER dürfen nur berechtigte Vorlagen und Checklisten lesen; DISTRICT_ADMIN dürfen Vorlagen und Entscheidungen des Bezirks ändern; CONGREGATION_ADMIN dürfen dies nur für ihre Gemeinde. Die bestehende Monatsfreigabe SHALL für CONGREGATION_ADMIN mit expliziter congregation_id die Slots genau ihrer Gemeinde bestätigen können; ohne congregation_id bleibt für die bezirksweite Freigabe mindestens die bisherige Bezirks-PLANNER-Berechtigung erforderlich. Eine eigenständige PLANNER-Rolle SHALL dadurch keine bislang fehlenden Event-Erstellrechte erhalten. RLS und API-Guards SHALL fremde Bezirke, Gemeinden und Slot-Verknüpfungen schützen.
+Das System SHALL die bestehenden Rollen und Scope-Grenzen nutzen: VIEWER dürfen nur berechtigte Vorlagen und Checklisten lesen; DISTRICT_ADMIN dürfen Vorlagen und Entscheidungen des Bezirks ändern; CONGREGATION_ADMIN dürfen dies nur für ihre Gemeinde. Eine eigenständige PLANNER-Rolle SHALL dadurch keine bislang fehlenden Event-Erstellrechte erhalten.
+
+#### Scenario: Additional constraints for Organisationsrechte und Mandantenschutz
+- **GIVEN** this requirement is applicable
+- **WHEN** the system processes the relevant operation
+- **THEN** Die bestehende Monatsfreigabe SHALL für CONGREGATION_ADMIN mit expliziter congregation_id die Slots genau ihrer Gemeinde bestätigen können; ohne congregation_id bleibt für die bezirksweite Freigabe mindestens die bisherige Bezirks-PLANNER-Berechtigung erforderlich. RLS und API-Guards SHALL fremde Bezirke, Gemeinden und Slot-Verknüpfungen schützen.
 
 #### Scenario: Gemeinde A darf Gemeinde B nicht verändern
 - **GIVEN** ein Benutzer ist nur CONGREGATION_ADMIN für Gemeinde A
