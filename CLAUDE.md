@@ -158,7 +158,7 @@ Authoritative descriptions live in `openspec/specs/` (notably `planning-model`, 
 3. **Phase 3:** ✅ Vue 3 + Tailwind + Pinia scaffolding; event list dashboard; matrix planning view (`MatrixTable.vue`)
 4. **Phase 4:** ✅ OIDC authentication (`OIDCAdapter`); RBAC; API key encryption in DB (service layer decorator)
 
-Current work is tracked via OpenSpec (`openspec/changes/`) rather than these phases. For current priorities see `docs/roadmap.md`; `openspec/specs/` is the source of truth for implemented behaviour and `docs/security-baseline.md` summarises security constraints. Run `npx -y @fission-ai/openspec@1.14.1 validate --all` before opening a PR that touches `openspec/`.
+Current work is tracked via OpenSpec (`openspec/changes/`) rather than these phases. For current priorities see `docs/roadmap.md`; `openspec/specs/` is the source of truth for implemented behaviour and `docs/security/baseline.md` summarises security constraints. Run `npx -y @fission-ai/openspec@1.14.1 validate --all` before opening a PR that touches `openspec/`.
 
 ---
 
@@ -215,7 +215,7 @@ decrypted = decrypt_credentials(encrypted)
 
 #### API Security
 - **Input Validation:** Use Pydantic v2 models for all request bodies, query parameters, and path parameters
-- **Rate Limiting:** Implement rate limiting for all public endpoints (see `docs/security-analysis.md`)
+- **Rate Limiting:** Implement rate limiting for all public endpoints (see `docs/archive/security-analysis-2025.md`)
 - **CSRF Protection:** Add CSRF tokens for state-changing requests in web interfaces
 - **Error Handling:** Never expose stack traces or sensitive error details in production
 
@@ -286,13 +286,13 @@ def test_create_event_without_permission():
 ### Security Documentation
 
 **Mandatory Reading for Security Work:**
-- `docs/security-baseline.md` - Security baseline requirements
-- `docs/security-analysis.md` - Comprehensive security analysis with threat modeling
-- `docs/roles.md` - Role model and permission matrix
+- `docs/security/baseline.md` - Security baseline requirements
+- `docs/archive/security-analysis-2025.md` - Comprehensive security analysis with threat modeling
+- `docs/features/roles.md` - Role model and permission matrix
 - `docs/approval-workflow.md` - User onboarding and approval workflow
 
 **Reference Documents:**
-- `docs/production-runbook.md` - Production security procedures
+- `docs/operations/production-runbook.md` - Production security procedures
 - `.github/workflows/security.yml` - Automated security scanning workflow
 
 ### Security Incident Response
@@ -372,7 +372,7 @@ Is this a security-sensitive change?
     │   │
     │   ├── Does it involve authentication/authorization?
     │   │   │
-    │   │   ├── Yes → Review docs/roles.md and test with multiple role levels
+    │   │   ├── Yes → Review docs/features/roles.md and test with multiple role levels
     │   │   │
     │   │   └── No
     │   │       │
@@ -388,7 +388,7 @@ Is this a security-sensitive change?
     │   │       │       │   │
     │   │       │       │   └── No → Proceed with standard review
     │   │       │       │
-    │   │       └── Consult docs/security-analysis.md for threat modeling
+    │   │       └── Consult docs/archive/security-analysis-2025.md for threat modeling
     │   │
     └── No → Standard code review applies
 ```

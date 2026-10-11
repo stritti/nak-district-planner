@@ -12,11 +12,11 @@ Der eigene Quellcode steht unter der [GNU Affero General Public License v3.0 onl
 
 Die VitePress-Dokumentation ist nach Aufgaben strukturiert. Der Einstieg beschreibt zuerst den fachlichen Nutzen und verweist von dort auf verbindliche Detailregeln.
 
-- [So funktioniert die Planung](docs/workflows.md): Matrix, Kalenderanbindung, Zusammenarbeit, Veröffentlichung und Freigabe.
-- [Fachliche Use Cases](docs/use-cases.md): Regeln und Sonderfälle.
-- [Rollenkonzept](docs/roles.md): Berechtigungen für Bezirk und Gemeinden.
+- [So funktioniert die Planung](docs/guide/workflows.md): Matrix, Kalenderanbindung, Zusammenarbeit, Veröffentlichung und Freigabe.
+- [Fachliche Use Cases](docs/features/use-cases.md): Regeln und Sonderfälle.
+- [Rollenkonzept](docs/features/roles.md): Berechtigungen für Bezirk und Gemeinden.
 - [Entwicklereinstieg](docs/getting-started.md): Dokumentation lokal starten.
-- [Betrieb](docs/production-runbook.md) und [Produktiv-Stack](docs/production-compose.md).
+- [Betrieb](docs/operations/production-runbook.md) und [Produktiv-Stack](docs/operations/production-compose.md).
 - [Quellen und Verbindlichkeit](docs/documentation-map.md): OpenSpec, Referenzdokumente und historische Unterlagen.
 
 ---
@@ -324,7 +324,7 @@ Die einzige persistente State-Quelle ist das PostgreSQL-Volume `postgres_data`.
 
 **Empfohlen:** `scripts/backup.sh` / `scripts/restore.sh` — verschlüsseln Dumps automatisch
 per GPG (`BACKUP_ENCRYPT_KEY`), prüfen die Archiv-Integrität vor dem Restore und erlauben
-einen `--dry-run`. Details siehe `docs/production-runbook.md` Abschnitt 4.
+einen `--dry-run`. Details siehe `docs/operations/production-runbook.md` Abschnitt 4.
 
 ```bash
 # Backup erstellen (verschlüsselt, wenn BACKUP_ENCRYPT_KEY gesetzt ist)

@@ -195,7 +195,7 @@ cat services/frontend/.env.local
 - **CONFIGURATION.md** — IDP comparison, endpoint reference, Traefik integration
 - **keycloak/OIDC-SETUP.md** — Keycloak complete setup guide
 - **authentik/OIDC-SETUP.md** — Authentik complete setup guide
-- **../MIGRATION_GUIDE.md** — Phase 4a → 4b migration path
+- **../docs/archive/phase4a-to-4b-oidc-migration.md** — historical Phase 4a → 4b migration reference (not for v1 production)
 
 ## Switching Between IDPs
 
@@ -231,6 +231,6 @@ For help with specific IDP:
 - **Authentik:** See `authentik/OIDC-SETUP.md` troubleshooting section
 
 For OIDC implementation details:
-- See `../docs/security-baseline.md`
+- See `../docs/security/baseline.md`
 - See `../docs/documentation-map.md`
-- See `../MIGRATION_GUIDE.md` (Phase 4a -> 4b migration)
+- See `../docs/archive/phase4a-to-4b-oidc-migration.md` (historical Phase 4a -> 4b reference; see current production runbook)

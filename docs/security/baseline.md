@@ -54,7 +54,7 @@ Der Bootstrap ist owner-controlled: ✅
 - `SUPERADMIN_SUB` sollte vor der Bootstrap-Migration auf den exakten OIDC-`sub` gesetzt werden; alternativ provisioniert der DB-Owner die Konfiguration.
 - Auf bestehenden Installationen pinnt die Migration bei fehlendem `SUPERADMIN_SUB` deterministisch einen vorhandenen Superadmin bzw. den fruehesten Benutzer.
 
-Details: `docs/production-runbook.md`.
+Details: `docs/operations/production-runbook.md`.
 
 ## 5. CSRF, Rate Limiting und oeffentliche Endpunkte
 
@@ -97,7 +97,7 @@ Eine Route darf nur dann ohne Bearer-Authentifizierung erreichbar sein, wenn sie
 
 ### 7.1 Keine In-App-Updates
 
-Die Anwendung **fuehrt keine Deployment-Updates aus** (#469): kein Update-Endpoint, kein Update-Task, kein Docker-Socket-Modus. Der Docker-Socket darf nie in einen Container gemountet werden (root-aequivalenter Host-Zugriff). Die Anwendung zeigt Administratoren nur an, dass eine neuere Version existiert (`GET /api/v1/system/version`); Updates erfolgen ausschliesslich durch Betreiber nach `docs/production-runbook.md`.
+Die Anwendung **fuehrt keine Deployment-Updates aus** (#469): kein Update-Endpoint, kein Update-Task, kein Docker-Socket-Modus. Der Docker-Socket darf nie in einen Container gemountet werden (root-aequivalenter Host-Zugriff). Die Anwendung zeigt Administratoren nur an, dass eine neuere Version existiert (`GET /api/v1/system/version`); Updates erfolgen ausschliesslich durch Betreiber nach `docs/operations/production-runbook.md`.
 
 ## 8. Audit und Nachvollziehbarkeit
 
@@ -142,11 +142,11 @@ Die RC-2-Freigabeprüfung ist historisch abgeschlossen. Neue Releases folgen [Re
 
 ## 12. Referenzen
 
-- `docs/production-runbook.md`
-- `docs/architecture-status.md`
-- `docs/rbac-coverage.md`
+- `docs/operations/production-runbook.md`
+- `docs/architecture/status.md`
+- `docs/security/rbac-coverage.md`
 - `docs/security/tenant-isolation.md`
 - `docs/security/rate-limiting.md`
 - `docs/security/csrf-protection.md`
 - `.github/workflows/security.yml`
-- `openspec/security-roadmap.md`
+- `docs/archive/security-roadmap-2025.md`

@@ -18,7 +18,7 @@
 Domain <- Application <- Adapters / Composition
 ```
 
-Neue Application-Use-Cases verwenden Ports und explizite Policies. Die Integration konkreter Adapter erfolgt an der Composition Boundary. Vorhandene Legacy-Ausnahmen sollten reduziert, nicht um weitere Ausnahmen ergänzt werden. Zielbild: [Architekturüberblick](https://github.com/stritti/nak-district-planner/blob/main/openspec/architecture/overview.md).
+Neue Application-Use-Cases verwenden Ports und explizite Policies. Die Integration konkreter Adapter erfolgt an der Composition Boundary. Vorhandene Legacy-Ausnahmen sollten reduziert, nicht um weitere Ausnahmen ergänzt werden. Zielbild: [Architekturüberblick](https://github.com/stritti/nak-district-planner/blob/main/docs/architecture/overview.md).
 
 ## Technische Schulden
 
