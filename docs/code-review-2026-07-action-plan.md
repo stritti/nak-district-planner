@@ -1,5 +1,7 @@
 # Aktionsplan — Priorisierte Todo-Liste (aus Code Review Juli 2026)
 
+> **Historisches Review (Juli 2026).** Die damaligen Befunde gelten nicht automatisch als aktuelle Release-Blocker. Siehe [Roadmap](/roadmap) und [Architekturstatus](/architecture-status).
+
 > Basis: `docs/code-review-2026-07.md`. Findings sind hier nach möglichen, in sich geschlossenen
 > PRs gruppiert — jede Gruppe kann unabhängig geplant, gebrancht und gemerged werden.
 > Reihenfolge der Gruppen = Umsetzungsreihenfolge.

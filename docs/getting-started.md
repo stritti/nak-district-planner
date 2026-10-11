@@ -26,6 +26,7 @@ Die statische Website wird nach `docs/.vitepress/dist` geschrieben. Der Build pr
 - Fachliche Regeln: [Use Cases](/use-cases), [Rollen](/roles)
 - Implementierung: [Architekturstatus](/architecture-status), [Engineering Standards](/engineering-standards)
 - Betrieb: [Production Runbook](/production-runbook), [Security Baseline](/security-baseline)
+- Geplante Änderungen: [Roadmap](/roadmap)
 - Spezifikationen und Dokumentstatus: [Dokumentationslandkarte](/documentation-map)
 
 Verhaltensänderungen werden über OpenSpec spezifiziert; Einstiegstexte ersetzen keine normativen Anforderungen.

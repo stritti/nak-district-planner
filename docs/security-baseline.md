@@ -1,12 +1,6 @@
 # Security Baseline
 
-**Stand:** 4. Oktober 2026  
-**Release-Ziel:** `1.0.0-rc.2`  
-**Status:** aktiv; RC-2-Haertungen werden erst nach erfolgreichem Merge ihrer Workstreams als abgeschlossen markiert
-
-Dieses Dokument beschreibt die verbindlichen Sicherheitsgrenzen des NAK District Planner. Detail- und Betriebsdokumente sind unter `docs/security/` und im `docs/production-runbook.md` verlinkt.
-
-Legende: ✅ aktiv auf `main` · 🟡 offener RC-2-Workstream / Release-Gate · ❌ offen
+**Referenzstand:** v1.0.0 (veröffentlicht am 10. Oktober 2026). Sicherheitsgrenzen werden durch die OpenSpec-Baseline und den ausgelieferten Code definiert. Aktuelle Folgearbeiten stehen in der [Roadmap](/roadmap). Die älteren PR-Referenzen unten dokumentieren die Herkunft, nicht den Live-CI-Status.
 
 ## 1. Authentifizierung und Token-Vertrauen
 
@@ -132,7 +126,7 @@ Verpflichtende Sicherheits-/Qualitaetskontrollen im aktiven `main`-Ruleset:
 - Backend-/Frontend-Image-Build
 - Dokumentations-Build
 
-Das Ruleset arbeitet strict und ohne Bypass. Aktuell werden noch keine Approvals verlangt; mindestens eine menschliche Approval plus stale-review/thread-resolution-Haertung bleibt Governance-Arbeit vor finalem 1.0.0.
+Das Ruleset arbeitet strict und ohne Bypass. Die aktuellen Branch-Schutz- und Approval-Regeln sind im GitHub-Ruleset zu prüfen; frühere RC-Governance-Befunde sind keine Live-Quelle.
 
 ## 10. Coverage und Testqualitaet
 
@@ -140,18 +134,11 @@ Das Ruleset arbeitet strict und ohne Bypass. Aktuell werden noch keine Approvals
 - Frontend-Coverage muss alle relevanten Production-Sources messen und fuer Statements, Branches, Functions und Lines mindestens 80 Prozent erreichen: ✅ (PR #439)
 - Production-Code darf nicht breit ausgeschlossen werden, nur um ein Coverage-Gate zu erreichen.
 - Security-Fixes muessen Negativ-/Ausnahmefaelle testen (invalid JWT, falscher Issuer/Audience, fehlender Refresh-Cookie, Provider-Fehler, Valkey-Ausfall, Cross-Tenant-Zugriff).
-- RuntimeWarnings durch falsch gemockte/unawaited Coroutines gelten als Testqualitaets-Schuld und muessen vor finalem 1.0.0 bereinigt werden.
+- RuntimeWarnings durch falsch gemockte oder unawaited Coroutines sind Testqualitätsschuld und müssen behoben werden.
 
-## 11. Release-Gate fuer RC-2
+## 11. Sicherheits-Nacharbeiten nach v1.0.0
 
-RC-2 ist erst freigabefaehig, wenn:
-
-1. PR #438, #440, #441, #442 und #443 inhaltlich verifiziert und alle verpflichtenden Checks gruen sind;
-2. PR #439 die reale Frontend-Coverage >80 Prozent erreicht;
-3. keine blockierenden Security-/CodeQL-/Dependency-Findings offen sind;
-4. Migration und Restore-Drill erfolgreich sind;
-5. OpenSpec fuer die ausgelieferten Grenzen verifiziert und erledigte Changes archiviert sind;
-6. Runbook und Architekturstatus dem ausgelieferten Code entsprechen.
+Die RC-2-Freigabeprüfung ist historisch abgeschlossen. Neue Releases folgen [Release-Prozess](/release-process), Pflicht-CI und [Roadmap](/roadmap). Opaque-Token-, JWKS-, PII- und Export-Token-Härtungen sind in [#471](https://github.com/stritti/nak-district-planner/issues/471) nachverfolgbar; Betriebs-Härtung in [#472](https://github.com/stritti/nak-district-planner/issues/472).
 
 ## 12. Referenzen
 

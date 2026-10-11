@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**v1.0.0-rc.2 — release candidate in feature freeze.** OIDC authentication (server-held refresh cookie), RBAC, tenant isolation (middleware + PostgreSQL RLS), audit logging, rate limiting and CSRF protection are implemented and wired into `main.py` (see `docs/security/`). 54 Alembic migration files. Planning model (PlanningSlot/EventInstance), matrix planning (UC-03), calendar connectors and hybrid sync (UC-01/UC-02), governed external-event ingestion, distribution and ICS export (UC-04/05/06), notifications and mail hooks are implemented.
+**v1.0.0 — stable release published on 2026-10-10.** OIDC authentication (server-held refresh cookie), RBAC, tenant isolation (middleware + PostgreSQL RLS), audit logging, rate limiting and CSRF protection are implemented and wired into `main.py` (see `docs/security/`). 54 Alembic migration files. Planning model (PlanningSlot/EventInstance), matrix planning (UC-03), calendar connectors and hybrid sync (UC-01/UC-02), governed external-event ingestion, distribution and ICS export (UC-04/05/06), notifications and mail hooks are implemented.
 
-**Source of truth:** `openspec/specs/` describes what is implemented (baseline, 2026-10-07); active work lives in `openspec/changes/`, delivered changes in `openspec/changes/archive/`. The v1.0 release backlog is tracked in GitHub issue #476 (see `docs/reviews/2026-10-07-release-1.0-review.md`).
+**Source of truth:** `openspec/specs/` describes what is implemented (baseline, 2026-10-07); active work lives in `openspec/changes/`, delivered changes in `openspec/changes/archive/`. The current release and feature backlog lives in `docs/roadmap.md`; issue #476 and the RC review are historical.
 
 The spec is written in German (NAK = Neuapostolische Kirche / New Apostolic Church).
 
@@ -158,7 +158,7 @@ Authoritative descriptions live in `openspec/specs/` (notably `planning-model`, 
 3. **Phase 3:** ✅ Vue 3 + Tailwind + Pinia scaffolding; event list dashboard; matrix planning view (`MatrixTable.vue`)
 4. **Phase 4:** ✅ OIDC authentication (`OIDCAdapter`); RBAC; API key encryption in DB (service layer decorator)
 
-Current work is tracked via OpenSpec (`openspec/changes/`) rather than these phases. The release backlog for v1.0 is tracker issue #476; `openspec/specs/` is the source of truth for implemented behaviour and `openspec/security-roadmap.md` summarises the security status. Run `npx -y @fission-ai/openspec@1.14.1 validate --all` before opening a PR that touches `openspec/`.
+Current work is tracked via OpenSpec (`openspec/changes/`) rather than these phases. For current priorities see `docs/roadmap.md`; `openspec/specs/` is the source of truth for implemented behaviour and `docs/security-baseline.md` summarises security constraints. Run `npx -y @fission-ai/openspec@1.14.1 validate --all` before opening a PR that touches `openspec/`.
 
 ---
 

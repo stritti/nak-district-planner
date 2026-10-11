@@ -1,38 +1,35 @@
 # Test- und Coverage-Strategie
 
-Dieses Dokument beschreibt, wie Testabdeckung im Projekt gemessen und bewertet wird.
+Maßgeblich sind die tatsächlichen [CI-Jobs](https://github.com/stritti/nak-district-planner/blob/main/.github/workflows/ci.yml) und die [Vitest-Konfiguration](https://github.com/stritti/nak-district-planner/blob/main/services/frontend/vitest.config.ts), nicht historische Phasenpläne.
 
-## 1. Ziele
+## Testebenen
 
-- Kritische Fachlogik ist durch Unit-Tests abgesichert.
-- Sicherheits- und Berechtigungslogik hat hohe Testabdeckung.
-- Integrationspunkte (DB, Sync, Auth) sind durch Integrationstests validiert.
+- **Unit-Tests:** Domain, Application, Frontend-Stores, Composables und Komponenten.
+- **Integration:** API, PostgreSQL-RLS, Authentifizierung, Kalender-Sync, Migrationen.
+- **E2E:** Login, Rechteprüfung, zentrale Planungsabläufe.
+- **Negativtests:** fremde Mandanten, unzulässige Rollen, falsche Tokens, Fehler-/Timeoutfälle, Idempotenz und Terminrandfälle.
 
-## 2. Testebenen
+## Aktuelle Mindestanforderungen
 
-- Unit: schnelle, isolierte Tests fuer Domain und Application Services.
-- Integration: FastAPI + DB + relevante externe Adapter mit kontrollierter Umgebung.
-- Frontend Unit/Component: Stores, Composables, zentrale Views/Komponenten.
-- E2E: kritische End-to-End-Fluesse (insb. Login, geschuetzte Routen, Kernplanung).
+| Umfang | Verbindliche Regel |
+| --- | --- |
+| Backend | Mindestens **80 %** Gesamt-Line-Coverage in der Unit-Suite |
+| Backend-kritische Router | Je mindestens **80 % Line Coverage** für `auth.py`, `leader_unavailabilities.py`, `planning_series.py`, `system.py` (fehlende Datei ist Fehler) |
+| Frontend | **80 % pro Production-Datei** für Statements, Branches, Functions und Lines (`perFile: true`) |
+| Ausnahmen | Nur begründete Testdoubles, reine Typdateien und Bootstrap-Wiring gemäß `vitest.config.ts`; kein großflächiges Ausschließen fachlichen Codes |
 
-## 3. Coverage-Messung
+Tests müssen zusätzlich relevante Ausnahme- und Sicherheitsfälle prüfen; reine Prozentsätze reichen nicht.
 
-- Backend-Coverage wird in CI als XML erzeugt und an Codecov hochgeladen
-  (siehe `.github/workflows/ci.yml`).
-- Frontend-Tests laufen in CI; Coverage-Erweiterung kann schrittweise ergaenzt werden.
+## Lokal prüfen
 
-## 4. Mindestanforderungen (Policy)
-
-- Neue sicherheitsrelevante oder berechtigungsrelevante Logik: Tests verpflichtend.
-- Neue Domain-/Application-Logik ohne Tests ist nicht merge-faehig.
-- Fuer bestehende Legacy-Bereiche gilt: bei Aenderungen "boy scout rule"
-  (mindestens bestehende Testabdeckung nicht verschlechtern).
-
-## 5. Empfohlene Zielwerte (inkrementell)
-
-- Backend gesamt: >= 80% line coverage
-- Sicherheits- und mandantenkritische Router `auth.py`, `leader_unavailabilities.py`, `planning_series.py` und `system.py`: einzeln mindestens 80% Line Coverage aus der **Backend-Unit-Suite**. Das CI-Gate prüft die vier Dateien direkt aus `coverage.xml` und schlägt auch fehl, wenn eine der Dateien fehlt.
-- Kritische Module (Auth, RBAC, Sync): >= 90%
-- Frontend Kernfluesse: testbasiert abgesichert, Coverage schrittweise ausbauen
-
-Weitere Zielwerte sind Leitplanken. Verbindlich sind die genannten Backend-Gates und die sicherheitsrelevanten Integrationstests (RLS, Mandantengrenze, OIDC, Berechtigungen). Die Erweiterung von Branch Coverage erfordert eine separate CI-Umstellung; die aktuelle pytest-cov-Konfiguration misst Line Coverage.
+```bash
+cd services/backend
+uv run pytest tests/unit/
+uv run pytest tests/integration/ tests/performance/
+cd ../frontend
+bun run test
+bun run lint
+bun run build
+cd ../..
+bun run docs:build
+```

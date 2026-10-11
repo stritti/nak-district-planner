@@ -30,6 +30,7 @@ export default defineConfig(
         { text: 'Überblick', link: '/' },
         { text: 'Abläufe', link: '/workflows' },
         { text: 'Use Cases', link: '/use-cases' },
+        { text: 'Roadmap', link: '/roadmap' },
         { text: 'Entwicklung', link: '/getting-started' },
         { text: 'Betrieb', link: '/production-runbook' }
       ],
@@ -39,7 +40,8 @@ export default defineConfig(
           { text: 'Einstieg', items: [
             { text: 'Projektüberblick', link: '/' },
             { text: 'So funktioniert es', link: '/workflows' },
-            { text: 'Use Cases', link: '/use-cases' }
+            { text: 'Use Cases', link: '/use-cases' },
+            { text: 'Roadmap', link: '/roadmap' }
           ] },
           { text: 'Funktionen und Zusammenarbeit', items: [
             { text: 'Rollenkonzept', link: '/roles' },
@@ -63,7 +65,7 @@ export default defineConfig(
             { text: 'Glossar', link: '/glossary' },
             { text: 'Dokumentationslandkarte', link: '/documentation-map' },
             { text: 'Lizenzierung', link: '/licensing' },
-            { text: 'Verbesserungsvorschläge', link: '/improvement-proposals' }
+            { text: 'Archiv und Historie', link: '/archive/' }
           ] }
         ]
       },
