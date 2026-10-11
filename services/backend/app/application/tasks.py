@@ -123,6 +123,22 @@ async def record_sync_attempt(integration_id: uuid.UUID, error: str | None = Non
         await session.commit()
 
 
+async def mark_scheduled_sync(integration_id: uuid.UUID) -> None:
+    """Update only the attempt timestamp once the broker accepted the task."""
+    from sqlalchemy import update
+
+    from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
+    from app.adapters.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        await session.execute(
+            update(CalendarIntegrationORM)
+            .where(CalendarIntegrationORM.id == integration_id)
+            .values(last_attempt_at=datetime.now(UTC))
+        )
+        await session.commit()
+
+
 class SyncIntegrationTask(celery.Task):
     """Celery hooks that log each failed attempt and alert once retries are exhausted."""
 
@@ -260,7 +276,7 @@ def sync_all_active_integrations() -> dict:
         sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
         # Only successful broker publishes count as attempted. A failed publish
         # must leave the integration due for the next Beat cycle.
-        asyncio.run(_run_as_system_worker(record_sync_attempt(uuid.UUID(integration_id))))
+        asyncio.run(_run_as_system_worker(mark_scheduled_sync(uuid.UUID(integration_id))))
         dispatched += 1
     logger.info("Dispatched sync for %d integration(s)", dispatched)
     return {"dispatched": dispatched}
