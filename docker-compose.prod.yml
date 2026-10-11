@@ -189,6 +189,7 @@ services:
       resources:
         limits:
           memory: 1g
+          pids: 256
     depends_on:
       migrate:
         condition: service_completed_successfully
