@@ -241,7 +241,7 @@ class TestSyncReliability:
         assert _due_integration_ids([integration], now) == [str(integration.id)]
 
     async def test_record_error_commits_sanitized_text_in_new_session(self):
-        from app.application.sync_attempts import record_sync_attempt
+        from app.adapters.db.sync_attempts import record_sync_attempt
 
         integration = MagicMock(last_attempt_at=None, last_sync_error=None)
         repository = MagicMock()
@@ -252,10 +252,10 @@ class TestSyncReliability:
 
         with (
             patch(
-                "app.application.sync_attempts.AsyncSessionLocal",
+                "app.adapters.db.sync_attempts.AsyncSessionLocal",
             ) as session_factory,
             patch(
-                "app.application.sync_attempts.SqlCalendarIntegrationRepository",
+                "app.adapters.db.sync_attempts.SqlCalendarIntegrationRepository",
                 return_value=repository,
             ),
         ):
@@ -268,16 +268,16 @@ class TestSyncReliability:
         session.commit.assert_awaited_once()
 
     async def test_missing_integration_does_not_create_phantom_status(self):
-        from app.application.sync_attempts import record_sync_attempt
+        from app.adapters.db.sync_attempts import record_sync_attempt
 
         repo = MagicMock()
         repo.get = AsyncMock(return_value=None)
         repo.save = AsyncMock()
         session = AsyncMock()
         with (
-            patch("app.application.sync_attempts.AsyncSessionLocal") as session_factory,
+            patch("app.adapters.db.sync_attempts.AsyncSessionLocal") as session_factory,
             patch(
-                "app.application.sync_attempts.SqlCalendarIntegrationRepository",
+                "app.adapters.db.sync_attempts.SqlCalendarIntegrationRepository",
                 return_value=repo,
             ),
         ):
