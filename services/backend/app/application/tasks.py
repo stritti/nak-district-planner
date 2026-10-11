@@ -33,6 +33,7 @@ import uuid
 from collections.abc import Awaitable
 from datetime import UTC, date, datetime
 
+from app.application.sync_attempts import record_sync_attempt
 from app.celery_app import celery
 from app.domain.errors import IntegrationNotFoundError, UnsupportedCalendarTypeError
 from app.domain.models.calendar_integration import SUPPORTED_CALENDAR_TYPES
@@ -102,27 +103,6 @@ async def _alert_sync_failure(integration_id: str, exc: BaseException, attempts:
 
 
 
-async def _record_sync_attempt(integration_id: uuid.UUID, error: str | None = None) -> None:
-    """Persist a sync attempt independently of provider event writes.
-
-    On failure the main sync transaction has already rolled back. Never persist
-    provider exception text: URLs and tokens can occur in error messages.
-    """
-    from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
-    from app.adapters.db.session import AsyncSessionLocal
-
-    async with AsyncSessionLocal() as session:
-        repo = SqlCalendarIntegrationRepository(session)
-        integration = await repo.get(integration_id)
-        if integration is None:
-            return
-        integration.last_attempt_at = datetime.now(UTC)
-        if error is not None:
-            integration.last_sync_error = error[:500]
-        await repo.save(integration)
-        await session.commit()
-
-
 class SyncIntegrationTask(celery.Task):
     """Celery hooks that log each failed attempt and alert once retries are exhausted."""
 
@@ -185,13 +165,13 @@ def sync_calendar_integration(self, integration_id: str) -> dict:
 
     async def _run() -> dict:
         sync_id = uuid.UUID(integration_id)
-        await _record_sync_attempt(sync_id)
+        await record_sync_attempt(sync_id)
         try:
             async with AsyncSessionLocal() as session:
                 result = await run_sync(sync_id, session)
                 await session.commit()
         except Exception as exc:
-            await _record_sync_attempt(
+            await record_sync_attempt(
                 sync_id, f"Synchronisierung fehlgeschlagen ({type(exc).__name__})"
             )
             raise
