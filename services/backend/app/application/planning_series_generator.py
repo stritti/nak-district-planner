@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from app.config import settings
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import (
@@ -23,8 +24,6 @@ from app.domain.models.planning_slot import (
     planning_series_generation_key,
 )
 from app.domain.ports.repositories import (
-    CongregationRepository,
-    DistrictRepository,
     EventInstanceRepository,
     PlanningSeriesRepository,
     PlanningSlotRepository,
@@ -32,7 +31,7 @@ from app.domain.ports.repositories import (
 
 # Default event duration when generating instances from a PlanningSeries.
 # Used as the difference between actual_start_at and actual_end_at.
-_DEFAULT_EVENT_DURATION = timedelta(hours=1, minutes=30)
+_DEFAULT_EVENT_DURATION = timedelta(minutes=settings.sync_expected_duration_minutes)
 
 
 @dataclass(frozen=True)
@@ -52,44 +51,57 @@ def _expand_recurrence(
     to_date_exclusive: date,
     timezone_name: str = "Europe/Berlin",
 ) -> list[GeneratedSlot]:
-    """Expand a PlanningSeries recurrence pattern into concrete slot dates.
+    """Expand both supported weekly formats and the legacy monthly pattern.
 
-    Supports simple weekly recurrence:
-      {"type": "weekly", "days": [0, 1, 2, 3, 4, 5, 6]}
-    where day numbers match Python's weekday (0=Monday, 6=Sunday).
-
-    Falls back to weekly on the series' default_planning_time day of week
-    if no pattern is specified.
+    Calendar dates are local; converting occurrences to UTC is done later,
+    per occurrence, to preserve daylight-saving transitions.
     """
     pattern = series.recurrence_pattern or {}
-    pattern_type = pattern.get("type", "weekly")
+    frequency = pattern.get("type", pattern.get("frequency", "weekly"))
+    interval = pattern.get("interval", 1)
+    if not isinstance(interval, int) or interval < 1:
+        raise ValueError("Recurrence interval must be a positive integer")
+
+    modern = "type" in pattern
+    default_weekday = (
+        series.created_at.weekday()
+        if modern
+        else (series.active_from or from_date).weekday()
+    )
+    weekdays = pattern.get("days", pattern.get("by_weekday"))
+    if weekdays is None:
+        weekdays = [default_weekday]
+
+    first_month = from_date.year * 12 + from_date.month
+    month_day = pattern.get("by_month_day") or (series.active_from or from_date).day
+
     slots: list[GeneratedSlot] = []
-    _tz = ZoneInfo(timezone_name)
+    current = from_date
+    while current < to_date_exclusive:
+        if frequency == "monthly":
+            month_index = current.year * 12 + current.month - first_month
+            matches = month_index % interval == 0 and current.day == month_day
+        elif frequency == "weekly" or not modern:
+            week_index = (current - from_date).days // 7
+            matches = week_index % interval == 0 and current.weekday() in weekdays
+        else:
+            matches = False
 
-    if pattern_type == "weekly":
-        days: list[int] = pattern.get("days", [series.created_at.weekday()])
-        current = from_date
-        while current < to_date_exclusive:
-            if current.weekday() in days:
-                planning_time = (
-                    timedelta(
-                        hours=series.default_planning_time.hour,
-                        minutes=series.default_planning_time.minute,
-                    )
-                    if series.default_planning_time
-                    else timedelta(hours=10)
+        if matches:
+            default_time = series.default_planning_time
+            planning_time = (
+                timedelta(hours=default_time.hour, minutes=default_time.minute)
+                if default_time else timedelta(hours=10)
+            )
+            slots.append(
+                GeneratedSlot(
+                    planning_date=current,
+                    planning_time=planning_time,
+                    category=series.category,
+                    title=None,
                 )
-                slots.append(
-                    GeneratedSlot(
-                        planning_date=current,
-                        planning_time=planning_time,
-                        category=series.category,
-                        title=None,
-                    )
-                )
-            current += timedelta(days=1)
-    # Future: add monthly, biweekly patterns here
-
+            )
+        current += timedelta(days=1)
     return slots
 
 
@@ -102,16 +114,12 @@ class PlanningSeriesGenerator:
         series_repo: PlanningSeriesRepository,
         slot_repo: PlanningSlotRepository,
         instance_repo: EventInstanceRepository,
-        district_repo: DistrictRepository,
-        congregation_repo: CongregationRepository,
         timezone_name: str = "Europe/Berlin",
         horizon_months: int = 12,
     ) -> None:
         self._series_repo = series_repo
         self._slot_repo = slot_repo
         self._instance_repo = instance_repo
-        self._district_repo = district_repo
-        self._congregation_repo = congregation_repo
         self._timezone_name = timezone_name
         self._horizon_months = horizon_months
 
@@ -132,26 +140,30 @@ class PlanningSeriesGenerator:
         from_date: date,
         to_date_exclusive: date,
         district_ids: set[uuid.UUID] | None = None,
+        series_list: list[PlanningSeries] | None = None,
     ) -> dict[str, int]:
         """Generate slots for a specific window, optionally filtered by district."""
         if to_date_exclusive <= from_date:
             return {"series_processed": 0, "slots_created": 0, "slots_skipped": 0}
 
-        series_list = sorted(
-            await self._series_repo.list_active(),
+        active_series = sorted(
+            series_list if series_list is not None else await self._series_repo.list_active(),
             key=lambda series: (series.district_id, series.id),
         )
         created = 0
         skipped = 0
         processed_series = 0
 
-        for series in series_list:
+        for series in active_series:
             if district_ids is not None and series.district_id not in district_ids:
                 continue
 
             processed_series += 1
             effective_from = max(from_date, series.active_from or from_date)
-            effective_to = min(to_date_exclusive, series.active_until or to_date_exclusive)
+            effective_to = min(
+                to_date_exclusive,
+                series.active_until + timedelta(days=1) if series.active_until else to_date_exclusive,
+            )
             if effective_to <= effective_from:
                 skipped += 1
                 continue

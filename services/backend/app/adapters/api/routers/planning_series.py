@@ -26,6 +26,7 @@ from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import require_role_in_district, require_superadmin
 from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.application.planning_series_service import PlanningSeriesSlotGenerationService
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.role import Role
@@ -205,6 +206,7 @@ async def generate_slots_for_series(
     service = PlanningSeriesSlotGenerationService(
         series_repo=series_repo,
         slot_repo=slot_repo,
+        instance_repo=SqlEventInstanceRepository(db),
     )
 
     result = await service.generate_slots_for_series(
@@ -241,6 +243,7 @@ async def generate_slots_for_district(
     service = PlanningSeriesSlotGenerationService(
         series_repo=series_repo,
         slot_repo=slot_repo,
+        instance_repo=SqlEventInstanceRepository(db),
     )
 
     result = await service.generate_slots_for_district(
@@ -276,6 +279,7 @@ async def generate_all_slots(
     service = PlanningSeriesSlotGenerationService(
         series_repo=series_repo,
         slot_repo=slot_repo,
+        instance_repo=SqlEventInstanceRepository(db),
     )
 
     result = await service.generate_all_slots(

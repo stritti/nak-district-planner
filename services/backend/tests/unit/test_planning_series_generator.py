@@ -188,8 +188,6 @@ class MockRepos:
             series_repo=self.series_repo,
             slot_repo=self.slot_repo,
             instance_repo=self.instance_repo,
-            district_repo=self.district_repo,
-            congregation_repo=self.congregation_repo,
         )
 
 

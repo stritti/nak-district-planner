@@ -8,8 +8,8 @@
 - [x] Remove unused SyncStatusCard and OIDC build-time examples
 - [x] Remove unregistered Celery tasks
 - [x] Remove unused passlib dependency and lock entries
-- [ ] Centralize provider event fingerprints
-- [ ] Consolidate API/Beat series generation
+- [x] Centralize provider event fingerprints
+- [x] Consolidate API/Beat series generation
 - [ ] Move Celery entrypoints under inbound adapters
 - [ ] Decouple application services from API schemas
 - [ ] Verify unit, integration, build and coverage gates
