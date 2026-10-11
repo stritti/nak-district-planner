@@ -33,9 +33,9 @@ from app.adapters.auth.permissions import (
 from app.adapters.calendar.url_guard import UnsafeCalendarUrlError, validate_calendar_url
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.db.sync_attempts import record_sync_attempt
 from app.application.crypto import CryptoError, encrypt_credentials
 from app.application.services.calendar_integration_service import CalendarIntegrationService
-from app.adapters.db.sync_attempts import record_sync_attempt
 from app.application.sync_service import run_sync
 from app.domain.errors import UnsupportedCalendarTypeError
 from app.domain.models.calendar_integration import (
