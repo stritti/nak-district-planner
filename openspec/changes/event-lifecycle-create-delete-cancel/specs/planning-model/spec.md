@@ -3,6 +3,10 @@
 ### Requirement: Retention cleanup
 The beat task `cleanup_old_events` SHALL delete only never-released planning slots whose `planning_date` is older than 24 months on the first day of each month and SHALL record one bulk-delete audit entry. Previously released events (including cancelled events) SHALL NOT be permanently removed by retention. Retention SHALL use the relationship-aware PlanningSlot repository deletion to clear invitation links, delete unreleased target copies, and retain released target copies as cancellations.
 
+#### Scenario: Old slots removed
+- **WHEN** the cleanup runs with never-released slots older than the cutoff
+- **THEN** those slots and their dependent unreleased rows are removed and a bulk audit entry with reason `retention` exists, while previously released records are preserved
+
 #### Scenario: Old unreleased slots removed
 - **WHEN** the cleanup runs
 - **THEN** never-released slots older than the cutoff and their dependent rows are removed and an audit row with reason `retention` exists
