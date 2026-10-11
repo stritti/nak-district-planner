@@ -8,6 +8,7 @@ import logging
 
 from celery import Celery, signals
 from celery.schedules import crontab, timedelta
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -98,6 +99,22 @@ def assert_schema_current_on_startup(**_kwargs) -> None:
         check_engine = create_async_engine(settings.database_url, poolclass=NullPool)
         try:
             await assert_database_schema_current(check_engine)
+            # Reject broker cutover while SQL Kombu tasks remain pending.
+            # Older installations retain these tables via Alembic.
+            async with check_engine.connect() as conn:
+                has_table = await conn.scalar(
+                    text("SELECT to_regclass('public.kombu_message') IS NOT NULL")
+                )
+                if has_table:
+                    pending = await conn.scalar(
+                        text("SELECT COUNT(*) FROM public.kombu_message")
+                    )
+                    if pending:
+                        raise SchemaVersionError(
+                            "Legacy SQL Celery broker contains queued messages. "
+                            "Drain the old worker before switching to Valkey "
+                            "(see production runbook)."
+                        )
         finally:
             await check_engine.dispose()
 
