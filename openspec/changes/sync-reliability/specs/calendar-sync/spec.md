@@ -17,8 +17,16 @@ A sync attempt SHALL use a transaction-scoped PostgreSQL try-advisory lock keyed
 - **THEN** the second invocation returns a skipped result and logs the reason without fetching provider events
 
 ### Requirement: Bounded task scheduling
-Periodic dispatch SHALL consider both the previous success and latest attempt, avoiding duplicate retry chains for integrations in backoff.
+Periodic dispatch SHALL consider both the previous success and latest attempt, avoiding duplicate retry chains for integrations in backoff. A scheduled attempt SHALL be stamped only after the broker accepts that specific task; failed dispatch SHALL remain eligible for the next scheduling cycle. Timestamp updates SHALL NOT overwrite concurrent integration configuration or success/error status.
 
 #### Scenario: Failed attempt waiting for retry
 - **WHEN** the latest attempt is less than 30 minutes ago
 - **THEN** Beat does not dispatch another sync for that integration
+
+#### Scenario: Broker dispatch fails
+- **WHEN** Valkey rejects a scheduled sync task
+- **THEN** the integration remains due for a future Beat cycle and its last attempt is not advanced
+
+#### Scenario: Integration edited while scheduling
+- **WHEN** a user modifies integration configuration during scheduling
+- **THEN** scheduling does not overwrite those changes or successful sync status
