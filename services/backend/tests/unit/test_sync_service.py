@@ -80,10 +80,6 @@ def _raw(
     return RawCalendarEvent(
         uid=uid, title=title, start_at=start_at, end_at=end_at,
         description=description,
-        content_hash=_hash(
-            uid, start_at=start_at, end_at=end_at, title=title,
-            description=description, is_cancelled=is_cancelled,
-        ),
         is_cancelled=is_cancelled,
     )
 

@@ -126,7 +126,6 @@ def _raw_event(*, revision_marker: str | None = None) -> RawCalendarEvent:
         start_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
         end_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
         description="Stale internal description",
-        content_hash="hash",
         is_cancelled=False,
         revision_marker=revision_marker,
         resource_id="event.ics",
