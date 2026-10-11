@@ -267,18 +267,29 @@ def sync_all_active_integrations() -> dict:
             repo = SqlCalendarIntegrationRepository(session)
             return _due_integration_ids(await repo.list_active(), datetime.now(UTC))
 
-    ids = asyncio.run(_run_as_system_worker(_run()))
-    dispatched = 0
-    for integration_id in ids:
-        dispatched_at = datetime.now(UTC)
-        sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
-        # Only successful broker publishes count as attempted. A failed publish
-        # must leave the integration due for the next Beat cycle.
-        asyncio.run(_run_as_system_worker(mark_scheduled_sync(uuid.UUID(integration_id), dispatched_at)))
-        dispatched += 1
+    async def _publish_and_stamp(ids: list[str]) -> int:
+        # One event loop and one database session for all accepted publishes.
+        # Each stamp is committed independently, preserving progress on failure.
+        from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+
+        async with AsyncSessionLocal() as session:
+            repo = SqlCalendarIntegrationRepository(session)
+            dispatched = 0
+            for integration_id in ids:
+                dispatched_at = datetime.now(UTC)
+                sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
+                await repo.stamp_scheduled_attempt(uuid.UUID(integration_id), dispatched_at)
+                await session.commit()
+                dispatched += 1
+            return dispatched
+
+    async def _dispatch() -> int:
+        ids = await _run()
+        return await _publish_and_stamp(ids)
+
+    dispatched = asyncio.run(_run_as_system_worker(_dispatch()))
     logger.info("Dispatched sync for %d integration(s)", dispatched)
     return {"dispatched": dispatched}
-
 
 def _unreleased_retention_conditions(cutoff_date: date):
     """Shared conditions for identifying drafts eligible for retention."""
