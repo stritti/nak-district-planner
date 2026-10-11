@@ -14,6 +14,7 @@
 - [x] 3.3 Document configuration changes, role restore order and retained CSP decisions
 
 ## 4. Verification
-- [ ] 4.1 Validate Compose interpolation and YAML schemas
-- [ ] 4.2 Run regression and config tests (coverage >80%)
-- [ ] 4.3 Run full Docker-based encrypted Restore Drill and review CI checks
+- [x] 4.1 Validate Compose interpolation and YAML schemas
+- [x] 4.2 Run regression and config tests (coverage >80%)
+- [x] 4.3 Run full Docker-based encrypted Restore Drill and review CI checks
+- [ ] 4.4 Triage external GitGuardian incident 36714356 for Compose environment-variable interpolation (security gate remains active)
