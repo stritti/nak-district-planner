@@ -16,7 +16,7 @@ from app.adapters.db.repositories.calendar_integration import (
     SqlCalendarIntegrationRepository,
 )
 from app.adapters.db.session import _set_tenant_gucs
-from app.domain.models.membership import TenantContext
+from app.tenant import TenantContext
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL is not configured"
