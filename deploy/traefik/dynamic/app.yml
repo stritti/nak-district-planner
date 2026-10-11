@@ -11,7 +11,7 @@ http:
         certResolver: letsencrypt
 
   middlewares:
-    # HSTS belongs at the public TLS endpoint (docs/security-baseline.md);
+    # HSTS belongs at the public TLS endpoint (docs/security/baseline.md);
     # the remaining headers are set by frontend-nginx.
     security-headers:
       headers:

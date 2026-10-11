@@ -29,4 +29,4 @@ python3 scripts/license_headers.py --check
 
 Die CI prüft REUSE und die projektinternen SPDX-Regeln unabhängig voneinander. Neue Drittanbieterdateien benötigen eine belegbare Herkunft, korrekte SPDX-Zuordnung und gegebenenfalls eine neue Lizenzdatei unter `LICENSES/`.
 
-Für Dateien mit wörtlichen SPDX-Beispielen (`scripts/license_headers.py`, die zugehörigen Tests und `docs/engineering-standards.md`) verwendet REUSE eine spezifische AGPL-Zuordnung mit `precedence = "override"`, damit Dokumentationsbeispiele nicht als Lizenzdaten interpretiert werden. Der separate Source-Header-Check prüft die Originalheader weiterhin direkt.
+Für Dateien mit wörtlichen SPDX-Beispielen (`scripts/license_headers.py`, die zugehörigen Tests und `docs/development/engineering-standards.md`) verwendet REUSE eine spezifische AGPL-Zuordnung mit `precedence = "override"`, damit Dokumentationsbeispiele nicht als Lizenzdaten interpretiert werden. Der separate Source-Header-Check prüft die Originalheader weiterhin direkt.

@@ -1,7 +1,7 @@
 # Production stack: Traefik (TLS, Let's Encrypt) + Keycloak + NAK District Planner
 # from the published GHCR images. Nothing is built on the server.
 #
-#   Setup and operation: docs/production-compose.md
+#   Setup and operation: docs/operations/production-compose.md
 #
 #   docker compose -f docker-compose.prod.yml up -d
 #   (or set COMPOSE_FILE=docker-compose.prod.yml in .env so plain
@@ -15,10 +15,10 @@
 #   .env.keycloak-db  Keycloak database owner: keycloak-db only
 #
 # Only Traefik publishes ports (80/443). Traefik does not get the Docker
-# socket: routes are static (deploy/traefik/dynamic/), see docs/security-baseline.md.
+# socket: routes are static (deploy/traefik/dynamic/), see docs/security/baseline.md.
 #
 # Existing Traefik or Keycloak on the host: add the overrides in deploy/compose/
-# (docs/production-compose.md, "Bestehenden Traefik oder Keycloak einbinden").
+# (docs/operations/production-compose.md, "Bestehenden Traefik oder Keycloak einbinden").
 
 x-app-image: &backend-image ${IMAGE_REGISTRY:-ghcr.io/stritti/nak-district-planner}/backend:${APP_VERSION:?Set APP_VERSION in .env, e.g. 1.0.0-rc.2}
 
