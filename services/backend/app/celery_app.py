@@ -16,7 +16,6 @@ from app.adapters.db.session import engine
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
 
-
 celery = Celery(
     "nak_planner",
     broker=settings.valkey_url.replace("valkey://", "redis://", 1),
