@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Protocol, Sequence
+from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +28,7 @@ from app.domain.models.invitation import (
     OverwriteDecisionStatus,
 )
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+
 
 class InvitationTargetInput(Protocol):
     """Transport-neutral invitation target validated at the inbound boundary."""
