@@ -33,7 +33,6 @@ import uuid
 from collections.abc import Awaitable
 from datetime import UTC, date, datetime
 
-from app.adapters.db.sync_attempts import record_sync_attempt
 from app.celery_app import celery
 from app.domain.errors import IntegrationNotFoundError, UnsupportedCalendarTypeError
 from app.domain.models.calendar_integration import SUPPORTED_CALENDAR_TYPES
@@ -101,6 +100,27 @@ async def _alert_sync_failure(integration_id: str, exc: BaseException, attempts:
             await session.commit()
 
 
+
+
+async def record_sync_attempt(integration_id: uuid.UUID, error: str | None = None) -> None:
+    """Commit attempt metadata in its own transaction after failed sync rollback.
+
+    Callers must not pass provider-controlled messages: exception class names and
+    curated constant strings are safe; URLs, HTTP response bodies and tokens are not.
+    """
+    from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
+    from app.adapters.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        repo = SqlCalendarIntegrationRepository(session)
+        integration = await repo.get(integration_id)
+        if integration is None:
+            return
+        integration.last_attempt_at = datetime.now(UTC)
+        if error is not None:
+            integration.last_sync_error = error[:500]
+        await repo.save(integration)
+        await session.commit()
 
 
 class SyncIntegrationTask(celery.Task):
