@@ -8,7 +8,7 @@ services:
       migrate:
         condition: service_completed_successfully
       valkey:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -31,7 +31,13 @@ services:
     command: uv run alembic upgrade head
     restart: "no"
     depends_on:
-      db:
+        healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  db:
         condition: service_healthy
 
   worker:
@@ -46,6 +52,12 @@ services:
       valkey:
         condition: service_started
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d celery@$(hostname) --timeout=5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # The only scheduler for celery_app.beat_schedule. Run exactly one instance:
   # every additional replica would fire each periodic job again. The schedule
@@ -73,7 +85,7 @@ services:
     # reverse proxy; this prevents bypassing HTTPS via the server IP while
     # preserving the documented reverse-proxy target on 127.0.0.1:80.
     ports:
-      - "127.0.0.1:80:80"
+      - "127.0.0.1:80:8080"
     env_file:
       - .env.docker.frontend
     depends_on:
@@ -119,9 +131,17 @@ services:
 
   valkey:
     image: valkey/valkey:9.1.2-alpine
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?Set VALKEY_PASSWORD in .env}
+    command: ["sh", "-c", "exec valkey-server --requirepass \"${VALKEY_PASSWORD}\""]
     volumes:
       - ./valkey_data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"${VALKEY_PASSWORD}\" valkey-cli ping | grep -qx PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   beat_schedule:

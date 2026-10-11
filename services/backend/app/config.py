@@ -220,6 +220,13 @@ def production_guard(settings: Settings) -> None:
         if os.environ.get(name)
     )
 
+    # Reject trivially guessable runtime credentials; owner credentials must
+    # never enter a production runtime at all (checked above).
+    for name in ("APP_DB_PASSWORD", "VALKEY_PASSWORD"):
+        value = os.environ.get(name)
+        if value is None or value.strip().lower() in {"", "changeme", "password", "default"}:
+            errors.append(f"{name} must be set to a non-default value in production")
+
     # SECRET_KEY must be non-default and have sufficient entropy
     if settings.secret_key in (
         "replace-with-a-long-random-secret-key",

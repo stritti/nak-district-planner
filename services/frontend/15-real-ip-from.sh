@@ -8,7 +8,7 @@
 set -eu
 
 networks="${NGINX_REAL_IP_FROM:-127.0.0.1/32 172.16.0.0/12}"
-out=/etc/nginx/conf.d/real-ip-from.conf
+out=/tmp/real-ip-from.conf
 
 : > "$out"
 for net in $(echo "$networks" | tr ',' ' '); do

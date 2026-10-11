@@ -22,6 +22,17 @@
 
 x-app-image: &backend-image ${IMAGE_REGISTRY:-ghcr.io/stritti/nak-district-planner}/backend:${APP_VERSION:?Set APP_VERSION in .env, e.g. 1.0.0-rc.2}
 
+x-runtime-hardening: &runtime-hardening
+  read_only: true
+  cap_drop: [ALL]
+  tmpfs:
+    - /tmp:rw,nosuid,noexec,size=64m
+  pids_limit: 256
+  deploy:
+    resources:
+      limits:
+        memory: 1g
+
 x-defaults: &defaults
   restart: unless-stopped
   security_opt:
@@ -82,7 +93,7 @@ services:
       retries: 3
 
   frontend:
-    <<: *defaults
+    <<: [*defaults, *runtime-hardening]
     image: ${IMAGE_REGISTRY:-ghcr.io/stritti/nak-district-planner}/frontend:${APP_VERSION:?Set APP_VERSION in .env}
     env_file:
       - .env.docker.frontend
@@ -95,13 +106,13 @@ services:
       - edge
       - app
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 30s
       timeout: 5s
       retries: 3
 
   backend:
-    <<: *defaults
+    <<: [*defaults, *runtime-hardening]
     image: *backend-image
     env_file:
       - .env
@@ -125,6 +136,7 @@ services:
   # One-shot deployment step with the database owner credentials (see
   # docs/deployment-migrations.md). Runtime services start only after it.
   migrate:
+    <<: *runtime-hardening
     image: *backend-image
     env_file:
       - .env
@@ -141,7 +153,7 @@ services:
       - data
 
   worker:
-    <<: *defaults
+    <<: [*defaults, *runtime-hardening]
     image: *backend-image
     command: uv run celery -A app.celery_app worker --loglevel=info
     env_file:
@@ -155,10 +167,16 @@ services:
     networks:
       - app
       - data
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d celery@$(hostname) --timeout=5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # The only scheduler: exactly one instance, schedule file on a named volume.
   beat:
-    <<: *defaults
+    <<: [*defaults, *runtime-hardening]
     image: *backend-image
     command: uv run celery -A app.celery_app beat --loglevel=info --schedule /app/beat/celerybeat-schedule
     env_file:
@@ -168,6 +186,9 @@ services:
       - beat_schedule:/app/beat
     deploy:
       replicas: 1
+      resources:
+        limits:
+          memory: 1g
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -196,13 +217,21 @@ services:
 
   valkey:
     <<: *defaults
+    pids_limit: 128
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     image: valkey/valkey:9.1.2-alpine
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?Set VALKEY_PASSWORD in .env}
+    command: ["sh", "-c", "exec valkey-server --requirepass \"${VALKEY_PASSWORD}\""]
     volumes:
       - valkey_data:/data
     networks:
       - data
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"${VALKEY_PASSWORD}\" valkey-cli ping | grep -qx PONG"]
       interval: 10s
       timeout: 5s
       retries: 5

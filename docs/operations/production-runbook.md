@@ -301,3 +301,84 @@ Valkey. **Vor dem Upgrade** müssen deshalb alte Aufträge abgearbeitet werden.
 5. Kontrollieren, dass keine Nachricht verloren ging (insbesondere E-Mail-Aufträge und synchronisierte Kalender). Bei nicht leerem Legacy-Broker verweigern neue Worker und Beat den Start mit einem eindeutigen Fehler.
 
 Die Tabellen bleiben vorerst zur forensischen Prüfung bestehen; ein Downgrade darf keine wartenden Aufträge still löschen.
+
+## 4. Container-Haertung und Valkey-Zugang
+
+Mit Issue #472 laufen Frontend, Backend, Worker, Beat und der Migrationsschritt im
+veroeffentlichten Produktions-Compose mit schreibgeschuetztem Root-Dateisystem,
+ohne Linux-Capabilities und mit begrenzten PIDs und Speicherkontingenten.
+Schreibbare Pfade sind ausschliesslich tmpfs (`/tmp`) und das
+`beat_schedule`-Volume. Nicht jeder Datenbank- und Proxy-Dienst ist
+`read_only`: PostgreSQL, Valkey, Keycloak und Traefik benoetigen schreibbare
+Daten-, Cache- oder Zertifikatsverzeichnisse. Ihre Netz- und Secret-Grenzen
+bleiben bestehen. Das interne Nginx lauscht unprivilegiert auf Port 8080;
+nur der externe Proxy nimmt HTTPS auf 443 an.
+
+Vor dem Deployment `VALKEY_PASSWORD` in `.env` auf einen neuen, URL-sicheren
+Zufallswert setzen, zum Beispiel mit `openssl rand -hex 32`. Der
+`production_guard` verweigert den Start bei fehlendem oder bekannten
+Standardwerten von `APP_DB_PASSWORD` und `VALKEY_PASSWORD`.
+`.env.docker` setzt daraus eine authentifizierte `VALKEY_URL` fuer
+API, Worker und Beat. **Bestehende Valkey-Nachrichten und Celery-Jobs
+vor einem Passwortwechsel auslaufen lassen oder die Credentials bei
+einem Rolling Update koordiniert umstellen.** Das Passwort wird fuer den
+Valkey-Prozess als Environment-Wert konfiguriert: Nur befugte Betreiber
+duerfen Docker-Metadaten und Compose-Dateien lesen. Nie `.env` committen.
+
+`services/frontend/.dockerignore` und
+`services/backend/.dockerignore` schliessen lokale Env-Dateien,
+Abhaengigkeiten und Build-Artefakte von Image-Build-Kontexten aus.
+`index.html` und `sw.js` werden nicht zwischengespeichert.
+Direkte `/api/*`- und `/health`-Navigationen sind vom PWA-App-Shell-Fallback
+ausgenommen. Die bestehende CSP erlaubt `style-src 'unsafe-inline'`
+wegen der verwendeten UI-Styles und `img-src https:` fuer externe Bilder;
+ein Entfernen erfordert vorherige Browser-/E2E-Regressionstests.
+
+### Standalone-IDPs
+
+Die separaten `idp-deploy/keycloak/`- und
+`idp-deploy/authentik/`-Stacks erfordern gesetzte,
+nicht-leere Credentials und HTTPS-Hostnamen. Bei Keycloak:
+`KEYCLOAK_HOSTNAME=auth.example.org` und
+`KC_BOOTSTRAP_ADMIN_PASSWORD` / `KEYCLOAK_DB_PASSWORD`.
+Bei Authentik:
+`AUTHENTIK_HOSTNAME=auth.example.org`,
+`AUTHENTIK_SECRET_KEY` und `AUTHENTIK_POSTGRES_PASSWORD`.
+Die Einstellungen aus `*.env.example` muessen ersetzt werden.
+TLS endet am vorgeschalteten Reverse Proxy; HTTP der Backends bleibt intern.
+Ein vorhandener Keycloak/Traefik wird gemaess
+[Produktions-Compose](/operations/production-compose) eingebunden.
+
+## 5. Backup inklusive Rollen und Wiederherstellung
+
+`scripts/backup.sh` erstellt nun zwei zusammengehoerige Archive:
+`<datenbank>_<zeit>.dump.gpg` (Schema und Daten) und
+`<datenbank>_<zeit>.roles.sql.gpg` (globale Rollen, **ohne Passworthashes**).
+Beide werden im verschluesselten Modus ueber Pipes erstellt; kein
+unverschluesselter Dump wird auf dem Host zwischengespeichert.
+
+Bei einer Wiederherstellung in einen **neuen, isolierten PostgreSQL-Cluster**
+zuerst Rollen einspielen, **danach** das Datenbankarchiv wiederherstellen.
+Die Rollenliste kann auch die urspruengliche Besitzerrolle enthalten.
+Diese Rollen duerfen im Ziel nicht bereits existieren; fuer solche
+Neuinstallationen eignet sich ein separater Bootstrap-Superuser.
+Auf einem bestehenden Ziel Rollen selektiv und nach manueller
+Konfliktpruefung einspielen.
+
+```bash
+gpg --decrypt backups/nak_planner_YYYYMMDD_HHMMSS.roles.sql.gpg \
+  | docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1
+./scripts/restore.sh backups/nak_planner_YYYYMMDD_HHMMSS.dump.gpg --dry-run
+./scripts/restore.sh backups/nak_planner_YYYYMMDD_HHMMSS.dump.gpg
+```
+
+Nach dem Restore unbedingt die Passwoerter fuer alle benoetigten Rollen
+aus dem sicheren Secret-Store neu setzen (`\password nak_app` in psql)
+und mit `APP_DB_PASSWORD` und `POSTGRES_PASSWORD` synchronisieren.
+Die verschluesselte Rollen-SQL enthaelt bewusst keine Passwort-Hashes.
+Vor Freigabe Daten, Alembic-Revision, RLS-Policies,
+`SECURITY DEFINER`-Funktionen, Grants und Anwendungsgesundheit pruefen.
+Der CI-Restore-Drill startet jetzt mit einem migrierten Quell-Schema und
+prueft die Wiederherstellung dieser Sicherheitsmerkmale in einem
+unabhaengigen Ziel-Cluster. Die Probe-Tabelle und der Test gegen
+beschaedigte Archive bleiben erhalten.

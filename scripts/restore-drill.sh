@@ -8,9 +8,11 @@ readonly POSTGRES_IMAGE="${RESTORE_DRILL_POSTGRES_IMAGE:-postgres:18-alpine}"
 readonly POSTGRES_USER="${RESTORE_DRILL_POSTGRES_USER:-nak_planner}"
 readonly POSTGRES_PASSWORD="${RESTORE_DRILL_POSTGRES_PASSWORD:-restore-drill-only}"
 readonly POSTGRES_DB="${RESTORE_DRILL_POSTGRES_DB:-nak_planner}"
+readonly RESTORE_USER="nak_restore"
 readonly DRILL_ID="${GITHUB_RUN_ID:-local}-$$"
 readonly SOURCE_CONTAINER="nak-restore-source-${DRILL_ID}"
 readonly TARGET_CONTAINER="nak-restore-target-${DRILL_ID}"
+readonly MIGRATION_IMAGE="nak-restore-migration-${DRILL_ID}"
 readonly WORK_DIR="$(mktemp -d)"
 readonly BACKUP_DIR="${WORK_DIR}/backups"
 readonly GNUPGHOME="${WORK_DIR}/gnupg"
@@ -19,6 +21,7 @@ export GNUPGHOME
 
 cleanup() {
   docker rm -f "$SOURCE_CONTAINER" "$TARGET_CONTAINER" >/dev/null 2>&1 || true
+  docker image rm -f "$MIGRATION_IMAGE" >/dev/null 2>&1 || true
   rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
@@ -29,17 +32,18 @@ log() {
 
 start_database() {
   local container="$1"
+  local db_user="${2:-$POSTGRES_USER}"
 
   docker run --rm -d \
     --name "$container" \
-    -e "POSTGRES_USER=${POSTGRES_USER}" \
+    -e "POSTGRES_USER=${db_user}" \
     -e "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" \
     -e "POSTGRES_DB=${POSTGRES_DB}" \
     "$POSTGRES_IMAGE" >/dev/null
 
   for _ in $(seq 1 30); do
     if docker exec "$container" psql \
-      -U "$POSTGRES_USER" \
+      -U "$db_user" \
       -d "$POSTGRES_DB" \
       -Atqc 'SELECT 1' >/dev/null 2>&1; then
       return 0
@@ -50,6 +54,17 @@ start_database() {
   log "database ${POSTGRES_DB} in container ${container} did not become ready"
   docker logs "$container" >&2 || true
   return 1
+}
+
+run_schema_migrations() {
+  log 'building the migration image from this commit'
+  docker build --quiet -t "$MIGRATION_IMAGE" -f services/backend/Dockerfile services/backend >/dev/null
+  docker run --rm --network "container:$SOURCE_CONTAINER" \
+    -e "MIGRATION_DATABASE_URL=postgresql+asyncpg://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5432/$POSTGRES_DB" \
+    -e "APP_DB_USER=nak_app" \
+    -e "APP_DB_PASSWORD=$POSTGRES_PASSWORD" \
+    -e "APP_ENV=test" \
+    "$MIGRATION_IMAGE" uv run alembic upgrade head
 }
 
 create_probe_data() {
@@ -94,10 +109,26 @@ create_encrypted_backup() {
   find "$BACKUP_DIR" -maxdepth 1 -type f -name '*.dump.gpg' -print -quit
 }
 
+restore_roles() {
+  local backup_file="$1"
+  local role_archive="${backup_file%.dump.gpg}.roles.sql.gpg"
+  local role_sql="$WORK_DIR/roles.sql"
+  [[ -s "$role_archive" ]] || { log "missing encrypted role metadata: $role_archive"; return 1; }
+  gpg --batch --quiet --output "$role_sql" --decrypt "$role_archive"
+  if ! grep -Eq 'CREATE ROLE nak_app;' "$role_sql"; then
+    log 'application role missing from backed-up cluster globals'
+    return 1
+  fi
+  # The restore cluster has a different bootstrap superuser, so recreating
+  # backed-up roles does not conflict with an existing database owner.
+  docker exec -i "$TARGET_CONTAINER" psql -v ON_ERROR_STOP=1 \
+    -U "$RESTORE_USER" -d "$POSTGRES_DB" < "$role_sql" >/dev/null
+}
+
 seed_target_with_conflicting_data() {
   docker exec -i "$TARGET_CONTAINER" psql \
     -v ON_ERROR_STOP=1 \
-    -U "$POSTGRES_USER" \
+    -U "$RESTORE_USER" \
     -d "$POSTGRES_DB" <<'SQL'
 CREATE TABLE restore_drill_probe (
     id integer PRIMARY KEY,
@@ -113,13 +144,13 @@ run_restore() {
 
   env \
     DB_CONTAINER="$TARGET_CONTAINER" \
-    POSTGRES_USER="$POSTGRES_USER" \
+    POSTGRES_USER="$RESTORE_USER" \
     POSTGRES_DB="$POSTGRES_DB" \
     bash ./scripts/restore.sh "$backup_file" --dry-run --yes >/dev/null
 
   env \
     DB_CONTAINER="$TARGET_CONTAINER" \
-    POSTGRES_USER="$POSTGRES_USER" \
+    POSTGRES_USER="$RESTORE_USER" \
     POSTGRES_DB="$POSTGRES_DB" \
     bash ./scripts/restore.sh "$backup_file" --yes >/dev/null
 }
@@ -127,7 +158,7 @@ run_restore() {
 assert_restored_data() {
   local payload
   payload="$(docker exec "$TARGET_CONTAINER" psql \
-    -U "$POSTGRES_USER" \
+    -U "$RESTORE_USER" \
     -d "$POSTGRES_DB" \
     -Atc 'SELECT payload FROM restore_drill_probe WHERE id = 1')"
 
@@ -147,13 +178,13 @@ assert_corrupt_archive_is_rejected_without_changes() {
   head -c 64 "$plain_backup" > "$corrupt_backup"
 
   before="$(docker exec "$TARGET_CONTAINER" psql \
-    -U "$POSTGRES_USER" \
+    -U "$RESTORE_USER" \
     -d "$POSTGRES_DB" \
     -Atc 'SELECT payload FROM restore_drill_probe WHERE id = 1')"
 
   if env \
     DB_CONTAINER="$TARGET_CONTAINER" \
-    POSTGRES_USER="$POSTGRES_USER" \
+    POSTGRES_USER="$RESTORE_USER" \
     POSTGRES_DB="$POSTGRES_DB" \
       bash ./scripts/restore.sh "$corrupt_backup" --dry-run --yes >/dev/null 2>&1; then
     log 'corrupt archive was unexpectedly accepted'
@@ -161,7 +192,7 @@ assert_corrupt_archive_is_rejected_without_changes() {
   fi
 
   after="$(docker exec "$TARGET_CONTAINER" psql \
-    -U "$POSTGRES_USER" \
+    -U "$RESTORE_USER" \
     -d "$POSTGRES_DB" \
     -Atc 'SELECT payload FROM restore_drill_probe WHERE id = 1')"
 
@@ -171,11 +202,32 @@ assert_corrupt_archive_is_rejected_without_changes() {
   fi
 }
 
+assert_restored_security_model() {
+  local result
+  result="$(docker exec "$TARGET_CONTAINER" psql -U "$RESTORE_USER" -d "$POSTGRES_DB" \
+    -v ON_ERROR_STOP=1 -Atqc "
+      SELECT
+        EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nak_app' AND NOT rolbypassrls)
+        AND EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public')
+        AND EXISTS (SELECT 1 FROM pg_class WHERE relname = 'memberships' AND relrowsecurity)
+        AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'grant_bootstrap_superadmin' AND prosecdef)
+        AND to_regclass('public.app_superadmin_config') IS NOT NULL
+        AND has_table_privilege('nak_app', 'public.memberships', 'SELECT')
+        AND NOT has_table_privilege('nak_app', 'public.app_superadmin_config', 'SELECT')
+        AND NOT has_schema_privilege('nak_app', 'public', 'CREATE');
+    ")"
+  if [[ "$result" != "t" ]]; then
+    log "restored RLS, SECURITY DEFINER or grants differ: $result"
+    return 1
+  fi
+}
+
 main() {
   local recipient backup_file
 
   log 'starting isolated source database'
   start_database "$SOURCE_CONTAINER"
+  run_schema_migrations
   create_probe_data
 
   log 'creating encrypted backup'
@@ -190,12 +242,14 @@ main() {
   docker rm -f "$SOURCE_CONTAINER" >/dev/null
 
   log 'starting independent restore target'
-  start_database "$TARGET_CONTAINER"
+  start_database "$TARGET_CONTAINER" "$RESTORE_USER"
+  restore_roles "$backup_file"
   seed_target_with_conflicting_data
 
   log 'validating and restoring backup'
   run_restore "$backup_file"
   assert_restored_data
+  assert_restored_security_model
 
   log 'verifying corrupt archives fail before changing target data'
   assert_corrupt_archive_is_rejected_without_changes "$backup_file"
