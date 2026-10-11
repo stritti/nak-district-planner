@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from app.adapters.api.schemas.calendar_integration import (
-    CalendarIntegrationCreate,
-    CalendarIntegrationUpdate,
+from app.application.services.calendar_integration_commands import (
+    CalendarIntegrationCreateCommand,
+    CalendarIntegrationUpdateCommand,
 )
 from app.application.crypto import encrypt_credentials
 from app.domain.models.calendar_integration import CalendarIntegration
@@ -20,7 +20,7 @@ class CalendarIntegrationService:
     def __init__(self, repository: CalendarIntegrationRepository) -> None:
         self._repo = repository
 
-    async def create_integration(self, body: CalendarIntegrationCreate) -> CalendarIntegration:
+    async def create_integration(self, body: CalendarIntegrationCreateCommand) -> CalendarIntegration:
         integration = CalendarIntegration.create(
             district_id=body.district_id,
             congregation_id=body.congregation_id,
@@ -38,21 +38,21 @@ class CalendarIntegrationService:
     async def update_integration(
         self,
         integration: CalendarIntegration,
-        body: CalendarIntegrationUpdate,
+        body: CalendarIntegrationUpdateCommand,
     ) -> CalendarIntegration:
-        fields = body.model_fields_set
-        if "name" in fields and body.name is not None:
-            integration.name = body.name
-        if "credentials" in fields and body.credentials is not None:
-            integration.credentials_enc = encrypt_credentials(body.credentials)
-        if "sync_interval" in fields and body.sync_interval is not None:
-            integration.sync_interval = body.sync_interval
-        if "capabilities" in fields and body.capabilities is not None:
-            integration.capabilities = body.capabilities
+        fields = body.changes
+        if "name" in fields and fields["name"] is not None:
+            integration.name = fields["name"]
+        if "credentials" in fields and fields["credentials"] is not None:
+            integration.credentials_enc = encrypt_credentials(fields["credentials"])
+        if "sync_interval" in fields and fields["sync_interval"] is not None:
+            integration.sync_interval = fields["sync_interval"]
+        if "capabilities" in fields and fields["capabilities"] is not None:
+            integration.capabilities = fields["capabilities"]
         if "default_category" in fields:
-            integration.default_category = body.default_category
-        if "delete_behavior" in fields and body.delete_behavior is not None:
-            integration.delete_behavior = body.delete_behavior
+            integration.default_category = fields["default_category"]
+        if "delete_behavior" in fields and fields["delete_behavior"] is not None:
+            integration.delete_behavior = fields["delete_behavior"]
 
         integration.updated_at = datetime.now(UTC)
         await self._repo.save(integration)
