@@ -23,7 +23,6 @@ from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
 
-
 class GoogleCalendarConnector(CalendarConnector):
     """Adapter for Google Calendar API."""
 

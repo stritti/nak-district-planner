@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.application.crypto import encrypt_credentials
 from app.application.services.calendar_integration_commands import (
     CalendarIntegrationCreateCommand,
     CalendarIntegrationUpdateCommand,
 )
-from app.application.crypto import encrypt_credentials
 from app.domain.models.calendar_integration import CalendarIntegration
 from app.domain.ports.repositories import CalendarIntegrationRepository
 

@@ -3,9 +3,9 @@
 
 """Application commands independent from FastAPI and Pydantic schemas."""
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
-import uuid
 
 from app.domain.models.calendar_integration import (
     CalendarCapability,
