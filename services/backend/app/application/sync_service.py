@@ -678,7 +678,12 @@ async def run_sync(
     ``now`` anchors the sync window (tests pin it; production uses the clock).
     """
     lock_key = int.from_bytes(integration_id.bytes[:8], "big", signed=True)
-    await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
+    lock = await session.scalar(
+        text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": lock_key}
+    )
+    if not lock:
+        logger.info("Calendar sync skipped: integration %s already running", integration_id)
+        return SyncResult(skipped=1)
     integration_repo = SqlCalendarIntegrationRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
     slot_repo = SqlPlanningSlotRepository(session)
@@ -743,15 +748,9 @@ async def run_sync(
             problems.append(_INCOMPLETE_SNAPSHOT)
         integration.last_sync_error = "; ".join(problems) or None
         await integration_repo.save(integration)
-    except Exception as exc:
-        # Only connector errors carry curated, secret-free texts; anything else
-        # may embed URLs or credentials (#463).
-        integration.last_sync_error = (
-            str(exc)[:500]
-            if isinstance(exc, CalendarConnectorError)
-            else "Synchronisierung fehlgeschlagen (interner Fehler)"
-        )
-        await integration_repo.save(integration)
+    except Exception:
+        # The caller rolls back this transaction. Error persistence belongs to
+        # the task runner, which records it in a separate transaction.
         raise
     return SyncResult(
         created=counters[SyncOutcome.CREATED],
