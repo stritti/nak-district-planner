@@ -125,16 +125,12 @@ async def record_sync_attempt(integration_id: uuid.UUID, error: str | None = Non
 
 async def mark_scheduled_sync(integration_id: uuid.UUID) -> None:
     """Update only the attempt timestamp once the broker accepted the task."""
-    from sqlalchemy import update
-
-    from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
+    from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
     from app.adapters.db.session import AsyncSessionLocal
 
     async with AsyncSessionLocal() as session:
-        await session.execute(
-            update(CalendarIntegrationORM)
-            .where(CalendarIntegrationORM.id == integration_id)
-            .values(last_attempt_at=datetime.now(UTC))
+        await SqlCalendarIntegrationRepository(session).stamp_scheduled_attempt(
+            integration_id, datetime.now(UTC)
         )
         await session.commit()
 
