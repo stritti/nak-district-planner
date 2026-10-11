@@ -8,7 +8,7 @@ Diese Seite ist die **einzige aktive produktbezogene Roadmap**. Die verbindliche
 
 | Vorhaben | Umfang | Nachweis | Status |
 | --- | --- | --- | --- |
-| Wiederkehrende Gemeinde-/Bezirkstermine | Wochen-/Monatsmuster, monatliche Checkliste, explizite Übernahme, DST-/Konflikt-/Rechteprüfungen, Dubletten verhindern | [Issue #557](https://github.com/stritti/nak-district-planner/issues/557), [PR #558](https://github.com/stritti/nak-district-planner/pull/558) | **Nur OpenSpec, nicht implementiert** |
+| Wiederkehrende Gemeinde-/Bezirkstermine | Wochen-/Monatsmuster, monatliche Checkliste, explizite Übernahme, DST-/Konflikt-/Rechteprüfungen, Dubletten verhindern | [Issue #557](https://github.com/stritti/nak-district-planner/issues/557), [OpenSpec-PR #558](https://github.com/stritti/nak-district-planner/pull/558), [Implementierungs-PR #570](https://github.com/stritti/nak-district-planner/pull/570) | **In Umsetzung (Draft):** Regelmodell und Unit-Tests, noch keine API oder Oberfläche |
 | Konfigurierbare Aufgaben je Termin | Schließdienst, Organist, Dirigent, Namensvorschläge und Amtsträger-Lifecycle | [PR #525](https://github.com/stritti/nak-district-planner/pull/525) | **Nur OpenSpec, nicht implementiert** |
 | Inline-Editing in Übersichten | Berechtigte Tabellenzellen bearbeiten; gemeinsamer Vue-Editor mit Konflikt-/Fehlerbehandlung | [PR #530](https://github.com/stritti/nak-district-planner/pull/530) | **Nur OpenSpec, nicht implementiert** |
 
