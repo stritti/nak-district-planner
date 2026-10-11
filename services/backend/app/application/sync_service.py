@@ -682,7 +682,7 @@ async def run_sync(
         text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": lock_key}
     )
     if not lock:
-        logger.info("Calendar sync skipped: integration %s already running", integration_id)
+        logger.info("Calendar sync skipped: integration already running")
         return SyncResult(skipped=1)
     integration_repo = SqlCalendarIntegrationRepository(session)
     instance_repo = SqlEventInstanceRepository(session)
