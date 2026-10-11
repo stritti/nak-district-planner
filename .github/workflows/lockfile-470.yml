@@ -1,0 +1,28 @@
+name: Regenerate uv lock #470
+on:
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/lockfile-470.yml]
+permissions:
+  contents: write
+jobs:
+  lock:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+      - uses: astral-sh/setup-uv@v6
+      - run: uv lock
+        working-directory: services/backend
+      - name: Commit refreshed lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add services/backend/uv.lock
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(deps): resolve celery redis lockfile (#470)"
+            git push
+          fi
