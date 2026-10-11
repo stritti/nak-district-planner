@@ -59,6 +59,7 @@ class CalendarIntegration:
     congregation_id: uuid.UUID | None = None
     default_category: str | None = None
     last_sync_error: str | None = None
+    last_attempt_at: datetime | None = None
     delete_behavior: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
 
     @classmethod
@@ -88,6 +89,7 @@ class CalendarIntegration:
             is_active=True,
             last_synced_at=None,
             last_sync_error=None,
+            last_attempt_at=None,
             created_at=now,
             updated_at=now,
             default_category=default_category,
