@@ -553,3 +553,37 @@ async def test_scheduled_generator_locks_district_before_reading_generation_keys
     )
     assert order[:2] == ["lock", "read"]
     m.slot_repo.lock_district_for_generation.assert_awaited_once_with(series.district_id)
+
+@pytest.mark.asyncio
+async def test_moved_series_slot_is_not_recreated_by_beat_generator() -> None:
+    """The scheduled generator also deduplicates by key, not mutable slot date."""
+    from app.domain.models.planning_slot import planning_series_generation_key
+
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(),
+        default_planning_time=time(10),
+        recurrence_pattern={"type": "weekly", "days": [0]},
+    )
+    original_date = date(2026, 6, 1)
+    moved = PlanningSlot.create(
+        district_id=series.district_id,
+        series_id=series.id,
+        congregation_id=series.congregation_id,
+        planning_date=date(2026, 6, 8),
+        planning_time=time(10),
+        generation_key=planning_series_generation_key(series.id, original_date),
+    )
+    mocks = MockRepos()
+    mocks.series_repo.list_active.return_value = [series]
+    mocks.slot_repo.list_by_generation_keys.return_value = [moved]
+    mocks.slot_repo.get_by_series_date.return_value = None
+
+    result = await mocks.build().run_for_window(
+        from_date=original_date,
+        to_date_exclusive=date(2026, 6, 2),
+    )
+
+    assert result["slots_created"] == 0
+    assert result["slots_skipped"] == 1
+    mocks.slot_repo.add_if_absent.assert_not_awaited()
+    mocks.instance_repo.save.assert_not_awaited()
