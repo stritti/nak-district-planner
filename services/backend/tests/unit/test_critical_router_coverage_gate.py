@@ -37,13 +37,13 @@ def _report(tmp_path: Path, *, rates: dict[str, float]) -> Path:
 def test_all_critical_routers_meeting_threshold_pass(tmp_path: Path) -> None:
     xml = _report(
         tmp_path,
-        rates={path: 0.8 for path in checker.CRITICAL_ROUTERS},
+        rates=dict.fromkeys(checker.CRITICAL_ROUTERS, 0.8),
     )
     assert checker.check_critical_coverage(xml) == []
 
 
 def test_low_coverage_fails_even_if_other_modules_are_high(tmp_path: Path) -> None:
-    rates = {path: 0.99 for path in checker.CRITICAL_ROUTERS}
+    rates = dict.fromkeys(checker.CRITICAL_ROUTERS, 0.99)
     rates[checker.CRITICAL_ROUTERS[1]] = 0.799
     failures = checker.check_critical_coverage(
         _report(tmp_path, rates=rates)
@@ -53,9 +53,7 @@ def test_low_coverage_fails_even_if_other_modules_are_high(tmp_path: Path) -> No
 
 
 def test_missing_or_duplicated_critical_class_fails(tmp_path: Path) -> None:
-    rates = {
-        path: 0.95 for path in checker.CRITICAL_ROUTERS[1:]
-    }
+    rates = dict.fromkeys(checker.CRITICAL_ROUTERS[1:], 0.95)
     missing = checker.check_critical_coverage(_report(tmp_path, rates=rates))
     assert len(missing) == 1
     assert "found 0" in missing[0]
@@ -70,7 +68,7 @@ def test_normalized_path_matches_coverage_class_filename(tmp_path: Path) -> None
 
 @pytest.mark.parametrize("bad_rate", [0.0, 0.5, 0.799])
 def test_every_rate_below_gate_is_rejected(tmp_path: Path, bad_rate: float) -> None:
-    rates = {path: 1.0 for path in checker.CRITICAL_ROUTERS}
+    rates = dict.fromkeys(checker.CRITICAL_ROUTERS, 1.0)
     rates[checker.CRITICAL_ROUTERS[-1]] = bad_rate
     failures = checker.check_critical_coverage(_report(tmp_path, rates=rates))
     assert len(failures) == 1
