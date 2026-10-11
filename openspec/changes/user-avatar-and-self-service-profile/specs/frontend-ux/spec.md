@@ -2,7 +2,7 @@
 
 ### Requirement: Benutzeravatar und Profilmenü in der Hauptnavigation
 
-Die SPA SHALL bei authentifizierten Benutzern rechts oben einen kreisrunden, generischen Avatar statt eines breiten Namens-/E-Mail-Blocks anzeigen. Der Avatar SHALL ohne eigene oder externe Bilddateien aus den Initialen des effektiven Vornamens und Nachnamens berechnet werden. Das Avatar-Steuerelement SHALL das Benutzer-Popup öffnen; das Popup SHALL den Anzeigenamen, die E-Mail, „Mein Profil“ und „Abmelden“ enthalten. Ein optionaler Link zur externen Konto-Verwaltung SHALL nur bei vertrauenswürdig konfigurierter Provider-URL erscheinen.
+Die SPA SHALL bei authentifizierten Benutzern einen generischen kreisrunden Initialen-Avatar ohne Bildabruf darstellen. Das barrierefrei bedienbare Profilmenü SHALL Anzeigename, E-Mail, „Mein Profil“ und „Abmelden“ enthalten. Ein Link zur externen Kontoverwaltung SHALL nur bei vertrauenswürdig konfigurierter URL erscheinen.
 
 #### Scenario: Vor- und Nachname vorhanden
 - **WHEN** ein angemeldeter Benutzer die effektiven Namensbestandteile „Max“ und „Beispiel“ hat

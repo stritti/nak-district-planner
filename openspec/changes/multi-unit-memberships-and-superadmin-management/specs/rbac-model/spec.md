@@ -2,9 +2,7 @@
 
 ### Requirement: Multiple independent memberships per user
 
-A registered user SHALL be assignable to multiple districts and congregations under the same authenticated subject. Each membership SHALL retain its own scope and role. Memberships MAY include congregations in different districts and a combination of district and congregation scopes.
-
-Adding a membership SHALL NOT replace existing memberships. Changing or removing one membership SHALL NOT modify others. Reassigning the same user and scope SHALL update the existing membership instead of creating duplicate memberships. The database SHALL enforce uniqueness of `(user_sub, scope_type, scope_id)`; repeated or concurrent requests SHALL be transactional and idempotent, without affecting memberships of another scope. Existing rows duplicated by the current `(user_sub, role, scope_type, scope_id)` constraint SHALL be consolidated before the new constraint is applied, retaining the highest role already effective in that scope. A tie SHALL be resolved deterministically by `updated_at` and membership ID; removed records SHALL be archived for audit and safe migration downgrade. Effective permissions of a non-superadmin SHALL be evaluated for the target scope using the existing role hierarchy and scope rules.
+Users MAY have independent roles in multiple districts and congregations under one authenticated subject. Operations on one membership SHALL preserve others. Memberships SHALL be unique by `(user_sub, scope_type, scope_id)`, concurrency-safe and idempotent. Existing duplicates SHALL be consolidated without reducing the effective role or losing auditability.
 
 #### Scenario: One user belongs to multiple congregations
 
@@ -46,7 +44,7 @@ Adding a membership SHALL NOT replace existing memberships. Changing or removing
 
 ### Requirement: Superadmins can appoint additional superadmins
 
-An authenticated existing superadmin SHALL be able to grant superadmin status to a registered user securely linked to an authenticated subject through user administration. This SHALL set the global is_superadmin status independently of unit memberships. Non-superadmins SHALL NOT grant superadmin status, including through registration or membership payloads. Successful appointments SHALL be recorded according to the existing audit rules. Grant and revoke operations SHALL be separate, authenticated, explicit administrative actions using database-reconciled `is_superadmin`, never values from OIDC claims, registration or membership payloads. Existing superadmins SHALL also be able to revoke superadmin status, except when doing so would leave zero superadmins. The final-superadmin guard SHALL be transactional and concurrency safe. Revocation SHALL take effect on the next authorised request, including middleware, API and RLS, without depending on client cache or logout; ordinary memberships remain intact.
+A verified superadmin MAY grant or revoke global superadmin status to a securely linked registered user through explicit audited actions. Other roles MUST NOT grant this status, including through registration payloads. The last superadmin MUST NOT be revoked, including in concurrent operations. Revocation SHALL take effect on the next authorised request.
 
 #### Scenario: Appoint another superadmin
 

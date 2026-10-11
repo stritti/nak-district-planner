@@ -2,7 +2,7 @@
 
 ### Requirement: Authentifizierte Benutzer können ihr lokales Anzeigeprofil verwalten
 
-Der Dienst SHALL jedem authentifizierten OIDC-Subject, einschließlich Benutzern mit `PENDING_APPROVAL`, eine geschützte Self-Service-Ansicht und die Endpunkte `GET /api/v1/profile/me` sowie `PUT /api/v1/profile/me` bereitstellen. Der Dienst SHALL `given_name_override` und `family_name_override` unabhängig von den per OIDC aktualisierten `users`-Stammdaten speichern. Die effektiven Namen SHALL die lokale Überschreibung vor den aktuellen Provider-Werten bevorzugen. `PUT` SHALL beide Override-Felder enthalten und die effektive Profilantwort liefern.
+Der Dienst SHALL für jedes verifizierte OIDC-Subject, auch bei `PENDING_APPROVAL`, eine Self-Service-Ansicht mit `GET /api/v1/profile/me` und `PUT /api/v1/profile/me` anbieten. Beide lokalen Namens-Overrides SHALL unabhängig von IdP-Stammdaten gespeichert werden; der effektive Name SHALL lokale Overrides bevorzugen.
 
 #### Scenario: Neuer Benutzer ohne Überschreibungen
 - **WHEN** der authentifizierte Benutzer erstmals das eigene Profil öffnet

@@ -26,7 +26,7 @@ The system SHALL treat self-registration and access activation as separate steps
 
 ### Requirement: Administrators can manage additional unit assignments
 
-Superadmins SHALL be able to add, update and remove district and congregation memberships of registered, securely linked users across all units. Non-superadmins MAY grant only roles no higher than their own within the same authorised scope; a congregation administrator MUST NOT grant a district-scoped membership. Other authorized administrators SHALL be able to manage assignments only within their existing management permissions. Additional assignments SHALL use the existing role, scope_type and scope_id fields and SHALL preserve the user's existing account and other memberships. Secure user-linkage requirements SHALL remain applicable.
+Superadmins SHALL manage district and congregation memberships of securely linked users across all units. Other administrators MAY manage only authorised scopes and roles no higher than their own. A congregation admin MUST NOT create district roles. Managing one assignment SHALL preserve the existing account and other assignments.
 
 #### Scenario: Superadmin adds a second assignment
 
