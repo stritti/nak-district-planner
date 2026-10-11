@@ -67,63 +67,68 @@ class TestSyncCalendarIntegrationTask:
 
 
 class TestSyncAllActiveIntegrationsTask:
-    """Tests for sync_all_active_integrations Celery task (integration discovery)."""
+    """Dispatch only due integrations; persist each accepted publish."""
+
+    def _run(self, ids: list[str], *, fail_at: int | None = None) -> tuple:
+        from app.application.tasks import sync_all_active_integrations
+
+        session = AsyncMock()
+        repo = MagicMock()
+        repo.list_active = AsyncMock(return_value=[])
+        repo.stamp_scheduled_attempt = AsyncMock()
+        engine = MagicMock()
+        engine.dispose = AsyncMock()
+
+        with (
+            patch("app.adapters.db.session.AsyncSessionLocal") as factory,
+            patch("app.adapters.db.session.engine", engine),
+            patch(
+                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
+                return_value=repo,
+            ),
+            patch("app.application.tasks._due_integration_ids", return_value=ids),
+            patch("app.application.tasks.sync_calendar_integration") as task,
+        ):
+            factory.return_value.__aenter__.return_value = session
+            if fail_at is not None:
+                calls = [None] * fail_at + [ConnectionError("broker unavailable")]
+                task.delay.side_effect = calls
+                with pytest.raises(ConnectionError, match="broker unavailable"):
+                    sync_all_active_integrations()
+                result = None
+            else:
+                result = sync_all_active_integrations()
+            assert task.delay.call_count == (fail_at + 1 if fail_at is not None else len(ids))
+        return result, repo, session, engine
 
     def test_sync_all_active_integrations_queues_tasks(self):
-        """sync_all_active_integrations should discover and queue sync tasks."""
-        # This is more of an integration test, but we can test the basic flow
-        from app.application.tasks import sync_all_active_integrations
-
-        fake_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
-
-        with (
-            patch(
-                "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
-            ) as mock_asyncio_run,
-            patch("app.application.tasks.sync_calendar_integration") as mock_task,
-        ):
-            mock_asyncio_run.return_value = fake_ids
-            mock_task.delay = MagicMock()
-
-            result = sync_all_active_integrations()
-
-        assert result is not None
-        assert result["dispatched"] == len(fake_ids)
-        assert mock_asyncio_run.call_count == len(fake_ids) + 1
-        assert mock_task.delay.call_count == len(fake_ids)
-
+        ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+        result, repo, session, engine = self._run(ids)
+        assert result == {"dispatched": 2}
+        assert repo.stamp_scheduled_attempt.await_count == 2
+        assert session.commit.await_count == 2
+        engine.dispose.assert_awaited_once()
 
     def test_failed_broker_publish_does_not_mark_undispatched_integrations(self):
-        """A failed publish must not mark this or later IDs as attempted."""
-        from app.application.tasks import sync_all_active_integrations
+        ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+        _, repo, session, _ = self._run(ids, fail_at=0)
+        repo.stamp_scheduled_attempt.assert_not_awaited()
+        session.commit.assert_not_awaited()
 
-        fake_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
-        with (
-            patch("app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock) as run,
-            patch("app.application.tasks.sync_calendar_integration") as task,
-            pytest.raises(ConnectionError, match="broker unavailable"),
-        ):
-            run.return_value = fake_ids
-            task.delay.side_effect = ConnectionError("broker unavailable")
-            sync_all_active_integrations()
-        run.assert_called_once()
-        task.delay.assert_called_once_with(fake_ids[0])
+    def test_prior_successful_publish_remains_stamped_after_later_failure(self):
+        ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+        _, repo, session, _ = self._run(ids, fail_at=1)
+        repo.stamp_scheduled_attempt.assert_awaited_once()
+        assert repo.stamp_scheduled_attempt.await_args.args[0] == uuid.UUID(ids[0])
+        session.commit.assert_awaited_once()
 
-    def test_mark_only_after_successful_publish(self):
-        """The timestamp write follows the broker acknowledgement."""
-        from app.application.tasks import sync_all_active_integrations
-
-        integration_id = str(uuid.uuid4())
-        with (
-            patch("app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock) as run,
-            patch("app.application.tasks.sync_calendar_integration") as task,
-        ):
-            run.return_value = [integration_id]
-            task.delay.return_value = MagicMock()
-            result = sync_all_active_integrations()
-        assert result["dispatched"] == 1
-        assert run.call_count == 2
-        task.delay.assert_called_once_with(integration_id)
+    def test_dispatch_timestamp_precedes_published_task_completion(self):
+        ids = [str(uuid.uuid4())]
+        result, repo, _, _ = self._run(ids)
+        assert result == {"dispatched": 1}
+        timestamp = repo.stamp_scheduled_attempt.await_args.args[1]
+        from datetime import UTC, datetime
+        assert timestamp <= datetime.now(UTC)
 
 
 class TestImportFeiertageTask:
@@ -317,7 +322,9 @@ class TestSyncReliability:
         ):
             session_factory.return_value.__aenter__.return_value = session
             identifier = uuid.uuid4()
-            await mark_scheduled_sync(identifier)
+            from datetime import UTC, datetime
+            dispatched_at = datetime.now(UTC)
+            await mark_scheduled_sync(identifier, dispatched_at)
 
         repository.stamp_scheduled_attempt.assert_awaited_once()
         assert repository.stamp_scheduled_attempt.await_args.args[0] == identifier
