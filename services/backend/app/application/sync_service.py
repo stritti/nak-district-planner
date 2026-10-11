@@ -43,13 +43,13 @@ from app.domain.models.calendar_integration import (
 from app.domain.models.event_instance import EventInstance, EventSource, SyncState
 from app.domain.models.external_event_link import ExternalEventLink, ExternalEventLinkState
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
-from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.services.external_event_fingerprint import compute_content_hash, is_occurrence_key
+from app.domain.models.raw_calendar_event import RawCalendarEvent, is_occurrence_key
 from app.domain.ports.calendar import (
     CalendarConnector,
     CalendarConnectorError,
     OccurrenceWriteBackError,
 )
+from app.domain.services.external_event_fingerprint import compute_content_hash
 from app.domain.services.sync_policy import (
     INTERNAL_DELETE_MARKER,
     SyncFieldAuthority,

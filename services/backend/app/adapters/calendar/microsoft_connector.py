@@ -24,6 +24,16 @@ from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
 
 
+_MAX_PAGES = 100
+
+
+def _validate_next_link(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.netloc != "graph.microsoft.com":
+        raise CalendarConnectorError("Ungültiger Microsoft Graph nextLink")
+    return url
+
+
 class MicrosoftGraphCalendarConnector(CalendarConnector):
     """Adapter for Microsoft Graph Calendar API."""
 

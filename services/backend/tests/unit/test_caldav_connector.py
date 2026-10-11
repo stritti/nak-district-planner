@@ -19,8 +19,8 @@ from icalendar import Calendar as ICalendar
 from app.adapters.calendar.caldav_connector import CalDAVConnector
 from app.adapters.calendar.ical_events import to_utc as _to_utc
 from app.domain.models.raw_calendar_event import RawCalendarEvent
-from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 
 CREDS = {
     "url": "https://example.com/calendars/user/default/",

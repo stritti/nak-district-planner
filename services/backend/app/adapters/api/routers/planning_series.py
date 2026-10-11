@@ -24,9 +24,9 @@ from app.adapters.api.schemas.planning_series import (
 )
 from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import require_role_in_district, require_superadmin
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.application.planning_series_service import PlanningSeriesSlotGenerationService
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.role import Role

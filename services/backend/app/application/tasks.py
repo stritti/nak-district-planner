@@ -406,6 +406,7 @@ def auto_import_feiertage() -> dict:
     """
     from datetime import datetime
 
+    from app.adapters.db.repositories.district import SqlDistrictRepository
     from app.adapters.db.session import AsyncSessionLocal
 
     async def _run() -> dict:

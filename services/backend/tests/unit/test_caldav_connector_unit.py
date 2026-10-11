@@ -15,8 +15,8 @@ import httpx
 import pytest
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector
-from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 
 CREDS_BASIC = {"url": "https://caldav.example.com/cal/", "username": "user", "password": "pass"}
 CREDS_BEARER = {"url": "https://caldav.example.com/cal/", "access_token": "tok"}
