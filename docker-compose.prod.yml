@@ -27,11 +27,11 @@ x-runtime-hardening: &runtime-hardening
   cap_drop: [ALL]
   tmpfs:
     - /tmp:rw,nosuid,noexec,size=64m
-  pids_limit: 256
   deploy:
     resources:
       limits:
         memory: 1g
+        pids: 256
 
 x-defaults: &defaults
   restart: unless-stopped
@@ -217,11 +217,11 @@ services:
 
   valkey:
     <<: *defaults
-    pids_limit: 128
     deploy:
       resources:
         limits:
           memory: 512m
+          pids: 128
     image: valkey/valkey:9.1.2-alpine
     environment:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD:?Set VALKEY_PASSWORD in .env}
