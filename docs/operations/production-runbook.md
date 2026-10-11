@@ -266,3 +266,21 @@ Vor RC-2 pruefen:
 4. CodeQL und Dependency Audits ohne blockierende Findings;
 5. OpenSpec-Changes fuer den Releaseumfang verifiziert und erledigte Changes archiviert;
 6. Architektur- und Security-Dokumentation entspricht dem ausgelieferten Code.
+
+
+## Calendar sync diagnostics (#470)
+
+Celery uses VALKEY_URL as its Redis-protocol broker and result backend. The
+worker has a 240-second soft limit, 300-second hard limit, late task ACKs and
+prefetch multiplier 1. Valkey availability is required for dispatch and results.
+
+For a calendar integration, `last_attempt_at` denotes the latest scheduled or
+started attempt, `last_synced_at` the most recent successful run, and
+`last_sync_error` a sanitized failure class. Failed event changes roll back,
+while the error is committed separately. Success clears the error.
+
+Beat avoids scheduling a second retry chain for at least 30 minutes after a
+failed attempt. Running integrations are protected by a transaction-scoped
+`pg_try_advisory_xact_lock`; a busy lock causes an immediate logged skip.
+Manual triggers still use the lock but bypass Beat's cooldown. Check logs for
+`Calendar sync skipped` and `Calendar sync failed` when investigating errors.
