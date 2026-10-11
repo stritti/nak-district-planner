@@ -102,7 +102,7 @@ def test_owner_password_cannot_reach_runtime_services() -> None:
 
 
 def test_deployment_migration_runbook_documents_explicit_commands() -> None:
-    runbook = (REPO_ROOT / "docs" / "deployment-migrations.md").read_text(encoding="utf-8")
+    runbook = (REPO_ROOT / "docs" / "operations" / "deployment-migrations.md").read_text(encoding="utf-8")
 
     assert "docker compose run --no-deps --rm migrate" in runbook
     assert "docker compose run --no-deps --rm --build migrate" in runbook

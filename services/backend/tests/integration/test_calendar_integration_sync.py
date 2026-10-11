@@ -97,6 +97,7 @@ def _integration(district_id: uuid.UUID):
         default_category=None,
         last_synced_at=None,
         last_sync_error=None,
+        last_attempt_at=None,
     )
 
 
@@ -135,7 +136,18 @@ def _connector(*, events=(), error: Exception | None = None) -> AsyncMock:
 @contextmanager
 def _sync_pipeline(repo: AsyncMock, connector: AsyncMock, *, matched: bool = True):
     """Run the real sync service with a mocked connector and repository adapters."""
+    async def persist_attempt(integration_id, error=None):
+        integration = await repo.get(integration_id)
+        if integration is not None:
+            integration.last_attempt_at = datetime.now(UTC)
+            if error is not None:
+                integration.last_sync_error = error
+
     with (
+        patch(
+            "app.adapters.api.routers.calendar_integrations.record_sync_attempt",
+            new=AsyncMock(side_effect=persist_attempt),
+        ),
         patch("app.application.sync_service.SqlCalendarIntegrationRepository", return_value=repo),
         patch("app.application.sync_service._get_connector", return_value=connector),
         patch("app.application.sync_service.decrypt_credentials", return_value={}),
@@ -236,7 +248,7 @@ def test_trigger_sync_connector_error_returns_400_and_persists_error():
         response = client.post(_sync_url(integration), headers=headers)
 
     assert response.status_code == 400
-    assert integration.last_sync_error == "provider unavailable"
+    assert integration.last_sync_error == "Synchronisierung fehlgeschlagen (CalendarConnectorError)"
 
 
 def test_trigger_sync_unexpected_failure_returns_500_and_persists_error():
