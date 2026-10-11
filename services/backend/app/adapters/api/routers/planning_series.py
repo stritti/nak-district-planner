@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -168,7 +168,7 @@ async def update_planning_series(
     if "is_active" in fields and body.is_active is not None:
         series.is_active = body.is_active
 
-    series.updated_at = datetime.now()
+    series.updated_at = datetime.now(UTC)
     await repo.save(series)
     await db.commit()
 

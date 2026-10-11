@@ -38,3 +38,19 @@ freigeben.
 #### Scenario: Zwei DB-Tasks im selben Worker-Prozess
 - **WHEN** ein Worker-Prozess nacheinander zwei Tasks mit Datenbankzugriff ausführt
 - **THEN** laufen beide erfolgreich, ohne „attached to a different loop"-Fehler
+
+### Requirement: Kritische API-Router mit gemessenen Fehlerpfaden
+
+Der Backend-Unit-Testlauf SHALL für die Router `auth.py`, `leader_unavailabilities.py`, `planning_series.py` und `system.py` jeweils mindestens 80 Prozent **Line Coverage** erreichen. Das CI-Gate MUST fehlende Klassen im Coverage-XML und Unterschreitungen als Fehler melden, ohne die globale Grenze von 80 Prozent abzusenken. Die Tests MUST Rollen, Mandantengrenzen und Fehlerpfade mit tatsächlichen Berechtigungsfunktionen prüfen statt diese wegzumocken.
+
+#### Scenario: Einzelner kritischer Router unter dem Schwellenwert
+- **WHEN** einer der vier Router weniger als 80 Prozent Unit-Test-Coverage hat
+- **THEN** schlägt der Backend-CI-Check fehl, selbst wenn die globale Coverage ausreichend ist
+
+#### Scenario: Fremder Bezirk oder fehlender Datensatz
+- **WHEN** ein Benutzer ohne erforderliche Bezirksrolle einen fremden Datensatz liest oder ändert, oder ein Datensatz unbekannt ist
+- **THEN** geben die getesteten Router den spezifizierten 403- beziehungsweise 404-Status zurück, ohne einen Schreibzugriff auszuführen
+
+#### Scenario: Eingabe- oder Providerfehler
+- **WHEN** ein unzulässiger Zeitraum, ungültige OIDC-Payload oder ein externer Versionscheck-Fehler auftritt
+- **THEN** verifiziert ein Regressionstest die Validierung beziehungsweise den definierten Fallback

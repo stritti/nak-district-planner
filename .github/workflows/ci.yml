@@ -198,6 +198,9 @@ jobs:
           fi
           echo "✅ Coverage ${TOTAL_COVERAGE}% meets 80% threshold"
 
+      - name: Check critical router coverage (each >=80%)
+        run: uv run python scripts/check_critical_router_coverage.py coverage.xml
+
       - name: Post coverage report to PR
         if: always() && github.event_name == 'pull_request'
         env:

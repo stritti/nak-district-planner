@@ -31,8 +31,8 @@ Dieses Dokument beschreibt, wie Testabdeckung im Projekt gemessen und bewertet w
 ## 5. Empfohlene Zielwerte (inkrementell)
 
 - Backend gesamt: >= 80% line coverage
+- Sicherheits- und mandantenkritische Router `auth.py`, `leader_unavailabilities.py`, `planning_series.py` und `system.py`: einzeln mindestens 80% Line Coverage aus der **Backend-Unit-Suite**. Das CI-Gate prüft die vier Dateien direkt aus `coverage.xml` und schlägt auch fehl, wenn eine der Dateien fehlt.
 - Kritische Module (Auth, RBAC, Sync): >= 90%
 - Frontend Kernfluesse: testbasiert abgesichert, Coverage schrittweise ausbauen
 
-Hinweis: Zielwerte sind Leitplanken. Verbindliche Gates koennen spaeter im CI
-hart konfiguriert werden.
+Weitere Zielwerte sind Leitplanken. Verbindlich sind die genannten Backend-Gates und die sicherheitsrelevanten Integrationstests (RLS, Mandantengrenze, OIDC, Berechtigungen). Die Erweiterung von Branch Coverage erfordert eine separate CI-Umstellung; die aktuelle pytest-cov-Konfiguration misst Line Coverage.
