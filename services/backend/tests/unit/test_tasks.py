@@ -218,3 +218,71 @@ class TestRunAsSystemWorker:
             await _run_as_system_worker(work())
 
         engine.dispose.assert_awaited_once()
+
+
+class TestSyncReliability:
+    """Retry suppression and independent error persistence (#470)."""
+
+    def test_due_integrations_backoff_blocks_duplicate_retry_chain(self):
+        from datetime import UTC, datetime, timedelta
+        from types import SimpleNamespace
+
+        from app.application.tasks import _due_integration_ids
+        from app.domain.models.calendar_integration import CalendarType
+
+        now = datetime.now(UTC)
+        integration = SimpleNamespace(
+            id=uuid.uuid4(), type=CalendarType.ICS,
+            last_synced_at=now - timedelta(hours=2),
+            last_attempt_at=now - timedelta(minutes=10), sync_interval=5,
+        )
+        assert _due_integration_ids([integration], now) == []
+        integration.last_attempt_at = now - timedelta(minutes=31)
+        assert _due_integration_ids([integration], now) == [str(integration.id)]
+
+    async def test_record_error_commits_sanitized_text_in_new_session(self):
+        from app.application.tasks import _record_sync_attempt
+
+        integration = MagicMock(last_attempt_at=None, last_sync_error=None)
+        repository = MagicMock()
+        repository.get = AsyncMock(return_value=integration)
+        repository.save = AsyncMock()
+        session = AsyncMock()
+        session.commit = AsyncMock()
+
+        with (
+            patch(
+                "app.adapters.db.session.AsyncSessionLocal",
+            ) as session_factory,
+            patch(
+                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
+                return_value=repository,
+            ),
+        ):
+            session_factory.return_value.__aenter__.return_value = session
+            await _record_sync_attempt(uuid.uuid4(), "failure " + "x" * 800)
+
+        assert integration.last_attempt_at is not None
+        assert len(integration.last_sync_error) == 500
+        repository.save.assert_awaited_once_with(integration)
+        session.commit.assert_awaited_once()
+
+    async def test_missing_integration_does_not_create_phantom_status(self):
+        from app.application.tasks import _record_sync_attempt
+
+        repo = MagicMock()
+        repo.get = AsyncMock(return_value=None)
+        repo.save = AsyncMock()
+        session = AsyncMock()
+        with (
+            patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
+            patch(
+                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
+                return_value=repo,
+            ),
+        ):
+            session_factory.return_value.__aenter__.return_value = session
+            await _record_sync_attempt(uuid.uuid4(), "unavailable")
+
+        repo.save.assert_not_awaited()
+        session.commit.assert_not_awaited()
