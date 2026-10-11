@@ -56,6 +56,7 @@ class RecurrenceRule:
     version: int = 1
 
     def __post_init__(self) -> None:
+        """Reject malformed recurrence rules at construction time."""
         if not isinstance(self.kind, RecurrenceKind):
             raise ValueError("Unknown recurrence kind")
         if not isinstance(self.anchor_date, date) or isinstance(self.anchor_date, datetime):
@@ -112,6 +113,7 @@ class RecurringEventTemplate:
     timezone: str = "Europe/Berlin"
 
     def __post_init__(self) -> None:
+        """Validate the template without consulting persistence or tenants."""
         if not self.title.strip() or not self.category.strip():
             raise ValueError("Title and category are required")
         if self.category.strip().casefold() == "gottesdienst":
@@ -151,6 +153,7 @@ class RecurringEventDecision:
     planning_slot_id: uuid.UUID | None = None
 
     def __post_init__(self) -> None:
+        """Enforce skipped-decision consistency while allowing deleted slots."""
         if self.status is DecisionStatus.SKIPPED and self.planning_slot_id is not None:
             raise ValueError("Skipped occurrences must not reference a planning slot")
 
