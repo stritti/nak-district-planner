@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
@@ -97,6 +98,14 @@ class SqlCalendarIntegrationRepository(CalendarIntegrationRepository):
             .order_by(CalendarIntegrationORM.id)
         )
         return [_orm_to_domain(r) for r in result.scalars().all()]
+
+    async def stamp_scheduled_attempt(self, integration_id: uuid.UUID, at: datetime) -> None:
+        """Write only the scheduler timestamp, preserving concurrent edits."""
+        await self._session.execute(
+            update(CalendarIntegrationORM)
+            .where(CalendarIntegrationORM.id == integration_id)
+            .values(last_attempt_at=at)
+        )
 
     async def save(self, integration: CalendarIntegration) -> None:
         existing = await self._session.get(CalendarIntegrationORM, integration.id)
