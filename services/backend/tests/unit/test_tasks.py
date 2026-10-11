@@ -300,6 +300,24 @@ class TestSyncReliability:
         repository.save.assert_awaited_once_with(integration)
         session.commit.assert_awaited_once()
 
+    async def test_scheduled_stamp_only_updates_timestamp(self):
+        """Scheduler must not save a stale domain snapshot over concurrent edits."""
+        from app.application.tasks import mark_scheduled_sync
+
+        session = AsyncMock()
+        with patch("app.adapters.db.session.AsyncSessionLocal") as session_factory:
+            session_factory.return_value.__aenter__.return_value = session
+            await mark_scheduled_sync(uuid.uuid4())
+
+        session.execute.assert_awaited_once()
+        statement = session.execute.await_args.args[0]
+        compiled = str(statement)
+        assert "UPDATE calendar_integrations SET last_attempt_at" in compiled
+        assert "credentials_enc" not in compiled
+        assert "last_synced_at" not in compiled
+        assert "last_sync_error" not in compiled
+        session.commit.assert_awaited_once()
+
     async def test_missing_integration_does_not_create_phantom_status(self):
         from app.application.tasks import record_sync_attempt
 
