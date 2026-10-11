@@ -33,7 +33,7 @@ import uuid
 from collections.abc import Awaitable
 from datetime import UTC, date, datetime
 
-from app.application.sync_attempts import record_sync_attempt
+from app.adapters.db.sync_attempts import record_sync_attempt
 from app.celery_app import celery
 from app.domain.errors import IntegrationNotFoundError, UnsupportedCalendarTypeError
 from app.domain.models.calendar_integration import SUPPORTED_CALENDAR_TYPES
