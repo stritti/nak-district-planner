@@ -8,9 +8,9 @@
 | --- | --- |
 | Was ist implementiert? | [OpenSpec-Baseline](https://github.com/stritti/nak-district-planner/tree/main/openspec/specs) |
 | Was ist in Planung? | [Roadmap](/roadmap), [aktive Changes](https://github.com/stritti/nak-district-planner/tree/main/openspec/changes) |
-| Welche Rollen gelten? | [Rollenkonzept](/roles) und [RBAC-Coverage](/rbac-coverage) |
-| Welche Security-Grenzen gelten? | [Security Baseline](/security-baseline) |
-| Wie wird betrieben? | [Production Runbook](/production-runbook), [Produktiv-Stack](/production-compose) |
+| Welche Rollen gelten? | [Rollenkonzept](/features/roles) und [RBAC-Coverage](/security/rbac-coverage) |
+| Welche Security-Grenzen gelten? | [Security Baseline](/security/baseline) |
+| Wie wird betrieben? | [Production Runbook](/operations/production-runbook), [Produktiv-Stack](/operations/production-compose) |
 
 ## Architekturregel
 

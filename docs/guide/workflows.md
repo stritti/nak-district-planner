@@ -28,7 +28,7 @@ Eine Kalenderintegration ist optional: Termine und Dienste können auch innerhal
 2. Sie prüft unbesetzte Gottesdienste und ordnet Dienstleiter zu.
 3. Berechtigte Personen sehen die aktualisierte Planung.
 
-Die Regeln der Matrix einschließlich Feiertagsspalten stehen in [UC-03](/use-cases#uc-03-matrix). Berechtigungen und Scope werden im [Rollenkonzept](/roles) erklärt.
+Die Regeln der Matrix einschließlich Feiertagsspalten stehen in [UC-03](/features/use-cases#uc-03-matrix). Berechtigungen und Scope werden im [Rollenkonzept](/features/roles) erklärt.
 
 ## Kalender synchronisieren
 
@@ -46,17 +46,17 @@ flowchart LR
   F --> G
 ```
 
-**Abgrenzung:** V1 übernimmt Ereignisse aus explizit vertrauenswürdigen Quellen direkt. Der allgemeine Review-Prozess für unbekannte externe Ereignisse ist ein weiterführendes Vorhaben. Google Calendar und Microsoft 365 sind noch **keine produktiven V1-Connectoren**. Siehe [UC-01 und UC-02](/use-cases) und [Konfliktregeln](/conflict-rules).
+**Abgrenzung:** V1 übernimmt Ereignisse aus explizit vertrauenswürdigen Quellen direkt. Der allgemeine Review-Prozess für unbekannte externe Ereignisse ist ein weiterführendes Vorhaben. Google Calendar und Microsoft 365 sind noch **keine produktiven V1-Connectoren**. Siehe [UC-01 und UC-02](/features/use-cases) und [Konfliktregeln](/features/conflict-rules).
 
 ## Gemeinden und Veranstaltungen verbinden
 
 Bezirksveranstaltungen können in ausgewählten Gemeinden sichtbar werden. Bei Einladungen zwischen Gemeinden bleibt der Gastgeber erkennbar; Überschreibungen folgen festgelegten Regeln.
 
-Fachliche Details: [UC-04: Bezirks-Events](/use-cases#uc-04-events) und [Einladungen zwischen Gemeinden](/invitations).
+Fachliche Details: [UC-04: Bezirks-Events](/features/use-cases#uc-04-events) und [Einladungen zwischen Gemeinden](/features/invitations).
 
 ## Termine veröffentlichen
 
-Abonnierbare ICS-Feeds stellen freigegebene Termine für andere Kalender bereit. Öffentliche Exporte enthalten nur veröffentlichte öffentliche Daten; interne Exporte können zusätzliche Informationen enthalten. Verbindlich ist [UC-05: Export](/use-cases#uc-05-export).
+Abonnierbare ICS-Feeds stellen freigegebene Termine für andere Kalender bereit. Öffentliche Exporte enthalten nur veröffentlichte öffentliche Daten; interne Exporte können zusätzliche Informationen enthalten. Verbindlich ist [UC-05: Export](/features/use-cases#uc-05-export).
 
 ## Zugang und Freigabe
 
@@ -72,8 +72,8 @@ flowchart TD
   F --> G[Zugriff gemäß Membership]
 ```
 
-Technische Details: [Freigabe-Workflow](/approval-workflow), [Rollenkonzept](/roles).
+Technische Details: [Freigabe-Workflow](/features/approval-workflow), [Rollenkonzept](/features/roles).
 
 ## Geltungsbereich
 
-Dieser Überblick zeigt den fachlichen Weg, nicht die Zusage eines vollständig abgeschlossenen Releases. [Architekturstatus](/architecture-status) und [OpenSpec](/documentation-map) trennen Implementierung, Zielbild und geplante Funktionen.
+Dieser Überblick zeigt den fachlichen Weg, nicht die Zusage eines vollständig abgeschlossenen Releases. [Architekturstatus](/architecture/status) und [OpenSpec](/documentation-map) trennen Implementierung, Zielbild und geplante Funktionen.
