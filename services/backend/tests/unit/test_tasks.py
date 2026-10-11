@@ -252,10 +252,10 @@ class TestSyncReliability:
 
         with (
             patch(
-                "app.application.tasks.AsyncSessionLocal",
+                "app.adapters.db.session.AsyncSessionLocal",
             ) as session_factory,
             patch(
-                "app.application.tasks.SqlCalendarIntegrationRepository",
+                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
                 return_value=repository,
             ),
         ):
@@ -275,9 +275,9 @@ class TestSyncReliability:
         repo.save = AsyncMock()
         session = AsyncMock()
         with (
-            patch("app.application.tasks.AsyncSessionLocal") as session_factory,
+            patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
             patch(
-                "app.application.tasks.SqlCalendarIntegrationRepository",
+                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
                 return_value=repo,
             ),
         ):
