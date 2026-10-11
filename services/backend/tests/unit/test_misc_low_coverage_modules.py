@@ -362,6 +362,21 @@ def test_celery_uses_valkey_redis_transport() -> None:
     """Celery must use Redis-compatible Valkey, never the experimental SQL broker."""
     assert celery.conf.broker_url.startswith("redis://")
     assert celery.conf.result_backend.startswith("redis://")
+
+
+def test_settings_redis_url_scheme_conversion() -> None:
+    """Valkey and Redis schemes map to redis-py URLs; unknown schemes fail loudly."""
+    for valkey_url, expected in [
+        ("valkey://valkey:6379/0", "redis://valkey:6379/0"),
+        ("valkeys://valkey:6379/0", "rediss://valkey:6379/0"),
+        ("redis://redis:6379/1", "redis://redis:6379/1"),
+        ("rediss://redis:6379/1", "rediss://redis:6379/1"),
+    ]:
+        s = Settings(valkey_url=valkey_url)
+        assert s.redis_url == expected
+    invalid = Settings(valkey_url="kafka://broker:9092")
+    with pytest.raises(ValueError, match="VALKEY_URL"):
+        _ = invalid.redis_url
     sync_task = celery.tasks["sync_calendar_integration"]
     assert sync_task.acks_late is True
     assert sync_task.reject_on_worker_lost is True

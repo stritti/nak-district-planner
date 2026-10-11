@@ -91,14 +91,14 @@ class TestSyncAllActiveIntegrationsTask:
         ):
             factory.return_value.__aenter__.return_value = session
             if fail_at is not None:
-                calls = [None] * fail_at + [ConnectionError("broker unavailable")]
+                calls = [None] * fail_at + [ConnectionError("broker unavailable")] + [None] * (
+                    len(ids) - fail_at - 1
+                )
                 task.delay.side_effect = calls
-                with pytest.raises(ConnectionError, match="broker unavailable"):
-                    sync_all_active_integrations()
-                result = None
+                result = sync_all_active_integrations()
             else:
                 result = sync_all_active_integrations()
-            assert task.delay.call_count == (fail_at + 1 if fail_at is not None else len(ids))
+            assert task.delay.call_count == len(ids)
         return result, repo, session, engine
 
     def test_sync_all_active_integrations_queues_tasks(self):
@@ -111,16 +111,21 @@ class TestSyncAllActiveIntegrationsTask:
 
     def test_failed_broker_publish_does_not_mark_undispatched_integrations(self):
         ids = [str(uuid.uuid4()), str(uuid.uuid4())]
-        _, repo, session, _ = self._run(ids, fail_at=0)
-        repo.stamp_scheduled_attempt.assert_not_awaited()
-        session.commit.assert_not_awaited()
+        result, repo, session, _ = self._run(ids, fail_at=0)
+        assert result == {"dispatched": 1}
+        repo.stamp_scheduled_attempt.assert_awaited_once()
+        assert repo.stamp_scheduled_attempt.await_args.args[0] == uuid.UUID(ids[1])
+        assert session.commit.await_count == 1
+        assert session.rollback.await_count == 1
 
     def test_prior_successful_publish_remains_stamped_after_later_failure(self):
         ids = [str(uuid.uuid4()), str(uuid.uuid4())]
-        _, repo, session, _ = self._run(ids, fail_at=1)
+        result, repo, session, _ = self._run(ids, fail_at=1)
+        assert result == {"dispatched": 1}
         repo.stamp_scheduled_attempt.assert_awaited_once()
         assert repo.stamp_scheduled_attempt.await_args.args[0] == uuid.UUID(ids[0])
-        session.commit.assert_awaited_once()
+        assert session.commit.await_count == 1
+        assert session.rollback.await_count == 1
 
     def test_dispatch_timestamp_precedes_published_task_completion(self):
         ids = [str(uuid.uuid4())]
@@ -281,36 +286,101 @@ class TestSyncReliability:
     async def test_record_error_commits_sanitized_text_in_new_session(self):
         from app.application.tasks import record_sync_attempt
 
-        integration = MagicMock(last_attempt_at=None, last_sync_error=None)
-        repository = MagicMock()
-        repository.get = AsyncMock(return_value=integration)
-        repository.save = AsyncMock()
+        repo = MagicMock()
+        repo.record_attempt = AsyncMock()
         session = AsyncMock()
         session.commit = AsyncMock()
 
         with (
-            patch(
-                "app.adapters.db.session.AsyncSessionLocal",
-            ) as session_factory,
+            patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
             patch(
                 "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
-                return_value=repository,
+                return_value=repo,
             ),
         ):
             session_factory.return_value.__aenter__.return_value = session
             await record_sync_attempt(uuid.uuid4(), "failure " + "x" * 800)
 
-        assert integration.last_attempt_at is not None
-        assert len(integration.last_sync_error) == 500
-        repository.save.assert_awaited_once_with(integration)
+        assert repo.record_attempt.await_count == 1
+        args = repo.record_attempt.await_args.args
+        assert args[2] == "failure " + "x" * 800
+        repo.record_attempt.assert_awaited_once()
         session.commit.assert_awaited_once()
+
+    async def test_record_attempt_truncates_error_text(self):
+        from datetime import UTC, datetime
+
+        from app.adapters.db.repositories.calendar_integration import (
+            SqlCalendarIntegrationRepository,
+        )
+
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=MagicMock(rowcount=1))
+        repo = SqlCalendarIntegrationRepository(session)
+        integration_id = uuid.uuid4()
+        at = datetime.now(UTC)
+        long_error = "x" * 800
+
+        await repo.record_attempt(integration_id, at, long_error)
+
+        statement = session.execute.await_args.args[0]
+        compiled = statement.compile(compile_kwargs={"literal_binds": False})
+        assert "last_attempt_at" in str(compiled)
+        assert "last_sync_error" in str(compiled)
+        error_params = [
+            value for value in compiled.params.values() if isinstance(value, str)
+        ]
+        assert error_params and len(error_params[0]) == 500
+
+    async def test_record_attempt_targeted_update_only(self):
+        from datetime import UTC, datetime
+
+        from app.adapters.db.repositories.calendar_integration import (
+            SqlCalendarIntegrationRepository,
+        )
+
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=MagicMock(rowcount=1))
+        repo = SqlCalendarIntegrationRepository(session)
+        integration_id = uuid.uuid4()
+        at = datetime.now(UTC)
+
+        await repo.record_attempt(integration_id, at, "Synchronisierung fehlgeschlagen (X)")
+
+        statement = session.execute.await_args.args[0]
+        compiled = str(statement.compile())
+        for column in (
+            "last_synced_at",
+            "updated_at",
+            "is_active",
+            "sync_interval",
+            "name",
+            "credentials_enc",
+        ):
+            assert column not in compiled, f"targeted update must not touch {column}"
+
+    async def test_record_attempt_returns_row_updated_flag(self):
+        from datetime import UTC, datetime
+
+        from app.adapters.db.repositories.calendar_integration import (
+            SqlCalendarIntegrationRepository,
+        )
+
+        session = MagicMock()
+        result = MagicMock(rowcount=1)
+        session.execute = AsyncMock(return_value=result)
+        repo = SqlCalendarIntegrationRepository(session)
+
+        assert await repo.record_attempt(uuid.uuid4(), datetime.now(UTC), None) is True
+
+        result.rowcount = 0
+        assert await repo.record_attempt(uuid.uuid4(), datetime.now(UTC), None) is False
 
     async def test_missing_integration_does_not_create_phantom_status(self):
         from app.application.tasks import record_sync_attempt
 
         repo = MagicMock()
-        repo.get = AsyncMock(return_value=None)
-        repo.save = AsyncMock()
+        repo.record_attempt = AsyncMock()
         session = AsyncMock()
         with (
             patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
@@ -322,5 +392,5 @@ class TestSyncReliability:
             session_factory.return_value.__aenter__.return_value = session
             await record_sync_attempt(uuid.uuid4(), "unavailable")
 
-        repo.save.assert_not_awaited()
-        session.commit.assert_not_awaited()
+        repo.record_attempt.assert_awaited_once()
+        session.commit.assert_awaited_once()

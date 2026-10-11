@@ -111,15 +111,12 @@ async def record_sync_attempt(integration_id: uuid.UUID, error: str | None = Non
     from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
     from app.adapters.db.session import AsyncSessionLocal
 
+    at = datetime.now(UTC)
     async with AsyncSessionLocal() as session:
         repo = SqlCalendarIntegrationRepository(session)
-        integration = await repo.get(integration_id)
-        if integration is None:
-            return
-        integration.last_attempt_at = datetime.now(UTC)
-        if error is not None:
-            integration.last_sync_error = error[:500]
-        await repo.save(integration)
+        # Targeted UPDATE: a concurrent success must not be overwritten by a
+        # stale aggregate snapshot (same reasoning as stamp_scheduled_attempt).
+        await repo.record_attempt(integration_id, at, error)
         await session.commit()
 
 
@@ -267,7 +264,14 @@ def sync_all_active_integrations() -> dict:
             dispatched = 0
             for integration_id in ids:
                 dispatched_at = datetime.now(UTC)
-                sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
+                try:
+                    sync_calendar_integration.delay(integration_id)  # type: ignore[attr-defined]
+                except Exception:
+                    # One flaky publish must not block the remaining due
+                    # integrations; the skipped one stays due for the next tick.
+                    logger.exception("Calendar sync dispatch failed for %s", integration_id)
+                    await session.rollback()
+                    continue
                 await repo.stamp_scheduled_attempt(uuid.UUID(integration_id), dispatched_at)
                 await session.commit()
                 dispatched += 1

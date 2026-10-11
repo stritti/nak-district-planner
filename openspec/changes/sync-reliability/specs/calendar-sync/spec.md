@@ -17,7 +17,7 @@ A sync attempt SHALL use a transaction-scoped PostgreSQL try-advisory lock keyed
 - **THEN** the second invocation returns a skipped result and logs the reason without fetching provider events
 
 ### Requirement: Bounded task scheduling
-Periodic dispatch SHALL consider both the previous success and latest attempt, avoiding duplicate retry chains for integrations in backoff. A scheduled attempt SHALL be stamped only after the broker accepts that specific task; failed dispatch SHALL remain eligible for the next scheduling cycle. Timestamp updates SHALL NOT overwrite concurrent integration configuration or success/error status.
+Periodic dispatch SHALL consider both the previous success and latest attempt, avoiding duplicate retry chains for integrations in backoff. A scheduled attempt SHALL be stamped only after the broker accepts that specific task; failed dispatch SHALL remain eligible for the next scheduling cycle. Timestamp updates SHALL NOT overwrite concurrent integration configuration or success/error status. After a failed attempt, the effective retry cooldown SHALL be at least 30 minutes, even if the configured `sync_interval` is shorter.
 
 #### Scenario: Failed attempt waiting for retry
 - **WHEN** the latest attempt is less than 30 minutes ago

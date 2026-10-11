@@ -19,8 +19,8 @@ from app.telemetry import setup_telemetry
 
 celery = Celery(
     "nak_planner",
-    broker=settings.valkey_url.replace("valkey://", "redis://", 1),
-    backend=settings.valkey_url.replace("valkey://", "redis://", 1),
+    broker=settings.redis_url,
+    backend=settings.redis_url,
     include=[
         "app.application.tasks",
         "app.application.reminder_tasks",

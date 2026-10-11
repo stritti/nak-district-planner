@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
@@ -106,6 +106,33 @@ class SqlCalendarIntegrationRepository(CalendarIntegrationRepository):
             .where(CalendarIntegrationORM.id == integration_id)
             .values(last_attempt_at=at)
         )
+
+    async def record_attempt(
+        self, integration_id: uuid.UUID, at: datetime, error: str | None = None
+    ) -> bool:
+        """Persist attempt metadata without touching other aggregate columns.
+
+        A failed attempt records the sanitized error class; a successful or
+        retried attempt clears it only if no newer error was stored.
+        """
+        error = error[:500] if error else None
+        result = await self._session.execute(
+            update(CalendarIntegrationORM)
+            .where(CalendarIntegrationORM.id == integration_id)
+            .values(
+                last_attempt_at=at,
+                last_sync_error=case(
+                    (error is not None, error),
+                    (
+                        CalendarIntegrationORM.last_attempt_at.is_(None)
+                        | (CalendarIntegrationORM.last_attempt_at <= at),
+                        None,
+                    ),
+                    else_=CalendarIntegrationORM.last_sync_error,
+                ),
+            )
+        )
+        return bool(result.rowcount)
 
     async def save(self, integration: CalendarIntegration) -> None:
         existing = await self._session.get(CalendarIntegrationORM, integration.id)
