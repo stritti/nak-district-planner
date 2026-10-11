@@ -364,6 +364,7 @@ def test_celery_uses_valkey_redis_transport() -> None:
     assert celery.conf.result_backend.startswith("redis://")
     sync_task = celery.tasks["sync_calendar_integration"]
     assert sync_task.acks_late is True
+    assert sync_task.reject_on_worker_lost is True
     assert sync_task.soft_time_limit == 240
     assert sync_task.time_limit == 300
     assert celery.conf.task_acks_late is False
