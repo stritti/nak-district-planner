@@ -29,7 +29,7 @@ def close_coroutine(coro: object) -> None:
 class CoroutineClosingMock(MagicMock):
     """``MagicMock`` that closes coroutine arguments before applying the configured behaviour.
 
-    Use as ``patch("app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock)``;
+    Use as ``patch("app.adapters.worker.tasks.asyncio.run", new_callable=CoroutineClosingMock)``;
     ``return_value`` and ``side_effect`` keep working as usual.
     """
 

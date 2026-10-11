@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application.tasks import sync_calendar_integration
+from app.adapters.worker.tasks import sync_calendar_integration
 from tests.unit.coroutine_mocks import CoroutineClosingMock
 
 
@@ -27,7 +27,7 @@ class TestSyncCalendarIntegrationTask:
         mock_result = {"created": 1, "updated": 0, "cancelled": 0}
 
         with patch(
-            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+            "app.adapters.worker.tasks.asyncio.run", new_callable=CoroutineClosingMock
         ) as mock_asyncio_run:
             mock_asyncio_run.return_value = mock_result
 
@@ -44,7 +44,7 @@ class TestSyncCalendarIntegrationTask:
         integration_id = str(uuid.uuid4())
 
         with patch(
-            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+            "app.adapters.worker.tasks.asyncio.run", new_callable=CoroutineClosingMock
         ) as mock_asyncio_run:
             mock_asyncio_run.side_effect = RuntimeError("DB connection failed")
 
@@ -56,7 +56,7 @@ class TestSyncCalendarIntegrationTask:
         integration_id = str(uuid.uuid4())
 
         with patch(
-            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+            "app.adapters.worker.tasks.asyncio.run", new_callable=CoroutineClosingMock
         ) as mock_asyncio_run:
             mock_asyncio_run.return_value = {"created": 0, "updated": 0, "cancelled": 0}
 
@@ -70,7 +70,7 @@ class TestSyncAllActiveIntegrationsTask:
     """Dispatch only due integrations; persist each accepted publish."""
 
     def _run(self, ids: list[str], *, fail_at: int | None = None) -> tuple:
-        from app.application.tasks import sync_all_active_integrations
+        from app.adapters.worker.tasks import sync_all_active_integrations
 
         session = AsyncMock()
         repo = MagicMock()
@@ -86,8 +86,8 @@ class TestSyncAllActiveIntegrationsTask:
                 "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
                 return_value=repo,
             ),
-            patch("app.application.tasks._due_integration_ids", return_value=ids),
-            patch("app.application.tasks.sync_calendar_integration") as task,
+            patch("app.adapters.worker.tasks._due_integration_ids", return_value=ids),
+            patch("app.adapters.worker.tasks.sync_calendar_integration") as task,
         ):
             factory.return_value.__aenter__.return_value = session
             if fail_at is not None:
@@ -141,10 +141,10 @@ class TestGenerateDraftServicesWindowTask:
     """Tests for generate_draft_services_window Celery task."""
 
     def test_generate_draft_services_window_success(self):
-        from app.application.tasks import generate_draft_services_window
+        from app.adapters.worker.tasks import generate_draft_services_window
 
         with patch(
-            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+            "app.adapters.worker.tasks.asyncio.run", new_callable=CoroutineClosingMock
         ) as mock_asyncio_run:
             mock_asyncio_run.return_value = {
                 "districts": 2,
@@ -169,7 +169,7 @@ class TestSyncAllSkipsUnsupportedProviders:
         from datetime import UTC, datetime
         from types import SimpleNamespace
 
-        from app.application.tasks import _due_integration_ids
+        from app.adapters.worker.tasks import _due_integration_ids
         from app.domain.models.calendar_integration import CalendarType
 
         def item(cal_type):
@@ -180,7 +180,7 @@ class TestSyncAllSkipsUnsupportedProviders:
         ics, caldav = item(CalendarType.ICS), item(CalendarType.CALDAV)
         google, microsoft = item(CalendarType.GOOGLE), item(CalendarType.MICROSOFT)
 
-        with caplog.at_level("WARNING", logger="app.application.tasks"):
+        with caplog.at_level("WARNING", logger="app.adapters.worker.tasks"):
             ids = _due_integration_ids([ics, google, caldav, microsoft], datetime.now(UTC))
 
         assert ids == [str(ics.id), str(caldav.id)]
@@ -193,7 +193,7 @@ class TestRunAsSystemWorker:
 
     async def test_disposes_engine_pool_before_loop_closes(self):
         """Pooled asyncpg connections must not outlive the loop that opened them."""
-        from app.application.tasks import _run_as_system_worker
+        from app.adapters.worker.tasks import _run_as_system_worker
 
         async def work():
             return "done"
@@ -206,7 +206,7 @@ class TestRunAsSystemWorker:
         engine.dispose.assert_awaited_once()
 
     async def test_disposes_engine_pool_on_failure(self):
-        from app.application.tasks import _run_as_system_worker
+        from app.adapters.worker.tasks import _run_as_system_worker
 
         async def work():
             raise RuntimeError("boom")
@@ -229,7 +229,7 @@ class TestSyncReliability:
         from datetime import UTC, datetime, timedelta
         from types import SimpleNamespace
 
-        from app.application.tasks import _due_integration_ids
+        from app.adapters.worker.tasks import _due_integration_ids
         from app.domain.models.calendar_integration import CalendarType
 
         now = datetime.now(UTC)
@@ -243,7 +243,7 @@ class TestSyncReliability:
         assert _due_integration_ids([integration], now) == [str(integration.id)]
 
     async def test_record_error_commits_sanitized_text_in_new_session(self):
-        from app.application.tasks import record_sync_attempt
+        from app.adapters.worker.tasks import record_sync_attempt
 
         repo = MagicMock()
         repo.record_attempt = AsyncMock()
@@ -336,7 +336,7 @@ class TestSyncReliability:
         assert await repo.record_attempt(uuid.uuid4(), datetime.now(UTC), None) is False
 
     async def test_missing_integration_does_not_create_phantom_status(self):
-        from app.application.tasks import record_sync_attempt
+        from app.adapters.worker.tasks import record_sync_attempt
 
         repo = MagicMock()
         repo.record_attempt = AsyncMock()
