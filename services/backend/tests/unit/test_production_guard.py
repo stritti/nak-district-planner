@@ -12,6 +12,7 @@ import pytest
 
 from app.config import Settings, production_guard
 
+
 @pytest.fixture(autouse=True)
 def _safe_production_runtime_passwords(monkeypatch) -> None:
     """Most guard tests isolate one failure from otherwise safe runtime secrets."""
