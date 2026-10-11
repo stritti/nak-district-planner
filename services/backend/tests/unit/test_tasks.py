@@ -241,7 +241,7 @@ class TestSyncReliability:
         assert _due_integration_ids([integration], now) == [str(integration.id)]
 
     async def test_record_error_commits_sanitized_text_in_new_session(self):
-        from app.application.tasks import _record_sync_attempt
+        from app.application.sync_attempts import record_sync_attempt
 
         integration = MagicMock(last_attempt_at=None, last_sync_error=None)
         repository = MagicMock()
@@ -252,15 +252,15 @@ class TestSyncReliability:
 
         with (
             patch(
-                "app.adapters.db.session.AsyncSessionLocal",
+                "app.application.sync_attempts.AsyncSessionLocal",
             ) as session_factory,
             patch(
-                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
+                "app.application.sync_attempts.SqlCalendarIntegrationRepository",
                 return_value=repository,
             ),
         ):
             session_factory.return_value.__aenter__.return_value = session
-            await _record_sync_attempt(uuid.uuid4(), "failure " + "x" * 800)
+            await record_sync_attempt(uuid.uuid4(), "failure " + "x" * 800)
 
         assert integration.last_attempt_at is not None
         assert len(integration.last_sync_error) == 500
@@ -268,21 +268,21 @@ class TestSyncReliability:
         session.commit.assert_awaited_once()
 
     async def test_missing_integration_does_not_create_phantom_status(self):
-        from app.application.tasks import _record_sync_attempt
+        from app.application.sync_attempts import record_sync_attempt
 
         repo = MagicMock()
         repo.get = AsyncMock(return_value=None)
         repo.save = AsyncMock()
         session = AsyncMock()
         with (
-            patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
+            patch("app.application.sync_attempts.AsyncSessionLocal") as session_factory,
             patch(
-                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
+                "app.application.sync_attempts.SqlCalendarIntegrationRepository",
                 return_value=repo,
             ),
         ):
             session_factory.return_value.__aenter__.return_value = session
-            await _record_sync_attempt(uuid.uuid4(), "unavailable")
+            await record_sync_attempt(uuid.uuid4(), "unavailable")
 
         repo.save.assert_not_awaited()
         session.commit.assert_not_awaited()
