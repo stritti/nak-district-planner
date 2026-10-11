@@ -8,7 +8,7 @@ readonly POSTGRES_IMAGE="${RESTORE_DRILL_POSTGRES_IMAGE:-postgres:18-alpine}"
 readonly POSTGRES_USER="${RESTORE_DRILL_POSTGRES_USER:-nak_planner}"
 readonly POSTGRES_PASSWORD="${RESTORE_DRILL_POSTGRES_PASSWORD:-restore-drill-only}"
 readonly POSTGRES_DB="${RESTORE_DRILL_POSTGRES_DB:-nak_planner}"
-readonly RESTORE_USER="nak_restore"
+readonly RESTORE_USER="${POSTGRES_USER}"
 readonly DRILL_ID="${GITHUB_RUN_ID:-local}-$$"
 readonly SOURCE_CONTAINER="nak-restore-source-${DRILL_ID}"
 readonly TARGET_CONTAINER="nak-restore-target-${DRILL_ID}"
@@ -119,10 +119,12 @@ restore_roles() {
     log 'application role missing from backed-up cluster globals'
     return 1
   fi
-  # The restore cluster has a different bootstrap superuser, so recreating
-  # backed-up roles does not conflict with an existing database owner.
-  docker exec -i "$TARGET_CONTAINER" psql -v ON_ERROR_STOP=1 \
-    -U "$RESTORE_USER" -d "$POSTGRES_DB" < "$role_sql" >/dev/null
+  # The fresh target bootstraps the same owner as the source. Filter that
+  # single already-existing CREATE ROLE; preserve all other definitions and
+  # role-membership GRANTs, whose GRANTED BY clauses need the original owner.
+  sed "/^CREATE ROLE ${POSTGRES_USER};$/d" "$role_sql" |
+    docker exec -i "$TARGET_CONTAINER" psql -v ON_ERROR_STOP=1 \
+      -U "$RESTORE_USER" -d "$POSTGRES_DB" >/dev/null
 }
 
 seed_target_with_conflicting_data() {
