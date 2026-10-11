@@ -1,6 +1,6 @@
 # Lokaler Einstieg für Entwickler
 
-Die fachlichen Abläufe stehen unter [So funktioniert der Bezirksplaner](/workflows). Diese Seite behandelt nur die **lokale Dokumentation**. Die Anwendung selbst wird im [Repository-README](https://github.com/stritti/nak-district-planner#entwicklung) eingerichtet.
+Die fachlichen Abläufe stehen unter [So funktioniert der Bezirksplaner](/guide/workflows). Diese Seite behandelt nur die **lokale Dokumentation**. Die Anwendung selbst wird im [Repository-README](https://github.com/stritti/nak-district-planner#entwicklung) eingerichtet.
 
 ## VitePress starten
 
@@ -23,9 +23,10 @@ Die statische Website wird nach `docs/.vitepress/dist` geschrieben. Der Build pr
 
 ## Weiterführende Quellen
 
-- Fachliche Regeln: [Use Cases](/use-cases), [Rollen](/roles)
-- Implementierung: [Architekturstatus](/architecture-status), [Engineering Standards](/engineering-standards)
-- Betrieb: [Production Runbook](/production-runbook), [Security Baseline](/security-baseline)
+- Fachliche Regeln: [Use Cases](/features/use-cases), [Rollen](/features/roles)
+- Implementierung: [Architekturstatus](/architecture/status), [Engineering Standards](/development/engineering-standards)
+- Betrieb: [Production Runbook](/operations/production-runbook), [Security Baseline](/security/baseline)
+- Geplante Änderungen: [Roadmap](/roadmap)
 - Spezifikationen und Dokumentstatus: [Dokumentationslandkarte](/documentation-map)
 
 Verhaltensänderungen werden über OpenSpec spezifiziert; Einstiegstexte ersetzen keine normativen Anforderungen.

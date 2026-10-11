@@ -1,5 +1,7 @@
 # Code Review — Clean Code & Use-Case-Kohärenz (Juli 2026)
 
+> **Historisches Review (Juli 2026).** Die damaligen Befunde gelten nicht automatisch als aktuelle Release-Blocker. Siehe [Roadmap](/roadmap) und [Architekturstatus](/architecture/status).
+
 > **Stand:** 09.07.2026 (Review-Dokument) · Aktualisiert 20.07.2026 (Status-Update)
 > **Methodik:** Statische Analyse (Lesen von Domain-/Application-/Adapter-Code, gezielte `grep`/AST-Stichproben,
 > Verifikation gegen bestehende Docs). Kein Laufzeit-Test, keine neue Testausführung.

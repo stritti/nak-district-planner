@@ -33,4 +33,4 @@ PR #375 hardens calendar synchronization, but the current transition functions a
 ## Dependencies
 
 - Behavioral baseline: PR #375 / hybrid calendar sync hardening.
-- Must remain consistent with `openspec/architecture/overview.md` and `planning-slot-hybrid-sync`.
+- Must remain consistent with `docs/architecture/overview.md` and `planning-slot-hybrid-sync`.

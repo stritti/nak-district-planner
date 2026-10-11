@@ -129,7 +129,7 @@ Legende:
 
 - `docs/roles.md` — Rollenmodell und Berechtigungsmatrix
 - `docs/architecture-status.md` — aktueller Architekturstatus
-- `docs/improvement-proposals.md` — dokumentierte Verbesserungs- und Restarbeiten
+- `docs/archive/improvement-proposals.md` — dokumentierte Verbesserungs- und Restarbeiten
 - `services/backend/scripts/check_rbac_guard_pattern.py` — CI-Lint-Regel für RBAC-Guard-Pattern
 
 ## Generiertes Endpoint-Inventar

@@ -1,10 +1,10 @@
 # Production Runbook
 
-Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deployments des NAK District Planner. Es ist auf den RC-2-Stand ausgerichtet.
+Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deployments des NAK District Planner. Maßgeblich sind die tatsächlich ausgerollte Image-Version, der [Produktiv-Stack](/operations/production-compose) und das [stabile Release v1.0.0](https://github.com/stritti/nak-district-planner/releases/tag/v1.0.0).
 
 ## 1. Voraussetzungen
 
-- Gueltige Produktionskonfiguration ohne Development-Secrets: `.env` fuer die Anwendung und `.env.db` mit dem PostgreSQL-Owner-Passwort (nur fuer `db`/`migrate`, siehe `docs/deployment-migrations.md`)
+- Gueltige Produktionskonfiguration ohne Development-Secrets: `.env` fuer die Anwendung und `.env.db` mit dem PostgreSQL-Owner-Passwort (nur fuer `db`/`migrate`, siehe `docs/operations/deployment-migrations.md`)
   - Beim Upgrade einer bestehenden Installation `POSTGRES_PASSWORD` (und ggf. `MIGRATION_DATABASE_URL`) aus `.env` entfernen und nach `.env.db` verschieben. Mit `APP_ENV=production` verweigern API und Worker sonst den Start (`production_guard`).
 - TLS-Termination am Reverse Proxy; der Anwendungseinstieg ist nicht direkt oeffentlich exponiert
 - PostgreSQL und Valkey/Redis nur im internen Netz erreichbar
@@ -97,7 +97,7 @@ Danach abmelden und neu anmelden; beim nächsten Login setzt das Backend `is_sup
 
 ## 3. Standard-Deployment
 
-> **Empfohlen:** der fertige Produktiv-Stack `docker-compose.prod.yml` mit Traefik (TLS/Let's Encrypt), Keycloak und den veröffentlichten GHCR-Images. Er ersetzt den externen TLS-Proxy aus 1.2 und den Image-Build auf dem Server; Einrichtung und Update siehe `docs/production-compose.md`. Die folgenden Schritte beschreiben den Betrieb mit `docker-compose.yml` und eigenem Reverse Proxy.
+> **Empfohlen:** der fertige Produktiv-Stack `docker-compose.prod.yml` mit Traefik (TLS/Let's Encrypt), Keycloak und den veröffentlichten GHCR-Images. Er ersetzt den externen TLS-Proxy aus 1.2 und den Image-Build auf dem Server; Einrichtung und Update siehe `docs/operations/production-compose.md`. Die folgenden Schritte beschreiben den Betrieb mit `docker-compose.yml` und eigenem Reverse Proxy.
 
 1. Release-Tag bzw. freigegebenen `main`-Stand bereitstellen.
 2. Images reproduzierbar mit den committed Lockfiles bauen: `docker compose -f docker-compose.yml build`
@@ -108,7 +108,7 @@ Danach abmelden und neu anmelden; beim nächsten Login setzt das Backend `is_sup
    docker compose -f docker-compose.yml run --no-deps --rm migrate
    ```
 
-   Der Schritt verwendet das in Schritt 2 gebaute Image (Details in `docs/deployment-migrations.md`).
+   Der Schritt verwendet das in Schritt 2 gebaute Image (Details in `docs/operations/deployment-migrations.md`).
 
 5. Erst nach erfolgreicher Migration API, Worker und Beat aktualisieren:
 

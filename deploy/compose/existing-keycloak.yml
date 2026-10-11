@@ -1,5 +1,5 @@
 # Override for docker-compose.prod.yml: use an existing Keycloak (or any OIDC
-# provider) instead of the bundled one. See docs/production-compose.md.
+# provider) instead of the bundled one. See docs/operations/production-compose.md.
 #
 #   COMPOSE_FILE=docker-compose.prod.yml:deploy/compose/existing-keycloak.yml
 #

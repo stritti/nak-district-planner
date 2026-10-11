@@ -1,6 +1,6 @@
 # Use-Case Dokumentation
 
-Diese Seite dokumentiert die fachlichen Detailregeln (UC-01 bis UC-06). Den durchgehenden Anwendungsablauf erklärt [So funktioniert der Bezirksplaner](/workflows).
+Diese Seite dokumentiert die fachlichen Detailregeln (UC-01 bis UC-06). Den durchgehenden Anwendungsablauf erklärt [So funktioniert der Bezirksplaner](/guide/workflows).
 
 ## UC-01: Kalender-Anbindung (Ingest)
 

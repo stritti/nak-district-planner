@@ -10,7 +10,7 @@ Production operators had to assemble the stack themselves: `docker-compose.yml` 
 - Network segmentation: `edge` (proxy hop, fixed subnet trusted by nginx and Keycloak), `app`, internal `data` and `idp`. Inside the stack the auth host resolves to Traefik, so token validation does not hairpin through the internet.
 - Secrets split by need-to-know: `.env.db` (db, migrate), `.env.keycloak` (keycloak), `.env.keycloak-db` (keycloak-db); new example files and `.gitignore` entries.
 - Optional overrides in `deploy/compose/` for hosts that already run Traefik (`existing-traefik.yml`: routes via Docker labels on the operator's Traefik, bundled Traefik disabled) or Keycloak (`existing-keycloak.yml`: bundled Keycloak and its routes disabled, auth host resolved via DNS).
-- CI validates the production Compose configuration; static tests guard the invariants; operator guide `docs/production-compose.md`.
+- CI validates the production Compose configuration; static tests guard the invariants; operator guide `docs/operations/production-compose.md`.
 
 ## Impact
 

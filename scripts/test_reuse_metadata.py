@@ -58,7 +58,7 @@ class ReuseMetadataTests(unittest.TestCase):
         self.assertEqual(last["precedence"], "override")
         self.assertEqual(last["SPDX-License-Identifier"], "AGPL-3.0-only")
         self.assertIn("scripts/test_license_headers.py", last["path"])
-        self.assertIn("docs/engineering-standards.md", last["path"])
+        self.assertIn("docs/development/engineering-standards.md", last["path"])
 
     def test_license_files_only_for_actual_licenses(self) -> None:
         self.assertEqual(

@@ -1,5 +1,7 @@
 # Release-Prozess
 
+> **Stand:** [v1.0.0](https://github.com/stritti/nak-district-planner/releases/tag/v1.0.0) ist seit dem 10. Oktober 2026 stabil veröffentlicht. Die RC-1.0-Abschnitte weiter unten sind historisch; kommende Features siehe [Roadmap](/roadmap).
+
 Der NAK District Planner verwendet eine vollautomatisierte **Semantic Versioning (SemVer)** Release-Pipeline, die auf [Conventional Commits](https://www.conventionalcommits.org/de/) und [release-please](https://github.com/googleapis/release-please) basiert.
 
 ---
@@ -132,7 +134,7 @@ Jeder Pull Request gegen `main` muss den stabilen Check `Build documentation` er
 
 ---
 
-## v1.0 Release-Candidate-Phase
+## Historie: v1.0 Release-Candidate-Phase (abgeschlossen)
 
 Vor `v1.0.0` wird mindestens ein echter Release Candidate veröffentlicht. Während dieser Phase ist Release Please auf die Prerelease-Versionierungsstrategie mit `prerelease-type: rc` eingestellt.
 

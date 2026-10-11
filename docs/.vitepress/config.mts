@@ -28,42 +28,44 @@ export default defineConfig(
     themeConfig: {
       nav: [
         { text: 'Überblick', link: '/' },
-        { text: 'Abläufe', link: '/workflows' },
-        { text: 'Use Cases', link: '/use-cases' },
-        { text: 'Entwicklung', link: '/getting-started' },
-        { text: 'Betrieb', link: '/production-runbook' }
+        { text: 'Abläufe', link: '/guide/workflows' },
+        { text: 'Use Cases', link: '/features/use-cases' },
+        { text: 'Roadmap', link: '/roadmap' },
+        { text: 'Entwicklung', link: '/guide/getting-started' },
+        { text: 'Betrieb', link: '/operations/production-runbook' }
       ],
 
       sidebar: {
         '/': [
           { text: 'Einstieg', items: [
             { text: 'Projektüberblick', link: '/' },
-            { text: 'So funktioniert es', link: '/workflows' },
-            { text: 'Use Cases', link: '/use-cases' }
+            { text: 'So funktioniert es', link: '/guide/workflows' },
+            { text: 'Use Cases', link: '/features/use-cases' },
+            { text: 'Roadmap', link: '/roadmap' }
           ] },
           { text: 'Funktionen und Zusammenarbeit', items: [
-            { text: 'Rollenkonzept', link: '/roles' },
-            { text: 'Freigabe-Workflow', link: '/approval-workflow' },
-            { text: 'Einladungen', link: '/invitations' },
-            { text: 'Konfliktregeln', link: '/conflict-rules' }
+            { text: 'Rollenkonzept', link: '/features/roles' },
+            { text: 'Freigabe-Workflow', link: '/features/approval-workflow' },
+            { text: 'Einladungen', link: '/features/invitations' },
+            { text: 'Konfliktregeln', link: '/features/conflict-rules' }
           ] },
           { text: 'Entwicklung und Architektur', items: [
-            { text: 'Lokaler Einstieg', link: '/getting-started' },
-            { text: 'Architekturstatus', link: '/architecture-status' },
-            { text: 'Engineering Standards', link: '/engineering-standards' },
-            { text: 'Tests und Coverage', link: '/coverage-strategy' }
+            { text: 'Lokaler Einstieg', link: '/guide/getting-started' },
+            { text: 'Architekturstatus', link: '/architecture/status' },
+            { text: 'Engineering Standards', link: '/development/engineering-standards' },
+            { text: 'Tests und Coverage', link: '/development/coverage-strategy' }
           ] },
           { text: 'Betrieb und Sicherheit', items: [
-            { text: 'Production Runbook', link: '/production-runbook' },
-            { text: 'Produktiv-Stack', link: '/production-compose' },
-            { text: 'Security Baseline', link: '/security-baseline' },
-            { text: 'Release-Prozess', link: '/release-process' }
+            { text: 'Production Runbook', link: '/operations/production-runbook' },
+            { text: 'Produktiv-Stack', link: '/operations/production-compose' },
+            { text: 'Security Baseline', link: '/security/baseline' },
+            { text: 'Release-Prozess', link: '/operations/release-process' }
           ] },
           { text: 'Referenz', items: [
             { text: 'Glossar', link: '/glossary' },
             { text: 'Dokumentationslandkarte', link: '/documentation-map' },
             { text: 'Lizenzierung', link: '/licensing' },
-            { text: 'Verbesserungsvorschläge', link: '/improvement-proposals' }
+            { text: 'Archiv und Historie', link: '/archive/' }
           ] }
         ]
       },
