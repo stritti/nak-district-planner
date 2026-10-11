@@ -61,7 +61,7 @@ def test_production_compose_restricts_app_processes() -> None:
         assert service["cap_drop"] == ["ALL"], name
         assert "no-new-privileges:true" in service["security_opt"], name
         assert service["deploy"]["resources"]["limits"]["memory"], name
-        assert service["pids_limit"] > 0, name
+        assert service["deploy"]["resources"]["limits"]["pids"] > 0, name
         assert service.get("tmpfs"), name
     assert services["frontend"]["healthcheck"]["test"][-1].endswith(":8080/")
     assert services["worker"]["healthcheck"]["test"][0] == "CMD-SHELL"
