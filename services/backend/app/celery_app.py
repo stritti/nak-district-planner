@@ -32,8 +32,8 @@ _sync_db_url = _make_sync_db_url(settings.database_url)
 
 celery = Celery(
     "nak_planner",
-    broker=f"sqla+{_sync_db_url}",
-    backend=f"db+{_sync_db_url}",
+    broker=settings.valkey_url.replace("valkey://", "redis://", 1),
+    backend=settings.valkey_url.replace("valkey://", "redis://", 1),
     include=[
         "app.application.tasks",
         "app.application.reminder_tasks",
@@ -44,6 +44,10 @@ celery = Celery(
 
 celery.conf.update(
     task_serializer="json",
+    task_soft_time_limit=240,
+    task_time_limit=300,
+    task_acks_late=True,
+    worker_prefetch_multiplier=1,
     result_serializer="json",
     accept_content=["json"],
     timezone="Europe/Berlin",
