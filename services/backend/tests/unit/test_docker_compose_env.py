@@ -73,7 +73,7 @@ def test_docker_env_files_have_single_responsibilities() -> None:
     assert set(migrate_env) == {"MIGRATION_DATABASE_URL"}
     assert test_env == {"POSTGRES_DB": "nak_planner_test"}
     assert "@db:5432/" in app_env["DATABASE_URL"]
-    assert app_env["VALKEY_URL"] == "valkey://valkey:6379/0"
+    assert app_env["VALKEY_URL"] == "valkey://:${VALKEY_PASSWORD:?Set VALKEY_PASSWORD in .env}@valkey:6379/0"
 
 
 def test_owner_database_credentials_are_isolated_to_migration_override() -> None:
