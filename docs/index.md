@@ -37,18 +37,18 @@ features:
 
 Ein Bezirk koordiniert Gottesdienste und Veranstaltungen in mehreren Gemeinden. Der NAK District Planner macht sichtbar, **wann und wo ein Gottesdienst geplant ist, wer die Dienstleitung übernimmt und wo noch eine Besetzung fehlt**.
 
-Die wichtigsten Abläufe sind unter [So funktioniert der Bezirksplaner](/workflows) beschrieben. Die [Use Cases](/use-cases) enthalten die fachlichen Details.
+Die wichtigsten Abläufe sind unter [So funktioniert der Bezirksplaner](/guide/workflows) beschrieben. Die [Use Cases](/features/use-cases) enthalten die fachlichen Details.
 
 ::: info Stand der Kalenderanbindung
-Version 1 unterstützt als externe Kalenderquellen **ICS und CalDAV über HTTPS**. Google Calendar und Microsoft 365 sind für eine spätere Version vorgesehen und nicht als produktive V1-Integration freigegeben. Der [Architekturstatus](/architecture-status) unterscheidet implementierte Funktionen und Zielbild.
+Version 1 unterstützt als externe Kalenderquellen **ICS und CalDAV über HTTPS**. Google Calendar und Microsoft 365 sind für eine spätere Version vorgesehen und nicht als produktive V1-Integration freigegeben. Der [Architekturstatus](/architecture/status) unterscheidet implementierte Funktionen und Zielbild.
 :::
 
 ## Der richtige Einstieg
 
-- **Planung:** [Workflows](/workflows), [Use Cases](/use-cases) und [Rollenkonzept](/roles)
+- **Planung:** [Workflows](/guide/workflows), [Use Cases](/features/use-cases) und [Rollenkonzept](/features/roles)
 - **Weiterentwicklung:** [Roadmap und nächster Feature-Backlog](/roadmap)
-- **Entwicklung:** [Lokaler Einstieg](/getting-started), [Engineering Standards](/engineering-standards)
-- **Betrieb:** [Produktiv-Stack](/production-compose), [Runbook](/production-runbook)
+- **Entwicklung:** [Lokaler Einstieg](/guide/getting-started), [Engineering Standards](/development/engineering-standards)
+- **Betrieb:** [Produktiv-Stack](/operations/production-compose), [Runbook](/operations/production-runbook)
 - **Quellen und Spezifikationen:** [Dokumentationslandkarte](/documentation-map)
 
 Der Quellcode steht unter [AGPL-3.0-only](/licensing).

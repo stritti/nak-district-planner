@@ -1,4 +1,4 @@
-# ADR NNNN: <Entscheidungstitel>
+# ADR NNNN: Entscheidungstitel
 
 - **Status:** Proposed / Accepted / Superseded
 - **Datum:** YYYY-MM-DD

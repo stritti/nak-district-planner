@@ -34,7 +34,7 @@ Siehe auch `docs/development/coverage-strategy.md`.
 
 ## 5. Lizenzierung und Attribution
 
-- Neuer oder geänderter eigener Quellcode trägt `SPDX-License-Identifier: AGPL-3.0-only` und den zutreffenden `SPDX-FileCopyrightText`-Vermerk.
+- Neuer oder geänderter eigener Quellcode trägt `SPDX-Lizenzkennung: AGPL-3.0-only` und den zutreffenden `SPDX-FileCopyrightText`-Vermerk.
 - Drittanbieterdateien, bestehende Copyright-Vermerke und abweichende Lizenzen werden nicht automatisch überschrieben.
 - Bei unklarer Rechteinhaberschaft ist vor der Kennzeichnung eine manuelle Prüfung erforderlich.
 - `python3 scripts/license_headers.py --check` und `python3 -m unittest discover -s scripts -p 'test_license_headers.py'` müssen erfolgreich sein.

@@ -20,30 +20,6 @@ export default defineConfig(
     description: 'Dokumentation f\u00fcr den Bezirksplaner der Neuapostolischen Kirche',
     ignoreDeadLinks: false,
     srcExclude: ['superpowers/**'],
-    // Keep existing public URLs stable while organizing Markdown sources by topic.
-    rewrites: {
-      'guide/workflows.md': 'workflows.md',
-      'guide/getting-started.md': 'getting-started.md',
-      'features/use-cases.md': 'use-cases.md',
-      'features/roles.md': 'roles.md',
-      'features/approval-workflow.md': 'approval-workflow.md',
-      'features/invitations.md': 'invitations.md',
-      'features/conflict-rules.md': 'conflict-rules.md',
-      'architecture/status.md': 'architecture-status.md',
-      'architecture/schema.md': 'schema.md',
-      'development/engineering-standards.md': 'engineering-standards.md',
-      'development/coverage-strategy.md': 'coverage-strategy.md',
-      'development/performance-baseline.md': 'performance-baseline.md',
-      'operations/production-runbook.md': 'production-runbook.md',
-      'operations/production-compose.md': 'production-compose.md',
-      'operations/release-process.md': 'release-process.md',
-      'operations/deployment-migrations.md': 'deployment-migrations.md',
-      'operations/membership-backfill-runbook.md': 'membership-backfill-runbook.md',
-      'operations/opentelemetry.md': 'opentelemetry.md',
-      'operations/congregation-grouping-rollout.md': 'congregation-grouping-rollout.md',
-      'security/baseline.md': 'security-baseline.md',
-      'security/rbac-coverage.md': 'rbac-coverage.md',
-    },
     markdown: {
       config(md) {
         md.use(diagramPlugin)
@@ -52,38 +28,38 @@ export default defineConfig(
     themeConfig: {
       nav: [
         { text: 'Überblick', link: '/' },
-        { text: 'Abläufe', link: '/workflows' },
-        { text: 'Use Cases', link: '/use-cases' },
+        { text: 'Abläufe', link: '/guide/workflows' },
+        { text: 'Use Cases', link: '/features/use-cases' },
         { text: 'Roadmap', link: '/roadmap' },
-        { text: 'Entwicklung', link: '/getting-started' },
-        { text: 'Betrieb', link: '/production-runbook' }
+        { text: 'Entwicklung', link: '/guide/getting-started' },
+        { text: 'Betrieb', link: '/operations/production-runbook' }
       ],
 
       sidebar: {
         '/': [
           { text: 'Einstieg', items: [
             { text: 'Projektüberblick', link: '/' },
-            { text: 'So funktioniert es', link: '/workflows' },
-            { text: 'Use Cases', link: '/use-cases' },
+            { text: 'So funktioniert es', link: '/guide/workflows' },
+            { text: 'Use Cases', link: '/features/use-cases' },
             { text: 'Roadmap', link: '/roadmap' }
           ] },
           { text: 'Funktionen und Zusammenarbeit', items: [
-            { text: 'Rollenkonzept', link: '/roles' },
-            { text: 'Freigabe-Workflow', link: '/approval-workflow' },
-            { text: 'Einladungen', link: '/invitations' },
-            { text: 'Konfliktregeln', link: '/conflict-rules' }
+            { text: 'Rollenkonzept', link: '/features/roles' },
+            { text: 'Freigabe-Workflow', link: '/features/approval-workflow' },
+            { text: 'Einladungen', link: '/features/invitations' },
+            { text: 'Konfliktregeln', link: '/features/conflict-rules' }
           ] },
           { text: 'Entwicklung und Architektur', items: [
-            { text: 'Lokaler Einstieg', link: '/getting-started' },
-            { text: 'Architekturstatus', link: '/architecture-status' },
-            { text: 'Engineering Standards', link: '/engineering-standards' },
-            { text: 'Tests und Coverage', link: '/coverage-strategy' }
+            { text: 'Lokaler Einstieg', link: '/guide/getting-started' },
+            { text: 'Architekturstatus', link: '/architecture/status' },
+            { text: 'Engineering Standards', link: '/development/engineering-standards' },
+            { text: 'Tests und Coverage', link: '/development/coverage-strategy' }
           ] },
           { text: 'Betrieb und Sicherheit', items: [
-            { text: 'Production Runbook', link: '/production-runbook' },
-            { text: 'Produktiv-Stack', link: '/production-compose' },
-            { text: 'Security Baseline', link: '/security-baseline' },
-            { text: 'Release-Prozess', link: '/release-process' }
+            { text: 'Production Runbook', link: '/operations/production-runbook' },
+            { text: 'Produktiv-Stack', link: '/operations/production-compose' },
+            { text: 'Security Baseline', link: '/security/baseline' },
+            { text: 'Release-Prozess', link: '/operations/release-process' }
           ] },
           { text: 'Referenz', items: [
             { text: 'Glossar', link: '/glossary' },

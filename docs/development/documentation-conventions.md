@@ -29,7 +29,7 @@ Die aktive **Roadmap** ist ausschließlich `docs/roadmap.md`; Arbeitstickets lie
 - **Implemented**, **planned** und **historical** klar unterscheiden; nur basierend auf aktuellem Code-/GitHub-Status behaupten.
 - Eine Fachregel hat genau eine maßgebliche Quelle (OpenSpec); Überblicksseiten verlinken.
 - Relative Repository-Links und kanonische VitePress-Routen nutzen; externe Links nicht ohne Prüfung auf eine andere Seite richten.
-- Beim Verschieben öffentlicher Dokumentationsseiten bestehende VitePress-URLs über `rewrites` in `docs/.vitepress/config.mts` stabil halten. Neue interne Links auf den kanonischen Zielort richten.
+- Die VitePress-URL folgt dem Speicherpfad unter `docs/`. Nach Dateiverschiebungen alle internen Links und Navigationseinträge auf die neue öffentliche Route umstellen; keine dauerhafte Rewrite-Kompatibilität für historische URLs.
 - Ein abgeschlossener OpenSpec-Change wird archiviert; historische Analysen wandern in `docs/archive/`.
 - VitePress-Build (`bun run docs:build`), OpenSpec-Validierung und Referenzen prüfen, bevor ein Dokumentations-PR gemerged wird.
 
