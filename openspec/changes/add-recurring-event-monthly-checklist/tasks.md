@@ -2,7 +2,7 @@
 
 - [x] 1.1 RecurringEventTemplate, validierte Wiederholungsregeln und RecurringEventDecision als getrennte Domänenmodelle entwerfen; nicht mit PlanningSeries-Generatoren vermischen.
 - [x] 1.2 Pure Monats-Expansion (WEEKLY, MONTHLY_DAY, MONTHLY_WEEKDAY inkl. letzter Wochentag), feste Anker, aktive Grenzen und Europe/Berlin implementieren.
-- [ ] 1.3 Deterministische Statusprojektion für OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW samt stabiler Vorkommens-ID entwickeln.
+- [x] 1.3 Deterministische Statusprojektion für OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW samt stabiler Vorkommens-ID entwickeln.
 - [x] 1.4 Kategorien für Gottesdienste im neuen Vorlagenpfad verhindern, damit die vorhandene automatische Vorgenerierung unverändert bleibt.
 
 ## 2. Persistenz und Use Cases
