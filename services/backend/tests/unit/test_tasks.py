@@ -301,21 +301,27 @@ class TestSyncReliability:
         session.commit.assert_awaited_once()
 
     async def test_scheduled_stamp_only_updates_timestamp(self):
-        """Scheduler must not save a stale domain snapshot over concurrent edits."""
+        """Scheduler uses the targeted repository update, not aggregate save."""
         from app.application.tasks import mark_scheduled_sync
 
         session = AsyncMock()
-        with patch("app.adapters.db.session.AsyncSessionLocal") as session_factory:
+        repository = MagicMock()
+        repository.stamp_scheduled_attempt = AsyncMock()
+        repository.save = AsyncMock()
+        with (
+            patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
+            patch(
+                "app.adapters.db.repositories.calendar_integration.SqlCalendarIntegrationRepository",
+                return_value=repository,
+            ),
+        ):
             session_factory.return_value.__aenter__.return_value = session
-            await mark_scheduled_sync(uuid.uuid4())
+            identifier = uuid.uuid4()
+            await mark_scheduled_sync(identifier)
 
-        session.execute.assert_awaited_once()
-        statement = session.execute.await_args.args[0]
-        compiled = str(statement)
-        assert "UPDATE calendar_integrations SET last_attempt_at" in compiled
-        assert "credentials_enc" not in compiled
-        assert "last_synced_at" not in compiled
-        assert "last_sync_error" not in compiled
+        repository.stamp_scheduled_attempt.assert_awaited_once()
+        assert repository.stamp_scheduled_attempt.await_args.args[0] == identifier
+        repository.save.assert_not_awaited()
         session.commit.assert_awaited_once()
 
     async def test_missing_integration_does_not_create_phantom_status(self):
