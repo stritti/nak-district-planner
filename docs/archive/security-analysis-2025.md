@@ -1,6 +1,6 @@
 # Security Analyse - NAK District Planner
 
-> **Historische Sicherheitsanalyse (19. Juni 2025).** Risiko- und Implementierungsbewertungen beziehen sich auf den damaligen Code. Aktuell: [Security Baseline](/security-baseline), [Roadmap](/roadmap), [OpenSpec](https://github.com/stritti/nak-district-planner/tree/main/openspec/specs).
+> **Historische Sicherheitsanalyse (19. Juni 2025).** Risiko- und Implementierungsbewertungen beziehen sich auf den damaligen Code. Aktuell: [Security Baseline](/security/baseline), [Roadmap](/roadmap), [OpenSpec](https://github.com/stritti/nak-district-planner/tree/main/openspec/specs).
 
 **Version:** 1.0.0  
 **Datum:** 2025-06-19  
