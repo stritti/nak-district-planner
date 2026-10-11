@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.application import event_mail_hook_tasks, event_mail_hooks
-from app.application.event_mail_hook_tasks import (
+from app.adapters.worker.event_mail_hook_tasks import (
     dispatch_event_mail_hooks,
     enqueue_event_mail_dispatch,
     register_event_mail_hooks,

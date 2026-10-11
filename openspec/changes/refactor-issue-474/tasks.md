@@ -10,6 +10,6 @@
 - [x] Remove unused passlib dependency and lock entries
 - [x] Centralize provider event fingerprints
 - [x] Consolidate API/Beat series generation
-- [ ] Move Celery entrypoints under inbound adapters
+- [x] Move Celery entrypoints under inbound adapters
 - [x] Decouple application services from API schemas
 - [ ] Verify unit, integration, build and coverage gates

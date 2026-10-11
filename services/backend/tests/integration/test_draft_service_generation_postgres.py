@@ -27,7 +27,7 @@ from app.application.draft_service_generation import (
     GenerateDraftServicesUseCase,
     draft_service_generation_key,
 )
-from app.application.tasks import _run_as_system_worker
+from app.adapters.worker.tasks import _run_as_system_worker
 from app.domain.models.planning_slot import PlanningSlot
 
 # Wednesdays 20:00 Europe/Berlin; the window holds 2030-03-06 and 2030-03-13.
