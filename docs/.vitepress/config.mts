@@ -20,6 +20,30 @@ export default defineConfig(
     description: 'Dokumentation f\u00fcr den Bezirksplaner der Neuapostolischen Kirche',
     ignoreDeadLinks: false,
     srcExclude: ['superpowers/**'],
+    // Keep existing public URLs stable while organizing Markdown sources by topic.
+    rewrites: {
+      'guide/workflows.md': 'workflows.md',
+      'guide/getting-started.md': 'getting-started.md',
+      'features/use-cases.md': 'use-cases.md',
+      'features/roles.md': 'roles.md',
+      'features/approval-workflow.md': 'approval-workflow.md',
+      'features/invitations.md': 'invitations.md',
+      'features/conflict-rules.md': 'conflict-rules.md',
+      'architecture/status.md': 'architecture-status.md',
+      'architecture/schema.md': 'schema.md',
+      'development/engineering-standards.md': 'engineering-standards.md',
+      'development/coverage-strategy.md': 'coverage-strategy.md',
+      'development/performance-baseline.md': 'performance-baseline.md',
+      'operations/production-runbook.md': 'production-runbook.md',
+      'operations/production-compose.md': 'production-compose.md',
+      'operations/release-process.md': 'release-process.md',
+      'operations/deployment-migrations.md': 'deployment-migrations.md',
+      'operations/membership-backfill-runbook.md': 'membership-backfill-runbook.md',
+      'operations/opentelemetry.md': 'opentelemetry.md',
+      'operations/congregation-grouping-rollout.md': 'congregation-grouping-rollout.md',
+      'security/baseline.md': 'security-baseline.md',
+      'security/rbac-coverage.md': 'rbac-coverage.md',
+    },
     markdown: {
       config(md) {
         md.use(diagramPlugin)

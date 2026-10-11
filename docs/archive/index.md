@@ -16,6 +16,12 @@ Ihre frühere Fassung ist mit festem Commit in Git verfügbar:
 
 ## Weiterhin zur Nachvollziehbarkeit vorhanden
 
-[2025 Gap-Analyse](/archive/openspec-gap-analysis), [2026 Release-Review](/reviews/2026-10-07-release-1.0-review), [Sicherheitsanalyse](/security-analysis), [Juli-Code-Review](/code-review-2026-07), [Juli-Aktionsplan](/code-review-2026-07-action-plan), [OpenSpec-Change-Archiv](https://github.com/stritti/nak-district-planner/tree/main/openspec/changes/archive).
+[2025 Gap-Analyse](/archive/openspec-gap-analysis), [2026 Release-Review](/archive/release-review-2026-10-07), [Sicherheitsanalyse](/archive/security-analysis-2025), [Juli-Code-Review](/archive/code-review-2026-07), [Juli-Aktionsplan](/archive/code-review-2026-07-action-plan), [OpenSpec-Change-Archiv](https://github.com/stritti/nak-district-planner/tree/main/openspec/changes/archive).
 
 Alte technische Anleitungen dürfen nicht gegen die aktuelle Security-/Deployment-Baseline ausgeführt werden.
+
+## Archivierte Roadmaps und Entwurfsentscheidungen
+
+- [Historischer Architektur-Phasenplan](/archive/architecture-implementation-roadmap), [Planning-Modell-Migrationsentwurf](/archive/phase-1-planning-model-technical-plan)
+- [Security-Roadmap von 2025](/archive/security-roadmap-2025), [RBAC-Einführungsplan](/archive/rbac-completion-plan), [frühere Verbesserungsvorschläge](/archive/improvement-proposals)
+- [OIDC-Migrationsnotizen Phase 4a/4b](/archive/phase4a-to-4b-oidc-migration)
