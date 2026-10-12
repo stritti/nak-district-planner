@@ -95,3 +95,58 @@ gate and downloadable coverage artifact.
 #### Scenario: Authenticated Codecov upload fails
 - **WHEN** `CODECOV_TOKEN` is configured and Codecov rejects the report
 - **THEN** the backend CI job SHALL fail instead of reporting a false success
+
+### Requirement: Stable multi-interval series recurrence
+
+Weekly and monthly recurring series SHALL use a stable series-based anchor,
+preferentially `active_from` and otherwise the creation date. Daily rolling
+generation windows SHALL not affect interval parity. Calendar-week parity SHALL
+be computed on Monday-based weeks.
+
+#### Scenario: Biweekly generation with a moving window
+- **WHEN** a biweekly Monday series starts on June 1 and the next generator run
+  begins June 2
+- **THEN** the same June 15 occurrence SHALL be selected, without introducing
+  a June 8 occurrence
+
+#### Scenario: Every-two-month recurrence
+- **WHEN** a two-month series begins in January and generation is requested
+  from February
+- **THEN** its next occurrences SHALL remain in March and May, rather than
+  changing the month parity to February and April
+
+### Requirement: Planning generation compatibility
+
+Both scheduled worker entrypoints SHALL instantiate their use cases with all
+required repositories. Series generation SHALL default uncategorized slots to
+`Gottesdienst` without overriding an explicit category. The generated event
+duration SHALL honor the current configured duration when generation runs.
+
+#### Scenario: Scheduled draft generation
+- **WHEN** the daily draft-service task executes
+- **THEN** it SHALL provide district, congregation, slot and event repositories
+  to the draft generation use case
+
+#### Scenario: Unset series category
+- **WHEN** a recurring series has no category
+- **THEN** its generated PlanningSlot SHALL have category `Gottesdienst`
+  so that it remains classified as a worship service
+
+#### Scenario: Updated event duration
+- **WHEN** the configured expected duration differs from its import-time value
+- **THEN** the generated EventInstance SHALL use the current value
+
+### Requirement: Typed calendar integration commands
+
+HTTP request schemas SHALL be explicitly converted into typed application
+commands. Update commands SHALL distinguish omitted fields from explicit null,
+including clearing the nullable default category, without depending on dynamic
+string-keyed dictionaries in application code.
+
+#### Scenario: Clear default category
+- **WHEN** the update request explicitly includes `default_category: null`
+- **THEN** the category SHALL be cleared without modifying other omitted fields
+
+#### Scenario: New HTTP schema property
+- **WHEN** an unrelated optional property is added to the HTTP create schema
+- **THEN** the application command mapper SHALL remain compatible
