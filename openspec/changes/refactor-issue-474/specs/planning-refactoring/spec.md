@@ -115,6 +115,12 @@ be computed on Monday-based weeks.
 - **THEN** its next occurrences SHALL remain in March and May, rather than
   changing the month parity to February and April
 
+
+#### Scenario: Implicit weekday across recurrence formats
+- **WHEN** a weekly series omits explicit weekdays but defines `active_from`
+- **THEN** both the modern and legacy recurrence formats SHALL use the
+  `active_from` weekday; without `active_from` they SHALL use the creation weekday
+
 ### Requirement: Planning generation compatibility
 
 Both scheduled worker entrypoints SHALL instantiate their use cases with all
