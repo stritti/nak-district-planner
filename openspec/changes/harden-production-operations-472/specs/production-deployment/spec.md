@@ -54,3 +54,25 @@ Production database backups SHALL include separately encrypted global role defin
 #### Scenario: Damaged backup is provided
 - **WHEN** a truncated archive is used for a dry-run restore
 - **THEN** validation fails and the restored data remain unchanged
+
+### Requirement: Production upgrade actions are prominent in published Release Notes
+Changes that require an operator to modify an existing production installation SHALL introduce an actionable, release-specific upgrade note alongside the change. Following release-please publication, the release workflow SHALL prepend newly introduced upgrade notes under a prominent "WICHTIG: Anpassungen bei produktiven Installationen" heading before the generated changelog. The release image publication SHALL depend on successful upgrade-note processing.
+
+#### Scenario: Release includes a new required environment variable
+- **WHEN** a version includes a new production upgrade note with affected deployments, pre-upgrade steps and post-upgrade checks
+- **THEN** its GitHub Release description begins with the upgrade instructions
+- **AND** the original generated changelog remains intact below those instructions
+
+#### Scenario: Subsequent release has no new required operator actions
+- **WHEN** a later release only contains older upgrade notes or no upgrade notes
+- **THEN** the GitHub Release description stays unchanged
+- **AND** older operator actions are not repeated
+
+#### Scenario: Upgrade note publication fails
+- **WHEN** a new upgrade note lacks affected deployments, pre-upgrade steps or post-upgrade checks, or GitHub rejects the release-description update
+- **THEN** the publish-upgrade-notes job fails
+- **AND** the release image publishing job does not run
+
+#### Scenario: Upgrade notes publication is retried
+- **WHEN** the release description already includes the note marker for the same release
+- **THEN** the release publisher leaves it unchanged instead of duplicating the notice
