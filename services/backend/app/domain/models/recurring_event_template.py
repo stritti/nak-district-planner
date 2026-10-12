@@ -116,6 +116,7 @@ class RecurringEventTemplate:
     applicability: tuple[str, ...] = ()
     active_from: date | None = None
     active_until: date | None = None
+    excluded_dates: tuple[date, ...] = ()
     is_active: bool = True
     revision: int = 1
     timezone: str = "Europe/Berlin"
@@ -136,6 +137,11 @@ class RecurringEventTemplate:
             raise ValueError("Only Europe/Berlin is currently supported")
         if self.active_from and self.active_until and self.active_from > self.active_until:
             raise ValueError("active_from must not exceed active_until")
+        if (
+            any(not isinstance(day, date) or isinstance(day, datetime) for day in self.excluded_dates)
+            or len(set(self.excluded_dates)) != len(self.excluded_dates)
+        ):
+            raise ValueError("Invalid exclusion dates")
         if self.congregation_id is not None and self.applicability:
             raise ValueError("Congregation templates cannot have applicability")
         if len(set(self.applicability)) != len(self.applicability):
@@ -243,6 +249,7 @@ def expand_month(template: RecurringEventTemplate, year: int, month: int) -> lis
         candidate
         for candidate in candidates
         if candidate >= rule.anchor_date
+        and candidate not in template.excluded_dates
         and (template.active_from is None or candidate >= template.active_from)
         and (template.active_until is None or candidate <= template.active_until)
     ]
