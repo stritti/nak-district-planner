@@ -353,3 +353,37 @@ class TestSyncReliability:
 
         repo.record_attempt.assert_awaited_once()
         session.commit.assert_awaited_once()
+
+def test_draft_worker_supplies_required_district_and_congregation_repositories() -> None:
+    """Run the real task coroutine and verify all required constructor ports."""
+    from app.adapters.worker.tasks import generate_draft_services_window
+
+    session = AsyncMock()
+    summary = {
+        "districts": 1, "congregations": 2, "created": 3,
+        "skipped_existing": 0, "adopted_existing": 0,
+        "invalid_configurations": 0,
+    }
+
+    with (
+        patch("app.adapters.db.session.AsyncSessionLocal") as session_factory,
+        patch("app.adapters.db.repositories.district.SqlDistrictRepository") as district_repo,
+        patch(
+            "app.adapters.db.repositories.congregation.SqlCongregationRepository"
+        ) as congregation_repo,
+        patch("app.adapters.db.repositories.planning_slot.SqlPlanningSlotRepository"),
+        patch("app.adapters.db.repositories.event_instance.SqlEventInstanceRepository"),
+        patch(
+            "app.application.draft_service_generation.GenerateDraftServicesUseCase"
+        ) as use_case,
+        patch("app.adapters.worker.tasks._run_as_system_worker", side_effect=lambda work: work),
+    ):
+        session_factory.return_value.__aenter__.return_value = session
+        use_case.return_value.run = AsyncMock(return_value=summary)
+        result = generate_draft_services_window()
+
+    assert result == summary
+    kwargs = use_case.call_args.kwargs
+    assert kwargs["district_repo"] is district_repo.return_value
+    assert kwargs["congregation_repo"] is congregation_repo.return_value
+    session.commit.assert_awaited_once()
