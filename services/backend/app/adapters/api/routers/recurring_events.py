@@ -334,6 +334,7 @@ async def list_recurring_checklist(
                 duration_minutes=row.template.duration_minutes,
                 template_revision=row.template.revision,
                 status=row.status,
+                decision_status=row.decision_status,
                 planning_slot_id=row.planning_slot_id,
                 reason=row.reason,
             ) for row in page.items
