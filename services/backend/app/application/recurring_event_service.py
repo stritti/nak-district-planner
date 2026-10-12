@@ -14,12 +14,22 @@ import uuid
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from collections.abc import AsyncContextManager
+from typing import Protocol
 
-from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
-from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-from app.adapters.db.repositories.recurring_event import SqlRecurringEventRepository
+from app.domain.ports.repositories import EventInstanceRepository, PlanningSlotRepository
+
+class RecurringEventRepositoryPort(Protocol):
+    async def list_decisions(self, district_id: uuid.UUID, from_date: date, to_date: date) -> list[RecurringEventDecision]: ...
+    async def get_template(self, template_id: uuid.UUID, *, for_update: bool = False) -> RecurringEventTemplate | None: ...
+    async def get_decision(self, template_id: uuid.UUID, occurrence_date: date, *, for_update: bool = False) -> RecurringEventDecision | None: ...
+    async def save_decision(self, decision: RecurringEventDecision) -> None: ...
+    async def delete_decision(self, decision_id: uuid.UUID) -> None: ...
+    async def find_slot_decision(self, slot_id: uuid.UUID) -> RecurringEventDecision | None: ...
+
+class TransactionPort(Protocol):
+    def begin_nested(self) -> AsyncContextManager[None]: ...
+
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
@@ -75,10 +85,10 @@ class RecurringEventService:
 
     def __init__(
         self,
-        session: AsyncSession,
-        recurring: SqlRecurringEventRepository,
-        slots: SqlPlanningSlotRepository,
-        instances: SqlEventInstanceRepository,
+        session: TransactionPort,
+        recurring: RecurringEventRepositoryPort,
+        slots: PlanningSlotRepository,
+        instances: EventInstanceRepository,
     ) -> None:
         self.session = session
         self.recurring = recurring
@@ -307,7 +317,7 @@ class RecurringEventService:
                 )
                 await self.recurring.save_decision(decision)
                 return decision
-        except IntegrityError as exc:
+        except Exception as exc:
             raise OccurrenceConflictError("Vorkommen wurde parallel bearbeitet.") from exc
 
     async def skip(
@@ -338,7 +348,7 @@ class RecurringEventService:
                 )
                 await self.recurring.save_decision(decision)
                 return decision
-        except IntegrityError as exc:
+        except Exception as exc:
             raise OccurrenceConflictError("Vorkommen wurde parallel bearbeitet.") from exc
 
     async def reopen(
@@ -410,5 +420,5 @@ class RecurringEventService:
                 updated = replace(decision, planning_slot_id=slot_id)
                 await self.recurring.save_decision(updated)
                 return updated
-        except IntegrityError as exc:
+        except Exception as exc:
             raise OccurrenceConflictError("Die Zuordnung wurde parallel geändert.") from exc
