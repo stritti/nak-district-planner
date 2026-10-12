@@ -55,12 +55,6 @@ LEGACY_APPLICATION_ADAPTER_IMPORTS: dict[str, LegacyDebt] = {
         "app.adapters.db.session",
         "sqlalchemy",
     ),
-    "event_mail_hook_tasks.py": _debt(
-        "Celery composition still constructs persistence adapters",
-        "app.adapters.db.repositories.event_mail_hook",
-        "app.adapters.db.session",
-        "app.adapters.mail",
-    ),
     "external_candidate_ingestion.py": _debt(
         "legacy ingestion orchestration still uses DB adapters",
         "app.adapters.db.locks",
@@ -84,8 +78,7 @@ LEGACY_APPLICATION_ADAPTER_IMPORTS: dict[str, LegacyDebt] = {
         "sqlalchemy.ext.asyncio",
     ),
     "invitation_service.py": _debt(
-        "legacy invitation orchestration still reaches persistence adapters and API schemas",
-        "app.adapters.api.schemas.invitation",
+        "legacy invitation orchestration still reaches persistence adapters",
         "app.adapters.db.repositories.congregation",
         "app.adapters.db.repositories.event_instance",
         "app.adapters.db.repositories.invitation",
@@ -104,11 +97,6 @@ LEGACY_APPLICATION_ADAPTER_IMPORTS: dict[str, LegacyDebt] = {
         "sqlalchemy.dialects.postgresql",
         "sqlalchemy.ext.asyncio",
     ),
-    "reminder_tasks.py": _debt(
-        "Celery composition currently lives in the application package",
-        "app.adapters.db.session",
-        "app.adapters.mail",
-    ),
     "service_assignment_conflict.py": _debt(
         "legacy conflict orchestration still uses persistence adapters",
         "app.adapters.db.repositories.event_instance",
@@ -117,16 +105,6 @@ LEGACY_APPLICATION_ADAPTER_IMPORTS: dict[str, LegacyDebt] = {
         "app.adapters.db.repositories.planning_slot",
         "app.adapters.db.repositories.service_assignment",
         "sqlalchemy.ext.asyncio",
-    ),
-    "services/calendar_integration_service.py": _debt(
-        "legacy application service consumes API request schemas directly",
-        "app.adapters.api.schemas.calendar_integration",
-    ),
-    "slot_gap_tasks.py": _debt(
-        "Celery composition currently lives in the application package",
-        "app.adapters.db.repositories.slot_gap",
-        "app.adapters.db.session",
-        "app.adapters.db.transactional_events",
     ),
     "sync_service.py": _debt(
         "legacy sync orchestration still reaches calendar and persistence adapters",
@@ -140,24 +118,6 @@ LEGACY_APPLICATION_ADAPTER_IMPORTS: dict[str, LegacyDebt] = {
         "app.adapters.db.repositories.planning_slot",
         "sqlalchemy",
         "sqlalchemy.ext.asyncio",
-    ),
-    "tasks.py": _debt(
-        "legacy Celery composition currently lives in the application package",
-        "app.adapters.db.domain_audit",
-        "app.adapters.db.orm_models.audit_log",
-        "app.adapters.db.orm_models.planning_slot",
-        "app.adapters.db.repositories.calendar_integration",
-        "app.adapters.db.repositories.congregation",
-        "app.adapters.db.repositories.district",
-        "app.adapters.db.repositories.event_instance",
-        "app.adapters.db.repositories.notification",
-        "app.adapters.db.repositories.planning_series",
-        "app.adapters.db.repositories.planning_slot",
-        "app.adapters.db.session",
-        "app.adapters.db.transactional_events",
-        "app.adapters.version_check.cache",
-        "app.adapters.version_check.ghcr",
-        "sqlalchemy",
     ),
     "tenant_validation.py": _debt(
         "legacy tenant validation still queries persistence adapters",
