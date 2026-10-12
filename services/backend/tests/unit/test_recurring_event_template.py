@@ -331,3 +331,27 @@ def test_checklist_rejects_decisions_from_other_tenants_dates_or_templates() -> 
             project_checklist_status(entry, selected, decision=foreign)
     with pytest.raises(ValueError, match="Unknown decision status"):
         replace(decision, status="HIDDEN")
+
+
+def test_template_exclusion_dates_skip_only_specified_occurrences() -> None:
+    rule_ = rule(RecurrenceKind.WEEKLY, date(2026, 11, 3), weekdays=(2,))
+    entry = template(rule_, excluded_dates=(date(2026, 11, 10), date(2026, 11, 24)))
+    assert expand_month(entry, 2026, 11) == [
+        date(2026, 11, 3),
+        date(2026, 11, 17),
+    ]
+    assert expand_month(entry, 2026, 12) == [
+        date(2026, 12, 1),
+        date(2026, 12, 8),
+        date(2026, 12, 15),
+        date(2026, 12, 22),
+        date(2026, 12, 29),
+    ]
+
+
+def test_template_rejects_duplicate_and_non_date_exclusions() -> None:
+    weekly = rule(RecurrenceKind.WEEKLY, weekdays=(2,))
+    with pytest.raises(ValueError, match="exclusion"):
+        template(weekly, excluded_dates=(date(2026, 11, 3), date(2026, 11, 3)))
+    with pytest.raises(ValueError, match="exclusion"):
+        template(weekly, excluded_dates=(datetime(2026, 11, 3),))
