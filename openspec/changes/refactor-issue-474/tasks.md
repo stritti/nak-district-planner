@@ -13,3 +13,4 @@
 - [x] Move Celery entrypoints under inbound adapters
 - [x] Decouple application services from API schemas
 - [x] Verify unit, integration, build and coverage gates
+- [x] Require authenticated Codecov uploads and surface missing-token warnings without weakening local coverage gates
