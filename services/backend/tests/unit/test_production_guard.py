@@ -302,14 +302,22 @@ def test_production_guard_requires_runtime_passwords(monkeypatch, name) -> None:
     with pytest.raises(RuntimeError, match=name):
         production_guard(_valid_prod_settings())
 
-@pytest.mark.parametrize("value", ["some@password", "with spaces", "a:b", "a/b", "a$bc", "äbc"])
-def test_production_guard_rejects_non_url_safe_valkey_passwords(monkeypatch, value) -> None:
-    monkeypatch.setenv("VALKEY_PASSWORD", value)
-    with pytest.raises(RuntimeError, match=r"VALKEY_PASSWORD.*URL-safe"):
+@pytest.mark.parametrize("name", ["APP_DB_PASSWORD", "VALKEY_PASSWORD"])
+@pytest.mark.parametrize(
+    "value", ["some@password", "with spaces", "a:b", "a/b", "a$bc", "äbc", "quoted'password"],
+)
+def test_production_guard_rejects_non_url_safe_runtime_passwords(
+    monkeypatch, name: str, value: str,
+) -> None:
+    monkeypatch.setenv(name, value)
+    with pytest.raises(RuntimeError, match=rf"{name}.*URL-safe"):
         production_guard(_valid_prod_settings())
 
 
+@pytest.mark.parametrize("name", ["APP_DB_PASSWORD", "VALKEY_PASSWORD"])
 @pytest.mark.parametrize("value", ["A1bcdefghijk-_", "A1bcdefghijk.~"])
-def test_production_guard_accepts_url_safe_valkey_passwords(monkeypatch, value) -> None:
-    monkeypatch.setenv("VALKEY_PASSWORD", value)
+def test_production_guard_accepts_url_safe_runtime_passwords(
+    monkeypatch, name: str, value: str,
+) -> None:
+    monkeypatch.setenv(name, value)
     production_guard(_valid_prod_settings())
