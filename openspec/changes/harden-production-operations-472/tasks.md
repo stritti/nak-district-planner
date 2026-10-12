@@ -18,3 +18,11 @@
 - [x] 4.2 Run regression and config tests (coverage >80%)
 - [x] 4.3 Run full Docker-based encrypted Restore Drill and review CI checks
 - [ ] 4.4 Triage external GitGuardian incident 36714356 for Compose environment-variable interpolation (security gate remains active)
+
+## 5. Production release instructions
+- [x] 5.1 Add operator-facing upgrade instructions for Issue #472
+- [x] 5.2 Publish newly introduced upgrade instructions ahead of the generated release changelog
+- [x] 5.3 Make Docker image release conditional on successful upgrade-note publication
+- [x] 5.4 Add behavioral tests for first release, later releases, invalid notes, idempotence, and unchanged changelogs
+- [x] 5.5 Document contributor workflow and upgrade-note contract
+- [ ] 5.6 Confirm GitHub Actions checks on the updated PR branch
