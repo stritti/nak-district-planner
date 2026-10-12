@@ -813,3 +813,35 @@ async def test_explicit_generator_locks_district_before_insertion():
     )
     assert result["generated"] == 1
     assert slots.locked_districts == [series.district_id]
+
+@pytest.mark.asyncio
+async def test_moved_series_slot_keeps_occurrence_key_in_api_generator() -> None:
+    """Moving a generated slot must not create its old occurrence again."""
+    series_repo = MockPlanningSeriesRepository()
+    slot_repo = MockPlanningSlotRepository()
+    service = PlanningSeriesSlotGenerationService(series_repo, slot_repo)
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(),
+        default_planning_time=time(10),
+        recurrence_pattern={"frequency": "weekly", "by_weekday": [6]},
+    )
+    await series_repo.save(series)
+    period = {
+        "series_id": series.id,
+        "from_date": date(2026, 1, 4),
+        "to_date": date(2026, 1, 4),
+    }
+    first = await service.generate_slots_for_series(**period)
+    assert first["generated"] == 1
+    original = slot_repo.slots[0]
+    identity = original.generation_key
+    assert identity is not None
+
+    # Simulate the planner moving the slot without changing its series scope.
+    original.planning_date = date(2026, 2, 1)
+    second = await service.generate_slots_for_series(**period)
+
+    assert second["generated"] == 0
+    assert second["skipped"] == 1
+    assert len(slot_repo.slots) == 1
+    assert original.generation_key == identity

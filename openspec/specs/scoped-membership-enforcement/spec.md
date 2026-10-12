@@ -40,6 +40,11 @@ The system SHALL allow congregation-level operations only when user memberships 
 - **WHEN** user has memberships only outside the requested congregation
 - **THEN** operation is rejected with `403 Forbidden`
 
+#### Scenario: District role cannot be mapped to an unknown congregation
+- **WHEN** `has_role_in_congregation` receives only a district membership
+- **THEN** it returns false because it checks direct congregation membership only
+- **AND** callers permitting district administrators SHALL verify the actual parent district through a separate district-scoped authorization check
+
 ### Requirement: Access context SHALL be visible for client UX
 The system SHALL provide an authenticated endpoint that returns effective memberships so the client can render access-aware UI states.
 

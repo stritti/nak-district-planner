@@ -77,8 +77,10 @@ def has_role_in_congregation(
 ) -> bool:
     """Check if user has the required role (or higher) in a congregation.
 
-    Direct congregation membership and district-level roles are considered.
-    A DISTRICT_ADMIN has all permissions in all congregations within the district.
+    Only direct CONGREGATION memberships are checked (plus superadmin).
+    The helper has no congregation-to-district mapping; callers that allow
+    DISTRICT_ADMIN access must separately check the actual parent district.
+    It must not infer a congregation's district from unrelated memberships.
     """
     if getattr(getattr(auth_context, "user", None), "is_superadmin", False):
         return True
