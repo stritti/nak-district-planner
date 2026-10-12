@@ -4,7 +4,7 @@
 """Create tenant-isolated opt-in recurring templates and occurrence decisions.
 
 Revision ID: 20261012_recurring_events
-Revises: 20261010_event_release
+Revises: 20261011_sync_attempt
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from alembic import op
 
 revision = "20261012_recurring_events"
-down_revision = "20261010_event_release"
+down_revision = "20261011_sync_attempt"
 branch_labels = None
 depends_on = None
 
