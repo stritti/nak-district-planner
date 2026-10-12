@@ -118,6 +118,10 @@ function setup(items = baseEvents) {
   return { wrapper, districtsStore, eventsStore }
 }
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
   sessionStorage.clear()
