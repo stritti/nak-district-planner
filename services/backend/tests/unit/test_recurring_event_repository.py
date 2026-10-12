@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, time
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -84,6 +84,7 @@ def test_decision_roundtrip_preserves_missing_slot_for_review() -> None:
 @pytest.mark.asyncio
 async def test_new_template_is_flushed_for_transactional_persistence() -> None:
     session = AsyncMock()
+    session.add = Mock()
     session.get.return_value = None
     template = _template()
     await SqlRecurringEventRepository(session).save_template(template)
