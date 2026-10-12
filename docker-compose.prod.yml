@@ -25,6 +25,9 @@ x-app-image: &backend-image ${IMAGE_REGISTRY:-ghcr.io/stritti/nak-district-plann
 x-runtime-hardening: &runtime-hardening
   read_only: true
   cap_drop: [ALL]
+  # Explicit runtime limits for plain docker compose up (no Swarm required).
+  mem_limit: 1g
+  pids_limit: 256
   tmpfs:
     - /tmp:rw,nosuid,noexec,size=64m
   deploy:
@@ -171,8 +174,8 @@ services:
       test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d celery@$(hostname) --timeout=5 | grep -q pong"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 5
+      start_period: 60s
 
   # The only scheduler: exactly one instance, schedule file on a named volume.
   beat:
@@ -218,6 +221,8 @@ services:
 
   valkey:
     <<: *defaults
+    mem_limit: 512m
+    pids_limit: 128
     deploy:
       resources:
         limits:
