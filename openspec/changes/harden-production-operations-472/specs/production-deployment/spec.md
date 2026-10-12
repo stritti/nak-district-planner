@@ -27,7 +27,7 @@ The frontend, backend, worker, beat and migrate services SHALL have read-only ro
 - **AND** the beat schedule remains writable on its dedicated persistent volume
 
 ### Requirement: Valkey is authenticated and production runtime secrets are non-default
-The stack SHALL require a nonempty VALKEY_PASSWORD and use it for the Valkey server, healthcheck and application/Celery connections. Production startup SHALL reject missing or known default APP_DB_PASSWORD and VALKEY_PASSWORD. Owner credentials SHALL still be forbidden in runtime service environments.
+The stack SHALL require a nonempty VALKEY_PASSWORD and use it for the Valkey server, healthcheck and application/Celery connections. Production startup SHALL reject missing or known default APP_DB_PASSWORD and VALKEY_PASSWORD and reject VALKEY_PASSWORD values containing URI-reserved or non-ASCII characters, because Compose embeds the password in a Valkey connection URI. Compose SHALL pass VALKEY_PASSWORD to Valkey startup and healthcheck commands through quoted container environment-variable expansion, not through unescaped interpolation into shell script text. Owner credentials SHALL still be forbidden in runtime service environments.
 
 #### Scenario: Operator forgets or uses development secrets
 - **WHEN** application startup uses a missing or placeholder runtime credential
@@ -36,6 +36,15 @@ The stack SHALL require a nonempty VALKEY_PASSWORD and use it for the Valkey ser
 #### Scenario: Valkey starts
 - **WHEN** a client connects without the configured password
 - **THEN** Valkey refuses authenticated operations
+
+#### Scenario: Runtime password contains URL-reserved characters
+- **WHEN** production startup receives a VALKEY_PASSWORD that cannot be embedded directly in a URI
+- **THEN** startup fails with a clear validation error
+
+#### Scenario: Compose starts Valkey and runs the healthcheck
+- **WHEN** VALKEY_PASSWORD contains characters that have shell syntax
+- **THEN** the literal value is delivered as a single credential argument to Valkey
+- **AND** the healthcheck authenticates with that exact value without interpreting it as code
 
 ### Requirement: Standalone identity providers require secure configuration
 The standalone Keycloak and Authentik Compose examples SHALL require operator-provided passwords and HTTPS public hostnames. Insecure cookie overrides, hardcoded personal domains and deprecated Compose version declarations SHALL NOT remain.
