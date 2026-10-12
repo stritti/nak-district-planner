@@ -359,7 +359,14 @@ describe('EventListView', () => {
   })
 
   it('updates calendar events and surfaces edit failures without closing the modal', async () => {
-    const { wrapper } = setup([event()])
+    // The weekly calendar starts at the current week. Fixed 2026-10-05
+    // fixtures disappear as soon as the CI clock enters a later week.
+    const startAt = new Date()
+    const endAt = new Date(startAt.getTime() + 60 * 60 * 1000)
+    const { wrapper } = setup([event({
+      start_at: startAt.toISOString(),
+      end_at: endAt.toISOString(),
+    })])
     await flushPromises()
     await wrapper.findAll('button').find((button) => button.text() === 'Woche')!.trigger('click')
     await flushPromises()
