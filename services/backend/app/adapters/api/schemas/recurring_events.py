@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.models.recurring_event_template import (
     ChecklistStatus,
+    DecisionStatus,
     RecurrenceKind,
     RecurrenceRule,
 )
@@ -101,6 +102,7 @@ class ChecklistItemResponse(BaseModel):
     duration_minutes: int
     template_revision: int
     status: ChecklistStatus
+    decision_status: DecisionStatus | None
     planning_slot_id: uuid.UUID | None
     reason: str | None
 
