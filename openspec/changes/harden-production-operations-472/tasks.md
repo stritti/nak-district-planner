@@ -7,6 +7,7 @@
 - [x] 2.1 Add application runtime isolation, limits, service healthchecks
 - [x] 2.2 Enforce Valkey auth in development and production Compose and application URL
 - [x] 2.3 Validate production runtime credentials and standalone IdP secrets/HTTPS
+- [x] 2.4 Preserve literal Valkey passwords in Compose commands and reject URL-unsafe production values
 
 ## 3. Restore and documentation
 - [x] 3.1 Back up encrypted database and global roles separately
