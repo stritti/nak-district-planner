@@ -317,7 +317,11 @@ nur der externe Proxy nimmt HTTPS auf 443 an.
 Vor dem Deployment `VALKEY_PASSWORD` in `.env` auf einen neuen, URL-sicheren
 Zufallswert setzen, zum Beispiel mit `openssl rand -hex 32`. Der
 `production_guard` verweigert den Start bei fehlendem oder bekannten
-Standardwerten von `APP_DB_PASSWORD` und `VALKEY_PASSWORD`.
+Standardwerten von `APP_DB_PASSWORD` und `VALKEY_PASSWORD` sowie bei
+URL-reservierten und nicht-ASCII-Zeichen im Valkey-Passwort. Zulaessig sind
+Buchstaben, Ziffern, Punkt, Unterstrich, Tilde und Bindestrich.
+Die Valkey-Start- und Healthcheck-Kommandos verwenden die geschuetzte
+Variablenexpansion im Container statt das Passwort als Shell-Code einzusetzen.
 `.env.docker` setzt daraus eine authentifizierte `VALKEY_URL` fuer
 API, Worker und Beat. **Bestehende Valkey-Nachrichten und Celery-Jobs
 vor einem Passwortwechsel auslaufen lassen oder die Credentials bei
