@@ -359,7 +359,9 @@ describe('EventListView', () => {
   })
 
   it('updates calendar events and surfaces edit failures without closing the modal', async () => {
-    const { wrapper } = setup([event()])
+    const currentDay = new Date()
+    const localDate = `${currentDay.getFullYear()}-${String(currentDay.getMonth() + 1).padStart(2, '0')}-${String(currentDay.getDate()).padStart(2, '0')}`
+    const { wrapper } = setup([event({ start_at: `${localDate}T09:30:00`, end_at: `${localDate}T10:30:00` })])
     await flushPromises()
     await wrapper.findAll('button').find((button) => button.text() === 'Woche')!.trigger('click')
     await flushPromises()
