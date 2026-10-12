@@ -122,16 +122,16 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
     def test_labels_mentioned_mid_paragraph_are_not_valid_sections(self) -> None:
         with self.assertRaisesRegex(ValueError, "Betroffen"):
             validate_upgrade_note(
-                "### Update\\n\\nSome prose mentions **Betroffen:** inline\\n"
-                "**Vor dem Update:** Setup\\n**Nach dem Update:** Checks\\n",
+                "### Update\n\nSome prose mentions **Betroffen:** inline\n"
+                "**Vor dem Update:** Setup\n**Nach dem Update:** Checks\n",
                 Path("misleading.md"),
             )
 
     def test_empty_action_section_fails_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "Vor dem Update section is empty"):
             validate_upgrade_note(
-                "### Update\\n\\n**Betroffen:** Production\\n\\n"
-                "**Vor dem Update:**\\n\\n**Nach dem Update:** Verify\\n",
+                "### Update\n\n**Betroffen:** Production\n\n"
+                "**Vor dem Update:**\n\n**Nach dem Update:** Verify\n",
                 Path("empty.md"),
             )
 
