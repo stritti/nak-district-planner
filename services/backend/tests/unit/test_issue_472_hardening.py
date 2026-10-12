@@ -134,7 +134,10 @@ def test_restore_drill_checks_migrated_security_contract() -> None:
         "pg_policies", "prosecdef", "has_table_privilege", "app_superadmin_config",
     ):
         assert item in drill
-    assert "roles" in _read("scripts/backup.sh").lower()
+    backup = _read("scripts/backup.sh")
+    assert "roles" in backup.lower()
+    assert backup.count("require_nonempty_roles |") == 1
+    assert 'require_nonempty_roles > "$roles_file"' in backup
     assert 'grep -Fxc "CREATE ROLE ${POSTGRES_USER};"' in drill
     assert 'awk -v definition="CREATE ROLE ${POSTGRES_USER};"' in drill
 
