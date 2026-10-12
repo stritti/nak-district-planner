@@ -117,6 +117,11 @@ class RecurringEventService:
         # Decisions survive rule edits, exclusions, and template deactivation.
         occurrence_keys.update(key for key in decisions if key[0] in visible)
         result: list[ChecklistItem] = []
+        linked_slot_ids = {decision.planning_slot_id for decision in decisions.values() if decision.planning_slot_id is not None}
+        linked_slots = {slot.id: slot for slot in slots if slot.id in linked_slot_ids}
+        missing_ids = linked_slot_ids - linked_slots.keys()
+        if missing_ids:
+            linked_slots.update({slot.id: slot for slot in await self.slots.get_many(missing_ids)})
         for template_id, day in occurrence_keys:
             entry = visible[template_id]
             if query and query.casefold() not in (
@@ -139,7 +144,7 @@ class RecurringEventService:
                     reason = "Ein aktiver Gemeindetermin belegt diese Startzeit."
             linked_slot_exists = False
             if decision and decision.planning_slot_id is not None:
-                linked = await self.slots.get(decision.planning_slot_id)
+                linked = linked_slots.get(decision.planning_slot_id)
                 linked_slot_exists = (
                     linked is not None and linked.district_id == district_id
                 )
@@ -398,6 +403,8 @@ class RecurringEventService:
                     or target.status != PlanningSlotStatus.ACTIVE
                 ):
                     raise OccurrenceConflictError("Slot gehört nicht zum passenden Bezirk/Gemeindescope.")
+                if target.planning_date != local_start_utc(occurrence_day, current.start_time, timezone=current.timezone).date():
+                    raise OccurrenceConflictError("Slot liegt nicht am geplanten Vorkommensdatum.")
                 if await self.recurring.find_slot_decision(slot_id) is not None:
                     raise OccurrenceConflictError("Slot ist bereits mit einer Entscheidung verknüpft.")
                 updated = replace(decision, planning_slot_id=slot_id)
