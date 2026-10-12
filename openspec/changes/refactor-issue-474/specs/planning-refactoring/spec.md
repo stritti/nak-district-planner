@@ -42,3 +42,38 @@ the caller specifies an explicit duration.
 #### Scenario: Duration override
 - **WHEN** configured duration is 60 minutes and the actual end matches
 - **THEN** the matrix SHALL not mark an end-time deviation
+
+### Requirement: Canonical external calendar fingerprint
+
+All synchronized provider events SHALL use one deterministic fingerprint over
+the sync-relevant fields. Connectors SHALL not independently compute or persist
+an unused content hash.
+
+#### Scenario: Event cancellation is detected
+- **WHEN** the same provider event changes from active to cancelled
+- **THEN** the canonical fingerprint SHALL change so synchronization can detect it
+
+### Requirement: Inbound worker and application dependency boundaries
+
+Celery task entrypoints SHALL reside under `app.adapters.worker` while business
+operations remain in application services. Registered Beat jobs SHALL reference
+existing tasks, and unused task entrypoints SHALL be removed. Application services
+SHALL not import HTTP API request schemas.
+
+#### Scenario: Worker executes a scheduled task
+- **WHEN** Celery loads its declared task modules and dispatches a scheduled job
+- **THEN** the task SHALL remain registered and SHALL call its application service
+
+#### Scenario: Architecture debt is repaid
+- **WHEN** an API schema dependency or application-layer Celery entrypoint is removed
+- **THEN** the corresponding exception SHALL be removed from the architecture test allowlist
+
+### Requirement: Simplified frontend and dependency surface
+
+The affected UI components SHALL use Tailwind utilities instead of component-local
+style blocks. Unused frontend components, unused OIDC sample variables, and unused
+backend dependencies SHALL be removed without altering existing user workflows.
+
+#### Scenario: Existing views are rendered
+- **WHEN** the matrix, confirmation dialog, deviation indicator, or toast appears
+- **THEN** its content and interactions SHALL remain available using shared styling
