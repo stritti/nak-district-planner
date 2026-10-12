@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import NotFoundView from './NotFoundView'
+import NotFoundView from './NotFoundView.vue'
 
 describe('NotFoundView', () => {
   it('shows a useful heading and a link to the event overview', () => {
