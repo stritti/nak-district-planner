@@ -64,6 +64,8 @@ jobs:
     needs: changes
     if: ${{ github.event_name == 'push' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.workflows == 'true' }}
     runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN_CONFIGURED: ${{ secrets.CODECOV_TOKEN != '' }}
     permissions:
       contents: read
       pull-requests: write # coverage comment
@@ -176,12 +178,19 @@ jobs:
           path: services/backend/coverage.xml
 
       - name: Upload coverage to Codecov
+        if: ${{ success() && env.CODECOV_TOKEN_CONFIGURED == 'true' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
-        if: always()
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: services/backend/coverage.xml
           flags: backend
-          fail_ci_if_error: false
+          fail_ci_if_error: true
+
+      - name: Explain skipped Codecov upload
+        if: ${{ success() && env.CODECOV_TOKEN_CONFIGURED != 'true' }}
+        run: |
+          echo "::warning title=Codecov upload skipped::Set the CODECOV_TOKEN repository secret to enable external coverage uploads."
+          echo "Codecov upload skipped: CODECOV_TOKEN is not configured; local coverage gates and the coverage artifact remain active." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test results
         if: always()
