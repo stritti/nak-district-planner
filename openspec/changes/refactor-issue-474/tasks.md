@@ -18,3 +18,5 @@
 - [x] Anchor multi-interval recurrences to the series and restore worship-service defaults
 - [x] Use runtime duration settings and typed calendar commands with explicit DTO mapping
 - [x] Convert the not-found view to a Vue SFC and extend regression coverage
+
+- [x] Reject malformed recurrence intervals at API boundaries and isolate invalid legacy series in the worker batch
