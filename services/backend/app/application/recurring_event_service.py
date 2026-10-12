@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import calendar
 import uuid
+from collections.abc import AsyncContextManager
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
-
-from collections.abc import AsyncContextManager
 from typing import Protocol
 
 from app.domain.ports.repositories import EventInstanceRepository, PlanningSlotRepository
+
 
 class RecurringEventRepositoryPort(Protocol):
     async def list_decisions(self, district_id: uuid.UUID, from_date: date, to_date: date) -> list[RecurringEventDecision]: ...
