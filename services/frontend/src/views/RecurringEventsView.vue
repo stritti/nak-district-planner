@@ -95,8 +95,8 @@
               <template v-if="item.status === 'NEEDS_REVIEW' && item.decision_status === 'ACCEPTED'">
                 <button class="btn-icon px-3 py-1.5 text-sm" :disabled="busy" @click="resolve(item, 'MARK_SKIPPED')">Als ausgelassen markieren</button>
                 <button class="btn-icon px-3 py-1.5 text-sm" :disabled="busy" @click="resolve(item, 'REOPEN')">Neu öffnen</button>
-                <input v-model="resolveSlotId" aria-label="Slot-ID zur Zuordnung" class="form-select text-sm" placeholder="UUID des bestehenden Slots" />
-                <button class="btn-primary px-3 py-1.5 text-sm" :disabled="busy || !resolveSlotId" @click="resolve(item, 'LINK_EXISTING')">Slot zuordnen</button>
+                <input  :value="resolveSlotIds[itemKey(item)] ?? ''" @input="setResolveSlotId(item, $event)" aria-label="Slot-ID zur Zuordnung" class="form-select text-sm" placeholder="UUID des bestehenden Slots" />
+                <button class="btn-primary px-3 py-1.5 text-sm" :disabled="busy || !resolveSlotIds[itemKey(item)]" @click="resolve(item, 'LINK_EXISTING')">Slot zuordnen</button>
               </template>
             </div>
           </article>
@@ -368,11 +368,14 @@ function skip(item: ChecklistItem): void {
 function reopen(item: ChecklistItem): void {
   void perform(() => reopenRecurringOccurrence(districtId.value, actionFor(item)))
 }
-const resolveSlotId = ref('')
+const resolveSlotIds = ref<Record<string, string>>({})
+function setResolveSlotId(item: ChecklistItem, event: Event): void {
+  resolveSlotIds.value[itemKey(item)] = (event.target as HTMLInputElement).value
+}
 function resolve(item: ChecklistItem, action: 'LINK_EXISTING' | 'MARK_SKIPPED' | 'REOPEN'): void {
   void perform(() => resolveRecurringOccurrence(districtId.value, {
     ...actionFor(item), action,
-    planning_slot_id: action === 'LINK_EXISTING' ? resolveSlotId.value : undefined,
+    planning_slot_id: action === 'LINK_EXISTING' ? resolveSlotIds.value[itemKey(item)] : undefined,
   }))
 }
 async function bulkAccept(): Promise<void> {
