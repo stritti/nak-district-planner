@@ -227,12 +227,13 @@ def production_guard(settings: Settings) -> None:
         value = os.environ.get(name)
         if value is None or value.strip().lower() in {"", "changeme", "password", "default"}:
             errors.append(f"{name} must be set to a non-default value in production")
-        elif name == "VALKEY_PASSWORD" and not re.fullmatch(r"[A-Za-z0-9._~-]+", value):
-            # The password is also embedded in a Compose-generated Redis URI.
-            # Reserved URI characters must not change its parsed credentials.
+        elif not re.fullmatch(r"[A-Za-z0-9._~-]+", value):
+            # Compose embeds both runtime credentials directly in connection
+            # URIs; reserved characters would change their parsed components.
             errors.append(
-                "VALKEY_PASSWORD must contain only URL-safe ASCII characters "
-                "(letters, digits, dot, underscore, tilde or hyphen)"
+                f"{name} must contain only URL-safe ASCII characters "
+                "(letters, digits, dot, underscore, tilde or hyphen); "
+                "generate one with: openssl rand -hex 32"
             )
 
     # SECRET_KEY must be non-default and have sufficient entropy
