@@ -29,6 +29,16 @@ class CalendarIntegrationCreateCommand:
 
 @dataclass(frozen=True)
 class CalendarIntegrationUpdateCommand:
-    """Explicitly supplied fields; omission differs from clearing a value."""
+    """Typed patch input: provided_fields preserves explicit null semantics.
 
-    changes: dict[str, Any] = field(default_factory=dict)
+    Omitted fields are ignored. An explicit null clears only nullable values
+    such as default_category; it does not overwrite required integration data.
+    """
+
+    name: str | None = None
+    credentials: dict[str, Any] | None = None
+    sync_interval: int | None = None
+    capabilities: list[CalendarCapability] | None = None
+    default_category: str | None = None
+    delete_behavior: SyncDeleteMode | None = None
+    provided_fields: frozenset[str] = field(default_factory=frozenset)
