@@ -14,3 +14,7 @@
 - [x] Decouple application services from API schemas
 - [x] Verify unit, integration, build and coverage gates
 - [x] Require authenticated Codecov uploads and surface missing-token warnings without weakening local coverage gates
+- [x] Correct worker use-case wiring and verify the manual planning generator constructor
+- [x] Anchor multi-interval recurrences to the series and restore worship-service defaults
+- [x] Use runtime duration settings and typed calendar commands with explicit DTO mapping
+- [x] Convert the not-found view to a Vue SFC and extend regression coverage
