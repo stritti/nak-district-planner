@@ -62,11 +62,18 @@ def test_production_compose_restricts_app_processes() -> None:
         assert service["read_only"] is True, name
         assert service["cap_drop"] == ["ALL"], name
         assert "no-new-privileges:true" in service["security_opt"], name
-        assert service["deploy"]["resources"]["limits"]["memory"], name
-        assert service["deploy"]["resources"]["limits"]["pids"] > 0, name
+        limits = service["deploy"]["resources"]["limits"]
+        assert service["mem_limit"] == limits["memory"], name
+        assert service["pids_limit"] == limits["pids"], name
         assert service.get("tmpfs"), name
     assert services["frontend"]["healthcheck"]["test"][-1].endswith(":8080/")
     assert services["worker"]["healthcheck"]["test"][0] == "CMD-SHELL"
+    assert services["worker"]["healthcheck"]["retries"] == 5
+    assert services["worker"]["healthcheck"]["start_period"] == "60s"
+    assert services["migrate"]["mem_limit"] == "1g"
+    assert services["migrate"]["pids_limit"] == 256
+    assert services["valkey"]["mem_limit"] == "512m"
+    assert services["valkey"]["pids_limit"] == 128
     assert services["backend"]["depends_on"]["valkey"]["condition"] == "service_healthy"
 
 
@@ -177,3 +184,15 @@ def test_valkey_shell_never_interprets_password_as_script(
         env=env, capture_output=True, text=True, check=True,
     )
     assert client.returncode == 0
+
+
+def test_development_worker_healthcheck_allows_transient_worker_load() -> None:
+    health = _services("docker-compose.yml")["worker"]["healthcheck"]
+    assert health["retries"] == 5
+    assert health["start_period"] == "60s"
+    assert health["timeout"] == "10s"
+
+
+def test_external_traefik_override_reuses_production_valkey() -> None:
+    override = _services("deploy/compose/existing-traefik.yml")
+    assert "valkey" not in override
