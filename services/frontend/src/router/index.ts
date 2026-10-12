@@ -91,6 +91,12 @@ export const router = createRouter({
       beforeEnter: requireAuth,
     },
     {
+      path: '/recurring-events',
+      name: 'recurring-events',
+      component: () => import('../views/RecurringEventsView.vue'),
+      beforeEnter: requireAuth,
+    },
+    {
       path: '/matrix',
       name: 'matrix',
       component: MatrixView,
