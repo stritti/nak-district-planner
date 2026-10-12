@@ -39,15 +39,15 @@ from app.domain.models.recurring_event_template import (
 )
 
 
-class OccurrenceConflict(ValueError):
+class OccurrenceConflictError(ValueError):
     """An existing decision or active planning slot forbids the requested write."""
 
 
-class StaleTemplate(OccurrenceConflict):
+class StaleTemplateError(OccurrenceConflictError):
     """A preview was based on an older template revision."""
 
 
-class InvalidOccurrence(ValueError):
+class InvalidOccurrenceError(ValueError):
     """The local occurrence is no longer produced by the current template."""
 
 
@@ -199,13 +199,13 @@ class RecurringEventService:
     ) -> RecurringEventTemplate:
         current = await self.recurring.get_template(entry.id, for_update=True)
         if current is None or current.district_id != entry.district_id:
-            raise InvalidOccurrence("Vorlage nicht verfügbar.")
+            raise InvalidOccurrenceError("Vorlage nicht verfügbar.")
         if current.revision != expected_revision:
-            raise StaleTemplate("Vorlage wurde zwischenzeitlich geändert.")
+            raise StaleTemplateError("Vorlage wurde zwischenzeitlich geändert.")
         if require_occurrence and occurrence_day not in expand_month(
             current, occurrence_day.year, occurrence_day.month
         ):
-            raise InvalidOccurrence("Vorkommen wird von der aktuellen Vorlage nicht erzeugt.")
+            raise InvalidOccurrenceError("Vorkommen wird von der aktuellen Vorlage nicht erzeugt.")
         return current
 
     async def accept(
@@ -230,12 +230,12 @@ class RecurringEventService:
                 )
                 if decision is not None:
                     if decision.status is DecisionStatus.SKIPPED:
-                        raise OccurrenceConflict("Ausgelassene Termine erst wieder öffnen.")
+                        raise OccurrenceConflictError("Ausgelassene Termine erst wieder öffnen.")
                     if decision.planning_slot_id is None:
-                        raise OccurrenceConflict("Gelöschter Termin benötigt explizite Auflösung.")
+                        raise OccurrenceConflictError("Gelöschter Termin benötigt explizite Auflösung.")
                     slot = await self.slots.get(decision.planning_slot_id)
                     if slot is None:
-                        raise OccurrenceConflict("Gelöschter Termin benötigt explizite Auflösung.")
+                        raise OccurrenceConflictError("Gelöschter Termin benötigt explizite Auflösung.")
                     return decision
 
                 local_day = local_date_override or occurrence_day
@@ -248,19 +248,19 @@ class RecurringEventService:
                     if duration_minutes_override is not None else current.duration_minutes
                 )
                 if duration <= 0:
-                    raise InvalidOccurrence("Dauer muss positiv sein.")
+                    raise InvalidOccurrenceError("Dauer muss positiv sein.")
                 if local_day.year not in range(1900, 10000):
-                    raise InvalidOccurrence("Unzulässiger Termin.")
+                    raise InvalidOccurrenceError("Unzulässiger Termin.")
                 existing = await self.slots.list_for_date_range(
                     district_id=current.district_id,
                     from_date=utc_start.date(),
                     to_date=utc_start.date(),
                 )
                 if self._has_congregation_collision(current, utc_start, existing):
-                    raise OccurrenceConflict("Gemeinde hat bereits einen Termin zur Startzeit.")
+                    raise OccurrenceConflictError("Gemeinde hat bereits einen Termin zur Startzeit.")
                 title = title_override if title_override is not None else current.title
                 if not title.strip():
-                    raise InvalidOccurrence("Titel darf nicht leer sein.")
+                    raise InvalidOccurrenceError("Titel darf nicht leer sein.")
                 description = (
                     description_override
                     if description_override is not None else current.description
@@ -301,7 +301,7 @@ class RecurringEventService:
                 await self.recurring.save_decision(decision)
                 return decision
         except IntegrityError as exc:
-            raise OccurrenceConflict("Vorkommen wurde parallel bearbeitet.") from exc
+            raise OccurrenceConflictError("Vorkommen wurde parallel bearbeitet.") from exc
 
     async def skip(
         self,
@@ -320,7 +320,7 @@ class RecurringEventService:
                 if existing is not None:
                     if existing.status is DecisionStatus.SKIPPED:
                         return existing
-                    raise OccurrenceConflict("Bereits übernommene Termine nur über Planung verwalten.")
+                    raise OccurrenceConflictError("Bereits übernommene Termine nur über Planung verwalten.")
                 decision = RecurringEventDecision(
                     id=uuid.uuid4(),
                     district_id=current.district_id,
@@ -332,7 +332,7 @@ class RecurringEventService:
                 await self.recurring.save_decision(decision)
                 return decision
         except IntegrityError as exc:
-            raise OccurrenceConflict("Vorkommen wurde parallel bearbeitet.") from exc
+            raise OccurrenceConflictError("Vorkommen wurde parallel bearbeitet.") from exc
 
     async def reopen(
         self,
@@ -347,7 +347,7 @@ class RecurringEventService:
                 entry.id, occurrence_day, for_update=True
             )
             if existing is None or existing.status is not DecisionStatus.SKIPPED:
-                raise OccurrenceConflict("Nur ausgelassene Entscheidungen können geöffnet werden.")
+                raise OccurrenceConflictError("Nur ausgelassene Entscheidungen können geöffnet werden.")
             await self.recurring.delete_decision(existing.id)
 
     async def resolve_missing_slot(
@@ -368,13 +368,13 @@ class RecurringEventService:
                     entry.id, occurrence_day, for_update=True
                 )
                 if decision is None or decision.status is not DecisionStatus.ACCEPTED:
-                    raise OccurrenceConflict("Keine übernommene Entscheidung zu prüfen.")
+                    raise OccurrenceConflictError("Keine übernommene Entscheidung zu prüfen.")
                 previous = (
                     await self.slots.get(decision.planning_slot_id)
                     if decision.planning_slot_id else None
                 )
                 if previous is not None:
-                    raise OccurrenceConflict("Verknüpfter Termin besteht noch.")
+                    raise OccurrenceConflictError("Verknüpfter Termin besteht noch.")
                 if action == "MARK_SKIPPED":
                     updated = replace(decision, status=DecisionStatus.SKIPPED, planning_slot_id=None)
                     await self.recurring.save_decision(updated)
@@ -383,11 +383,11 @@ class RecurringEventService:
                     if occurrence_day not in expand_month(
                         current, occurrence_day.year, occurrence_day.month
                     ):
-                        raise InvalidOccurrence("Vorlage erzeugt diesen Termin nicht mehr.")
+                        raise InvalidOccurrenceError("Vorlage erzeugt diesen Termin nicht mehr.")
                     await self.recurring.delete_decision(decision.id)
                     return None
                 if action != "LINK_EXISTING" or slot_id is None:
-                    raise InvalidOccurrence("LINK_EXISTING benötigt einen Planungsslot.")
+                    raise InvalidOccurrenceError("LINK_EXISTING benötigt einen Planungsslot.")
                 target = await self.slots.get(slot_id)
                 if (
                     target is None or target.district_id != current.district_id
@@ -395,11 +395,11 @@ class RecurringEventService:
                     or target.category != current.category
                     or target.status != PlanningSlotStatus.ACTIVE
                 ):
-                    raise OccurrenceConflict("Slot gehört nicht zum passenden Bezirk/Gemeindescope.")
+                    raise OccurrenceConflictError("Slot gehört nicht zum passenden Bezirk/Gemeindescope.")
                 if await self.recurring.find_slot_decision(slot_id) is not None:
-                    raise OccurrenceConflict("Slot ist bereits mit einer Entscheidung verknüpft.")
+                    raise OccurrenceConflictError("Slot ist bereits mit einer Entscheidung verknüpft.")
                 updated = replace(decision, planning_slot_id=slot_id)
                 await self.recurring.save_decision(updated)
                 return updated
         except IntegrityError as exc:
-            raise OccurrenceConflict("Die Zuordnung wurde parallel geändert.") from exc
+            raise OccurrenceConflictError("Die Zuordnung wurde parallel geändert.") from exc
