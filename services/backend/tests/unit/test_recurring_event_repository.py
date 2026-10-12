@@ -97,6 +97,7 @@ async def test_new_template_is_flushed_for_transactional_persistence() -> None:
 @pytest.mark.asyncio
 async def test_skipped_decision_is_removed_only_by_explicit_reopen() -> None:
     session = AsyncMock()
+    session.add = Mock()
     session.get.return_value = None
     decision = RecurringEventDecision(
         id=uuid.uuid4(),
