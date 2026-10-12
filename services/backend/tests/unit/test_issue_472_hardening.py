@@ -135,6 +135,8 @@ def test_restore_drill_checks_migrated_security_contract() -> None:
     ):
         assert item in drill
     assert "roles" in _read("scripts/backup.sh").lower()
+    assert 'grep -Fxc "CREATE ROLE ${POSTGRES_USER};"' in drill
+    assert 'awk -v definition="CREATE ROLE ${POSTGRES_USER};"' in drill
 
 
 @pytest.mark.parametrize("path", ["docker-compose.yml", "docker-compose.prod.yml"])
