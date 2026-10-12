@@ -81,7 +81,7 @@ def new_note_paths(repo: Path, tag: str) -> list[Path]:
 
 
 _REQUIRED_SECTIONS = ("Betroffen", "Vor dem Update", "Nach dem Update")
-_SECTION_PATTERN = re.compile(r"^\\*\\*(Betroffen|Vor dem Update|Nach dem Update):\\*\\*", re.MULTILINE)
+_SECTION_PATTERN = re.compile(r"^\*\*(Betroffen|Vor dem Update|Nach dem Update):\*\*", re.MULTILINE)
 
 
 def validate_upgrade_note(body: str, path: Path) -> None:
