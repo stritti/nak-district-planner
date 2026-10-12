@@ -132,12 +132,12 @@ services:
     image: valkey/valkey:9.1.2-alpine
     environment:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD:?Set VALKEY_PASSWORD in .env}
-    command: ["sh", "-c", "exec valkey-server --requirepass \"${VALKEY_PASSWORD}\""]
+    command: ["sh", "-c", "exec valkey-server --requirepass \"$${VALKEY_PASSWORD}\""]
     volumes:
       - ./valkey_data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "REDISCLI_AUTH=\"${VALKEY_PASSWORD}\" valkey-cli ping | grep -qx PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${VALKEY_PASSWORD}\" valkey-cli ping | grep -qx PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
