@@ -56,6 +56,7 @@ export interface ChecklistItem {
   duration_minutes: number
   template_revision: number
   status: ChecklistStatus
+  decision_status: 'ACCEPTED' | 'SKIPPED' | null
   planning_slot_id: string | null
   reason: string | null
 }
