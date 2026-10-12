@@ -10,6 +10,7 @@ from dataclasses import replace
 from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
@@ -62,6 +63,7 @@ def _service(session: AsyncSession) -> RecurringEventService:
         _repository(session),
         SqlPlanningSlotRepository(session),
         SqlEventInstanceRepository(session),
+        integrity_error_type=IntegrityError,
     )
 
 
