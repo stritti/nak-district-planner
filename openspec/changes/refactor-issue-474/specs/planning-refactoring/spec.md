@@ -156,3 +156,20 @@ string-keyed dictionaries in application code.
 #### Scenario: New HTTP schema property
 - **WHEN** an unrelated optional property is added to the HTTP create schema
 - **THEN** the application command mapper SHALL remain compatible
+
+### Requirement: Invalid recurrence isolation
+
+Create and update requests SHALL reject recurrence intervals that are not positive
+integers, including booleans, strings, zero and negative numbers. The scheduled
+generator SHALL log and skip any previously persisted series with an invalid
+interval, without stopping generation of valid series in other districts.
+
+#### Scenario: Invalid recurrence requested
+- **WHEN** a district administrator creates or updates a series with an invalid
+  recurrence interval
+- **THEN** the API SHALL reject the request with HTTP 422
+
+#### Scenario: Malformed legacy series in scheduled batch
+- **WHEN** the database contains one malformed series and another valid series
+- **THEN** the malformed series SHALL be skipped with a log warning and the
+  valid series SHALL still create its scheduled occurrence
