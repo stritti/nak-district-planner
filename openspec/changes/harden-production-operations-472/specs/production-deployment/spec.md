@@ -53,7 +53,7 @@ The standalone Keycloak and Authentik Compose examples SHALL require operator-pr
 - **THEN** interpolation fails instead of deploying known placeholder credentials
 
 ### Requirement: Disaster recovery verifies global roles and migrated security controls
-Production database backups SHALL include separately encrypted global role definitions without password hashes. The isolated Restore Drill SHALL migrate the source using the current Alembic head, restore the role archive before the database archive, verify RLS policies, `SECURITY DEFINER` functions, grants and the application role, and reject corrupt archives without changing restored data.
+Production database backups SHALL include separately encrypted nonempty global role definitions without password hashes. The isolated Restore Drill SHALL migrate the source using the current Alembic head, restore the role archive before the database archive, verify RLS policies, `SECURITY DEFINER` functions, grants and the application role, and reject corrupt archives without changing restored data.
 
 #### Scenario: Weekly restore drill completes
 - **WHEN** an encrypted backup is restored in a fresh independent PostgreSQL cluster
