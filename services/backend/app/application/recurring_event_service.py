@@ -12,8 +12,7 @@ from __future__ import annotations
 import calendar
 import uuid
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -244,7 +243,10 @@ class RecurringEventService:
                 utc_start = local_start_utc(
                     local_day, local_clock, fold=fold, timezone=current.timezone
                 )
-                duration = duration_minutes_override or current.duration_minutes
+                duration = (
+                    duration_minutes_override
+                    if duration_minutes_override is not None else current.duration_minutes
+                )
                 if duration <= 0:
                     raise InvalidOccurrence("Dauer muss positiv sein.")
                 if local_day.year not in range(1900, 10000):
