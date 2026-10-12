@@ -5,13 +5,15 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from publish_release_upgrade_notes import (
+from scripts.publish_release_upgrade_notes import (
     HEADING,
     NOTES_DIR,
     compose_release_body,
@@ -20,6 +22,7 @@ from publish_release_upgrade_notes import (
     previous_release_tag,
     publish,
     run,
+    validate_upgrade_note,
 )
 
 
@@ -99,8 +102,49 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
             load_upgrade_notes(self.repo, "v1.0.1")
 
     def test_missing_tag_fails_closed(self) -> None:
-        with self.assertRaises(subprocess.CalledProcessError):
-            new_note_paths(self.repo, "v100.0.0")
+        diagnostics = io.StringIO()
+        with contextlib.redirect_stderr(diagnostics):
+            with self.assertRaises(subprocess.CalledProcessError):
+                new_note_paths(self.repo, "v100.0.0")
+        self.assertIn("failed with code", diagnostics.getvalue())
+
+    def test_nonrelease_tag_does_not_interrupt_upgrade_note_range(self) -> None:
+        self.note("first.md")
+        self.commit("First upgrade", tag="v1.0.1")
+        self.git("tag", "test-build-artifact")
+        self.note("second.md")
+        self.commit("Second upgrade", tag="v1.0.2")
+        self.assertEqual(previous_release_tag(self.repo, "v1.0.2"), "v1.0.1")
+        self.assertEqual(
+            [p.name for p in new_note_paths(self.repo, "v1.0.2")], ["second.md"]
+        )
+
+    def test_labels_mentioned_mid_paragraph_are_not_valid_sections(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Betroffen"):
+            validate_upgrade_note(
+                "### Update\\n\\nSome prose mentions **Betroffen:** inline\\n"
+                "**Vor dem Update:** Setup\\n**Nach dem Update:** Checks\\n",
+                Path("misleading.md"),
+            )
+
+    def test_empty_action_section_fails_closed(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Vor dem Update section is empty"):
+            validate_upgrade_note(
+                "### Update\\n\\n**Betroffen:** Production\\n\\n"
+                "**Vor dem Update:**\\n\\n**Nach dem Update:** Verify\\n",
+                Path("empty.md"),
+            )
+
+    def test_command_errors_include_stderr(self) -> None:
+        problem = subprocess.CalledProcessError(
+            2, ["gh", "release", "edit"], stderr="permission denied"
+        )
+        diagnostics = io.StringIO()
+        with patch("scripts.publish_release_upgrade_notes.subprocess.run", side_effect=problem):
+            with contextlib.redirect_stderr(diagnostics):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    run("gh", "release", "edit", cwd=self.repo)
+        self.assertIn("permission denied", diagnostics.getvalue())
 
     def test_publication_keeps_original_generated_changelog(self) -> None:
         self.note()
@@ -115,7 +159,7 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
                 return ""
             return run(*args, cwd=cwd)
 
-        with patch("publish_release_upgrade_notes.run", side_effect=fake_run):
+        with patch("scripts.publish_release_upgrade_notes.run", side_effect=fake_run):
             self.assertTrue(publish(self.repo, "v1.0.1"))
         self.assertIn("**Vor dem Update:**", captured["body"])
         self.assertIn("Existing changelog", captured["body"])
