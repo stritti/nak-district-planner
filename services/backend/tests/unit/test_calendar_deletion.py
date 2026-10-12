@@ -15,7 +15,16 @@ from app.domain.ports.calendar import CalendarConnectorError
 
 
 def event(resource_id="resource"):
-    return RawCalendarEvent("uid", "title", datetime.now(UTC), datetime.now(UTC), None, "hash", False, '"etag"', resource_id)
+    return RawCalendarEvent(
+        uid="uid",
+        title="title",
+        start_at=datetime.now(UTC),
+        end_at=datetime.now(UTC),
+        description=None,
+        is_cancelled=False,
+        revision_marker='"etag"',
+        resource_id=resource_id,
+    )
 
 
 @pytest.mark.parametrize("connector_type", [GoogleCalendarConnector, MicrosoftGraphCalendarConnector, CalDAVConnector])
