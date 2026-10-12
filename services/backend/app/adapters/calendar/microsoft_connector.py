@@ -22,7 +22,6 @@ from app.adapters.calendar.http_policy import resilient_request
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
-
 _MAX_PAGES = 100
 
 
