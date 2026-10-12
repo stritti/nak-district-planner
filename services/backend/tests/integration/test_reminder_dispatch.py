@@ -25,8 +25,8 @@ from app.adapters.db.repositories.district_reminder_config import (
 )
 from app.adapters.db.session import _set_tenant_gucs
 from app.adapters.mail.mock import MockMailService
-from app.application.reminder_service import dispatch_reminders
 from app.adapters.worker.tasks import _run_as_system_worker
+from app.application.reminder_service import dispatch_reminders
 from app.domain.models.district_reminder_config import DistrictReminderConfig
 from app.domain.models.role import Role
 

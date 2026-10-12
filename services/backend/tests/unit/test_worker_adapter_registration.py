@@ -19,7 +19,10 @@ def test_celery_includes_only_adapter_task_modules() -> None:
 
 
 def test_registered_task_names_remain_stable() -> None:
-    from app.adapters.worker.tasks import generate_planning_series_slots, sync_all_active_integrations
+    from app.adapters.worker.tasks import (
+        generate_planning_series_slots,
+        sync_all_active_integrations,
+    )
 
     assert generate_planning_series_slots.name == "generate_planning_series_slots"
     assert sync_all_active_integrations.name == "sync_all_active_integrations"

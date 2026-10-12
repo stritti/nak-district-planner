@@ -13,7 +13,7 @@ import pytest
 from celery.exceptions import Retry
 from celery.utils.time import get_exponential_backoff_interval
 
-from app.application import tasks
+from app.adapters.worker import tasks
 from app.adapters.worker.tasks import (
     SYNC_MAX_RETRIES,
     SYNC_RETRY_BACKOFF_MAX_SECONDS,

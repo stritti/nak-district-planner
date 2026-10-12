@@ -43,10 +43,10 @@ from app.adapters.auth.oidc import OIDCAdapter
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.schema_version import SchemaVersionError, assert_database_schema_current
 from app.adapters.db.session import AsyncSessionLocal, engine
+from app.adapters.worker.event_mail_hook_tasks import register_event_mail_hooks
 from app.application.audit_service import audit_service
 from app.application.csrf import CSRFTokenService
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
-from app.adapters.worker.event_mail_hook_tasks import register_event_mail_hooks
 from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry

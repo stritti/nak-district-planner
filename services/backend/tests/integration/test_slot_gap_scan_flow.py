@@ -24,9 +24,9 @@ from app.adapters.db.repositories.slot_gap import SqlSlotGapLedger
 from app.adapters.db.session import _set_tenant_gucs
 from app.adapters.db.transactional_events import publish_after_commit
 from app.adapters.mail.mock import MockMailService
+from app.adapters.worker.tasks import _run_as_system_worker
 from app.application.event_mail_hooks import EventMailHookDispatcher
 from app.application.slot_gap_scan import ScanSummary, SlotGapScanner
-from app.adapters.worker.tasks import _run_as_system_worker
 from app.domain.events import DomainEvent, DomainEventBus, EventType
 from app.domain.models.event_mail_hook import EventMailHook
 from app.domain.models.role import Role
