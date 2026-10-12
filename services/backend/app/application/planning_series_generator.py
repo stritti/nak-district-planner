@@ -29,9 +29,8 @@ from app.domain.ports.repositories import (
     PlanningSlotRepository,
 )
 
-# Default event duration when generating instances from a PlanningSeries.
-# Used as the difference between actual_start_at and actual_end_at.
-_DEFAULT_EVENT_DURATION = timedelta(minutes=settings.sync_expected_duration_minutes)
+# Fallback when an older series has no explicit default_planning_time.
+_DEFAULT_PLANNING_TIME = timedelta(hours=10)
 
 
 @dataclass(frozen=True)
@@ -72,17 +71,22 @@ def _expand_recurrence(
     if weekdays is None:
         weekdays = [default_weekday]
 
-    first_month = from_date.year * 12 + from_date.month
-    month_day = pattern.get("by_month_day") or (series.active_from or from_date).day
+    # Recurrence parity must be independent of the requested rolling window.
+    # Calendar weeks are Monday-based so all selected weekdays share the same
+    # week index, including weeks that cross a year or month boundary.
+    anchor = series.active_from or series.created_at.date()
+    anchor_week_start = anchor - timedelta(days=anchor.weekday())
+    anchor_month = anchor.year * 12 + anchor.month
+    month_day = pattern.get("by_month_day") or anchor.day
 
     slots: list[GeneratedSlot] = []
     current = from_date
     while current < to_date_exclusive:
         if frequency == "monthly":
-            month_index = current.year * 12 + current.month - first_month
+            month_index = current.year * 12 + current.month - anchor_month
             matches = month_index % interval == 0 and current.day == month_day
         elif frequency == "weekly" or not modern:
-            week_index = (current - from_date).days // 7
+            week_index = (current - anchor_week_start).days // 7
             matches = week_index % interval == 0 and current.weekday() in weekdays
         else:
             matches = False
@@ -91,7 +95,7 @@ def _expand_recurrence(
             default_time = series.default_planning_time
             planning_time = (
                 timedelta(hours=default_time.hour, minutes=default_time.minute)
-                if default_time else timedelta(hours=10)
+                if default_time else _DEFAULT_PLANNING_TIME
             )
             slots.append(
                 GeneratedSlot(
@@ -223,7 +227,7 @@ class PlanningSeriesGenerator:
                     series_id=series.id,
                     district_id=series.district_id,
                     congregation_id=series.congregation_id,
-                    category=gslot.category or series.category,
+                    category=gslot.category or "Gottesdienst",
                     title=gslot.title,
                     planning_date=start_utc.date(),
                     planning_time=start_utc.timetz().replace(tzinfo=None),
@@ -241,7 +245,8 @@ class PlanningSeriesGenerator:
                     planning_slot_id=slot.id,
                     title=gslot.title or "Gottesdienst",
                     actual_start_at=start_utc,
-                    actual_end_at=start_utc + _DEFAULT_EVENT_DURATION,
+                    actual_end_at=start_utc
+                    + timedelta(minutes=settings.sync_expected_duration_minutes),
                     source=EventSource.INTERNAL,
                     visibility=EventVisibility.INTERNAL,
                     deviation_flag=False,
