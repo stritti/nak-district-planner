@@ -6,6 +6,7 @@
 import importlib.metadata
 import ipaddress
 import os
+import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator, model_validator
@@ -226,6 +227,13 @@ def production_guard(settings: Settings) -> None:
         value = os.environ.get(name)
         if value is None or value.strip().lower() in {"", "changeme", "password", "default"}:
             errors.append(f"{name} must be set to a non-default value in production")
+        elif name == "VALKEY_PASSWORD" and not re.fullmatch(r"[A-Za-z0-9._~-]+", value):
+            # The password is also embedded in a Compose-generated Redis URI.
+            # Reserved URI characters must not change its parsed credentials.
+            errors.append(
+                "VALKEY_PASSWORD must contain only URL-safe ASCII characters "
+                "(letters, digits, dot, underscore, tilde or hyphen)"
+            )
 
     # SECRET_KEY must be non-default and have sufficient entropy
     if settings.secret_key in (
