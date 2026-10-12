@@ -77,3 +77,21 @@ backend dependencies SHALL be removed without altering existing user workflows.
 #### Scenario: Existing views are rendered
 - **WHEN** the matrix, confirmation dialog, deviation indicator, or toast appears
 - **THEN** its content and interactions SHALL remain available using shared styling
+
+### Requirement: Authenticated and observable CI coverage reporting
+
+Backend CI SHALL enforce its local coverage threshold and critical-router coverage
+independently of external reporting. The Codecov upload SHALL run only with a
+configured `CODECOV_TOKEN` secret and SHALL fail the CI job when that
+authenticated upload fails. When the secret is unavailable (including forked
+pull requests), CI SHALL explicitly warn and SHALL retain its local coverage
+gate and downloadable coverage artifact.
+
+#### Scenario: Missing Codecov token
+- **WHEN** a pull request runs without a configured `CODECOV_TOKEN`
+- **THEN** CI SHALL skip the external upload, report the reason, and still
+  enforce its local coverage thresholds
+
+#### Scenario: Authenticated Codecov upload fails
+- **WHEN** `CODECOV_TOKEN` is configured and Codecov rejects the report
+- **THEN** the backend CI job SHALL fail instead of reporting a false success
