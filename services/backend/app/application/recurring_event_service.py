@@ -56,6 +56,7 @@ class ChecklistItem:
     template: RecurringEventTemplate
     occurrence_local_date: date
     status: ChecklistStatus
+    decision_status: DecisionStatus | None = None
     planning_slot_id: uuid.UUID | None = None
     reason: str | None = None
 
@@ -155,6 +156,7 @@ class RecurringEventService:
                     template=entry,
                     occurrence_local_date=day,
                     status=status,
+                    decision_status=decision.status if decision else None,
                     planning_slot_id=decision.planning_slot_id if decision else None,
                     reason=reason,
                 )
