@@ -305,7 +305,7 @@ def test_production_guard_requires_runtime_passwords(monkeypatch, name) -> None:
 @pytest.mark.parametrize("value", ["some@password", "with spaces", "a:b", "a/b", "a$bc", "äbc"])
 def test_production_guard_rejects_non_url_safe_valkey_passwords(monkeypatch, value) -> None:
     monkeypatch.setenv("VALKEY_PASSWORD", value)
-    with pytest.raises(RuntimeError, match="VALKEY_PASSWORD.*URL-safe"):
+    with pytest.raises(RuntimeError, match=r"VALKEY_PASSWORD.*URL-safe"):
         production_guard(_valid_prod_settings())
 
 
