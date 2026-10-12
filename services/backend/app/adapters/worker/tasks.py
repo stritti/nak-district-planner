@@ -479,6 +479,7 @@ def generate_draft_services_window() -> dict:
     Generates PlanningSlot + EventInstance from congregation service_times.
     Safe to run repeatedly: generation is idempotent.
     """
+    from app.adapters.db.repositories.congregation import SqlCongregationRepository
     from app.adapters.db.repositories.district import SqlDistrictRepository
     from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
     from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
@@ -488,6 +489,8 @@ def generate_draft_services_window() -> dict:
     async def _run() -> dict:
         async with AsyncSessionLocal() as session:
             use_case = GenerateDraftServicesUseCase(
+                district_repo=SqlDistrictRepository(session),
+                congregation_repo=SqlCongregationRepository(session),
                 slot_repo=SqlPlanningSlotRepository(session),
                 instance_repo=SqlEventInstanceRepository(session),
             )
