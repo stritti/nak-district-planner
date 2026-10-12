@@ -369,7 +369,10 @@ Die Rollenliste kann auch die urspruengliche Besitzerrolle enthalten.
 Diese Rollen duerfen im Ziel nicht bereits existieren; fuer solche
 Neuinstallationen eignet sich ein separater Bootstrap-Superuser.
 Auf einem bestehenden Ziel Rollen selektiv und nach manueller
-Konfliktpruefung einspielen.
+Konfliktpruefung einspielen. Der Restore-Drill prueft, dass die
+bereits vorhandene Bootstrap-Rolle exakt einmal mit der erwarteten
+`CREATE ROLE`-Definition vorkommt; abweichende Rollenmetadaten fuehren
+zum Abbruch vor der Wiederherstellung.
 
 ```bash
 gpg --decrypt backups/nak_planner_YYYYMMDD_HHMMSS.roles.sql.gpg \
