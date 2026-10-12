@@ -26,4 +26,4 @@
 - [x] 5.3 Make Docker image release conditional on successful upgrade-note publication
 - [x] 5.4 Add behavioral tests for first release, later releases, invalid notes, idempotence, and unchanged changelogs
 - [x] 5.5 Document contributor workflow and upgrade-note contract
-- [ ] 5.6 Confirm GitHub Actions checks on the updated PR branch
+- [x] 5.6 Confirm GitHub Actions checks on the updated PR branch (all nine workflows passed on 5c2a839b)
