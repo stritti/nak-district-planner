@@ -119,10 +119,17 @@ restore_roles() {
     log 'application role missing from backed-up cluster globals'
     return 1
   fi
-  # The fresh target bootstraps the same owner as the source. Filter that
-  # single already-existing CREATE ROLE; preserve all other definitions and
-  # role-membership GRANTs, whose GRANTED BY clauses need the original owner.
-  sed "/^CREATE ROLE ${POSTGRES_USER};$/d" "$role_sql" |
+  # The target already has the owner role. Verify that the source role
+  # definition exists exactly once before filtering; quoted or duplicate
+  # definitions must fail rather than silently corrupt the restore.
+  local owner_definitions
+  owner_definitions="$(grep -Fxc "CREATE ROLE ${POSTGRES_USER};" "$role_sql" || true)"
+  if [[ "$owner_definitions" != "1" ]]; then
+    log "expected exactly one unquoted CREATE ROLE definition for ${POSTGRES_USER}; found ${owner_definitions}"
+    return 1
+  fi
+  # Preserve all other role definitions and GRANTED BY membership clauses.
+  awk -v definition="CREATE ROLE ${POSTGRES_USER};" '$0 != definition { print }' "$role_sql" |
     docker exec -i "$TARGET_CONTAINER" psql -v ON_ERROR_STOP=1 \
       -U "$RESTORE_USER" -d "$POSTGRES_DB" >/dev/null
 }
