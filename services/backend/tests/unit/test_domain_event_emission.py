@@ -117,12 +117,16 @@ async def _bulk(body, *, district_id=DISTRICT, slots=None):
         else slots
     )
     session = object()
+    congregation_repo = AsyncMock()
+    congregation_repo.get.return_value = SimpleNamespace(
+        id=body.congregation_id, district_id=district_id
+    )
     with (
         patch.object(events_router, "require_role_in_district"),
         patch.object(events_router, "publish_after_commit") as publish,
     ):
         await events_router.bulk_update_approval_status(
-            body, _auth(superadmin=True), session, district_id, slot_repo
+            body, _auth(superadmin=True), session, district_id, slot_repo, congregation_repo
         )
     return publish
 
