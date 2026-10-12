@@ -62,11 +62,10 @@ def _expand_recurrence(
         raise ValueError("Recurrence interval must be a positive integer")
 
     modern = "type" in pattern
-    default_weekday = (
-        series.created_at.weekday()
-        if modern
-        else (series.active_from or from_date).weekday()
-    )
+    # Both supported pattern formats inherit the weekday from the same
+    # immutable series anchor when no explicit days are configured.
+    anchor = series.active_from or series.created_at.date()
+    default_weekday = anchor.weekday()
     weekdays = pattern.get("days", pattern.get("by_weekday"))
     if weekdays is None:
         weekdays = [default_weekday]
@@ -74,7 +73,6 @@ def _expand_recurrence(
     # Recurrence parity must be independent of the requested rolling window.
     # Calendar weeks are Monday-based so all selected weekdays share the same
     # week index, including weeks that cross a year or month boundary.
-    anchor = series.active_from or series.created_at.date()
     anchor_week_start = anchor - timedelta(days=anchor.weekday())
     anchor_month = anchor.year * 12 + anchor.month
     month_day = pattern.get("by_month_day") or anchor.day
