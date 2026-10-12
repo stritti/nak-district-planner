@@ -55,6 +55,13 @@ Das System SHALL WEEKLY (ein oder mehrere ISO-Wochentage mit ganzzahligem Wochen
 - **WHEN** November einzeln oder November und Dezember zusammen berechnet werden
 - **THEN** stimmen die Novembertermine 03.11. und 17.11. in beiden Berechnungen überein
 
+#### Scenario: Einzelnes Datum aus der Wiederholung ausnehmen
+- **GIVEN** eine wöchentliche Chorprobe an jedem Dienstag mit Ausnahme des 10. und 24.11.2026
+- **WHEN** die November-Checkliste berechnet wird
+- **THEN** sind nur der 03. und 17.11. als neue offene Vorschläge enthalten
+- **AND** im Dezember gelten wieder die unveränderten Wiederholungsregeln
+- **AND** bereits gespeicherte Entscheidungen über inzwischen ausgenommene Termine bleiben als historische Einträge sichtbar
+
 #### Scenario: Sommerzeit
 - **GIVEN** eine Vorlage um 19:30 Uhr Europe/Berlin
 - **WHEN** ein Vorkommen im Winter und eines im Sommer übernommen wird
