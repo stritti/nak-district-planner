@@ -89,11 +89,13 @@ class RecurringEventService:
         recurring: RecurringEventRepositoryPort,
         slots: PlanningSlotRepository,
         instances: EventInstanceRepository,
+        integrity_error_type: type[Exception] | None = None,
     ) -> None:
         self.session = session
         self.recurring = recurring
         self.slots = slots
         self.instances = instances
+        self.integrity_error_type = integrity_error_type
 
     async def list_month(
         self,
@@ -318,6 +320,8 @@ class RecurringEventService:
                 await self.recurring.save_decision(decision)
                 return decision
         except Exception as exc:
+            if self.integrity_error_type is None or not isinstance(exc, self.integrity_error_type):
+                raise
             raise OccurrenceConflictError("Vorkommen wurde parallel bearbeitet.") from exc
 
     async def skip(
@@ -349,6 +353,8 @@ class RecurringEventService:
                 await self.recurring.save_decision(decision)
                 return decision
         except Exception as exc:
+            if self.integrity_error_type is None or not isinstance(exc, self.integrity_error_type):
+                raise
             raise OccurrenceConflictError("Vorkommen wurde parallel bearbeitet.") from exc
 
     async def reopen(
@@ -421,4 +427,6 @@ class RecurringEventService:
                 await self.recurring.save_decision(updated)
                 return updated
         except Exception as exc:
+            if self.integrity_error_type is None or not isinstance(exc, self.integrity_error_type):
+                raise
             raise OccurrenceConflictError("Die Zuordnung wurde parallel geändert.") from exc
