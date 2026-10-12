@@ -513,8 +513,6 @@ def generate_planning_series_slots() -> dict:
     Runs daily to keep a rolling 12-month window of generated slots.
     Safe to run repeatedly: skips existing slots by (series_id, date, congregation).
     """
-    from app.adapters.db.repositories.congregation import SqlCongregationRepository
-    from app.adapters.db.repositories.district import SqlDistrictRepository
     from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
     from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
     from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
@@ -532,8 +530,6 @@ def generate_planning_series_slots() -> dict:
                 series_repo=SqlPlanningSeriesRepository(session),
                 slot_repo=SqlPlanningSlotRepository(session),
                 instance_repo=SqlEventInstanceRepository(session),
-                district_repo=SqlDistrictRepository(session),
-                congregation_repo=SqlCongregationRepository(session),
             )
             result = await generator.run()
             await session.commit()
