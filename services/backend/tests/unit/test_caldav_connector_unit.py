@@ -262,7 +262,7 @@ class TestFetchEvents:
         assert ev.end_at == datetime(2026, 3, 1, 12, tzinfo=UTC)
         assert ev.description == "Sonntagsgottesdienst"
         assert ev.is_cancelled is False
-        assert len(ev.content_hash) == 64
+        assert ev.revision_marker is not None
 
     async def test_bearer_token_auth(self):
         connector = CalDAVConnector(client=_mock_xml_response(MULTISTATUS_WITH_EVENTS))
