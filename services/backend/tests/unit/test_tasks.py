@@ -376,7 +376,7 @@ def test_draft_worker_supplies_required_district_and_congregation_repositories()
         patch(
             "app.application.draft_service_generation.GenerateDraftServicesUseCase"
         ) as use_case,
-        patch("app.adapters.worker.tasks._run_as_system_worker", side_effect=lambda work: work),
+        patch("app.adapters.worker.tasks._run_as_system_worker", new=lambda work: work),
     ):
         session_factory.return_value.__aenter__.return_value = session
         use_case.return_value.run = AsyncMock(return_value=summary)
