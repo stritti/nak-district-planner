@@ -10,6 +10,7 @@ by Pydantic — the handlers only contain business logic.
 
 from __future__ import annotations
 
+import calendar
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
@@ -27,7 +28,7 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
-from app.adapters.auth.permissions import require_role_in_district
+from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
@@ -589,20 +590,35 @@ async def bulk_update_approval_status(
     session: DbSession,
     district_id: uuid.UUID | None = Query(None),
     slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
 ) -> BulkApprovalStatusResponse:
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="district_id ist erforderlich, außer für Superadmin.",
         )
-    if district_id is not None:
-        require_role_in_district(auth, Role.PLANNER, district_id)
+    if body.congregation_id is None:
+        # District-wide publication remains restricted to district planners.
+        if district_id is not None:
+            require_role_in_district(auth, Role.PLANNER, district_id)
+    else:
+        # Resolve and authorize the *requested* congregation before reading any
+        # planning slots. A membership for another congregation is insufficient.
+        if district_id is None:
+            raise HTTPException(status_code=400, detail="district_id ist erforderlich.")
+        congregation = await cong_repo.get(body.congregation_id)
+        if congregation is None or congregation.district_id != district_id:
+            raise HTTPException(status_code=403, detail="Gemeinde gehört nicht zum Bezirk.")
+        if not has_role_in_district(auth, Role.PLANNER, district_id):
+            require_role_in_district(
+                auth,
+                Role.CONGREGATION_ADMIN,
+                district_id,
+                congregation_ids_in_district={body.congregation_id},
+            )
 
     from_date = date(body.year, body.month, 1)
-    if body.month == 12:
-        to_date = date(body.year + 1, 1, 1) - timedelta(days=1)
-    else:
-        to_date = date(body.year, body.month + 1, 1) - timedelta(days=1)
+    to_date = date(body.year, body.month, calendar.monthrange(body.year, body.month)[1])
 
     all_slots = await slot_repo.list_for_date_range(
         district_id=district_id or uuid.UUID(int=0),
