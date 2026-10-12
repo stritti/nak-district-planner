@@ -8,10 +8,12 @@
 - [x] 2.2 Enforce Valkey auth in development and production Compose and application URL
 - [x] 2.3 Validate production runtime credentials and standalone IdP secrets/HTTPS
 - [x] 2.4 Preserve literal Valkey passwords in Compose commands and reject URL-unsafe production values
+- [x] 2.5 Enforce URL-safe application DB credentials and plain-Compose runtime limits; increase Celery healthcheck tolerance
 
 ## 3. Restore and documentation
 - [x] 3.1 Back up encrypted database and global roles separately
 - [x] 3.2 Migrate drill source and verify restored data, grants, RLS and definer functions
+- [x] 3.4 Fail the restore drill on missing or duplicated bootstrap owner role definitions
 - [x] 3.3 Document configuration changes, role restore order and retained CSP decisions
 
 ## 4. Verification
@@ -26,4 +28,5 @@
 - [x] 5.3 Make Docker image release conditional on successful upgrade-note publication
 - [x] 5.4 Add behavioral tests for first release, later releases, invalid notes, idempotence, and unchanged changelogs
 - [x] 5.5 Document contributor workflow and upgrade-note contract
+- [x] 5.7 Validate ordered nonempty upgrade-note sections, semver tag lineage and subprocess diagnostics
 - [x] 5.6 Confirm GitHub Actions checks on the updated PR branch (all nine workflows passed on 5c2a839b)
