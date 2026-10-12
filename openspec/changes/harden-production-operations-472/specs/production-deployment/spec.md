@@ -27,8 +27,7 @@ The frontend, backend, worker, beat and migrate services SHALL have read-only ro
 - **AND** the beat schedule remains writable on its dedicated persistent volume
 
 ### Requirement: Valkey is authenticated and production runtime secrets are non-default
-The stack SHALL require a nonempty VALKEY_PASSWORD and use it for the Valkey server, healthcheck and application/Celery connections. Production startup SHALL reject missing or known default APP_DB_PASSWORD and VALKEY_PASSWORD and reject VALKEY_PASSWORD values containing URI-reserved or non-ASCII characters, because Compose embeds the password in a Valkey connection URI. Compose SHALL pass VALKEY_PASSWORD to Valkey startup and healthcheck commands through quoted container environment-variable expansion, not through unescaped interpolation into shell script text. Owner credentials SHALL still be forbidden in runtime service environments.
-
+The stack SHALL authenticate Valkey clients with VALKEY_PASSWORD. Application and Celery connections SHALL use the same credential. Production startup SHALL reject missing, default or URL-unsafe VALKEY_PASSWORD values and missing or default APP_DB_PASSWORD. Runtime services SHALL NOT receive database owner credentials. The Valkey startup and healthcheck shell commands SHALL expand the credential from the container environment without interpreting its contents as shell code.
 #### Scenario: Operator forgets or uses development secrets
 - **WHEN** application startup uses a missing or placeholder runtime credential
 - **THEN** production_guard blocks startup
