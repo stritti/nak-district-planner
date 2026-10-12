@@ -3,6 +3,8 @@
 
 """Regression contracts for issue #472's deployment hardening."""
 
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -126,3 +128,51 @@ def test_restore_drill_checks_migrated_security_contract() -> None:
     ):
         assert item in drill
     assert "roles" in _read("scripts/backup.sh").lower()
+
+@pytest.mark.parametrize("path", ["docker-compose.yml", "docker-compose.prod.yml"])
+@pytest.mark.parametrize(
+    "password",
+    ["safe-password_123", 'contains"quotes', "literal$(printf unexpected)", "semi;colon and spaces"],
+)
+def test_valkey_shell_never_interprets_password_as_script(
+    path: str, password: str, tmp_path: Path
+) -> None:
+    """Compose must pass the secret through an environment variable, not script text."""
+    valkey = _services(path)["valkey"]
+    assert valkey["environment"]["VALKEY_PASSWORD"].startswith("${VALKEY_PASSWORD:?")
+    command = valkey["command"]
+    assert command[:2] == ["sh", "-c"]
+    assert command[2] == 'exec valkey-server --requirepass "$${VALKEY_PASSWORD}"'
+    healthcheck = valkey["healthcheck"]["test"]
+    assert healthcheck == [
+        "CMD-SHELL",
+        'REDISCLI_AUTH="$${VALKEY_PASSWORD}" valkey-cli ping | grep -qx PONG',
+    ]
+
+    # Docker Compose turns $$ into a literal $ in the container command.
+    server_stub = tmp_path / "valkey-server"
+    server_stub.write_text('#!/bin/sh\\nprintf "%s" "$2"\\n', encoding="utf-8")
+    server_stub.chmod(0o755)
+    client_stub = tmp_path / "valkey-cli"
+    client_stub.write_text(
+        '#!/bin/sh\\n[ "$REDISCLI_AUTH" = "$EXPECTED_PASSWORD" ] && echo PONG\\n',
+        encoding="utf-8",
+    )
+    client_stub.chmod(0o755)
+    env = dict(os.environ)
+    env.update({
+        "VALKEY_PASSWORD": password,
+        "EXPECTED_PASSWORD": password,
+        "PATH": f'{tmp_path}{os.pathsep}{env.get("PATH", "")}',
+    })
+
+    server = subprocess.run(
+        ["sh", "-c", command[2].replace("$$", "$")],
+        env=env, capture_output=True, text=True, check=True,
+    )
+    assert server.stdout == password
+    client = subprocess.run(
+        ["sh", "-c", healthcheck[1].replace("$$", "$")],
+        env=env, capture_output=True, text=True, check=True,
+    )
+    assert client.returncode == 0
