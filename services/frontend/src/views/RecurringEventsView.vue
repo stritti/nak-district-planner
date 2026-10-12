@@ -326,19 +326,6 @@ async function load(): Promise<void> {
     if (request === fetchVersion) loading.value = false
   }
 }
-watch(districtId, id => {
-  fetchVersion++
-  templates.value = []
-  checklist.value = emptyPage()
-  selected.value = new Set()
-  preview.value = null
-  formOpen.value = false
-  if (id) {
-    void districtsStore.fetchCongregations(id).catch(() => undefined)
-    void load()
-  }
-}, { immediate: true })
-
 function applyFilters(): void {
   pageOffset.value = 0
   void load()
@@ -516,4 +503,20 @@ function deactivateTemplate(item: RecurringTemplate): void {
     is_active: false, expected_revision: item.revision,
   }))
 }
+
+// Immediate watchers execute during setup: keep them after all reactive declarations.
+watch(districtId, id => {
+  fetchVersion++
+  templates.value = []
+  checklist.value = emptyPage()
+  selected.value = new Set()
+  pageOffset.value = 0
+  loading.value = false
+  preview.value = null
+  formOpen.value = false
+  if (id) {
+    void districtsStore.fetchCongregations(id).catch(() => undefined)
+    void load()
+  }
+}, { immediate: true })
 </script>
