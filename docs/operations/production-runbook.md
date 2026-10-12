@@ -307,6 +307,8 @@ Die Tabellen bleiben vorerst zur forensischen Prüfung bestehen; ein Downgrade d
 Mit Issue #472 laufen Frontend, Backend, Worker, Beat und der Migrationsschritt im
 veroeffentlichten Produktions-Compose mit schreibgeschuetztem Root-Dateisystem,
 ohne Linux-Capabilities und mit begrenzten PIDs und Speicherkontingenten.
+Die Limits sind auch fuer den Betrieb mit `docker compose up` direkt als
+`mem_limit` und `pids_limit` festgelegt und nicht von Swarm abhaengig.
 Schreibbare Pfade sind ausschliesslich tmpfs (`/tmp`) und das
 `beat_schedule`-Volume. Nicht jeder Datenbank- und Proxy-Dienst ist
 `read_only`: PostgreSQL, Valkey, Keycloak und Traefik benoetigen schreibbare
@@ -318,7 +320,7 @@ Vor dem Deployment `VALKEY_PASSWORD` in `.env` auf einen neuen, URL-sicheren
 Zufallswert setzen, zum Beispiel mit `openssl rand -hex 32`. Der
 `production_guard` verweigert den Start bei fehlendem oder bekannten
 Standardwerten von `APP_DB_PASSWORD` und `VALKEY_PASSWORD` sowie bei
-URL-reservierten und nicht-ASCII-Zeichen im Valkey-Passwort. Zulaessig sind
+URL-reservierten und nicht-ASCII-Zeichen in beiden Passwoertern. Zulaessig sind
 Buchstaben, Ziffern, Punkt, Unterstrich, Tilde und Bindestrich.
 Die Valkey-Start- und Healthcheck-Kommandos verwenden die geschuetzte
 Variablenexpansion im Container statt das Passwort als Shell-Code einzusetzen.
