@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import date, time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -25,6 +26,7 @@ from app.adapters.api.schemas.recurring_events import (
 from app.application.recurring_event_service import OccurrenceConflictError
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.recurring_event_template import (
+    DecisionStatus,
     RecurrenceKind,
     RecurrenceRule,
     RecurringEventTemplate,
@@ -108,10 +110,10 @@ def test_district_applicability_not_visible_to_uninvited_congregation() -> None:
     own = uuid.uuid4()
     other = uuid.uuid4()
     entry = _template()
-    entry = __import__("dataclasses").replace(entry, applicability=(str(other),))
+    entry = replace(entry, applicability=(str(other),))
     user = _auth(Role.VIEWER, ScopeType.CONGREGATION, own)
     assert not r._visible(user, entry)
-    allowed = __import__("dataclasses").replace(entry, applicability=("all",))
+    allowed = replace(entry, applicability=("all",))
     assert r._visible(user, allowed)
 
 
@@ -168,9 +170,7 @@ async def test_bulk_partial_conflict_keeps_subsequent_successes() -> None:
     entry = _template()
     body = BulkOccurrenceAcceptRequest(items=[_action(entry), _action(entry)])
     expected = SimpleNamespace(
-        status=__import__(
-            "app.domain.models.recurring_event_template", fromlist=["DecisionStatus"]
-        ).DecisionStatus.ACCEPTED,
+        status=DecisionStatus.ACCEPTED,
         planning_slot_id=uuid.uuid4(),
     )
     service = AsyncMock()
