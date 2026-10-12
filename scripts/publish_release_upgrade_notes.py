@@ -11,7 +11,9 @@ CHANGELOG content from release-please remains intact. No note means no modificat
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -19,15 +21,41 @@ NOTES_DIR = Path("docs/operations/release-notes")
 HEADING = "## WICHTIG: Anpassungen bei produktiven Installationen"
 
 
+def _execute(*args: str, cwd: Path, text_mode: bool) -> subprocess.CompletedProcess:
+    """Run a command without shell expansion and preserve diagnostics on failure."""
+    try:
+        return subprocess.run(
+            args, cwd=cwd, check=True, capture_output=True, text=text_mode
+        )
+    except subprocess.CalledProcessError as exc:
+        error = exc.stderr
+        if isinstance(error, bytes):
+            error = error.decode("utf-8", errors="replace")
+        print(
+            f"Command {' '.join(args[:3])} failed with code {exc.returncode}: "
+            f"{(error or '(no stderr)').strip()}",
+            file=sys.stderr,
+        )
+        raise
+
+
 def run(*args: str, cwd: Path) -> str:
-    """Execute a command safely with argv, without shell expansion."""
-    return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True).stdout
+    """Execute a text command and surface its stderr when it fails."""
+    return _execute(*args, cwd=cwd, text_mode=True).stdout
+
+
+def run_bytes(*args: str, cwd: Path) -> bytes:
+    """Execute a binary command (for NUL-separated git output)."""
+    return _execute(*args, cwd=cwd, text_mode=False).stdout
 
 
 def previous_release_tag(repo: Path, tag: str) -> str | None:
     """Find the closest ancestor release tag, excluding the current release."""
     result = subprocess.run(
-        ["git", "describe", "--tags", "--abbrev=0", f"{tag}^"],
+        [
+            "git", "describe", "--tags", "--first-parent",
+            "--match", "v[0-9]*.[0-9]*.[0-9]*", "--abbrev=0", f"{tag}^",
+        ],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -48,8 +76,26 @@ def new_note_paths(repo: Path, tag: str) -> list[Path]:
     else:
         args = ("git", "ls-tree", "-r", "--name-only", "-z", tag, "--", str(NOTES_DIR))
     # NUL-separated names handle spaces and special characters.
-    paths = subprocess.run(args, cwd=repo, check=True, capture_output=True).stdout.split(b"\0")
+    paths = run_bytes(*args, cwd=repo).split(b"\0")
     return sorted(Path(p.decode("utf-8")) for p in paths if p and p.endswith(b".md"))
+
+
+_REQUIRED_SECTIONS = ("Betroffen", "Vor dem Update", "Nach dem Update")
+_SECTION_PATTERN = re.compile(r"^\\*\\*(Betroffen|Vor dem Update|Nach dem Update):\\*\\*", re.MULTILINE)
+
+
+def validate_upgrade_note(body: str, path: Path) -> None:
+    """Require ordered, line-anchored sections with actionable contents."""
+    sections = list(_SECTION_PATTERN.finditer(body))
+    if not body.startswith("### ") or tuple(m.group(1) for m in sections) != _REQUIRED_SECTIONS:
+        raise ValueError(
+            f"{path}: note must start with ### and contain the ordered "
+            "Betroffen, Vor dem Update and Nach dem Update sections"
+        )
+    for i, section in enumerate(sections):
+        end = sections[i + 1].start() if i + 1 < len(sections) else len(body)
+        if not body[section.end():end].strip():
+            raise ValueError(f"{path}: {section.group(1)} section is empty")
 
 
 def load_upgrade_notes(repo: Path, tag: str) -> list[str]:
@@ -57,15 +103,7 @@ def load_upgrade_notes(repo: Path, tag: str) -> list[str]:
     notes = []
     for path in new_note_paths(repo, tag):
         body = run("git", "show", f"{tag}:{path.as_posix()}", cwd=repo).strip()
-        if not body.startswith("### ") or not all(
-            label in body for label in (
-                "**Betroffen:**", "**Vor dem Update:**", "**Nach dem Update:**",
-            )
-        ):
-            raise ValueError(
-                f"{path}: note must start with ### and include Betroffen, "
-                "Vor dem Update and Nach dem Update sections"
-            )
+        validate_upgrade_note(body, path)
         notes.append(body)
     return notes
 
