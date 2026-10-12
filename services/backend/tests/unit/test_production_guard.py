@@ -301,3 +301,15 @@ def test_production_guard_requires_runtime_passwords(monkeypatch, name) -> None:
     monkeypatch.delenv(name)
     with pytest.raises(RuntimeError, match=name):
         production_guard(_valid_prod_settings())
+
+@pytest.mark.parametrize("value", ["some@password", "with spaces", "a:b", "a/b", "a$bc", "äbc"])
+def test_production_guard_rejects_non_url_safe_valkey_passwords(monkeypatch, value) -> None:
+    monkeypatch.setenv("VALKEY_PASSWORD", value)
+    with pytest.raises(RuntimeError, match="VALKEY_PASSWORD.*URL-safe"):
+        production_guard(_valid_prod_settings())
+
+
+@pytest.mark.parametrize("value", ["A1bcdefghijk-_", "A1bcdefghijk.~"])
+def test_production_guard_accepts_url_safe_valkey_passwords(monkeypatch, value) -> None:
+    monkeypatch.setenv("VALKEY_PASSWORD", value)
+    production_guard(_valid_prod_settings())
