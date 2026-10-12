@@ -63,6 +63,10 @@ Production database backups SHALL include separately encrypted global role defin
 - **WHEN** a truncated archive is used for a dry-run restore
 - **THEN** validation fails and the restored data remain unchanged
 
+#### Scenario: Source roles differ from the expected bootstrap identity
+- **WHEN** the source role archive does not contain exactly one expected owner definition
+- **THEN** the isolated restore drill fails before replaying role SQL
+
 ### Requirement: Production upgrade actions are prominent in published Release Notes
 Changes that require an operator to modify an existing production installation SHALL introduce an actionable, release-specific upgrade note alongside the change. Following release-please publication, the release workflow SHALL prepend newly introduced upgrade notes under a prominent "WICHTIG: Anpassungen bei produktiven Installationen" heading before the generated changelog. The release image publication SHALL depend on successful upgrade-note processing.
 
