@@ -67,6 +67,15 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
         row = await self._session.get(PlanningSlotORM, slot_id)
         return _orm_to_domain(row) if row else None
 
+    async def get_many(self, slot_ids: Collection[uuid.UUID]) -> list[PlanningSlot]:
+        """Fetch linked slots in one query, including slots outside the preview month."""
+        if not slot_ids:
+            return []
+        result = await self._session.execute(
+            select(PlanningSlotORM).where(PlanningSlotORM.id.in_(slot_ids))
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()]
+
     async def get_for_update(self, slot_id: uuid.UUID) -> PlanningSlot | None:
         """Read the latest state while holding a row lock through the transaction."""
         row = await self._session.get(
