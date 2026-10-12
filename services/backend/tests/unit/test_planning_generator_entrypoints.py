@@ -61,7 +61,7 @@ def test_scheduled_generate_passes_only_supported_repositories() -> None:
         patch("app.adapters.db.repositories.event_instance.SqlEventInstanceRepository")
         as instance_repo,
         patch("app.application.planning_series_generator.PlanningSeriesGenerator") as generator,
-        patch("app.adapters.worker.tasks._run_as_system_worker", side_effect=lambda work: work),
+        patch("app.adapters.worker.tasks._run_as_system_worker", new=lambda work: work),
     ):
         settings.use_series_generation = True
         session_factory.return_value.__aenter__.return_value = session
