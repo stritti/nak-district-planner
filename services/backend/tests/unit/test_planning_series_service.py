@@ -819,7 +819,7 @@ async def test_moved_series_slot_keeps_occurrence_key_in_api_generator() -> None
     """Moving a generated slot must not create its old occurrence again."""
     series_repo = MockPlanningSeriesRepository()
     slot_repo = MockPlanningSlotRepository()
-    service = PlanningSeriesSlotGenerationService(series_repo, slot_repo)
+    service = PlanningSeriesSlotGenerationService(series_repo, slot_repo, AsyncMock())
     series = PlanningSeries.create(
         district_id=uuid.uuid4(),
         default_planning_time=time(10),
