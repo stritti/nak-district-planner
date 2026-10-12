@@ -12,9 +12,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.application.recurring_event_service import (
-    OccurrenceConflict,
+    OccurrenceConflictError,
     RecurringEventService,
-    StaleTemplate,
+    StaleTemplateError,
 )
 from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.recurring_event_template import (
@@ -96,7 +96,7 @@ async def test_month_projection_preserves_skipped_decisions() -> None:
 async def test_stale_preview_does_not_write_slot_or_decision() -> None:
     entry = _template()
     service, repo, slots, instances = _service(entry)
-    with pytest.raises(StaleTemplate):
+    with pytest.raises(StaleTemplateError):
         await service.accept(
             entry, date(2026, 11, 3), expected_revision=entry.revision + 1,
             created_by="u"
@@ -120,7 +120,7 @@ async def test_occupied_congregation_time_does_not_create_second_slot() -> None:
         approval_status=EventApprovalStatus.PLANNED,
     )
     slots.list_for_date_range.return_value = [existing]
-    with pytest.raises(OccurrenceConflict):
+    with pytest.raises(OccurrenceConflictError):
         await service.accept(
             entry, date(2026, 11, 3), expected_revision=entry.revision, created_by="u"
         )
