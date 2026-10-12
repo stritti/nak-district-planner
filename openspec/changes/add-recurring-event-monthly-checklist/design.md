@@ -11,7 +11,7 @@ Die Events-API, die bestehenden PLANNED/CONFIRMED-Freigaben, District-applicabil
 Ein neues Domänenmodell RecurringEventTemplate enthält:
 - id, district_id, congregation_id optional (null = Bezirkstermin)
 - title, description optional, category (kein Gottesdienst im ersten Ausbauschritt), start_time als lokale Uhrzeit, duration_minutes > 0
-- recurrence als validierte, versionierte Regel mit verpflichtendem anchor_date; active_from, active_until optional; is_active; revision / updated_at
+- recurrence als validierte, versionierte Regel mit verpflichtendem anchor_date; active_from, active_until optional; excluded_dates als eindeutige Liste einzelner lokaler Ausnahme-Daten (kein stilles Verschieben); is_active; revision / updated_at
 - applicability nur bei Bezirksterminen: [] = nur auf Bezirksebene, ["all"] oder eine eindeutige Menge bezirkszugehöriger Gemeinden; niemals bei Gemeindeterminen
 - timezone = Europe/Berlin in der ersten Ausbaustufe
 
@@ -38,7 +38,7 @@ RecurringEventDecision:
 - ACCEPTED referenziert den entstandenen oder bewusst zugeordneten PlanningSlot; SKIPPED besitzt keine slot_id
 - Fremdschlüssel mit geprüfter Bezirkszugehörigkeit; planning_slot_id ist nullable und verwendet ON DELETE SET NULL, damit eine gelöschte Slot-Referenz (auch durch Retention Cleanup) die Entscheidung nicht löscht. ACCEPTED + null wird als NEEDS_REVIEW projiziert, nie ungeprüft neu angelegt
 
-Die Darstellung unterscheidet OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW. CONFLICT ist ein aus der aktuellen Planungsrealität abgeleiteter Zustand und keine automatische Ablehnung. Entscheidungen bleiben erhalten, wenn eine Vorlage später inaktiv wird oder ihre Regel bearbeitet wird; der Monatsstatus kann weiterhin als historischer Eintrag angezeigt werden. Ein verschobener akzeptierter Termin bleibt dem ursprünglichen Vorkommen zugeordnet, auch wenn er einen anderen Monat erreicht.
+Die Darstellung unterscheidet OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW. Zusätzlich liefert die API decision_status (ACCEPTED, SKIPPED oder null), damit ein fehlender akzeptierter Slot von einer nur wegen Sommerzeit prüfbedürftigen Vorschau unterschieden wird. CONFLICT ist ein aus der aktuellen Planungsrealität abgeleiteter Zustand und keine automatische Ablehnung. Entscheidungen bleiben erhalten, wenn eine Vorlage später inaktiv wird oder ihre Regel bearbeitet wird; der Monatsstatus kann weiterhin als historischer Eintrag angezeigt werden. Ein verschobener akzeptierter Termin bleibt dem ursprünglichen Vorkommen zugeordnet, auch wenn er einen anderen Monat erreicht.
 
 Ein übersprungener Vorschlag kann explizit wieder geöffnet werden (Entscheidung entfernen); ACCEPTED mit existierendem Slot wird durch dessen normale Event-Bearbeitung oder Stornierung verwaltet. Wird der Slot endgültig gelöscht, zeigt die Checkliste NEEDS_REVIEW. Ein dedizierter Resolve-Use-Case erlaubt dann nur explizit und atomar: LINK_EXISTING (einen passenden, noch nicht anders zugeordneten Slot derselben Gemeinde bzw. desselben Bezirksscopes verknüpfen), MARK_SKIPPED (Entscheidung behalten, slot_id null) oder REOPEN (Entscheidung löschen, nur falls die aktuell aktive Vorlage das ursprüngliche Vorkommen weiterhin erzeugt). Vor jedem Schritt werden Scope, bestehende Verknüpfung und Revisionskonflikte geprüft. Ohne Entscheidung bleibt NEEDS_REVIEW und es erfolgt keine automatische Neuanlage.
 
