@@ -116,7 +116,17 @@ async def create_calendar_integration(
             detail=str(UnsupportedCalendarTypeError(body.type)),
         )
     _validate_credentials_url(body.type, body.credentials)
-    integration = await service.create_integration(CalendarIntegrationCreateCommand(**body.model_dump()))
+    integration = await service.create_integration(CalendarIntegrationCreateCommand(
+        district_id=body.district_id,
+        congregation_id=body.congregation_id,
+        name=body.name,
+        type=body.type,
+        credentials=body.credentials,
+        sync_interval=body.sync_interval,
+        capabilities=body.capabilities,
+        default_category=body.default_category,
+        delete_behavior=body.delete_behavior,
+    ))
     return _to_response(integration)
 
 
@@ -235,7 +245,15 @@ async def update_calendar_integration(
 
     if body.credentials is not None:
         _validate_credentials_url(integration.type, body.credentials)
-    integration = await service.update_integration(integration, CalendarIntegrationUpdateCommand(changes=body.model_dump(exclude_unset=True)))
+    integration = await service.update_integration(integration, CalendarIntegrationUpdateCommand(
+        name=body.name,
+        credentials=body.credentials,
+        sync_interval=body.sync_interval,
+        capabilities=body.capabilities,
+        default_category=body.default_category,
+        delete_behavior=body.delete_behavior,
+        provided_fields=frozenset(body.model_fields_set),
+    ))
     return _to_response(integration)
 
 
