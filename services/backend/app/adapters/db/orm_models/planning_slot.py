@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, time
 
-from sqlalchemy import ARRAY, Boolean, Date, DateTime, ForeignKey, Index, String, Time, text
+from sqlalchemy import ARRAY, Boolean, Date, DateTime, ForeignKey, Index, String, Time, UniqueConstraint, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -18,6 +18,7 @@ from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlotSta
 class PlanningSlotORM(Base):
     __tablename__ = "planning_slots"
     __table_args__ = (
+        UniqueConstraint("id", "district_id", name="uq_planning_slots_id_district"),
         Index("ix_planning_slots_district_date", "district_id", "planning_date"),
         Index("ix_planning_slots_congregation_date", "congregation_id", "planning_date"),
         # A congregation cannot hold two active slots at the same date and time.
