@@ -661,3 +661,18 @@ async def test_generated_instance_duration_reads_current_settings(monkeypatch) -
     assert result["slots_created"] == 1
     instance = repos.instance_repo.save.await_args.args[0]
     assert instance.actual_end_at - instance.actual_start_at == timedelta(minutes=65)
+
+def test_implicit_weekday_uses_series_start_for_both_pattern_formats() -> None:
+    start = date(2026, 6, 2)  # Tuesday
+    for pattern in ({"type": "weekly"}, {"frequency": "weekly"}):
+        series = PlanningSeries.create(
+            district_id=uuid.uuid4(), default_planning_time=time(10),
+            active_from=start, recurrence_pattern=pattern,
+        )
+        series.created_at = datetime(2026, 6, 1, tzinfo=UTC)  # Monday
+        slots = _expand_recurrence(
+            series, from_date=start, to_date_exclusive=date(2026, 6, 10)
+        )
+        assert [slot.planning_date for slot in slots] == [
+            date(2026, 6, 2), date(2026, 6, 9)
+        ]
