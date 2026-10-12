@@ -129,6 +129,7 @@ def test_restore_drill_checks_migrated_security_contract() -> None:
         assert item in drill
     assert "roles" in _read("scripts/backup.sh").lower()
 
+
 @pytest.mark.parametrize("path", ["docker-compose.yml", "docker-compose.prod.yml"])
 @pytest.mark.parametrize(
     "password",
@@ -151,11 +152,11 @@ def test_valkey_shell_never_interprets_password_as_script(
 
     # Docker Compose turns $$ into a literal $ in the container command.
     server_stub = tmp_path / "valkey-server"
-    server_stub.write_text('#!/bin/sh\\nprintf "%s" "$2"\\n', encoding="utf-8")
+    server_stub.write_text('#!/bin/sh\nprintf "%s" "$2"\n', encoding="utf-8")
     server_stub.chmod(0o755)
     client_stub = tmp_path / "valkey-cli"
     client_stub.write_text(
-        '#!/bin/sh\\n[ "$REDISCLI_AUTH" = "$EXPECTED_PASSWORD" ] && echo PONG\\n',
+        '#!/bin/sh\n[ "$REDISCLI_AUTH" = "$EXPECTED_PASSWORD" ] && echo PONG\n',
         encoding="utf-8",
     )
     client_stub.chmod(0o755)
