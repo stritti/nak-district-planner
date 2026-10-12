@@ -200,10 +200,10 @@ class TestFetchEvents:
         # default: start + 1 day
         assert events[0].end_at == events[0].start_at + timedelta(days=1)
 
-    async def test_content_hash_is_populated(self):
+    async def test_connector_does_not_precompute_unused_content_hash(self):
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_BASIC)))
         events = await connector.fetch_events(CREDS)
-        assert len(events[0].content_hash) == 64  # SHA-256 hex
+        assert not hasattr(events[0], "content_hash")
 
     async def test_multiple_events_returned(self):
         connector = ICalConnector(
