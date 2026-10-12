@@ -10,6 +10,7 @@ for a rolling window (default 6-12 months ahead).
 from __future__ import annotations
 
 import calendar
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -28,9 +29,12 @@ from app.domain.ports.repositories import (
     PlanningSeriesRepository,
     PlanningSlotRepository,
 )
+from app.domain.services.recurrence_validation import recurrence_interval
 
 # Fallback when an older series has no explicit default_planning_time.
 _DEFAULT_PLANNING_TIME = timedelta(hours=10)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -57,9 +61,7 @@ def _expand_recurrence(
     """
     pattern = series.recurrence_pattern or {}
     frequency = pattern.get("type", pattern.get("frequency", "weekly"))
-    interval = pattern.get("interval", 1)
-    if not isinstance(interval, int) or interval < 1:
-        raise ValueError("Recurrence interval must be a positive integer")
+    interval = recurrence_interval(pattern)
 
     modern = "type" in pattern
     # Both supported pattern formats inherit the weekday from the same
@@ -173,12 +175,24 @@ class PlanningSeriesGenerator:
             # Share the district transaction lock with deletions and the
             # other generator. Lock order is stable even across districts.
             await self._slot_repo.lock_district_for_generation(series.district_id)
-            generated = _expand_recurrence(
-                series,
-                from_date=effective_from,
-                to_date_exclusive=effective_to,
-                timezone_name=self._timezone_name,
-            )
+            try:
+                generated = _expand_recurrence(
+                    series,
+                    from_date=effective_from,
+                    to_date_exclusive=effective_to,
+                    timezone_name=self._timezone_name,
+                )
+            except ValueError as exc:
+                # A legacy malformed series must not abort the nightly batch
+                # and prevent other tenants from receiving their slots.
+                logger.warning(
+                    "Skipping invalid recurrence in series %s (district %s): %s",
+                    series.id,
+                    series.district_id,
+                    exc,
+                )
+                skipped += 1
+                continue
 
             projected = []
             for gslot in generated:
