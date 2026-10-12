@@ -207,7 +207,7 @@
           </label>
         </div>
         <div class="flex gap-2">
-          <button type="submit" class="btn-primary px-3 py-2" :disabled="busy">Als Entwurf übernehmen</button>
+          <button type="button" class="btn-primary px-3 py-2" :disabled="busy" @click="acceptPreview">Als Entwurf übernehmen</button>
           <button type="button" class="btn-icon px-3 py-2" @click="preview = null">Abbrechen</button>
         </div>
       </form>
