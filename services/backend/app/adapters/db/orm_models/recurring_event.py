@@ -85,6 +85,7 @@ class RecurringEventDecisionORM(Base):
         UniqueConstraint(
             "template_id", "occurrence_local_date", name="uq_recurring_decision_occurrence"
         ),
+        UniqueConstraint("planning_slot_id", name="uq_recurring_decisions_planning_slot"),
         ForeignKeyConstraint(
             ("template_id", "district_id"),
             ("recurring_event_templates.id", "recurring_event_templates.district_id"),

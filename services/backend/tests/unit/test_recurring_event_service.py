@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import date, time, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -93,8 +94,10 @@ async def test_month_projection_preserves_skipped_decisions() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("slot_location", ["month", "batch", "deleted"])
-async def test_month_projection_batches_missing_accepted_slot_links(slot_location: str) -> None:
+@pytest.mark.parametrize("slot_visible", [True, False])
+async def test_month_projection_preserves_accepted_links_hidden_by_rls(
+    slot_visible: bool,
+) -> None:
     entry = _template()
     service, repo, slots, instances = _service(entry)
     slot = PlanningSlot.create(
@@ -102,30 +105,39 @@ async def test_month_projection_batches_missing_accepted_slot_links(slot_locatio
         category=entry.category, planning_date=date(2026, 11, 4),
         planning_time=time(18, 30), approval_status=EventApprovalStatus.PLANNED,
     )
-    decision = RecurringEventDecision(
+    repo.list_decisions.return_value = [RecurringEventDecision(
         id=uuid.uuid4(), district_id=entry.district_id, template_id=entry.id,
         occurrence_local_date=date(2026, 11, 3), status=DecisionStatus.ACCEPTED,
         planning_slot_id=slot.id, created_by="u",
-    )
-    repo.list_decisions.return_value = [decision]
-    slots.list_for_date_range.return_value = [slot] if slot_location == "month" else []
-    slots.get_many.return_value = [slot] if slot_location == "batch" else []
+    )]
+    slots.list_for_date_range.return_value = [slot] if slot_visible else []
     result = await service.list_month(
         entry.district_id, 2026, 11, templates=[entry],
-        status_filter=(
-            ChecklistStatus.NEEDS_REVIEW if slot_location == "deleted"
-            else ChecklistStatus.ACCEPTED
-        ),
+        status_filter=ChecklistStatus.ACCEPTED,
     )
     assert result.total == 1
-    assert result.items[0].occurrence_local_date == date(2026, 11, 3)
-    if slot_location == "month":
-        slots.get_many.assert_not_awaited()
-    else:
-        slots.get_many.assert_awaited_once_with({slot.id})
+    assert result.items[0].planning_slot_id == slot.id
+    slots.get_many.assert_not_awaited()
     slots.save.assert_not_awaited()
     instances.save.assert_not_awaited()
     repo.save_decision.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_month_projection_marks_deleted_accepted_slot_for_review() -> None:
+    entry = _template()
+    service, repo, slots, _ = _service(entry)
+    repo.list_decisions.return_value = [RecurringEventDecision(
+        id=uuid.uuid4(), district_id=entry.district_id, template_id=entry.id,
+        occurrence_local_date=date(2026, 11, 3), status=DecisionStatus.ACCEPTED,
+        planning_slot_id=None, created_by="u",
+    )]
+    result = await service.list_month(
+        entry.district_id, 2026, 11, templates=[entry],
+        status_filter=ChecklistStatus.NEEDS_REVIEW,
+    )
+    assert result.total == 1
+    slots.get_many.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -363,6 +375,38 @@ async def test_resolve_missing_slot_applies_explicit_action(action: str) -> None
         repo.save_decision.assert_awaited_once_with(result)
         repo.delete_decision.assert_not_awaited()
     slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_dst_overlap_uses_target_slots_actual_utc_instant() -> None:
+    entry = _template(congregation_id=uuid.uuid4())
+    entry = replace(
+        entry, start_time=time(2, 30),
+        recurrence=RecurrenceRule(
+            kind=RecurrenceKind.WEEKLY,
+            anchor_date=date(2026, 10, 25), weekdays=(7,),
+        ),
+    )
+    service, repo, slots, instances = _service(entry)
+    repo.get_template.return_value = entry
+    repo.get_decision.return_value = RecurringEventDecision(
+        id=uuid.uuid4(), district_id=entry.district_id, template_id=entry.id,
+        occurrence_local_date=date(2026, 10, 25), status=DecisionStatus.ACCEPTED,
+        planning_slot_id=None, created_by="u",
+    )
+    repo.find_slot_decision.return_value = None
+    slot = PlanningSlot.create(
+        district_id=entry.district_id, congregation_id=entry.congregation_id,
+        title=entry.title, category=entry.category, planning_date=date(2026, 10, 25),
+        planning_time=time(1, 30),
+    )
+    slots.get.return_value = slot
+    linked = await service.resolve_missing_slot(
+        entry, date(2026, 10, 25), expected_revision=entry.revision,
+        action="LINK_EXISTING", slot_id=slot.id,
+    )
+    assert linked.planning_slot_id == slot.id
     instances.save.assert_not_awaited()
 
 

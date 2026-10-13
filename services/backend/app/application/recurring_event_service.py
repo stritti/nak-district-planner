@@ -13,7 +13,8 @@ import calendar
 import uuid
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, replace
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 from typing import Protocol
 
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
@@ -152,11 +153,6 @@ class RecurringEventService:
         # Decisions survive rule edits, exclusions, and template deactivation.
         occurrence_keys.update(key for key in decisions if key[0] in visible)
         result: list[ChecklistItem] = []
-        linked_slot_ids = {decision.planning_slot_id for decision in decisions.values() if decision.planning_slot_id is not None}
-        linked_slots = {slot.id: slot for slot in slots if slot.id in linked_slot_ids}
-        missing_ids = linked_slot_ids - linked_slots.keys()
-        if missing_ids:
-            linked_slots.update({slot.id: slot for slot in await self.slots.get_many(missing_ids)})
         for template_id, day in occurrence_keys:
             entry = visible[template_id]
             if query and query.casefold() not in (
@@ -177,12 +173,9 @@ class RecurringEventService:
                 has_conflict = self._has_congregation_collision(entry, utc_start, slots)
                 if has_conflict:
                     reason = "Ein aktiver Gemeindetermin belegt diese Startzeit."
-            linked_slot_exists = False
-            if decision and decision.planning_slot_id is not None:
-                linked = linked_slots.get(decision.planning_slot_id)
-                linked_slot_exists = (
-                    linked is not None and linked.district_id == district_id
-                )
+            # FK ON DELETE SET NULL guarantees an existing slot while the ID is
+            # non-null, even if that slot is hidden by planning-slot RLS.
+            linked_slot_exists = decision is not None and decision.planning_slot_id is not None
             status = project_checklist_status(
                 entry, day, decision=decision, has_conflict=has_conflict,
                 linked_slot_exists=linked_slot_exists,
@@ -415,11 +408,9 @@ class RecurringEventService:
                 )
                 if decision is None or decision.status is not DecisionStatus.ACCEPTED:
                     raise OccurrenceConflictError("Keine übernommene Entscheidung zu prüfen.")
-                previous = (
-                    await self.slots.get(decision.planning_slot_id)
-                    if decision.planning_slot_id else None
-                )
-                if previous is not None:
+                # The FK nulls planning_slot_id on deletion; do not treat an
+                # RLS-hidden still-linked slot as deleted or allow relinking it.
+                if decision.planning_slot_id is not None:
                     raise OccurrenceConflictError("Verknüpfter Termin besteht noch.")
                 if action == "MARK_SKIPPED":
                     updated = replace(decision, status=DecisionStatus.SKIPPED, planning_slot_id=None)
@@ -442,7 +433,12 @@ class RecurringEventService:
                     or target.status != PlanningSlotStatus.ACTIVE
                 ):
                     raise OccurrenceConflictError("Slot gehört nicht zum passenden Bezirk/Gemeindescope.")
-                if target.planning_date != local_start_utc(occurrence_day, current.start_time, timezone=current.timezone).date():
+                # Date-only membership does not need to disambiguate a DST
+                # overlap. The existing slot's UTC time is already definitive.
+                target_local_date = datetime.combine(
+                    target.planning_date, target.planning_time, tzinfo=UTC,
+                ).astimezone(ZoneInfo(current.timezone)).date()
+                if target_local_date != occurrence_day:
                     raise OccurrenceConflictError("Slot liegt nicht am geplanten Vorkommensdatum.")
                 if await self.recurring.find_slot_decision(slot_id) is not None:
                     raise OccurrenceConflictError("Slot ist bereits mit einer Entscheidung verknüpft.")

@@ -185,6 +185,23 @@ def test_recurring_decision_rejects_foreign_district_slot(owner, data):
             )
 
 
+def test_two_recurring_decisions_cannot_link_same_planning_slot(owner, data):
+    with owner.cursor() as cur:
+        first_template = _seed_template(cur, data.a.district_id)
+        second_template = _seed_template(cur, data.a.district_id)
+        _seed_decision(cur, first_template, data.a.district_id, slot_id=data.a.slot_id)
+    try:
+        with owner.cursor() as cur:
+            with pytest.raises(psycopg2.errors.UniqueViolation):
+                _seed_decision(cur, second_template, data.a.district_id, slot_id=data.a.slot_id)
+    finally:
+        with owner.cursor() as cur:
+            cur.execute(
+                "DELETE FROM recurring_event_templates WHERE id = ANY(%s::uuid[])",
+                ([str(first_template), str(second_template)],),
+            )
+
+
 def test_recurring_template_rejects_foreign_district_congregation(owner, data):
     with owner.cursor() as cur:
         with pytest.raises(psycopg2.errors.ForeignKeyViolation):

@@ -199,6 +199,10 @@ def upgrade() -> None:
             "template_id", "occurrence_local_date",
             name="uq_recurring_decision_occurrence",
         ),
+        # NULL remains allowed for retained decisions after slot deletion.
+        sa.UniqueConstraint(
+            "planning_slot_id", name="uq_recurring_decisions_planning_slot",
+        ),
         sa.ForeignKeyConstraint(
             ["template_id", "district_id"],
             ["recurring_event_templates.id", "recurring_event_templates.district_id"],

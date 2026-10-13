@@ -14,6 +14,7 @@ import calendar
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -617,16 +618,21 @@ async def bulk_update_approval_status(
                 congregation_ids_in_district={body.congregation_id},
             )
 
-    from_date = date(body.year, body.month, 1)
-    to_date = date(body.year, body.month, calendar.monthrange(body.year, body.month)[1])
-
+    first_local_day = date(body.year, body.month, 1)
+    last_local_day = date(body.year, body.month, calendar.monthrange(body.year, body.month)[1])
+    # Slots use UTC date/time, whereas monthly approval is a local calendar operation.
+    # A 00:30 Berlin event on Dec 1 may occupy Nov 30 in the slot table.
     all_slots = await slot_repo.list_for_date_range(
         district_id=district_id or uuid.UUID(int=0),
-        from_date=from_date,
-        to_date=to_date,
+        from_date=first_local_day - timedelta(days=1),
+        to_date=last_local_day,
     )
-    if body.congregation_id is not None:
-        all_slots = [s for s in all_slots if s.congregation_id == body.congregation_id]
+    berlin = ZoneInfo("Europe/Berlin")
+    all_slots = [
+        slot for slot in all_slots
+        if first_local_day <= _slot_start_at(slot).astimezone(berlin).date() <= last_local_day
+        and (body.congregation_id is None or slot.congregation_id == body.congregation_id)
+    ]
 
     if body.approval_status == EventApprovalStatus.PLANNED and any(slot.was_released for slot in all_slots):
         raise HTTPException(status_code=409, detail="Bereits freigegebene Ereignisse können nicht zurückgestuft werden.")
