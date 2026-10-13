@@ -19,10 +19,11 @@ from tests.integration.test_rls_postgres import (
     OWNER_DSN,
     _visible_ids,
     app_session,
-    data,
-    owner,
     psycopg2,
 )
+
+# Register the shared database fixtures without shadowing imported symbols.
+pytest_plugins = ("tests.integration.test_rls_postgres",)
 
 pytestmark = [
     pytest.mark.postgres,

@@ -9,9 +9,8 @@ import uuid
 from datetime import date, time
 from unittest.mock import AsyncMock, Mock
 
-from sqlalchemy.dialects import postgresql
-
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from app.adapters.db.orm_models.recurring_event import (
     RecurringEventDecisionORM,

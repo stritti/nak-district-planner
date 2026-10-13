@@ -26,11 +26,11 @@ from app.adapters.db.orm_models.audit_log import AuditAction, AuditStatus
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
 from app.adapters.db.orm_models.notification import NotificationORM
+from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.recurring_event import (
     RecurringEventDecisionORM,
     RecurringEventTemplateORM,
 )
-from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.domain.models.planning_slot import EventApprovalStatus
 from app.domain.models.service_assignment import AssignmentStatus

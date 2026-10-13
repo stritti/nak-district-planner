@@ -34,11 +34,11 @@ from sqlalchemy.orm.util import identity_key
 from app.adapters.db.orm_models.audit_log import AuditAction, AuditLogORM, AuditStatus
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
+from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.recurring_event import (
     RecurringEventDecisionORM,
     RecurringEventTemplateORM,
 )
-from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.tenant import TenantContext
 
