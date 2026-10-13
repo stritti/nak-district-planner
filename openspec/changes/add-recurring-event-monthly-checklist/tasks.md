@@ -41,6 +41,8 @@
 - [x] 6.1 Import-Regression aus Commit 7747c86 korrigieren: TransactionPort verwendet contextlib.AbstractAsyncContextManager; keine SQL-Abhängigkeit im Application-Service.
 - [x] 6.2 Repository- und Transaktionsverträge dokumentieren und wirkungslose Ellipsis-Anweisungen aus den sieben von CodeQL beanstandeten Protokollmethoden entfernen.
 - [x] 6.3 Ausnahmefalltests für Accept, Skip und Resolve ergänzen: injizierte Integritätsfehler werden mit Ursache in Konflikte übersetzt, andere Fehler bleiben unverändert; ohne konfigurierte Fehlerklasse erfolgt keine Übersetzung.
-- [ ] 6.4 Vollständige CI am finalen Head einschließlich Backend-/Router-Coverage und Security Scans bestätigen; Review-Threads nach erfolgreicher Verifikation abschließen.
+- [x] 6.4 Vollständige CI am Code-Head f053af0 einschließlich Backend-/Router-Coverage und Security Scans bestätigen; alle sieben CodeQL-Review-Threads sind aufgelöst.
 
 Die Korrektur des Importfehlers hat im ersten CI-Lauf die PostgreSQL-/RLS-Testausführung wieder ermöglicht. Die übrigen offenen Implementierungs- und Verifikationsaufgaben bleiben offen: erfolgreiche CI allein belegt keine vollständige Umsetzung des Fachfeatures.
+
+Verifikationsstand am Code-Head `f053af0`: alle neun Workflows erfolgreich; 1.889 Backend-Unit-Tests bestanden (ein bestehender Skip), 239 PostgreSQL-/RLS-Tests bestanden. Backend-Gesamtcoverage 90 %, Recurring-Service 90 %, Recurring-Router 90 %, Repository 92 %, Schemas/ORM/Domänenmodell jeweils 100 %. Zusätzliche Tests prüfen Command-Ergebnisse und HTTP-Fehler, Scope-Abweisung, Template-Revisionen, gesperrte Datenbank-Lookups und Löschung fehlender Entscheidungen. Aufgabe 5.6 bleibt wegen der noch offenen strikten OpenSpec-Validierung und Fachverifikation offen; die fehlende Checklisten-/Vorlagenoberfläche verhindert weiterhin die fachliche Merge-Reife.
