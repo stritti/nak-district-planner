@@ -35,3 +35,12 @@
 - [ ] 5.4 API-/RLS-Tests für alle Rollen, gemeindebezogene Freigabe (eigene Gemeinde erlaubt, fremde/ganzes Bezirk verboten), Scope-Manipulation, Cross-Tenant-Zugriffe, Bulk-Teilkonflikte, Filter vor Pagination und stale Revisions.
 - [ ] 5.5 Frontend-Unit- und Browser-Tests für Monatswechsel, Checklistenstatus, Mehrfachübernahme, Fehlermeldungen und mobile Nutzung.
 - [ ] 5.6 OpenSpec strikt validieren; bestehende Lint-, Sicherheits-, Build- und CI-Gates ohne Abschwächung bestehen; neue Produktionspfade mit >80 % Code Coverage und Ausnahmefällen abdecken.
+
+## 6. CI-Regressionen vom 13. Oktober 2026
+
+- [x] 6.1 Import-Regression aus Commit 7747c86 korrigieren: TransactionPort verwendet contextlib.AbstractAsyncContextManager; keine SQL-Abhängigkeit im Application-Service.
+- [x] 6.2 Repository- und Transaktionsverträge dokumentieren und wirkungslose Ellipsis-Anweisungen aus den sieben von CodeQL beanstandeten Protokollmethoden entfernen.
+- [x] 6.3 Ausnahmefalltests für Accept, Skip und Resolve ergänzen: injizierte Integritätsfehler werden mit Ursache in Konflikte übersetzt, andere Fehler bleiben unverändert; ohne konfigurierte Fehlerklasse erfolgt keine Übersetzung.
+- [ ] 6.4 Vollständige CI am finalen Head einschließlich Backend-/Router-Coverage und Security Scans bestätigen; Review-Threads nach erfolgreicher Verifikation abschließen.
+
+Die Korrektur des Importfehlers hat im ersten CI-Lauf die PostgreSQL-/RLS-Testausführung wieder ermöglicht. Die übrigen offenen Implementierungs- und Verifikationsaufgaben bleiben offen: erfolgreiche CI allein belegt keine vollständige Umsetzung des Fachfeatures.
