@@ -205,13 +205,27 @@ describe('recurring monthly checklist', () => {
     vi.mocked(api.bulkAcceptRecurringOccurrences).mockResolvedValueOnce({
       results: [{
         template_id: template.id, occurrence_local_date: '2026-11-03',
-        status: null, planning_slot_id: null, error: 'Revision veraltet',
+        status: null, planning_slot_id: null, error: 'STALE_TEMPLATE',
       }],
     })
     await view.get('input[type="checkbox"][aria-label="Chorprobe auswählen"]').setValue(true)
     await click('ausgewählte übernehmen')
-    expect(view.get('[role="alert"]').text()).toContain('Revision veraltet')
+    expect(view.get('[role="alert"]').text()).toContain('Vorlage wurde inzwischen geändert')
     expect(view.text()).toContain('Offen')
+  })
+
+  it('shows a safe localized message for unexpected invalid input errors', async () => {
+    const view = await render()
+    vi.mocked(api.bulkAcceptRecurringOccurrences).mockResolvedValueOnce({
+      results: [{
+        template_id: template.id, occurrence_local_date: '2026-11-03',
+        status: null, planning_slot_id: null, error: 'INVALID_INPUT',
+      }],
+    })
+    await view.get('input[type="checkbox"][aria-label="Chorprobe auswählen"]').setValue(true)
+    await click('ausgewählte übernehmen')
+    expect(view.get('[role="alert"]').text()).toContain('Ungültige Eingabe')
+    expect(view.get('[role="alert"]').text()).not.toContain('INVALID_INPUT')
   })
 
   it('opens preview, sends edited concrete data, and closes after success', async () => {
