@@ -45,11 +45,13 @@ class LeaderInlineUpdate(BaseModel):
     phone: str | None = None
 
 
+def _to_utc(timestamp: datetime) -> datetime:
+    return timestamp if timestamp.tzinfo is not None else timestamp.replace(tzinfo=UTC)
+
+
 def _leader_revision(leader: Leader) -> str:
     """Opaque strong validator for a leader record."""
-    timestamp = leader.updated_at
-    if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=UTC)
+    timestamp = _to_utc(leader.updated_at)
     return '"' + str(leader.id) + ':' + timestamp.isoformat(timespec="microseconds") + '"'
 
 
@@ -155,9 +157,7 @@ async def update_leader(
         leader.notes = body.notes
     if "is_active" in fields and body.is_active is not None:
         leader.is_active = body.is_active
-    timestamp = leader.updated_at
-    if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=UTC)
+    timestamp = _to_utc(leader.updated_at)
     leader.updated_at = max(datetime.now(UTC), timestamp + timedelta(microseconds=1))
     await repo.save(leader)
     return _leader_response(leader)
