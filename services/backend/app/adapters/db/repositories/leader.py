@@ -43,6 +43,13 @@ class SqlLeaderRepository(LeaderRepository):
         row = await self._session.get(LeaderORM, leader_id)
         return _orm_to_domain(row) if row else None
 
+    async def get_for_update(self, leader_id: uuid.UUID) -> Leader | None:
+        """Refresh the leader row while holding a transaction-scoped write lock."""
+        row = await self._session.get(
+            LeaderORM, leader_id, with_for_update=True, populate_existing=True
+        )
+        return _orm_to_domain(row) if row else None
+
     async def list_by_district(
         self,
         district_id: uuid.UUID,
