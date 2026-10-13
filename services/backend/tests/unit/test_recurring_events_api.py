@@ -23,10 +23,16 @@ from app.adapters.api.schemas.recurring_events import (
     RecurrenceRulePayload,
     RecurringTemplateCreate,
 )
-from app.application.recurring_event_service import OccurrenceConflictError
+from app.application.recurring_event_service import (
+    InvalidOccurrenceError,
+    OccurrenceConflictError,
+    StaleTemplateError,
+)
 from app.domain.models.membership import Membership, ScopeType
 from app.domain.models.recurring_event_template import (
+    AmbiguousLocalTimeError,
     DecisionStatus,
+    NonexistentLocalTimeError,
     RecurrenceKind,
     RecurrenceRule,
     RecurringEventTemplate,
@@ -187,9 +193,42 @@ async def test_bulk_partial_conflict_keeps_subsequent_successes() -> None:
             AsyncMock(),
         )
     assert len(result.results) == 2
-    assert result.results[0].error == "belegt"
+    assert result.results[0].error == "OCCURRENCE_CONFLICT"
     assert result.results[1].planning_slot_id == expected.planning_slot_id
     assert service.accept.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure", "expected_code"),
+    [
+        (StaleTemplateError("sensitive revision details"), "STALE_TEMPLATE"),
+        (OccurrenceConflictError("sensitive slot details"), "OCCURRENCE_CONFLICT"),
+        (InvalidOccurrenceError("sensitive template details"), "INVALID_OCCURRENCE"),
+        (AmbiguousLocalTimeError("sensitive timing details"), "AMBIGUOUS_LOCAL_TIME"),
+        (NonexistentLocalTimeError("sensitive timing details"), "NONEXISTENT_LOCAL_TIME"),
+        (ValueError("internal sensitive details"), "INVALID_INPUT"),
+    ],
+)
+async def test_bulk_errors_use_stable_codes_without_exposing_exception_text(
+    failure: ValueError, expected_code: str,
+) -> None:
+    entry = _template()
+    service = AsyncMock()
+    service.accept.side_effect = failure
+    with (
+        patch.object(r, "_mutable_entry", AsyncMock(return_value=entry)),
+        patch.object(r, "_service", return_value=service),
+    ):
+        response = await r.bulk_accept_recurring_occurrences(
+            entry.district_id, BulkOccurrenceAcceptRequest(items=[_action(entry)]),
+            _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id),
+            AsyncMock(),
+        )
+    assert response.results[0].status is None
+    assert response.results[0].error == expected_code
+    assert "sensitive" not in response.model_dump_json()
+    assert "internal" not in response.model_dump_json()
 
 
 @pytest.mark.asyncio
