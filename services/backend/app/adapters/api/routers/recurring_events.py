@@ -54,6 +54,8 @@ from app.domain.models.recurring_event_template import (
     RecurringEventTemplate,
 )
 
+MAX_CHECKLIST_TEMPLATES = 500
+
 router = APIRouter(prefix="/api/v1/districts/{district_id}", tags=["recurring-events"])
 
 
@@ -271,22 +273,20 @@ async def list_recurring_checklist(
     await _validate_congregation(session, district_id, congregation_id)
     if congregation_id is not None and allowed is not None and congregation_id not in allowed:
         raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Gemeinde.")
-    entries = [
-        entry for entry in await _repository(session).list_templates(district_id)
-        if _visible(auth, entry)
-    ]
-    if congregation_id is not None:
-        entries = [
-            entry for entry in entries
-            if entry.congregation_id == congregation_id
-            or (
-                entry.congregation_id is None
-                and (
-                    "all" in entry.applicability
-                    or str(congregation_id) in entry.applicability
-                )
-            )
-        ]
+    # Limit the complete authorized set before in-memory monthly recurrence expansion.
+    # An explicitly chosen congregation also narrows district-wide readers.
+    filter_scope = {congregation_id} if congregation_id is not None else allowed
+    entries, template_total = await _repository(session).list_visible_templates_page(
+        district_id,
+        visible_congregation_ids=filter_scope,
+        limit=MAX_CHECKLIST_TEMPLATES + 1,
+        offset=0,
+    )
+    if template_total > MAX_CHECKLIST_TEMPLATES:
+        raise HTTPException(
+            status_code=413,
+            detail="Zu viele Vorlagen für eine Monatsvorschau. Bitte Gemeinde eingrenzen.",
+        )
     page = await _service(session).list_month(
         district_id, year, month, templates=entries, query=q, category=category,
         status_filter=approval_status, limit=limit, offset=offset,

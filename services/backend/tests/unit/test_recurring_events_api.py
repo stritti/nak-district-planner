@@ -409,7 +409,7 @@ async def test_create_template_persists_valid_district_template() -> None:
 async def test_checklist_passes_filters_and_pagination_to_service() -> None:
     entry = _template(congregation_id=uuid.uuid4())
     repo = AsyncMock()
-    repo.list_templates.return_value = [entry]
+    repo.list_visible_templates_page.return_value = ([entry], 1)
     service = AsyncMock()
     service.list_month.return_value = SimpleNamespace(
         items=[], total=0, limit=5, offset=10, counts={"OPEN": 0},
@@ -434,13 +434,19 @@ async def test_checklist_passes_filters_and_pagination_to_service() -> None:
     assert kwargs["status_filter"] is r.ChecklistStatus.OPEN
     assert kwargs["limit"] == 5
     assert kwargs["offset"] == 10
+    repo.list_visible_templates_page.assert_awaited_once_with(
+        entry.district_id,
+        visible_congregation_ids={entry.congregation_id},
+        limit=501,
+        offset=0,
+    )
 
 
 @pytest.mark.asyncio
 async def test_month_checklist_refuses_unbounded_template_expansion() -> None:
     entry = _template()
     repo = AsyncMock()
-    repo.list_templates.return_value = [entry] * 501
+    repo.list_visible_templates_page.return_value = ([entry] * 501, 501)
     service = AsyncMock()
     with (
         patch.object(r, "_repository", return_value=repo),
@@ -454,6 +460,9 @@ async def test_month_checklist_refuses_unbounded_template_expansion() -> None:
             )
     assert error.value.status_code == 413
     service.list_month.assert_not_awaited()
+    repo.list_visible_templates_page.assert_awaited_once_with(
+        entry.district_id, visible_congregation_ids=None, limit=501, offset=0,
+    )
 
 
 @pytest.mark.asyncio

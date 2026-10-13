@@ -79,6 +79,8 @@ Für Teilfehler bei `bulk-accept` enthält jedes Item statt eines rohen Exceptio
 
 Die Vorlagenliste unterstützt `limit` (1 bis 100, Standard 50) und `offset` (ab 0) und liefert `total`, `limit` und `offset`. Gemeinde-Sichtbarkeit und Bezirkszugehörigkeit werden in der SQL-Abfrage vor `LIMIT/OFFSET` ausgewertet. Die Oberfläche navigiert seitenweise statt sämtliche Vorlagen gleichzeitig zu laden.
 
+Die Monatscheckliste lädt höchstens 500 berechtigte Vorlagen für eine Vorschau. Scope- und optionaler Gemeindefilter werden vor diesem Limit in PostgreSQL angewendet. Größere Mengen antworten mit HTTP 413 und verlangen eine gezieltere Gemeindeauswahl; niemals wird eine abgeschnittene Teilmenge als vollständiger Monat ausgegeben.
+
 ### 7. API-Kontrakt (Planungsentwurf)
 
 - GET/POST /api/v1/districts/{district_id}/recurring-event-templates
