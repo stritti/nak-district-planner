@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.session import _set_tenant_gucs
-from app.application.tasks import (
+from app.adapters.worker.tasks import (
     _delete_expired_drafts,
     _run_as_system_worker,
     _unreleased_retention_statement,

@@ -15,8 +15,8 @@ import httpx
 import pytest
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector
-from app.adapters.calendar.ical_events import content_hash as _content_hash
 from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 
 CREDS_BASIC = {"url": "https://caldav.example.com/cal/", "username": "user", "password": "pass"}
 CREDS_BEARER = {"url": "https://caldav.example.com/cal/", "access_token": "tok"}
@@ -262,7 +262,7 @@ class TestFetchEvents:
         assert ev.end_at == datetime(2026, 3, 1, 12, tzinfo=UTC)
         assert ev.description == "Sonntagsgottesdienst"
         assert ev.is_cancelled is False
-        assert len(ev.content_hash) == 64
+        assert ev.revision_marker is not None
 
     async def test_bearer_token_auth(self):
         connector = CalDAVConnector(client=_mock_xml_response(MULTISTATUS_WITH_EVENTS))

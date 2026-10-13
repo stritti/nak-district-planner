@@ -13,7 +13,6 @@ expansion library applies), otherwise to the configured district timezone.
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, date, datetime, timedelta
 from typing import NamedTuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -59,10 +58,6 @@ def to_utc(value, tz: ZoneInfo | None = None) -> datetime:
         raw = raw.replace(tzinfo=tz or _local_zone())
     return raw.astimezone(UTC)
 
-
-def content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:
-    payload = f"{uid}|{start_at.isoformat()}|{end_at.isoformat()}|{title}"
-    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _recurring_uids(calendar: Calendar) -> set[str]:
@@ -162,7 +157,6 @@ def _raw_event(component, key: str, tz: ZoneInfo, **extra) -> RawCalendarEvent:
         start_at=start_at,
         end_at=end_at,
         description=str(description).strip() if description else None,
-        content_hash=content_hash(key, start_at, end_at, title),
         is_cancelled=str(component.get("STATUS", "")).upper() == "CANCELLED",
         **extra,
     )

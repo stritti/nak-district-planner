@@ -34,7 +34,6 @@ def candidate() -> ExternalEventCandidate:
         start_at=datetime(2026, 6, 1, 10, tzinfo=UTC),
         end_at=datetime(2026, 6, 1, 11, tzinfo=UTC),
         description="Details",
-        content_hash="provider-hash",
         is_cancelled=False,
     )
     return ExternalEventCandidate.create(
@@ -180,7 +179,6 @@ def test_refresh_updates_data_without_implicit_status_transition():
         start_at=item.start_at,
         end_at=item.end_at,
         description="Neu",
-        content_hash="ignored",
         is_cancelled=True,
     )
 

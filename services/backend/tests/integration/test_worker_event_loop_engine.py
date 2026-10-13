@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.db import session as session_module
 from app.adapters.db.session import AuditedSession, _set_tenant_gucs
-from app.application.tasks import _run_as_system_worker
+from app.adapters.worker.tasks import _run_as_system_worker
 
 
 def test_consecutive_asyncio_run_task_bodies_reuse_module_engine(monkeypatch) -> None:

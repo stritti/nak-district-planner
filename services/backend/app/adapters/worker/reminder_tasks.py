@@ -14,8 +14,8 @@ from app.celery_app import celery
 def check_due_reminders() -> dict[str, int]:
     from app.adapters.db.session import AsyncSessionLocal
     from app.adapters.mail import create_mail_service
+    from app.adapters.worker.tasks import _run_as_system_worker
     from app.application.reminder_service import dispatch_reminders
-    from app.application.tasks import _run_as_system_worker
 
     async def _run() -> dict[str, int]:
         async with AsyncSessionLocal() as session:

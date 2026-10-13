@@ -3,7 +3,12 @@
 
 <template>
   <Teleport to="body">
-    <Transition name="dialog">
+    <Transition
+      enter-active-class="transition-opacity duration-200 ease-out [&>div:last-child]:transition-[transform,opacity] [&>div:last-child]:duration-200"
+      enter-from-class="opacity-0 [&>div:last-child]:scale-95 [&>div:last-child]:opacity-0"
+      leave-active-class="transition-opacity duration-150 ease-in [&>div:last-child]:transition-[transform,opacity] [&>div:last-child]:duration-150"
+      leave-to-class="opacity-0 [&>div:last-child]:scale-95 [&>div:last-child]:opacity-0"
+    >
       <div
         v-if="open"
         class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm"
@@ -171,29 +176,3 @@ function onCancel() {
 }
 </script>
 
-<style scoped>
-.dialog-enter-active {
-  transition: opacity 0.2s ease-out;
-}
-.dialog-enter-active > div:last-child {
-  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
-}
-.dialog-leave-active {
-  transition: opacity 0.15s ease-in;
-}
-.dialog-leave-active > div:last-child {
-  transition: transform 0.15s ease-in, opacity 0.15s ease-in;
-}
-.dialog-enter-from,
-.dialog-leave-to {
-  opacity: 0;
-}
-.dialog-enter-from > div:last-child {
-  transform: scale(0.95);
-  opacity: 0;
-}
-.dialog-leave-to > div:last-child {
-  transform: scale(0.95);
-  opacity: 0;
-}
-</style>

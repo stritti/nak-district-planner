@@ -793,8 +793,6 @@ async def generate_planning_series_slots(
         series_repo=series_repo,
         slot_repo=slot_repo,
         instance_repo=instance_repo,
-        district_repo=district_repo,
-        congregation_repo=congregation_repo,
     )
     result = await generator.run_for_window(
         from_date=from_dt.date(),

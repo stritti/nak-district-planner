@@ -11,7 +11,6 @@ Credentials format: {"access_token": "EwBgA8l6BAAUE..."}
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -22,12 +21,6 @@ from app.adapters.calendar.deletion import delete_resource
 from app.adapters.calendar.http_policy import resilient_request
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
-
-
-def _content_hash(uid: str, start_at: datetime, end_at: datetime, title: str) -> str:
-    payload = f"{uid}|{start_at.isoformat()}|{end_at.isoformat()}|{title}"
-    return hashlib.sha256(payload.encode()).hexdigest()
-
 
 _MAX_PAGES = 100
 
@@ -138,7 +131,6 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
                     start_at=start_at,
                     end_at=end_at,
                     description=description,
-                    content_hash=_content_hash(uid, start_at, end_at, title),
                     is_cancelled=is_cancelled,
                     revision_marker=item.get("changeKey"),
                     resource_id=item.get("id"),

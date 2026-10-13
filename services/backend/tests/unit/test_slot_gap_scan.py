@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application import slot_gap_tasks
+from app.adapters.worker import slot_gap_tasks
 from app.application.slot_gap_scan import ScanSummary, SlotGapScanner
 from app.domain.events import EventType
 from app.domain.models.event_mail_hook import EVENT_PLACEHOLDERS

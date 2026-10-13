@@ -471,68 +471,6 @@ def auto_import_feiertage() -> dict:
     return asyncio.run(_run_as_system_worker(_run()))
 
 
-@celery.task(name="import_feiertage_task")
-def import_feiertage_task(district_id: str, year: int, state_code: str | None = None) -> dict:
-    """Import German public holidays for a district and year.
-
-    Args:
-        district_id: Target district UUID as string.
-        year: Calendar year (e.g. 2026).
-        state_code: 2-letter German state code (e.g. "BY") or None.
-
-    Returns:
-        dict with created/updated/skipped counts.
-    """
-    from app.adapters.db.session import AsyncSessionLocal
-    from app.application.feiertage_service import import_feiertage
-
-    async def _run() -> dict:
-        async with AsyncSessionLocal() as session:
-            result = await import_feiertage(
-                district_id=uuid.UUID(district_id),
-                year=year,
-                state_code=state_code,
-                session=session,
-            )
-            await session.commit()
-            return result
-
-    result = asyncio.run(_run_as_system_worker(_run()))
-    logger.info("import_feiertage_task: district=%s year=%d %s", district_id, year, result)
-    return result
-
-
-@celery.task(name="import_kirchliche_festtage_task")
-def import_kirchliche_festtage_task(district_id: str, year: int) -> dict:
-    """Import NAK kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag,
-    Entschlafenen-Gottesdienste) for a district and year.
-
-    Args:
-        district_id: Target district UUID as string.
-        year: Calendar year (e.g. 2026).
-
-    Returns:
-        dict with created/updated/skipped counts.
-    """
-    from app.adapters.db.session import AsyncSessionLocal
-    from app.application.feiertage_service import import_kirchliche_festtage
-
-    async def _run() -> dict:
-        async with AsyncSessionLocal() as session:
-            result = await import_kirchliche_festtage(
-                district_id=uuid.UUID(district_id),
-                year=year,
-                session=session,
-            )
-            await session.commit()
-            return result
-
-    result = asyncio.run(_run_as_system_worker(_run()))
-    logger.info(
-        "import_kirchliche_festtage_task: district=%s year=%d %s", district_id, year, result
-    )
-    return result
-
 
 @celery.task(name="generate_draft_services_window")
 def generate_draft_services_window() -> dict:
@@ -578,8 +516,6 @@ def generate_planning_series_slots() -> dict:
     Runs daily to keep a rolling 12-month window of generated slots.
     Safe to run repeatedly: skips existing slots by (series_id, date, congregation).
     """
-    from app.adapters.db.repositories.congregation import SqlCongregationRepository
-    from app.adapters.db.repositories.district import SqlDistrictRepository
     from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
     from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
     from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
@@ -597,8 +533,6 @@ def generate_planning_series_slots() -> dict:
                 series_repo=SqlPlanningSeriesRepository(session),
                 slot_repo=SqlPlanningSlotRepository(session),
                 instance_repo=SqlEventInstanceRepository(session),
-                district_repo=SqlDistrictRepository(session),
-                congregation_repo=SqlCongregationRepository(session),
             )
             result = await generator.run()
             await session.commit()
@@ -632,43 +566,3 @@ def check_version() -> dict:
     return {"latest": latest}
 
 
-@celery.task(name="generate_planning_slots")
-def generate_planning_slots() -> dict:
-    """Celery beat task — runs daily at 02:00 Europe/Berlin.
-
-    Generates PlanningSlots from all active PlanningSeries for the next 6-12 months.
-    This ensures that the matrix view always has up-to-date planning data.
-
-    The task:
-    - Processes all active PlanningSeries across all districts
-    - Generates slots for the configured horizon (default: 6 months)
-    - Skips existing slots (idempotent)
-    - Logs results for monitoring
-    """
-    from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
-    from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
-    from app.adapters.db.session import AsyncSessionLocal
-    from app.application.planning_series_service import PlanningSeriesSlotGenerationService
-
-    async def _run() -> dict:
-        async with AsyncSessionLocal() as session:
-            service = PlanningSeriesSlotGenerationService(
-                series_repo=SqlPlanningSeriesRepository(session),
-                slot_repo=SqlPlanningSlotRepository(session),
-                default_horizon_months=6,
-            )
-
-            result = await service.generate_all_slots()
-            await session.commit()
-
-            return result
-
-    result = asyncio.run(_run_as_system_worker(_run()))
-    logger.info(
-        "generate_planning_slots: generated=%d, skipped=%d, series_processed=%d, districts_processed=%d",
-        result.get("generated", 0),
-        result.get("skipped", 0),
-        result.get("series_processed", 0),
-        result.get("districts_processed", 0),
-    )
-    return result

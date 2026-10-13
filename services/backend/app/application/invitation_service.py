@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.api.schemas.invitation import InvitationTargetCreate
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
@@ -28,6 +29,15 @@ from app.domain.models.invitation import (
 )
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 
+
+class InvitationTargetInput(Protocol):
+    """Transport-neutral invitation target validated at the inbound boundary."""
+
+    target_type: InvitationTargetType
+    target_congregation_id: uuid.UUID | None
+    external_target_note: str | None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +45,7 @@ async def create_invitations_for_event(
     session: AsyncSession,
     *,
     source_planning_slot_id: uuid.UUID,
-    targets: list[InvitationTargetCreate],
+    targets: Sequence[InvitationTargetInput],
 ) -> list[CongregationInvitation]:
     """Create invitations for a planning slot and its optional event instance.
 
