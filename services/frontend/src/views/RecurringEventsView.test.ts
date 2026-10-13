@@ -154,6 +154,16 @@ describe('recurring monthly checklist', () => {
     expect(api.acceptRecurringOccurrence).not.toHaveBeenCalled()
   })
 
+  it('uses input styling for typed search and template fields', async () => {
+    const view = await render()
+    expect(view.get('#recurring-search').classes()).toContain('form-input')
+    expect(view.get('#recurring-category').classes()).toContain('form-input')
+    await templatesTab()
+    await click('Vorlage anlegen')
+    expect(view.get('[data-testid="recurring-template-form"] input[maxlength="500"]').classes())
+      .toContain('form-input')
+  })
+
   it('uses server-side search, category, organization and status filters', async () => {
     const view = await render()
     await view.get('#recurring-search').setValue('Chor')
