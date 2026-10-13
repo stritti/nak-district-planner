@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
@@ -35,6 +36,14 @@ from app.domain.models.role import Role
 router = APIRouter(prefix="/api/v1/districts/{district_id}/leaders", tags=["leaders"])
 
 
+def _leader_revision(leader: Leader) -> str:
+    """Opaque strong validator for a leader record."""
+    timestamp = leader.updated_at
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    return '"' + str(leader.id) + ':' + timestamp.isoformat(timespec="microseconds") + '"'
+
+
 def _leader_response(leader: Leader) -> LeaderResponse:
     return LeaderResponse(
         id=leader.id,
@@ -50,6 +59,7 @@ def _leader_response(leader: Leader) -> LeaderResponse:
         is_active=leader.is_active,
         created_at=leader.created_at,
         updated_at=leader.updated_at,
+        revision=_leader_revision(leader),
     )
 
 
@@ -105,14 +115,17 @@ async def update_leader(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> LeaderResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
     repo = leaders_repo
-    leader = await repo.get(leader_id)
+    leader = await (repo.get_for_update(leader_id) if if_match is not None else repo.get(leader_id))
     if not leader or leader.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
+    if if_match is not None and if_match != _leader_revision(leader):
+        raise HTTPException(status_code=412, detail="Datensatz wurde zwischenzeitlich geändert.")
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
         leader.name = body.name
@@ -133,9 +146,35 @@ async def update_leader(
         leader.notes = body.notes
     if "is_active" in fields and body.is_active is not None:
         leader.is_active = body.is_active
-    leader.updated_at = datetime.now(UTC)
+    timestamp = leader.updated_at
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    leader.updated_at = max(datetime.now(UTC), timestamp + timedelta(microseconds=1))
     await repo.save(leader)
     return _leader_response(leader)
+
+
+@router.patch("/{leader_id}/inline", response_model=LeaderResponse)
+async def inline_update_leader(
+    district_id: uuid.UUID,
+    leader_id: uuid.UUID,
+    body: LeaderUpdate,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+) -> LeaderResponse:
+    """Only non-workflow contact/name fields support inline updates."""
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    fields = body.model_fields_set
+    if not fields or not fields.issubset({"name", "email", "phone"}) or (
+        "name" in fields and body.name is None
+    ):
+        raise HTTPException(status_code=422, detail="Dieses Feld ist nicht inline editierbar.")
+    return await update_leader(
+        district_id, leader_id, body, auth, db, leaders_repo=leaders_repo, if_match=if_match,
+    )
 
 
 @router.post("/link-self", response_model=LeaderSelfLinkResponse)
