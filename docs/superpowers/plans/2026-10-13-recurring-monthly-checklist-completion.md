@@ -62,3 +62,10 @@
 - [ ] Verify PUBLIC ICS requires CONFIRMED and existing generator behavior remains unchanged.
 - [ ] Run strict OpenSpec validation, Ruff, pytest with coverage, Vitest, browser tests, migration roundtrip, security and all workflows.
 - [ ] Mark only evidenced OpenSpec tasks complete, request final code review and make PR ready only after verification.
+
+## Execution notes
+
+- Added regression tests for stable bulk error codes and authorized template pagination.
+- Added stable bulk error-code mapping and localized UI responses.
+- Added paginated template endpoint: SQL membership filters are applied before LIMIT/OFFSET; template management navigates results.
+- GitHub Actions and feature integration verification are pending; this note is not a completion claim.
