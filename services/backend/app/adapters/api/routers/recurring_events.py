@@ -15,12 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
-from app.adapters.api.recurring_event_policy import (
-    _is_congregation_admin,
-    _require_read,
-    _require_write,
-    _visible,
-)
+from app.adapters.api.recurring_event_policy import _require_read, _require_write
 from app.adapters.api.schemas.recurring_events import (
     BulkOccurrenceAcceptRequest,
     BulkOccurrenceResponse,
