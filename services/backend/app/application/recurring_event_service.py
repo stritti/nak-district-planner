@@ -16,20 +16,6 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from typing import Protocol
 
-from app.domain.ports.repositories import EventInstanceRepository, PlanningSlotRepository
-
-
-class RecurringEventRepositoryPort(Protocol):
-    async def list_decisions(self, district_id: uuid.UUID, from_date: date, to_date: date) -> list[RecurringEventDecision]: ...
-    async def get_template(self, template_id: uuid.UUID, *, for_update: bool = False) -> RecurringEventTemplate | None: ...
-    async def get_decision(self, template_id: uuid.UUID, occurrence_date: date, *, for_update: bool = False) -> RecurringEventDecision | None: ...
-    async def save_decision(self, decision: RecurringEventDecision) -> None: ...
-    async def delete_decision(self, decision_id: uuid.UUID) -> None: ...
-    async def find_slot_decision(self, slot_id: uuid.UUID) -> RecurringEventDecision | None: ...
-
-class TransactionPort(Protocol):
-    def begin_nested(self) -> AbstractAsyncContextManager[None]: ...
-
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
@@ -47,6 +33,45 @@ from app.domain.models.recurring_event_template import (
     local_start_utc,
     project_checklist_status,
 )
+
+
+from app.domain.ports.repositories import EventInstanceRepository, PlanningSlotRepository
+
+
+class RecurringEventRepositoryPort(Protocol):
+    """Persistence operations required by recurring-event commands."""
+
+    async def list_decisions(
+        self, district_id: uuid.UUID, from_date: date, to_date: date,
+    ) -> list[RecurringEventDecision]:
+        """Return decisions within the district and date range."""
+
+    async def get_template(
+        self, template_id: uuid.UUID, *, for_update: bool = False,
+    ) -> RecurringEventTemplate | None:
+        """Return a template, optionally locking it for a command."""
+
+    async def get_decision(
+        self, template_id: uuid.UUID, occurrence_date: date, *,
+        for_update: bool = False,
+    ) -> RecurringEventDecision | None:
+        """Return an occurrence decision, optionally locking it."""
+
+    async def save_decision(self, decision: RecurringEventDecision) -> None:
+        """Persist an occurrence decision."""
+
+    async def delete_decision(self, decision_id: uuid.UUID) -> None:
+        """Delete an explicitly reopened decision."""
+
+    async def find_slot_decision(self, slot_id: uuid.UUID) -> RecurringEventDecision | None:
+        """Return the decision linked to a planning slot."""
+
+
+class TransactionPort(Protocol):
+    """Savepoint boundary owned by the calling request."""
+
+    def begin_nested(self) -> AbstractAsyncContextManager[None]:
+        """Create an asynchronous savepoint context."""
 
 
 class OccurrenceConflictError(ValueError):
