@@ -33,8 +33,6 @@ from app.domain.models.recurring_event_template import (
     local_start_utc,
     project_checklist_status,
 )
-
-
 from app.domain.ports.repositories import EventInstanceRepository, PlanningSlotRepository
 
 
