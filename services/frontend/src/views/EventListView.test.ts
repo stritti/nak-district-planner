@@ -76,6 +76,7 @@ const event = (overrides: Partial<eventsApi.EventResponse> = {}): eventsApi.Even
   sync_state: 'CLEAN',
   created_at: now,
   updated_at: now,
+  revision: '"revision-1"',
   ...overrides,
 })
 
@@ -508,5 +509,48 @@ describe('Create event district selection', () => {
     expect((wrapper.get('#new-event-congregation').element as HTMLSelectElement).value).toBe('')
     expect(wrapper.find('#new-event-congregation').text()).toContain('Gemeinde Drei')
     wrapper.unmount()
+  })
+})
+
+describe('Inline editing in the event overview', () => {
+  it('sends the title with its original revision and refreshes canonical data', async () => {
+    vi.mocked(eventsApi.updateEventInline).mockResolvedValue(event({ title: 'Geändert' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-title-desktop-e1"]')
+    expect(cell.find('input').exists()).toBe(false)
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('input').setValue('Geändert')
+    await cell.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(eventsApi.updateEventInline).toHaveBeenCalledWith('e1', { title: 'Geändert' }, '"revision-1"')
+    expect(eventsApi.listEvents).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not edit external events, cancelled events or missing-version rows', async () => {
+    const { wrapper } = setup([
+      event({ id: 'external', source: 'EXTERNAL' }),
+      event({ id: 'cancelled', status: 'CANCELLED' }),
+      event({ id: 'no-version', revision: undefined }),
+    ])
+    await flushPromises()
+    for (const id of ['external', 'cancelled', 'no-version']) {
+      const cell = wrapper.get('[data-inline-cell-id="event-title-desktop-' + id + '"]')
+      await cell.trigger('click')
+      expect(cell.find('input').exists()).toBe(false)
+    }
+    expect(eventsApi.updateEventInline).not.toHaveBeenCalled()
+  })
+
+  it('denies editing when district membership is absent', async () => {
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    useAuthStore().memberships = []
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-title-desktop-e1"]')
+    await cell.trigger('click')
+    expect(cell.find('input').exists()).toBe(false)
+    expect(eventsApi.updateEventInline).not.toHaveBeenCalled()
   })
 })
