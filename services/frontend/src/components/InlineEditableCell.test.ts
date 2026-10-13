@@ -73,6 +73,17 @@ describe('InlineEditableCell', () => {
     expect(save).toHaveBeenCalledWith('Neu', '"rev-1"')
   })
 
+  it.each([false, true])('saves with Tab, including backward navigation (shift=%s)', async (shiftKey) => {
+    const { wrapper, save } = setup()
+    await open(wrapper)
+    await wrapper.get('input').setValue('Tab input')
+    await wrapper.get('input').trigger('keydown', { key: 'Tab', shiftKey })
+    await flushPromises()
+    expect(save).toHaveBeenCalledOnce()
+    expect(wrapper.find('input').exists()).toBe(false)
+    expect(wrapper.element).toBe(document.activeElement)
+  })
+
   it('never persists unchanged data', async () => {
     const { wrapper, save } = setup()
     await open(wrapper)
