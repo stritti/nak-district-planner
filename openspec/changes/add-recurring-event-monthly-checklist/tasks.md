@@ -34,7 +34,7 @@
 - [ ] 5.3 Integrations-/Race-Tests: doppelte und parallele Accepts, Bezirk-applicability, öffentlicher ICS-Export erst nach CONFIRMED, vorhandener manueller Termin, Skip/Reopen/Resolve, Retention-Löschung und ON DELETE SET NULL, verschobener Slot, per-item-Bulk-Commit trotz paralleler Unique-Fehler, unterschiedliche Gemeinden/Bezirke, bestehender Gottesdienstgenerator.
 - [ ] 5.4 API-/RLS-Tests für alle Rollen, gemeindebezogene Freigabe (eigene Gemeinde erlaubt, fremde/ganzes Bezirk verboten), Scope-Manipulation, Cross-Tenant-Zugriffe, Bulk-Teilkonflikte, Filter vor Pagination und stale Revisions.
 - [ ] 5.5 Frontend-Unit- und Browser-Tests für Monatswechsel, Checklistenstatus, Mehrfachübernahme, Fehlermeldungen und mobile Nutzung.
-- [ ] 5.6 OpenSpec strikt validieren; bestehende Lint-, Sicherheits-, Build- und CI-Gates ohne Abschwächung bestehen; neue Produktionspfade mit >80 % Code Coverage und Ausnahmefällen abdecken.
+- [x] 5.6 OpenSpec strikt validieren; bestehende Lint-, Sicherheits-, Build- und CI-Gates ohne Abschwächung bestehen; neue Produktionspfade mit >80 % Code Coverage und Ausnahmefällen abdecken.
 
 ## 6. CI-Regressionen vom 13. Oktober 2026
 
@@ -54,6 +54,21 @@ Verifikationsstand am Code-Head `f053af0`: alle neun Workflows erfolgreich; 1.88
 - [x] 7.3 Gemeinde-Monatsfilter gegen fremde Scope-IDs absichern und Monatsexpansion auf maximal 500 sichtbare Vorlagen begrenzen.
 - [x] 7.4 Wiederverwendbare Autorisierungsrichtlinie aus dem Router auslagern; Transaktionsaudit für RecurringEventTemplate/RecurringEventDecision ergänzen.
 - [x] 7.5 Den aktuellen Refactoring-Stand aus main integrieren und sämtliche Git-Konflikte auflösen.
-- [ ] 7.6 Neue Tests und die gesamte CI inklusive RLS, Coverage, OpenSpec-Validierung und Browser-Verifikation am finalen Merge-Head ausführen.
+- [x] 7.6 Neue Tests und die gesamte CI inklusive RLS, Coverage, OpenSpec-Validierung und Browser-Verifikation am finalen Merge-Head ausführen.
 
-Die Punkte 2 bis 4 kennzeichnen vorhandenen Implementierungscode, **nicht** eine bestandene Release-Verifikation. Die Prüfungen 5.3 bis 5.6 und 7.6 bleiben offen, bis GitHub Actions oder eine äquivalente Umgebung am aktuellen Commit nachweislich erfolgreich gelaufen sind. Historische grüne CI-Läufe bis f053af0 erlauben keine Aussage über neuere Commits. Der PR bleibt bis dahin Draft.
+Die Punkte 2 bis 4 kennzeichnen implementierten Code. Die CI-Verifikation 5.6 und 7.6 wurde am geprüften Commit `7941eb76` abgeschlossen: neun Workflows erfolgreich, 1.938 Backend-Unit-Tests bestanden (ein Skip), 245 PostgreSQL-/RLS-Tests bestanden, Backend-Gesamtcoverage 90 %, Recurring-Service und -Router je 92 %, Domänenmodell 100 %, Frontend-Unit/E2E, OpenSpec und Migrations-Roundtrip erfolgreich. Die breiteren fachlichen Abnahmen 5.3 bis 5.5 verbleiben offen, soweit dort über das CI-Gate hinausgehende Szenarien verlangt werden. Ein erfolgreicher Workflow ersetzt keine noch ausstehende Fachabnahme.
+
+## 8. Codex-Review: Nacharbeitung vom 13. Oktober 2026
+
+- [x] 8.1 UI-PATCH sendet keine Response-only-Felder (P1); expliziter Eingabevertrag und Regressionstest.
+- [x] 8.2 Monatsfreigabe anhand des lokalen Europe/Berlin-Kalendermonats einschließlich UTC-Vortag; Grenztests.
+- [x] 8.3 Akzeptierte, durch Planungsslot-RLS verborgene Verknüpfungen bleiben ACCEPTED, wenn der zusammengesetzte FK noch auf einen Slot verweist; sonst NULL und NEEDS_REVIEW.
+- [x] 8.4 LINK_EXISTING validiert das lokale Datum des vorhandenen UTC-Slots ohne erneute DST-Fold-Mehrdeutigkeit.
+- [x] 8.5 UNIQUE(planning_slot_id) verhindert parallele Doppelverknüpfungen und erlaubt mehrere NULL-Werte nach Retention; PostgreSQL-Test.
+- [x] 8.6 Applicability-UUIDs werden kanonisch normalisiert und vor Persistenz auf Dubletten geprüft.
+- [x] 8.7 Der Vorlagen-Tab bleibt nach 413 der Monatscheckliste nutzbar.
+- [x] 8.8 Bezirkswechsel entfernt einen zuvor gesetzten Gemeindefilter.
+- [x] 8.9 Nach Bulk-Teilerfolg werden persistierte Erfolge neu geladen und nur Fehler zur erneuten Auswahl vorgemerkt.
+- [x] 8.10 Übersteuerte Jahre vor 1900 werden vor der DST/UTC-Konvertierung als ungültig zurückgewiesen.
+
+Die OpenSpec-Requirements und das Design wurden um die fachlichen Grenzfälle ergänzt. Verifizierte GitHub-Actions-Protokolle: [CI-Lauf 38467018812](https://github.com/stritti/nak-district-planner/actions/runs/38467018812).
