@@ -51,6 +51,7 @@ export interface LeaderResponse {
   is_active: boolean
   created_at: string
   updated_at: string
+  revision?: string
 }
 
 export interface LeaderSelfLinkResponse {
@@ -98,6 +99,21 @@ export function updateLeader(
 ): Promise<LeaderResponse> {
   return apiFetch<LeaderResponse>(`/api/v1/districts/${districtId}/leaders/${leaderId}`, {
     method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+/** Scoped scalar edits require the original server-issued strong revision. */
+export function updateLeaderInline(
+  districtId: string,
+  leaderId: string,
+  body: Pick<LeaderUpdate, 'name' | 'email' | 'phone'>,
+  revision: string,
+): Promise<LeaderResponse> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+  return apiFetch<LeaderResponse>(`/api/v1/districts/${districtId}/leaders/${leaderId}/inline`, {
+    method: 'PATCH',
+    headers: { 'If-Match': revision },
     body: JSON.stringify(body),
   })
 }
