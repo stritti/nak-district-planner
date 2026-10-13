@@ -111,23 +111,35 @@ def _dependency_calls(dependant: Dependant) -> Iterator[Callable[..., Any]]:
 
 
 def _guards_reachable_from(module: ModuleType, function_name: str) -> frozenset[str]:
-    functions = _module_functions(module)
+    """Find RBAC checks through local and explicitly imported API-policy helpers."""
     found: set[str] = set()
-    pending = [function_name]
-    visited: set[str] = set()
+    pending = [(module, function_name)]
+    visited: set[tuple[str, str]] = set()
     while pending:
-        name = pending.pop()
-        if name in visited or name not in functions:
+        source_module, name = pending.pop()
+        key = source_module.__name__, name
+        if key in visited:
             continue
-        visited.add(name)
-        for node in ast.walk(functions[name]):
+        visited.add(key)
+        function = _module_functions(source_module).get(name)
+        if function is None:
+            continue
+        for node in ast.walk(function):
             if isinstance(node, ast.Attribute) and node.attr == SUPERADMIN_ATTRIBUTE:
                 found.add(SUPERADMIN_ATTRIBUTE)
             elif isinstance(node, ast.Call) and (called := _called_name(node)):
                 if called in GUARD_FUNCTIONS:
                     found.add(called)
+                elif called in _module_functions(source_module):
+                    pending.append((source_module, called))
                 else:
-                    pending.append(called)
+                    helper = getattr(source_module, called, None)
+                    helper_module = inspect.getmodule(helper) if inspect.isfunction(helper) else None
+                    if helper_module is not None and (
+                        helper_module.__name__.startswith("app.adapters.api.")
+                        or helper_module.__package__ == source_module.__package__
+                    ):
+                        pending.append((helper_module, helper.__name__))
     return frozenset(found)
 
 
