@@ -161,7 +161,7 @@ async function onEditorKeydown(event: KeyboardEvent): Promise<void> {
     event.stopPropagation()
     const direction = event.shiftKey ? -1 : 1
     // Only navigate inside the same visible representation (table or mobile cards).
-    const scope = root.value?.closest('[data-inline-edit-scope]')
+    const scope = root.value?.closest('[data-inline-edit-scope]') ?? root.value?.closest('.card')
     const cells = Array.from(scope?.querySelectorAll<HTMLElement>('[data-inline-editable="true"]') ?? [])
       .filter((cell) => cell.getClientRects().length > 0)
     const index = cells.indexOf(root.value as HTMLElement)
