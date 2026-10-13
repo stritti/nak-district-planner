@@ -34,6 +34,10 @@ from sqlalchemy.orm.util import identity_key
 from app.adapters.db.orm_models.audit_log import AuditAction, AuditLogORM, AuditStatus
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
+from app.adapters.db.orm_models.recurring_event import (
+    RecurringEventDecisionORM,
+    RecurringEventTemplateORM,
+)
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.tenant import TenantContext
@@ -64,6 +68,20 @@ def _planning_slot_tenant(session: Session, row: ServiceAssignmentORM) -> Tenant
     )
     tenant = found.first()
     return (tenant.district_id, tenant.congregation_id) if tenant else (None, None)
+
+
+def _recurring_decision_tenant(session: Session, row: RecurringEventDecisionORM) -> Tenant:
+    """Resolve the congregation of a decision from its template for RLS audit writes."""
+    template = session.identity_map.get(identity_key(RecurringEventTemplateORM, row.template_id))
+    if template is not None:
+        return row.district_id, template.congregation_id
+    found = session.connection().execute(
+        select(RecurringEventTemplateORM.congregation_id).where(
+            RecurringEventTemplateORM.id == row.template_id,
+            RecurringEventTemplateORM.district_id == row.district_id,
+        )
+    ).first()
+    return row.district_id, found.congregation_id if found else None
 
 
 @dataclass(frozen=True)
@@ -116,6 +134,20 @@ AUDITED_RESOURCES: dict[type, AuditedResource] = {
         ("label", "token_type", "congregation_id", "leader_id"),
         _own_tenant,
         redacted=("token",),
+    ),
+    RecurringEventTemplateORM: AuditedResource(
+        "recurring_event_template",
+        (
+            "title", "category", "description", "recurrence",
+            "start_time", "duration_minutes", "applicability", "excluded_dates",
+            "active_from", "active_until", "is_active", "revision", "congregation_id",
+        ),
+        _own_tenant,
+    ),
+    RecurringEventDecisionORM: AuditedResource(
+        "recurring_event_decision",
+        ("template_id", "occurrence_local_date", "status", "planning_slot_id"),
+        _recurring_decision_tenant,
     ),
 }
 
