@@ -326,8 +326,10 @@ async def list_recurring_checklist(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> ChecklistResponse:
-    await _require_read(auth, district_id, session)
+    allowed = await _require_read(auth, district_id, session)
     await _validate_congregation(session, district_id, congregation_id)
+    if congregation_id is not None and allowed is not None and congregation_id not in allowed:
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Gemeinde.")
     entries = [
         entry for entry in await _repository(session).list_templates(district_id)
         if _visible(auth, entry)
