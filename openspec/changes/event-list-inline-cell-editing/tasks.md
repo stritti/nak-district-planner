@@ -1,5 +1,5 @@
 ## 1. Specification and integration
-- [ ] 1.1 Inventory event overview columns, actual writable API fields and special workflow actions; record explicit editable field mapping.
+- [x] 1.1 Inventory event overview columns, actual writable API fields and special workflow actions; record explicit editable field mapping.
 - [ ] 1.2 Implement/verify strong ETag `If-Match` (or an existing equivalent explicit server-side version) for every inline mutation, including assignments: 428 missing precondition, 412 stale revision, 409 business conflict; disable editing for endpoints lacking a safe conditional write.
 - [ ] 1.3 Validate OpenSpec delta and align other affected canonical specifications.
 
@@ -17,9 +17,17 @@
 - [ ] 3.4 Run frontend tests, lint, build and OpenSpec validation; maintain >80% coverage with edge-path coverage.
 
 ## 4. Cross-application consistency
-- [ ] 4.1 Inventory every Vue table, overview, list and planning matrix; record each column's editable/read-only/action classification, role and backend mutation endpoint.
-- [ ] 4.2 Extract a reusable Vue inline-cell editor/composable with standard compact display, keyboard/touch activation, focus management, mutation lifecycle and accessible errors.
+- [x] 4.1 Inventory every Vue table, overview, list and planning matrix; record each column's editable/read-only/action classification, role and backend mutation endpoint.
+- [x] 4.2 Extract a reusable Vue inline-cell editor/composable with standard compact display, keyboard/touch activation, focus management, mutation lifecycle and accessible errors.
 - [ ] 4.3 Migrate all eligible mutable table cells throughout the application to the shared interaction; retain domain-specific save adapters and validations.
 - [ ] 4.4 Bring read-only/derived/externally managed and action-only tables into consistent display styling without offering unauthorised edits or bypassing confirmation dialogs.
 - [ ] 4.5 Cover every inventoried table with integration regression tests for editability, authorisation, keyboard operation, async failure/retry and sorting/pagination where applicable.
 - [ ] 4.6 Document any excluded table or column with an explicit reason, and ensure no eligible overview remains on a competing inline-edit interaction.
+
+
+## Implementation progress (PR #576)
+
+A conditional-write adapter and reusable editor are integrated for internal event titles only.
+The full event and cross-application scope remains open: assignment preconditions,
+domain-dependent changes and administrative list updates are not yet covered.
+See [table inventory](./table-inventory.md) for explicit deferred columns and reasons.
