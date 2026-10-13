@@ -101,14 +101,45 @@
                   <span class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
                     {{ leader.rank ?? '—' }}
                   </span>
-                  <p class="font-medium text-gray-800 dark:text-gray-200 break-words min-w-0">{{ leader.name }}</p>
+                  <InlineEditableCell
+                    :id="'leader-name-mobile-' + leader.id"
+                    as="div"
+                    class="font-medium text-gray-800 dark:text-gray-200 break-words min-w-0"
+                    :value="leader.name"
+                    :revision="leader.revision ?? ''"
+                    :label="'Name: ' + leader.name"
+                    :editable="canInlineEditLeader(leader)"
+                    :coordinator="inlineCoordinator"
+                    :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
+                    required
+                    :max-length="255"
+                  />
                 </div>
                 <p v-if="section.congregationId === null" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   {{ congregationName(leader.congregation_id) || '—' }}
                 </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {{ leader.email || '—' }} · {{ leader.phone || '—' }}
-                </p>
+                <div class="mt-0.5 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <InlineEditableCell
+                    :id="'leader-email-mobile-' + leader.id"
+                    as="div"
+                    :value="leader.email"
+                    :revision="leader.revision ?? ''"
+                    :label="'E-Mail: ' + leader.name"
+                    :editable="canInlineEditLeader(leader)"
+                    :coordinator="inlineCoordinator"
+                    :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                  />
+                  <InlineEditableCell
+                    :id="'leader-phone-mobile-' + leader.id"
+                    as="div"
+                    :value="leader.phone"
+                    :revision="leader.revision ?? ''"
+                    :label="'Telefon: ' + leader.name"
+                    :editable="canInlineEditLeader(leader)"
+                    :coordinator="inlineCoordinator"
+                    :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                  />
+                </div>
                 <p v-if="leader.special_role" class="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">Beauftragung: {{ leader.special_role }}</p>
               </div>
               <span
@@ -175,7 +206,18 @@
                     {{ leader.rank ?? '—' }}
                   </span>
                 </td>
-                <td class="table-td py-2 font-medium text-gray-800 dark:text-gray-200">{{ leader.name }}</td>
+                <InlineEditableCell
+                  :id="'leader-name-desktop-' + leader.id"
+                  class="py-2 font-medium text-gray-800 dark:text-gray-200"
+                  :value="leader.name"
+                  :revision="leader.revision ?? ''"
+                  :label="'Name: ' + leader.name"
+                  :editable="canInlineEditLeader(leader)"
+                  :coordinator="inlineCoordinator"
+                  :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
+                  required
+                  :max-length="255"
+                />
                 <td class="px-4 py-2">
                   <span
                     v-if="leader.special_role"
@@ -188,8 +230,26 @@
                 <td v-if="section.congregationId === null" class="table-td py-2">
                   {{ congregationName(leader.congregation_id) || '—' }}
                 </td>
-                <td class="table-td py-2">{{ leader.email || '—' }}</td>
-                <td class="table-td py-2">{{ leader.phone || '—' }}</td>
+                <InlineEditableCell
+                  :id="'leader-email-desktop-' + leader.id"
+                  class="py-2"
+                  :value="leader.email"
+                  :revision="leader.revision ?? ''"
+                  :label="'E-Mail: ' + leader.name"
+                  :editable="canInlineEditLeader(leader)"
+                  :coordinator="inlineCoordinator"
+                  :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                />
+                <InlineEditableCell
+                  :id="'leader-phone-desktop-' + leader.id"
+                  class="py-2"
+                  :value="leader.phone"
+                  :revision="leader.revision ?? ''"
+                  :label="'Telefon: ' + leader.name"
+                  :editable="canInlineEditLeader(leader)"
+                  :coordinator="inlineCoordinator"
+                  :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                />
                 <td class="table-td py-2 text-center">
                   <span
                     class="badge"
@@ -796,6 +856,8 @@ import CopyButton from '../components/CopyButton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
 import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
+import InlineEditableCell from '../components/InlineEditableCell.vue'
+import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import {
   BuildingOffice2Icon,
   CalendarDaysIcon,
@@ -816,6 +878,7 @@ import {
   listLeaders,
   unlinkSelfFromLeader,
   updateLeader,
+  updateLeaderInline,
   LEADER_RANKS,
   SPECIAL_ROLES,
   leaderNameFromId,
@@ -853,6 +916,28 @@ const selectedDistrictId = computed({
 })
 const loading = ref(false)
 const saving = ref(false)
+const inlineCoordinator = useInlineCellCoordinator()
+
+function canInlineEditLeader(leader: LeaderResponse): boolean {
+  return canManageUnavailabilities.value &&
+    leader.district_id === selectedDistrictId.value &&
+    !!leader.revision
+}
+
+async function saveInlineLeader(
+  leader: LeaderResponse,
+  field: 'name' | 'email' | 'phone',
+  value: string,
+  revision: string,
+): Promise<void> {
+  const districtId = leader.district_id
+  await updateLeaderInline(
+    districtId, leader.id, { [field]: value || null }, revision,
+  )
+  // Refresh canonical ordering and all fields, but not a newly selected district.
+  const current = await listLeaders(districtId)
+  if (selectedDistrictId.value === districtId) leaders.value = current
+}
 
 const selfLinkedLeader = ref<LeaderResponse | null>(null)
 const selfSelectedLeaderId = ref('')
