@@ -10,9 +10,11 @@ by Pydantic — the handlers only contain business logic.
 
 from __future__ import annotations
 
+import calendar
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,7 +29,7 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
-from app.adapters.auth.permissions import require_role_in_district
+from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
@@ -633,28 +635,48 @@ async def bulk_update_approval_status(
     session: DbSession,
     district_id: uuid.UUID | None = Query(None),
     slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
 ) -> BulkApprovalStatusResponse:
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="district_id ist erforderlich, außer für Superadmin.",
         )
-    if district_id is not None:
-        require_role_in_district(auth, Role.PLANNER, district_id)
-
-    from_date = date(body.year, body.month, 1)
-    if body.month == 12:
-        to_date = date(body.year + 1, 1, 1) - timedelta(days=1)
+    if body.congregation_id is None:
+        # District-wide publication remains restricted to district planners.
+        if district_id is not None:
+            require_role_in_district(auth, Role.PLANNER, district_id)
     else:
-        to_date = date(body.year, body.month + 1, 1) - timedelta(days=1)
+        # Resolve and authorize the *requested* congregation before reading any
+        # planning slots. A membership for another congregation is insufficient.
+        if district_id is None:
+            raise HTTPException(status_code=400, detail="district_id ist erforderlich.")
+        congregation = await cong_repo.get(body.congregation_id)
+        if congregation is None or congregation.district_id != district_id:
+            raise HTTPException(status_code=403, detail="Gemeinde gehört nicht zum Bezirk.")
+        if not has_role_in_district(auth, Role.PLANNER, district_id):
+            require_role_in_district(
+                auth,
+                Role.CONGREGATION_ADMIN,
+                district_id,
+                congregation_ids_in_district={body.congregation_id},
+            )
 
+    first_local_day = date(body.year, body.month, 1)
+    last_local_day = date(body.year, body.month, calendar.monthrange(body.year, body.month)[1])
+    # Slots use UTC date/time, whereas monthly approval is a local calendar operation.
+    # A 00:30 Berlin event on Dec 1 may occupy Nov 30 in the slot table.
     all_slots = await slot_repo.list_for_date_range(
         district_id=district_id or uuid.UUID(int=0),
-        from_date=from_date,
-        to_date=to_date,
+        from_date=first_local_day - timedelta(days=1),
+        to_date=last_local_day,
     )
-    if body.congregation_id is not None:
-        all_slots = [s for s in all_slots if s.congregation_id == body.congregation_id]
+    berlin = ZoneInfo("Europe/Berlin")
+    all_slots = [
+        slot for slot in all_slots
+        if first_local_day <= _slot_start_at(slot).astimezone(berlin).date() <= last_local_day
+        and (body.congregation_id is None or slot.congregation_id == body.congregation_id)
+    ]
 
     if body.approval_status == EventApprovalStatus.PLANNED and any(slot.was_released for slot in all_slots):
         raise HTTPException(status_code=409, detail="Bereits freigegebene Ereignisse können nicht zurückgestuft werden.")

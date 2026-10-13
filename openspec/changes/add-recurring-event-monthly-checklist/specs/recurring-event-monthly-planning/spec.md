@@ -50,10 +50,22 @@ Das System SHALL WEEKLY (ein oder mehrere ISO-Wochentage mit ganzzahligem Wochen
 - **WHEN** Februar 2027 geöffnet wird
 - **THEN** entsteht kein Vorkommen und kein stillschweigend verschobener Februartermin
 
+#### Scenario: Gemeindeverteilung mit nicht-kanonischer UUID
+- **WHEN** eine gültige Gemeinde-UUID in Großschreibung als applicability übergeben wird
+- **THEN** wird sie in die kanonische UUID-Form überführt, sodass RLS und Gemeindefilter denselben Scope erkennen
+- **AND** mehrere Schreibweisen derselben UUID gelten als Dublette und werden zurückgewiesen
+
 #### Scenario: Zweiwöchentlicher Termin mit Anker
 - **GIVEN** eine Vorlage jeden zweiten Dienstag mit Ankerwoche ab 03.11.2026
 - **WHEN** November einzeln oder November und Dezember zusammen berechnet werden
 - **THEN** stimmen die Novembertermine 03.11. und 17.11. in beiden Berechnungen überein
+
+#### Scenario: Einzelnes Datum aus der Wiederholung ausnehmen
+- **GIVEN** eine wöchentliche Chorprobe an jedem Dienstag mit Ausnahme des 10. und 24.11.2026
+- **WHEN** die November-Checkliste berechnet wird
+- **THEN** sind nur der 03. und 17.11. als neue offene Vorschläge enthalten
+- **AND** im Dezember gelten wieder die unveränderten Wiederholungsregeln
+- **AND** bereits gespeicherte Entscheidungen über inzwischen ausgenommene Termine bleiben als historische Einträge sichtbar
 
 #### Scenario: Sommerzeit
 - **GIVEN** eine Vorlage um 19:30 Uhr Europe/Berlin
@@ -128,6 +140,13 @@ Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter
 - **THEN** speichert der erzeugte PlanningSlot applicability=["all"] unverändert
 - **AND** der Termin ist nach CONFIRMED für alle Gemeinden des Bezirks sichtbar, vorher nicht
 
+#### Scenario: Monatsfreigabe am lokalen Monatswechsel
+- **GIVEN** ein wiederkehrender Termin am 1. Dezember um 00:30 Uhr Europe/Berlin ist als UTC-Slot am 30. November um 23:30 Uhr gespeichert
+- **WHEN** die November-Monatsfreigabe ausgeführt wird
+- **THEN** bleibt dieser Termin PLANNED
+- **WHEN** die Dezember-Monatsfreigabe ausgeführt wird
+- **THEN** wird derselbe Termin CONFIRMED
+
 #### Scenario: Öffentlicher Export nach Freigabe
 - **GIVEN** eine übernommene Chorprobe mit EventInstance.visibility=PUBLIC
 - **WHEN** deren Slot zunächst PLANNED und später CONFIRMED ist
@@ -144,6 +163,12 @@ Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter
 - **WHEN** derselbe Vorschlag übernommen werden soll
 - **THEN** erhält der Benutzer einen Konflikt statt einer automatischen Überschreibung
 - **AND** eine eventuell beabsichtigte Zuordnung zum vorhandenen Slot erfordert eine ausdrückliche Aktion
+
+#### Scenario: Gemischte Ergebnisse einer Mehrfachübernahme
+- **GIVEN** eine Übernahme mit erfolgreichen und kollidierenden Vorkommen
+- **WHEN** die Antwort im Frontend verarbeitet wird
+- **THEN** wird die Checkliste nachgeladen und die erfolgreichen Entscheidungen erscheinen als ACCEPTED
+- **AND** Fehlermeldungen bleiben sichtbar und nur nicht übernommene Vorkommen bleiben ausgewählt
 
 #### Scenario: Auswahl mehrerer Vorschläge
 - **WHEN** drei Vorschläge gemeinsam angenommen werden und einer mit einem vorhandenen Termin kollidiert
@@ -176,6 +201,21 @@ Das System SHALL die Identität eines vorgeschlagenen Vorkommens durch Vorlagen-
 - **WHEN** eine berechtigte Person sie explizit einem anderen passenden, noch nicht verknüpften Slot desselben Scopes zuordnet
 - **THEN** wird die bestehende Entscheidung atomar auf diesen Slot umgebucht und als ACCEPTED angezeigt
 - **AND** der bereits existierende Slot wird nicht überschrieben
+
+#### Scenario: Gemeinde sieht Bezirksentscheidung trotz RLS-verdecktem Slot
+- **GIVEN** die Entscheidung eines Bezirksvorkommens zeigt auf einen gültigen, aber für Gemeindeleser per RLS verborgenen Bezirksslot
+- **WHEN** ein berechtigter Gemeindeleser die Monatscheckliste öffnet
+- **THEN** bleibt der Status ACCEPTED und wird nicht fälschlich als Löschung behandelt
+
+#### Scenario: Gleichzeitige Zuordnung desselben Slots
+- **GIVEN** zwei akzeptierte Entscheidungen ohne Slot-Verweis
+- **WHEN** zwei berechtigte Aufrufe gleichzeitig denselben Slot explizit verknüpfen
+- **THEN** erlaubt der Datenbank-Unique-Constraint nur eine Zuordnung und der konkurrierende Aufruf erhält einen Konflikt
+
+#### Scenario: DST-Fold nach Löschung neu zuordnen
+- **GIVEN** ein zuvor in der doppeldeutigen Oktoberstunde übernommener Termin wurde gelöscht
+- **WHEN** eine berechtigte Person einen passenden existierenden Slot derselben lokalen Vorkommensdatums zuordnet
+- **THEN** kann der vorhandene konkrete UTC-Zeitpunkt verwendet werden, ohne die ursprüngliche Fold-Wahl zu erraten
 
 #### Scenario: Gelöschten Slot nicht automatisch regenerieren
 - **GIVEN** eine ACCEPTED-Entscheidung zeigt NEEDS_REVIEW wegen eines gelöschten Slots
