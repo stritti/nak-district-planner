@@ -96,6 +96,8 @@ function cancel(): void {
 
 function saveError(cause: unknown): string {
   if (cause instanceof ApiError) {
+    const detail = (cause.body as { detail?: unknown } | null)?.detail
+    if (typeof detail === 'string' && detail.trim()) return detail
     if (cause.status === 412) return 'Der Eintrag wurde geändert. Bitte neu laden und vergleichen.'
     if (cause.status === 428) return 'Die Versionsinformation fehlt. Bitte neu laden.'
     if (cause.status === 403) return 'Keine Berechtigung zum Bearbeiten.'
@@ -158,24 +160,20 @@ async function onEditorKeydown(event: KeyboardEvent): Promise<void> {
     event.preventDefault()
     event.stopPropagation()
     const direction = event.shiftKey ? -1 : 1
-    const table = root.value?.closest('table')
-    const cells = Array.from((table ?? root.value?.parentElement)?.querySelectorAll<HTMLElement>('[data-inline-editable="true"]') ?? [])
+    // Only navigate inside the same visible representation (table or mobile cards).
+    const scope = root.value?.closest('[data-inline-edit-scope]') ?? root.value?.closest('.card')
+    const cells = Array.from(scope?.querySelectorAll<HTMLElement>('[data-inline-editable="true"]') ?? [])
+      .filter((cell) => cell.getClientRects().length > 0)
     const index = cells.indexOf(root.value as HTMLElement)
-    const destinationId = event.key === 'Tab' ? cells[index + direction]?.dataset.inlineCellId : undefined
+    const destination = event.key === 'Tab' && index >= 0 ? cells[index + direction] : undefined
     if (!(await commit())) return
     await nextTick()
-    if (!destinationId) {
-      const self = Array.from(document.querySelectorAll<HTMLElement>('[data-inline-cell-id]')).find(
-        (cell) => cell.dataset.inlineCellId === props.id && (!!table === !!cell.closest('table')),
-      )
-      self?.focus()
+    if (!destination) {
+      root.value?.focus()
       return
     }
-    const destination = Array.from(document.querySelectorAll<HTMLElement>('[data-inline-editable="true"]')).find(
-      (cell) => cell.dataset.inlineCellId === destinationId && (!!table === !!cell.closest('table')),
-    )
-    destination?.focus()
-    destination?.click()
+    destination.focus()
+    destination.click()
   }
 }
 

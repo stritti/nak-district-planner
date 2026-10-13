@@ -116,14 +116,71 @@ async def _bulk(body, *, district_id=DISTRICT, slots=None):
         else slots
     )
     session = object()
+    congregation_repo = AsyncMock()
+    congregation_repo.get.return_value = SimpleNamespace(
+        id=body.congregation_id, district_id=district_id
+    )
     with (
         patch.object(events_router, "require_role_in_district"),
         patch.object(events_router, "publish_after_commit") as publish,
     ):
         await events_router.bulk_update_approval_status(
-            body, _auth(superadmin=True), session, district_id, slot_repo
+            body, _auth(superadmin=True), session, district_id, slot_repo, congregation_repo
         )
     return publish
+
+
+@pytest.mark.asyncio
+async def test_bulk_approval_selects_slots_by_berlin_month_across_utc_boundary() -> None:
+    november = PlanningSlot.create(
+        district_id=DISTRICT, planning_date=date(2026, 11, 30), planning_time=time(23, 30),
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    december = PlanningSlot.create(
+        district_id=DISTRICT, planning_date=date(2026, 12, 1), planning_time=time(10),
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    repo = AsyncMock()
+    repo.list_for_date_range.return_value = [november, december]
+    with (
+        patch.object(events_router, "require_role_in_district"),
+        patch.object(events_router, "publish_after_commit"),
+    ):
+        result = await events_router.bulk_update_approval_status(
+            events_router.BulkApprovalStatusRequest(
+                year=2026, month=12, approval_status=EventApprovalStatus.CONFIRMED,
+            ),
+            _auth(superadmin=True), object(), DISTRICT, repo, AsyncMock(),
+        )
+    assert result.updated_count == 2
+    repo.list_for_date_range.assert_awaited_once_with(
+        district_id=DISTRICT,
+        from_date=date(2026, 11, 30),
+        to_date=date(2026, 12, 31),
+    )
+
+
+@pytest.mark.asyncio
+async def test_november_approval_excludes_december_occurrence_on_utc_november_date() -> None:
+    future = PlanningSlot.create(
+        district_id=DISTRICT, planning_date=date(2026, 11, 30), planning_time=time(23, 30),
+        approval_status=EventApprovalStatus.PLANNED,
+    )
+    repo = AsyncMock()
+    repo.list_for_date_range.return_value = [future]
+    with (
+        patch.object(events_router, "require_role_in_district"),
+        patch.object(events_router, "publish_after_commit") as publish,
+    ):
+        result = await events_router.bulk_update_approval_status(
+            events_router.BulkApprovalStatusRequest(
+                year=2026, month=11, approval_status=EventApprovalStatus.CONFIRMED,
+            ),
+            _auth(superadmin=True), object(), DISTRICT, repo, AsyncMock(),
+        )
+    assert result.updated_count == 0
+    repo.save.assert_not_awaited()
+    publish.assert_not_called()
 
 
 class TestPlanFinalized:

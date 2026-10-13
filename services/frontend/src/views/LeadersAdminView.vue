@@ -181,7 +181,7 @@
         <!-- Leaders: desktop table -->
         <div v-if="leadersForSection(section.congregationId).length > 0" class="card overflow-hidden hidden md:block">
           <div class="table-scroll">
-          <table class="table-min-w w-full text-sm">
+          <table data-inline-edit-scope class="table-min-w w-full text-sm">
             <thead class="table-thead">
               <tr>
                 <th class="table-th py-2">Grad</th>
@@ -311,7 +311,7 @@
 
       <div v-else class="border border-gray-200 rounded-lg overflow-hidden">
         <div class="table-scroll">
-        <table class="table-min-w w-full text-sm">
+        <table data-inline-edit-scope class="table-min-w w-full text-sm">
           <thead class="bg-gray-50 text-xs text-gray-500 font-medium">
             <tr>
               <th class="px-4 py-2 text-left">Name</th>
@@ -919,7 +919,9 @@ const saving = ref(false)
 const inlineCoordinator = useInlineCellCoordinator()
 
 function canInlineEditLeader(leader: LeaderResponse): boolean {
-  return canManageUnavailabilities.value &&
+  return (authStore.isSuperadmin || authStore.memberships.some((m) =>
+    m.scope_type === 'DISTRICT' && m.scope_id === selectedDistrictId.value && m.role === 'PLANNER'
+  )) &&
     leader.district_id === selectedDistrictId.value &&
     !!leader.revision
 }

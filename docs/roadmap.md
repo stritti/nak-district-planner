@@ -9,14 +9,14 @@ Diese Seite ist die **einzige aktive produktbezogene Roadmap**. Die verbindliche
 - **Veröffentlicht:** v1.0.0 (10. Oktober 2026).
 - **In `main` integriert, aber nicht automatisch als veröffentlicht zu betrachten:** PR #568 (Kalendersynchronisation), #571 (Rollenvertrag/verschobene Serien) und #573 (technische Konsolidierung).
 - **Release 1.0.1:** [PR #572](https://github.com/stritti/nak-district-planner/pull/572) offen; ein Release-PR ist noch keine veröffentlichte Version.
-- **Implementiert, noch nicht integriert:** [Draft-PR #570](https://github.com/stritti/nak-district-planner/pull/570) (Recurring Events); aktuelle Head-SHA `b74d8ae2a8a01785c8a8fb5488088ad6ae4f3e1e`. OpenSpec-Aufgaben, fachliche Abnahme und CI auf dem finalen Head sind vor Merge zu bestätigen.
+- **Implementiert, noch nicht integriert:** [PR #570](https://github.com/stritti/nak-district-planner/pull/570) (Recurring Events). Die aktuelle CI am finalen Head sowie OpenSpec-Verifikation und fachliche Abnahme sind vor Merge zu bestätigen.
 - **Produktionshärtung:** [PR #574](https://github.com/stritti/nak-district-planner/pull/574) offen; externer GitGuardian-Befund noch zu klassifizieren, ohne das Security-Gate abzuschwächen.
 
 ## Fachlicher Backlog
 
 | Vorhaben | Umfang | Nachweis | Status |
 | --- | --- | --- | --- |
-| Wiederkehrende Gemeinde-/Bezirkstermine | Wochen-/Monatsmuster, monatliche Checkliste, explizite Übernahme, DST-/Konflikt-/Rechteprüfungen, Dubletten verhindern | [Issue #557](https://github.com/stritti/nak-district-planner/issues/557), [PR #558](https://github.com/stritti/nak-district-planner/pull/558) | **Implementierung in [Draft-PR #570](https://github.com/stritti/nak-district-planner/pull/570); noch nicht in `main`, fachliche Abnahme offen** |
+| Wiederkehrende Gemeinde-/Bezirkstermine | Wochen-/Monatsmuster, monatliche Checkliste, explizite Übernahme, DST-/Konflikt-/Rechteprüfungen, Dubletten verhindern | [Issue #557](https://github.com/stritti/nak-district-planner/issues/557), [PR #558](https://github.com/stritti/nak-district-planner/pull/558) | **Implementierung in [PR #570](https://github.com/stritti/nak-district-planner/pull/570); noch nicht in `main`, CI und fachliche Abnahme offen** |
 | Konfigurierbare Aufgaben je Termin | Schließdienst, Organist, Dirigent, Namensvorschläge und Amtsträger-Lifecycle | [PR #525](https://github.com/stritti/nak-district-planner/pull/525) | **OpenSpec in `main` (PR #525); Feature-Implementierung weiterhin ausstehend** |
 | Inline-Editing in Übersichten | Berechtigte Tabellenzellen bearbeiten; gemeinsamer Vue-Editor mit Konflikt-/Fehlerbehandlung | [PR #530](https://github.com/stritti/nak-district-planner/pull/530) | **OpenSpec in `main` (PR #530); Feature-Implementierung weiterhin ausstehend** |
 

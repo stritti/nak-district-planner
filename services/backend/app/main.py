@@ -30,6 +30,7 @@ from app.adapters.api.routers import (
     leaders,
     notifications,
     planning_series,
+    recurring_events,
     registrations,
     reminder_configs,
     service_assignments,
@@ -210,6 +211,7 @@ app.include_router(districts.router)
 app.include_router(leaders.router)
 app.include_router(leader_unavailabilities.router)
 app.include_router(planning_series.router)
+app.include_router(recurring_events.router)
 app.include_router(reminder_configs.router)
 app.include_router(event_hooks.router)
 app.include_router(registrations.public_router)

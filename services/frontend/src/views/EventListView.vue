@@ -270,7 +270,7 @@
       <!-- Desktop: table -->
       <div class="table-container hidden md:block">
         <div class="table-scroll">
-        <table class="table-min-w w-full text-sm">
+        <table data-inline-edit-scope class="table-min-w w-full text-sm">
           <thead>
             <tr class="table-thead">
               <th class="table-th">Titel</th>
@@ -722,7 +722,9 @@ const canManageEvents = computed(() => auth.isSuperadmin || auth.memberships.som
 const inlineCoordinator = useInlineCellCoordinator()
 
 function canInlineEditEvent(event: EventResponse): boolean {
-  return canManageEvents.value &&
+  return (auth.isSuperadmin || auth.memberships.some((m) =>
+    m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId && m.role === 'PLANNER'
+  )) &&
     event.district_id === districtsStore.selectedDistrictId &&
     event.status === 'ACTIVE' &&
     event.source === 'INTERNAL' &&

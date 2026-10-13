@@ -28,6 +28,10 @@ from app.adapters.db.orm_models.membership import MembershipORM
 from app.adapters.db.orm_models.notification import NotificationORM
 from app.adapters.db.orm_models.planning_series import PlanningSeriesORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+from app.adapters.db.orm_models.recurring_event import (
+    RecurringEventDecisionORM,
+    RecurringEventTemplateORM,
+)
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.adapters.db.orm_models.slot_gap_alert import SlotGapAlertORM
 from app.adapters.db.orm_models.user import UserORM
