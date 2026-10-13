@@ -15,6 +15,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from app.adapters.api.recurring_event_policy import _is_congregation_admin, _visible
 from app.adapters.api.routers import recurring_events as r
 from app.adapters.api.schemas.recurring_events import (
     BulkOccurrenceAcceptRequest,
@@ -115,7 +116,7 @@ def test_district_admin_can_manage_district_and_congregation() -> None:
 def test_congregation_scoped_district_admin_is_not_a_congregation_admin() -> None:
     congregation_id = uuid.uuid4()
     user = _auth(Role.DISTRICT_ADMIN, ScopeType.CONGREGATION, congregation_id)
-    assert not r._is_congregation_admin(user, congregation_id)
+    assert not _is_congregation_admin(user, congregation_id)
 
 
 @pytest.mark.asyncio
@@ -144,9 +145,9 @@ def test_district_applicability_not_visible_to_uninvited_congregation() -> None:
     entry = _template()
     entry = replace(entry, applicability=(str(other),))
     user = _auth(Role.VIEWER, ScopeType.CONGREGATION, own)
-    assert not r._visible(user, entry)
+    assert not _visible(user, entry)
     allowed = replace(entry, applicability=("all",))
-    assert r._visible(user, allowed)
+    assert _visible(user, allowed)
 
 
 def test_outgoing_template_schema_roundtrips_domain_rule() -> None:
