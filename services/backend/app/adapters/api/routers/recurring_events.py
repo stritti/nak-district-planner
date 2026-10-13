@@ -15,6 +15,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.recurring_event_policy import (
+    _is_congregation_admin,
+    _require_read,
+    _require_write,
+    _visible,
+)
 from app.adapters.api.schemas.recurring_events import (
     BulkOccurrenceAcceptRequest,
     BulkOccurrenceResponse,
@@ -30,7 +36,6 @@ from app.adapters.api.schemas.recurring_events import (
     RecurringTemplateResponse,
     TemplateListResponse,
 )
-from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
@@ -41,7 +46,6 @@ from app.application.recurring_event_service import (
     RecurringEventService,
     StaleTemplateError,
 )
-from app.domain.models.membership import ScopeType
 from app.domain.models.recurring_event_template import (
     AmbiguousLocalTimeError,
     ChecklistStatus,
@@ -49,7 +53,6 @@ from app.domain.models.recurring_event_template import (
     RecurringEventDecision,
     RecurringEventTemplate,
 )
-from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}", tags=["recurring-events"])
 
@@ -66,68 +69,6 @@ def _service(session: AsyncSession) -> RecurringEventService:
         SqlEventInstanceRepository(session),
         integrity_error_type=IntegrityError,
     )
-
-
-def _is_congregation_admin(auth: CurrentUserWithMemberships, congregation_id: uuid.UUID) -> bool:
-    return any(
-        membership.scope_type is ScopeType.CONGREGATION
-        and membership.scope_id == congregation_id
-        and membership.role in (Role.CONGREGATION_ADMIN, Role.DISTRICT_ADMIN)
-        for membership in auth.memberships
-    )
-
-
-def _require_write(
-    auth: CurrentUserWithMemberships,
-    district_id: uuid.UUID,
-    congregation_id: uuid.UUID | None,
-) -> None:
-    if has_role_in_district(auth, Role.DISTRICT_ADMIN, district_id):
-        return
-    if congregation_id is not None and _is_congregation_admin(auth, congregation_id):
-        return
-    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-
-
-def _visible(auth: CurrentUserWithMemberships, entry: RecurringEventTemplate) -> bool:
-    if has_role_in_district(auth, Role.VIEWER, entry.district_id):
-        return True
-    return any(
-        membership.scope_type is ScopeType.CONGREGATION
-        and (
-            membership.scope_id == entry.congregation_id
-            or (
-                entry.congregation_id is None
-                and (
-                    "all" in entry.applicability
-                    or str(membership.scope_id) in entry.applicability
-                )
-            )
-        )
-        for membership in auth.memberships
-    )
-
-
-async def _require_read(
-    auth: CurrentUserWithMemberships,
-    district_id: uuid.UUID,
-    session: AsyncSession,
-) -> set[uuid.UUID] | None:
-    """Return None for district-wide readers, or authorized congregations."""
-    if has_role_in_district(auth, Role.VIEWER, district_id):
-        return None
-    congregations = await SqlCongregationRepository(session).list_by_district(district_id)
-    district_congregations = {congregation.id for congregation in congregations}
-    authorized = {
-        membership.scope_id
-        for membership in auth.memberships
-        if membership.scope_type is ScopeType.CONGREGATION
-        and membership.scope_id in district_congregations
-    }
-    if authorized:
-        return authorized
-    require_role_in_district(auth, Role.VIEWER, district_id)
-    return set()
 
 
 async def _validate_congregation(

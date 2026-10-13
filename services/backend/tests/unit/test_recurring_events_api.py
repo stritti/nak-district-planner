@@ -126,7 +126,10 @@ async def test_read_policy_rejects_membership_of_congregation_in_other_district(
     repo.list_by_district.return_value = [
         SimpleNamespace(id=uuid.uuid4(), district_id=district_id),
     ]
-    with patch.object(r, "SqlCongregationRepository", return_value=repo):
+    with patch(
+        "app.adapters.api.recurring_event_policy.SqlCongregationRepository",
+        return_value=repo,
+    ):
         with pytest.raises(HTTPException) as error:
             await r._require_read(
                 _auth(Role.VIEWER, ScopeType.CONGREGATION, foreign_congregation),
