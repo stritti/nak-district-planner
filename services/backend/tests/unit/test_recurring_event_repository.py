@@ -9,6 +9,8 @@ import uuid
 from datetime import date, time
 from unittest.mock import AsyncMock, Mock
 
+from sqlalchemy.dialects import postgresql
+
 import pytest
 
 from app.adapters.db.orm_models.recurring_event import (
@@ -163,3 +165,46 @@ async def test_locked_decision_lookup_preserves_missing_slot(present: bool) -> N
     if result is not None:
         assert result.planning_slot_id is None
     session.execute.assert_awaited_once()
+
+@pytest.mark.asyncio
+async def test_template_page_applies_scope_filter_in_sql_before_offset() -> None:
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    session = AsyncMock()
+    session.scalar.return_value = 3
+    result = Mock()
+    result.scalars.return_value = []
+    session.execute.return_value = result
+    entries, total = await SqlRecurringEventRepository(session).list_visible_templates_page(
+        district_id,
+        visible_congregation_ids={congregation_id},
+        limit=5,
+        offset=10,
+    )
+    assert entries == []
+    assert total == 3
+    statement = session.execute.await_args.args[0]
+    sql = str(statement.compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
+    ))
+    assert " LIMIT 5 OFFSET 10" in sql
+    assert str(congregation_id) in sql
+    assert "ANY" in sql
+    assert "congregation_id" in sql
+    count_statement = session.scalar.await_args.args[0]
+    count_sql = str(count_statement.compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
+    ))
+    assert str(congregation_id) in count_sql
+
+
+@pytest.mark.asyncio
+async def test_template_page_without_readable_congregations_never_queries_database() -> None:
+    session = AsyncMock()
+    entries, total = await SqlRecurringEventRepository(session).list_visible_templates_page(
+        uuid.uuid4(), visible_congregation_ids=set(), limit=25, offset=0,
+    )
+    assert entries == []
+    assert total == 0
+    session.execute.assert_not_awaited()
+    session.scalar.assert_not_awaited()

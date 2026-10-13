@@ -49,7 +49,12 @@ beforeEach(() => {
 describe('recurring events API', () => {
   it('loads the district templates with an encoded identifier', async () => {
     await api.listRecurringTemplates('district/a')
-    expect(apiFetch).toHaveBeenCalledWith(templatesUrl)
+    expect(apiFetch).toHaveBeenCalledWith(`${templatesUrl}?limit=50&offset=0`)
+  })
+
+  it('uses requested limits and offsets for the template list', async () => {
+    await api.listRecurringTemplates('district/a', 20, 40)
+    expect(apiFetch).toHaveBeenCalledWith(`${templatesUrl}?limit=20&offset=40`)
   })
 
   it('creates and updates templates without dropping recurrence metadata', async () => {

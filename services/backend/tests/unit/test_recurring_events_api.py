@@ -308,12 +308,15 @@ async def test_template_list_and_update_preserve_revision_contract() -> None:
     entry = _template()
     user = _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id)
     repo = AsyncMock()
-    repo.list_templates.return_value = [entry]
+    repo.list_visible_templates_page.return_value = ([entry], 1)
     repo.get_template.return_value = entry
     with patch.object(r, "_repository", return_value=repo):
         listed = await r.list_recurring_templates(entry.district_id, user, AsyncMock())
         assert listed.total == 1
         assert listed.items[0].id == entry.id
+        repo.list_visible_templates_page.assert_awaited_once_with(
+            entry.district_id, visible_congregation_ids=None, limit=50, offset=0,
+        )
         updated = await r.update_recurring_template(
             entry.district_id, entry.id,
             r.RecurringTemplatePatch(expected_revision=entry.revision, title="Updated"),
@@ -330,6 +333,29 @@ async def test_template_list_and_update_preserve_revision_contract() -> None:
             )
         assert error.value.status_code == 409
         repo.save_template.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_template_list_paginates_only_authorized_congregation_rows() -> None:
+    own = uuid.uuid4()
+    entry = _template(congregation_id=own)
+    repo = AsyncMock()
+    repo.list_visible_templates_page.return_value = ([entry], 19)
+    with (
+        patch.object(r, "_repository", return_value=repo),
+        patch.object(r, "_require_read", AsyncMock(return_value={own})),
+    ):
+        result = await r.list_recurring_templates(
+            entry.district_id, _auth(Role.VIEWER, ScopeType.CONGREGATION, own),
+            AsyncMock(), limit=10, offset=10,
+        )
+    assert result.total == 19
+    assert result.limit == 10
+    assert result.offset == 10
+    assert [item.id for item in result.items] == [entry.id]
+    repo.list_visible_templates_page.assert_awaited_once_with(
+        entry.district_id, visible_congregation_ids={own}, limit=10, offset=10,
+    )
 
 
 @pytest.mark.asyncio

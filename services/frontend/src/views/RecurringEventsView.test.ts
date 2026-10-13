@@ -149,7 +149,7 @@ describe('recurring monthly checklist', () => {
     const view = await render()
     expect(view.text()).toContain('Chorprobe')
     expect(view.text()).toContain('1 Vorschläge')
-    expect(api.listRecurringTemplates).toHaveBeenCalledWith('district-1')
+    expect(api.listRecurringTemplates).toHaveBeenCalledWith('district-1', 50, 0)
     expect(api.createRecurringTemplate).not.toHaveBeenCalled()
     expect(api.acceptRecurringOccurrence).not.toHaveBeenCalled()
   })
@@ -226,6 +226,21 @@ describe('recurring monthly checklist', () => {
     await click('ausgewählte übernehmen')
     expect(view.get('[role="alert"]').text()).toContain('Ungültige Eingabe')
     expect(view.get('[role="alert"]').text()).not.toContain('INVALID_INPUT')
+  })
+
+  it('paginates large template lists without loading every template at once', async () => {
+    vi.mocked(api.listRecurringTemplates).mockResolvedValue({
+      items: [template], total: 51,
+    })
+    const view = await render()
+    await templatesTab()
+    expect(view.text()).toContain('51 Vorlagen')
+    await view.get('[data-testid="next-template-page"]').trigger('click')
+    await flushPromises()
+    expect(api.listRecurringTemplates).toHaveBeenLastCalledWith('district-1', 50, 50)
+    await view.get('[data-testid="previous-template-page"]').trigger('click')
+    await flushPromises()
+    expect(api.listRecurringTemplates).toHaveBeenLastCalledWith('district-1', 50, 0)
   })
 
   it('opens preview, sends edited concrete data, and closes after success', async () => {
@@ -352,7 +367,7 @@ describe('recurring monthly checklist', () => {
     expect(wrapper!.text()).not.toContain('Chorprobe')
     districtStore.selectedDistrictId = 'district-2'
     await flushPromises()
-    expect(api.listRecurringTemplates).toHaveBeenCalledWith('district-2')
+    expect(api.listRecurringTemplates).toHaveBeenCalledWith('district-2', 50, 0)
   })
 })
 
