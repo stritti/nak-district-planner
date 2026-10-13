@@ -111,3 +111,55 @@ async def test_skipped_decision_is_removed_only_by_explicit_reopen() -> None:
     await repo.save_decision(decision)
     session.flush.assert_awaited()
     assert session.add.call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("present", [False, True])
+async def test_get_template_maps_row_and_requests_fresh_lock(present: bool) -> None:
+    entry = _template()
+    row = RecurringEventTemplateORM()
+    _template_to_row(entry, row)
+    session = AsyncMock()
+    session.get.return_value = row if present else None
+    result = await SqlRecurringEventRepository(session).get_template(entry.id, for_update=True)
+    assert result == (entry if present else None)
+    session.get.assert_awaited_once_with(
+        RecurringEventTemplateORM, entry.id, with_for_update=True, populate_existing=True,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("present", [False, True])
+async def test_delete_decision_flushes_only_existing_row(present: bool) -> None:
+    session = AsyncMock()
+    row = RecurringEventDecisionORM()
+    session.get.return_value = row if present else None
+    await SqlRecurringEventRepository(session).delete_decision(uuid.uuid4())
+    if present:
+        session.delete.assert_awaited_once_with(row)
+        session.flush.assert_awaited_once()
+    else:
+        session.delete.assert_not_awaited()
+        session.flush.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("present", [False, True])
+async def test_locked_decision_lookup_preserves_missing_slot(present: bool) -> None:
+    entry = _template()
+    row = RecurringEventDecisionORM(
+        id=uuid.uuid4(), district_id=entry.district_id, template_id=entry.id,
+        occurrence_local_date=date(2026, 11, 3), status="ACCEPTED",
+        planning_slot_id=None, created_by="user",
+    )
+    session = AsyncMock()
+    query_result = Mock()
+    query_result.scalar_one_or_none.return_value = row if present else None
+    session.execute.return_value = query_result
+    result = await SqlRecurringEventRepository(session).get_decision(
+        entry.id, row.occurrence_local_date, for_update=True,
+    )
+    assert result == (_decision_from_row(row) if present else None)
+    if result is not None:
+        assert result.planning_slot_id is None
+    session.execute.assert_awaited_once()
