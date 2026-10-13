@@ -7,30 +7,30 @@
 
 ## 2. Persistenz und Use Cases
 
-- [ ] 2.1 Alembic-Migration mit Mandantenbezug, Unique-Constraints, nullable planning_slot_id (ON DELETE SET NULL), referenzieller Scope-Prüfung und PostgreSQL-RLS für Vorlagen/Entscheidungen.
-- [ ] 2.2 Repository-Ports und Adapter für Vorlagen, Entscheidungen und verknüpfte PlanningSlots erstellen.
-- [ ] 2.3 Accept, Skip, Reopen, Resolve (LINK_EXISTING/MARK_SKIPPED/REOPEN nur bei fehlendem Slot) und Bulk-Accept als Use-Cases umsetzen; atomar je Vorkommen mit separaten Transaktionen/Savepoints, Idempotenz, Optimistic-Concurrency-Check und per-item-Konflikten.
-- [ ] 2.4 Übernommene Termine als PlanningSlot (ACTIVE, PLANNED, template.applicability bei Bezirksterminen bzw. [] bei Gemeindeterminen) + EventInstance (source=INTERNAL, visibility=PUBLIC) erstellen und an die bestehenden Freigabe-/Exportregeln anbinden; Zeitverschiebung ohne Neuanlage erhalten.
-- [ ] 2.5 Deaktivieren/Bearbeiten von Vorlagen und historische Entscheidungen ohne Datenverlust berücksichtigen; Audit-Events erfassen.
+- [x] 2.1 Alembic-Migration mit Mandantenbezug, Unique-Constraints, nullable planning_slot_id (ON DELETE SET NULL), referenzieller Scope-Prüfung und PostgreSQL-RLS für Vorlagen/Entscheidungen.
+- [x] 2.2 Repository-Ports und Adapter für Vorlagen, Entscheidungen und verknüpfte PlanningSlots erstellen.
+- [x] 2.3 Accept, Skip, Reopen, Resolve (LINK_EXISTING/MARK_SKIPPED/REOPEN nur bei fehlendem Slot) und Bulk-Accept als Use-Cases umsetzen; atomar je Vorkommen mit separaten Transaktionen/Savepoints, Idempotenz, Optimistic-Concurrency-Check und per-item-Konflikten.
+- [x] 2.4 Übernommene Termine als PlanningSlot (ACTIVE, PLANNED, template.applicability bei Bezirksterminen bzw. [] bei Gemeindeterminen) + EventInstance (source=INTERNAL, visibility=PUBLIC) erstellen und an die bestehenden Freigabe-/Exportregeln anbinden; Zeitverschiebung ohne Neuanlage erhalten.
+- [x] 2.5 Deaktivieren/Bearbeiten von Vorlagen und historische Entscheidungen ohne Datenverlust berücksichtigen; Audit-Events erfassen.
 
 ## 3. API und Sicherheit
 
-- [ ] 3.1 REST-Verträge für Templates, Monatsvorschau inkl. serverseitigem q-/Kategorie-/Statusfilter vor Pagination und Vorkommensentscheidungen inkl. Resolve als typisierte Schemas dokumentieren und implementieren.
-- [ ] 3.2 VIEWER-, CONGREGATION_ADMIN- und DISTRICT_ADMIN-Scope-Rechte durchsetzen; die bestehende Monatsfreigabe ausschließlich bei expliziter congregation_id auf die eigene Gemeinde für CONGREGATION_ADMIN erweitern, bezirksweite Freigabe unverändert lassen; keine implizite Erweiterung von PLANNER.
-- [ ] 3.3 Manipulierte district_id/congregation_id/template_id/slot_id, fremde applicability und stale template_revision abfangen; Abfragen unter eingeschränkter DB-Rolle/RLS testen.
-- [ ] 3.4 Paginierung, Monatsbegrenzung, Eingabevalidierung, angemessene Fehlermeldungen und reproduzierbare HTTP 409-Konflikte implementieren.
+- [x] 3.1 REST-Verträge für Templates, Monatsvorschau inkl. serverseitigem q-/Kategorie-/Statusfilter vor Pagination und Vorkommensentscheidungen inkl. Resolve als typisierte Schemas dokumentieren und implementieren.
+- [x] 3.2 VIEWER-, CONGREGATION_ADMIN- und DISTRICT_ADMIN-Scope-Rechte durchsetzen; die bestehende Monatsfreigabe ausschließlich bei expliziter congregation_id auf die eigene Gemeinde für CONGREGATION_ADMIN erweitern, bezirksweite Freigabe unverändert lassen; keine implizite Erweiterung von PLANNER.
+- [x] 3.3 Manipulierte district_id/congregation_id/template_id/slot_id, fremde applicability und stale template_revision abfangen; Abfragen unter eingeschränkter DB-Rolle/RLS testen.
+- [x] 3.4 Paginierung, Monatsbegrenzung, Eingabevalidierung, angemessene Fehlermeldungen und reproduzierbare HTTP 409-Konflikte implementieren.
 
 ## 4. Bedienoberfläche
 
-- [ ] 4.1 Vorlagenverwaltung für Bezirk bzw. Gemeinde mit verständlichen Regel-Editoren und sofortiger Monatsvorschau.
-- [ ] 4.2 Checkliste in die Monatsplanung integrieren: serverseitige Text-/Kategorie-/Statusfilter, Selektions- und Mehrfachübernahme, bewusstes Auslassen, erneutes Öffnen, NEEDS_REVIEW-Auflösung, Konflikthilfe.
-- [ ] 4.3 Termin vor Übernahme individuell anpassen, erfolgreiche Übernahme in der bestehenden Eventübersicht sichtbar machen und Freigabe getrennt halten.
-- [ ] 4.4 Responsive/mobile Bedienung und Lade-, Leer-, Fehler-, Berechtigungs- und Paralleländerungszustände vorsehen.
+- [x] 4.1 Vorlagenverwaltung für Bezirk bzw. Gemeinde mit verständlichen Regel-Editoren und sofortiger Monatsvorschau.
+- [x] 4.2 Checkliste in die Monatsplanung integrieren: serverseitige Text-/Kategorie-/Statusfilter, Selektions- und Mehrfachübernahme, bewusstes Auslassen, erneutes Öffnen, NEEDS_REVIEW-Auflösung, Konflikthilfe.
+- [x] 4.3 Termin vor Übernahme individuell anpassen, erfolgreiche Übernahme in der bestehenden Eventübersicht sichtbar machen und Freigabe getrennt halten.
+- [x] 4.4 Responsive/mobile Bedienung und Lade-, Leer-, Fehler-, Berechtigungs- und Paralleländerungszustände vorsehen.
 
 ## 5. Verifikation
 
-- [ ] 5.1 Unit-Tests: Dienstag wöchentlich, alle zwei Wochen mit festem Anker, letzter Dienstag, erster/fünfter Wochentag, 29./30./31., Februar/Schaltjahr, Monats- und Jahreswechsel, Aktivitätsgrenzen.
-- [ ] 5.2 Unit-Tests: lokale Zeit/UTC inkl. DST-Lücke und doppelter Stunde, Dauer, inaktive Vorlage, geänderte Vorlage, geändertes Vorkommen, ungültige Patterns.
+- [x] 5.1 Unit-Tests: Dienstag wöchentlich, alle zwei Wochen mit festem Anker, letzter Dienstag, erster/fünfter Wochentag, 29./30./31., Februar/Schaltjahr, Monats- und Jahreswechsel, Aktivitätsgrenzen.
+- [x] 5.2 Unit-Tests: lokale Zeit/UTC inkl. DST-Lücke und doppelter Stunde, Dauer, inaktive Vorlage, geänderte Vorlage, geändertes Vorkommen, ungültige Patterns.
 - [ ] 5.3 Integrations-/Race-Tests: doppelte und parallele Accepts, Bezirk-applicability, öffentlicher ICS-Export erst nach CONFIRMED, vorhandener manueller Termin, Skip/Reopen/Resolve, Retention-Löschung und ON DELETE SET NULL, verschobener Slot, per-item-Bulk-Commit trotz paralleler Unique-Fehler, unterschiedliche Gemeinden/Bezirke, bestehender Gottesdienstgenerator.
 - [ ] 5.4 API-/RLS-Tests für alle Rollen, gemeindebezogene Freigabe (eigene Gemeinde erlaubt, fremde/ganzes Bezirk verboten), Scope-Manipulation, Cross-Tenant-Zugriffe, Bulk-Teilkonflikte, Filter vor Pagination und stale Revisions.
 - [ ] 5.5 Frontend-Unit- und Browser-Tests für Monatswechsel, Checklistenstatus, Mehrfachübernahme, Fehlermeldungen und mobile Nutzung.
@@ -46,3 +46,14 @@
 Die Korrektur des Importfehlers hat im ersten CI-Lauf die PostgreSQL-/RLS-Testausführung wieder ermöglicht. Die übrigen offenen Implementierungs- und Verifikationsaufgaben bleiben offen: erfolgreiche CI allein belegt keine vollständige Umsetzung des Fachfeatures; RecurringEventsView.vue und zugehörige Unit-Tests sind vorhanden.
 
 Verifikationsstand am Code-Head `f053af0`: alle neun Workflows erfolgreich; 1.889 Backend-Unit-Tests bestanden (ein bestehender Skip), 239 PostgreSQL-/RLS-Tests bestanden. Backend-Gesamtcoverage 90 %, Recurring-Service 90 %, Recurring-Router 90 %, Repository 92 %, Schemas/ORM/Domänenmodell jeweils 100 %. Zusätzliche Tests prüfen Command-Ergebnisse und HTTP-Fehler, Scope-Abweisung, Template-Revisionen, gesperrte Datenbank-Lookups und Löschung fehlender Entscheidungen. Aufgabe 5.6 bleibt wegen der noch offenen strikten OpenSpec-Validierung und Fachverifikation offen; die vorhandene Checklisten-/Vorlagenoberfläche sowie die weiteren Punkte der Review-Zusammenfassung vom 12. Oktober müssen vor fachlicher Merge-Reife abschließend verifiziert werden.
+
+## 7. Nachbearbeitung von PR #570 (13. Oktober 2026)
+
+- [x] 7.1 Fehlertexte des Bulk-Accepts durch öffentliche Fehlercodes ersetzen und im Frontend lokalisieren; interne Fehlermeldungen nicht weitergeben.
+- [x] 7.2 Vorlagenliste mit autorisierungsgefilterter SQL-Paginierung, Gesamtzahl und UI-Seitenwechsel versehen.
+- [x] 7.3 Gemeinde-Monatsfilter gegen fremde Scope-IDs absichern und Monatsexpansion auf maximal 500 sichtbare Vorlagen begrenzen.
+- [x] 7.4 Wiederverwendbare Autorisierungsrichtlinie aus dem Router auslagern; Transaktionsaudit für RecurringEventTemplate/RecurringEventDecision ergänzen.
+- [x] 7.5 Den aktuellen Refactoring-Stand aus main integrieren und sämtliche Git-Konflikte auflösen.
+- [ ] 7.6 Neue Tests und die gesamte CI inklusive RLS, Coverage, OpenSpec-Validierung und Browser-Verifikation am finalen Merge-Head ausführen.
+
+Die Punkte 2 bis 4 kennzeichnen vorhandenen Implementierungscode, **nicht** eine bestandene Release-Verifikation. Die Prüfungen 5.3 bis 5.6 und 7.6 bleiben offen, bis GitHub Actions oder eine äquivalente Umgebung am aktuellen Commit nachweislich erfolgreich gelaufen sind. Historische grüne CI-Läufe bis f053af0 erlauben keine Aussage über neuere Commits. Der PR bleibt bis dahin Draft.
