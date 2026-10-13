@@ -411,6 +411,26 @@ async def test_checklist_passes_filters_and_pagination_to_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_checklist_rejects_filter_for_other_congregation_before_read() -> None:
+    own_id, foreign_id = uuid.uuid4(), uuid.uuid4()
+    district_id = uuid.uuid4()
+    user = _auth(Role.VIEWER, ScopeType.CONGREGATION, own_id)
+    repo = AsyncMock()
+    with (
+        patch.object(r, "_require_read", AsyncMock(return_value={own_id})),
+        patch.object(r, "_validate_congregation", AsyncMock()),
+        patch.object(r, "_repository", return_value=repo),
+    ):
+        with pytest.raises(HTTPException) as error:
+            await r.list_recurring_checklist(
+                district_id, user, AsyncMock(), year=2026, month=11,
+                congregation_id=foreign_id,
+            )
+    assert error.value.status_code == 403
+    repo.list_templates.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_congregation_and_distribution_reject_cross_district_ids() -> None:
     entry = _template()
     congregation_id = uuid.uuid4()
