@@ -32,6 +32,7 @@ vi.mock('../api/leaders', () => ({
   listLeaders: vi.fn(),
   unlinkSelfFromLeader: vi.fn(),
   updateLeader: vi.fn(),
+  updateLeaderInline: vi.fn(),
 }))
 vi.mock('../api/registrations', () => ({
   approveRegistration: vi.fn(),
