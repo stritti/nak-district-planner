@@ -216,7 +216,19 @@
         >
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <p class="font-medium text-gray-900 dark:text-gray-100 break-words">{{ event.title }}</p>
+              <InlineEditableCell
+                :id="'event-title-mobile-' + event.id"
+                as="div"
+                class="font-medium text-gray-900 dark:text-gray-100 break-words"
+                :value="event.title"
+                :revision="event.revision ?? ''"
+                :label="'Titel: ' + event.title"
+                :editable="canInlineEditEvent(event)"
+                :coordinator="inlineCoordinator"
+                :save="(value, revision) => saveInlineTitle(event, value, revision)"
+                required
+                :max-length="500"
+              />
               <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDt(event.start_at) }} · {{ event.category ?? '—' }}</p>
             </div>
             <button
@@ -296,7 +308,18 @@
               :key="event.id"
               class="table-tr"
             >
-              <td class="table-td font-medium text-gray-900 dark:text-gray-100">{{ event.title }}</td>
+              <InlineEditableCell
+                :id="'event-title-desktop-' + event.id"
+                class="font-medium text-gray-900 dark:text-gray-100"
+                :value="event.title"
+                :revision="event.revision ?? ''"
+                :label="'Titel: ' + event.title"
+                :editable="canInlineEditEvent(event)"
+                :coordinator="inlineCoordinator"
+                :save="(value, revision) => saveInlineTitle(event, value, revision)"
+                required
+                :max-length="500"
+              />
               <td class="table-td whitespace-nowrap">{{ formatDt(event.start_at) }}</td>
               <td class="table-td">{{ event.category ?? '—' }}</td>
               <td class="table-td text-xs">
@@ -663,6 +686,7 @@ import {
   createEvent,
   deleteEvent,
   updateEvent,
+  updateEventInline,
   type EventApprovalStatus,
   type EventListParams,
   type EventResponse,
@@ -672,6 +696,8 @@ import { exportEventsToExcel } from '../composables/useExcelExport'
 import { useConfirm } from '../composables/useConfirm'
 import { errorMessage, useToast } from '../composables/useToast'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
+import InlineEditableCell from '../components/InlineEditableCell.vue'
+import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import EmptyState from '../components/EmptyState.vue'
 import ApplicabilitySelect from '../components/ApplicabilitySelect.vue'
 import AutocompleteInput, {
@@ -692,6 +718,21 @@ const canManageEvents = computed(() => auth.isSuperadmin || auth.memberships.som
   m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId &&
   ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role),
 ))
+
+const inlineCoordinator = useInlineCellCoordinator()
+
+function canInlineEditEvent(event: EventResponse): boolean {
+  return canManageEvents.value &&
+    event.district_id === districtsStore.selectedDistrictId &&
+    event.status === 'ACTIVE' &&
+    event.source === 'INTERNAL' &&
+    !!event.revision
+}
+
+async function saveInlineTitle(event: EventResponse, value: string, revision: string): Promise<void> {
+  await updateEventInline(event.id, { title: value }, revision)
+  await eventsStore.fetch()
+}
 
 // ── Ansichts-Modus ───────────────────────────────────────────────────────────
 
