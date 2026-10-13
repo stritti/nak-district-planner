@@ -354,6 +354,7 @@ describe('LeadersAdminView inline contact editing', () => {
     vi.mocked(leadersApi.listLeaders).mockResolvedValue([versioned])
     vi.mocked(leadersApi.updateLeaderInline).mockResolvedValue({ ...versioned, name: 'Neu', revision: '"v2"' })
     const { wrapper } = await mountView()
+    const initialFetches = vi.mocked(leadersApi.listLeaders).mock.calls.length
     const cell = wrapper.get('[data-inline-cell-id="leader-name-desktop-l1"]')
     await cell.trigger('click')
     await flushPromises()
@@ -361,7 +362,7 @@ describe('LeadersAdminView inline contact editing', () => {
     await cell.get('input').trigger('keydown', { key: 'Enter' })
     await flushPromises()
     expect(leadersApi.updateLeaderInline).toHaveBeenCalledWith('d1', 'l1', { name: 'Neu' }, '"v1"')
-    expect(leadersApi.listLeaders).toHaveBeenCalledTimes(2)
+    expect(leadersApi.listLeaders).toHaveBeenCalledTimes(initialFetches + 1)
   })
 
   it('renders legacy rows without a revision as read-only', async () => {
