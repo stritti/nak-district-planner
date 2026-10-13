@@ -9,7 +9,7 @@ import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinato
 import { ApiError } from '../api/errors'
 
 function setup(override: Record<string, unknown> = {}) {
-  const save = vi.fn(async (_draft: string, _revision: string) => undefined)
+  const save = vi.fn(async () => undefined)
   const coordinator = useInlineCellCoordinator()
   const wrapper = mount(InlineEditableCell, {
     props: {
