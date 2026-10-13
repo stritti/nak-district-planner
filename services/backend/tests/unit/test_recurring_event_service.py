@@ -93,6 +93,42 @@ async def test_month_projection_preserves_skipped_decisions() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("slot_location", ["month", "batch", "deleted"])
+async def test_month_projection_batches_missing_accepted_slot_links(slot_location: str) -> None:
+    entry = _template()
+    service, repo, slots, instances = _service(entry)
+    slot = PlanningSlot.create(
+        district_id=entry.district_id, title="Moved",
+        category=entry.category, planning_date=date(2026, 11, 4),
+        planning_time=time(18, 30), approval_status=EventApprovalStatus.PLANNED,
+    )
+    decision = RecurringEventDecision(
+        id=uuid.uuid4(), district_id=entry.district_id, template_id=entry.id,
+        occurrence_local_date=date(2026, 11, 3), status=DecisionStatus.ACCEPTED,
+        planning_slot_id=slot.id, created_by="u",
+    )
+    repo.list_decisions.return_value = [decision]
+    slots.list_for_date_range.return_value = [slot] if slot_location == "month" else []
+    slots.get_many.return_value = [slot] if slot_location == "batch" else []
+    result = await service.list_month(
+        entry.district_id, 2026, 11, templates=[entry],
+        status_filter=(
+            ChecklistStatus.NEEDS_REVIEW if slot_location == "deleted"
+            else ChecklistStatus.ACCEPTED
+        ),
+    )
+    assert result.total == 1
+    assert result.items[0].occurrence_local_date == date(2026, 11, 3)
+    if slot_location == "month":
+        slots.get_many.assert_not_awaited()
+    else:
+        slots.get_many.assert_awaited_once_with({slot.id})
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+    repo.save_decision.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_stale_preview_does_not_write_slot_or_decision() -> None:
     entry = _template()
     service, repo, slots, instances = _service(entry)
@@ -312,6 +348,31 @@ async def test_resolve_missing_slot_applies_explicit_action(action: str) -> None
         assert result.planning_slot_id == (target.id if action == "LINK_EXISTING" else None)
         repo.save_decision.assert_awaited_once_with(result)
         repo.delete_decision.assert_not_awaited()
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_existing_slot_rejects_wrong_occurrence_utc_date() -> None:
+    entry = _template(congregation_id=uuid.uuid4())
+    service, repo, slots, instances = _service(entry)
+    repo.get_decision.return_value = RecurringEventDecision(
+        id=uuid.uuid4(), district_id=entry.district_id, template_id=entry.id,
+        occurrence_local_date=date(2026, 11, 3), status=DecisionStatus.ACCEPTED,
+        planning_slot_id=None, created_by="u",
+    )
+    wrong_day_slot = PlanningSlot.create(
+        district_id=entry.district_id, congregation_id=entry.congregation_id,
+        title=entry.title, category=entry.category, planning_date=date(2026, 11, 4),
+        planning_time=time(18, 30),
+    )
+    slots.get.return_value = wrong_day_slot
+    with pytest.raises(OccurrenceConflictError, match="Vorkommensdatum"):
+        await service.resolve_missing_slot(
+            entry, date(2026, 11, 3), expected_revision=entry.revision,
+            action="LINK_EXISTING", slot_id=wrong_day_slot.id,
+        )
+    repo.save_decision.assert_not_awaited()
     slots.save.assert_not_awaited()
     instances.save.assert_not_awaited()
 
