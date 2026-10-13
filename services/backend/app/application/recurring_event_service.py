@@ -153,6 +153,7 @@ class RecurringEventService:
         # Decisions survive rule edits, exclusions, and template deactivation.
         occurrence_keys.update(key for key in decisions if key[0] in visible)
         result: list[ChecklistItem] = []
+        counts = {state.value: 0 for state in ChecklistStatus}
         for template_id, day in occurrence_keys:
             entry = visible[template_id]
             if query and query.casefold() not in (
@@ -182,6 +183,7 @@ class RecurringEventService:
             )
             if reason and status is ChecklistStatus.OPEN:
                 status = ChecklistStatus.NEEDS_REVIEW
+            counts[status.value] += 1
             if status_filter is not None and status is not status_filter:
                 continue
             result.append(
@@ -200,7 +202,6 @@ class RecurringEventService:
                 item.template.title.casefold(), str(item.template.id),
             )
         )
-        counts = {state.value: sum(item.status is state for item in result) for state in ChecklistStatus}
         return ChecklistPage(
             items=result[offset : offset + limit], total=len(result),
             limit=limit, offset=offset, counts=counts,

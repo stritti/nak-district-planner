@@ -71,6 +71,12 @@ Alle Endpunkte sind in Backend-Ports, Domänenservices und API-Adapter getrennt.
 
 ### 6. UI und Fehlerführung
 
+Ein Statusfilter begrenzt nur die zurückgegebenen Checklistenzeilen und den paginierten `total`-Wert. Die `counts` der Statusleiste spiegeln die Verteilung sämtlicher berechtigter Such-/Kategorie-Ergebnisse desselben Monats vor dem Statusfilter wider.
+
+Einmalig selektierte Checkboxen werden beim Seitenwechsel zurückgesetzt. Mehrfachübernahmen betreffen ausschließlich die aktuelle Checklisten-Seite (maximal 50 Einträge); dies wird im Frontend ausdrücklich erläutert.
+
+Die Write-RLS `_DECISION_WRITE` erlaubt reguläre `CONGREGATION_ADMIN`-Sessions für Entscheidungen zu Vorlagen ihrer eigenen Gemeinde, aber nicht für Bezirksvorlagen oder fremde Gemeinde-IDs. `LINK_EXISTING` bindet nur Slots desselben Bezirk-/Gemeindescopes; ein Bezirksvorkommen wird nicht implizit einem Gemeindeslot zugeordnet. Fremde Zielslots werden sowohl durch die Slot-RLS als auch durch die Service-Scope-Prüfung abgewehrt.
+
 Die Monatsplanung zeigt einen Abschnitt "Wiederkehrende Termine" mit Monatsnavigation, Scope-/Gemeindefilter, serverseitiger Freitextsuche (Titel/Beschreibung), Kategorie- und Statusfilter, Fortschritt offen/übernommen/ausgelassen und Checkboxen bzw. Aktionen zur bewussten Übernahme. Ein Vorschau-Dialog ermöglicht das Ändern einzelner konkreter Termindaten vor dem Bestätigen. Konflikte und ungültige lokale Zeiten haben eine eigene erkennbare Darstellung und blockieren ausschließlich die betroffenen Übernahmen. Eine Statusänderung wird erst nach erfolgreicher API-Antwort angezeigt; API-Fehler lassen die Auswahl bearbeitbar.
 
 Die Vorlagenverwaltung nutzt denselben globalen Bezirkskontext wie die übrigen geschützten Ansichten. Liste und Checkliste sind auf schmalen Bildschirmen nutzbar. Bestehende Eventliste, Monatsansicht und Export erhalten nach Übernahme ihre Daten über die vorhandene API, ohne neue Anzeige-Logik für virtuelle Vorschläge.

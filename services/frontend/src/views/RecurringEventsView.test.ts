@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { reactive } from 'vue'
 import RecurringEventsView from './RecurringEventsView.vue'
+import { ApiError } from '../api/errors'
 import * as api from '../api/recurringEvents'
 
 vi.mock('../api/recurringEvents', () => ({
@@ -256,7 +257,7 @@ describe('recurring monthly checklist', () => {
   it('shows a readable message for oversized month preview errors', async () => {
     const view = await render()
     vi.mocked(api.listRecurringChecklist).mockRejectedValueOnce(
-      new Error('API Error: 413 {"detail":"Zu viele Vorlagen"}'),
+      new ApiError(413, 'Payload Too Large', { detail: 'Zu viele Vorlagen' }),
     )
     await click('Filtern')
     const alert = view.get('[role="alert"]').text()
@@ -266,12 +267,12 @@ describe('recurring monthly checklist', () => {
 
   it('keeps template management usable when month expansion is too large', async () => {
     const view = await render()
-    vi.mocked(api.listRecurringChecklist).mockRejectedValueOnce(new Error('413 month too large'))
+    vi.mocked(api.listRecurringChecklist).mockRejectedValueOnce(new ApiError(413, 'Payload Too Large', { detail: 'Zu viele Vorlagen' }))
     await click('Filtern')
     await templatesTab()
     expect(view.text()).toContain('1 Vorlagen')
     expect(view.text()).toContain('Chorprobe')
-    expect(view.get('[role="alert"]').text()).toContain('413')
+    expect(view.get('[role="alert"]').text()).toContain('Zu viele Vorlagen für eine Monatsvorschau')
     await click('Bearbeiten')
     expect(view.get('[data-testid="recurring-template-form"]').exists()).toBe(true)
   })

@@ -9,7 +9,7 @@ import uuid
 from datetime import date, time
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.models.recurring_event_template import (
     ChecklistStatus,
@@ -130,6 +130,13 @@ class OccurrenceAcceptRequest(OccurrenceActionRequest):
     local_time_override: time | None = None
     title_override: str | None = Field(default=None, min_length=1, max_length=500)
     description_override: str | None = None
+
+    @field_validator("title_override")
+    @classmethod
+    def validate_title_override(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("title_override must contain non-whitespace characters")
+        return value
     duration_minutes_override: int | None = Field(default=None, gt=0, le=525600, strict=True)
     fold: Literal[0, 1] | None = None
 

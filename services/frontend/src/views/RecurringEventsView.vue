@@ -60,7 +60,10 @@
           <span v-for="state in statuses" :key="state">{{ statusLabel(state) }}: {{ checklist.counts[state] ?? 0 }}</span>
         </div>
         <div class="flex flex-wrap justify-between gap-2 items-center">
-          <p class="text-sm text-gray-500">{{ checklist.total }} Vorschläge</p>
+          <div class="text-sm text-gray-500">
+            <p>{{ checklist.total }} Vorschläge</p>
+            <p>Auswahl und Mehrfachübernahme gelten für die aktuelle Seite (max. 50 Einträge).</p>
+          </div>
           <button
             v-if="selectedCount > 0"
             data-testid="bulk-accept"
@@ -222,6 +225,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ApiError } from '../api/errors'
 import {
   acceptRecurringOccurrence,
   bulkAcceptRecurringOccurrences,
@@ -315,6 +319,13 @@ function actionFor(item: ChecklistItem): OccurrenceAction {
   }
 }
 
+function loadErrorMessage(cause: unknown): string {
+  if (cause instanceof ApiError && cause.status === 413) {
+    return 'Zu viele Vorlagen für eine Monatsvorschau. Bitte die Gemeinde eingrenzen.'
+  }
+  return 'Die Vorlagen oder die Monatscheckliste konnten nicht geladen werden. Bitte erneut versuchen.'
+}
+
 async function load(): Promise<void> {
   const id = districtId.value
   const request = ++fetchVersion
@@ -344,11 +355,11 @@ async function load(): Promise<void> {
       selected.value = new Set()
     }
     const failures = [templateResult, checklistResult].flatMap(result =>
-      result.status === 'rejected' ? [String(result.reason)] : [],
+      result.status === 'rejected' ? [result.reason] : [],
     )
-    if (failures.length) error.value = failures.join('; ')
+    if (failures.length) error.value = failures.map(loadErrorMessage).join('; ')
   } catch (cause) {
-    if (request === fetchVersion) error.value = String(cause)
+    if (request === fetchVersion) error.value = loadErrorMessage(cause)
   } finally {
     if (request === fetchVersion) loading.value = false
   }
