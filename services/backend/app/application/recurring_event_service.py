@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import calendar
 import uuid
-from collections.abc import AsyncContextManager
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from typing import Protocol
@@ -28,7 +28,7 @@ class RecurringEventRepositoryPort(Protocol):
     async def find_slot_decision(self, slot_id: uuid.UUID) -> RecurringEventDecision | None: ...
 
 class TransactionPort(Protocol):
-    def begin_nested(self) -> AsyncContextManager[None]: ...
+    def begin_nested(self) -> AbstractAsyncContextManager[None]: ...
 
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import (
