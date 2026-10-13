@@ -437,6 +437,26 @@ async def test_checklist_passes_filters_and_pagination_to_service() -> None:
 
 
 @pytest.mark.asyncio
+async def test_month_checklist_refuses_unbounded_template_expansion() -> None:
+    entry = _template()
+    repo = AsyncMock()
+    repo.list_templates.return_value = [entry] * 501
+    service = AsyncMock()
+    with (
+        patch.object(r, "_repository", return_value=repo),
+        patch.object(r, "_service", return_value=service),
+    ):
+        with pytest.raises(HTTPException) as error:
+            await r.list_recurring_checklist(
+                entry.district_id,
+                _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id),
+                AsyncMock(), year=2026, month=11,
+            )
+    assert error.value.status_code == 413
+    service.list_month.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_checklist_rejects_filter_for_other_congregation_before_read() -> None:
     own_id, foreign_id = uuid.uuid4(), uuid.uuid4()
     district_id = uuid.uuid4()
