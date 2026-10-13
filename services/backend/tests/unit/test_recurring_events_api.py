@@ -183,6 +183,20 @@ def test_create_schema_forbids_unknown_fields_and_service_template() -> None:
         RecurringTemplateCreate.model_validate({**body, "unused": "bad"})
 
 
+@pytest.mark.parametrize("title_override", ["", "   ", "\t  \n"])
+def test_occurrence_accept_rejects_blank_title_override_with_422(
+    title_override: str,
+) -> None:
+    entry = _template()
+    with pytest.raises(ValidationError):
+        OccurrenceAcceptRequest.model_validate({
+            "template_id": entry.id,
+            "occurrence_local_date": date(2026, 11, 3),
+            "template_revision": entry.revision,
+            "title_override": title_override,
+        })
+
+
 def test_resolve_schema_requires_slot_only_for_existing_link() -> None:
     entry = _template()
     request = {

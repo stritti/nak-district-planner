@@ -96,6 +96,52 @@ def recurring_rows(owner, data):
         )
 
 
+def test_congregation_admin_writes_own_decision_without_worker_bypass(
+    owner, data, recurring_rows,
+):
+    template_a, template_b, decision_a, decision_b = recurring_rows
+    sub = data.sub("recurring-congregation-admin")
+    with owner.cursor() as cur:
+        cur.execute(
+            "INSERT INTO users (id, sub, email, username, is_superadmin, "
+            "created_at, updated_at) VALUES (%s,%s,%s,%s,false,now(),now())",
+            (str(uuid.uuid4()), sub, f"{sub}@example.org", sub),
+        )
+        cur.execute(
+            "INSERT INTO memberships (id, user_sub, role, scope_type, scope_id, "
+            "created_at, updated_at) VALUES (%s,%s,'CONGREGATION_ADMIN',"
+            "'CONGREGATION',%s,now(),now())",
+            (str(uuid.uuid4()), sub, str(data.a.congregation_id)),
+        )
+    try:
+        with app_session(sub) as cur:
+            cur.execute(
+                "UPDATE recurring_event_decisions SET created_by='congregation-admin' "
+                "WHERE id=%s RETURNING id",
+                (str(decision_a),),
+            )
+            assert [uuid.UUID(str(row[0])) for row in cur.fetchall()] == [decision_a]
+            cur.execute(
+                "UPDATE recurring_event_decisions SET created_by='foreign' "
+                "WHERE id=%s RETURNING id",
+                (str(decision_b),),
+            )
+            assert cur.fetchall() == []
+            cur.execute(
+                "INSERT INTO recurring_event_decisions "
+                "(id,district_id,template_id,occurrence_local_date,status,created_by,"
+                "created_at,updated_at) "
+                "VALUES (%s,%s,%s,'2026-11-10','SKIPPED',%s,now(),now()) "
+                "RETURNING id",
+                (str(uuid.uuid4()), str(data.a.district_id), str(template_a), sub),
+            )
+            assert len(cur.fetchall()) == 1
+    finally:
+        with owner.cursor() as cur:
+            cur.execute("DELETE FROM memberships WHERE user_sub=%s", (sub,))
+            cur.execute("DELETE FROM users WHERE sub=%s", (sub,))
+
+
 def test_recurring_rls_reader_sees_only_own_templates_and_decisions(data, recurring_rows):
     template_a, template_b, decision_a, decision_b = recurring_rows
     with app_session(data.sub("viewer-a")) as cur:

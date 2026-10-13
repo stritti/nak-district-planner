@@ -253,6 +253,17 @@ describe('recurring monthly checklist', () => {
     expect(api.listRecurringTemplates).toHaveBeenLastCalledWith('district-1', 50, 0)
   })
 
+  it('shows a readable message for oversized month preview errors', async () => {
+    const view = await render()
+    vi.mocked(api.listRecurringChecklist).mockRejectedValueOnce(
+      new Error('API Error: 413 {"detail":"Zu viele Vorlagen"}'),
+    )
+    await click('Filtern')
+    const alert = view.get('[role="alert"]').text()
+    expect(alert).toContain('Zu viele Vorlagen für eine Monatsvorschau')
+    expect(alert).not.toContain('{"detail"')
+  })
+
   it('keeps template management usable when month expansion is too large', async () => {
     const view = await render()
     vi.mocked(api.listRecurringChecklist).mockRejectedValueOnce(new Error('413 month too large'))

@@ -94,6 +94,25 @@ async def test_month_projection_preserves_skipped_decisions() -> None:
 
 
 @pytest.mark.asyncio
+async def test_status_counts_remain_global_after_status_filter() -> None:
+    entry = _template()
+    planner, repo, _, _ = _service(entry)
+    repo.list_decisions.return_value = [RecurringEventDecision(
+        id=uuid.uuid4(), district_id=entry.district_id, template_id=entry.id,
+        occurrence_local_date=date(2026, 11, 10),
+        status=DecisionStatus.SKIPPED, created_by="admin",
+    )]
+    page = await planner.list_month(
+        entry.district_id, 2026, 11, templates=[entry],
+        status_filter=ChecklistStatus.SKIPPED,
+    )
+    assert page.total == 1
+    assert [item.status for item in page.items] == [ChecklistStatus.SKIPPED]
+    assert page.counts["OPEN"] == 3
+    assert page.counts["SKIPPED"] == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("slot_visible", [True, False])
 async def test_month_projection_preserves_accepted_links_hidden_by_rls(
     slot_visible: bool,
@@ -374,6 +393,37 @@ async def test_resolve_missing_slot_applies_explicit_action(action: str) -> None
         assert result.planning_slot_id == (target.id if action == "LINK_EXISTING" else None)
         repo.save_decision.assert_awaited_once_with(result)
         repo.delete_decision.assert_not_awaited()
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("template_congregation", [False, True])
+async def test_resolve_rejects_link_to_other_organizational_scope(
+    template_congregation: bool,
+) -> None:
+    own = uuid.uuid4() if template_congregation else None
+    entry = _template(congregation_id=own)
+    planner, repo, slots, instances = _service(entry)
+    repo.get_decision.return_value = RecurringEventDecision(
+        id=uuid.uuid4(), district_id=entry.district_id, template_id=entry.id,
+        occurrence_local_date=date(2026, 11, 3),
+        status=DecisionStatus.ACCEPTED, planning_slot_id=None, created_by="admin",
+    )
+    # A district-wide template may not silently attach a congregation slot,
+    # and a congregation template may not attach another congregation's slot.
+    other = uuid.uuid4()
+    slots.get.return_value = PlanningSlot.create(
+        district_id=entry.district_id, congregation_id=other,
+        title="Other", category=entry.category,
+        planning_date=date(2026, 11, 3), planning_time=time(18, 30),
+    )
+    with pytest.raises(OccurrenceConflictError):
+        await planner.resolve_missing_slot(
+            entry, date(2026, 11, 3), expected_revision=entry.revision,
+            action="LINK_EXISTING", slot_id=slots.get.return_value.id,
+        )
+    repo.save_decision.assert_not_awaited()
     slots.save.assert_not_awaited()
     instances.save.assert_not_awaited()
 
