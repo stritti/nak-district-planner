@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import InlineEditableCell from './InlineEditableCell.vue'
@@ -12,6 +12,7 @@ function setup(override: Record<string, unknown> = {}) {
   const save = vi.fn(async () => undefined)
   const coordinator = useInlineCellCoordinator()
   const wrapper = mount(InlineEditableCell, {
+    attachTo: document.body,
     props: {
       id: 'cell-1', value: 'Vorher', revision: '"rev-1"', label: 'Titel',
       editable: true, coordinator, save, required: true, maxLength: 500,
@@ -25,6 +26,8 @@ async function open(wrapper: ReturnType<typeof setup>['wrapper']) {
   await wrapper.trigger('click')
   await flushPromises()
 }
+
+afterEach(() => { document.body.replaceChildren() })
 
 describe('InlineEditableCell', () => {
   it('shows a compact full-value read mode without permanent input', () => {
