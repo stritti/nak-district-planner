@@ -112,6 +112,29 @@ def test_district_admin_can_manage_district_and_congregation() -> None:
     r._require_write(user, entry.district_id, uuid.uuid4())
 
 
+def test_congregation_scoped_district_admin_is_not_a_congregation_admin() -> None:
+    congregation_id = uuid.uuid4()
+    user = _auth(Role.DISTRICT_ADMIN, ScopeType.CONGREGATION, congregation_id)
+    assert not r._is_congregation_admin(user, congregation_id)
+
+
+@pytest.mark.asyncio
+async def test_read_policy_rejects_membership_of_congregation_in_other_district() -> None:
+    district_id = uuid.uuid4()
+    foreign_congregation = uuid.uuid4()
+    repo = AsyncMock()
+    repo.list_by_district.return_value = [
+        SimpleNamespace(id=uuid.uuid4(), district_id=district_id),
+    ]
+    with patch.object(r, "SqlCongregationRepository", return_value=repo):
+        with pytest.raises(HTTPException) as error:
+            await r._require_read(
+                _auth(Role.VIEWER, ScopeType.CONGREGATION, foreign_congregation),
+                district_id, AsyncMock(),
+            )
+    assert error.value.status_code == 403
+
+
 def test_district_applicability_not_visible_to_uninvited_congregation() -> None:
     own = uuid.uuid4()
     other = uuid.uuid4()
