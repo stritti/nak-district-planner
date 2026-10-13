@@ -286,6 +286,17 @@ function statusLabel(state: ChecklistStatus): string {
     CONFLICT: 'Konflikt', NEEDS_REVIEW: 'Prüfung nötig',
   }[state]
 }
+const bulkErrorMessages: Record<string, string> = {
+  STALE_TEMPLATE: 'Vorlage wurde inzwischen geändert. Bitte die Monatsliste aktualisieren.',
+  OCCURRENCE_CONFLICT: 'Der Termin ist bereits belegt oder wurde verändert.',
+  INVALID_OCCURRENCE: 'Der Termin entspricht nicht mehr der aktuellen Vorlage.',
+  AMBIGUOUS_LOCAL_TIME: 'Die Uhrzeit ist doppeldeutig. Bitte einzeln prüfen.',
+  NONEXISTENT_LOCAL_TIME: 'Die lokale Uhrzeit existiert an diesem Tag nicht.',
+  INVALID_INPUT: 'Ungültige Eingabe. Bitte den Termin prüfen.',
+}
+function bulkErrorMessage(code: string | null | undefined): string {
+  return (code && bulkErrorMessages[code]) || 'Übernahme fehlgeschlagen. Bitte die Monatsliste aktualisieren.'
+}
 function itemKey(item: ChecklistItem): string {
   return `${item.template_id}:${item.occurrence_local_date}`
 }
@@ -389,7 +400,7 @@ async function bulkAccept(): Promise<void> {
       districtId.value, items.map(item => actionFor(item)),
     )
     const failed = result.results.filter(item => item.error)
-    if (failed.length) throw new Error(failed.map(item => item.error).join('; '))
+    if (failed.length) throw new Error(failed.map(item => `${item.occurrence_local_date}: ${bulkErrorMessage(item.error)}`).join('; '))
   })
 }
 

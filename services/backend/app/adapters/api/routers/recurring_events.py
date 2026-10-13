@@ -184,6 +184,21 @@ def _handle_occurrence_error(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=422, detail=str(exc))
 
 
+def _bulk_error_code(exc: ValueError) -> str:
+    """Return a stable public error code, never exception or database details."""
+    if isinstance(exc, StaleTemplateError):
+        return "STALE_TEMPLATE"
+    if isinstance(exc, OccurrenceConflictError):
+        return "OCCURRENCE_CONFLICT"
+    if isinstance(exc, InvalidOccurrenceError):
+        return "INVALID_OCCURRENCE"
+    if isinstance(exc, AmbiguousLocalTimeError):
+        return "AMBIGUOUS_LOCAL_TIME"
+    if isinstance(exc, NonexistentLocalTimeError):
+        return "NONEXISTENT_LOCAL_TIME"
+    return "INVALID_INPUT"
+
+
 async def _mutable_entry(
     repo: SqlRecurringEventRepository,
     district_id: uuid.UUID,
@@ -473,7 +488,7 @@ async def bulk_accept_recurring_occurrences(
                 BulkOccurrenceResult(
                     template_id=item.template_id,
                     occurrence_local_date=item.occurrence_local_date,
-                    status=None, error=str(exc),
+                    status=None, error=_bulk_error_code(exc),
                 )
             )
     return BulkOccurrenceResponse(results=results)

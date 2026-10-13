@@ -75,6 +75,8 @@ Die Monatsplanung zeigt einen Abschnitt "Wiederkehrende Termine" mit Monatsnavig
 
 Die Vorlagenverwaltung nutzt denselben globalen Bezirkskontext wie die übrigen geschützten Ansichten. Liste und Checkliste sind auf schmalen Bildschirmen nutzbar. Bestehende Eventliste, Monatsansicht und Export erhalten nach Übernahme ihre Daten über die vorhandene API, ohne neue Anzeige-Logik für virtuelle Vorschläge.
 
+Für Teilfehler bei `bulk-accept` enthält jedes Item statt eines rohen Exception-Texts einen stabilen Fehlercode im bestehenden `error`-Feld: `STALE_TEMPLATE`, `OCCURRENCE_CONFLICT`, `INVALID_OCCURRENCE`, `AMBIGUOUS_LOCAL_TIME`, `NONEXISTENT_LOCAL_TIME` oder `INVALID_INPUT`. Das Frontend lokalisiert die Codes; interne SQL-/Validierungsdetails werden nie an Clients übertragen. Erfolge bleiben pro Item unabhängig davon erhalten.
+
 ### 7. API-Kontrakt (Planungsentwurf)
 
 - GET/POST /api/v1/districts/{district_id}/recurring-event-templates
