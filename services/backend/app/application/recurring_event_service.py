@@ -14,8 +14,8 @@ import uuid
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import (
