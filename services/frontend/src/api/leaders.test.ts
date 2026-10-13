@@ -16,6 +16,7 @@ import {
   listLeaders,
   unlinkSelfFromLeader,
   updateLeader,
+  updateLeaderInline,
   type LeaderResponse,
 } from './leaders'
 
@@ -77,6 +78,18 @@ describe('leader API', () => {
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/districts/district-1/leaders/leader-1', {
       method: 'DELETE',
     })
+  })
+
+  it('requires the exact revision for inline leader contact edits', async () => {
+    await updateLeaderInline('district-1', 'leader-1', { email: 'new@example.org' }, '"rev"')
+    expect(apiFetch).toHaveBeenCalledWith('/api/v1/districts/district-1/leaders/leader-1/inline', {
+      method: 'PATCH',
+      headers: { 'If-Match': '"rev"' },
+      body: JSON.stringify({ email: 'new@example.org' }),
+    })
+    apiFetch.mockClear()
+    await expect(updateLeaderInline('district-1', 'leader-1', { email: null }, '')).rejects.toThrow('Versionsinformation')
+    expect(apiFetch).not.toHaveBeenCalled()
   })
 
   it('covers self-link lifecycle', async () => {
