@@ -215,3 +215,149 @@ async def test_create_fails_authorization_before_congregation_lookup() -> None:
         )
     assert exc.value.status_code == 403
     session.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", ["accept", "skip", "reopen", "resolve"])
+@pytest.mark.parametrize("failure", [None, OccurrenceConflictError("changed"), ValueError("invalid")])
+async def test_occurrence_routes_preserve_results_and_error_status(command: str, failure: Exception | None) -> None:
+    entry = _template()
+    user = _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id)
+    service = AsyncMock()
+    method = service.resolve_missing_slot if command == "resolve" else getattr(service, command)
+    method.side_effect = failure
+    method.return_value = SimpleNamespace(status=DecisionStatus.SKIPPED, planning_slot_id=None)
+    body = _action(entry)
+    if command == "resolve":
+        body = OccurrenceResolveRequest(
+            template_id=entry.id, occurrence_local_date=body.occurrence_local_date,
+            template_revision=entry.revision, action="MARK_SKIPPED",
+        )
+    route = getattr(r, f"{command}_recurring_occurrence")
+    with (
+        patch.object(r, "_mutable_entry", AsyncMock(return_value=entry)),
+        patch.object(r, "_service", return_value=service),
+    ):
+        if failure is not None:
+            with pytest.raises(HTTPException) as error:
+                await route(entry.district_id, body, user, AsyncMock())
+            assert error.value.status_code == (409 if isinstance(failure, OccurrenceConflictError) else 422)
+            assert error.value.__cause__ is failure
+        else:
+            result = await route(entry.district_id, body, user, AsyncMock())
+            assert result.template_id == entry.id
+            assert result.status.value == ("OPEN" if command == "reopen" else "SKIPPED")
+    method.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("foreign", [False, True])
+async def test_mutable_entry_hides_missing_or_foreign_templates(foreign: bool) -> None:
+    entry = _template()
+    repo = AsyncMock()
+    repo.get_template.return_value = entry if foreign else None
+    with pytest.raises(HTTPException) as error:
+        await r._mutable_entry(
+            repo, uuid.uuid4(), entry.id,
+            _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id),
+        )
+    assert error.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_template_list_and_update_preserve_revision_contract() -> None:
+    entry = _template()
+    user = _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id)
+    repo = AsyncMock()
+    repo.list_templates.return_value = [entry]
+    repo.get_template.return_value = entry
+    with patch.object(r, "_repository", return_value=repo):
+        listed = await r.list_recurring_templates(entry.district_id, user, AsyncMock())
+        assert listed.total == 1
+        assert listed.items[0].id == entry.id
+        updated = await r.update_recurring_template(
+            entry.district_id, entry.id,
+            r.RecurringTemplatePatch(expected_revision=entry.revision, title="Updated"),
+            user, AsyncMock(),
+        )
+        assert updated.title == "Updated"
+        assert updated.revision == entry.revision + 1
+        repo.save_template.assert_awaited_once()
+        with pytest.raises(HTTPException) as error:
+            await r.update_recurring_template(
+                entry.district_id, entry.id,
+                r.RecurringTemplatePatch(expected_revision=entry.revision + 1),
+                user, AsyncMock(),
+            )
+        assert error.value.status_code == 409
+        repo.save_template.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_template_persists_valid_district_template() -> None:
+    entry = _template()
+    repo = AsyncMock()
+    payload = RecurringTemplateCreate(
+        title=entry.title, category=entry.category, start_time=entry.start_time,
+        duration_minutes=90, recurrence=RecurrenceRulePayload(
+            kind=RecurrenceKind.WEEKLY, anchor_date=date(2026, 11, 3), weekdays=(2,),
+        ),
+    )
+    with patch.object(r, "_repository", return_value=repo):
+        result = await r.create_recurring_template(
+            entry.district_id, payload,
+            _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id),
+            AsyncMock(),
+        )
+    assert result.title == entry.title
+    assert result.district_id == entry.district_id
+    repo.save_template.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_checklist_passes_filters_and_pagination_to_service() -> None:
+    entry = _template(congregation_id=uuid.uuid4())
+    repo = AsyncMock()
+    repo.list_templates.return_value = [entry]
+    service = AsyncMock()
+    service.list_month.return_value = SimpleNamespace(
+        items=[], total=0, limit=5, offset=10, counts={"OPEN": 0},
+    )
+    with (
+        patch.object(r, "_repository", return_value=repo),
+        patch.object(r, "_service", return_value=service),
+        patch.object(r, "_validate_congregation", AsyncMock()),
+    ):
+        result = await r.list_recurring_checklist(
+            entry.district_id,
+            _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id),
+            AsyncMock(), year=2026, month=11, congregation_id=entry.congregation_id,
+            q="choir", category="Musik", approval_status=r.ChecklistStatus.OPEN,
+            limit=5, offset=10,
+        )
+    assert result.total == 0
+    kwargs = service.list_month.call_args.kwargs
+    assert kwargs["templates"] == [entry]
+    assert kwargs["query"] == "choir"
+    assert kwargs["category"] == "Musik"
+    assert kwargs["status_filter"] is r.ChecklistStatus.OPEN
+    assert kwargs["limit"] == 5
+    assert kwargs["offset"] == 10
+
+
+@pytest.mark.asyncio
+async def test_congregation_and_distribution_reject_cross_district_ids() -> None:
+    entry = _template()
+    congregation_id = uuid.uuid4()
+    congregations = AsyncMock()
+    congregations.get.return_value = SimpleNamespace(id=congregation_id, district_id=uuid.uuid4())
+    congregations.list_by_district.return_value = []
+    with patch.object(r, "SqlCongregationRepository", return_value=congregations):
+        with pytest.raises(HTTPException) as error:
+            await r._validate_congregation(AsyncMock(), entry.district_id, congregation_id)
+        assert error.value.status_code == 403
+        with pytest.raises(HTTPException) as error:
+            await r._validate_distribution(
+                AsyncMock(), replace(entry, applicability=(str(congregation_id),)),
+            )
+        assert error.value.status_code == 403
