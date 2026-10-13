@@ -129,6 +129,14 @@ class EventCreate(BaseModel):
     )
 
 
+class EventInlineUpdate(BaseModel):
+    """Explicit scalar-only contract; reject future workflow fields by default."""
+
+    model_config = ConfigDict(extra="forbid")
+    title: str | None = Field(None, min_length=1, max_length=500)
+    description: str | None = None
+
+
 class EventUpdate(BaseModel):
     """Patch fields for an event."""
 
@@ -508,7 +516,7 @@ async def update_event(
 @router.patch("/{event_id}/inline", response_model=EventResponse)
 async def inline_update_event(
     event_id: uuid.UUID,
-    body: EventUpdate,
+    body: EventInlineUpdate,
     auth: CurrentUserWithMemberships,
     session: DbSession,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
@@ -522,12 +530,12 @@ async def inline_update_event(
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     fields = body.model_fields_set
-    if not fields or not fields.issubset({"title", "description"}) or (
+    if not fields or (
         "title" in fields and body.title is None
     ):
         raise HTTPException(status_code=422, detail="Dieses Feld kann nicht inline bearbeitet werden.")
     return await update_event(
-        event_id, body, auth, session, slot_repo=slot_repo, cong_repo=cong_repo,
+        event_id, EventUpdate.model_validate(body.model_dump(exclude_unset=True)), auth, session, slot_repo=slot_repo, cong_repo=cong_repo,
         inst_repo=inst_repo, assignments_repo=assignments_repo,
         leaders_repo=leaders_repo, if_match=if_match,
     )
