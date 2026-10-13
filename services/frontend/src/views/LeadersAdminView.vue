@@ -919,7 +919,9 @@ const saving = ref(false)
 const inlineCoordinator = useInlineCellCoordinator()
 
 function canInlineEditLeader(leader: LeaderResponse): boolean {
-  return canManageUnavailabilities.value &&
+  return (authStore.isSuperadmin || authStore.memberships.some((m) =>
+    m.scope_type === 'DISTRICT' && m.scope_id === selectedDistrictId.value && m.role === 'PLANNER'
+  )) &&
     leader.district_id === selectedDistrictId.value &&
     !!leader.revision
 }
