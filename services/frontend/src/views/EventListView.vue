@@ -270,7 +270,7 @@
       <!-- Desktop: table -->
       <div class="table-container hidden md:block">
         <div class="table-scroll">
-        <table class="table-min-w w-full text-sm">
+        <table data-inline-edit-scope class="table-min-w w-full text-sm">
           <thead>
             <tr class="table-thead">
               <th class="table-th">Titel</th>
