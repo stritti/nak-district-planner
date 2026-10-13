@@ -13,6 +13,7 @@ import {
   listEvents,
   resolveEventConflict,
   updateEvent,
+  updateEventInline,
 } from './events'
 
 describe('events api', () => {
@@ -88,6 +89,20 @@ describe('events api', () => {
       method: 'PATCH',
       body: JSON.stringify({ status: 'ACTIVE' }),
     })
+  })
+
+  it('requires a version for an inline patch and sends an If-Match header', async () => {
+    await updateEventInline('e1', { title: 'Neu' }, '"opaque-revision"')
+    expect(client.apiFetch).toHaveBeenCalledWith('/api/v1/events/e1/inline', {
+      method: 'PATCH',
+      headers: { 'If-Match': '"opaque-revision"' },
+      body: JSON.stringify({ title: 'Neu' }),
+    })
+  })
+
+  it('does not issue an unsafe inline request without the server revision', async () => {
+    await expect(updateEventInline('e1', { title: 'Neu' }, '')).rejects.toThrow('Versionsinformation')
+    expect(client.apiFetch).not.toHaveBeenCalled()
   })
 
   it('resolves an event conflict through its dedicated action', async () => {
