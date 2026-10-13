@@ -99,7 +99,7 @@ def recurring_rows(owner, data):
 def test_congregation_admin_writes_own_decision_without_worker_bypass(
     owner, data, recurring_rows,
 ):
-    template_a, template_b, decision_a, decision_b = recurring_rows
+    template_a, _, decision_a, decision_b = recurring_rows
     sub = data.sub("recurring-congregation-admin")
     with owner.cursor() as cur:
         cur.execute(
