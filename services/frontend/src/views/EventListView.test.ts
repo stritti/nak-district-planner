@@ -517,6 +517,7 @@ describe('Inline editing in the event overview', () => {
     vi.mocked(eventsApi.updateEventInline).mockResolvedValue(event({ title: 'Geändert' }))
     const { wrapper } = setup([event()])
     await flushPromises()
+    const initialFetches = vi.mocked(eventsApi.listEvents).mock.calls.length
     const cell = wrapper.get('[data-inline-cell-id="event-title-desktop-e1"]')
     expect(cell.find('input').exists()).toBe(false)
     await cell.trigger('click')
@@ -525,7 +526,7 @@ describe('Inline editing in the event overview', () => {
     await cell.get('input').trigger('keydown', { key: 'Enter' })
     await flushPromises()
     expect(eventsApi.updateEventInline).toHaveBeenCalledWith('e1', { title: 'Geändert' }, '"revision-1"')
-    expect(eventsApi.listEvents).toHaveBeenCalledTimes(2)
+    expect(eventsApi.listEvents).toHaveBeenCalledTimes(initialFetches + 1)
   })
 
   it('does not edit external events, cancelled events or missing-version rows', async () => {
