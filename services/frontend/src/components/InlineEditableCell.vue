@@ -34,6 +34,7 @@
       <span v-if="error" :id="id + '-error'" role="alert" class="text-xs text-red-700">{{ error }}</span>
     </div>
     <span v-else class="block truncate" :title="value || undefined">{{ value || '—' }}</span>
+    <span class="sr-only" aria-live="polite">{{ announcement }}</span>
   </component>
 </template>
 
@@ -60,6 +61,7 @@ const input = ref<HTMLInputElement | null>(null)
 const draft = ref(props.value ?? '')
 const startingRevision = ref(props.revision)
 const error = ref('')
+const announcement = ref('')
 const saving = ref(false)
 const editing = computed(() => props.coordinator.activeId.value === props.id)
 let pendingSave: Promise<boolean> | null = null
@@ -78,6 +80,7 @@ async function activate(): Promise<void> {
   draft.value = props.value ?? ''
   startingRevision.value = props.revision
   error.value = ''
+  announcement.value = ''
   await nextTick()
   input.value?.focus()
   input.value?.select()
@@ -126,10 +129,12 @@ async function commit(): Promise<boolean> {
     error.value = ''
     try {
       await props.save(nextValue, startingRevision.value)
+      announcement.value = 'Gespeichert'
       props.coordinator.release(props.id)
       return true
     } catch (cause) {
       error.value = saveError(cause)
+      announcement.value = error.value
       await nextTick()
       input.value?.focus()
       return false
@@ -157,8 +162,15 @@ async function onEditorKeydown(event: KeyboardEvent): Promise<void> {
     const cells = Array.from((table ?? root.value?.parentElement)?.querySelectorAll<HTMLElement>('[data-inline-editable="true"]') ?? [])
     const index = cells.indexOf(root.value as HTMLElement)
     const destinationId = event.key === 'Tab' ? cells[index + direction]?.dataset.inlineCellId : undefined
-    if (!(await commit()) || !destinationId) return
+    if (!(await commit())) return
     await nextTick()
+    if (!destinationId) {
+      const self = Array.from(document.querySelectorAll<HTMLElement>('[data-inline-cell-id]')).find(
+        (cell) => cell.dataset.inlineCellId === props.id && (!!table === !!cell.closest('table')),
+      )
+      self?.focus()
+      return
+    }
     const destination = Array.from(document.querySelectorAll<HTMLElement>('[data-inline-editable="true"]')).find(
       (cell) => cell.dataset.inlineCellId === destinationId && (!!table === !!cell.closest('table')),
     )
