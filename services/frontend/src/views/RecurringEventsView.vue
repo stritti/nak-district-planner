@@ -26,7 +26,7 @@
               <label for="recurring-month" class="filter-label">Monat</label>
               <div class="flex gap-1 items-center">
                 <button aria-label="Vorheriger Monat" class="btn-icon" @click="moveMonth(-1)">‹</button>
-                <input id="recurring-month" v-model="monthValue" type="month" class="form-select" />
+                <input id="recurring-month" v-model="monthValue" type="month" class="form-input" />
                 <button aria-label="Nächster Monat" class="btn-icon" @click="moveMonth(1)">›</button>
               </div>
             </div>
@@ -46,11 +46,11 @@
             </div>
             <div>
               <label for="recurring-category" class="filter-label">Kategorie</label>
-              <input id="recurring-category" v-model="categoryFilter" class="form-select" placeholder="Alle Kategorien" />
+              <input id="recurring-category" v-model="categoryFilter" class="form-input" placeholder="Alle Kategorien" />
             </div>
             <div class="grow">
               <label for="recurring-search" class="filter-label">Suche</label>
-              <input id="recurring-search" v-model="queryFilter" class="form-select w-full" placeholder="Titel oder Beschreibung" @keyup.enter="applyFilters" />
+              <input id="recurring-search" v-model="queryFilter" class="form-input w-full" placeholder="Titel oder Beschreibung" @keyup.enter="applyFilters" />
             </div>
             <button data-testid="apply-recurring-filters" class="btn-primary px-3 py-2" :disabled="loading" @click="applyFilters">Filtern</button>
           </div>
@@ -95,7 +95,7 @@
               <template v-if="item.status === 'NEEDS_REVIEW' && item.decision_status === 'ACCEPTED'">
                 <button class="btn-icon px-3 py-1.5 text-sm" :disabled="busy" @click="resolve(item, 'MARK_SKIPPED')">Als ausgelassen markieren</button>
                 <button class="btn-icon px-3 py-1.5 text-sm" :disabled="busy" @click="resolve(item, 'REOPEN')">Neu öffnen</button>
-                <input  :value="resolveSlotIds[itemKey(item)] ?? ''" @input="setResolveSlotId(item, $event)" aria-label="Slot-ID zur Zuordnung" class="form-select text-sm" placeholder="UUID des bestehenden Slots" />
+                <input  :value="resolveSlotIds[itemKey(item)] ?? ''" @input="setResolveSlotId(item, $event)" aria-label="Slot-ID zur Zuordnung" class="form-input text-sm" placeholder="UUID des bestehenden Slots" />
                 <button class="btn-primary px-3 py-1.5 text-sm" :disabled="busy || !resolveSlotIds[itemKey(item)]" @click="resolve(item, 'LINK_EXISTING')">Slot zuordnen</button>
               </template>
             </div>
@@ -135,10 +135,10 @@
         <form v-if="formOpen" class="card p-4 space-y-3" data-testid="recurring-template-form" @submit.prevent="saveTemplate">
           <h2 class="font-semibold">{{ editing ? 'Vorlage bearbeiten' : 'Neue Vorlage' }}</h2>
           <div class="grid gap-3 sm:grid-cols-2">
-            <label class="text-sm">Titel<input v-model="form.title" required maxlength="500" class="form-select w-full" /></label>
-            <label class="text-sm">Kategorie (kein Gottesdienst)<input v-model="form.category" required maxlength="255" class="form-select w-full" /></label>
-            <label class="text-sm">Lokale Startzeit<input v-model="form.start_time" type="time" required class="form-select w-full" /></label>
-            <label class="text-sm">Dauer (Minuten)<input v-model.number="form.duration_minutes" type="number" min="1" required class="form-select w-full" /></label>
+            <label class="text-sm">Titel<input v-model="form.title" required maxlength="500" class="form-input w-full" /></label>
+            <label class="text-sm">Kategorie (kein Gottesdienst)<input v-model="form.category" required maxlength="255" class="form-input w-full" /></label>
+            <label class="text-sm">Lokale Startzeit<input v-model="form.start_time" type="time" required class="form-input w-full" /></label>
+            <label class="text-sm">Dauer (Minuten)<input v-model.number="form.duration_minutes" type="number" min="1" required class="form-input w-full" /></label>
             <label class="text-sm">Gemeinde
               <select v-model="form.congregation_id" class="form-select w-full" :disabled="editing !== null">
                 <option v-if="districtAdmin" :value="null">Bezirkstermin</option>
@@ -152,8 +152,8 @@
                 <option value="MONTHLY_WEEKDAY">Monatlicher Wochentag</option>
               </select>
             </label>
-            <label class="text-sm">Ankerdatum<input v-model="form.recurrence.anchor_date" type="date" required class="form-select w-full" /></label>
-            <label class="text-sm">Intervall<input v-model.number="form.recurrence.interval" type="number" min="1" required class="form-select w-full" /></label>
+            <label class="text-sm">Ankerdatum<input v-model="form.recurrence.anchor_date" type="date" required class="form-input w-full" /></label>
+            <label class="text-sm">Intervall<input v-model.number="form.recurrence.interval" type="number" min="1" required class="form-input w-full" /></label>
             <fieldset v-if="form.recurrence.kind === 'WEEKLY'" class="sm:col-span-2">
               <legend class="text-sm">Wochentage</legend>
               <label v-for="day in 7" :key="day" class="inline-flex gap-1 items-center text-sm mr-3">
@@ -162,7 +162,7 @@
               </label>
             </fieldset>
             <label v-if="form.recurrence.kind === 'MONTHLY_DAY'" class="text-sm">Tag des Monats
-              <input v-model.number="form.recurrence.day_of_month" type="number" min="1" max="31" class="form-select w-full" />
+              <input v-model.number="form.recurrence.day_of_month" type="number" min="1" max="31" class="form-input w-full" />
             </label>
             <template v-if="form.recurrence.kind === 'MONTHLY_WEEKDAY'">
               <label class="text-sm">Wochentag
@@ -177,14 +177,14 @@
               </label>
             </template>
             <label v-if="!form.congregation_id" class="text-sm sm:col-span-2">Verteilung (all oder komma-getrennte Gemeinde-UUIDs)
-              <input v-model="applicabilityInput" class="form-select w-full" placeholder="all" />
+              <input v-model="applicabilityInput" class="form-input w-full" placeholder="all" />
             </label>
             <label class="text-sm sm:col-span-2">Ausnahmedaten (YYYY-MM-DD, komma-getrennt)
-              <input v-model="excludedDatesInput" class="form-select w-full" />
+              <input v-model="excludedDatesInput" class="form-input w-full" />
             </label>
-            <label class="text-sm">Aktiv ab<input v-model="activeFromInput" type="date" class="form-select w-full" /></label>
-            <label class="text-sm">Aktiv bis<input v-model="activeUntilInput" type="date" class="form-select w-full" /></label>
-            <label class="text-sm sm:col-span-2">Beschreibung<textarea v-model="form.description" class="form-select w-full" rows="2" /></label>
+            <label class="text-sm">Aktiv ab<input v-model="activeFromInput" type="date" class="form-input w-full" /></label>
+            <label class="text-sm">Aktiv bis<input v-model="activeUntilInput" type="date" class="form-input w-full" /></label>
+            <label class="text-sm sm:col-span-2">Beschreibung<textarea v-model="form.description" class="form-input w-full" rows="2" /></label>
             <label class="text-sm flex gap-2 items-center"><input v-model="form.is_active" type="checkbox" /> Aktiv</label>
           </div>
           <div class="flex gap-2">
@@ -198,11 +198,11 @@
         <h2 class="font-semibold">Einzeltermin prüfen und übernehmen</h2>
         <p class="text-xs text-gray-500">Die ursprüngliche Serienzuordnung bleibt auch nach einer Verschiebung erhalten. Der Termin bleibt bis zur Monatsfreigabe PLANNED.</p>
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="text-sm">Titel<input v-model="previewTitle" required class="form-select w-full" /></label>
-          <label class="text-sm">Datum<input v-model="previewDate" type="date" required class="form-select w-full" /></label>
-          <label class="text-sm">Uhrzeit<input v-model="previewTime" type="time" required class="form-select w-full" /></label>
-          <label class="text-sm">Dauer<input v-model.number="previewDuration" type="number" min="1" required class="form-select w-full" /></label>
-          <label class="text-sm sm:col-span-2">Beschreibung<textarea v-model="previewDescription" class="form-select w-full" rows="2" /></label>
+          <label class="text-sm">Titel<input v-model="previewTitle" required class="form-input w-full" /></label>
+          <label class="text-sm">Datum<input v-model="previewDate" type="date" required class="form-input w-full" /></label>
+          <label class="text-sm">Uhrzeit<input v-model="previewTime" type="time" required class="form-input w-full" /></label>
+          <label class="text-sm">Dauer<input v-model.number="previewDuration" type="number" min="1" required class="form-input w-full" /></label>
+          <label class="text-sm sm:col-span-2">Beschreibung<textarea v-model="previewDescription" class="form-input w-full" rows="2" /></label>
           <label class="text-sm">Sommerzeit-Überlappung
             <select v-model="previewFold" class="form-select w-full">
               <option :value="null">Keine explizite Wahl</option>
