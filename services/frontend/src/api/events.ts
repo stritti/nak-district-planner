@@ -38,6 +38,8 @@ export interface EventResponse {
   responsible?: EventResponsible | null
   created_at: string
   updated_at: string
+  /** Strong revision returned by the server; legacy fixtures may omit it. */
+  revision?: string
 }
 
 export interface EventListResponse {
@@ -100,6 +102,18 @@ export interface EventUpdate {
 export function updateEvent(id: string, data: EventUpdate): Promise<EventResponse> {
   return apiFetch(`/api/v1/events/${id}`, {
     method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
+/** The server checks this exact opaque revision while holding the event row lock. */
+export function updateEventInline(
+  id: string, data: Pick<EventUpdate, 'title' | 'description'>, revision: string,
+): Promise<EventResponse> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+  return apiFetch(`/api/v1/events/${id}/inline`, {
+    method: 'PATCH',
+    headers: { 'If-Match': revision },
     body: JSON.stringify(data),
   })
 }
