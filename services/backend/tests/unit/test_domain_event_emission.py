@@ -51,7 +51,6 @@ class TestCandidateIngestion:
             start_at=self.START,
             end_at=self.START + timedelta(hours=1),
             description=None,
-            content_hash="h",
             is_cancelled=False,
         )
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from app.application.tasks import (
+from app.adapters.worker.tasks import (
     auto_import_feiertage,
     check_version,
     cleanup_old_events,
@@ -24,7 +24,7 @@ class TestCleanupOldEvents:
 
     def test_cleanup_old_events_success(self):
         with patch(
-            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+            "app.adapters.worker.tasks.asyncio.run", new_callable=CoroutineClosingMock
         ) as mock_run:
             mock_run.return_value = {"deleted": 5, "cutoff": "2024-06-15T00:00:00+00:00"}
 
@@ -36,7 +36,7 @@ class TestCleanupOldEvents:
     def test_cleanup_old_events_feb29_edge_case(self):
         """Test that Feb-29 edge case doesn't crash."""
         with patch(
-            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+            "app.adapters.worker.tasks.asyncio.run", new_callable=CoroutineClosingMock
         ) as mock_run:
             mock_run.return_value = {"deleted": 0, "cutoff": "2024-02-29T00:00:00+00:00"}
 
@@ -55,7 +55,7 @@ class TestCheckVersionTask:
         mock_fetcher.fetch_latest_version.return_value = "v0.9.0"
 
         # These imports are INSIDE the check_version function body, so we must
-        # patch at the defining module, not at app.application.tasks.
+        # patch at the defining module, not at app.adapters.worker.tasks.
         with (
             patch("app.adapters.version_check.cache.version_cache", mock_cache),
             patch("app.adapters.version_check.ghcr.GhcrTagFetcher", return_value=mock_fetcher) as _,
@@ -74,7 +74,7 @@ class TestAutoImportFeiertage:
 
     def test_auto_import_success(self):
         with patch(
-            "app.application.tasks.asyncio.run", new_callable=CoroutineClosingMock
+            "app.adapters.worker.tasks.asyncio.run", new_callable=CoroutineClosingMock
         ) as mock_run:
             mock_run.return_value = {
                 "years": [2026],

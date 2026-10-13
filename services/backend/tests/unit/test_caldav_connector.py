@@ -17,10 +17,10 @@ import pytest
 from icalendar import Calendar as ICalendar
 
 from app.adapters.calendar.caldav_connector import CalDAVConnector
-from app.adapters.calendar.ical_events import content_hash as _content_hash
 from app.adapters.calendar.ical_events import to_utc as _to_utc
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 
 CREDS = {
     "url": "https://example.com/calendars/user/default/",
@@ -126,7 +126,6 @@ def _raw_event(*, revision_marker: str | None = None) -> RawCalendarEvent:
         start_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
         end_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
         description="Stale internal description",
-        content_hash="hash",
         is_cancelled=False,
         revision_marker=revision_marker,
         resource_id="event.ics",

@@ -32,8 +32,7 @@ def integration():
 def event(*, uid="ext", cancelled=False):
     return RawCalendarEvent(
         uid=uid, title="Meeting", start_at=START,
-        end_at=START + timedelta(hours=1), description="Description",
-        content_hash="provider", is_cancelled=cancelled,
+        end_at=START + timedelta(hours=1), description="Description", is_cancelled=cancelled,
         revision_marker="etag", resource_id="resource-id",
     )
 
@@ -197,8 +196,7 @@ async def test_invalid_interval_does_not_persist_candidate():
     raw = event()
     raw = RawCalendarEvent(
         uid=raw.uid, title=raw.title, start_at=raw.start_at,
-        end_at=raw.start_at, description=raw.description,
-        content_hash=raw.content_hash, is_cancelled=False,
+        end_at=raw.start_at, description=raw.description, is_cancelled=False,
     )
     adapters["candidate_repo"].by_external_event.return_value = None
     assert await ingest_unlinked_event(

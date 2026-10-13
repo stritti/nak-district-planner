@@ -14,11 +14,9 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from app.adapters.calendar.google_connector import (
-    GoogleCalendarConnector,
-    _content_hash,
-)
+from app.adapters.calendar.google_connector import GoogleCalendarConnector
 from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 
 CREDS = {"access_token": "test_token"}
 

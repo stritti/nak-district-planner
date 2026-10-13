@@ -188,8 +188,6 @@ class MockRepos:
             series_repo=self.series_repo,
             slot_repo=self.slot_repo,
             instance_repo=self.instance_repo,
-            district_repo=self.district_repo,
-            congregation_repo=self.congregation_repo,
         )
 
 
@@ -587,3 +585,94 @@ async def test_moved_series_slot_is_not_recreated_by_beat_generator() -> None:
     assert result["slots_skipped"] == 1
     mocks.slot_repo.add_if_absent.assert_not_awaited()
     mocks.instance_repo.save.assert_not_awaited()
+
+def test_biweekly_recurrence_keeps_series_anchor_across_daily_windows() -> None:
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(),
+        default_planning_time=time(10),
+        active_from=date(2026, 6, 1),
+        recurrence_pattern={"type": "weekly", "interval": 2, "days": [0]},
+    )
+    initial = _expand_recurrence(
+        series, from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 29)
+    )
+    shifted = _expand_recurrence(
+        series, from_date=date(2026, 6, 2), to_date_exclusive=date(2026, 6, 29)
+    )
+    assert [slot.planning_date for slot in initial] == [
+        date(2026, 6, 1), date(2026, 6, 15)
+    ]
+    assert [slot.planning_date for slot in shifted] == [date(2026, 6, 15)]
+
+
+def test_bimonthly_recurrence_keeps_series_anchor_across_windows() -> None:
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(),
+        default_planning_time=time(10),
+        active_from=date(2026, 1, 5),
+        recurrence_pattern={"frequency": "monthly", "interval": 2, "by_month_day": 5},
+    )
+    shifted = _expand_recurrence(
+        series, from_date=date(2026, 2, 1), to_date_exclusive=date(2026, 7, 1)
+    )
+    assert [slot.planning_date for slot in shifted] == [
+        date(2026, 3, 5), date(2026, 5, 5)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_missing_series_category_generates_service_slot() -> None:
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(10),
+        active_from=date(2026, 6, 1),
+        recurrence_pattern={"type": "weekly", "days": [0]},
+    )
+    repos = MockRepos()
+    repos.series_repo.list_active.return_value = [series]
+    repos.slot_repo.get_by_series_date.return_value = None
+    result = await repos.build().run_for_window(
+        from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2)
+    )
+    assert result["slots_created"] == 1
+    slot = repos.slot_repo.add_if_absent.await_args.args[0]
+    assert slot.category == "Gottesdienst"
+
+
+@pytest.mark.asyncio
+async def test_generated_instance_duration_reads_current_settings(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import app.application.planning_series_generator as generator_module
+
+    monkeypatch.setattr(
+        generator_module, "settings", SimpleNamespace(sync_expected_duration_minutes=65)
+    )
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(10),
+        active_from=date(2026, 6, 1),
+        recurrence_pattern={"type": "weekly", "days": [0]},
+    )
+    repos = MockRepos()
+    repos.series_repo.list_active.return_value = [series]
+    repos.slot_repo.get_by_series_date.return_value = None
+    result = await repos.build().run_for_window(
+        from_date=date(2026, 6, 1), to_date_exclusive=date(2026, 6, 2)
+    )
+    assert result["slots_created"] == 1
+    instance = repos.instance_repo.save.await_args.args[0]
+    assert instance.actual_end_at - instance.actual_start_at == timedelta(minutes=65)
+
+def test_implicit_weekday_uses_series_start_for_both_pattern_formats() -> None:
+    start = date(2026, 6, 2)  # Tuesday
+    for pattern in ({"type": "weekly"}, {"frequency": "weekly"}):
+        series = PlanningSeries.create(
+            district_id=uuid.uuid4(), default_planning_time=time(10),
+            active_from=start, recurrence_pattern=pattern,
+        )
+        series.created_at = datetime(2026, 6, 1, tzinfo=UTC)  # Monday
+        slots = _expand_recurrence(
+            series, from_date=start, to_date_exclusive=date(2026, 6, 10)
+        )
+        assert [slot.planning_date for slot in slots] == [
+            date(2026, 6, 2), date(2026, 6, 9)
+        ]

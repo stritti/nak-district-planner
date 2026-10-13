@@ -9,7 +9,7 @@
   >
     <div
       ref="scrollContainer"
-      class="matrix-scroll-container max-h-[70dvh] overflow-auto overscroll-x-contain overscroll-y-auto touch-auto"
+      class="matrix-scroll-container max-h-[70dvh] overflow-auto overscroll-x-contain overscroll-y-auto touch-auto [&::-webkit-scrollbar:horizontal]:h-0"
       data-testid="matrix-scroll"
       role="region"
       aria-label="Dienstplan-Matrix, horizontal und vertikal scrollbar"
@@ -302,22 +302,22 @@ const tableWidth = computed(() => congregationColumnWidth.value + (matrixStore.m
 
 const gapTitleClass = computed(() => {
   return [
-    'matrix-ellipsis matrix-cell-gap text-red-600 dark:text-red-400',
-    props.compactMode ? 'text-[10px]' : 'text-[11px]',
+    'matrix-ellipsis matrix-cell-gap block truncate text-red-600 dark:text-red-400',
+    props.compactMode ? 'text-[10px] max-w-[11ch] xl:max-w-[13ch]' : 'text-[11px] max-w-[14ch] xl:max-w-[18ch]',
   ]
 })
 
 const eventTitleClass = computed(() => {
   return [
-    'matrix-ellipsis matrix-cell-title font-medium text-gray-800 dark:text-gray-200',
-    props.compactMode ? 'text-[10px]' : 'text-[11px]',
+    'matrix-ellipsis matrix-cell-title block truncate font-medium text-gray-800 dark:text-gray-200',
+    props.compactMode ? 'text-[10px] max-w-[12ch] xl:max-w-[14ch]' : 'text-[11px] max-w-[16ch] xl:max-w-[22ch]',
   ]
 })
 
 const leaderNameClass = computed(() => {
   return [
-    'matrix-ellipsis matrix-cell-subtitle text-gray-500 dark:text-gray-400',
-    props.compactMode ? 'text-[10px]' : 'text-[11px]',
+    'matrix-ellipsis matrix-cell-subtitle block truncate text-gray-500 dark:text-gray-400',
+    props.compactMode ? 'text-[10px] max-w-[13ch] xl:max-w-[15ch]' : 'text-[11px] max-w-[18ch] xl:max-w-[24ch]',
   ]
 })
 
@@ -397,66 +397,3 @@ function openCellModal(cell: MatrixCell, date: string, congregationName: string,
 }
 </script>
 
-<style scoped>
-/* Keep the native vertical scrollbar usable without duplicating the horizontal proxy in WebKit. */
-.matrix-scroll-container::-webkit-scrollbar:horizontal {
-  height: 0;
-}
-
-.matrix-ellipsis {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.matrix-table--normal .matrix-cell-gap {
-  max-width: 14ch;
-}
-
-.matrix-table--normal .matrix-cell-title {
-  max-width: 16ch;
-}
-
-.matrix-table--normal .matrix-cell-subtitle {
-  max-width: 18ch;
-}
-
-.matrix-table--compact .matrix-cell-gap {
-  max-width: 11ch;
-}
-
-.matrix-table--compact .matrix-cell-title {
-  max-width: 12ch;
-}
-
-.matrix-table--compact .matrix-cell-subtitle {
-  max-width: 13ch;
-}
-
-@media (min-width: 1280px) {
-  .matrix-table--normal .matrix-cell-gap {
-    max-width: 18ch;
-  }
-
-  .matrix-table--normal .matrix-cell-title {
-    max-width: 22ch;
-  }
-
-  .matrix-table--normal .matrix-cell-subtitle {
-    max-width: 24ch;
-  }
-
-  .matrix-table--compact .matrix-cell-gap {
-    max-width: 13ch;
-  }
-
-  .matrix-table--compact .matrix-cell-title {
-    max-width: 14ch;
-  }
-
-  .matrix-table--compact .matrix-cell-subtitle {
-    max-width: 15ch;
-  }
-}
-</style>

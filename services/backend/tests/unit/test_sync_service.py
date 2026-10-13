@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.sync_service import (
     SyncResult,
+    _compute_content_hash,
     _get_connector,
     _has_significant_deviation,
     run_sync,
@@ -80,10 +81,6 @@ def _raw(
     return RawCalendarEvent(
         uid=uid, title=title, start_at=start_at, end_at=end_at,
         description=description,
-        content_hash=_hash(
-            uid, start_at=start_at, end_at=end_at, title=title,
-            description=description, is_cancelled=is_cancelled,
-        ),
         is_cancelled=is_cancelled,
     )
 
@@ -804,7 +801,7 @@ class TestCodexReviewFindings:
             planning_slot_id=slot.id, actual_start_at=start, actual_end_at=start + timedelta(hours=1),
         )
         raw = _raw(start_at=start, end_at=start + timedelta(hours=1))
-        link = _make_link(event_instance_id=instance.id, last_synced_hash=raw.content_hash)
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=_compute_content_hash(raw))
         mocks["integration_repo"].get.return_value = _integration()
         mocks["connector"].authoritative_snapshot = True
         mocks["link_repo"].list_active_by_integration.return_value = [link]
@@ -934,7 +931,7 @@ class TestCodexReviewFindingsRound2:
             planning_slot_id=slot.id, actual_start_at=start, actual_end_at=start + timedelta(hours=1)
         )
         raw = _raw(start_at=start, end_at=start + timedelta(hours=1))
-        link = _make_link(event_instance_id=instance.id, last_synced_hash=raw.content_hash)
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=_compute_content_hash(raw))
         mocks["integration_repo"].get.return_value = _integration()
         mocks["connector"].authoritative_snapshot = True
         mocks["link_repo"].list_active_by_integration.return_value = [link]
@@ -1034,7 +1031,7 @@ class TestCodexReviewFindingsRound4:
             planning_slot_id=slot.id, actual_start_at=start, actual_end_at=start + timedelta(hours=1)
         )
         raw = _raw(start_at=start, end_at=start + timedelta(hours=1))
-        link = _make_link(event_instance_id=instance.id, last_synced_hash=raw.content_hash)
+        link = _make_link(event_instance_id=instance.id, last_synced_hash=_compute_content_hash(raw))
         mocks["integration_repo"].get.return_value = _integration()
         mocks["connector"].authoritative_snapshot = True
         mocks["link_repo"].list_active_by_integration.return_value = [link]

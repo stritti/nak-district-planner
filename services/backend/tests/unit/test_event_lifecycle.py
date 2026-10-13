@@ -614,7 +614,7 @@ async def test_deleting_legacy_invitation_source_cleans_orphaned_link():
 def test_retention_statement_excludes_both_current_and_former_releases():
     from sqlalchemy.dialects.postgresql import dialect
 
-    from app.application.tasks import _unreleased_retention_statement
+    from app.adapters.worker.tasks import _unreleased_retention_statement
 
     statement = _unreleased_retention_statement(date(2024, 10, 10))
     compiled = str(statement.compile(dialect=dialect(), compile_kwargs={"literal_binds": True}))

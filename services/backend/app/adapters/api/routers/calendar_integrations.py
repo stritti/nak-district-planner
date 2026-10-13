@@ -33,10 +33,14 @@ from app.adapters.auth.permissions import (
 from app.adapters.calendar.url_guard import UnsafeCalendarUrlError, validate_calendar_url
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.worker.tasks import record_sync_attempt
 from app.application.crypto import CryptoError, encrypt_credentials
+from app.application.services.calendar_integration_commands import (
+    CalendarIntegrationCreateCommand,
+    CalendarIntegrationUpdateCommand,
+)
 from app.application.services.calendar_integration_service import CalendarIntegrationService
 from app.application.sync_service import run_sync
-from app.application.tasks import record_sync_attempt
 from app.domain.errors import UnsupportedCalendarTypeError
 from app.domain.models.calendar_integration import (
     SUPPORTED_CALENDAR_TYPES,
@@ -112,7 +116,17 @@ async def create_calendar_integration(
             detail=str(UnsupportedCalendarTypeError(body.type)),
         )
     _validate_credentials_url(body.type, body.credentials)
-    integration = await service.create_integration(body)
+    integration = await service.create_integration(CalendarIntegrationCreateCommand(
+        district_id=body.district_id,
+        congregation_id=body.congregation_id,
+        name=body.name,
+        type=body.type,
+        credentials=body.credentials,
+        sync_interval=body.sync_interval,
+        capabilities=body.capabilities,
+        default_category=body.default_category,
+        delete_behavior=body.delete_behavior,
+    ))
     return _to_response(integration)
 
 
@@ -231,7 +245,15 @@ async def update_calendar_integration(
 
     if body.credentials is not None:
         _validate_credentials_url(integration.type, body.credentials)
-    integration = await service.update_integration(integration, body)
+    integration = await service.update_integration(integration, CalendarIntegrationUpdateCommand(
+        name=body.name,
+        credentials=body.credentials,
+        sync_interval=body.sync_interval,
+        capabilities=body.capabilities,
+        default_category=body.default_category,
+        delete_behavior=body.delete_behavior,
+        provided_fields=frozenset(body.model_fields_set),
+    ))
     return _to_response(integration)
 
 

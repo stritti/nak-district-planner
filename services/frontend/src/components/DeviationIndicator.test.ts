@@ -22,6 +22,7 @@ describe('DeviationIndicator', () => {
       },
     })
 
+    expect(wrapper.get('.deviation-tooltip').classes()).toContain('group-hover:opacity-100')
     expect(wrapper.text()).toContain('Geplant:')
     expect(wrapper.text()).toContain('10:00–11:00')
     expect(wrapper.text()).toContain('Tatsächlich:')

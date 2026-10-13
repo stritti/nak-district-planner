@@ -335,7 +335,6 @@ def _feed(count: int) -> list[RawCalendarEvent]:
                 start_at=begins,
                 end_at=begins + timedelta(hours=1),
                 description=None,
-                content_hash="",
                 is_cancelled=False,
             )
         )

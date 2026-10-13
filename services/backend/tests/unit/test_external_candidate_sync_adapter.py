@@ -24,8 +24,7 @@ START = datetime(2026, 7, 1, 10, tzinfo=UTC)
 def raw(uid: str) -> RawCalendarEvent:
     return RawCalendarEvent(
         uid=uid, title="External", start_at=START,
-        end_at=START + timedelta(hours=1), description=None,
-        content_hash="provider", is_cancelled=False,
+        end_at=START + timedelta(hours=1), description=None, is_cancelled=False,
     )
 
 

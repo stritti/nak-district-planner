@@ -26,8 +26,8 @@ from app.adapters.db.repositories.event_mail_hook import (
 from app.adapters.db.session import _set_tenant_gucs
 from app.adapters.db.transactional_events import publish_after_commit
 from app.adapters.mail.mock import MockMailService
+from app.adapters.worker.tasks import _run_as_system_worker
 from app.application.event_mail_hooks import EventMailHookDispatcher
-from app.application.tasks import _run_as_system_worker
 from app.domain.event_payloads import registration_received
 from app.domain.events import DomainEvent, DomainEventBus, EventType
 from app.domain.models.event_mail_hook import EventMailHook

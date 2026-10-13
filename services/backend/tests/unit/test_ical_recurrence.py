@@ -95,7 +95,7 @@ async def test_floating_and_all_day_times_use_district_timezone():
 
 async def test_repeated_fetch_is_stable():
     first, second = await _fetch(), await _fetch()
-    assert [(e.uid, e.content_hash) for e in first] == [(e.uid, e.content_hash) for e in second]
+    assert [(e.uid, e.start_at, e.end_at, e.title) for e in first] == [(e.uid, e.start_at, e.end_at, e.title) for e in second]
     assert len({e.uid for e in first}) == len(first)
 
 
@@ -173,7 +173,7 @@ async def test_caldav_refuses_writes_to_a_single_occurrence():
     occurrence = RawCalendarEvent(
         uid=f"{SERIES}::20260329T080000Z", title="Gottesdienst",
         start_at=datetime(2026, 3, 29, 8, tzinfo=UTC), end_at=datetime(2026, 3, 29, 9, 30, tzinfo=UTC),
-        description=None, content_hash="", is_cancelled=False,
+        description=None, is_cancelled=False,
         resource_id="/calendars/gemeinde/gd-sonntag.ics",
         series_uid=SERIES, recurrence_id="20260329T080000Z",
     )
@@ -196,7 +196,7 @@ async def test_caldav_identity_is_not_parsed_from_the_uid():
     single = RawCalendarEvent(
         uid="urn::legacy::event-7", title="Einzeltermin",
         start_at=datetime(2026, 3, 29, 8, tzinfo=UTC), end_at=datetime(2026, 3, 29, 9, tzinfo=UTC),
-        description=None, content_hash="", is_cancelled=False,
+        description=None, is_cancelled=False,
         resource_id="/calendars/gemeinde/event-7.ics",
     )
     await connector.delete_event(CALDAV_CREDS, single)

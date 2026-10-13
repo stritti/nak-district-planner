@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import * as districtsApi from '../api/districts'
@@ -117,6 +117,10 @@ function setup(items = baseEvents) {
   const wrapper = mount(EventListView, { global: { plugins: [pinia] } })
   return { wrapper, districtsStore, eventsStore }
 }
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -359,9 +363,10 @@ describe('EventListView', () => {
   })
 
   it('updates calendar events and surfaces edit failures without closing the modal', async () => {
-    const currentDay = new Date()
-    const localDate = `${currentDay.getFullYear()}-${String(currentDay.getMonth() + 1).padStart(2, '0')}-${String(currentDay.getDate()).padStart(2, '0')}`
-    const { wrapper } = setup([event({ start_at: `${localDate}T09:30:00`, end_at: `${localDate}T10:30:00` })])
+    // The fixture is on Monday 2026-10-05; make the displayed week deterministic.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-05T12:00:00Z'))
+    const { wrapper } = setup([event()])
     await flushPromises()
     await wrapper.findAll('button').find((button) => button.text() === 'Woche')!.trigger('click')
     await flushPromises()
