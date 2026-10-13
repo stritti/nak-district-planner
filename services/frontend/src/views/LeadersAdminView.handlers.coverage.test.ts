@@ -347,3 +347,41 @@ describe('LeadersAdminView rendered handlers', () => {
     wrapper.unmount()
   })
 })
+
+describe('LeadersAdminView inline contact editing', () => {
+  it('persists leader name with the original revision and refreshes the listing', async () => {
+    const versioned = { ...leader, revision: '"v1"' }
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([versioned])
+    vi.mocked(leadersApi.updateLeaderInline).mockResolvedValue({ ...versioned, name: 'Neu', revision: '"v2"' })
+    const { wrapper } = await mountView()
+    const cell = wrapper.get('[data-inline-cell-id="leader-name-desktop-l1"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('input').setValue('Neu')
+    await cell.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(leadersApi.updateLeaderInline).toHaveBeenCalledWith('d1', 'l1', { name: 'Neu' }, '"v1"')
+    expect(leadersApi.listLeaders).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders legacy rows without a revision as read-only', async () => {
+    const { wrapper } = await mountView()
+    const cell = wrapper.get('[data-inline-cell-id="leader-email-desktop-l1"]')
+    await cell.trigger('click')
+    expect(cell.find('input').exists()).toBe(false)
+    expect(leadersApi.updateLeaderInline).not.toHaveBeenCalled()
+  })
+
+  it('does not permit inline changes without planner membership', async () => {
+    const versioned = { ...leader, revision: '"v1"' }
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([versioned])
+    const { wrapper } = await mountView()
+    const auth = useAuthStore()
+    auth.isSuperadmin = false
+    auth.memberships = []
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="leader-phone-desktop-l1"]')
+    await cell.trigger('click')
+    expect(cell.find('input').exists()).toBe(false)
+  })
+})
