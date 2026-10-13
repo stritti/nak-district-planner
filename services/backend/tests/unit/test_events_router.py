@@ -687,6 +687,9 @@ def test_event_update_bounds_applicability_input(applicability) -> None:
 async def test_bulk_approval_status_updates_month_slots() -> None:
     district_id = uuid.uuid4()
     slot = _slot(district_id=district_id)
+    # The fixture defaults to September; monthly release now correctly
+    # selects only the requested Europe/Berlin calendar month.
+    slot.planning_date = date(2026, 12, 2)
     slot_repo = AsyncMock()
     slot_repo.list_for_date_range.return_value = [slot]
     request = events.BulkApprovalStatusRequest(
@@ -708,7 +711,7 @@ async def test_bulk_approval_status_updates_month_slots() -> None:
         slot_repo.list_for_date_range.await_args.kwargs["from_date"],
         slot_repo.list_for_date_range.await_args.kwargs["to_date"],
     )
-    assert (start, end) == (date(2026, 12, 1), date(2026, 12, 31))
+    assert (start, end) == (date(2026, 11, 30), date(2026, 12, 31))
     slot_repo.save.assert_awaited_once_with(slot, require_existing=True)
 
 
