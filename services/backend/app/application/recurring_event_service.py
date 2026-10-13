@@ -281,6 +281,8 @@ class RecurringEventService:
                     return decision
 
                 local_day = local_date_override or occurrence_day
+                if local_day.year < 1900:
+                    raise InvalidOccurrenceError("Unzulässiges Terminjahr.")
                 local_clock = local_time_override or current.start_time
                 utc_start = local_start_utc(
                     local_day, local_clock, fold=fold, timezone=current.timezone
@@ -291,8 +293,6 @@ class RecurringEventService:
                 )
                 if duration <= 0:
                     raise InvalidOccurrenceError("Dauer muss positiv sein.")
-                if local_day.year not in range(1900, 10000):
-                    raise InvalidOccurrenceError("Unzulässiger Termin.")
                 existing = await self.slots.list_for_date_range(
                     district_id=current.district_id,
                     from_date=utc_start.date(),

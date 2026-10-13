@@ -144,16 +144,20 @@ class RecurringEventTemplate:
             raise ValueError("Invalid exclusion dates")
         if self.congregation_id is not None and self.applicability:
             raise ValueError("Congregation templates cannot have applicability")
-        if len(set(self.applicability)) != len(self.applicability):
-            raise ValueError("Duplicate applicability entries")
-        if "all" in self.applicability and len(self.applicability) != 1:
-            raise ValueError("'all' cannot be combined with congregation IDs")
+        normalized: list[str] = []
         for entry in self.applicability:
-            if entry != "all":
-                try:
-                    uuid.UUID(entry)
-                except (ValueError, TypeError) as exc:
-                    raise ValueError("Invalid applicability UUID") from exc
+            if entry == "all":
+                normalized.append(entry)
+                continue
+            try:
+                normalized.append(str(uuid.UUID(entry)))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise ValueError("Invalid applicability UUID") from exc
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("Duplicate applicability entries")
+        if "all" in normalized and len(normalized) != 1:
+            raise ValueError("'all' cannot be combined with congregation IDs")
+        object.__setattr__(self, "applicability", tuple(normalized))
 
 
 @dataclass(frozen=True, kw_only=True)

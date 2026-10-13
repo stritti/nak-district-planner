@@ -278,6 +278,20 @@ async def test_accept_rejects_invalid_overrides_without_writes(invalid_input: di
 
 
 @pytest.mark.asyncio
+async def test_accept_rejects_year_before_converting_to_utc() -> None:
+    entry = _template()
+    service, repo, slots, instances = _service(entry)
+    with pytest.raises(ValueError, match="Terminjahr"):
+        await service.accept(
+            entry, date(2026, 11, 3), expected_revision=entry.revision, created_by="u",
+            local_date_override=date(1, 1, 1), local_time_override=time(0, 30),
+        )
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+    repo.save_decision.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("missing_template", [True, False])
 async def test_accept_rejects_missing_template_or_nonoccurrence(missing_template: bool) -> None:
     entry = _template()

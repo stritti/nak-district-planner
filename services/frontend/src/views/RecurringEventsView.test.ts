@@ -253,6 +253,44 @@ describe('recurring monthly checklist', () => {
     expect(api.listRecurringTemplates).toHaveBeenLastCalledWith('district-1', 50, 0)
   })
 
+  it('keeps template management usable when month expansion is too large', async () => {
+    vi.mocked(api.listRecurringChecklist).mockRejectedValue(new Error('413 month too large'))
+    const view = await render()
+    await templatesTab()
+    expect(view.text()).toContain('1 Vorlagen')
+    expect(view.text()).toContain('Chorprobe')
+    expect(view.get('[role="alert"]').text()).toContain('413')
+    await click('Bearbeiten')
+    expect(view.get('[data-testid="recurring-template-form"]').exists()).toBe(true)
+  })
+
+  it('refreshes successful bulk items while preserving failed selection and error', async () => {
+    const another: api.ChecklistItem = {
+      ...openOccurrence, template_id: 'template-2', occurrence_local_date: '2026-11-10',
+    }
+    const view = await render([openOccurrence, another])
+    vi.mocked(api.bulkAcceptRecurringOccurrences).mockResolvedValueOnce({
+      results: [
+        { template_id: template.id, occurrence_local_date: '2026-11-03',
+          status: 'ACCEPTED', planning_slot_id: 'slot-1', error: null },
+        { template_id: 'template-2', occurrence_local_date: '2026-11-10',
+          status: null, planning_slot_id: null, error: 'OCCURRENCE_CONFLICT' },
+      ],
+    })
+    vi.mocked(api.listRecurringChecklist).mockResolvedValueOnce(page([
+      { ...openOccurrence, status: 'ACCEPTED', decision_status: 'ACCEPTED', planning_slot_id: 'slot-1' },
+      another,
+    ]))
+    const checkboxes = view.findAll('input[type="checkbox"]')
+    for (const checkbox of checkboxes) await checkbox.setValue(true)
+    await click('ausgewählte übernehmen')
+    expect(api.listRecurringChecklist).toHaveBeenCalledTimes(2)
+    expect(view.get('[role="alert"]').text()).toContain('bereits belegt')
+    expect(view.find('[data-testid="occurrence-2026-11-03"]').text()).toContain('Übernommen')
+    expect(view.get('input[aria-label="Chorprobe auswählen"]').element.checked).toBe(true)
+    expect(view.findAll('input[type="checkbox"]:checked')).toHaveLength(1)
+  })
+
   it('opens preview, sends edited concrete data, and closes after success', async () => {
     const view = await render()
     await click('Prüfen und übernehmen')
@@ -370,7 +408,8 @@ describe('recurring monthly checklist', () => {
   })
 
   it('clears old tenant results when switching districts', async () => {
-    await render()
+    const view = await render()
+    await view.get('#recurring-congregation').setValue('congregation-1')
     districtStore.selectedDistrictId = ''
     await flushPromises()
     expect(wrapper!.text()).toContain('Wähle einen Bezirk')
@@ -378,6 +417,9 @@ describe('recurring monthly checklist', () => {
     districtStore.selectedDistrictId = 'district-2'
     await flushPromises()
     expect(api.listRecurringTemplates).toHaveBeenCalledWith('district-2', 50, 0)
+    expect(api.listRecurringChecklist).toHaveBeenLastCalledWith('district-2', expect.objectContaining({
+      congregation_id: undefined,
+    }))
   })
 })
 
@@ -411,6 +453,14 @@ describe('recurring template editor', () => {
     expect(patch.expected_revision).toBe(4)
     expect(patch.title).toBe('Neue Chorprobe')
     expect(patch).not.toHaveProperty('congregation_id')
+    for (const field of ['id', 'district_id', 'timezone', 'revision']) {
+      expect(patch).not.toHaveProperty(field)
+    }
+    expect(Object.keys(patch).sort()).toEqual([
+      'active_from', 'active_until', 'applicability', 'category', 'description',
+      'duration_minutes', 'excluded_dates', 'expected_revision', 'is_active',
+      'recurrence', 'start_time', 'title',
+    ].sort())
   })
 
   it('deactivates an existing template with optimistic revision', async () => {

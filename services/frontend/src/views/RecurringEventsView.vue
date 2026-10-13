@@ -323,7 +323,7 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const [templateResponse, page] = await Promise.all([
+    const [templateResult, checklistResult] = await Promise.allSettled([
       listRecurringTemplates(id, 50, templateOffset.value),
       listRecurringChecklist(id, {
         year, month,
@@ -335,10 +335,20 @@ async function load(): Promise<void> {
       }),
     ])
     if (request !== fetchVersion || id !== districtId.value) return
-    templates.value = templateResponse.items
-    templatesTotal.value = templateResponse.total
-    checklist.value = page
-    selected.value = new Set()
+    if (templateResult.status === 'fulfilled') {
+      templates.value = templateResult.value.items
+      templatesTotal.value = templateResult.value.total
+    }
+    if (checklistResult.status === 'fulfilled') {
+      checklist.value = checklistResult.value
+      selected.value = new Set()
+    }
+    const failures = [templateResult, checklistResult].filter(
+      result => result.status === 'rejected',
+    )
+    if (failures.length) error.value = failures.map(result =>
+      String((result as PromiseRejectedResult).reason),
+    ).join('; ')
   } catch (cause) {
     if (request === fetchVersion) error.value = String(cause)
   } finally {
@@ -407,13 +417,26 @@ async function bulkAccept(): Promise<void> {
       && selected.value.has(itemKey(item)),
   )
   if (!items.length) return
-  await perform(async () => {
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
     const result = await bulkAcceptRecurringOccurrences(
       districtId.value, items.map(item => actionFor(item)),
     )
     const failed = result.results.filter(item => item.error)
-    if (failed.length) throw new Error(failed.map(item => `${item.occurrence_local_date}: ${bulkErrorMessage(item.error)}`).join('; '))
-  })
+    await load()
+    if (failed.length) {
+      selected.value = new Set(failed.map(item => `${item.template_id}:${item.occurrence_local_date}`))
+      error.value = failed.map(item =>
+        `${item.occurrence_local_date}: ${bulkErrorMessage(item.error)}`,
+      ).join('; ')
+    }
+  } catch (cause) {
+    error.value = String(cause)
+  } finally {
+    busy.value = false
+  }
 }
 
 const preview = ref<ChecklistItem | null>(null)
@@ -470,11 +493,18 @@ const activeUntilInput = ref('')
 function loadForm(item: RecurringTemplate | null): void {
   editing.value = item
   form.value = item ? {
-    ...item,
+    title: item.title,
+    description: item.description,
+    category: item.category,
+    congregation_id: item.congregation_id,
     start_time: item.start_time.slice(0, 5),
+    duration_minutes: item.duration_minutes,
     recurrence: { ...item.recurrence, weekdays: [...item.recurrence.weekdays] },
     applicability: [...item.applicability],
     excluded_dates: [...item.excluded_dates],
+    active_from: item.active_from,
+    active_until: item.active_until,
+    is_active: item.is_active,
   } : newForm()
   applicabilityInput.value = form.value.applicability.join(', ')
   excludedDatesInput.value = form.value.excluded_dates.join(', ')
@@ -536,6 +566,7 @@ watch(districtId, id => {
   templates.value = []
   templatesTotal.value = 0
   templateOffset.value = 0
+  congregationFilter.value = ''
   checklist.value = emptyPage()
   selected.value = new Set()
   pageOffset.value = 0

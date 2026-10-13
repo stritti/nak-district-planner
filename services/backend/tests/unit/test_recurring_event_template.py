@@ -202,6 +202,20 @@ def test_valid_district_applicability_and_congregation_template() -> None:
     assert congregation.congregation_id is not None
 
 
+def test_applicability_uuid_canonicalized_and_alias_duplicates_rejected() -> None:
+    congregation_id = uuid.uuid4()
+    entry = template(
+        rule(RecurrenceKind.WEEKLY, weekdays=(2,)),
+        applicability=(str(congregation_id).upper(),),
+    )
+    assert entry.applicability == (str(congregation_id),)
+    with pytest.raises(ValueError, match="Duplicate applicability"):
+        template(
+            rule(RecurrenceKind.WEEKLY, weekdays=(2,)),
+            applicability=(str(congregation_id), str(congregation_id).upper()),
+        )
+
+
 def test_normal_winter_and_summer_clock_times_remain_local_1930() -> None:
     winter = local_start_utc(date(2026, 1, 6), time(19, 30))
     summer = local_start_utc(date(2026, 7, 7), time(19, 30))
