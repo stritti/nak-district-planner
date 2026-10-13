@@ -48,7 +48,8 @@ const props = withDefaults(defineProps<{
   label: string
   editable: boolean
   coordinator: InlineCellCoordinator
-  save: (draft: string) => Promise<void>
+  save: (draft: string, revision: string) => Promise<void>
+  revision: string
   as?: 'td' | 'div'
   required?: boolean
   maxLength?: number
@@ -57,6 +58,7 @@ const props = withDefaults(defineProps<{
 const root = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)
 const draft = ref(props.value ?? '')
+const startingRevision = ref(props.revision)
 const error = ref('')
 const saving = ref(false)
 const editing = computed(() => props.coordinator.activeId.value === props.id)
@@ -74,6 +76,7 @@ async function activate(): Promise<void> {
   if (!props.editable || editing.value) return
   if (!(await props.coordinator.activate(props.id, commit))) return
   draft.value = props.value ?? ''
+  startingRevision.value = props.revision
   error.value = ''
   await nextTick()
   input.value?.focus()
@@ -122,7 +125,7 @@ async function commit(): Promise<boolean> {
     saving.value = true
     error.value = ''
     try {
-      await props.save(nextValue)
+      await props.save(nextValue, startingRevision.value)
       props.coordinator.release(props.id)
       return true
     } catch (cause) {
