@@ -88,6 +88,8 @@ class RecurringTemplateResponse(RecurringTemplateCreate):
 class TemplateListResponse(BaseModel):
     items: list[RecurringTemplateResponse]
     total: int
+    limit: int = 50
+    offset: int = 0
 
 
 class ChecklistItemResponse(BaseModel):

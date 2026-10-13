@@ -110,7 +110,7 @@
 
       <div v-else class="space-y-4">
         <div class="flex items-center justify-between">
-          <p class="text-sm text-gray-500">{{ templates.length }} Vorlagen</p>
+          <p class="text-sm text-gray-500">{{ templatesTotal }} Vorlagen</p>
           <button v-if="canCreate" data-testid="create-template" class="btn-primary px-3 py-2" @click="openNewTemplate">Vorlage anlegen</button>
         </div>
         <div class="grid gap-3 md:grid-cols-2">
@@ -126,6 +126,11 @@
               <button v-if="item.is_active" class="btn-icon px-3 py-2 text-sm" :disabled="busy" @click="deactivateTemplate(item)">Deaktivieren</button>
             </div>
           </article>
+        </div>
+        <div v-if="templatesTotal > 50" class="flex items-center justify-between gap-3">
+          <button data-testid="previous-template-page" class="btn-icon px-3 py-2" :disabled="loading || templateOffset === 0" @click="changeTemplatePage(-1)">Zurück</button>
+          <span class="text-sm">Vorlagenseite {{ Math.floor(templateOffset / 50) + 1 }}</span>
+          <button data-testid="next-template-page" class="btn-icon px-3 py-2" :disabled="loading || templateOffset + 50 >= templatesTotal" @click="changeTemplatePage(1)">Weiter</button>
         </div>
         <form v-if="formOpen" class="card p-4 space-y-3" data-testid="recurring-template-form" @submit.prevent="saveTemplate">
           <h2 class="font-semibold">{{ editing ? 'Vorlage bearbeiten' : 'Neue Vorlage' }}</h2>
@@ -251,6 +256,8 @@ const today = new Date()
 const monthValue = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`)
 const checklist = ref<ChecklistPage>(emptyPage())
 const templates = ref<RecurringTemplate[]>([])
+const templatesTotal = ref(0)
+const templateOffset = ref(0)
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
@@ -317,7 +324,7 @@ async function load(): Promise<void> {
   error.value = ''
   try {
     const [templateResponse, page] = await Promise.all([
-      listRecurringTemplates(id),
+      listRecurringTemplates(id, 50, templateOffset.value),
       listRecurringChecklist(id, {
         year, month,
         congregation_id: congregationFilter.value || undefined,
@@ -329,6 +336,7 @@ async function load(): Promise<void> {
     ])
     if (request !== fetchVersion || id !== districtId.value) return
     templates.value = templateResponse.items
+    templatesTotal.value = templateResponse.total
     checklist.value = page
     selected.value = new Set()
   } catch (cause) {
@@ -349,6 +357,10 @@ function moveMonth(direction: number): void {
 }
 function changePage(direction: number): void {
   pageOffset.value += direction * 50
+  void load()
+}
+function changeTemplatePage(direction: number): void {
+  templateOffset.value = Math.max(0, templateOffset.value + direction * 50)
   void load()
 }
 function toggleSelected(item: ChecklistItem): void {
@@ -522,6 +534,8 @@ function deactivateTemplate(item: RecurringTemplate): void {
 watch(districtId, id => {
   fetchVersion++
   templates.value = []
+  templatesTotal.value = 0
+  templateOffset.value = 0
   checklist.value = emptyPage()
   selected.value = new Set()
   pageOffset.value = 0

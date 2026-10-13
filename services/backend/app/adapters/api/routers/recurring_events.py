@@ -8,6 +8,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import replace
 from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
@@ -111,17 +112,22 @@ async def _require_read(
     auth: CurrentUserWithMemberships,
     district_id: uuid.UUID,
     session: AsyncSession,
-) -> None:
+) -> set[uuid.UUID] | None:
+    """Return None for district-wide readers, or authorized congregations."""
     if has_role_in_district(auth, Role.VIEWER, district_id):
-        return
+        return None
     congregations = await SqlCongregationRepository(session).list_by_district(district_id)
-    if any(
-        membership.scope_type is ScopeType.CONGREGATION
-        and membership.scope_id in {congregation.id for congregation in congregations}
+    district_congregations = {congregation.id for congregation in congregations}
+    authorized = {
+        membership.scope_id
         for membership in auth.memberships
-    ):
-        return
+        if membership.scope_type is ScopeType.CONGREGATION
+        and membership.scope_id in district_congregations
+    }
+    if authorized:
+        return authorized
     require_role_in_district(auth, Role.VIEWER, district_id)
+    return set()
 
 
 async def _validate_congregation(
@@ -217,11 +223,16 @@ async def list_recurring_templates(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TemplateListResponse:
-    await _require_read(auth, district_id, session)
-    entries = await _repository(session).list_templates(district_id)
-    visible = [_response(entry) for entry in entries if _visible(auth, entry)]
-    return TemplateListResponse(items=visible, total=len(visible))
+    allowed = await _require_read(auth, district_id, session)
+    rows, total = await _repository(session).list_visible_templates_page(
+        district_id, visible_congregation_ids=allowed, limit=limit, offset=offset,
+    )
+    return TemplateListResponse(
+        items=[_response(entry) for entry in rows], total=total, limit=limit, offset=offset,
+    )
 
 
 @router.post(

@@ -42,6 +42,8 @@ export interface RecurringTemplate extends RecurringTemplateInput {
 export interface RecurringTemplateList {
   items: RecurringTemplate[]
   total: number
+  limit?: number
+  offset?: number
 }
 
 export interface ChecklistItem {
@@ -127,8 +129,11 @@ function post<T>(url: string, body: unknown): Promise<T> {
   return apiFetch<T>(url, { method: 'POST', body: JSON.stringify(body) })
 }
 
-export function listRecurringTemplates(districtId: string): Promise<RecurringTemplateList> {
-  return apiFetch<RecurringTemplateList>(templatesPath(districtId))
+export function listRecurringTemplates(
+  districtId: string, limit = 50, offset = 0,
+): Promise<RecurringTemplateList> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  return apiFetch<RecurringTemplateList>(`${templatesPath(districtId)}?${params}`)
 }
 
 export function createRecurringTemplate(

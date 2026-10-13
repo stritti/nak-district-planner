@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.recurring_event import (
@@ -130,6 +130,53 @@ class SqlRecurringEventRepository:
             .order_by(RecurringEventTemplateORM.title, RecurringEventTemplateORM.id)
         )
         return [_template_from_row(row) for row in result.scalars()]
+
+    async def list_visible_templates_page(
+        self,
+        district_id: uuid.UUID,
+        *,
+        visible_congregation_ids: set[uuid.UUID] | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[RecurringEventTemplate], int]:
+        """Filter at SQL level before applying the bounded list page.
+
+        None means district-wide read access. A set limits rows to those
+        belonging to the authorized congregations or distributed to them.
+        """
+        filters = [RecurringEventTemplateORM.district_id == district_id]
+        if visible_congregation_ids is not None:
+            if not visible_congregation_ids:
+                return [], 0
+            congregation_ids = sorted(visible_congregation_ids)
+            distributed_to = or_(
+                RecurringEventTemplateORM.applicability.any("all"),
+                *(
+                    RecurringEventTemplateORM.applicability.any(str(congregation_id))
+                    for congregation_id in congregation_ids
+                ),
+            )
+            filters.append(
+                or_(
+                    RecurringEventTemplateORM.congregation_id.in_(congregation_ids),
+                    and_(
+                        RecurringEventTemplateORM.congregation_id.is_(None),
+                        distributed_to,
+                    ),
+                )
+            )
+        count_stmt = (
+            select(func.count()).select_from(RecurringEventTemplateORM).where(*filters)
+        )
+        total = int(await self.session.scalar(count_stmt) or 0)
+        result = await self.session.execute(
+            select(RecurringEventTemplateORM)
+            .where(*filters)
+            .order_by(RecurringEventTemplateORM.title, RecurringEventTemplateORM.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_template_from_row(row) for row in result.scalars()], total
 
     async def save_template(self, entry: RecurringEventTemplate) -> None:
         row = await self.session.get(
