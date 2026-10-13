@@ -343,12 +343,10 @@ async function load(): Promise<void> {
       checklist.value = checklistResult.value
       selected.value = new Set()
     }
-    const failures = [templateResult, checklistResult].filter(
-      result => result.status === 'rejected',
+    const failures = [templateResult, checklistResult].flatMap(result =>
+      result.status === 'rejected' ? [String(result.reason)] : [],
     )
-    if (failures.length) error.value = failures.map(result =>
-      String((result as PromiseRejectedResult).reason),
-    ).join('; ')
+    if (failures.length) error.value = failures.join('; ')
   } catch (cause) {
     if (request === fetchVersion) error.value = String(cause)
   } finally {

@@ -254,8 +254,9 @@ describe('recurring monthly checklist', () => {
   })
 
   it('keeps template management usable when month expansion is too large', async () => {
-    vi.mocked(api.listRecurringChecklist).mockRejectedValue(new Error('413 month too large'))
     const view = await render()
+    vi.mocked(api.listRecurringChecklist).mockRejectedValueOnce(new Error('413 month too large'))
+    await click('Filtern')
     await templatesTab()
     expect(view.text()).toContain('1 Vorlagen')
     expect(view.text()).toContain('Chorprobe')

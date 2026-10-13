@@ -81,6 +81,17 @@ Die Vorlagenliste unterstützt `limit` (1 bis 100, Standard 50) und `offset` (ab
 
 Die Monatscheckliste lädt höchstens 500 berechtigte Vorlagen für eine Vorschau. Scope- und optionaler Gemeindefilter werden vor diesem Limit in PostgreSQL angewendet. Größere Mengen antworten mit HTTP 413 und verlangen eine gezieltere Gemeindeauswahl; niemals wird eine abgeschnittene Teilmenge als vollständiger Monat ausgegeben.
 
+### 6.1 Codex-Review: Grenzfälle und Datenintegrität
+
+- Vorlagen-PATCH sendet ausschließlich Felder aus `RecurringTemplateInput`, nicht die nur lesbaren Response-Metadaten `id`, `district_id`, `revision`, `timezone`. Die Revision wird separat als `expected_revision` übertragen.
+- `applicability`-UUIDs werden vor Speicherung und Dublettenprüfung kanonisiert. PostgreSQL-RLS und Filter verwenden die gleiche kanonische UUID-Zeichenfolge.
+- Ein nicht-null `planning_slot_id` der Entscheidung garantiert mittels zusammengesetztem FK auf einen vorhandenen Slot, auch wenn die Slot-RLS ihn für bestimmte Gemeindeleser verbirgt. `NULL` entsteht beim Löschen und ergibt `NEEDS_REVIEW`.
+- Die Referenz auf einen Slot darf über alle Vorlagen hinweg nur zu genau einer Entscheidung gehören. Ein `UNIQUE (planning_slot_id)` lässt mehrere `NULL` bei Retention zu; konkurrierende Links werden vom bestehenden Integritätsfehler-Adapter als Konflikt behandelt.
+- `LINK_EXISTING` vergleicht das Datum des vorhandenen UTC-Slots nach Zeitzonen-Konvertierung mit dem ursprünglichen lokalen Vorkommensdatum. Der tatsächliche UTC-Zeitpunkt kann im DST-Fold ohne zusätzliche Fold-Entscheidung bestimmt werden.
+- Monatsfreigabe wird nach dem lokalen Kalendermonat `Europe/Berlin` entschieden; die Repository-Abfrage berücksichtigt deshalb auch den vorangehenden UTC-Tag und filtert dann auf das lokale Datum.
+- Der Template-Tab bleibt bei HTTP 413 der Monatscheckliste bedienbar, damit Vorlagen bearbeitet/deaktiviert werden können. Nach Bulk-Teilerfolgen werden persistierte Ergebnisse nachgeladen, Fehler sichtbar gehalten und nur fehlgeschlagene Zeilen erneut markiert.
+- Ein Bezirkswechsel verwirft den bisherigen Gemeindefilter; Datum-Overrides vor 1900 werden vor jeder UTC-Konvertierung abgelehnt.
+
 ### 7. API-Kontrakt (Planungsentwurf)
 
 - GET/POST /api/v1/districts/{district_id}/recurring-event-templates
