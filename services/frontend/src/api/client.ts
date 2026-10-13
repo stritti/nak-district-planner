@@ -3,13 +3,12 @@
 
 import { useAuthStore } from '../stores/auth'
 import { useOIDC } from '../composables/useOIDC'
-import { useCSRF } from '../composables/useCSRF'
+import { getCurrentCSRFHeaders } from '../composables/useCSRF'
 import { router } from '../router'
 import { ApiError, UnauthorizedError } from './errors'
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const authStore = useAuthStore()
-  const { getCSRFHeaders } = useCSRF()
   const oidc = useOIDC(router)
 
   // If the access token already expired (e.g. the scheduled refresh timer
@@ -36,7 +35,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   }
 
   // Add CSRF token for state-changing requests
-  const csrfHeaders = getCSRFHeaders()
+  const csrfHeaders = getCurrentCSRFHeaders()
   Object.assign(headers, csrfHeaders)
 
   let res = await fetch(path, {
@@ -64,13 +63,6 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-
-    // Handle CSRF validation failure
-    if (res.status === 403 && text.includes('CSRF validation failed')) {
-      // Token might be expired, reload page to get new token
-      window.location.reload()
-      throw new Error('CSRF validation failed - page reloaded')
-    }
 
     let body: unknown
     try {

@@ -22,10 +22,10 @@ celery = Celery(
     broker=settings.redis_url,
     backend=settings.redis_url,
     include=[
-        "app.application.tasks",
-        "app.application.reminder_tasks",
-        "app.application.event_mail_hook_tasks",
-        "app.application.slot_gap_tasks",
+        "app.adapters.worker.tasks",
+        "app.adapters.worker.reminder_tasks",
+        "app.adapters.worker.event_mail_hook_tasks",
+        "app.adapters.worker.slot_gap_tasks",
     ],
 )
 

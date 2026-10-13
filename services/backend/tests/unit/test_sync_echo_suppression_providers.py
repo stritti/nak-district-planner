@@ -61,7 +61,6 @@ def _hash(
         start_at=start_at,
         end_at=end_at,
         description=description,
-        content_hash="",
         is_cancelled=cancelled,
     )
     return sync_service._compute_content_hash(raw)
@@ -79,7 +78,6 @@ def _raw(
         start_at=start_at,
         end_at=end_at,
         description="Beschreibung",
-        content_hash="",
         is_cancelled=cancelled,
         revision_marker="provider-revision",
         resource_id="provider-resource",

@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application.tasks import _delete_expired_drafts, cleanup_old_events
+from app.adapters.worker.tasks import _delete_expired_drafts, cleanup_old_events
 from app.domain.models.planning_slot import ReleasedEventError
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ class TestCleanupOldEvents:
                 "app.adapters.db.session.AsyncSessionLocal",
                 return_value=cm,
             ),
-            patch("app.application.tasks.datetime", _FakeDatetime),
+            patch("app.adapters.worker.tasks.datetime", _FakeDatetime),
             patch("app.adapters.db.repositories.planning_slot.SqlPlanningSlotRepository") as repo_cls,
         ):
             repo_cls.return_value.delete = AsyncMock(return_value=True)

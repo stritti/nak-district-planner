@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import * as districtsApi from '../api/districts'
@@ -117,6 +117,10 @@ function setup(items = baseEvents) {
   const wrapper = mount(EventListView, { global: { plugins: [pinia] } })
   return { wrapper, districtsStore, eventsStore }
 }
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -359,8 +363,10 @@ describe('EventListView', () => {
   })
 
   it('updates calendar events and surfaces edit failures without closing the modal', async () => {
-    // The weekly calendar starts at the current week. Fixed 2026-10-05
-    // fixtures disappear as soon as the CI clock enters a later week.
+    // Freeze the calendar clock at a known Monday and derive fixture dates
+    // from it, so the test is independent of real CI dates and time zones.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-05T12:00:00Z'))
     const startAt = new Date()
     const endAt = new Date(startAt.getTime() + 60 * 60 * 1000)
     const { wrapper } = setup([event({

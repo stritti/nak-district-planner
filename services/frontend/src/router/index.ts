@@ -140,5 +140,10 @@ export const router = createRouter({
       name: 'register',
       component: RegistrationView,
     },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../views/NotFoundView.vue'),
+    },
   ],
 })

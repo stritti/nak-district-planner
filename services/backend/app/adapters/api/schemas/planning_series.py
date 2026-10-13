@@ -9,9 +9,10 @@ import uuid
 from datetime import date, datetime, time
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.domain.models.planning_series import PlanningSeries
+from app.domain.services.recurrence_validation import recurrence_interval
 
 
 class PlanningSeriesCreate(BaseModel):
@@ -52,6 +53,13 @@ class PlanningSeriesCreate(BaseModel):
         description="Whether this series is active (defaults to True)",
     )
 
+    @field_validator("recurrence_pattern")
+    @classmethod
+    def validate_recurrence_interval(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is not None:
+            recurrence_interval(value)
+        return value
+
 
 class PlanningSeriesUpdate(BaseModel):
     """Partial update for PlanningSeries — only fields present are changed."""
@@ -85,6 +93,13 @@ class PlanningSeriesUpdate(BaseModel):
         default=None,
         description="Whether this series is active",
     )
+
+    @field_validator("recurrence_pattern")
+    @classmethod
+    def validate_recurrence_interval(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is not None:
+            recurrence_interval(value)
+        return value
 
 
 class PlanningSeriesResponse(BaseModel):

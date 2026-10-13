@@ -250,7 +250,7 @@ class TestCheckVersionTask:
     """Tests for check_version Celery task."""
 
     def test_check_version_success(self):
-        from app.application.tasks import check_version
+        from app.adapters.worker.tasks import check_version
 
         with (
             patch(
@@ -266,7 +266,7 @@ class TestCheckVersionTask:
         mock_set.assert_called_once_with("0.5.0")
 
     def test_check_version_no_newer(self):
-        from app.application.tasks import check_version
+        from app.adapters.worker.tasks import check_version
 
         with (
             patch(

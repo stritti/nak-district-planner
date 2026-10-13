@@ -31,7 +31,7 @@ def dispatch_event_mail_hooks(event_data: dict[str, Any]) -> dict[str, int]:
     )
     from app.adapters.db.session import AsyncSessionLocal
     from app.adapters.mail import create_mail_service
-    from app.application.tasks import _run_as_system_worker
+    from app.adapters.worker.tasks import _run_as_system_worker
 
     event = deserialize_event(event_data)
 

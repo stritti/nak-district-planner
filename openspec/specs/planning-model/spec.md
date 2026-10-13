@@ -59,6 +59,11 @@ Planning series SHALL describe recurring slots (weekdays pattern, default time, 
 - **WHEN** slots are generated for an active series
 - **THEN** missing slots on matching weekdays within the horizon are created
 
+#### Scenario: Previously generated series occurrence is moved
+- **WHEN** a generated PlanningSlot is moved to another date without changing its series scope
+- **THEN** its stable generation key identifies the original occurrence
+- **AND** neither the background generator nor the API generator inserts a duplicate at the former date
+
 ### Requirement: Draft service generation
 Draft `Gottesdienst` slots with a public `EventInstance` and without assignment SHALL be generated from each congregation's `service_times` for an 8-week rolling horizon, daily at 01:10 via `generate_draft_services_window` and on demand via `POST /api/v1/districts/{id}/matrix/generate-drafts` (`PLANNER`). A run SHALL skip congregation date/time combinations that already have a `Gottesdienst` slot.
 
