@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, ConfigDict\nfrom fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
@@ -34,6 +34,15 @@ from app.domain.models.leader import Leader
 from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/leaders", tags=["leaders"])
+
+
+class LeaderInlineUpdate(BaseModel):
+    """Explicit contact-only inline contract."""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
 
 
 def _leader_revision(leader: Leader) -> str:
@@ -158,7 +167,7 @@ async def update_leader(
 async def inline_update_leader(
     district_id: uuid.UUID,
     leader_id: uuid.UUID,
-    body: LeaderUpdate,
+    body: LeaderInlineUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
@@ -168,12 +177,12 @@ async def inline_update_leader(
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     fields = body.model_fields_set
-    if not fields or not fields.issubset({"name", "email", "phone"}) or (
+    if not fields or (
         "name" in fields and body.name is None
     ):
         raise HTTPException(status_code=422, detail="Dieses Feld ist nicht inline editierbar.")
     return await update_leader(
-        district_id, leader_id, body, auth, db, leaders_repo=leaders_repo, if_match=if_match,
+        district_id, leader_id, LeaderUpdate.model_validate(body.model_dump(exclude_unset=True)), auth, db, leaders_repo=leaders_repo, if_match=if_match,
     )
 
 
