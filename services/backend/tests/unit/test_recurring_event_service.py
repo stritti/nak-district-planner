@@ -146,3 +146,55 @@ async def test_skip_is_idempotent_and_creates_no_planning_slot() -> None:
     )
     assert second.id == decision.id
     repo.save_decision.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", ["accept", "skip", "resolve_missing_slot"])
+@pytest.mark.parametrize("translate_integrity_error", [False, True])
+async def test_transaction_failure_translation_preserves_unrelated_errors(
+    command: str, translate_integrity_error: bool,
+) -> None:
+    entry = _template()
+    service, repo, slots, instances = _service(entry)
+
+    class DatabaseIntegrityError(Exception):
+        """Injected database constraint failure."""
+
+    failure = DatabaseIntegrityError("constraint") if translate_integrity_error else RuntimeError("unavailable")
+    service.integrity_error_type = DatabaseIntegrityError
+    service.session.begin_nested.return_value.__aenter__.side_effect = failure
+    kwargs = {"expected_revision": entry.revision}
+    if command == "resolve_missing_slot":
+        kwargs["action"] = "MARK_SKIPPED"
+    else:
+        kwargs["created_by"] = "u"
+
+    expected_error = OccurrenceConflictError if translate_integrity_error else RuntimeError
+    with pytest.raises(expected_error) as raised:
+        await getattr(service, command)(entry, date(2026, 11, 3), **kwargs)
+
+    if translate_integrity_error:
+        assert raised.value.__cause__ is failure
+    else:
+        assert raised.value is failure
+    repo.save_decision.assert_not_awaited()
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_integrity_error_is_propagated() -> None:
+    entry = _template()
+    service, repo, slots, instances = _service(entry)
+    failure = RuntimeError("transaction unavailable")
+    service.session.begin_nested.return_value.__aenter__.side_effect = failure
+
+    with pytest.raises(RuntimeError) as raised:
+        await service.accept(
+            entry, date(2026, 11, 3), expected_revision=entry.revision, created_by="u",
+        )
+
+    assert raised.value is failure
+    repo.save_decision.assert_not_awaited()
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
