@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, time
+from datetime import date, time, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -195,6 +195,137 @@ async def test_unconfigured_integrity_error_is_propagated() -> None:
         )
 
     assert raised.value is failure
+    repo.save_decision.assert_not_awaited()
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_accept_creates_public_instance_and_is_idempotent() -> None:
+    entry = _template()
+    service, repo, slots, instances = _service(entry)
+    decision = await service.accept(
+        entry, date(2026, 11, 3), expected_revision=entry.revision, created_by="u",
+    )
+    slot = slots.save.call_args.args[0]
+    instance = instances.save.call_args.args[0]
+    assert decision.planning_slot_id == slot.id
+    assert slot.applicability == list(entry.applicability)
+    assert slot.planning_date == date(2026, 11, 3)
+    assert slot.planning_time == time(18, 30)
+    assert instance.planning_slot_id == slot.id
+    assert instance.actual_end_at - instance.actual_start_at == timedelta(minutes=90)
+    repo.get_decision.return_value = decision
+    slots.get.return_value = slot
+    repeated = await service.accept(
+        entry, date(2026, 11, 3), expected_revision=entry.revision, created_by="u",
+    )
+    assert repeated is decision
+    slots.save.assert_awaited_once()
+    instances.save.assert_awaited_once()
+    repo.save_decision.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_input", [{"title_override": " "}, {"duration_minutes_override": 0}])
+async def test_accept_rejects_invalid_overrides_without_writes(invalid_input: dict) -> None:
+    entry = _template()
+    service, repo, slots, instances = _service(entry)
+    with pytest.raises(ValueError):
+        await service.accept(
+            entry, date(2026, 11, 3), expected_revision=entry.revision,
+            created_by="u", **invalid_input,
+        )
+    repo.save_decision.assert_not_awaited()
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing_template", [True, False])
+async def test_accept_rejects_missing_template_or_nonoccurrence(missing_template: bool) -> None:
+    entry = _template()
+    service, repo, slots, instances = _service(entry)
+    if missing_template:
+        repo.get_template.return_value = None
+    with pytest.raises(ValueError):
+        await service.accept(
+            entry, date(2026, 11, 4), expected_revision=entry.revision, created_by="u",
+        )
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+    repo.save_decision.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reopen_removes_only_skipped_decision() -> None:
+    entry = _template()
+    service, repo, slots, instances = _service(entry)
+    decision = await service.skip(
+        entry, date(2026, 11, 3), expected_revision=entry.revision, created_by="u",
+    )
+    repo.get_decision.return_value = decision
+    await service.reopen(entry, date(2026, 11, 3), expected_revision=entry.revision)
+    repo.delete_decision.assert_awaited_once_with(decision.id)
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reopen_rejects_missing_decision() -> None:
+    entry = _template()
+    service, repo, _, _ = _service(entry)
+    with pytest.raises(OccurrenceConflictError):
+        await service.reopen(entry, date(2026, 11, 3), expected_revision=entry.revision)
+    repo.delete_decision.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["MARK_SKIPPED", "REOPEN", "LINK_EXISTING"])
+async def test_resolve_missing_slot_applies_explicit_action(action: str) -> None:
+    entry = _template(congregation_id=uuid.uuid4())
+    service, repo, slots, instances = _service(entry)
+    decision = RecurringEventDecision(
+        id=uuid.uuid4(), district_id=entry.district_id, template_id=entry.id,
+        occurrence_local_date=date(2026, 11, 3), status=DecisionStatus.ACCEPTED,
+        planning_slot_id=None, created_by="u",
+    )
+    repo.get_decision.return_value = decision
+    repo.find_slot_decision.return_value = None
+    target = PlanningSlot.create(
+        district_id=entry.district_id, congregation_id=entry.congregation_id,
+        title=entry.title, category=entry.category, planning_date=date(2026, 11, 3),
+        planning_time=time(18, 30), approval_status=EventApprovalStatus.PLANNED,
+    )
+    slots.get.return_value = target
+    result = await service.resolve_missing_slot(
+        entry, date(2026, 11, 3), expected_revision=entry.revision,
+        action=action, slot_id=target.id if action == "LINK_EXISTING" else None,
+    )
+    if action == "REOPEN":
+        assert result is None
+        repo.delete_decision.assert_awaited_once_with(decision.id)
+        repo.save_decision.assert_not_awaited()
+    else:
+        assert result.id == decision.id
+        assert result.status is (DecisionStatus.SKIPPED if action == "MARK_SKIPPED" else DecisionStatus.ACCEPTED)
+        assert result.planning_slot_id == (target.id if action == "LINK_EXISTING" else None)
+        repo.save_decision.assert_awaited_once_with(result)
+        repo.delete_decision.assert_not_awaited()
+    slots.save.assert_not_awaited()
+    instances.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_rejects_missing_decision_without_writes() -> None:
+    entry = _template()
+    service, repo, slots, instances = _service(entry)
+    with pytest.raises(OccurrenceConflictError):
+        await service.resolve_missing_slot(
+            entry, date(2026, 11, 3), expected_revision=entry.revision,
+            action="MARK_SKIPPED",
+        )
+    repo.delete_decision.assert_not_awaited()
     repo.save_decision.assert_not_awaited()
     slots.save.assert_not_awaited()
     instances.save.assert_not_awaited()
