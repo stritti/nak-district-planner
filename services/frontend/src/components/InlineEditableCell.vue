@@ -158,8 +158,9 @@ async function commit(): Promise<boolean> {
     } catch (cause) {
       error.value = saveError(cause)
       announcement.value = error.value
+      saving.value = false
       await nextTick()
-      input.value?.focus()
+      (input.value ?? selectInput.value)?.focus()
       return false
     } finally {
       saving.value = false
