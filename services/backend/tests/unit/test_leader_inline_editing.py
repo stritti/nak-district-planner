@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.adapters.api.routers import leaders
 from app.adapters.api.schemas.leader import LeaderUpdate
@@ -75,11 +76,22 @@ async def test_stale_revision_preserves_existing_contact():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [
-    LeaderUpdate(), LeaderUpdate(rank="Pr."),
-    LeaderUpdate(is_active=False), LeaderUpdate(congregation_id=uuid.uuid4()),
-    LeaderUpdate(name=None),
+    {"rank": "Pr."}, {"is_active": False},
+    {"congregation_id": str(uuid.uuid4())}, {"notes": "x"},
 ])
 async def test_status_and_scope_changes_not_exposed_inline(payload):
+    ctx = _setup()
+    with pytest.raises(ValidationError):
+        leaders.LeaderInlineUpdate.model_validate(payload)
+    ctx[2].save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [
+    leaders.LeaderInlineUpdate(name=None),
+    leaders.LeaderInlineUpdate(),
+])
+async def test_invalid_inline_leader_payloads_are_never_mutated(payload):
     ctx = _setup()
     with pytest.raises(HTTPException) as err:
         await _inline(ctx, payload, leaders._leader_revision(ctx[1]))

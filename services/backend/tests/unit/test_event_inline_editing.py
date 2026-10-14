@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.adapters.api.routers import events
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
@@ -94,14 +95,24 @@ async def test_stale_revision_is_412_without_any_writes():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("body", [
-    events.EventUpdate(status="CANCELLED"),
-    events.EventUpdate(congregation_id=uuid.uuid4()),
-    events.EventUpdate(start_at=datetime(2026, 10, 12, 11, tzinfo=UTC)),
-    events.EventUpdate(title=None),
-    events.EventUpdate(),
+@pytest.mark.parametrize("payload", [
+    {"status": "CANCELLED"},
+    {"congregation_id": str(uuid.uuid4())},
+    {"start_at": datetime(2026, 10, 12, 11, tzinfo=UTC).isoformat()},
 ])
-async def test_workflows_and_unsupported_fields_are_never_inline_mutable(body):
+async def test_workflow_fields_are_rejected_by_the_inline_contract(payload):
+    ctx = _context()
+    with pytest.raises(ValidationError):
+        events.EventInlineUpdate.model_validate(payload)
+    ctx[3].save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", [
+    events.EventInlineUpdate(title=None),
+    events.EventInlineUpdate(),
+])
+async def test_invalid_inline_payloads_are_never_mutated(body):
     ctx = _context()
     with pytest.raises(HTTPException) as err:
         await _update(ctx, body, events._slot_revision(ctx[0]))
