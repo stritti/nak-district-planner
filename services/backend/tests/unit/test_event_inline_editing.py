@@ -49,7 +49,8 @@ async def _update(context, body, revision):
             slot_repo=slots, inst_repo=instances, cong_repo=congregations,
             assignments_repo=assignments, leaders_repo=leaders,
         )
-    require_role.assert_called_once_with(auth, Role.PLANNER, slot.district_id)
+    assert require_role.call_count == 2
+    require_role.assert_any_call(auth, Role.PLANNER, slot.district_id)
     return result
 
 
