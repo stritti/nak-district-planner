@@ -19,8 +19,8 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
-from app.adapters.api.schemas.conflict import ConflictItem, ConflictResponse
 from app.adapters.api.revisions import slot_revision
+from app.adapters.api.schemas.conflict import ConflictItem, ConflictResponse
 from app.adapters.api.schemas.service_assignment import (
     InlineAssignmentChange,
     InlineAssignmentResult,
