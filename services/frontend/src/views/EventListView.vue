@@ -1298,7 +1298,7 @@ async function saveEdit() {
       category:        editForm.category || null,
       // Congregation-level events are never distributed; the backend clears it.
       ...(isDistrictLevel && { applicability: editForm.applicability }),
-    })
+    }, target.revision ?? '')
     let assignmentError: unknown = null
     try {
       updated.responsible = await saveResponsible(target)
