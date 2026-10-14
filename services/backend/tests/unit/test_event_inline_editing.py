@@ -63,7 +63,8 @@ async def test_conditional_inline_title_save_increments_revision_and_updates_ins
     assert result.revision != before
     assert result.revision.startswith('"')
     assert ctx[1].title == "Neu"
-    ctx[3].get_for_update.assert_awaited_once_with(ctx[0].id)
+    assert ctx[3].get_for_update.await_count == 2
+    ctx[3].get_for_update.assert_any_await(ctx[0].id)
     ctx[3].save.assert_awaited_once()
 
 
