@@ -4,7 +4,7 @@
 """Conditional inline minister assignment contract and edge cases."""
 
 import uuid
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from app.adapters.api.revisions import slot_revision
 from app.adapters.api.routers import service_assignments
 from app.adapters.api.schemas.service_assignment import InlineAssignmentChange
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
@@ -146,3 +147,47 @@ def test_inline_does_not_allow_implicit_deletion_or_unknown_workflow_fields():
             "leader_id": str(uuid.uuid4()),
             "status": "CONFIRMED",
         })
+
+
+def _instance(slot: PlanningSlot) -> EventInstance:
+    return EventInstance.create(
+        planning_slot_id=slot.id,
+        title="Gottesdienst",
+        actual_start_at=datetime(2026, 10, 14, 10, tzinfo=UTC),
+        actual_end_at=datetime(2026, 10, 14, 11, tzinfo=UTC),
+        source=EventSource.INTERNAL,
+        visibility=EventVisibility.PUBLIC,
+    )
+
+
+def test_assignment_revision_matches_complete_event_snapshot():
+    slot = _slot()
+    instance = _instance(slot)
+    from app.adapters.api.routers.events import _slot_revision
+
+    assert slot_revision(slot, instance) == _slot_revision(slot, instance)
+    before = slot_revision(slot, instance)
+    instance.updated_at = datetime(2026, 10, 15, tzinfo=UTC)
+    assert slot_revision(slot, instance) != before
+
+
+@pytest.mark.asyncio
+async def test_assignment_rejects_instance_only_stale_revision():
+    slot = _slot()
+    instance = _instance(slot)
+    before = slot_revision(slot, instance)
+    instance.updated_at = datetime(2026, 10, 15, tzinfo=UTC)
+    slots, assignments, instances = AsyncMock(), AsyncMock(), AsyncMock()
+    slots.get_for_update.return_value = slot
+    instances.get_by_planning_slot.return_value = instance
+    with (
+        patch.object(service_assignments, "require_role_in_district"),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await service_assignments.inline_change_assignment(
+            slot.id, InlineAssignmentChange(leader_id=uuid.uuid4()),
+            object(), AsyncMock(), if_match=before,
+            slots=slots, assignments_repo=assignments, instance_repo=instances,
+        )
+    assert exc.value.status_code == 412
+    assignments.save.assert_not_awaited()
