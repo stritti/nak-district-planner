@@ -43,7 +43,9 @@ describe('InlineEditableCell', () => {
     await wrapper.trigger('keydown', { key: 'Enter' })
     expect(wrapper.find('input').exists()).toBe(false)
     expect(save).not.toHaveBeenCalled()
-    expect(wrapper.attributes('tabindex')).toBeUndefined()
+    expect(wrapper.attributes('tabindex')).toBe('0')
+    expect(wrapper.attributes('aria-label')).toContain('Vorher')
+    expect(wrapper.attributes('aria-label')).toContain('Nur lesbar')
   })
 
   it.each(['Enter', 'F2'])('activates and focuses from keyboard %s', async (key) => {
