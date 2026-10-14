@@ -68,6 +68,16 @@ def _instance(slot: PlanningSlot) -> EventInstance:
     )
 
 
+
+async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
+    """Exercise legacy PATCH using the revision captured by a client at load time."""
+    slots = kwargs["slot_repo"]
+    slot = slots.get.return_value
+    if isinstance(slot, PlanningSlot):
+        slots.get_for_update.return_value = slot
+        kwargs["if_match"] = events._slot_revision(slot)
+    return await events.update_event(event_id, body, auth, session, **kwargs)
+
 @pytest.mark.asyncio
 async def test_resolve_deviation_restores_planned_duration():
     from app.domain.models.event_instance import SyncState
@@ -424,7 +434,7 @@ async def test_update_event_persists_instance_and_slot_changes() -> None:
     instance_repo.get_by_planning_slot.return_value = instance
 
     with patch("app.adapters.api.routers.events.require_role_in_district"):
-        result = await events.update_event(
+        result = await _update_event_with_revision(
             slot.id,
             events.EventUpdate(
                 title="Neuer Titel",
@@ -461,7 +471,7 @@ async def test_update_event_can_clear_congregation_and_description() -> None:
     instance_repo.get_by_planning_slot.return_value = instance
 
     with patch("app.adapters.api.routers.events.require_role_in_district"):
-        await events.update_event(
+        await _update_event_with_revision(
             slot.id,
             events.EventUpdate(congregation_id=None, description=None),
             _auth(),
@@ -480,7 +490,7 @@ async def test_update_event_rejects_missing_slot() -> None:
     slot_repo = AsyncMock()
     slot_repo.get.return_value = None
     with pytest.raises(HTTPException) as error:
-        await events.update_event(
+        await _update_event_with_revision(
             uuid.uuid4(),
             events.EventUpdate(),
             _auth(),
@@ -506,7 +516,7 @@ async def test_update_event_rejects_congregation_from_another_district() -> None
         patch("app.adapters.api.routers.events.require_role_in_district"),
         pytest.raises(HTTPException) as error,
     ):
-        await events.update_event(
+        await _update_event_with_revision(
             slot.id,
             events.EventUpdate(congregation_id=foreign_congregation.id),
             _auth(),
@@ -530,7 +540,7 @@ async def test_update_event_moves_slot_without_instance_and_rejects_invalid_rang
     new_start = datetime(2026, 10, 1, 8, 30, tzinfo=UTC)
     new_end = new_start + timedelta(hours=1)
     with patch("app.adapters.api.routers.events.require_role_in_district"):
-        result = await events.update_event(
+        result = await _update_event_with_revision(
             slot.id,
             events.EventUpdate(start_at=new_start, end_at=new_end),
             _auth(),
@@ -539,7 +549,7 @@ async def test_update_event_moves_slot_without_instance_and_rejects_invalid_rang
             inst_repo=instance_repo,
         )
         with pytest.raises(HTTPException) as range_error:
-            await events.update_event(
+            await _update_event_with_revision(
                 slot.id,
                 events.EventUpdate(
                     start_at=datetime(2026, 9, 26, 12, tzinfo=UTC),
@@ -571,7 +581,7 @@ async def test_update_event_rejects_description_without_instance() -> None:
         patch("app.adapters.api.routers.events.require_role_in_district"),
         pytest.raises(HTTPException) as error,
     ):
-        await events.update_event(
+        await _update_event_with_revision(
             slot.id,
             events.EventUpdate(description="Text"),
             _auth(),
@@ -599,7 +609,7 @@ async def _patch_event(slot: PlanningSlot, body: events.EventUpdate, congregatio
     congregation_repo = AsyncMock()
     congregation_repo.list_by_district.return_value = congregations
     with patch("app.adapters.api.routers.events.require_role_in_district"):
-        result = await events.update_event(
+        result = await _update_event_with_revision(
             slot.id,
             body,
             _auth(),
@@ -659,7 +669,7 @@ async def test_update_event_moving_to_congregation_drops_distribution() -> None:
     congregation_repo.get.return_value = congregation
 
     with patch("app.adapters.api.routers.events.require_role_in_district"):
-        result = await events.update_event(
+        result = await _update_event_with_revision(
             slot.id,
             events.EventUpdate(congregation_id=congregation.id),
             _auth(),
