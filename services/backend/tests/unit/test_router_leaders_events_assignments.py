@@ -125,6 +125,7 @@ async def test_leader_crud_and_self_link_paths() -> None:
     leader_repo.list_by_district.return_value = [leader]
     leader_repo.get.return_value = leader
     leader_repo.get_for_update.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
     leader_repo.get_for_update.return_value = leader
     leader_repo.get_by_user_sub.return_value = None
     with patch("app.adapters.api.routers.leaders.require_role_in_district"):
@@ -178,6 +179,7 @@ async def test_leader_crud_forbidden_without_permission() -> None:
     leader_repo = AsyncMock()
     leader_repo.get.return_value = leader
     leader_repo.get_for_update.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
     with patch(
         "app.adapters.api.routers.leaders.require_role_in_district",
         side_effect=HTTPException(status_code=403, detail="forbidden"),
@@ -250,6 +252,7 @@ async def test_leader_update_wrong_district() -> None:
     leader_repo = AsyncMock()
     leader_repo.get.return_value = leader
     leader_repo.get_for_update.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
     with pytest.raises(HTTPException) as exc:
         await leaders_router.update_leader(
             district_id, leader.id, LeaderUpdate(name="X"), _auth_context(), db, leader_repo
@@ -267,6 +270,7 @@ async def test_leader_delete_wrong_district() -> None:
     leader_repo = AsyncMock()
     leader_repo.get.return_value = leader
     leader_repo.get_for_update.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
     with pytest.raises(HTTPException) as exc:
         await leaders_router.delete_leader(
             district_id, leader.id, _auth_context(), db, leaders_repo=leader_repo
@@ -283,6 +287,7 @@ async def test_leader_link_self_forbidden_without_district_membership() -> None:
     leader_repo = AsyncMock()
     leader_repo.get.return_value = leader
     leader_repo.get_for_update.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
     with pytest.raises(HTTPException) as exc:
         await leaders_router.link_self_to_leader(
             district_id,
@@ -303,6 +308,7 @@ async def test_leader_link_self_success_with_district_membership() -> None:
     leader_repo = AsyncMock()
     leader_repo.get.return_value = leader
     leader_repo.get_for_update.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
     result = await leaders_router.link_self_to_leader(
         district_id,
         LeaderSelfLinkRequest(leader_id=leader.id),
@@ -328,6 +334,7 @@ async def test_leader_link_self_success_with_congregation_membership() -> None:
     leader_repo = AsyncMock()
     leader_repo.get.return_value = leader
     leader_repo.get_for_update.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
     result = await leaders_router.link_self_to_leader(
         district_id,
         LeaderSelfLinkRequest(leader_id=leader.id),
@@ -347,6 +354,7 @@ async def test_leader_link_self_conflict() -> None:
     leader_repo = AsyncMock()
     leader_repo.get.return_value = leader
     leader_repo.get_for_update.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
     with pytest.raises(HTTPException) as exc:
         await leaders_router.link_self_to_leader(
             district_id,
@@ -386,6 +394,7 @@ async def test_leader_link_self_leader_wrong_district() -> None:
     leader_repo = AsyncMock()
     leader_repo.get.return_value = leader
     leader_repo.get_for_update.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
     with pytest.raises(HTTPException) as exc:
         await leaders_router.link_self_to_leader(
             district_id,
