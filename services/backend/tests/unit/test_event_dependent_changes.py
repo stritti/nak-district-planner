@@ -324,7 +324,7 @@ async def test_blocking_impact_is_checked_before_any_instance_write() -> None:
     repos[1].get_by_planning_slot.return_value = instance
     with _patches([_conflict(Severity.BLOCK)]), pytest.raises(HTTPException) as exc:
         await _update(
-            slot, repos, events.EventUpdate(start_at=NEW_START),
+            slot, repos, events.EventUpdate(start_at=NEW_START, end_at=NEW_START.replace(hour=10)),
             if_match=events._slot_revision(slot, instance),
         )
     assert exc.value.status_code == 409
