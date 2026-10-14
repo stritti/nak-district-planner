@@ -30,7 +30,8 @@ def _slot() -> PlanningSlot:
 
 
 async def _call(slot: PlanningSlot, *, revision: str | None, existing=None, permitted=True, conflict=False):
-    slots, assignments = AsyncMock(), AsyncMock()
+    slots, assignments, instances = AsyncMock(), AsyncMock(), AsyncMock()
+    instances.get_by_planning_slot.return_value = None
     slots.get.return_value = slot
     slots.get_for_update.return_value = slot
     assignments.list_by_planning_slot.return_value = existing or []
@@ -52,6 +53,7 @@ async def _call(slot: PlanningSlot, *, revision: str | None, existing=None, perm
                 if_match=revision,
                 slots=slots,
                 assignments_repo=assignments,
+                instance_repo=instances,
             )
         except HTTPException:
             assignments.save.assert_not_awaited()
