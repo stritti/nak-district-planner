@@ -12,6 +12,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.adapters.api.routers import events
+from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 from app.domain.planning.conflict_result import ConflictResult, Severity
@@ -306,3 +307,26 @@ async def test_impact_preview_rejects_missing_and_stale_snapshot() -> None:
             assert exc.value.status_code == expected
     mocks["check_service_assignment_conflicts"].assert_not_awaited()
     slot_repo.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_blocking_impact_is_checked_before_any_instance_write() -> None:
+    slot = _slot()
+    instance = EventInstance.create(
+        planning_slot_id=slot.id,
+        title="Gottesdienst",
+        actual_start_at=datetime(2026, 10, 14, 10, tzinfo=UTC),
+        actual_end_at=datetime(2026, 10, 14, 11, tzinfo=UTC),
+        source=EventSource.INTERNAL,
+        visibility=EventVisibility.PUBLIC,
+    )
+    repos = _repos(slot, [_assigned(slot)])
+    repos[1].get_by_planning_slot.return_value = instance
+    with _patches([_conflict(Severity.BLOCK)]), pytest.raises(HTTPException) as exc:
+        await _update(
+            slot, repos, events.EventUpdate(start_at=NEW_START),
+            if_match=events._slot_revision(slot, instance),
+        )
+    assert exc.value.status_code == 409
+    repos[1].save.assert_not_awaited()
+    repos[0].save.assert_not_awaited()
