@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
+    get_event_instance_repository,
     get_leader_repository,
     get_planning_slot_repository,
     get_service_assignment_repository,
@@ -31,6 +32,7 @@ from app.adapters.api.schemas.service_assignment import (
 from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.locks import acquire_advisory_xact_lock
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
@@ -207,6 +209,7 @@ async def inline_change_assignment(
     db: DbSession,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
     slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> InlineAssignmentResult:
     """Change an assigned minister atomically against the event's strong revision.
@@ -224,7 +227,8 @@ async def inline_change_assignment(
         raise HTTPException(status_code=409, detail="Abgesagte Termine können nicht inline zugewiesen werden.")
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
-    if if_match != slot_revision(slot):
+    instance = await instance_repo.get_by_planning_slot(event_id, for_update=True)
+    if if_match != slot_revision(slot, instance):
         raise HTTPException(status_code=412, detail="Zuweisung wurde zwischenzeitlich geändert.")
 
     assignments = await assignments_repo.list_by_planning_slot(event_id)
@@ -234,7 +238,7 @@ async def inline_change_assignment(
     if existing is not None and existing.leader_id == body.leader_id:
         return InlineAssignmentResult(
             **_assignment_response(existing).model_dump(),
-            event_revision=slot_revision(slot),
+            event_revision=slot_revision(slot, instance),
         )
 
     await _check_leader(
@@ -261,7 +265,7 @@ async def inline_change_assignment(
     await _touch_slot(slots, slot)
     return InlineAssignmentResult(
         **_assignment_response(assignment).model_dump(),
-        event_revision=slot_revision(slot),
+        event_revision=slot_revision(slot, instance),
     )
 
 
