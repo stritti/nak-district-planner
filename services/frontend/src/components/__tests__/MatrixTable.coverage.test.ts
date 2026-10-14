@@ -1,13 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { beforeEach, describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import MatrixTable from '@/components/MatrixTable.vue'
 import { useDistrictsStore } from '@/stores/districts'
 import { useMatrixStore } from '@/stores/matrix'
+import { useLeadersStore } from '@/stores/leaders'
+import { useAuthStore } from '@/stores/auth'
+import * as assignmentsApi from '@/api/serviceAssignments'
 import type { MatrixResponse } from '@/api/matrix'
+
+vi.mock('@/api/serviceAssignments', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/serviceAssignments')>()),
+  changeAssignmentInline: vi.fn(),
+}))
 
 const dates = ['2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08']
 
@@ -119,6 +127,53 @@ describe('MatrixTable coverage gaps', () => {
     await wrapper.setProps({ compactMode: true, matrixSortMode: 'grouped' })
     expect(wrapper.get('table').classes()).toContain('matrix-table--compact')
     wrapper.unmount()
+  })
+
+  it('uses the shared inline select for authorised versioned minister updates', async () => {
+    const matrixStore = useMatrixStore()
+    const auth = useAuthStore()
+    const leaders = useLeadersStore()
+    matrixStore.districtId = 'd1'
+    matrixStore.matrix = structuredClone(richMatrix)
+    matrixStore.matrix!.rows[0].cells['2026-10-05'].revision = '"rev-1"'
+    auth.memberships = [{
+      scope_type: 'DISTRICT', scope_id: 'd1', role: 'PLANNER',
+    }] as typeof auth.memberships
+    leaders.leaders = [
+      { id: 'l1', name: 'Max Muster', rank: 'Pr.', is_active: true },
+      { id: 'l3', name: 'Neu', rank: 'Di.', is_active: true },
+    ] as typeof leaders.leaders
+    vi.mocked(assignmentsApi.changeAssignmentInline).mockResolvedValue({
+      id: 'a1', event_id: 'normal', leader_id: 'l3', leader_name: null,
+      status: 'ASSIGNED', event_revision: '"rev-2"',
+      created_at: '', updated_at: '',
+    })
+    const wrapper = mount(MatrixTable, {
+      props: { compactMode: false, matrixSortMode: 'default' },
+    })
+    const editable = wrapper.get('[data-inline-cell-id="matrix-leader-c1-2026-10-05"]')
+    await editable.trigger('click')
+    await flushPromises()
+    await editable.get('select').setValue('l3')
+    await editable.get('select').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(assignmentsApi.changeAssignmentInline)
+      .toHaveBeenCalledWith('normal', 'l3', '"rev-1"')
+    expect(matrixStore.matrix!.rows[0].cells['2026-10-05'].revision).toBe('"rev-2"')
+    expect(matrixStore.matrix!.rows[0].cells['2026-10-05'].leader_name).toBe('Di. Neu')
+    expect(wrapper.find('[data-inline-cell-id="matrix-leader-c1-2026-10-06"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('does not expose inline assignment editing to viewer-only access', () => {
+    const matrixStore = useMatrixStore()
+    matrixStore.districtId = 'd1'
+    matrixStore.matrix = structuredClone(richMatrix)
+    matrixStore.matrix.rows[0].cells['2026-10-05'].revision = '"rev-1"'
+    const wrapper = mount(MatrixTable, {
+      props: { compactMode: true, matrixSortMode: 'default' },
+    })
+    expect(wrapper.find('[data-inline-cell-id="matrix-leader-c1-2026-10-05"]').exists()).toBe(false)
   })
 
   it('renders the no-events state when the matrix has no dates', () => {
