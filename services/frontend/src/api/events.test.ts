@@ -39,9 +39,10 @@ describe('events api', () => {
   })
 
   it('previews a change with a POST that persists nothing', async () => {
-    await previewEventChange('e1', { start_at: '2026-10-20T09:00:00Z', congregation_id: null })
+    await previewEventChange('e1', { start_at: '2026-10-20T09:00:00Z', congregation_id: null }, '"rev"')
     expect(client.apiFetch).toHaveBeenLastCalledWith('/api/v1/events/e1/change-impact', {
       method: 'POST',
+      headers: { 'If-Match': '"rev"' },
       body: JSON.stringify({ start_at: '2026-10-20T09:00:00Z', congregation_id: null }),
     })
   })
