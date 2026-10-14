@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
@@ -41,9 +41,9 @@ class LeaderInlineUpdate(BaseModel):
     """Explicit contact-only inline contract."""
 
     model_config = ConfigDict(extra="forbid")
-    name: str | None = None
-    email: str | None = None
-    phone: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    email: str | None = Field(None, max_length=255)
+    phone: str | None = Field(None, max_length=100)
 
 
 def _to_utc(timestamp: datetime) -> datetime:
