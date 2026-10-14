@@ -1372,6 +1372,7 @@ async function saveAdd() {
 const editModal = reactive({
   open: false,
   leaderId: '',
+  revision: '',
   name: '',
   rank: '' as LeaderRank | '',
   congregation_id: null as string | null,
@@ -1386,6 +1387,7 @@ const editModal = reactive({
 function openEditModal(leader: LeaderResponse) {
   editModal.open = true
   editModal.leaderId = leader.id
+  editModal.revision = leader.revision ?? ''
   editModal.name = leader.name
   editModal.rank = leader.rank ?? ''
   editModal.congregation_id = leader.congregation_id
@@ -1411,7 +1413,7 @@ async function saveEdit() {
       phone: editModal.phone.trim() || null,
       notes: editModal.notes.trim() || null,
       is_active: editModal.is_active,
-    })
+    }, editModal.revision)
     const idx = leaders.value.findIndex((l) => l.id === editModal.leaderId)
     if (idx !== -1) leaders.value[idx] = updated
     editModal.open = false
