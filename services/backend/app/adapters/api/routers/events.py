@@ -548,6 +548,15 @@ async def update_event(
     proposed = _proposed_service(slot, instance, body)
     dependent = proposed != _proposed_service(slot, instance, EventUpdate())
 
+    if dependent:
+        await _revalidate_dependent_change(
+            session,
+            assignments_repo=assignments_repo,
+            slot=slot,
+            proposed=proposed,
+            confirm_warnings=body.confirm_warnings,
+        )
+
     if "congregation_id" in body.model_fields_set:
         if body.congregation_id is None:
             slot.congregation_id = None
@@ -614,14 +623,6 @@ async def update_event(
         instance.sync_state = internal_state(instance.sync_state)
         await inst_repo.save(instance)
 
-    if dependent:
-        await _revalidate_dependent_change(
-            session,
-            assignments_repo=assignments_repo,
-            slot=slot,
-            proposed=proposed,
-            confirm_warnings=body.confirm_warnings,
-        )
     # A new revision is required even for multiple writes inside the same clock tick.
     slot.updated_at = max(datetime.now(UTC), _to_utc(slot.updated_at) + timedelta(microseconds=1))
     try:
