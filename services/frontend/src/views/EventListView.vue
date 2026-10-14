@@ -734,7 +734,8 @@ function canInlineEditEvent(event: EventResponse): boolean {
 async function saveInlineTitle(event: EventResponse, value: string, revision: string): Promise<void> {
   const saved = await updateEventInline(event.id, { title: value }, revision)
   eventsStore.updateCached(saved)
-  await eventsStore.fetch()
+  // Keep the edited row mounted while the shared editor completes Tab navigation.
+  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
 }
 
 // ── Ansichts-Modus ───────────────────────────────────────────────────────────
