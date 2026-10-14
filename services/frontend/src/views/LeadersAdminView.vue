@@ -111,6 +111,7 @@
                     :editable="canInlineEditLeader(leader)"
                     :coordinator="inlineCoordinator"
                     :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'name')"
                     required
                     :max-length="255"
                   />
@@ -128,6 +129,7 @@
                     :editable="canInlineEditLeader(leader)"
                     :coordinator="inlineCoordinator"
                     :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'email')"
                     :max-length="255"
                   />
                   <InlineEditableCell
@@ -139,6 +141,7 @@
                     :editable="canInlineEditLeader(leader)"
                     :coordinator="inlineCoordinator"
                     :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'phone')"
                     :max-length="100"
                   />
                 </div>
@@ -217,6 +220,7 @@
                   :editable="canInlineEditLeader(leader)"
                   :coordinator="inlineCoordinator"
                   :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'name')"
                   required
                   :max-length="255"
                 />
@@ -241,6 +245,7 @@
                   :editable="canInlineEditLeader(leader)"
                   :coordinator="inlineCoordinator"
                   :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'email')"
                     :max-length="255"
                 />
                 <InlineEditableCell
@@ -252,6 +257,7 @@
                   :editable="canInlineEditLeader(leader)"
                   :coordinator="inlineCoordinator"
                   :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'phone')"
                     :max-length="100"
                 />
                 <td class="table-td py-2 text-center">
@@ -928,6 +934,18 @@ function canInlineEditLeader(leader: LeaderResponse): boolean {
   )) &&
     leader.district_id === selectedDistrictId.value &&
     !!leader.revision
+}
+
+async function reloadInlineLeader(
+  leader: LeaderResponse,
+  field: 'name' | 'email' | 'phone',
+): Promise<{ value: string | null; revision: string }> {
+  const latest = (await listLeaders(leader.district_id)).find((entry) => entry.id === leader.id)
+  if (!latest) throw new Error('Amtstragende:r wurde zwischenzeitlich entfernt.')
+  if (selectedDistrictId.value === leader.district_id) {
+    leaders.value = leaders.value.map((entry) => entry.id === latest.id ? latest : entry)
+  }
+  return { value: latest[field], revision: latest.revision ?? '' }
 }
 
 async function saveInlineLeader(
