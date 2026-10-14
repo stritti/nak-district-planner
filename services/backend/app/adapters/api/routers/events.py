@@ -168,9 +168,14 @@ class BulkApprovalStatusResponse(BaseModel):
     updated_count: int
 
 
-def _slot_revision(slot: PlanningSlot) -> str:
-    """Opaque strong validator for the locked planning-slot snapshot."""
-    return '"' + str(slot.id) + ':' + _to_utc(slot.updated_at).isoformat(timespec="microseconds") + '"'
+def _slot_revision(slot: PlanningSlot, instance: EventInstance | None = None) -> str:
+    """Strong validator for both halves of the event's persisted snapshot."""
+    slot_updated = _to_utc(slot.updated_at).isoformat(timespec="microseconds")
+    instance_updated = (
+        _to_utc(instance.updated_at).isoformat(timespec="microseconds")
+        if instance is not None else "none"
+    )
+    return f'"{slot.id}:{slot_updated}:{instance_updated}"'
 
 
 def _slot_start_at(slot: PlanningSlot) -> datetime:
@@ -204,7 +209,7 @@ def _slot_to_event(
         responsible=responsible,
         created_at=slot.created_at,
         updated_at=slot.updated_at,
-        revision=_slot_revision(slot),
+        revision=_slot_revision(slot, instance),
     )
 
 
@@ -445,7 +450,8 @@ async def update_event(
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
-    if if_match != _slot_revision(slot):
+    instance = await inst_repo.get_by_planning_slot(event_id)
+    if if_match != _slot_revision(slot, instance):
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail="Ereignis wurde zwischenzeitlich geändert. Bitte Daten neu laden.",
@@ -454,7 +460,6 @@ async def update_event(
         raise HTTPException(status_code=409, detail="Eine Freigabe kann nicht zurückgenommen werden.")
     if slot.was_released and slot.status == PlanningSlotStatus.CANCELLED and body.status == PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Eine veröffentlichte Absage kann nicht zurückgenommen werden.")
-    instance = await inst_repo.get_by_planning_slot(event_id)
     if "congregation_id" in body.model_fields_set:
         if body.congregation_id is None:
             slot.congregation_id = None
