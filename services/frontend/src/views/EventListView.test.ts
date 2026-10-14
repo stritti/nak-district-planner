@@ -386,7 +386,7 @@ describe('EventListView', () => {
     await modal.findAll('button').find((button) => button.text() === 'Speichern')!.trigger('click')
     await flushPromises()
 
-    expect(eventsApi.previewEventChange).toHaveBeenCalledWith('e1', { congregation_id: 'c2' })
+    expect(eventsApi.previewEventChange).toHaveBeenCalledWith('e1', { congregation_id: 'c2' }, '"revision-1"')
     expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'Konflikt durch Gemeindewechsel' }))
     expect(eventsApi.updateEvent).toHaveBeenCalledWith(
       'e1',
