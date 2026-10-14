@@ -21,8 +21,8 @@ export const useEventsStore = defineStore('events', () => {
   const currentPage = computed(() => Math.floor((filters.value.offset ?? 0) / PAGE_SIZE) + 1)
   const totalPages = computed(() => Math.ceil(total.value / PAGE_SIZE))
 
-  async function fetch() {
-    loading.value = true
+  async function fetch(options: { preserveRows?: boolean } = {}) {
+    if (!options.preserveRows) loading.value = true
     error.value = null
     try {
       const res = await listEvents(filters.value)
@@ -31,7 +31,7 @@ export const useEventsStore = defineStore('events', () => {
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Fehler beim Laden'
     } finally {
-      loading.value = false
+      if (!options.preserveRows) loading.value = false
     }
   }
 
