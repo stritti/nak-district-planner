@@ -51,6 +51,16 @@ def body(**kw):
     return events.EventCreate(**(data | kw))
 
 
+
+async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
+    """Exercise legacy PATCH using the revision captured by a client at load time."""
+    slots = kwargs["slot_repo"]
+    slot = slots.get.return_value
+    if isinstance(slot, PlanningSlot):
+        slots.get_for_update.return_value = slot
+        kwargs["if_match"] = events._slot_revision(slot)
+    return await events.update_event(event_id, body, auth, session, **kwargs)
+
 @pytest.mark.asyncio
 async def test_create_manual_draft_with_instance_and_utc_times():
     request = body(category="Gottesdienst", description="Beschreibung")
@@ -240,12 +250,12 @@ async def test_update_rejects_unpublication_and_reactivation():
     repo.get.return_value = value
     with patch.object(events, "require_role_in_district"):
         with pytest.raises(HTTPException) as exc:
-            await events.update_event(value.id, events.EventUpdate(approval_status="PLANNED"),
+            await _update_event_with_revision(value.id, events.EventUpdate(approval_status="PLANNED"),
                                       auth(), AsyncMock(), slot_repo=repo, inst_repo=instances)
         assert exc.value.status_code == 409
         value.status = PlanningSlotStatus.CANCELLED
         with pytest.raises(HTTPException) as exc:
-            await events.update_event(value.id, events.EventUpdate(status="ACTIVE"),
+            await _update_event_with_revision(value.id, events.EventUpdate(status="ACTIVE"),
                                       auth(), AsyncMock(), slot_repo=repo, inst_repo=instances)
     assert exc.value.status_code == 409
     repo.save.assert_not_awaited()
@@ -637,7 +647,7 @@ async def test_patch_stale_draft_release_race_returns_http_409(new_status):
 
     with patch.object(events, "require_role_in_district"):
         with pytest.raises(HTTPException) as exc:
-            await events.update_event(
+            await _update_event_with_revision(
                 event_slot.id,
                 events.EventUpdate(approval_status=new_status),
                 auth(), AsyncMock(), slot_repo=repo, inst_repo=instances,
@@ -707,7 +717,7 @@ async def test_patch_after_concurrent_delete_returns_conflict(new_approval):
     slot_repo.save.side_effect = DeletedPlanningSlotError("Ereignis wurde zwischenzeitlich gelöscht.")
     instances.get_by_planning_slot.return_value = None
     with patch.object(events, "require_role_in_district"), pytest.raises(HTTPException) as exc:
-        await events.update_event(
+        await _update_event_with_revision(
             draft.id, events.EventUpdate(approval_status=new_approval),
             auth(), AsyncMock(), slot_repo=slot_repo, inst_repo=instances
         )
