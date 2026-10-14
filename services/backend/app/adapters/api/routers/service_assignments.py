@@ -37,7 +37,7 @@ from app.adapters.db.repositories.service_assignment import SqlServiceAssignment
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.domain.event_payloads import assignment_confirmed
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
@@ -220,6 +220,8 @@ async def inline_change_assignment(
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
     if slot.invitation_source_event_id is not None:
         raise HTTPException(status_code=403, detail="Eingeladene Gemeinde darf Gastgeber-Zuweisung nicht ändern.")
+    if slot.status != PlanningSlotStatus.ACTIVE:
+        raise HTTPException(status_code=409, detail="Abgesagte Termine können nicht inline zugewiesen werden.")
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     if if_match != slot_revision(slot):
