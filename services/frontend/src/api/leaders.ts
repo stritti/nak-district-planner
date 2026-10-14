@@ -96,9 +96,12 @@ export function updateLeader(
   districtId: string,
   leaderId: string,
   body: LeaderUpdate,
+  revision: string,
 ): Promise<LeaderResponse> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
   return apiFetch<LeaderResponse>(`/api/v1/districts/${districtId}/leaders/${leaderId}`, {
     method: 'PATCH',
+    headers: { 'If-Match': revision },
     body: JSON.stringify(body),
   })
 }
