@@ -62,3 +62,23 @@ export function deleteAssignment(eventId: string, assignmentId: string): Promise
     method: 'DELETE',
   })
 }
+
+/** Optimistic, non-destructive minister assignment for inline UI adapters. */
+export interface InlineAssignmentResult extends ServiceAssignmentResponse {
+  event_revision: string
+}
+
+export function changeAssignmentInline(
+  eventId: string,
+  leaderId: string,
+  revision: string,
+  confirmWarnings = false,
+): Promise<InlineAssignmentResult> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+  if (!leaderId) return Promise.reject(new Error('Zum Zuweisen ist eine Person erforderlich.'))
+  return apiFetch<InlineAssignmentResult>(`/api/v1/events/${eventId}/assignments/inline`, {
+    method: 'PUT',
+    headers: { 'If-Match': revision },
+    body: JSON.stringify({ leader_id: leaderId, confirm_warnings: confirmWarnings }),
+  })
+}
