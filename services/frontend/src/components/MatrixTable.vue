@@ -171,6 +171,21 @@
                     Einladungen: {{ row.cells[date].invitation_count }}
                   </div>
                 </button>
+                <InlineEditableCell
+                  v-if="canInlineAssign(row.cells[date])"
+                  :id="'matrix-leader-' + row.congregation_id + '-' + date"
+                  as="div"
+                  class="mt-1"
+                  :value="row.cells[date].leader_id"
+                  :display-value="row.cells[date].leader_name ?? 'Dienstleiter zuweisen'"
+                  :label="'Dienstleiter: ' + row.congregation_name + ' ' + date"
+                  :editable="true"
+                  :choices="leaderChoices"
+                  :revision="row.cells[date].revision ?? ''"
+                  :coordinator="inlineCoordinator"
+                  :save="(leaderId, revision) => saveInlineAssignment(row.cells[date], leaderId, revision)"
+                  required
+                />
               </template>
               <template v-else>
                 <span class="text-gray-300 dark:text-gray-600">–</span>
@@ -229,6 +244,11 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
+import { useLeadersStore } from '../stores/leaders'
+import { useAuthStore } from '../stores/auth'
+import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
+import { changeAssignmentInline } from '../api/serviceAssignments'
+import InlineEditableCell from './InlineEditableCell.vue'
 import type { MatrixCell, MatrixRow } from '../api/matrix'
 import { filterMatrixRows, sortMatrixRows } from '../utils/matrixRows'
 import { useScrollShadow } from '../composables/useScrollShadow'
@@ -253,6 +273,38 @@ const emit = defineEmits<{
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
+const leadersStore = useLeadersStore()
+const auth = useAuthStore()
+const inlineCoordinator = useInlineCellCoordinator()
+
+const leaderChoices = computed(() => leadersStore.activeLeaders().map((leader) => ({
+  value: leader.id,
+  label: leader.rank ? `${leader.rank} ${leader.name}` : leader.name,
+})))
+
+function canInlineAssign(cell: MatrixCell): boolean {
+  return !!cell.event_id &&
+    cell.is_assignment_editable !== false &&
+    !!cell.revision &&
+    (auth.isSuperadmin || auth.memberships.some((membership) =>
+      membership.scope_type === 'DISTRICT' &&
+      membership.scope_id === matrixStore.districtId &&
+      ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(membership.role)
+    ))
+}
+
+async function saveInlineAssignment(cell: MatrixCell, leaderId: string, revision: string): Promise<void> {
+  const eventId = cell.assignment_event_id ?? cell.event_id
+  if (!eventId) throw new Error('Planungseintrag fehlt')
+  const saved = await changeAssignmentInline(eventId, leaderId, revision)
+  // Apply authoritative response without unmounting the table during focus navigation.
+  cell.assignment_id = saved.id
+  cell.assignment_status = saved.status
+  cell.leader_id = saved.leader_id
+  cell.leader_name = leaderChoices.value.find((item) => item.value === saved.leader_id)?.label ?? null
+  cell.revision = saved.event_revision
+  cell.is_gap = false
+}
 
 type OverflowTitleEl = HTMLElement & {
   __overflowTitleHandler__?: () => void
