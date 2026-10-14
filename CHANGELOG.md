@@ -1,40 +1,157 @@
-## [v0.29.3] - 2026-08-11
+# Changelog
 
-### Features
-* feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
-* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
-* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
-* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
-* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
-* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
-* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
-* feat(security): implement audit logging (SEC-009) (753a502)
-* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
-* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+## [1.0.0](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.9...v1.0.0) (2026-10-10)
+
 
 ### Bug Fixes
-* fix: upgrade click to 8.4.2 to resolve PYSEC-2026-2132 command injection vulnerability (16ef998)
-* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
-* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
-* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
-* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
-* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
-* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
-* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
-* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
-* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
 
-### Other Changes
-* chore: release v0.29.2 (4e273b0)
-* refactor(uc-01): extract CalendarIntegrationService and raise CalendarConnectorError (#264) (8166064)
-* chore: release v0.29.1 (63e30eb)
-* docs: mark uc-02 last_sync_error tasks complete (9a8c222)
-* chore: release v0.29.0 (4a450bb)
-* docs: mark verified-complete tasks in planning-slot, uc-01, rbac changes (fbe37c6)
-* ci: optimize actions caching and redundant jobs (#263) (b8efe7c)
-* build(deps-dev): Bump vue-tsc to 3.3.9 and typescript-eslint to 8.66.0 in /services/frontend (#262) (b500979)
-* build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
-* build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
+* **release:** promote 1.0.0 from rc.9 to stable ([#563](https://github.com/stritti/nak-district-planner/issues/563)) ([a260c5b](https://github.com/stritti/nak-district-planner/commit/a260c5ba76878aafd9d66fa43c18706b5cd81657))
+
+## [1.0.0-rc.9](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.8...v1.0.0-rc.9) (2026-10-10)
+
+
+### Features
+
+* **events:** manually create drafts, delete unreleased events, preserve cancellations ([#545](https://github.com/stritti/nak-district-planner/issues/545)) ([67c8f22](https://github.com/stritti/nak-district-planner/commit/67c8f22daa0070bd8c443efcfc933b6efc735ab4))
+
+
+### Bug Fixes
+
+* **license:** preserve modes and harden SPDX checks ([#560](https://github.com/stritti/nak-district-planner/issues/560)) ([11420de](https://github.com/stritti/nak-district-planner/commit/11420de3e31017dc38bccb3f48b03554a20b7e6d))
+* **matrix:** Datums-Header beim Scrollen fixieren ([#543](https://github.com/stritti/nak-district-planner/issues/543)) ([#544](https://github.com/stritti/nak-district-planner/issues/544)) ([27b5092](https://github.com/stritti/nak-district-planner/commit/27b5092f8843f9a56bd8c1a9d8e12c3dda6f0f5f))
+
+## [1.0.0-rc.8](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.7...v1.0.0-rc.8) (2026-10-10)
+
+
+### Features
+
+* **frontend:** retain filters and sorting during a session ([#537](https://github.com/stritti/nak-district-planner/issues/537)) ([eca8294](https://github.com/stritti/nak-district-planner/commit/eca82945107ea0a74864a5204177e19c0e088fa2))
+* **matrix,export:** Gastgeber als Titel und Ort eingeladener Gottesdienste ([#531](https://github.com/stritti/nak-district-planner/issues/531)) ([9fc3f50](https://github.com/stritti/nak-district-planner/commit/9fc3f50179fe540e2888db5d10032191ef8357df))
+* **matrix:** horizontale Scrollleiste immer am unteren Rand des sichtbaren Bereichs ([#532](https://github.com/stritti/nak-district-planner/issues/532)) ([abf8e79](https://github.com/stritti/nak-district-planner/commit/abf8e79dffc42a60aee9af4c221bdb6c68dc0ab2))
+* **matrix:** kompakte Dienstleiter-Auswahl mit automatischem Treffer ([#534](https://github.com/stritti/nak-district-planner/issues/534)) ([09d7907](https://github.com/stritti/nak-district-planner/commit/09d7907f9458be938a0c15c46f0947eb762b99bd))
+* **ux:** globalen Bezirkskontext in die Hauptnavigation verlegen ([#542](https://github.com/stritti/nak-district-planner/issues/542)) ([c8d7b7f](https://github.com/stritti/nak-district-planner/commit/c8d7b7f3f4c424101cc9416a216ecfa03d588129))
+
+
+### Bug Fixes
+
+* **ci:** align image policy tests with release-only publication ([#541](https://github.com/stritti/nak-district-planner/issues/541)) ([8309b74](https://github.com/stritti/nak-district-planner/commit/8309b7494c54fc58ec329117f7cffaf6bbe868b7))
+* **ci:** publish Docker images only for releases ([#535](https://github.com/stritti/nak-district-planner/issues/535)) ([eb04b5f](https://github.com/stritti/nak-district-planner/commit/eb04b5f71c8bcd54b784545bf03367c28f7ab00b))
+* **pwa:** keep calendar exports out of navigation fallback ([#540](https://github.com/stritti/nak-district-planner/issues/540)) ([2d55109](https://github.com/stritti/nak-district-planner/commit/2d551093263563d70b84368a4099e9ba20b11435))
+
+## [1.0.0-rc.7](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.6...v1.0.0-rc.7) (2026-10-09)
+
+
+### Bug Fixes
+
+* **idp:** Audience-Mapper im Keycloak-Setup anlegen und dokumentieren ([#526](https://github.com/stritti/nak-district-planner/issues/526)) ([9b08200](https://github.com/stritti/nak-district-planner/commit/9b0820078e520a7f26c1fa21fe608cd6b1606326)), closes [#511](https://github.com/stritti/nak-district-planner/issues/511)
+* **matrix:** eingeladene Gemeinden zeigen 'Eingeladen nach' statt Luecke ([#529](https://github.com/stritti/nak-district-planner/issues/529)) ([79ccd26](https://github.com/stritti/nak-district-planner/commit/79ccd2601c8f37e46a372377ac48aa976ed39705))
+
+## [1.0.0-rc.6](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.5...v1.0.0-rc.6) (2026-10-09)
+
+
+### Features
+
+* **events:** Verantwortliche:n / Dienstleiter:in in der Eventübersicht zuordnen ([#524](https://github.com/stritti/nak-district-planner/issues/524)) ([1e15047](https://github.com/stritti/nak-district-planner/commit/1e15047bfaa0380f1a7b56c5f77fa83df777c52d))
+
+
+### Bug Fixes
+
+* **frontend:** resolve the backend through Docker DNS per request ([#519](https://github.com/stritti/nak-district-planner/issues/519)) ([474a758](https://github.com/stritti/nak-district-planner/commit/474a7582c0be576f5c36adc8edbab41589fe676a))
+* **frontend:** stop the navigation from overlapping (badges, links, user area) ([#521](https://github.com/stritti/nak-district-planner/issues/521)) ([b0484a0](https://github.com/stritti/nak-district-planner/commit/b0484a0fd678f2cba8f73e8118603e0517ec5935))
+* **matrix:** verschobene Gottesdienste bleiben in der Matrix zuweisbar ([#523](https://github.com/stritti/nak-district-planner/issues/523)) ([62fa6b5](https://github.com/stritti/nak-district-planner/commit/62fa6b5a7c654c22fd898f9b543b91c39e04e226))
+
+## [1.0.0-rc.5](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.4...v1.0.0-rc.5) (2026-10-09)
+
+
+### Features
+
+* **frontend:** Frontend- und Backend-Version unauffällig im Footer anzeigen ([#516](https://github.com/stritti/nak-district-planner/issues/516)) ([2bad391](https://github.com/stritti/nak-district-planner/commit/2bad391ddb919391e71daeb0c3c793774d49c983))
+
+## [1.0.0-rc.4](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.3...v1.0.0-rc.4) (2026-10-09)
+
+
+### Bug Fixes
+
+* **auth:** return a real 204 from /oidc/revoke instead of the injected Response ([#512](https://github.com/stritti/nak-district-planner/issues/512)) ([b99f99c](https://github.com/stritti/nak-district-planner/commit/b99f99c30d81f9bdb0095d899c0ba94cddb90079))
+* **auth:** stop signed-out version check from wiping the PKCE verifier ([#513](https://github.com/stritti/nak-district-planner/issues/513)) ([b678401](https://github.com/stritti/nak-district-planner/commit/b6784015c3f9187673d12cd7b0939c8f0a3f6c34))
+
+## [1.0.0-rc.3](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.2...v1.0.0-rc.3) (2026-10-09)
+
+
+### Features
+
+* **deploy:** production stack with Traefik, Keycloak and released GHCR images ([#509](https://github.com/stritti/nak-district-planner/issues/509)) ([82e23c4](https://github.com/stritti/nak-district-planner/commit/82e23c46ff91a4b0747c6da35044228380ce9588))
+
+
+### Bug Fixes
+
+* **docs:** serve GitHub Pages below the repository path ([#510](https://github.com/stritti/nak-district-planner/issues/510)) ([3fb80e6](https://github.com/stritti/nak-district-planner/commit/3fb80e6ec46a61800d7017acb7ca1015c08a59f1))
+* **release:** keep the duplicate archive out of autogenerate; restore CHANGELOG order ([#504](https://github.com/stritti/nak-district-planner/issues/504)) ([70ed16a](https://github.com/stritti/nak-district-planner/commit/70ed16a4774e4a456a83e98a019b87dfd5e8bde5))
+* **security:** remove tracked Keycloak env backup and block future commits ([#506](https://github.com/stritti/nak-district-planner/issues/506)) ([be8c775](https://github.com/stritti/nak-district-planner/commit/be8c77572115f683b957e4a943de2c690b20b769))
+* **security:** require client-bound introspection for opaque OIDC tokens ([#505](https://github.com/stritti/nak-district-planner/issues/505)) ([77b5f9e](https://github.com/stritti/nak-district-planner/commit/77b5f9ed3b97a8fe68a5a016b5278b46db6878ba))
+
+## [1.0.0-rc.2](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2026-10-08)
+
+
+### Bug Fixes
+
+* **auth:** make OIDC token validation fail closed ([#438](https://github.com/stritti/nak-district-planner/issues/438)) ([8ea2612](https://github.com/stritti/nak-district-planner/commit/8ea2612e6caa24b0deb362df06b1e737465ecb9f))
+* **auth:** require verified email for registration auto-linking ([#478](https://github.com/stritti/nak-district-planner/issues/478)) ([05f61e3](https://github.com/stritti/nak-district-planner/commit/05f61e386a1fd04ef8f427794e12883a2e529413))
+* **calendar:** support only ICS and CalDAV for 1.0 ([#487](https://github.com/stritti/nak-district-planner/issues/487)) ([36dc685](https://github.com/stritti/nak-district-planner/commit/36dc68590bf208bf1310394ef2553b18bf6aa41c))
+* **deploy:** run a single Celery beat scheduler and reserve latest for stable releases ([#480](https://github.com/stritti/nak-district-planner/issues/480)) ([942b430](https://github.com/stritti/nak-district-planner/commit/942b430512871172fd4eb0804877ff77d5717c94))
+* **deploy:** stop workers on unreachable DB, route make migrate through .env.db ([#500](https://github.com/stritti/nak-district-planner/issues/500)) ([fe9e545](https://github.com/stritti/nak-district-planner/commit/fe9e5457c9423f3198ecef91ea55c51b7a174afb))
+* **domain:** one assignment per slot, per-leader lock and cross-tenant reference checks ([#484](https://github.com/stritti/nak-district-planner/issues/484)) ([8997ba6](https://github.com/stritti/nak-district-planner/commit/8997ba6c00e0620f2fb0f1c1c0c088f6ac66146e))
+* **planning:** one slot-visibility rule for matrix, event list and ICS export ([#485](https://github.com/stritti/nak-district-planner/issues/485)) ([56eb5bf](https://github.com/stritti/nak-district-planner/commit/56eb5bf251f16bff6c261a4c105bd31d50e74a5e))
+* **planning:** stable generator key prevents re-creating moved draft services ([#491](https://github.com/stritti/nak-district-planner/issues/491)) ([4351210](https://github.com/stritti/nak-district-planner/commit/43512108bc42bbf2b7df63d601da6d7327b632fc))
+* **security:** accept CSRF token only from the request header ([#460](https://github.com/stritti/nak-district-planner/issues/460)) ([32e1f7d](https://github.com/stritti/nak-district-planner/commit/32e1f7dbbe472e0dddd4af9d464dd650e6255d0f))
+* **security:** bump source-map-js to 1.2.2 in all Bun lockfiles ([#459](https://github.com/stritti/nak-district-planner/issues/459)) ([a183f81](https://github.com/stritti/nak-district-planner/commit/a183f816efa7481d71346fb4c91b7b693fc1498d))
+* **security:** prevent SSRF in ICS/CalDAV calendar fetching ([#486](https://github.com/stritti/nak-district-planner/issues/486)) ([9261a4e](https://github.com/stritti/nak-district-planner/commit/9261a4ee438b3042d97d1201f6e873c80c1716c7))
+* **security:** resolve client IP only from trusted proxies ([#479](https://github.com/stritti/nak-district-planner/issues/479)) ([d3c923a](https://github.com/stritti/nak-district-planner/commit/d3c923a46af5025b16b344d408140ec028ecaee0))
+* **sync:** bound sync window, expand recurring events, reconcile ICS deletions ([#483](https://github.com/stritti/nak-district-planner/issues/483)) ([e5d10c0](https://github.com/stritti/nak-district-planner/commit/e5d10c0c70a9117a825597f6e7db6cccedf4533d))
+* **update:** remove in-app update execution, prerelease-aware version check ([#481](https://github.com/stritti/nak-district-planner/issues/481)) ([9914da2](https://github.com/stritti/nak-district-planner/commit/9914da202263aeca6044311b2cab5cf83a3c3f91))
+* **worker:** dispose DB pool before each task's event loop closes ([#477](https://github.com/stritti/nak-district-planner/issues/477)) ([cd4d7e1](https://github.com/stritti/nak-district-planner/commit/cd4d7e1de83066d35cdd9f4a0d2488db8ef8bb33))
+* **worker:** restore the type parameter of _run_as_system_worker (main red) ([#499](https://github.com/stritti/nak-district-planner/issues/499)) ([354245b](https://github.com/stritti/nak-district-planner/commit/354245bb53a05a26833af4ddf365fdfd47872313))
+
+## [1.0.0-rc.1](https://github.com/stritti/nak-district-planner/compare/v0.34.0...v1.0.0-rc.1) (2026-10-03)
+
+
+### Features
+
+* **sync:** expose CONFLICT state and resolve-conflict endpoint (Roadmap-Task 3.7) ([#412](https://github.com/stritti/nak-district-planner/issues/412)) ([09d7da2](https://github.com/stritti/nak-district-planner/commit/09d7da25a3cd7d8695c62ca7bb5ec9b19251f250))
+
+
+### Bug Fixes
+
+* **backend:** resolve remaining ruff findings ([#406](https://github.com/stritti/nak-district-planner/issues/406)) ([a1a064d](https://github.com/stritti/nak-district-planner/commit/a1a064da3be20f470bb443dcc7ebdbafa5b80f24))
+* **ci:** serialize Pages deployments ([529fa44](https://github.com/stritti/nak-district-planner/commit/529fa44e6871451bb773ca7904ae501ac323523c))
+* **ci:** use locked Bun install for docs build ([7766f31](https://github.com/stritti/nak-district-planner/commit/7766f315ed9dfdf5a5287560d9abe1142a738fde))
+* **sync:** follow up review findings from [#412](https://github.com/stritti/nak-district-planner/issues/412) and [#413](https://github.com/stritti/nak-district-planner/issues/413) ([#415](https://github.com/stritti/nak-district-planner/issues/415)) ([5e4cfd8](https://github.com/stritti/nak-district-planner/commit/5e4cfd81493551c9b93928c0df2a6e17e99b2976))
+
+
+### Performance Improvements
+
+* **ci:** optimize GitHub Actions caching and redundant work ([#410](https://github.com/stritti/nak-district-planner/issues/410)) ([58e76e2](https://github.com/stritti/nak-district-planner/commit/58e76e20f9b281aaaa5c63968358b190d1e5f9f9))
+
+
+### Miscellaneous Chores
+
+* **release:** prepare v1.0.0 release candidate ([#416](https://github.com/stritti/nak-district-planner/issues/416)) ([c4ac86e](https://github.com/stritti/nak-district-planner/commit/c4ac86e69b9fa19d4c0770bda44064c8124e9a6c))
+
+## [0.34.0](https://github.com/stritti/nak-district-planner/compare/v0.33.0...v0.34.0) (2026-10-02)
+
+
+### Features
+
+* **events:** mark and filter worship services in event overview ([#370](https://github.com/stritti/nak-district-planner/issues/370)) ([aa5dfa0](https://github.com/stritti/nak-district-planner/commit/aa5dfa0afa363f7a1b52bcdc9285ac870abad0c4))
+* **frontend:** add role-based contextual help ([#380](https://github.com/stritti/nak-district-planner/issues/380)) ([683c23b](https://github.com/stritti/nak-district-planner/commit/683c23b1d7c1b6d27fa4680c0ce0c05a3c914a63))
+* **frontend:** finish UX improvements ([#381](https://github.com/stritti/nak-district-planner/issues/381)) ([e99139b](https://github.com/stritti/nak-district-planner/commit/e99139ba2641f9b2a439b9e8f612655d881a3d34))
+
+
+### Bug Fixes
+
+* [#383](https://github.com/stritti/nak-district-planner/issues/383) und [#390](https://github.com/stritti/nak-district-planner/issues/390) nach fehlerhaftem Merge in [#384](https://github.com/stritti/nak-district-planner/issues/384) wiederherstellen ([#400](https://github.com/stritti/nak-district-planner/issues/400)) ([4db84ea](https://github.com/stritti/nak-district-planner/commit/4db84ea056b24220df8f47d7b62f6a3b5993eeeb))
+* **backend:** bind lambda params and drop unused content hashes ([#405](https://github.com/stritti/nak-district-planner/issues/405)) ([83b9766](https://github.com/stritti/nak-district-planner/commit/83b976689ce8c8e54a4457aa9c33178b53b88914))
+* **ci:** resolve shared markdownlint baseline findings ([#389](https://github.com/stritti/nak-district-planner/issues/389)) ([41a5810](https://github.com/stritti/nak-district-planner/commit/41a5810ee1f4f52de052951058b66611f8fe0ef7))
 
 ## [0.33.0](https://github.com/stritti/nak-district-planner/compare/v0.32.0...v0.33.0) (2026-09-18)
 
@@ -111,6 +228,44 @@
 * **ci:** fallback to GITHUB_TOKEN when RELEASE_PLEASE_TOKEN missing ([92c112b](https://github.com/stritti/nak-district-planner/commit/92c112ba4e4bcc6c956e82c07e1e932f5a74e588))
 * **tests:** isolate production_guard tests from local .env leakage ([#309](https://github.com/stritti/nak-district-planner/issues/309)) ([4852c79](https://github.com/stritti/nak-district-planner/commit/4852c790cd0b5cea27bbd9288bba8395063d8752))
 * upgrade click to 8.4.2 to resolve PYSEC-2026-2132 command injection vulnerability ([16ef998](https://github.com/stritti/nak-district-planner/commit/16ef998423216b7570588e4c27d28f333c385daf))
+
+## [v0.29.3] - 2026-08-11
+
+### Features
+* feat(uc-02): persist and display last_sync_error for calendar integrations (b5bcfe3)
+* Merge pull request #210 from stritti/feat/toast-confirmdialog-consolidation (83d0a64)
+* feat(frontend): Toast-Feedback & ConfirmDialog konsolidieren (PR-2) (08bcea4)
+* feat(m3): remove legacy Event model — EventInstance + ExternalEventLink + Sync Härtung (#190) (e99a840)
+* feat(matrix): complete M1 frontend integration with deviation display (#188) (75a13f8)
+* feat: tenant isolation (SEC-020, SEC-021) (e197af9)
+* feat(matrix): implement PlanningSeries slot generation and deviation display (M1) (#187) (3eb157f)
+* feat(security): implement audit logging (SEC-009) (753a502)
+* Merge pull request #172 from stritti/feature/security-rate-limiting-sec-016 (dbd4806)
+* Merge pull request #186 from stritti/feat/sync-status-card (3a0a7ae)
+
+### Bug Fixes
+* fix: upgrade click to 8.4.2 to resolve PYSEC-2026-2132 command injection vulnerability (16ef998)
+* Merge pull request #211 from stritti/fix/csrf-middleware-asgi-crash (9d69581)
+* fix(security): CSRFMiddleware crasht bei jedem Request (ASGI-Signatur) (775b63f)
+* fix: ConfirmDialog ignoriert loading-Prop im dangerous-Modus nicht mehr (29acd1d)
+* Merge pull request #209 from stritti/fix/leaders-link-self-rbac-gap (8824da2)
+* fix: congregation-scoped users können self-link weiter nutzen (7116acc)
+* fix(security): RBAC-Guard für leaders link-self Endpoints (B-1) (9cb06f1)
+* Merge pull request #207 from stritti/fix/pip-audit-cve-joserfc (5e26c41)
+* fix: joserfc auf 1.7.3 aktualisiert — CVE-2026-48990, CVE-2026-49852 behoben (a920f40)
+* fix: Unit-Tests an require_role_in_district() angepasst (8805894)
+
+### Other Changes
+* chore: release v0.29.2 (4e273b0)
+* refactor(uc-01): extract CalendarIntegrationService and raise CalendarConnectorError (#264) (8166064)
+* chore: release v0.29.1 (63e30eb)
+* docs: mark uc-02 last_sync_error tasks complete (9a8c222)
+* chore: release v0.29.0 (4a450bb)
+* docs: mark verified-complete tasks in planning-slot, uc-01, rbac changes (fbe37c6)
+* ci: optimize actions caching and redundant jobs (#263) (b8efe7c)
+* build(deps-dev): Bump vue-tsc to 3.3.9 and typescript-eslint to 8.66.0 in /services/frontend (#262) (b500979)
+* build(deps): Bump pinia from 3.0.4 to 4.0.2 in /services/frontend (#254) (de2527d)
+* build(deps): Bump redis from 8.0.1 to 8.1.0 in /services/backend (#258) (bac6356)
 
 ## [v0.29.2] - 2026-08-11
 
@@ -2808,7 +2963,7 @@
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 
 ## [v0.2.0] - 2026-04-17
 
@@ -2844,7 +2999,7 @@
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 
@@ -2881,7 +3036,7 @@
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
@@ -2916,7 +3071,7 @@
 * chore: release v0.1.1 (06b51a0)
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
@@ -2953,7 +3108,7 @@
 ### Other Changes
 * chore: release v0.1.0 (0b81fb3)
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
@@ -2990,7 +3145,7 @@
 
 ### Other Changes
 * chore: remove unused release-please configuration (5ce1982)
-* cleanup: remove obsolete test scripts, empty __init__.py files, and unused imports (b817225)
+* cleanup: remove obsolete test scripts, empty `__init__.py` files, and unused imports (b817225)
 * Add project-checks skill and ruff/vue-tsc dependencies (d876312)
 * build(deps): Bump authlib from 1.6.9 to 1.6.10 in /services/backend (#78) (221a984)
 * build(deps-dev): Bump @vitejs/plugin-vue in /services/frontend (#75) (00d9649)
@@ -2999,5 +3154,3 @@
 * chore: standardize markdown formatting and update documentation references across the repository (a75b6a9)
 * chore: clean up whitespace and update yamllint configuration (ba4f5bf)
 * chore: update release-please token to use GITHUB_TOKEN (3936d60)
-
-# Changelog

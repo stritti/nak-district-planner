@@ -1,0 +1,39 @@
+# Traefik routes for the bundled Keycloak (docker-compose.prod.yml, file
+# provider, Go template). Not mounted when an existing Keycloak is used
+# (deploy/compose/existing-keycloak.yml). AUTH_HOST and
+# KEYCLOAK_ADMIN_ALLOWED_IPS come from the traefik service environment.
+http:
+  routers:
+    auth:
+      rule: Host(`{{ env "AUTH_HOST" }}`)
+      entryPoints: [websecure]
+      service: keycloak
+      middlewares: [security-headers]
+      tls:
+        certResolver: letsencrypt
+
+    # Administration (admin console + master realm) only from the allowlist.
+    # The more specific rule wins over the `auth` router.
+    auth-admin:
+      rule: Host(`{{ env "AUTH_HOST" }}`) && (PathPrefix(`/admin`) || PathPrefix(`/realms/master`))
+      entryPoints: [websecure]
+      service: keycloak
+      middlewares: [keycloak-admin-allowlist, security-headers]
+      tls:
+        certResolver: letsencrypt
+
+  middlewares:
+    keycloak-admin-allowlist:
+      ipAllowList:
+        # The template actions sit in comments so this file stays valid YAML
+        # for linters; rendered, one list item per comma-separated CIDR.
+        sourceRange:
+          # {{- range splitList "," (env "KEYCLOAK_ADMIN_ALLOWED_IPS") }}
+          - "{{ trim . }}"
+          # {{- end }}
+
+  services:
+    keycloak:
+      loadBalancer:
+        servers:
+          - url: http://keycloak:8080

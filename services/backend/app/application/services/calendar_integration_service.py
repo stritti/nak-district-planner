@@ -1,14 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Application service for calendar integrations."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from app.adapters.api.schemas.calendar_integration import (
-    CalendarIntegrationCreate,
-    CalendarIntegrationUpdate,
-)
 from app.application.crypto import encrypt_credentials
+from app.application.services.calendar_integration_commands import (
+    CalendarIntegrationCreateCommand,
+    CalendarIntegrationUpdateCommand,
+)
 from app.domain.models.calendar_integration import CalendarIntegration
 from app.domain.ports.repositories import CalendarIntegrationRepository
 
@@ -17,7 +20,7 @@ class CalendarIntegrationService:
     def __init__(self, repository: CalendarIntegrationRepository) -> None:
         self._repo = repository
 
-    async def create_integration(self, body: CalendarIntegrationCreate) -> CalendarIntegration:
+    async def create_integration(self, body: CalendarIntegrationCreateCommand) -> CalendarIntegration:
         integration = CalendarIntegration.create(
             district_id=body.district_id,
             congregation_id=body.congregation_id,
@@ -27,6 +30,7 @@ class CalendarIntegrationService:
             sync_interval=body.sync_interval,
             capabilities=body.capabilities,
             default_category=body.default_category,
+            delete_behavior=body.delete_behavior,
         )
         await self._repo.save(integration)
         return integration
@@ -34,9 +38,9 @@ class CalendarIntegrationService:
     async def update_integration(
         self,
         integration: CalendarIntegration,
-        body: CalendarIntegrationUpdate,
+        body: CalendarIntegrationUpdateCommand,
     ) -> CalendarIntegration:
-        fields = body.model_fields_set
+        fields = body.provided_fields
         if "name" in fields and body.name is not None:
             integration.name = body.name
         if "credentials" in fields and body.credentials is not None:
@@ -47,6 +51,8 @@ class CalendarIntegrationService:
             integration.capabilities = body.capabilities
         if "default_category" in fields:
             integration.default_category = body.default_category
+        if "delete_behavior" in fields and body.delete_behavior is not None:
+            integration.delete_behavior = body.delete_behavior
 
         integration.updated_at = datetime.now(UTC)
         await self._repo.save(integration)

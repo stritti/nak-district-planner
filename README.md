@@ -1,19 +1,23 @@
 # NAK Bezirksplaner
 
-Planungswerkzeug für Gottesdienste und Veranstaltungen in NAK-Bezirken.
-Verwaltet Gemeinden, Termine und Dienstzuweisungen; exportiert Kalender als ICS-Feed.
+Der NAK Bezirksplaner verbindet die **Gottesdienst- und Terminplanung mehrerer Gemeinden** in einer gemeinsamen Dienstmatrix. Offene Dienstleitungen werden sichtbar, können zugewiesen und freigegebene Termine als ICS-Kalender geteilt werden.
+
+Vertrauenswürdige externe Kalender lassen sich in Version 1.0 per **ICS (HTTPS)** und **CalDAV (HTTPS)** synchronisieren. Google Calendar und Microsoft 365 sind noch nicht als produktive Integrationen freigegeben.
+
+## Lizenz
+
+Der eigene Quellcode steht unter der [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Copyright- und SPDX-Hinweise, REUSE-Nachweise sowie Ausnahmen für Drittanbieter sind in [Lizenzierung und Copyright](docs/licensing.md) dokumentiert. Die vollständige Datei-Zuordnung wird mit `reuse lint` geprüft.
 
 ## Dokumentation
 
-Die Projektdokumentation befindet sich unter `docs/`.
+Die VitePress-Dokumentation ist nach Aufgaben strukturiert. Der Einstieg beschreibt zuerst den fachlichen Nutzen und verweist von dort auf verbindliche Detailregeln.
 
-- Einstieg: `docs/documentation-map.md`
-- Architekturstatus: `docs/architecture-status.md`
-- Engineering Standards: `docs/engineering-standards.md`
-- Security Baseline: `docs/security-baseline.md`
-- Production Runbook: `docs/production-runbook.md`
-
-Historische Inhalte wurden in die strukturierte Projektdokumentation ueberfuehrt.
+- [So funktioniert die Planung](docs/guide/workflows.md): Matrix, Kalenderanbindung, Zusammenarbeit, Veröffentlichung und Freigabe.
+- [Fachliche Use Cases](docs/features/use-cases.md): Regeln und Sonderfälle.
+- [Rollenkonzept](docs/features/roles.md): Berechtigungen für Bezirk und Gemeinden.
+- [Entwicklereinstieg](docs/getting-started.md): Dokumentation lokal starten.
+- [Betrieb](docs/operations/production-runbook.md) und [Produktiv-Stack](docs/operations/production-compose.md).
+- [Quellen und Verbindlichkeit](docs/documentation-map.md): OpenSpec, Referenzdokumente und historische Unterlagen.
 
 ---
 
@@ -23,8 +27,8 @@ Historische Inhalte wurden in die strukturierte Projektdokumentation ueberfuehrt
 |------|---------------|
 | Docker | 24+ |
 | Docker Compose | v2 (Plugin, nicht Standalone) |
-| Python | 3.11+ (nur für lokale Alembic-Migrationen außerhalb Docker) |
-| bun | 1.x (nur für lokale Frontend-Entwicklung außerhalb Docker) |
+| Python | 3.14 (nur für lokale Alembic-Migrationen außerhalb Docker) |
+| bun | 1.4 (nur für lokale Frontend-Entwicklung außerhalb Docker) |
 
 ---
 
@@ -34,12 +38,15 @@ Historische Inhalte wurden in die strukturierte Projektdokumentation ueberfuehrt
 
 ```bash
 cp .env.example .env
+cp .env.db.example .env.db
 ```
 
-`.env` öffnen und die Platzhalter ersetzen:
+`.env.db` enthält nur das PostgreSQL-Owner-Passwort (`POSTGRES_PASSWORD`). Es wird
+ausschließlich von `db`, `db-test` und `migrate` geladen — Backend und Worker
+erhalten es nie. In `.env.db` ein sicheres Passwort setzen und in `.env` die
+übrigen Platzhalter ersetzen:
 
 ```dotenv
-POSTGRES_PASSWORD=ein-sicheres-passwort
 SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
 API_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
 ```
@@ -76,13 +83,13 @@ docker compose up -d
 Beim ersten Start und nach jeder neuen Migrationsdatei:
 
 ```bash
-docker compose run --no-deps --rm backend alembic upgrade head
+docker compose run --no-deps --rm --build migrate
 ```
 
 Neue Migration erstellen (nach ORM-Änderungen):
 
 ```bash
-docker compose run --no-deps --rm backend alembic revision --autogenerate -m "kurze beschreibung"
+docker compose run --no-deps --rm migrate alembic revision --autogenerate -m "kurze beschreibung"
 ```
 
 > Die Migrationsdatei wird unter `services/backend/alembic/versions/` erzeugt.
@@ -155,7 +162,8 @@ docker compose up -d db valkey
 ```bash
 cd services/backend
 uv sync                              # Abhängigkeiten installieren
-uv run alembic upgrade head          # Migrationen anwenden
+MIGRATION_DATABASE_URL=postgresql+asyncpg://nak:<POSTGRES_PASSWORD aus .env.db>@localhost:5433/nak_planner \
+  uv run alembic upgrade head        # Migrationen mit Owner-Rolle anwenden
 uv run uvicorn app.main:app --reload # http://localhost:8000
 ```
 
@@ -216,14 +224,21 @@ docker compose -f docker-compose.yml build
 
 #### 2. `.env` für Produktion befüllen
 
-Auf dem Server eine `.env` anlegen — **niemals** die Dev-Werte übernehmen:
+Auf dem Server eine `.env` anlegen — **niemals** die Dev-Werte übernehmen.
+`DATABASE_URL`/`VALKEY_URL` für die Container setzt `.env.docker` (Runtime-Rolle
+`APP_DB_USER`). Das Owner-Passwort gehört **nur** in `.env.db`:
 
 ```dotenv
-POSTGRES_USER=nak
+# .env.db
 POSTGRES_PASSWORD=<starkes-passwort>
+```
+
+```dotenv
+# .env
+POSTGRES_USER=nak
 POSTGRES_DB=nak_planner
-DATABASE_URL=postgresql+asyncpg://nak:<passwort>@db:5432/nak_planner
-VALKEY_URL=valkey://valkey:6379/0
+APP_DB_USER=nak_app
+APP_DB_PASSWORD=<anderes-starkes-passwort>
 SECRET_KEY=<64-zeichen-hex>
 API_KEY=<64-zeichen-hex>
 APP_ENV=production
@@ -237,7 +252,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 #### 3. Datenbank migrieren
 
 ```bash
-docker compose -f docker-compose.yml run --no-deps --rm backend alembic upgrade head
+docker compose -f docker-compose.yml run --no-deps --rm migrate
 ```
 
 #### 4. Stack starten
@@ -295,7 +310,7 @@ git pull
 docker compose -f docker-compose.yml build
 
 # 3. Migrationen anwenden (falls neue Dateien vorhanden)
-docker compose -f docker-compose.yml run --no-deps --rm backend alembic upgrade head
+docker compose -f docker-compose.yml run --no-deps --rm migrate
 
 # 4. Stack neu starten (rollendes Neustarten ohne Downtime nicht ohne Orchestrator)
 docker compose -f docker-compose.yml up -d
@@ -309,7 +324,7 @@ Die einzige persistente State-Quelle ist das PostgreSQL-Volume `postgres_data`.
 
 **Empfohlen:** `scripts/backup.sh` / `scripts/restore.sh` — verschlüsseln Dumps automatisch
 per GPG (`BACKUP_ENCRYPT_KEY`), prüfen die Archiv-Integrität vor dem Restore und erlauben
-einen `--dry-run`. Details siehe `docs/production-runbook.md` Abschnitt 4.
+einen `--dry-run`. Details siehe `docs/operations/production-runbook.md` Abschnitt 4.
 
 ```bash
 # Backup erstellen (verschlüsselt, wenn BACKUP_ENCRYPT_KEY gesetzt ist)
@@ -345,7 +360,7 @@ nak-district-planner/
 ├── docker-compose.override.yml  # Dev-Ergänzungen (automatisch)
 ├── .env.example                 # Vorlage — nach .env kopieren
 └── services/
-    ├── backend/                 # FastAPI + Celery (Python 3.11)
+    ├── backend/                 # FastAPI + Celery (Python 3.14)
     │   ├── app/
     │   │   ├── domain/          # Pure-Python-Entitäten & Ports (ABCs)
     │   │   ├── application/     # Use Cases & Celery-Tasks
@@ -487,6 +502,6 @@ bash idp-deploy/authentik/deploy_authentik.sh \
 
 ### Erster Benutzer / Superadmin
 
-- Wenn `SUPERADMIN_SUB` **gesetzt** ist, bekommt genau dieser OIDC-`sub` globale Superadmin-Rechte.
-- Wenn `SUPERADMIN_SUB` **nicht gesetzt** ist, wird automatisch der **erste jemals angemeldete Benutzer** Superadmin.
+- Wenn `SUPERADMIN_SUB` **gesetzt** ist, bekommt genau dieser OIDC-`sub` globale Superadmin-Rechte. Der Wert wird beim Datenbank-Migration als owner-kontrollierte Konfiguration hinterlegt (`app_superadmin_config`); bei Rotation (Login des neuen Subjekts) werden alte Superadmin-Flags automatisch entzogen.
+- Wenn `SUPERADMIN_SUB` **nicht gesetzt** ist: Bei Upgrades bestehender Installationen wird der früheste vorhandene Benutzer (bzw. ein bestehender Superadmin) deterministisch bei der Migration hinterlegt. Auf frischen Installationen wird **kein** Superadmin automatisch ernannt — der Datenbank-Owner bestätigt den ersten Benutzer nach dessen Login mit einem einzigen SQL-Statement (siehe unten).
 - Superadmin darf alle Bezirks-/Gemeinde-Operationen ohne explizite Memberships ausführen.

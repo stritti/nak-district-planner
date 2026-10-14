@@ -1,10 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """tests/unit/test_planning_series_service.py: Unit tests for PlanningSeriesSlotGenerationService."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import date, time
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -40,6 +43,11 @@ class MockPlanningSlotRepository:
     def __init__(self):
         self.slots: list[PlanningSlot] = []
         self.slots_by_id: dict[uuid.UUID, PlanningSlot] = {}
+        self.deleted_keys: set[tuple[uuid.UUID, str]] = set()
+        self.locked_districts: list[uuid.UUID] = []
+
+    async def lock_district_for_generation(self, district_id: uuid.UUID) -> None:
+        self.locked_districts.append(district_id)
 
     async def get(self, slot_id: uuid.UUID) -> PlanningSlot | None:
         return self.slots_by_id.get(slot_id)
@@ -49,9 +57,16 @@ class MockPlanningSlotRepository:
     ) -> PlanningSlot | None:
         # Check if any slot exists for this series and date
         for slot in self.slots:
-            if slot.series_id == series_id and slot.planning_date == planning_date:
+            if (slot.series_id == series_id and slot.planning_date == planning_date
+                    and not slot.generation_key_detached):
                 return slot
         return None
+
+    async def get_by_series_date(
+        self, *, series_id: uuid.UUID, planning_date: date, congregation_id: uuid.UUID | None
+    ) -> PlanningSlot | None:
+        """Match a series occurrence by the UTC planning date."""
+        return await self.get_by_series_and_date(series_id, planning_date)
 
     async def list_for_date_range(
         self,
@@ -66,9 +81,48 @@ class MockPlanningSlotRepository:
             if s.district_id == district_id and from_date <= s.planning_date <= to_date
         ]
 
+    async def list_by_generation_keys(
+        self, *, district_id: uuid.UUID, generation_keys
+    ) -> list[PlanningSlot]:
+        return [
+            slot for slot in self.slots
+            if slot.district_id == district_id and slot.generation_key in generation_keys
+        ]
+
+    async def list_deleted_generation_keys(
+        self, *, district_id: uuid.UUID, generation_keys
+    ) -> set[str]:
+        return {
+            key for tenant, key in self.deleted_keys
+            if tenant == district_id and key in generation_keys
+        }
+
+    async def delete(self, slot_id: uuid.UUID) -> None:
+        slot = self.slots_by_id.pop(slot_id)
+        self.slots.remove(slot)
+        if slot.generation_key is not None:
+            self.deleted_keys.add((slot.district_id, slot.generation_key))
+
     async def save(self, slot: PlanningSlot) -> None:
         self.slots.append(slot)
         self.slots_by_id[slot.id] = slot
+
+    async def add_if_absent(self, slot: PlanningSlot) -> bool:
+        """Mirror the repository's generation-key and ACTIVE-slot constraints."""
+        for current in self.slots:
+            if (current.district_id == slot.district_id
+                    and slot.generation_key is not None
+                    and current.generation_key == slot.generation_key):
+                return False
+            if (slot.congregation_id is not None
+                    and current.congregation_id == slot.congregation_id
+                    and current.planning_date == slot.planning_date
+                    and current.planning_time == slot.planning_time
+                    and current.status == PlanningSlotStatus.ACTIVE
+                    and slot.status == PlanningSlotStatus.ACTIVE):
+                return False
+        await self.save(slot)
+        return True
 
 
 class TestPlanningSeriesSlotGenerationService:
@@ -82,6 +136,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -105,9 +160,11 @@ class TestPlanningSeriesSlotGenerationService:
         assert result["skipped"] == 0
         assert len(slot_repo.slots) == 4
 
-        # Check that all slots have correct time
+        # Check that all slots store the UTC instant of the local 09:30
+        # Berlin time (January = CET = UTC+1)
         for slot in slot_repo.slots:
-            assert slot.planning_time == time(9, 30)
+            assert slot.planning_time == time(8, 30)
+            assert slot.planning_date.weekday() == 6  # Sunday
             assert slot.series_id == series.id
 
     @pytest.mark.asyncio
@@ -118,6 +175,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -140,10 +198,15 @@ class TestPlanningSeriesSlotGenerationService:
         assert result["generated"] == 6  # 6 months
         assert result["skipped"] == 0
 
-        # Check that all slots are on the 1st of the month
+        # Check that all slots are on the 1st of the month (local 10:00
+        # Berlin = 09:00 UTC in January/March, 08:00 UTC after DST starts)
+        expected_utc = {1: time(9, 0), 2: time(9, 0), 3: time(9, 0), 4: time(8, 0), 5: time(8, 0), 6: time(8, 0)}
         for slot in slot_repo.slots:
-            assert slot.planning_date.day == 1
-            assert slot.planning_time == time(10, 0)
+            assert slot.planning_date.day == 1 or (
+                slot.planning_date.day == 2 and slot.planning_time == time(23, 0)
+            )
+            month = slot.planning_date.month if slot.planning_date.day != 2 else slot.planning_date.month - 1 or 12
+            assert slot.planning_time == expected_utc[month]
 
     @pytest.mark.asyncio
     async def test_generate_slots_skips_existing(self):
@@ -153,6 +216,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -191,6 +255,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -228,6 +293,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -257,6 +323,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         result = await service.generate_slots_for_series(
@@ -277,6 +344,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -306,6 +374,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -334,6 +403,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -363,6 +433,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -392,6 +463,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -422,6 +494,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -450,6 +523,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -478,6 +552,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district1 = uuid.uuid4()
@@ -515,6 +590,7 @@ class TestPlanningSeriesSlotGenerationService:
         service = PlanningSeriesSlotGenerationService(
             series_repo=series_repo,
             slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
         )
 
         district_id = uuid.uuid4()
@@ -550,3 +626,222 @@ class TestPlanningSeriesSlotGenerationService:
         assert result["series_processed"] == 1
         assert result["districts_processed"] == 1
         assert result["generated"] > 0
+
+
+@pytest.mark.asyncio
+async def test_deleted_generated_series_slot_does_not_return():
+    series_repo = MockPlanningSeriesRepository()
+    slot_repo = MockPlanningSlotRepository()
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(),
+        default_planning_time=time(9, 30),
+        recurrence_pattern={"frequency": "weekly", "interval": 1, "by_weekday": [6]},
+    )
+    await series_repo.save(series)
+    service = PlanningSeriesSlotGenerationService(
+        series_repo=series_repo, slot_repo=slot_repo, instance_repo=AsyncMock()
+    )
+    period = {"series_id": series.id, "from_date": date(2026, 1, 4),
+              "to_date": date(2026, 1, 4)}
+    first = await service.generate_slots_for_series(**period)
+    assert first["generated"] == 1
+    (original,) = slot_repo.slots
+    assert original.generation_key is not None
+    await slot_repo.delete(original.id)
+
+    second = await service.generate_slots_for_series(**period)
+    assert second["generated"] == 0
+    assert second["skipped"] == 1
+    assert slot_repo.slots == []
+
+
+
+class TestSeriesGenerationConflicts:
+    @pytest.mark.asyncio
+    async def test_competing_insert_is_skipped_without_aborting_batch(self):
+        """A duplicate inserted by another request is skipped while siblings persist."""
+        class CompetingSlotRepository(MockPlanningSlotRepository):
+            def __init__(self):
+                super().__init__()
+                self.attempts = 0
+
+            async def add_if_absent(self, slot: PlanningSlot) -> bool:
+                self.attempts += 1
+                if self.attempts == 2:
+                    return False  # competing transaction claimed the second key
+                return await super().add_if_absent(slot)
+
+        series_repo = MockPlanningSeriesRepository()
+        slot_repo = CompetingSlotRepository()
+        series = PlanningSeries.create(
+            district_id=uuid.uuid4(),
+            default_planning_time=time(10),
+            recurrence_pattern={"frequency": "weekly", "interval": 1, "by_weekday": [0]},
+            active_from=date(2026, 6, 1),
+        )
+        await series_repo.save(series)
+        result = await PlanningSeriesSlotGenerationService(
+            series_repo=series_repo, slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
+        ).generate_slots_for_series(
+            series_id=series.id,
+            from_date=date(2026, 6, 1),
+            to_date=date(2026, 6, 15),
+        )
+
+        assert result == {"generated": 2, "skipped": 1, "updated": 0}
+        assert slot_repo.attempts == 3
+        assert len(slot_repo.slots) == 2
+        assert {s.planning_date for s in slot_repo.slots} == {
+            date(2026, 6, 1), date(2026, 6, 15)
+        }
+
+    @pytest.mark.asyncio
+    async def test_concurrent_uniqueness_conflict_is_counted_as_skipped(self):
+        series_repo = MockPlanningSeriesRepository()
+        slot_repo = MockPlanningSlotRepository()
+        series = PlanningSeries.create(
+            district_id=uuid.uuid4(),
+            default_planning_time=time(10),
+            recurrence_pattern={"frequency": "weekly", "interval": 1, "by_weekday": [0]},
+            active_from=date(2026, 6, 1),
+        )
+        await series_repo.save(series)
+        # Simulate a competing writer that claimed the unique key after prechecks.
+        from unittest.mock import AsyncMock
+
+        slot_repo.add_if_absent = AsyncMock(return_value=False)
+        result = await PlanningSeriesSlotGenerationService(
+            series_repo=series_repo, slot_repo=slot_repo,
+            instance_repo=AsyncMock(),
+        ).generate_slots_for_series(
+            series_id=series.id,
+            from_date=date(2026, 6, 1),
+            to_date=date(2026, 6, 1),
+        )
+
+        assert result == {"generated": 0, "skipped": 1, "updated": 0}
+        assert slot_repo.slots == []
+        slot_repo.add_if_absent.assert_awaited_once()
+
+
+
+@pytest.mark.asyncio
+async def test_explicit_generator_checks_tombstones_after_existing_slots():
+    from app.domain.models.planning_slot import planning_series_generation_key
+
+    series_repo = MockPlanningSeriesRepository()
+    slots = MockPlanningSlotRepository()
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(10),
+        recurrence_pattern={"frequency": "weekly", "by_weekday": [0]},
+        active_from=date(2026, 6, 1),
+    )
+    await series_repo.save(series)
+    key = planning_series_generation_key(series.id, date(2026, 6, 1))
+    original = slots.list_by_generation_keys
+    order = []
+
+    async def existing(**kwargs):
+        order.append("slots")
+        slots.deleted_keys.add((series.district_id, key))
+        return await original(**kwargs)
+
+    original_deleted = slots.list_deleted_generation_keys
+
+    async def deleted(**kwargs):
+        order.append("ledger")
+        return await original_deleted(**kwargs)
+
+    slots.list_by_generation_keys = existing
+    slots.list_deleted_generation_keys = deleted
+    result = await PlanningSeriesSlotGenerationService(
+        series_repo=series_repo, slot_repo=slots,
+            instance_repo=AsyncMock(),
+    ).generate_slots_for_series(
+        series.id, from_date=date(2026, 6, 1), to_date=date(2026, 6, 1),
+    )
+    assert order == ["slots", "ledger"]
+    assert result["skipped"] == 1
+    assert result["generated"] == 0
+
+
+@pytest.mark.asyncio
+async def test_explicit_generator_ignores_detached_series_slot():
+    series_repo = MockPlanningSeriesRepository()
+    slots = MockPlanningSlotRepository()
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), congregation_id=uuid.uuid4(),
+        default_planning_time=time(10),
+        recurrence_pattern={"frequency": "weekly", "by_weekday": [0]},
+        active_from=date(2026, 6, 1),
+    )
+    await series_repo.save(series)
+    detached = PlanningSlot.create(
+        district_id=series.district_id, series_id=series.id,
+        congregation_id=uuid.uuid4(), category="Andacht",
+        planning_date=date(2026, 6, 1), planning_time=time(10),
+    )
+    detached.generation_key_detached = True
+    await slots.save(detached)
+    result = await PlanningSeriesSlotGenerationService(
+        series_repo=series_repo, slot_repo=slots,
+            instance_repo=AsyncMock(),
+    ).generate_slots_for_series(
+        series.id, from_date=date(2026, 6, 1), to_date=date(2026, 6, 1),
+    )
+    assert result["generated"] == 1
+    assert len(slots.slots) == 2
+
+
+
+@pytest.mark.asyncio
+async def test_explicit_generator_locks_district_before_insertion():
+    series_repo = MockPlanningSeriesRepository()
+    slots = MockPlanningSlotRepository()
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(), default_planning_time=time(10),
+        recurrence_pattern={"frequency": "weekly", "by_weekday": [0]},
+        active_from=date(2026, 6, 1),
+    )
+    await series_repo.save(series)
+    result = await PlanningSeriesSlotGenerationService(
+        series_repo=series_repo, slot_repo=slots,
+            instance_repo=AsyncMock(),
+    ).generate_slots_for_series(
+        series.id, from_date=date(2026, 6, 1), to_date=date(2026, 6, 1)
+    )
+    assert result["generated"] == 1
+    assert slots.locked_districts == [series.district_id]
+
+@pytest.mark.asyncio
+async def test_moved_series_slot_keeps_occurrence_key_in_api_generator() -> None:
+    """Moving a generated slot must not create its old occurrence again."""
+    series_repo = MockPlanningSeriesRepository()
+    slot_repo = MockPlanningSlotRepository()
+    service = PlanningSeriesSlotGenerationService(series_repo, slot_repo, AsyncMock())
+    series = PlanningSeries.create(
+        district_id=uuid.uuid4(),
+        default_planning_time=time(10),
+        recurrence_pattern={"frequency": "weekly", "by_weekday": [6]},
+    )
+    await series_repo.save(series)
+    period = {
+        "series_id": series.id,
+        "from_date": date(2026, 1, 4),
+        "to_date": date(2026, 1, 4),
+    }
+    first = await service.generate_slots_for_series(**period)
+    assert first["generated"] == 1
+    original = slot_repo.slots[0]
+    identity = original.generation_key
+    assert identity is not None
+
+    # Simulate the planner moving the slot without changing its series scope.
+    original.planning_date = date(2026, 2, 1)
+    second = await service.generate_slots_for_series(**period)
+
+    assert second["generated"] == 0
+    assert second["skipped"] == 1
+    assert len(slot_repo.slots) == 1
+    assert original.generation_key == identity

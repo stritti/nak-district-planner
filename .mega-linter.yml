@@ -19,15 +19,12 @@ REPORTERS:
   - githubstatusreporter
 
 # ── Linter selection ─────────────────────────────────────────────────────────
-# Enable only the linters relevant to this project's tech stack.
-# Python (ruff handles lint+format), TypeScript/Vue, YAML, JSON, Dockerfile, Markdown
+# Enable only linters provided by the Python flavor and relevant to this repo.
+# Frontend ESLint runs in the frontend CI job with the project's own config.
 
 ENABLE_LINTERS:
-  # Python
+  # Python security
   - PYTHON_BANDIT
-  # TypeScript / Vue
-  - TYPESCRIPT_ES
-  - JAVASCRIPT_ES
   # Markup / config
   - YAML_YAMLLINT
   - JSON_JSONLINT
@@ -36,17 +33,11 @@ ENABLE_LINTERS:
   # Markdown
   - MARKDOWN_MARKDOWNLINT
 
-# ── Python / Ruff ─────────────────────────────────────────────────────────────
-PYTHON_RUFF_CONFIG_FILE: services/backend/pyproject.toml
-PYTHON_RUFF_FILTER_REGEX_INCLUDE: "(services/backend/)"
+# ── Python ────────────────────────────────────────────────────────────────────
 
 # Bandit — security linter for Python
 PYTHON_BANDIT_FILTER_REGEX_INCLUDE: "(services/backend/app/)"
 PYTHON_BANDIT_ARGUMENTS: "-r -ll"
-
-# ── TypeScript / ESLint ───────────────────────────────────────────────────────
-TYPESCRIPT_ES_FILTER_REGEX_INCLUDE: "(services/frontend/src/)"
-JAVASCRIPT_ES_FILTER_REGEX_INCLUDE: "(services/frontend/)"
 
 # ── YAML ─────────────────────────────────────────────────────────────────────
 YAML_YAMLLINT_FILTER_REGEX_EXCLUDE: "(megalinter-reports/|node_modules/|.venv/|uv.lock)"

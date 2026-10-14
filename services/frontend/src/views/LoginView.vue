@@ -1,6 +1,10 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div class="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
     <div class="w-full max-w-md">
+      <ContextualHelp context="login" />
       <div class="bg-white rounded-lg shadow-lg p-8">
         <!-- Header -->
         <div class="text-center mb-8">
@@ -14,13 +18,12 @@
           <p class="text-gray-600">Discovery wird geladen...</p>
         </div>
 
-        <!-- Error State -->
-        <div v-else-if="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p class="text-red-800">{{ error }}</p>
-        </div>
-
-        <!-- Login Form -->
         <div v-else>
+          <!-- Errors are recoverable: keep the login action available for an explicit retry. -->
+          <div v-if="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p class="text-red-800">{{ error }}</p>
+          </div>
+
           <form @submit.prevent="handleLogin" class="space-y-6">
             <button
               type="submit"
@@ -56,10 +59,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOIDC } from '../composables/useOIDC'
+import ContextualHelp from '../components/ContextualHelp.vue'
 
 const router = useRouter()
 const oidc = useOIDC(router)
-
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
@@ -67,11 +70,7 @@ async function handleLogin() {
   try {
     error.value = null
     isLoading.value = true
-
-    // Get authorization URL (triggers discovery if needed)
     const authUrl = await oidc.getAuthorizationUrl()
-
-    // Redirect to OIDC provider
     window.location.href = authUrl
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Authentifizierung fehlgeschlagen'
@@ -81,7 +80,6 @@ async function handleLogin() {
   }
 }
 
-// Load discovery on mount to improve UX
 async function loadDiscovery() {
   try {
     isLoading.value = true
@@ -94,6 +92,5 @@ async function loadDiscovery() {
   }
 }
 
-// Initialize
 loadDiscovery()
 </script>

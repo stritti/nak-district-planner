@@ -1,23 +1,26 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <Teleport to="body">
-    <Transition name="dialog">
+    <Transition
+      enter-active-class="transition-opacity duration-200 ease-out [&>div:last-child]:transition-[transform,opacity] [&>div:last-child]:duration-200"
+      enter-from-class="opacity-0 [&>div:last-child]:scale-95 [&>div:last-child]:opacity-0"
+      leave-active-class="transition-opacity duration-150 ease-in [&>div:last-child]:transition-[transform,opacity] [&>div:last-child]:duration-150"
+      leave-to-class="opacity-0 [&>div:last-child]:scale-95 [&>div:last-child]:opacity-0"
+    >
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm"
+        @click.self="onCancel"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="`confirm-title-${uid}`"
       >
-        <!-- Backdrop -->
-        <div
-          class="absolute inset-0 bg-black/40 backdrop-blur-sm"
-          @click="onCancel"
-        />
-
         <!-- Dialog panel -->
         <div
           ref="panelRef"
-          class="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900"
+          class="relative z-10 my-auto w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900"
           @keydown.escape="onCancel"
         >
           <!-- Title -->
@@ -53,13 +56,14 @@
           <div class="mt-6 flex justify-end gap-3">
             <button
               ref="cancelBtnRef"
-              class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              :disabled="loading"
+              class="min-h-11 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
               @click="onCancel"
             >
               {{ cancelText }}
             </button>
             <button
-              class="rounded-md px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50"
+              class="min-h-11 rounded-md px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50"
               :class="confirmButtonClass"
               :disabled="loading || (dangerous ? typedWord !== confirmWord : false)"
               @click="onConfirm"
@@ -75,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -102,7 +106,7 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const uid = computed(() => `cd-${(Math.random() * 1e9).toFixed(0)}`)
+const uid = useId()
 const confirmWord = computed(() => {
   switch (props.variant) {
     case 'danger':
@@ -167,33 +171,8 @@ function onConfirm() {
 }
 
 function onCancel() {
+  if (props.loading) return
   emit('cancel')
 }
 </script>
 
-<style scoped>
-.dialog-enter-active {
-  transition: opacity 0.2s ease-out;
-}
-.dialog-enter-active > div:last-child {
-  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
-}
-.dialog-leave-active {
-  transition: opacity 0.15s ease-in;
-}
-.dialog-leave-active > div:last-child {
-  transition: transform 0.15s ease-in, opacity 0.15s ease-in;
-}
-.dialog-enter-from,
-.dialog-leave-to {
-  opacity: 0;
-}
-.dialog-enter-from > div:last-child {
-  transform: scale(0.95);
-  opacity: 0;
-}
-.dialog-leave-to > div:last-child {
-  transform: scale(0.95);
-  opacity: 0;
-}
-</style>

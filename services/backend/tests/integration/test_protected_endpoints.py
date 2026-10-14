@@ -1,15 +1,19 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Integration tests for protected API endpoints with JWT authentication.
 
 Tests verify that endpoints require valid Bearer tokens and work with authenticated users.
 """
 
 import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.api import deps
+from app.adapters.api.deps import get_db_session
 from app.adapters.auth.oidc import OIDCAdapter
 from app.main import app
 
@@ -27,6 +31,23 @@ def mock_oidc_adapter():
     adapter = AsyncMock(spec=OIDCAdapter)
     deps.set_oidc_adapter(adapter)
     return adapter
+
+
+@pytest.fixture
+def mock_db_session():
+    """Session override: link lookup finds nothing, no bootstrap grant needed."""
+
+    async def _override_db_session():
+        session = AsyncMock()
+        result = MagicMock()
+        result.mappings.return_value.one_or_none.return_value = None
+        result.scalar_one_or_none.return_value = False
+        session.execute.return_value = result
+        return session
+
+    app.dependency_overrides[get_db_session] = _override_db_session
+    yield
+    app.dependency_overrides.pop(get_db_session, None)
 
 
 @pytest.fixture
@@ -64,7 +85,7 @@ class TestEndpointAuthentication:
         )
         assert response.status_code == 401
 
-    def test_auth_me_endpoint_with_token(self, mock_oidc_adapter, valid_token):
+    def test_auth_me_endpoint_with_token(self, mock_oidc_adapter, mock_db_session, valid_token):
         """GET /api/v1/auth/me should return user info with valid token."""
         token_claims = {
             "sub": "user-123",
@@ -128,24 +149,6 @@ class TestEndpointProtection:
         )
         assert response.status_code == 401
 
-    def test_create_event_requires_auth(self):
-        """POST /api/v1/system/update should require auth."""
-        import uuid
-
-        client = TestClient(app)
-        csrf = _csrf_token(client)
-        response = client.post(
-            "/api/v1/system/update",
-            json={
-                "district_id": str(uuid.uuid4()),
-                "title": "Test Event",
-                "start_at": "2026-04-02T10:00:00Z",
-                "end_at": "2026-04-02T11:00:00Z",
-            },
-            headers={"X-CSRF-Token": csrf},
-        )
-        assert response.status_code == 401
-
     def test_list_leaders_requires_auth(self):
         """GET /api/v1/districts/{id}/leaders should require auth."""
         import uuid
@@ -166,7 +169,7 @@ class TestTokenHeader:
         response = client.get("/api/v1/auth/me", headers={"Authorization": valid_token})
         assert response.status_code in (401, 403)
 
-    def test_case_insensitive_bearer(self, mock_oidc_adapter, valid_token):
+    def test_case_insensitive_bearer(self, mock_oidc_adapter, mock_db_session, valid_token):
         """Bearer scheme should be case-insensitive."""
         token_claims = {"sub": "user-123", "email": "test@example.com"}
         mock_oidc_adapter.validate_token.return_value = token_claims
@@ -321,7 +324,7 @@ class TestRegistrationEndpoints:
 
 
 class TestApprovalAccessGating:
-    def test_pending_user_denied_on_protected_endpoint(self, mock_oidc_adapter, valid_token):
+    def test_pending_user_denied_on_protected_endpoint(self, mock_oidc_adapter, mock_db_session, valid_token):
         """Authenticated users without memberships are denied with 403."""
         token_claims = {
             "sub": "pending-user",
@@ -342,7 +345,6 @@ class TestApprovalAccessGating:
         with (
             patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
             patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
-            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
         ):
             user_repo = AsyncMock()
             user_repo.get_by_sub.return_value = None
@@ -354,9 +356,6 @@ class TestApprovalAccessGating:
             membership_repo.get_all_by_user.return_value = []
             MockMembershipRepo.return_value = membership_repo
 
-            reg_repo = AsyncMock()
-            reg_repo.list_approved_unlinked_by_email.return_value = []
-            MockRegRepo.return_value = reg_repo
 
             client = TestClient(app)
             response = client.get(
@@ -367,7 +366,7 @@ class TestApprovalAccessGating:
         assert response.status_code == 403
 
     def test_user_with_membership_allowed_on_protected_endpoint(
-        self, mock_oidc_adapter, valid_token
+        self, mock_oidc_adapter, mock_db_session, valid_token
     ):
         """Authenticated users with memberships can access protected endpoints."""
         from app.domain.models.membership import Membership, ScopeType
@@ -399,7 +398,6 @@ class TestApprovalAccessGating:
         with (
             patch("app.adapters.api.deps.SqlUserRepository") as MockUserRepo,
             patch("app.adapters.api.deps.SqlMembershipRepository") as MockMembershipRepo,
-            patch("app.adapters.api.deps.SqlLeaderRegistrationRepository") as MockRegRepo,
             patch(
                 "app.adapters.db.repositories.district.SqlDistrictRepository.list_all",
                 new_callable=AsyncMock,
@@ -416,9 +414,6 @@ class TestApprovalAccessGating:
             membership_repo.get_all_by_user.return_value = [membership]
             MockMembershipRepo.return_value = membership_repo
 
-            reg_repo = AsyncMock()
-            reg_repo.list_approved_unlinked_by_email.return_value = []
-            MockRegRepo.return_value = reg_repo
 
             client = TestClient(app)
             response = client.get(

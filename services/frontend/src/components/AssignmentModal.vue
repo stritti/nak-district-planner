@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <!-- Assignment Modal -->
   <div
@@ -10,7 +13,7 @@
         <h2 class="modal-title">
           {{ modal.isGap ? 'Amtstragende:n zuweisen' : 'Zuweisung bearbeiten' }}
         </h2>
-        <button class="modal-close" @click="closeModal">
+        <button class="modal-close" :disabled="modal.saving" @click="closeModal">
           <XMarkIcon class="h-5 w-5" />
         </button>
       </div>
@@ -19,6 +22,30 @@
       </p>
       <p class="text-sm text-gray-700 dark:text-gray-300 mb-4">
         <span class="font-medium">Ereignis:</span> {{ modal.eventTitle }}
+      </p>
+
+      <label class="form-label">Amtstragende:r</label>
+      <AutocompleteInput
+        ref="autocompleteRef"
+        :model-value="modal.leaderInput"
+        @update:model-value="updateLeaderSelection"
+        :options="autocompleteOptions"
+        :disabled="modal.saving"
+        placeholder="Name eingeben oder auswählen…"
+        class="mb-3"
+      />
+
+      <ConflictBanner
+        v-if="conflictStore.conflicts.length > 0"
+        :conflicts="conflictStore.conflicts"
+        class="mb-3"
+      />
+      <p
+        v-if="hasBlockingConflicts"
+        id="submit-conflict-description"
+        class="sr-only"
+      >
+        {{ conflictStore.blocking.map((c) => c.message).join(' ') }}
       </p>
 
       <div class="mb-4 rounded border border-gray-200 dark:border-gray-700 p-3">
@@ -58,7 +85,6 @@
           </button>
 
           <p v-if="invitation.error" class="text-xs text-red-600 dark:text-red-400">{{ invitation.error }}</p>
-          <p v-if="invitation.success" class="text-xs text-green-700 dark:text-green-400">{{ invitation.success }}</p>
 
           <div class="mt-2 border-t border-gray-200 dark:border-gray-700 pt-2">
             <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Bestehende Einladungen</p>
@@ -93,15 +119,15 @@
 
       <div class="mb-4 rounded border border-gray-200 dark:border-gray-700 p-3">
         <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Gottesdienst verschieben</p>
-        <div class="grid grid-cols-3 gap-2">
-          <input v-model="modal.moveDate" type="date" class="form-input col-span-2" />
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <input v-model="modal.moveDate" type="date" class="form-input sm:col-span-2" />
           <input v-model="modal.moveTime" type="time" class="form-input" />
           <input
             v-model.number="modal.moveDurationMinutes"
             type="number"
             min="15"
             step="15"
-            class="form-input col-span-2"
+            class="form-input sm:col-span-2"
             placeholder="Dauer in Minuten"
           />
           <button
@@ -115,15 +141,6 @@
         <p v-if="modal.moveError" class="text-xs text-red-600 dark:text-red-400 mt-2">{{ modal.moveError }}</p>
       </div>
 
-      <label class="form-label">Amtstragende:r</label>
-      <AutocompleteInput
-        ref="autocompleteRef"
-        v-model="modal.leaderInput"
-        :options="autocompleteOptions"
-        placeholder="Name eingeben oder auswählen…"
-        class="mb-3"
-      />
-
       <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mt-2">{{ modal.error }}</p>
 
       <div class="flex justify-end gap-3 mt-5">
@@ -135,13 +152,13 @@
         >
           Entfernen
         </button>
-        <button class="btn-secondary" @click="closeModal">
+        <button class="btn-secondary" :disabled="modal.saving" @click="closeModal">
           Abbrechen
         </button>
         <button
           v-if="!modal.isGap"
           class="btn-secondary px-4 py-2"
-          :disabled="!hasLeaderSelection || modal.saving"
+          :disabled="!hasLeaderSelection || hasBlockingConflicts || modal.saving"
           @click="confirmAssignment"
         >
           {{ modal.saving ? 'Speichern…' : 'Bestaetigen' }}
@@ -149,6 +166,8 @@
         <button
           class="btn-primary px-4 py-2"
           :disabled="!canSubmit || modal.saving"
+          :aria-describedby="hasBlockingConflicts ? 'submit-conflict-description' : undefined"
+          data-testid="submit-assignment"
           @click="submitAssignment"
         >
           {{ modal.saving ? 'Speichern…' : (modal.isGap ? 'Zuweisen' : 'Speichern') }}
@@ -156,11 +175,23 @@
       </div>
     </div>
   </div>
+  <ConfirmDialog
+    :open="conflictStore.confirmingWarning"
+    title="Trotz Konflikt zuweisen?"
+    :message="warnConfirmMessage"
+    confirm-text="Trotzdem zuweisen"
+    variant="warning"
+    :loading="modal.saving"
+    @confirm="overrideWarnConflicts"
+    @cancel="cancelWarnConfirmation"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
+import { ConflictError } from '../api/errors'
+import { useConflictStore, type PendingConflictAction } from '../stores/conflict'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
 import { useLeadersStore } from '../stores/leaders'
@@ -173,12 +204,17 @@ import {
 import { updateEvent } from '../api/events'
 import type { MatrixCell } from '../api/matrix'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from './AutocompleteInput.vue'
+import ConflictBanner from './ConflictBanner.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
+import { useToast } from '../composables/useToast'
 
 const autocompleteRef = ref<InstanceType<typeof AutocompleteInput> | null>(null)
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
 const leadersStore = useLeadersStore()
+const conflictStore = useConflictStore()
+const toast = useToast()
 
 // ── Assignment Modal ──────────────────────────────────────────────────────────
 
@@ -201,15 +237,26 @@ const modal = reactive({
   moveError: '',
 })
 
+type AssignmentAction = PendingConflictAction
+
+const hasBlockingConflicts = computed(() => conflictStore.blocking.length > 0)
+
+const hasLeaderSelection = computed(() => {
+  return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
+})
+
 const canSubmit = computed(() => {
+  if (hasBlockingConflicts.value) return false
   if (modal.isGap) {
-    return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
+    return hasLeaderSelection.value
   }
   return true
 })
 
-const hasLeaderSelection = computed(() => {
-  return modal.leaderInput.id !== null || modal.leaderInput.text.trim().length > 0
+const warnConfirmMessage = computed(() => {
+  const leader = modal.leaderInput.text.trim() || 'der/die Amtstragende'
+  const warnings = conflictStore.warnings.map((c) => c.message).join(' ')
+  return `Es liegen Konflikte vor: ${warnings}. Soll ${leader} trotzdem zugewiesen werden?`
 })
 
 const invitation = reactive({
@@ -220,7 +267,6 @@ const invitation = reactive({
   loadingExisting: false,
   saving: false,
   error: '',
-  success: '',
 })
 
 const invitationTargetOptions = computed(() => {
@@ -243,6 +289,7 @@ const autocompleteOptions = computed((): AutocompleteOption[] => {
 })
 
 function openModal(cell: MatrixCell, date: string, congregationName: string, congregationId: string) {
+  resetConflicts()
   modal.open = true
   modal.eventId = cell.assignment_event_id ?? cell.event_id!
   modal.assignmentId = cell.assignment_id
@@ -284,7 +331,6 @@ function openModal(cell: MatrixCell, date: string, congregationName: string, con
   invitation.existing = []
   invitation.loadingExisting = false
   invitation.error = ''
-  invitation.success = ''
   // Ensure leaders are loaded for this district
   if (matrixStore.districtId && leadersStore.districtId !== matrixStore.districtId) {
     leadersStore.fetchLeaders(matrixStore.districtId)
@@ -337,7 +383,6 @@ async function loadEventInvitations() {
 async function submitInvitation() {
   invitation.saving = true
   invitation.error = ''
-  invitation.success = ''
   try {
     const payload =
       invitation.targetType === 'DISTRICT_CONGREGATION'
@@ -350,7 +395,7 @@ async function submitInvitation() {
             external_target_note: invitation.externalNote.trim(),
           }
     await createInvitations(modal.eventId, [payload])
-    invitation.success = 'Einladung gespeichert.'
+    toast.success('Einladung gespeichert')
     await Promise.all([matrixStore.fetch(), loadEventInvitations()])
   } catch (e) {
     invitation.error = e instanceof Error ? e.message : 'Einladung konnte nicht gespeichert werden'
@@ -362,10 +407,9 @@ async function submitInvitation() {
 async function removeInvitation(invitationId: string) {
   invitation.saving = true
   invitation.error = ''
-  invitation.success = ''
   try {
     await deleteInvitation(invitationId)
-    invitation.success = 'Einladung geloescht.'
+    toast.success('Einladung gelöscht')
     await Promise.all([matrixStore.fetch(), loadEventInvitations()])
   } catch (e) {
     invitation.error = e instanceof Error ? e.message : 'Einladung konnte nicht geloescht werden'
@@ -374,31 +418,49 @@ async function removeInvitation(invitationId: string) {
   }
 }
 
+function resetConflicts() {
+  conflictStore.clear()
+}
+
+function updateLeaderSelection(value: AutocompleteValue) {
+  if (modal.saving) return
+  if (modal.leaderInput.id !== value.id || modal.leaderInput.text !== value.text) {
+    resetConflicts()
+    modal.error = ''
+  }
+  modal.leaderInput = value
+}
+
+function cancelWarnConfirmation() {
+  if (modal.saving) return
+  dismissWarnConfirmation()
+}
+
+function dismissWarnConfirmation() {
+  conflictStore.cancelWarnConfirmation()
+}
+
 function closeModal() {
+  if (modal.saving) return
+  dismissModal()
+}
+
+function dismissModal() {
   modal.open = false
+  resetConflicts()
+}
+
+function requestWarningConfirmation(action: AssignmentAction) {
+  conflictStore.beginWarnConfirmation(action)
 }
 
 async function submitAssignment() {
-  if (!canSubmit.value) return
-  modal.saving = true
-  modal.error = ''
-  try {
-    const leaderText = modal.leaderInput.text.trim()
-    const hasLeader = modal.leaderInput.id !== null || leaderText.length > 0
-
-    if (!hasLeader) {
-      await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
-    } else if (modal.leaderInput.id !== null) {
-      await matrixStore.assign(modal.eventId, modal.assignmentId, { leaderId: modal.leaderInput.id })
-    } else {
-      await matrixStore.assign(modal.eventId, modal.assignmentId, { leaderName: leaderText })
-    }
-    closeModal()
-  } catch (e) {
-    modal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
-  } finally {
-    modal.saving = false
+  if (!canSubmit.value || modal.saving) return
+  if (conflictStore.warnings.length > 0) {
+    requestWarningConfirmation('save')
+    return
   }
+  await persistAssignment('save')
 }
 
 async function confirmAssignment() {
@@ -406,31 +468,65 @@ async function confirmAssignment() {
     modal.error = 'Bitte waehle zuerst eine:n Amtstragende:n aus.'
     return
   }
+  if (hasBlockingConflicts.value || modal.saving) return
+  if (conflictStore.warnings.length > 0) {
+    requestWarningConfirmation('confirm')
+    return
+  }
+  await persistAssignment('confirm')
+}
+
+async function persistAssignment(action: AssignmentAction, confirmWarnings = false) {
+  if (modal.saving) return
   modal.saving = true
   modal.error = ''
   try {
     const leaderText = modal.leaderInput.text.trim()
-    if (modal.leaderInput.id !== null) {
-      await matrixStore.assign(
-        modal.eventId,
-        modal.assignmentId,
-        { leaderId: modal.leaderInput.id },
-        'CONFIRMED',
-      )
+    const hasLeader = modal.leaderInput.id !== null || leaderText.length > 0
+    const options = {
+      leaderId: modal.leaderInput.id,
+      leaderName: modal.leaderInput.id === null && leaderText.length > 0 ? leaderText : null,
+      ...(confirmWarnings ? { confirmWarnings: true } : {}),
+    }
+    if (!hasLeader && action === 'save') {
+      await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
+      toast.success('Zuweisung entfernt', modal.eventTitle)
     } else {
       await matrixStore.assign(
         modal.eventId,
         modal.assignmentId,
-        { leaderName: leaderText },
-        'CONFIRMED',
+        options,
+        action === 'confirm' ? 'CONFIRMED' : undefined,
       )
+      toast.success(action === 'confirm' ? 'Zuweisung bestätigt' : 'Zuweisung gespeichert', leaderText || undefined)
     }
-    closeModal()
+    dismissModal()
   } catch (e) {
-    modal.error = e instanceof Error ? e.message : 'Fehler beim Bestaetigen'
+    if (e instanceof ConflictError) {
+      conflictStore.setConflicts(e.conflicts)
+      modal.error = ''
+      if (e.blocking.length === 0 && e.warnings.length > 0 && !confirmWarnings) {
+        requestWarningConfirmation(action)
+      } else {
+        dismissWarnConfirmation()
+      }
+    } else {
+      // The error belongs to the underlying assignment modal, not the teleported dialog.
+      // Close the overlay so the user can actually see it and decide how to proceed.
+      dismissWarnConfirmation()
+      modal.error = e instanceof Error ? e.message : action === 'confirm'
+        ? 'Fehler beim Bestaetigen'
+        : 'Fehler beim Speichern'
+    }
   } finally {
     modal.saving = false
   }
+}
+
+async function overrideWarnConflicts() {
+  const action = conflictStore.pendingAction
+  if (!action || hasBlockingConflicts.value || modal.saving) return
+  await persistAssignment(action, true)
 }
 
 async function removeAssignmentFromModal() {
@@ -438,7 +534,8 @@ async function removeAssignmentFromModal() {
   modal.error = ''
   try {
     await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
-    closeModal()
+    toast.success('Zuweisung entfernt', modal.eventTitle)
+    dismissModal()
   } catch (e) {
     modal.error = e instanceof Error ? e.message : 'Fehler beim Entfernen'
   } finally {
@@ -472,7 +569,8 @@ async function moveServiceDateTime() {
       end_at: localEnd.toISOString(),
     })
     await matrixStore.fetch()
-    closeModal()
+    toast.success('Termin verschoben', modal.eventTitle)
+    dismissModal()
   } catch (e) {
     modal.moveError = e instanceof Error ? e.message : 'Verschieben fehlgeschlagen'
   } finally {

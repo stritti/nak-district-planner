@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """JWT claim enrichment for RBAC.
 
 Extends JWT token claims with membership information for efficient

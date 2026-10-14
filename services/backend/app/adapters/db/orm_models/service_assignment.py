@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/db/orm_models/service_assignment.py: Module."""
 
 from __future__ import annotations
@@ -20,12 +23,17 @@ class ServiceAssignmentORM(Base):
     __tablename__ = "service_assignments"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    event_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     planning_slot_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("planning_slots.id", ondelete="CASCADE"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("planning_slots.id", ondelete="CASCADE"),
+        nullable=True,
+        # One assignment per planning slot (migration 20261007_assignment_unique).
+        index=True,
+        unique=True,
     )
     leader_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("leaders.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("leaders.id", ondelete="SET NULL"), nullable=True, index=True
     )
     leader_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[AssignmentStatus] = mapped_column(

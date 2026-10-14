@@ -12,11 +12,11 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read # dorny/paths-filter lists PR files via the API
 
 env:
-  PYTHON_VERSION: "3.13"
-  BUN_VERSION: "1.2"
+  PYTHON_VERSION: "3.14.7"
+  BUN_VERSION: "1.4.2"
 
 jobs:
   changes:
@@ -28,11 +28,11 @@ jobs:
       e2e: ${{ steps.filter.outputs.e2e }}
       workflows: ${{ steps.filter.outputs.workflows }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Detect path changes
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           filters: |
             backend:
@@ -43,8 +43,6 @@ jobs:
               - 'services/frontend/**'
               - 'package.json'
               - 'bun.lock'
-              - 'docs/package.json'
-              - 'docs/bun.lock'
               - 'docker-compose*.yml'
               - '.markdownlint.json'
               - '.github/workflows/**'
@@ -53,8 +51,6 @@ jobs:
               - 'services/frontend/**'
               - 'package.json'
               - 'bun.lock'
-              - 'docs/package.json'
-              - 'docs/bun.lock'
               - 'docker-compose*.yml'
               - '.markdownlint.json'
               - '.github/workflows/**'
@@ -68,13 +64,18 @@ jobs:
     needs: changes
     if: ${{ github.event_name == 'push' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.workflows == 'true' }}
     runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN_CONFIGURED: ${{ secrets.CODECOV_TOKEN != '' }}
+    permissions:
+      contents: read
+      pull-requests: write # coverage comment
     defaults:
       run:
         working-directory: services/backend
 
     services:
       postgres:
-        image: postgres:18-alpine
+        image: postgres:18.6-alpine
         env:
           POSTGRES_USER: nak
           POSTGRES_PASSWORD: changeme
@@ -87,7 +88,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       valkey:
-        image: valkey/valkey:8-alpine
+        image: valkey/valkey:8.1.10-alpine
         ports:
           - 6379:6379
         options: >-
@@ -97,12 +98,12 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "latest"
+          version: "0.12.23"
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
           cache-dependency-glob: |
@@ -110,10 +111,40 @@ jobs:
             services/backend/uv.lock
 
       - name: Install Python dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --locked
+
+      - name: Ruff lint (pinned version from uv.lock)
+        run: uv run ruff check .
 
       - name: Check RBAC guard pattern in routers
         run: uv run python scripts/check_rbac_guard_pattern.py
+
+      - name: Generate throwaway password for the app DB role
+        run: |
+          APP_DB_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$APP_DB_PASSWORD"
+          echo "APP_DB_PASSWORD=$APP_DB_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Migrate fresh database (includes RLS policies)
+        env:
+          DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
+        run: uv run alembic upgrade head
+
+      - name: PostgreSQL integration and performance tests with RLS
+        env:
+          DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
+          TEST_DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
+          RLS_TEST_DATABASE_URL: postgresql://nak:changeme@localhost:5432/nak_planner_test
+        # Runs the whole suites on the database migrated above. A skipped test
+        # means a missing database setting, so skips fail the step.
+        run: |
+          set -o pipefail
+          RLS_TEST_APP_PASSWORD="$APP_DB_PASSWORD" uv run pytest tests/integration tests/performance -v -rs \
+            2>&1 | tee integration-output.txt
+          if grep -qE "[0-9]+ skipped" integration-output.txt; then
+            echo "::error::Integration tests were skipped; check the database environment."
+            exit 1
+          fi
 
       - name: Run unit tests with coverage
         id: unit-tests
@@ -141,22 +172,29 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: backend-coverage-report
           path: services/backend/coverage.xml
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        if: always()
+        if: ${{ success() && env.CODECOV_TOKEN_CONFIGURED == 'true' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: services/backend/coverage.xml
           flags: backend
-          fail_ci_if_error: false
+          fail_ci_if_error: true
+
+      - name: Explain skipped Codecov upload
+        if: ${{ success() && env.CODECOV_TOKEN_CONFIGURED != 'true' }}
+        run: |
+          echo "::warning title=Codecov upload skipped::Set the CODECOV_TOKEN repository secret to enable external coverage uploads."
+          echo "Codecov upload skipped: CODECOV_TOKEN is not configured; local coverage gates and the coverage artifact remain active." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: backend-test-results
           path: services/backend/junit.xml
@@ -168,6 +206,9 @@ jobs:
             exit 1
           fi
           echo "✅ Coverage ${TOTAL_COVERAGE}% meets 80% threshold"
+
+      - name: Check critical router coverage (each >=80%)
+        run: uv run python scripts/check_critical_router_coverage.py coverage.xml
 
       - name: Post coverage report to PR
         if: always() && github.event_name == 'pull_request'
@@ -190,7 +231,6 @@ jobs:
 
           _Reported by CI workflow_"
 
-          # Find existing coverage comment by this bot
           COMMENT_ID=$(gh api \
             repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
             --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## Backend Test Coverage"))) | .id' \
@@ -217,21 +257,26 @@ jobs:
         working-directory: services/frontend
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Cache Bun install cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --prefer-offline
+
+      - name: ESLint frontend
+        run: bun run lint
 
       - name: Run unit tests
         run: |
@@ -248,7 +293,7 @@ jobs:
 
       - name: Upload frontend test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frontend-test-results
           path: services/frontend/frontend-test-output.txt
@@ -263,29 +308,33 @@ jobs:
         working-directory: services/frontend
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Cache Bun install cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock','package.json','services/frontend/bun.lock','services/frontend/package.json') }}
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock', 'package.json', 'services/frontend/bun.lock', 'services/frontend/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --prefer-offline
 
-      - name: Install Playwright
+      - name: Cache Playwright browser
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('services/frontend/bun.lock') }}
+
+      - name: Install Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: bunx playwright install chromium
 
       - name: Build frontend
@@ -306,7 +355,7 @@ jobs:
 
       - name: Upload E2E report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-playwright-report
           path: services/frontend/playwright-report/

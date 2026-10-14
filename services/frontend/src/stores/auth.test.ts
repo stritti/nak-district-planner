@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Tests for auth store
  */
@@ -5,7 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from './auth'
-import type { OIDCToken, OIDCUser } from '../composables/useOIDC'
+import type { OIDCToken, OIDCUser } from '../composables/oidcTypes'
 import * as authApi from '../api/auth'
 import * as registrationsApi from '../api/registrations'
 

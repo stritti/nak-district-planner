@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/api/routers/export.py: Module."""
 
 from __future__ import annotations
@@ -6,32 +9,47 @@ import uuid
 from datetime import UTC, datetime, time, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from icalendar import Calendar
 from icalendar import Event as ICalEvent
 from sqlalchemy import select
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_event_instance_repository,
+    get_export_token_repository,
+    get_leader_repository,
+    get_planning_slot_repository,
+    get_service_assignment_repository,
+)
 from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportTokenResponse
+from app.adapters.api.tenant_references import (
+    ensure_congregation_in_district,
+    ensure_leader_in_district,
+)
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
-from app.adapters.db.repositories import (
-    SqlEventInstanceRepository,
-    SqlPlanningSlotRepository,
-)
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
+from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
-from app.domain.models.event_instance import EventInstance
+from app.domain.models.event_instance import EventInstance, EventVisibility
 from app.domain.models.export_token import ExportToken, TokenType
-from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
+from app.domain.models.planning_slot import (
+    EventApprovalStatus,
+    PlanningSlot,
+    PlanningSlotStatus,
+)
 from app.domain.models.role import Role
+from app.domain.models.service_assignment import ServiceAssignment
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1")
 
 
-# ── Token management (requires API key) ──────────────────────────────────────
+# ── Token management (DISTRICT_ADMIN, OIDC Bearer) ───────────────────────────
 
 
 @router.post(
@@ -40,9 +58,14 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 async def create_export_token(
-    auth: CurrentUserWithMemberships, body: ExportTokenCreate, session: DbSession
+    auth: CurrentUserWithMemberships,
+    body: ExportTokenCreate,
+    session: DbSession,
+    repo: SqlExportTokenRepository = Depends(get_export_token_repository),
 ) -> ExportTokenResponse:
     require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    await ensure_congregation_in_district(session, body.district_id, body.congregation_id)
+    await ensure_leader_in_district(session, body.district_id, body.leader_id)
 
     token = ExportToken.create(
         label=body.label,
@@ -51,7 +74,6 @@ async def create_export_token(
         congregation_id=body.congregation_id,
         leader_id=body.leader_id,
     )
-    repo = SqlExportTokenRepository(session)
     await repo.save(token)
     return _token_response(token)
 
@@ -64,6 +86,7 @@ async def list_export_tokens(
     auth: CurrentUserWithMemberships,
     session: DbSession,
     district_id: uuid.UUID | None = None,
+    repo: SqlExportTokenRepository = Depends(get_export_token_repository),
 ) -> list[ExportTokenResponse]:
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
@@ -74,7 +97,6 @@ async def list_export_tokens(
     if district_id is not None:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
-    repo = SqlExportTokenRepository(session)
     tokens = await repo.list_by_district(district_id) if district_id else await repo.list_all()
     return [_token_response(t) for t in tokens]
 
@@ -87,8 +109,8 @@ async def delete_export_token(
     auth: CurrentUserWithMemberships,
     token_id: uuid.UUID,
     session: DbSession,
+    repo: SqlExportTokenRepository = Depends(get_export_token_repository),
 ) -> None:
-    repo = SqlExportTokenRepository(session)
     token = await repo.get(token_id)
     if token is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht gefunden")
@@ -124,11 +146,30 @@ def _synthesize_datetime(slot: PlanningSlot, default_time: time = time(0, 0, 0))
     return dt
 
 
+def _slot_key(assignment: ServiceAssignment) -> uuid.UUID:
+    """Canonical slot key; ``event_id`` is the legacy compatibility fallback."""
+    return assignment.planning_slot_id or assignment.event_id
+
+
+# RFC 5545 INTEGER is 32-bit; Unix-epoch seconds would overflow in 2038.
+_SEQUENCE_EPOCH = datetime(2020, 1, 1, tzinfo=UTC)
+
+
+def _sequence(last_modified: datetime) -> int:
+    """Return the iCal SEQUENCE: seconds since 2020 of the last revision (monotonic)."""
+    return int((last_modified - _SEQUENCE_EPOCH).total_seconds())
+
+
 @router.get("/export/{token_str}/calendar.ics", include_in_schema=False)
 async def export_calendar_ics(
     token_str: str,
     session: DbSession,
     approval_status: Literal["confirmed_only", "include_planned"] | None = Query(None),
+    token_repo: SqlExportTokenRepository = Depends(get_export_token_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    sa_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leader_repo_dep: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> Response:
     from sqlalchemy import text
 
@@ -136,15 +177,11 @@ async def export_calendar_ics(
         text("SELECT set_config('app.current_export_token', :val, true)"),
         {"val": token_str},
     )
-    token_repo = SqlExportTokenRepository(session)
     export_token = await token_repo.get_by_token(token_str)
     if not export_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
 
     # RLS public export policies use app.current_export_token for scoped reads.
-
-    slot_repo = SqlPlanningSlotRepository(session)
-    instance_repo = SqlEventInstanceRepository(session)
 
     # Load PlanningSlots for a wide window (past 1 year, future 2 years)
     now = datetime.now(UTC).date()
@@ -156,9 +193,15 @@ async def export_calendar_ics(
         to_date=to_date,
     )
 
-    # Narrow by congregation if token is congregation-scoped
-    if export_token.congregation_id:
-        all_slots = [s for s in all_slots if s.congregation_id == export_token.congregation_id]
+    # Congregation feed: own slots plus district slots released to it (UC-04).
+    # CANCELLED slots stay in and are emitted as STATUS:CANCELLED so subscribed
+    # calendars remove previously synced events.
+    if congregation_id := export_token.congregation_id:
+        all_slots = [
+            s
+            for s in all_slots
+            if s.congregation_id == congregation_id or s.is_distributed_to(congregation_id)
+        ]
 
     # Load all EventInstances for these slots
     slot_ids = [s.id for s in all_slots]
@@ -169,33 +212,37 @@ async def export_calendar_ics(
         inst.planning_slot_id: inst for inst in instances
     }
 
-    # Apply approval_status filter
-    if approval_status is None:
-        if export_token.token_type == TokenType.PUBLIC and export_token.leader_id is None:
-            approval_status = "confirmed_only"
-        else:
-            approval_status = "include_planned"
+    # Personal and INTERNAL feeds are internal: they show leader names and
+    # INTERNAL events. PUBLIC feeds anonymize names (like the leaders RLS policy,
+    # they never load leader rows) and omit events with INTERNAL visibility.
+    show_names = bool(export_token.leader_id) or export_token.token_type == TokenType.INTERNAL
+    if not show_names:
+        all_slots = [
+            s
+            for s in all_slots
+            if (inst := instance_by_slot.get(s.id)) is None
+            or inst.visibility != EventVisibility.INTERNAL
+        ]
 
-    if approval_status == "confirmed_only":
-        all_slots = [s for s in all_slots if s.approval_status == EventApprovalStatus.CONFIRMED]
-    elif approval_status != "include_planned":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ungültiger approval_status-Filter: {approval_status}. "
-            f"Erlaubte Werte: confirmed_only, include_planned",
-        )
+    # PUBLIC tokens always export CONFIRMED slots only; the query parameter can
+    # only narrow INTERNAL feeds (ExportToken.confirmed_only).
+    if export_token.confirmed_only(approval_status):
+        all_slots = [s for s in all_slots if s.is_confirmed]
 
     # Load assignments in one batch query (keyed by planning_slot_id via event_id)
-    sa_repo = SqlServiceAssignmentRepository(session)
-    assignments = await sa_repo.list_by_planning_slots(slot_ids)
+    # An invitation copy shows the leader of the host's service.
+    host_slot_ids = {s.invitation_source_event_id for s in all_slots if s.invitation_source_event_id}
+    assignments = await sa_repo.list_by_planning_slots(list({*slot_ids, *host_slot_ids}))
 
-    # For leader tokens: keep only assignments for this specific leader
+    # Personal leader feed: only this leader's assignments and their slots
     if export_token.leader_id:
         assignments = [a for a in assignments if a.leader_id == export_token.leader_id]
+        leader_slot_ids = {_slot_key(a) for a in assignments}
+        all_slots = [s for s in all_slots if s.id in leader_slot_ids]
 
     # Batch-load leaders so leader_id-only assignments can be resolved to a display name
-    if export_token.district_id:
-        leader_repo = SqlLeaderRepository(session)
+    if export_token.district_id and show_names:
+        leader_repo = leader_repo_dep
         leaders = await leader_repo.list_by_district(export_token.district_id)
         leaders_by_id = {ldr.id: ldr for ldr in leaders}
     else:
@@ -203,7 +250,13 @@ async def export_calendar_ics(
 
     # Build assignment_map: prefer non-empty leader_name; fall back to leader_id lookup
     assignment_map: dict[uuid.UUID, str | None] = {}
+    # Leader renames change the exported COMMENT without touching the slot
+    leader_revision: dict[uuid.UUID, datetime] = {}
     for a in assignments:
+        if _slot_key(a) in host_slot_ids:
+            # The copy itself is not touched when the host's assignment changes.
+            key = _slot_key(a)
+            leader_revision[key] = max(a.updated_at, leader_revision.get(key, a.updated_at))
         display_name: str | None = None
         if a.leader_name:
             display_name = a.leader_name
@@ -211,9 +264,13 @@ async def export_calendar_ics(
             ldr = leaders_by_id[a.leader_id]
             rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
             display_name = f"{rank_prefix}{ldr.name}"
+            key = _slot_key(a)
+            leader_revision[key] = max(ldr.updated_at, leader_revision.get(key, ldr.updated_at))
+        elif a.leader_id and not show_names:
+            display_name = "[Name anonymisiert]"
 
         # For each slot keep the best name (non-None wins over None)
-        slot_key = a.event_id  # event_id is now the planning_slot_id
+        slot_key = _slot_key(a)
         existing = assignment_map.get(slot_key)
         if slot_key not in assignment_map or (display_name is not None and existing is None):
             assignment_map[slot_key] = display_name
@@ -222,7 +279,9 @@ async def export_calendar_ics(
     cong_result = await session.execute(
         select(CongregationORM).where(CongregationORM.district_id == export_token.district_id)
     )
-    cong_map: dict[uuid.UUID, str] = {c.id: c.name for c in cong_result.scalars()}
+    congregations = list(cong_result.scalars())
+    cong_map: dict[uuid.UUID, str] = {c.id: c.name for c in congregations}
+    cong_revision: dict[uuid.UUID, datetime] = {c.id: c.updated_at for c in congregations}
 
     # Build iCalendar
     cal = Calendar()
@@ -248,21 +307,40 @@ async def export_calendar_ics(
         if instance:
             vevent.add("dtstart", instance.actual_start_at)
             vevent.add("dtend", instance.actual_end_at)
-            vevent.add("dtstamp", instance.created_at)
         else:
             # Synthesize from PlanningSlot when no EventInstance exists
             vt = _synthesize_datetime(slot)
             vevent.add("dtstart", vt)
             vevent.add("dtend", vt + _SYNTHESIZED_EVENT_DURATION)
-            vevent.add("dtstamp", slot.created_at)
 
-        # Mark PLANNED events as tentative in the calendar
-        if slot.approval_status == EventApprovalStatus.PLANNED:
+        # Change metadata from the last revision of everything rendered into the
+        # VEVENT (slot, instance, leader name, congregation name)
+        revisions = [slot.updated_at]
+        if instance:
+            revisions.append(instance.updated_at)
+        for key in (slot.id, slot.invitation_source_event_id):
+            if key in leader_revision:
+                revisions.append(leader_revision[key])
+        if slot.congregation_id in cong_revision:
+            revisions.append(cong_revision[slot.congregation_id])
+        location_id = slot.invitation_source_congregation_id or slot.congregation_id
+        if location_id in cong_revision:
+            revisions.append(cong_revision[location_id])
+        last_modified = max(revisions)
+        vevent.add("dtstamp", last_modified)
+        vevent.add("last-modified", last_modified)
+        vevent.add("sequence", _sequence(last_modified))
+
+        if slot.status == PlanningSlotStatus.CANCELLED:
+            vevent.add("status", "CANCELLED")
+        elif slot.approval_status == EventApprovalStatus.PLANNED:
+            # Mark PLANNED events as tentative in the calendar
             vevent.add("status", "TENTATIVE")
             vevent.add("x-nak-approval-status", "PLANNED")
 
-        if slot.congregation_id and slot.congregation_id in cong_map:
-            vevent.add("location", cong_map[slot.congregation_id])
+        # An invitation copy takes place in the host congregation.
+        if location_id in cong_map:
+            vevent.add("location", cong_map[location_id])
 
         if slot.category:
             vevent.add("categories", slot.category)
@@ -271,12 +349,11 @@ async def export_calendar_ics(
             vevent.add("description", instance.description)
 
         leader = assignment_map.get(slot.id)
+        if leader is None and slot.invitation_source_event_id:
+            leader = assignment_map.get(slot.invitation_source_event_id)
         if leader:
-            # Personal leader token → always show full name (INTERNAL behaviour)
-            if export_token.leader_id or export_token.token_type == TokenType.INTERNAL:
-                vevent.add("comment", f"Dienstleiter: {leader}")
-            else:
-                vevent.add("comment", "Dienstleiter: [Name anonymisiert]")
+            name = leader if show_names else "[Name anonymisiert]"
+            vevent.add("comment", f"Dienstleiter: {name}")
 
         cal.add_component(vevent)
 

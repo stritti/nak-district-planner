@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/api/routers/service_assignments.py: Module."""
 
 from __future__ import annotations
@@ -5,21 +8,34 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_leader_repository,
+    get_planning_slot_repository,
+    get_service_assignment_repository,
+)
 from app.adapters.api.schemas.conflict import ConflictItem, ConflictResponse
 from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentCreate,
     ServiceAssignmentResponse,
     ServiceAssignmentUpdate,
 )
+from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import require_role_in_district
-from app.adapters.db.repositories import SqlPlanningSlotRepository
+from app.adapters.db.locks import acquire_advisory_xact_lock
+from app.adapters.db.repositories.leader import SqlLeaderRepository
+from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
+from app.adapters.db.transactional_events import publish_after_commit
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
+from app.domain.event_payloads import assignment_confirmed
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.role import Role
-from app.domain.models.service_assignment import ServiceAssignment
+from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
 router = APIRouter(
     prefix="/api/v1/events/{event_id}/assignments",
@@ -51,6 +67,62 @@ def _raise_blocking_conflicts(conflicts: list, *, confirm_warnings: bool) -> Non
         )
 
 
+async def _touch_slot(slots: SqlPlanningSlotRepository, planning_slot: PlanningSlot) -> None:
+    """Bump the slot revision: assignments are part of the exported event (UC-05).
+
+    ICS feeds derive DTSTAMP/LAST-MODIFIED/SEQUENCE from the slot's updated_at;
+    touching it also covers deletions, which leave no assignment row behind.
+    """
+    planning_slot.updated_at = datetime.now(UTC)
+    await slots.save(planning_slot)
+
+
+async def _check_leader(
+    db: DbSession,
+    *,
+    district_id: uuid.UUID,
+    event_id: uuid.UUID,
+    leader_id: uuid.UUID,
+    confirm_warnings: bool,
+    exclude_assignment_id: uuid.UUID | None = None,
+) -> None:
+    """Validate the leader reference and run the conflict check under a per-leader lock.
+
+    The transaction-scoped advisory lock serializes concurrent assignments of the
+    same leader, so check-then-insert cannot double-book; it is released on commit.
+    """
+    await ensure_leader_in_district(db, district_id, leader_id)
+    await acquire_advisory_xact_lock(db, leader_id)
+    conflicts = await check_service_assignment_conflicts(
+        db, event_id=event_id, leader_id=leader_id, exclude_assignment_id=exclude_assignment_id
+    )
+    _raise_blocking_conflicts(conflicts, confirm_warnings=confirm_warnings)
+
+
+_ONE_ASSIGNMENT_PER_SLOT = "ix_service_assignments_planning_slot_id"
+
+
+def _violated_constraint(exc: IntegrityError) -> str | None:
+    """Constraint name of the driver error (asyncpg: cause of SQLAlchemy's ``orig``)."""
+    driver_error = exc.orig.__cause__ or exc.orig
+    return getattr(driver_error, "constraint_name", None)
+
+
+async def _save(
+    assignments_repo: SqlServiceAssignmentRepository, assignment: ServiceAssignment
+) -> None:
+    """Persist; the unique index allows one assignment per planning slot."""
+    try:
+        await assignments_repo.save(assignment)
+    except IntegrityError as exc:
+        if _violated_constraint(exc) != _ONE_ASSIGNMENT_PER_SLOT:
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Planungseintrag hat bereits eine Zuweisung",
+        ) from exc
+
+
 def _assignment_response(assignment: ServiceAssignment) -> ServiceAssignmentResponse:
     return ServiceAssignmentResponse(
         id=assignment.id,
@@ -69,23 +141,25 @@ async def create_assignment(
     body: ServiceAssignmentCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> ServiceAssignmentResponse:
-    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    planning_slot = await slots.get(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
         )
 
-    # Check if user has PLANNER role (or higher) in the district
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     if body.leader_id is not None:
-        conflicts = await check_service_assignment_conflicts(
+        await _check_leader(
             db,
+            district_id=planning_slot.district_id,
             event_id=event_id,
             leader_id=body.leader_id,
+            confirm_warnings=body.confirm_warnings,
         )
-        _raise_blocking_conflicts(conflicts, confirm_warnings=body.confirm_warnings)
 
     assignment = ServiceAssignment.create(
         event_id=event_id,
@@ -93,7 +167,8 @@ async def create_assignment(
         leader_name=body.leader_name,
         status=body.status,
     )
-    await SqlServiceAssignmentRepository(db).save(assignment)
+    await _save(assignments_repo, assignment)
+    await _touch_slot(slots, planning_slot)
     return _assignment_response(assignment)
 
 
@@ -102,17 +177,18 @@ async def list_assignments(
     event_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> list[ServiceAssignmentResponse]:
-    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    planning_slot = await slots.get(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
         )
 
-    # Check if user has VIEWER role (or higher) in the district
     require_role_in_district(auth, Role.VIEWER, planning_slot.district_id)
 
-    assignments = await SqlServiceAssignmentRepository(db).list_by_planning_slot(event_id)
+    assignments = await assignments_repo.list_by_planning_slot(event_id)
     return [_assignment_response(a) for a in assignments]
 
 
@@ -123,42 +199,68 @@ async def update_assignment(
     body: ServiceAssignmentUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> ServiceAssignmentResponse:
-    repo = SqlServiceAssignmentRepository(db)
-    assignment = await repo.get(assignment_id)
+    assignment = await assignments_repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
 
-    # Verify PlanningSlot exists and check district access
-    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    planning_slot = await slots.get(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
         )
 
-    # Check if user has PLANNER role (or higher) in the district
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     fields = body.model_fields_set
     if "leader_id" in fields:
         if body.leader_id is not None:
-            conflicts = await check_service_assignment_conflicts(
+            await _check_leader(
                 db,
+                district_id=planning_slot.district_id,
                 event_id=event_id,
                 leader_id=body.leader_id,
+                confirm_warnings=body.confirm_warnings,
                 exclude_assignment_id=assignment.id,
             )
-            _raise_blocking_conflicts(conflicts, confirm_warnings=body.confirm_warnings)
         assignment.leader_id = body.leader_id
     if "leader_name" in fields:
         assignment.leader_name = body.leader_name
+    newly_confirmed = (
+        body.status == AssignmentStatus.CONFIRMED and assignment.status != AssignmentStatus.CONFIRMED
+    )
     if body.status is not None:
         assignment.status = body.status
     assignment.updated_at = datetime.now(UTC)
-    await repo.save(assignment)
+    await assignments_repo.save(assignment)
+    await _touch_slot(slots, planning_slot)
+    if newly_confirmed:
+        publish_after_commit(
+            db,
+            assignment_confirmed(
+                planning_slot.district_id,
+                leader_name=await _leader_display_name(leaders_repo, assignment),
+                event_title=planning_slot.title or "",
+                event_date=planning_slot.planning_date,
+            ),
+        )
     return _assignment_response(assignment)
+
+
+async def _leader_display_name(
+    leaders_repo: SqlLeaderRepository, assignment: ServiceAssignment
+) -> str:
+    if assignment.leader_name:
+        return assignment.leader_name
+    if assignment.leader_id is None:
+        return ""
+    leader = await leaders_repo.get(assignment.leader_id)
+    return leader.name if leader else ""
 
 
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -167,15 +269,16 @@ async def delete_assignment(
     assignment_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> None:
-    repo = SqlServiceAssignmentRepository(db)
-    assignment = await repo.get(assignment_id)
+    assignment = await assignments_repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
 
-    planning_slot = await SqlPlanningSlotRepository(db).get(event_id)
+    planning_slot = await slots.get(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
@@ -183,4 +286,5 @@ async def delete_assignment(
 
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
-    await repo.delete(assignment_id)
+    await assignments_repo.delete(assignment_id)
+    await _touch_slot(slots, planning_slot)

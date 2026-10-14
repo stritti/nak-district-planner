@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { listEvents, type EventListParams, type EventResponse } from '../api/events'
@@ -41,6 +44,4 @@ export const useEventsStore = defineStore('events', () => {
   }
 
   return { items, total, loading, error, filters, currentPage, totalPages, fetch, setFilter, goToPage }
-}, {
-  persist: { pick: ['filters'] },
 })

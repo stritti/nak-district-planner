@@ -1,14 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/application/invitation_service.py: Invitation management service."""
 
 from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.api.schemas.invitation import InvitationTargetCreate
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
@@ -25,6 +29,15 @@ from app.domain.models.invitation import (
 )
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 
+
+class InvitationTargetInput(Protocol):
+    """Transport-neutral invitation target validated at the inbound boundary."""
+
+    target_type: InvitationTargetType
+    target_congregation_id: uuid.UUID | None
+    external_target_note: str | None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +45,7 @@ async def create_invitations_for_event(
     session: AsyncSession,
     *,
     source_planning_slot_id: uuid.UUID,
-    targets: list[InvitationTargetCreate],
+    targets: Sequence[InvitationTargetInput],
 ) -> list[CongregationInvitation]:
     """Create invitations for a planning slot and its optional event instance.
 
@@ -174,20 +187,29 @@ async def delete_invitation(
     """
     invitation_repo = SqlInvitationRepository(session)
     slot_repo = SqlPlanningSlotRepository(session)
-    event_instance_repo = SqlEventInstanceRepository(session)
-
     invitation = await invitation_repo.get(invitation_id)
     if invitation is None:
         return False
 
-    # Remove the target PlanningSlot + EventInstance that was created for this invitation
+    # Published invitation copies must survive as cancelled calendar entries.
+    # Deleting the slot also cascades to its occurrence, so deleting the
+    # instance first would destroy a published event's exported details.
     if invitation.linked_event_id is not None:
-        target_instance = await event_instance_repo.get_by_planning_slot(invitation.linked_event_id)
-        if target_instance is not None:
-            await event_instance_repo.delete(target_instance.id)
-        target_slot = await slot_repo.get(invitation.linked_event_id)
+        # Lock and refresh the target *before* deciding between delete/cancel.
+        # A concurrent publication cannot turn a draft into a released event
+        # between the check and the write in the same transaction.
+        initial_target = await slot_repo.get(invitation.linked_event_id)
+        if initial_target is not None:
+            # Maintain the same district-first lock order as repository.delete.
+            await slot_repo.lock_district_for_generation(initial_target.district_id)
+        target_slot = await slot_repo.get_for_update(invitation.linked_event_id)
         if target_slot is not None:
-            await slot_repo.delete(target_slot.id)
+            if target_slot.was_released:
+                target_slot.status = PlanningSlotStatus.CANCELLED
+                target_slot.updated_at = datetime.now(UTC)
+                await slot_repo.save(target_slot, require_existing=True)
+            else:
+                await slot_repo.delete(target_slot.id)
 
     await invitation_repo.delete(invitation.id)
     return True

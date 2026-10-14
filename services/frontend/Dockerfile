@@ -1,10 +1,10 @@
 # Stage 1: build
-FROM oven/bun:1-alpine AS build
+FROM oven/bun:1.4.2-alpine AS build
 
 WORKDIR /app
 
 COPY package.json bun.lock ./
-RUN bun install
+RUN bun install --frozen-lockfile
 
 COPY . .
 RUN bun run build
@@ -14,5 +14,6 @@ FROM nginx:alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chmod=0755 15-real-ip-from.sh /docker-entrypoint.d/15-real-ip-from.sh
 
 EXPOSE 80

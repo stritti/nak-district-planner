@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div>
     <!-- Header -->
@@ -7,6 +10,12 @@
         <span v-if="viewMode === 'list'" class="text-sm text-gray-400 dark:text-gray-500">{{ eventsStore.total }} gesamt</span>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
+        <button
+          v-if="canManageEvents"
+          class="btn-primary px-3 py-1.5 text-sm"
+          data-testid="create-event-button"
+          @click="createOpen = true"
+        >Ereignis anlegen</button>
         <!-- Excel Export (list mode only) -->
         <div v-if="viewMode === 'list'" class="flex flex-col items-end gap-1">
           <button
@@ -84,23 +93,11 @@
 
       <!-- Zeile 2: Filter-Felder -->
       <div class="flex flex-wrap gap-3">
-        <!-- Bezirk -->
-        <div class="w-full sm:w-auto">
-          <label class="filter-label">Bezirk</label>
-          <select
-            v-model="districtsStore.selectedDistrictId"
-            class="form-select px-2"
-          >
-            <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">
-              {{ d.name }}
-            </option>
-          </select>
-        </div>
-
         <!-- Gemeinde -->
         <div class="w-full sm:w-auto">
           <label class="filter-label">Gemeinde</label>
           <select
+            id="event-congregation-filter"
             v-model="selectedCongregationId"
             :disabled="!districtsStore.selectedDistrictId"
             class="rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:bg-gray-800"
@@ -118,6 +115,7 @@
         <div v-if="districtsStore.groups.length > 0" class="w-full sm:w-auto">
           <label class="filter-label">Gruppe (optional)</label>
           <select
+            id="event-group-filter"
             v-model="selectedGroupId"
             class="form-select px-2"
             @change="onGroupChange"
@@ -133,13 +131,13 @@
         <div class="w-full sm:w-auto">
           <label class="filter-label">Status</label>
           <select
+            id="event-status-filter"
             v-model="selectedStatus"
             class="form-select px-2"
             @change="onFilterChange"
           >
             <option value="">Alle</option>
-            <option value="DRAFT">Entwurf</option>
-            <option value="PUBLISHED">Veröffentlicht</option>
+            <option value="ACTIVE">Aktiv</option>
             <option value="CANCELLED">Abgesagt</option>
           </select>
         </div>
@@ -148,6 +146,7 @@
         <div class="w-full sm:w-auto">
           <label class="filter-label">Freigabe</label>
           <select
+            id="event-approval-filter"
             v-model="selectedApprovalStatus"
             class="form-select px-2"
             @change="onFilterChange"
@@ -155,6 +154,21 @@
             <option value="">Alle</option>
             <option value="PLANNED">Geplant</option>
             <option value="CONFIRMED">Bestätigt</option>
+          </select>
+        </div>
+
+        <!-- Typ (Gottesdienst / andere Ereignisse) -->
+        <div class="w-full sm:w-auto">
+          <label class="filter-label">Typ</label>
+          <select
+            id="event-type-filter"
+            v-model="selectedType"
+            class="form-select px-2"
+            @change="onFilterChange"
+          >
+            <option value="">Alle</option>
+            <option value="service">Gottesdienste</option>
+            <option value="other">Andere Ereignisse</option>
           </select>
         </div>
 
@@ -184,7 +198,65 @@
 
     <!-- ── Listenansicht ───────────────────────────────────────────────────── -->
     <template v-if="viewMode === 'list'">
-      <div class="table-container">
+      <!-- Mobile: card list (no horizontal scroll needed) -->
+      <div class="md:hidden space-y-3">
+        <div v-if="eventsStore.loading" class="py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</div>
+        <div v-else-if="eventsStore.error" class="py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</div>
+        <EmptyState
+          v-else-if="eventsStore.items.length === 0"
+          message="Keine Ereignisse gefunden."
+          hint="Filter oder Zeitraum anpassen, um weitere Termine zu sehen."
+          :icon="CalendarDaysIcon"
+        />
+        <div
+          v-for="event in eventsStore.items"
+          v-else
+          :key="event.id"
+          class="card p-3"
+        >
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="font-medium text-gray-900 dark:text-gray-100 break-words">{{ event.title }}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDt(event.start_at) }} · {{ event.category ?? '—' }}</p>
+            </div>
+            <button
+              class="btn-icon border border-gray-300 dark:border-gray-600 shrink-0"
+              title="Zuordnung bearbeiten"
+              @click="openEdit(event)"
+            >
+              <BuildingOffice2Icon class="h-4 w-4" />
+            </button>
+          </div>
+          <p class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+            <span>{{ districtName(event.district_id) }}</span>
+            <template v-if="event.congregation_id">
+              <span class="text-gray-400 dark:text-gray-500"> › </span>
+              <span>{{ congregationName(event.congregation_id) }}</span>
+            </template>
+            <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
+          </p>
+          <p v-if="event.responsible" class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+            {{ responsibleLabel(event) }}: {{ event.responsible.name }}
+          </p>
+          <p v-if="event.invitation_source_congregation_id" class="mt-1 text-xs text-amber-700 dark:text-amber-300">
+            Einladung
+          </p>
+          <div class="mt-2 flex items-center gap-1.5 flex-wrap">
+            <span :class="statusClass(event.status)" class="badge">{{ statusLabel(event.status) }}</span>
+            <span v-if="event.is_service" class="badge bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">Gottesdienst</span>
+            <EventApprovalStatusBadge v-if="event.approval_status" :status="event.approval_status" />
+            <span
+              class="badge"
+              :class="event.source === 'EXTERNAL' ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'"
+            >
+              {{ event.source === 'EXTERNAL' ? 'Import' : 'Intern' }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desktop: table -->
+      <div class="table-container hidden md:block">
         <div class="table-scroll">
         <table class="table-min-w w-full text-sm">
           <thead>
@@ -193,8 +265,10 @@
               <th class="table-th">Start</th>
               <th class="table-th">Kategorie</th>
               <th class="table-th">Zuordnung</th>
+              <th class="table-th">Verantwortlich</th>
               <th class="table-th">Einladung</th>
               <th class="table-th">Status</th>
+              <th class="table-th">Typ</th>
               <th class="table-th">Freigabe</th>
               <th class="table-th">Quelle</th>
               <th class="table-th"></th>
@@ -202,13 +276,19 @@
           </thead>
           <tbody>
             <tr v-if="eventsStore.loading">
-              <td colspan="9" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
+              <td colspan="11" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Laden…</td>
             </tr>
             <tr v-else-if="eventsStore.error">
-              <td colspan="9" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
+              <td colspan="11" class="px-4 py-10 text-center text-red-500 text-sm">{{ eventsStore.error }}</td>
             </tr>
             <tr v-else-if="eventsStore.items.length === 0">
-              <td colspan="9" class="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">Keine Ereignisse gefunden.</td>
+              <td colspan="11">
+                <EmptyState
+                  message="Keine Ereignisse gefunden."
+                  hint="Filter oder Zeitraum anpassen, um weitere Termine zu sehen."
+                  :icon="CalendarDaysIcon"
+                />
+              </td>
             </tr>
             <tr
               v-else
@@ -227,9 +307,14 @@
                 </template>
                 <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
               </td>
+              <td class="table-td text-xs" data-testid="responsible-cell">
+                <span v-if="event.responsible">{{ event.responsible.name }}</span>
+                <span v-else-if="event.is_service" class="text-red-600 dark:text-red-400">Lücke</span>
+                <span v-else class="text-gray-400 dark:text-gray-500">—</span>
+              </td>
               <td class="table-td text-xs">
-                <span v-if="event.invitation_source_congregation_name" class="text-amber-700 dark:text-amber-300">
-                  Einladung von {{ event.invitation_source_congregation_name }}
+                <span v-if="event.invitation_source_congregation_id" class="text-amber-700 dark:text-amber-300">
+                  Einladung
                 </span>
                 <span v-else class="text-gray-400 dark:text-gray-500">—</span>
               </td>
@@ -239,7 +324,10 @@
                 </span>
               </td>
               <td class="px-4 py-3">
-                <EventApprovalStatusBadge :status="event.approval_status" />
+                <span v-if="event.is_service" class="badge bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">Gottesdienst</span>
+              </td>
+              <td class="px-4 py-3">
+                <EventApprovalStatusBadge v-if="event.approval_status" :status="event.approval_status" />
               </td>
               <td class="px-4 py-3">
                 <span
@@ -324,7 +412,7 @@
                   :class="eventPillClass(event)"
                   @click="openEdit(event)"
                 >
-                  <div class="font-medium truncate">{{ event.title }}</div>
+                  <div class="font-medium break-words">{{ event.title }}</div>
                   <div class="text-[10px] opacity-70">{{ formatTime(event.start_at) }}</div>
                 </div>
               </template>
@@ -404,6 +492,42 @@
       </div>
     </template>
 
+
+    <div v-if="createOpen" class="modal-backdrop" @click.self="createOpen = false">
+      <form class="modal-panel max-w-md space-y-3" @submit.prevent="submitCreate">
+        <div class="flex items-center justify-between">
+          <h2 class="modal-title">Ereignis anlegen</h2>
+          <button type="button" class="modal-close" @click="createOpen = false"><XMarkIcon class="h-5 w-5" /></button>
+        </div>
+        <label class="form-label" for="new-event-title">Titel</label>
+        <input id="new-event-title" v-model.trim="createForm.title" class="form-input" maxlength="500" required />
+        <label class="form-label" for="new-event-start">Beginn</label>
+        <input id="new-event-start" v-model="createForm.start" type="datetime-local" class="form-input" required />
+        <label class="form-label" for="new-event-end">Ende</label>
+        <input id="new-event-end" v-model="createForm.end" type="datetime-local" class="form-input" required />
+        <label class="form-label" for="new-event-category">Kategorie</label>
+        <input id="new-event-category" v-model.trim="createForm.category" class="form-input" maxlength="255" />
+        <label class="form-label" for="new-event-congregation">Gemeinde</label>
+        <select id="new-event-congregation" v-model="createForm.congregation_id" class="form-input">
+          <option value="">Bezirksebene</option>
+          <option v-for="c in districtsStore.congregations" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
+        <label class="form-label" for="new-event-description">Beschreibung</label>
+        <textarea id="new-event-description" v-model="createForm.description" class="form-input" rows="2" />
+        <label class="form-label" for="new-event-visibility">Sichtbarkeit</label>
+        <select id="new-event-visibility" v-model="createForm.visibility" class="form-input">
+          <option value="PUBLIC">Öffentlich nach Freigabe</option>
+          <option value="INTERNAL">Nur intern</option>
+        </select>
+        <p class="text-xs text-gray-500">Neue Ereignisse werden immer als Entwurf angelegt.</p>
+        <p v-if="createError" role="alert" class="text-sm text-red-600">{{ createError }}</p>
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn-secondary px-3" @click="createOpen = false">Abbrechen</button>
+          <button type="submit" class="btn-primary px-3" :disabled="createSaving">{{ createSaving ? 'Speichern…' : 'Anlegen' }}</button>
+        </div>
+      </form>
+    </div>
+
     <!-- ── Zuordnungs-Modal (alle Ansichten) ──────────────────────────────── -->
     <div
       v-if="editTarget"
@@ -417,24 +541,15 @@
             <XMarkIcon class="h-5 w-5" />
           </button>
         </div>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 truncate">{{ editTarget.title }}</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 break-words">{{ editTarget.title }}</p>
         <p
-          v-if="editTarget.invitation_source_congregation_name"
+          v-if="editTarget.invitation_source_congregation_id"
           class="text-xs text-amber-700 dark:text-amber-300 mb-4"
         >
-          Einladung von {{ editTarget.invitation_source_congregation_name }}
+          Einladung von anderer Gemeinde
         </p>
 
         <div class="space-y-4">
-          <div>
-            <label class="form-label">Bezirk</label>
-            <select
-              v-model="editForm.district_id"
-              class="form-input"
-            >
-              <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">{{ d.name }}</option>
-            </select>
-          </div>
           <div>
             <label class="form-label">
               Gemeinde <span class="text-gray-400 dark:text-gray-500 font-normal">(leer = Bezirksebene)</span>
@@ -447,14 +562,31 @@
               <option v-for="c in editCongregations" :key="c.id" :value="c.id">{{ c.name }}</option>
             </select>
           </div>
+          <ApplicabilitySelect
+            v-if="!editForm.congregation_id"
+            v-model="editForm.applicability"
+            :congregations="editCongregations"
+          />
+          <div>
+            <label class="form-label">
+              {{ responsibleLabel(editTarget) }}
+              <span class="text-gray-400 dark:text-gray-500 font-normal">(leer = keine Zuordnung)</span>
+            </label>
+            <AutocompleteInput
+              :model-value="editLeader"
+              :options="leaderOptions"
+              :disabled="editSaving"
+              placeholder="Name eingeben oder auswählen…"
+              @update:model-value="editLeader = $event"
+            />
+          </div>
           <div>
             <label class="form-label">Status</label>
             <select
               v-model="editForm.status"
               class="form-input"
             >
-              <option value="DRAFT">Entwurf</option>
-              <option value="PUBLISHED">Veröffentlicht</option>
+              <option value="ACTIVE" :disabled="editTarget.was_released && editTarget.status === 'CANCELLED'">Aktiv</option>
               <option value="CANCELLED">Abgesagt</option>
             </select>
           </div>
@@ -463,6 +595,7 @@
             <select
               v-model="editForm.approval_status"
               class="form-input"
+              :disabled="editTarget.was_released || editTarget.approval_status === 'CONFIRMED'"
             >
               <option value="PLANNED">Geplant</option>
               <option value="CONFIRMED">Bestätigt</option>
@@ -490,6 +623,13 @@
             Abbrechen
           </button>
           <button
+            v-if="canManageEvents && !editTarget.was_released && editTarget.approval_status !== 'CONFIRMED'"
+            class="btn-secondary px-3 py-2 text-red-700 dark:text-red-400"
+            :disabled="editSaving"
+            data-testid="delete-event-button"
+            @click="removeEditTarget"
+          >Löschen</button>
+          <button
             class="btn-primary px-4 py-2"
             :disabled="editSaving"
             @click="saveEdit"
@@ -504,22 +644,54 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useAuthStore } from '../stores/auth'
+import { useSessionViewSettings, sessionField, sessionText, sessionDate } from '../composables/useSessionViewSettings'
 import {
   ArrowDownTrayIcon,
   BuildingOffice2Icon,
+  CalendarDaysIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
 import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
+import { useLeadersStore } from '../stores/leaders'
 import { listCongregations, type CongregationResponse } from '../api/districts'
-import { listEvents, updateEvent, type EventListParams, type EventResponse } from '../api/events'
+import {
+  listEvents,
+  createEvent,
+  deleteEvent,
+  updateEvent,
+  type EventApprovalStatus,
+  type EventListParams,
+  type EventResponse,
+  type PlanningSlotStatus,
+} from '../api/events'
 import { exportEventsToExcel } from '../composables/useExcelExport'
+import { useConfirm } from '../composables/useConfirm'
+import { errorMessage, useToast } from '../composables/useToast'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
+import ApplicabilitySelect from '../components/ApplicabilitySelect.vue'
+import AutocompleteInput, {
+  type AutocompleteOption,
+  type AutocompleteValue,
+} from '../components/AutocompleteInput.vue'
+import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
+import { parseConflictError } from '../api/errors'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
+const leadersStore = useLeadersStore()
+const toast = useToast()
+const confirm = useConfirm()
+
+const auth = useAuthStore()
+const canManageEvents = computed(() => auth.isSuperadmin || auth.memberships.some((m) =>
+  m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId &&
+  ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role),
+))
 
 // ── Ansichts-Modus ───────────────────────────────────────────────────────────
 
@@ -591,8 +763,8 @@ async function fetchCalendar() {
     if (viewMode.value === 'week') {
       const end = new Date(currentPeriodStart.value)
       end.setDate(end.getDate() + 6)
-      from = localDate(currentPeriodStart.value) + 'T00:00:00'
-      to   = localDate(end) + 'T23:59:59'
+      from = localDate(currentPeriodStart.value)
+      to   = localDate(end)
     } else {
       // Monatsansicht: komplettes Kalender-Grid (bis zu 6 Wochen)
       const year = currentPeriodStart.value.getFullYear()
@@ -603,8 +775,8 @@ async function fetchCalendar() {
       gridStart.setDate(gridStart.getDate() - (dow === 0 ? 6 : dow - 1))
       const gridEnd = new Date(gridStart)
       gridEnd.setDate(gridEnd.getDate() + 41)
-      from = localDate(gridStart) + 'T00:00:00'
-      to   = localDate(gridEnd)   + 'T23:59:59'
+      from = localDate(gridStart)
+      to   = localDate(gridEnd)
     }
     const params: EventListParams = { from_dt: from, to_dt: to, limit: 500, offset: 0 }
     if (districtsStore.selectedDistrictId) params.district_id = districtsStore.selectedDistrictId
@@ -616,21 +788,25 @@ async function fetchCalendar() {
     if (selectedGroupId.value)        params.group_id        = selectedGroupId.value
     if (selectedStatus.value)         params.status          = selectedStatus.value
     if (selectedApprovalStatus.value) params.approval_status = selectedApprovalStatus.value
+    if (selectedType.value === 'service')      params.is_service = true
+    else if (selectedType.value === 'other')   params.is_service = false
     const res = await listEvents(params)
     let events = res.items
 
     // Bei Gemeinde-Filter: Feiertage des Bezirks zusätzlich laden (keine congregation_id-Einschränkung)
     if (selectedCongregationId.value && districtsStore.selectedDistrictId) {
-      const feierRes = await listEvents({
-        district_id: districtsStore.selectedDistrictId,
-        from_dt: from,
-        to_dt: to,
-        limit: 500,
-        offset: 0,
-      })
-      const existing = new Set(events.map(e => e.id))
-      const feiertage = feierRes.items.filter(e => e.category === 'Feiertag' && !existing.has(e.id))
-      events = [...events, ...feiertage]
+      if (selectedType.value !== 'service') {
+        const feierRes = await listEvents({
+          district_id: districtsStore.selectedDistrictId,
+          from_dt: from,
+          to_dt: to,
+          limit: 500,
+          offset: 0,
+        })
+        const existing = new Set(events.map(e => e.id))
+        const feiertage = feierRes.items.filter(e => e.category === 'Feiertag' && !existing.has(e.id))
+        events = [...events, ...feiertage]
+      }
     }
 
     calendarEvents.value = events
@@ -719,10 +895,38 @@ const periodLabel = computed(() => {
 
 const selectedCongregationId = ref('')
 const selectedGroupId        = ref('')
-const selectedStatus         = ref('')
-const selectedApprovalStatus = ref('')
+const selectedStatus         = ref<PlanningSlotStatus | ''>('')
+const selectedApprovalStatus = ref<EventApprovalStatus | ''>('')
+const selectedType           = ref<'' | 'service' | 'other'>('')
 const fromDate               = ref('')
 const toDate                 = ref('')
+const periodDate = computed({
+  get: () => localDate(currentPeriodStart.value),
+  set: (value: string) => { currentPeriodStart.value = new Date(value + 'T12:00:00') },
+})
+useSessionViewSettings('events', () => auth.user?.sub ?? null, () => districtsStore.selectedDistrictId, {
+  congregation: sessionField(selectedCongregationId, () => '', sessionText),
+  group: sessionField(selectedGroupId, () => '', sessionText),
+  status: sessionField(selectedStatus, () => '', (value) => ['', 'ACTIVE', 'CANCELLED'].includes(typeof value === 'string' ? value : '\u0000')),
+  approval: sessionField(selectedApprovalStatus, () => '', (value) => ['', 'PLANNED', 'CONFIRMED'].includes(typeof value === 'string' ? value : '\u0000')),
+  type: sessionField(selectedType, () => '', (value) => ['', 'service', 'other'].includes(typeof value === 'string' ? value : '\u0000')),
+  from: sessionField(fromDate, () => '', sessionDate),
+  to: sessionField(toDate, () => '', sessionDate),
+  mode: sessionField(viewMode, () => 'list', (value) => ['list', 'week', 'month'].includes(typeof value === 'string' ? value : '\u0000')),
+  period: sessionField(periodDate, () => localDate(new Date()), (value) => value !== '' && sessionDate(value)),
+})
+
+function validateFilters() {
+  if (selectedGroupId.value && !districtsStore.groups.some((group) => group.id === selectedGroupId.value)) {
+    selectedGroupId.value = ''
+  }
+  if (selectedCongregationId.value && selectedCongregationId.value !== 'DISTRICT_ONLY' &&
+      !districtsStore.congregations.some((congregation) => congregation.id === selectedCongregationId.value &&
+        (!selectedGroupId.value || congregation.group_id === selectedGroupId.value))) {
+    selectedCongregationId.value = ''
+  }
+}
+
 
 function monthRange(offset: number) {
   const now = new Date()
@@ -751,12 +955,11 @@ function setPreset(key: string) {
   if (key === 'current') { const r = monthRange(0); fromDate.value = r.from; toDate.value = r.to }
   else if (key === 'next') { const r = monthRange(1); fromDate.value = r.from; toDate.value = r.to }
   else { fromDate.value = ''; toDate.value = '' }
-  applyFilters()
+  onFilterChange()
 }
 
 async function onDistrictChange() {
-  selectedCongregationId.value = ''
-  selectedGroupId.value = ''
+  const districtId = districtsStore.selectedDistrictId
   districtsStore.clearCongregations()
   if (districtsStore.selectedDistrictId) {
     await Promise.all([
@@ -764,12 +967,16 @@ async function onDistrictChange() {
       districtsStore.fetchGroups(districtsStore.selectedDistrictId),
     ])
   }
+  if (districtId !== districtsStore.selectedDistrictId) return
+  validateFilters()
   onFilterChange()
 }
 
 watch(
   () => districtsStore.selectedDistrictId,
   async () => {
+    // The form may still contain a congregation from the previous district.
+    createForm.congregation_id = ''
     await onDistrictChange()
   },
 )
@@ -793,8 +1000,9 @@ function applyFilters() {
     only_district_level: isDistrictOnly,
     status:          selectedStatus.value || undefined,
     approval_status: selectedApprovalStatus.value || undefined,
-    from_dt: fromDate.value ? fromDate.value + 'T00:00:00' : undefined,
-    to_dt:   toDate.value   ? toDate.value   + 'T23:59:59' : undefined,
+    is_service:      selectedType.value === 'service' ? true : selectedType.value === 'other' ? false : undefined,
+    from_dt: fromDate.value || undefined,
+    to_dt:   toDate.value   || undefined,
   })
   eventsStore.fetch()
 }
@@ -813,7 +1021,8 @@ onMounted(async () => {
   }
   const all = await Promise.all(districtsStore.districts.map((d) => listCongregations(d.id)))
   allCongregations.value = all.flat()
-  applyFilters()
+  validateFilters()
+  onFilterChange()
 })
 
 watch(() => eventsStore.filters.offset, () => eventsStore.fetch())
@@ -841,19 +1050,72 @@ function formatTime(iso: string): string {
   return h === '00' && m === '00' ? '' : `${h}:${m}`
 }
 
-function statusLabel(s: string): string {
-  return { DRAFT: 'Entwurf', PUBLISHED: 'Veröffentlicht', CANCELLED: 'Abgesagt' }[s] ?? s
+function statusLabel(s: PlanningSlotStatus): string {
+  return { ACTIVE: 'Aktiv', CANCELLED: 'Abgesagt' }[s] ?? s
 }
 
-function statusClass(s: string): string {
-  return { DRAFT: 'bg-yellow-100 text-yellow-800', PUBLISHED: 'bg-green-100 text-green-800', CANCELLED: 'bg-red-100 text-red-700' }[s] ?? 'bg-gray-100 text-gray-600'
+function statusClass(s: PlanningSlotStatus): string {
+  return { ACTIVE: 'bg-green-100 text-green-800', CANCELLED: 'bg-red-100 text-red-700' }[s] ?? 'bg-gray-100 text-gray-600'
 }
 
 function eventPillClass(event: EventResponse): string {
   if (event.category === 'Feiertag')   return 'bg-amber-100 text-amber-800'
   if (event.status === 'CANCELLED')    return 'bg-red-100 text-red-600 line-through'
-  if (event.category === 'Gottesdienst') return 'bg-blue-100 text-blue-800'
+  if (event.is_service)                return 'bg-blue-100 text-blue-800'
   return 'bg-gray-100 text-gray-700'
+}
+
+// ── Manual event creation ────────────────────────────────────────────────────
+
+const createOpen = ref(false)
+const createSaving = ref(false)
+const createError = ref('')
+const createForm = reactive({
+  title: '',
+  start: '',
+  end: '',
+  category: 'Gottesdienst',
+  congregation_id: '',
+  description: '',
+  visibility: 'PUBLIC' as 'PUBLIC' | 'INTERNAL',
+})
+
+async function submitCreate() {
+  const districtId = districtsStore.selectedDistrictId
+  if (!districtId || !canManageEvents.value) return
+  const start = new Date(createForm.start)
+  const end = new Date(createForm.end)
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+    createError.value = 'Ende muss nach dem Beginn liegen.'
+    return
+  }
+  createSaving.value = true
+  createError.value = ''
+  try {
+    const saved = await createEvent({
+      district_id: districtId,
+      congregation_id: createForm.congregation_id || null,
+      title: createForm.title,
+      category: createForm.category || null,
+      description: createForm.description || null,
+      visibility: createForm.visibility,
+      start_at: start.toISOString(),
+      end_at: end.toISOString(),
+    })
+    createOpen.value = false
+    createForm.title = ''
+    createForm.start = ''
+    createForm.end = ''
+    createForm.congregation_id = ''
+    createForm.description = ''
+    onFilterChange()
+    toast.success('Ereignis angelegt', saved.title)
+  } catch (e) {
+    createError.value = errorMessage(e, 'Ereignis konnte nicht angelegt werden')
+    toast.error('Ereignis konnte nicht angelegt werden', e)
+  } finally {
+    createSaving.value = false
+  }
 }
 
 // ── Edit-Modal ───────────────────────────────────────────────────────────────
@@ -863,37 +1125,143 @@ const editSaving       = ref(false)
 const editError        = ref('')
 const editCongregations = ref<CongregationResponse[]>([])
 
-const editForm = reactive({ district_id: '', congregation_id: '', status: 'DRAFT', approval_status: 'PLANNED', category: '' })
-
-watch(() => editForm.district_id, async (id) => {
-  editForm.congregation_id = ''
-  try { editCongregations.value = id ? await listCongregations(id) : [] } catch { editCongregations.value = [] }
+const editForm = reactive({
+  congregation_id: '',
+  status: 'ACTIVE' as PlanningSlotStatus,
+  approval_status: 'PLANNED' as EventApprovalStatus,
+  category: '',
+  applicability: [] as string[],
 })
+
+const editLeader = ref<AutocompleteValue>({ id: null, text: '' })
+
+const leaderOptions = computed((): AutocompleteOption[] =>
+  leadersStore.activeLeaders().map((l) => ({
+    id: l.id,
+    label: `${l.rank ? l.rank + ' ' : ''}${l.name}`,
+    sublabel: l.congregation_id ? congregationName(l.congregation_id) : undefined,
+    isPriority: l.congregation_id === editForm.congregation_id,
+  })),
+)
+
+/** A Gottesdienst is led by a Dienstleiter; any other event has a Verantwortliche:r. */
+function responsibleLabel(event: EventResponse): string {
+  return event.is_service ? 'Dienstleiter:in' : 'Verantwortliche:r'
+}
+
+/** Applies the edited responsible person via the assignments API; returns the new value. */
+async function saveResponsible(target: EventResponse): Promise<EventResponse['responsible']> {
+  const current = target.responsible ?? null
+  const text = editLeader.value.text.trim()
+  const id = editLeader.value.id
+  if (!text) {
+    if (current) await deleteAssignment(target.id, current.assignment_id)
+    return null
+  }
+  if (current && current.leader_id === id && current.name === text) return current
+
+  const options = { leaderId: id, leaderName: id ? null : text }
+  const send = (confirmWarnings?: boolean) => {
+    const opts = { ...options, confirmWarnings }
+    return current
+      ? updateAssignment(target.id, current.assignment_id, opts)
+      : createAssignment(target.id, opts)
+  }
+  let saved
+  try {
+    saved = await send()
+  } catch (e) {
+    const conflict = parseConflictError(e)
+    if (!conflict || conflict.blocking.length > 0) {
+      throw conflict ? new Error(conflict.conflicts.map((c) => c.message).join(' ')) : e
+    }
+    const ok = await confirm({
+      title: 'Konflikt bei der Zuordnung',
+      message: conflict.warnings.map((c) => c.message).join(' '),
+      confirmText: 'Trotzdem zuordnen',
+      variant: 'warning',
+    })
+    if (!ok) throw new Error('Zuordnung abgebrochen')
+    saved = await send(true)
+  }
+  return { assignment_id: saved.id, leader_id: saved.leader_id, name: text, status: saved.status }
+}
 
 async function openEdit(event: EventResponse) {
   editTarget.value = event
   editError.value  = ''
-  editForm.district_id     = event.district_id
   editForm.congregation_id = event.congregation_id ?? ''
   editForm.status          = event.status
-  editForm.approval_status = event.approval_status
+  editForm.approval_status = event.approval_status ?? 'PLANNED'
   editForm.category        = event.category ?? ''
+  editForm.applicability   = [...event.applicability]
   editCongregations.value  = []
-  if (event.district_id) listCongregations(event.district_id).then(cs => { editCongregations.value = cs }).catch(() => {})
+  editLeader.value = event.responsible
+    ? { id: event.responsible.leader_id, text: event.responsible.name }
+    : { id: null, text: '' }
+  void leadersStore.fetchLeaders(event.district_id)
+  listCongregations(event.district_id).then(cs => { editCongregations.value = cs }).catch(() => {})
+}
+
+async function removeEditTarget() {
+  const target = editTarget.value
+  if (!target || target.was_released || target.approval_status === 'CONFIRMED' || !canManageEvents.value) return
+  const confirmed = await confirm({
+    title: 'Entwurf löschen?',
+    message: `„${target.title}“ wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`,
+    confirmText: 'Endgültig löschen',
+    variant: 'danger',
+  })
+  if (!confirmed) return
+  editSaving.value = true
+  editError.value = ''
+  try {
+    await deleteEvent(target.id)
+    editTarget.value = null
+    onFilterChange()
+    toast.success('Entwurf gelöscht', target.title)
+  } catch (e) {
+    editError.value = errorMessage(e, 'Entwurf konnte nicht gelöscht werden')
+    toast.error('Entwurf konnte nicht gelöscht werden', e)
+  } finally {
+    editSaving.value = false
+  }
 }
 
 async function saveEdit() {
-  if (!editTarget.value) return
+  const target = editTarget.value
+  if (!target) return
+  const cancelsEvent = target.status !== 'CANCELLED' && editForm.status === 'CANCELLED'
+  if (
+    cancelsEvent &&
+    !(await confirm({
+      title: 'Termin absagen?',
+      message: `„${target.title}“ wird als abgesagt markiert und erscheint so in allen Kalender-Exporten.`,
+      confirmText: 'Absagen',
+      variant: 'warning',
+    }))
+  ) {
+    return
+  }
   editSaving.value = true
   editError.value  = ''
   try {
-    const updated = await updateEvent(editTarget.value.id, {
-      district_id:     editForm.district_id || undefined,
+    const isDistrictLevel = !editForm.congregation_id
+    const updated = await updateEvent(target.id, {
       congregation_id: editForm.congregation_id || null,
-      status:          editForm.status || undefined,
-      approval_status: editForm.approval_status || undefined,
+      status:          editForm.status,
+      approval_status: editForm.approval_status,
       category:        editForm.category || null,
+      // Congregation-level events are never distributed; the backend clears it.
+      ...(isDistrictLevel && { applicability: editForm.applicability }),
     })
+    let assignmentError: unknown = null
+    try {
+      updated.responsible = await saveResponsible(target)
+    } catch (e) {
+      assignmentError = e
+      updated.responsible = target.responsible ?? null
+    }
     // In-place update je nach aktiver Ansicht
     if (viewMode.value === 'list') {
       const idx = eventsStore.items.findIndex(e => e.id === updated.id)
@@ -902,9 +1270,16 @@ async function saveEdit() {
       const idx = calendarEvents.value.findIndex(e => e.id === updated.id)
       if (idx !== -1) calendarEvents.value[idx] = updated
     }
+    if (assignmentError) {
+      editError.value = errorMessage(assignmentError, 'Zuordnung fehlgeschlagen')
+      toast.error('Termin gespeichert, Zuordnung fehlgeschlagen', assignmentError)
+      return
+    }
     editTarget.value = null
+    toast.success('Termin gespeichert', updated.title)
   } catch (e) {
-    editError.value = e instanceof Error ? e.message : 'Fehler beim Speichern'
+    editError.value = errorMessage(e, 'Fehler beim Speichern')
+    toast.error('Termin konnte nicht gespeichert werden', e)
   } finally {
     editSaving.value = false
   }
@@ -920,11 +1295,11 @@ async function triggerEventsExport() {
   exportWarning.value = ''
   try {
     // Fetch all matching events (no pagination) using current filter settings.
-    // The limit of 10 000 acts as a safety cap; normal districts have far fewer events.
+    // The limit acts as a safety cap; normal districts have far fewer events.
     const { district_id, congregation_id, group_id, only_district_level, status, from_dt, to_dt } = eventsStore.filters
-    const res = await listEvents({ district_id, congregation_id, group_id, only_district_level, status, from_dt, to_dt, limit: 10000, offset: 0 })
-    if (res.total > 10000) {
-      exportWarning.value = `Hinweis: Es wurden nur die ersten 10.000 von ${res.total} Ereignissen exportiert.`
+    const res = await listEvents({ district_id, congregation_id, group_id, only_district_level, status, from_dt, to_dt, limit: 500, offset: 0 })
+    if (res.total > 500) {
+      exportWarning.value = `Hinweis: Es wurden nur die ersten 500 von ${res.total} Ereignissen exportiert.`
     }
     const fromLabel = from_dt ? from_dt.slice(0, 10) : ''
     const toLabel   = to_dt   ? to_dt.slice(0, 10)   : ''

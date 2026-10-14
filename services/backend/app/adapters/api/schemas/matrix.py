@@ -1,7 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/api/schemas/matrix.py: Module."""
 
 import uuid
-from datetime import datetime, time
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -22,7 +25,7 @@ class MatrixCell(BaseModel):
     event_end_at: datetime | None = None
     category: str | None = None
     is_gap: bool = False  # category==Gottesdienst AND no assignment
-    planned_time: time | None = None
+    planned_time: datetime | None = None
     actual_start_at: datetime | None = None
     actual_end_at: datetime | None = None
     has_deviation: bool = False

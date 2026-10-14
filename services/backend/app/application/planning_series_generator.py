@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Planning series generator service.
 
 Generates PlanningSlot + EventInstance pairs from active PlanningSeries
@@ -7,25 +10,31 @@ for a rolling window (default 6-12 months ahead).
 from __future__ import annotations
 
 import calendar
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from app.config import settings
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
 from app.domain.models.planning_series import PlanningSeries
-from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.models.planning_slot import (
+    PlanningSlot,
+    PlanningSlotStatus,
+    planning_series_generation_key,
+)
 from app.domain.ports.repositories import (
-    CongregationRepository,
-    DistrictRepository,
     EventInstanceRepository,
     PlanningSeriesRepository,
     PlanningSlotRepository,
 )
+from app.domain.services.recurrence_validation import recurrence_interval
 
-# Default event duration when generating instances from a PlanningSeries.
-# Used as the difference between actual_start_at and actual_end_at.
-_DEFAULT_EVENT_DURATION = timedelta(hours=1, minutes=30)
+# Fallback when an older series has no explicit default_planning_time.
+_DEFAULT_PLANNING_TIME = timedelta(hours=10)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -45,44 +54,58 @@ def _expand_recurrence(
     to_date_exclusive: date,
     timezone_name: str = "Europe/Berlin",
 ) -> list[GeneratedSlot]:
-    """Expand a PlanningSeries recurrence pattern into concrete slot dates.
+    """Expand both supported weekly formats and the legacy monthly pattern.
 
-    Supports simple weekly recurrence:
-      {"type": "weekly", "days": [0, 1, 2, 3, 4, 5, 6]}
-    where day numbers match Python's weekday (0=Monday, 6=Sunday).
-
-    Falls back to weekly on the series' default_planning_time day of week
-    if no pattern is specified.
+    Calendar dates are local; converting occurrences to UTC is done later,
+    per occurrence, to preserve daylight-saving transitions.
     """
     pattern = series.recurrence_pattern or {}
-    pattern_type = pattern.get("type", "weekly")
+    frequency = pattern.get("type", pattern.get("frequency", "weekly"))
+    interval = recurrence_interval(pattern)
+
+    modern = "type" in pattern
+    # Both supported pattern formats inherit the weekday from the same
+    # immutable series anchor when no explicit days are configured.
+    anchor = series.active_from or series.created_at.date()
+    default_weekday = anchor.weekday()
+    weekdays = pattern.get("days", pattern.get("by_weekday"))
+    if weekdays is None:
+        weekdays = [default_weekday]
+
+    # Recurrence parity must be independent of the requested rolling window.
+    # Calendar weeks are Monday-based so all selected weekdays share the same
+    # week index, including weeks that cross a year or month boundary.
+    anchor_week_start = anchor - timedelta(days=anchor.weekday())
+    anchor_month = anchor.year * 12 + anchor.month
+    month_day = pattern.get("by_month_day") or anchor.day
+
     slots: list[GeneratedSlot] = []
-    _tz = ZoneInfo(timezone_name)
+    current = from_date
+    while current < to_date_exclusive:
+        if frequency == "monthly":
+            month_index = current.year * 12 + current.month - anchor_month
+            matches = month_index % interval == 0 and current.day == month_day
+        elif frequency == "weekly" or not modern:
+            week_index = (current - anchor_week_start).days // 7
+            matches = week_index % interval == 0 and current.weekday() in weekdays
+        else:
+            matches = False
 
-    if pattern_type == "weekly":
-        days: list[int] = pattern.get("days", [series.created_at.weekday()])
-        current = from_date
-        while current < to_date_exclusive:
-            if current.weekday() in days:
-                planning_time = (
-                    timedelta(
-                        hours=series.default_planning_time.hour,
-                        minutes=series.default_planning_time.minute,
-                    )
-                    if series.default_planning_time
-                    else timedelta(hours=10)
+        if matches:
+            default_time = series.default_planning_time
+            planning_time = (
+                timedelta(hours=default_time.hour, minutes=default_time.minute)
+                if default_time else _DEFAULT_PLANNING_TIME
+            )
+            slots.append(
+                GeneratedSlot(
+                    planning_date=current,
+                    planning_time=planning_time,
+                    category=series.category,
+                    title=None,
                 )
-                slots.append(
-                    GeneratedSlot(
-                        planning_date=current,
-                        planning_time=planning_time,
-                        category=series.category,
-                        title=None,
-                    )
-                )
-            current += timedelta(days=1)
-    # Future: add monthly, biweekly patterns here
-
+            )
+        current += timedelta(days=1)
     return slots
 
 
@@ -95,16 +118,12 @@ class PlanningSeriesGenerator:
         series_repo: PlanningSeriesRepository,
         slot_repo: PlanningSlotRepository,
         instance_repo: EventInstanceRepository,
-        district_repo: DistrictRepository,
-        congregation_repo: CongregationRepository,
         timezone_name: str = "Europe/Berlin",
         horizon_months: int = 12,
     ) -> None:
         self._series_repo = series_repo
         self._slot_repo = slot_repo
         self._instance_repo = instance_repo
-        self._district_repo = district_repo
-        self._congregation_repo = congregation_repo
         self._timezone_name = timezone_name
         self._horizon_months = horizon_months
 
@@ -125,71 +144,121 @@ class PlanningSeriesGenerator:
         from_date: date,
         to_date_exclusive: date,
         district_ids: set[uuid.UUID] | None = None,
+        series_list: list[PlanningSeries] | None = None,
     ) -> dict[str, int]:
         """Generate slots for a specific window, optionally filtered by district."""
         if to_date_exclusive <= from_date:
             return {"series_processed": 0, "slots_created": 0, "slots_skipped": 0}
 
-        series_list = await self._series_repo.list_active()
+        active_series = sorted(
+            series_list if series_list is not None else await self._series_repo.list_active(),
+            key=lambda series: (series.district_id, series.id),
+        )
         created = 0
         skipped = 0
         processed_series = 0
 
-        for series in series_list:
+        for series in active_series:
             if district_ids is not None and series.district_id not in district_ids:
                 continue
 
             processed_series += 1
             effective_from = max(from_date, series.active_from or from_date)
-            effective_to = min(to_date_exclusive, series.active_until or to_date_exclusive)
+            effective_to = min(
+                to_date_exclusive,
+                series.active_until + timedelta(days=1) if series.active_until else to_date_exclusive,
+            )
             if effective_to <= effective_from:
                 skipped += 1
                 continue
 
-            generated = _expand_recurrence(
-                series,
-                from_date=effective_from,
-                to_date_exclusive=effective_to,
-                timezone_name=self._timezone_name,
-            )
+            # Share the district transaction lock with deletions and the
+            # other generator. Lock order is stable even across districts.
+            await self._slot_repo.lock_district_for_generation(series.district_id)
+            try:
+                generated = _expand_recurrence(
+                    series,
+                    from_date=effective_from,
+                    to_date_exclusive=effective_to,
+                    timezone_name=self._timezone_name,
+                )
+            except ValueError as exc:
+                # A legacy malformed series must not abort the nightly batch
+                # and prevent other tenants from receiving their slots.
+                logger.warning(
+                    "Skipping invalid recurrence in series %s (district %s): %s",
+                    series.id,
+                    series.district_id,
+                    exc,
+                )
+                skipped += 1
+                continue
 
+            projected = []
             for gslot in generated:
+                # The recurrence time is local wall-clock time; the slot
+                # stores the UTC instant (DST-aware per date).
+                local_time = (
+                    datetime.combine(gslot.planning_date, datetime.min.time()) + gslot.planning_time
+                ).time()
+                start_utc = datetime.combine(
+                    gslot.planning_date, local_time, tzinfo=ZoneInfo(self._timezone_name)
+                ).astimezone(UTC)
+                key = planning_series_generation_key(series.id, start_utc.date())
+                projected.append((gslot, start_utc, key))
+
+            keys = {key for _, _, key in projected}
+            # Read slots before deletion markers: a deletion committed between
+            # the reads must remain visible under READ COMMITTED.
+            existing_keys = {
+                slot.generation_key
+                for slot in await self._slot_repo.list_by_generation_keys(
+                    district_id=series.district_id, generation_keys=keys
+                )
+            }
+            deleted_keys = await self._slot_repo.list_deleted_generation_keys(
+                district_id=series.district_id, generation_keys=keys
+            )
+            blocked_keys = deleted_keys | existing_keys
+
+            for gslot, start_utc, key in projected:
+                if key in blocked_keys:
+                    skipped += 1
+                    continue
                 # Check if slot already exists for this date/series/congregation
                 existing_slot = await self._slot_repo.get_by_series_date(
                     series_id=series.id,
-                    planning_date=gslot.planning_date,
+                    planning_date=start_utc.date(),
                     congregation_id=series.congregation_id,
                 )
-                if existing_slot is not None:
+                if existing_slot is not None and not existing_slot.generation_key_detached:
                     skipped += 1
                     continue
-
-                # Create PlanningSlot
-                planning_time = (
-                    datetime.combine(gslot.planning_date, datetime.min.time()) + gslot.planning_time
-                ).time()
 
                 slot = PlanningSlot.create(
                     series_id=series.id,
                     district_id=series.district_id,
                     congregation_id=series.congregation_id,
-                    category=gslot.category or series.category,
+                    category=gslot.category or "Gottesdienst",
                     title=gslot.title,
-                    planning_date=gslot.planning_date,
-                    planning_time=planning_time,
+                    planning_date=start_utc.date(),
+                    planning_time=start_utc.timetz().replace(tzinfo=None),
                     status=PlanningSlotStatus.ACTIVE,
+                    generation_key=key,
                 )
-                await self._slot_repo.save(slot)
+                # The unique generation key/slot index is the final arbiter
+                # when two schedulers race after their initial existence checks.
+                if not await self._slot_repo.add_if_absent(slot):
+                    skipped += 1
+                    continue
 
                 # Create EventInstance
                 instance = EventInstance.create(
                     planning_slot_id=slot.id,
                     title=gslot.title or "Gottesdienst",
-                    actual_start_at=datetime.combine(
-                        gslot.planning_date, planning_time, tzinfo=UTC
-                    ),
-                    actual_end_at=datetime.combine(gslot.planning_date, planning_time, tzinfo=UTC)
-                    + _DEFAULT_EVENT_DURATION,
+                    actual_start_at=start_utc,
+                    actual_end_at=start_utc
+                    + timedelta(minutes=settings.sync_expected_duration_minutes),
                     source=EventSource.INTERNAL,
                     visibility=EventVisibility.INTERNAL,
                     deviation_flag=False,

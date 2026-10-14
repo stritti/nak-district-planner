@@ -1,4 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { apiFetch } from './client'
+
+export type PlanningSlotStatus = 'ACTIVE' | 'CANCELLED'
+export type EventApprovalStatus = 'PLANNED' | 'CONFIRMED'
+export type EventSource = 'INTERNAL' | 'EXTERNAL'
+export type EventVisibility = 'INTERNAL' | 'PUBLIC'
+export type SyncState = 'CLEAN' | 'DIRTY_INTERNAL' | 'DIRTY_EXTERNAL' | 'CONFLICT'
+
+export interface EventResponsible {
+  assignment_id: string
+  leader_id: string | null
+  name: string
+  status: 'OPEN' | 'ASSIGNED' | 'CONFIRMED'
+}
 
 export interface EventResponse {
   id: string
@@ -9,15 +25,17 @@ export interface EventResponse {
   district_id: string
   congregation_id: string | null
   category: string | null
-  source: 'INTERNAL' | 'EXTERNAL'
-  status: 'DRAFT' | 'PUBLISHED' | 'CANCELLED'
-  approval_status: 'PLANNED' | 'CONFIRMED'
-  visibility: 'INTERNAL' | 'PUBLIC'
-  audiences: string[]
+  is_service: boolean
+  source: EventSource
+  status: PlanningSlotStatus
+  approval_status: EventApprovalStatus | null
+  was_released?: boolean
+  visibility: EventVisibility
   applicability: string[]
   invitation_source_congregation_id?: string | null
-  invitation_source_congregation_name?: string | null
   invitation_source_event_id?: string | null
+  sync_state?: SyncState | null
+  responsible?: EventResponsible | null
   created_at: string
   updated_at: string
 }
@@ -34,12 +52,36 @@ export interface EventListParams {
   congregation_id?: string
   group_id?: string
   only_district_level?: boolean
-  status?: string
-  approval_status?: string
+  status?: PlanningSlotStatus
+  approval_status?: EventApprovalStatus
+  is_service?: boolean
   from_dt?: string
   to_dt?: string
   limit?: number
   offset?: number
+}
+
+export interface EventCreate {
+  district_id: string
+  congregation_id?: string | null
+  title: string
+  description?: string | null
+  start_at: string
+  end_at: string
+  category?: string | null
+  visibility?: EventVisibility
+  applicability?: string[]
+}
+
+export function createEvent(data: EventCreate): Promise<EventResponse> {
+  return apiFetch('/api/v1/events', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function deleteEvent(id: string): Promise<void> {
+  return apiFetch(`/api/v1/events/${id}`, { method: 'DELETE' })
 }
 
 export interface EventUpdate {
@@ -47,11 +89,12 @@ export interface EventUpdate {
   description?: string | null
   start_at?: string
   end_at?: string
-  district_id?: string
   congregation_id?: string | null
-  status?: string
-  approval_status?: string
+  status?: PlanningSlotStatus
+  approval_status?: EventApprovalStatus
   category?: string | null
+  /** UC-04 distribution of a district event: `['all']`, congregation IDs or `[]`. */
+  applicability?: string[]
 }
 
 export function updateEvent(id: string, data: EventUpdate): Promise<EventResponse> {
@@ -61,38 +104,25 @@ export function updateEvent(id: string, data: EventUpdate): Promise<EventRespons
   })
 }
 
+export function resolveEventConflict(id: string): Promise<EventResponse> {
+  return apiFetch(`/api/v1/events/${id}/resolve-conflict`, {
+    method: 'POST',
+  })
+}
+
 export function listEvents(params: EventListParams = {}): Promise<EventListResponse> {
   const query = new URLSearchParams()
-  if (params.district_id !== undefined && params.district_id !== null) {
-    query.set('district_id', params.district_id)
-  }
-  if (params.congregation_id !== undefined && params.congregation_id !== null) {
-    query.set('congregation_id', params.congregation_id)
-  }
-  if (params.group_id !== undefined && params.group_id !== null) {
-    query.set('group_id', params.group_id)
-  }
-  if (params.only_district_level === true) {
-    query.set('only_district_level', 'true')
-  }
-  if (params.status !== undefined && params.status !== null) {
-    query.set('status', params.status)
-  }
-  if (params.approval_status !== undefined && params.approval_status !== null) {
-    query.set('approval_status', params.approval_status)
-  }
-  if (params.from_dt !== undefined && params.from_dt !== null) {
-    query.set('from_dt', params.from_dt)
-  }
-  if (params.to_dt !== undefined && params.to_dt !== null) {
-    query.set('to_dt', params.to_dt)
-  }
-  if (params.limit !== undefined && params.limit !== null) {
-    query.set('limit', String(params.limit))
-  }
-  if (params.offset !== undefined && params.offset !== null) {
-    query.set('offset', String(params.offset))
-  }
+  if (params.district_id) query.set('district_id', params.district_id)
+  if (params.congregation_id) query.set('congregation_id', params.congregation_id)
+  if (params.group_id) query.set('group_id', params.group_id)
+  if (params.only_district_level === true) query.set('only_district_level', 'true')
+  if (params.status) query.set('status', params.status)
+  if (params.approval_status) query.set('approval_status', params.approval_status)
+  if (params.is_service !== undefined) query.set('is_service', String(params.is_service))
+  if (params.from_dt) query.set('from_dt', params.from_dt)
+  if (params.to_dt) query.set('to_dt', params.to_dt)
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  if (params.offset !== undefined) query.set('offset', String(params.offset))
   const qs = query.toString()
   return apiFetch(`/api/v1/events${qs ? '?' + qs : ''}`)
 }
@@ -100,7 +130,7 @@ export function listEvents(params: EventListParams = {}): Promise<EventListRespo
 export interface BulkApprovalStatusRequest {
   year: number
   month: number
-  approval_status: 'PLANNED' | 'CONFIRMED'
+  approval_status: EventApprovalStatus
   congregation_id?: string | null
 }
 

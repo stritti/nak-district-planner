@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Prevent duplicate active planning slots per congregation and time.
 
 Guards against double-booking a congregation for the exact same date/time

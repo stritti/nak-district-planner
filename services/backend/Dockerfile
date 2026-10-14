@@ -1,7 +1,7 @@
-FROM python:3.11-slim
+FROM python:3.14.7-slim
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Install the same uv version used by CI to keep builds reproducible.
+COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
@@ -14,17 +14,24 @@ COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
 
+# Install the project itself (no dev group) so importlib.metadata reports the
+# real application version instead of the "0.0.0" fallback.
+RUN uv sync --frozen --no-dev
+
 # Install curl for container healthchecks
-# Note: python:3.11-slim is a rolling tag, pinned apt versions would break rebuilds
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
-# Add .venv/bin to PATH
-ENV PATH="/app/.venv/bin:$PATH"
+# `uv run` must never sync at container start: that would download and install
+# the dev dependency group (pytest, ...) into production containers.
+ENV PATH="/app/.venv/bin:$PATH" \
+    UV_NO_SYNC=1
 
-# Run as non-root user
-RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+# /app/beat holds the Celery beat schedule; a fresh named volume mounted there
+# inherits this ownership, so the non-root scheduler can write to it.
+RUN useradd --create-home --uid 1000 appuser && mkdir -p /app/beat && chown -R appuser:appuser /app
 USER 1000
 
-# Standard command for backend
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Client IP resolution is done once in app/adapters/api/client_ip.py
+# (TRUSTED_PROXIES); uvicorn must not rewrite request.client from headers.
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]

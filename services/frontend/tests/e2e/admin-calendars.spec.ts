@@ -1,28 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { expect, test } from '@playwright/test'
+import { mockAuthenticatedSession } from './helpers'
 
 const FRONTEND_URL = 'http://localhost:5173'
 
-const ADMIN_AUTH = {
-  token: {
-    accessToken: 'admin-token',
-    idToken: 'admin-id-token',
-    expiresAt: Math.floor(Date.now() / 1000) + 3600,
-  },
-  user: { sub: 'admin-1', email: 'admin@example.com', name: 'Admin' },
-  isSuperadmin: true,
-  accessStatus: 'ACTIVE' as const,
-  memberships: [
-    { role: 'DISTRICT_ADMIN', scope_type: 'DISTRICT', scope_id: 'district-1' },
-  ],
-}
-
 test.describe('Calendar integrations admin view', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript((auth) => {
-      localStorage.setItem('auth', JSON.stringify(auth))
-    }, ADMIN_AUTH)
-  })
-
   test('renders calendar integrations', async ({ page }) => {
     // Catch-all registered FIRST → lowest priority (runs last in Playwright's reverse order)
     await page.route('**/api/v1/**', async (route) => {
@@ -60,7 +44,9 @@ test.describe('Calendar integrations admin view', () => {
         body: JSON.stringify({ total_pending: 0 }),
       })
     })
-    await page.route('**/api/v1/calendar-integrations', async (route) => {
+    // The view filters by the selected district (`?district_id=…`); a plain glob
+    // would not match the query string and fall through to the catch-all.
+    await page.route(/\/api\/v1\/calendar-integrations(\?.*)?$/, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -91,6 +77,11 @@ test.describe('Calendar integrations admin view', () => {
         contentType: 'application/json',
         body: JSON.stringify([{ id: 'district-1', name: 'Bezirk München' }]),
       })
+    })
+    await mockAuthenticatedSession(page, {
+      sub: 'admin-1',
+      email: 'admin@example.com',
+      name: 'Admin',
     })
 
     await page.goto(`${FRONTEND_URL}/admin/calendars`)

@@ -1,4 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="vite/client" />
+
+/** Frontend version, injected from package.json at build time (vite `define`). */
+declare const __APP_VERSION__: string
 
 declare module '*.vue' {
   import type { DefineComponent } from 'vue'

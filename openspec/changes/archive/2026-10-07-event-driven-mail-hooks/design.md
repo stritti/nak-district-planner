@@ -1,0 +1,220 @@
+## Context
+
+The `configurable-email-reminders` change (designed in parallel) introduces a MailService port with SMTP/Log/Mock adapters and a daily Celery beat task for scheduled reminders. That handles **time-driven** mail (day-of-month). However, critical planning events happen **asynchronously** — a LÜCKE is detected during a sync, a new external event arrives, a sync job fails. These need **event-driven** notification.
+
+The existing system has several places where domain events naturally occur:
+- Calendar sync creates/updates ExternalEventCandidate records
+- Slot assignment changes in the matrix view
+- Leader registration/confirmation flows
+- Sync jobs that can succeed or fail
+
+Each of these sites currently has no mechanism to trigger outbound communication.
+
+## Goals / Non-Goals
+
+**Goals:**
+- Define a lightweight, in-process event bus (`DomainEventBus`) for emitting and subscribing to domain events
+- Create a generic `EventMailHook` entity that maps an event type to a mail notification (per district, configurable)
+- Pre-define initial event types: `SLOT_UNASSIGNED`, `EXTERNAL_EVENT_DETECTED`, `SYNC_ERROR`, `REGISTRATION_RECEIVED`, `ASSIGNMENT_CONFIRMED`, `PLAN_FINALIZED`
+- Implement a hook evaluator that receives emitted events and dispatches matching email notifications via the existing MailService
+- Add REST API CRUD endpoints for event mail hooks per district
+- Add admin UI for hook configuration
+- Instrument existing services to emit domain events at the appropriate points
+
+**Non-Goals:**
+- Cross-service event bus / message queue (RabbitMQ, Redis Pub/Sub) — in-process event bus is sufficient for MVP
+- Webhook delivery (POST to external URL) — mail only for now
+- Custom event types defined at runtime via admin UI — event types are code-defined
+- Rate limiting / debouncing of events — each event triggers at most one notification per matching hook
+- Asynchronous hook evaluation — hook dispatcher runs synchronously within the request/response lifecycle (Celery tasks are already async; service-level events should be fast)
+
+## Decisions
+
+### 1. Domain Event Bus — In-Process Observer Pattern
+
+```mermaid
+┌─────────────────────────────────────────────────────────────┐
+│                    DomainEventBus                             │
+│                                                              │
+│  + emit(event: DomainEvent)                                  │
+│  + subscribe(event_type, handler)                            │
+│                                                              │
+│  Internal: dict[EventType → list[callable]]                  │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+         ┌────────────┼────────────┐
+         ▼            ▼            ▼
+   ┌──────────┐ ┌──────────┐ ┌──────────┐
+   │Hook      │ │Future    │ │Future    │
+   │Evaluator │ │Handlers  │ │Handlers  │
+   └──────────┘ └──────────┘ └──────────┘
+```
+
+**Decision:** Use a simple in-process `DomainEventBus` singleton. Services call `event_bus.emit(DomainEvent(type=..., payload=...))`. The `HookEvaluator` subscribes to all event types and checks active `EventMailHook` records against the emitted event type.
+
+**Alternative considered:** Dedicated message queue (Redis Pub/Sub, RabbitMQ) — rejected because:
+- All services are in the same process (single Python backend)
+- Adding a message queue adds operational complexity for no benefit at this scale
+- Can be upgraded later if needed (the `DomainEventBus` interface would remain the same)
+
+**Alternative considered:** Global signal framework (Blinker, Django Signals) — rejected to keep zero external dependencies. A 50-line event bus class is sufficient.
+
+### 2. EventMailHook Domain Model
+
+```text
+EventMailHook
+──────────────────────
+  id: UUID
+  district_id: UUID (FK → district)
+  event_type: str (e.g. "SLOT_UNASSIGNED")
+  recipient_role: str (e.g. "PLANNER")
+  subject_template: str (with event-specific placeholders)
+  body_template: str (with event-specific placeholders)
+  is_active: bool
+  created_at: datetime
+  updated_at: datetime
+```
+
+**Decision:** One record per (district × event_type × recipient_role). A district can have multiple hooks for the same event type targeting different roles (e.g., SLOT_UNASSIGNED → PLANNER and SLOT_UNASSIGNED → ADMIN).
+
+**Placeholders per event type:**
+
+| Event Type | Available Placeholders |
+|---|---|
+| `SLOT_UNASSIGNED` | `{district_name}, {congregation_name}, {date}, {event_title}` |
+| `EXTERNAL_EVENT_DETECTED` | `{district_name}, {event_title}, {event_date}, {source}` |
+| `SYNC_ERROR` | `{district_name}, {integration_name}, {error_message}, {timestamp}` |
+| `REGISTRATION_RECEIVED` | `{district_name}, {leader_name}, {leader_email}` |
+| `ASSIGNMENT_CONFIRMED` | `{district_name}, {leader_name}, {event_title}, {event_date}` |
+| `PLAN_FINALIZED` | `{district_name}, {month}, {year}` |
+
+### 3. Hook Evaluator — Subscribes to All Events
+
+```mermaid
+Event emitted ──▶ HookEvaluator.on_event(event)
+                       │
+                       ▼
+                ┌─────────────────────┐
+                │ Query active hooks   │
+                │ WHERE event_type AND │
+                │ district_id IN       │
+                │ (event's districts)  │
+                └──────────┬──────────┘
+                           │
+                    ┌──────▼──────┐
+                    │ For each    │
+                    │ matching    │
+                    │ hook:       │
+                    └──────┬──────┘
+                           │
+               ┌───────────┴────────────┐
+               ▼                        ▼
+        ┌────────────────┐     ┌────────────────┐
+        │ Resolve role →  │     │ Render template │
+        │ user emails     │     │ + app footer    │
+        └────────┬───────┘     └────────┬───────┘
+                 │                      │
+                 └──────────┬───────────┘
+                            ▼
+                    ┌────────────────┐
+                    │ MailService    │
+                    │ .send()        │
+                    └────────────────┘
+```
+
+**Decision:** The `HookEvaluator` is a plain class registered with the `DomainEventBus` during app startup. It receives ALL events, filters by active hooks, and dispatches. No database polling — purely reactive.
+
+**Thread safety:** The event bus and hook evaluator are synchronous and run in the same process. No locking needed for the initial implementation.
+
+### 4. Event Emission Points — Where to Instrument Existing Services
+
+| Service / Operation | Event Type | When to Emit |
+|---|---|---|
+| Daily gap scan (Celery beat, 06:15) | `SLOT_UNASSIGNED` | For each gap (active `Gottesdienst` slot without `ServiceAssignment`, no invitation copy) in the next `SLOT_GAP_SCAN_DAYS` days (default 28) that was not reported while open |
+| Calendar sync → ExternalEventCandidate created | `EXTERNAL_EVENT_DETECTED` | After storing a new `ExternalEventCandidate` (not on update) |
+| Calendar sync job, retries exhausted (`SyncIntegrationTask.on_failure`) | `SYNC_ERROR` | When `SyncFailureAlerter` creates a new alert; while the alert for the integration is unread, further failures emit nothing. `error_message` contains attempts and error class only (exception texts may carry URLs or credentials) |
+| Leader registration approval | `REGISTRATION_RECEIVED` | When a leader registration is approved (or auto-approved) |
+| ServiceAssignment confirmation | `ASSIGNMENT_CONFIRMED` | When a leader confirms their assignment (status → CONFIRMED) |
+| Plan finalization action | `PLAN_FINALIZED` | When a district plan is explicitly finalized/released by an admin |
+
+**Decision:** Each emission point is a single call: `event_bus.emit(DomainEvent(type=..., payload={...}))`. The payload is a dict with the placeholders and a `district_id` for routing. This keeps instrumentation minimal and non-invasive.
+
+### 5. Event Payload Contract
+
+```python
+@dataclass
+class DomainEvent:
+    event_type: str              # "SLOT_UNASSIGNED"
+    district_id: UUID            # routing key
+    payload: dict[str, Any]      # placeholder values + metadata
+    occurred_at: datetime        # auto-set on creation
+```
+
+The `district_id` is required — all hooks are per-district, so without a district the event cannot be matched.
+
+### 6. Recipient Resolution
+
+**Decision:** Identical approach to `configurable-email-reminders` — resolve recipients at dispatch time by querying `Membership` for the target district + role. The `User.email` field is used as the recipient address.
+
+### 7. API Layer
+
+```http
+GET    /api/v1/districts/{district_id}/event-hooks
+POST   /api/v1/districts/{district_id}/event-hooks
+PUT    /api/v1/districts/{district_id}/event-hooks/{hook_id}
+DELETE /api/v1/districts/{district_id}/event-hooks/{hook_id}
+```
+
+Same pattern as reminder config endpoints. Soft-delete via `is_active=false`.
+
+**Decision:** Reuse the same pattern and router structure as `DistrictReminderConfig` endpoints. This keeps the API consistent.
+
+### 8. Implementation note: after-commit publication and worker dispatch
+
+Two refinements over the original synchronous design, made during implementation:
+
+- **Publish after commit.** Emitters call `publish_after_commit(session, event)`.
+  Events reach the bus only when the outermost transaction commits; events from
+  a rolled-back transaction or savepoint are discarded. Otherwise a failed
+  request could still send mail about a change that never became visible.
+- **Dispatch in the Celery worker.** Bus handlers are synchronous, while hook
+  lookup is async and SMTP is slow. The registered handler only enqueues
+  `dispatch_event_mail_hooks`; the worker runs `EventMailHookDispatcher`. A
+  broker outage is logged and never fails the business operation. Delivery
+  stays at-most-once, like monthly reminders.
+
+## Risks / Trade-offs
+
+| Risk | Mitigation |
+|---|---|
+| **Event loop / recursion** — a mail send could trigger another event, causing infinite loop | Ensure no mail-send event is ever emitted. Hook evaluator explicitly does not emit events. |
+| **Gap flooding** — the first scan of a district with many LÜCKEs emits many `SLOT_UNASSIGNED` events | Each gap is reported once while open (ledger `slot_gap_alerts`); later scans only report new gaps. Future: coalescing into one mail per district. |
+| **Performance** — hook evaluator queries DB synchronously for each event | Hook evaluator queries are simple indexed lookups (event_type + district_id × is_active). Expected to be fast (<5ms per event). |
+| **Stale hooks** — disabled hook still has events emitted for it | Hook evaluator filters `is_active=true`. Emission is fire-and-forget; evaluator silently ignores unmatchable events. |
+| **Dependency coupling** — this change depends on `configurable-email-reminders` being implemented first | Enforce via implementation order. The MailService ABC is the only dependency; this change adds no new external dependencies. |
+
+## Open Questions
+
+- Should events be logged/persisted for audit trail? → Useful but deferred; initial version emits events in-memory only.
+- Should there be a dry-run/preview endpoint for event hooks? → Useful for admins to test templates without triggering real sends. Deferred.
+- Should `SYNC_ERROR` notify the integration owner specifically, or all planners in the district? → All planners initially; the integration-specific `EXTERNAL_EVENT_DETECTED` notification is for the relevant admin.
+
+## Decision: SLOT_UNASSIGNED via daily scan with a gap ledger
+
+A gap (LÜCKE) is not a stored state; the matrix derives it on every read. There
+is no state change to emit from, and emitting on every matrix read would mail on
+every page view. A daily Celery task (`scan_slot_gaps`, 06:15 Europe/Berlin,
+after the nightly slot generation) therefore compares the current gaps with a
+ledger of reported ones (`slot_gap_alerts`, one row per planning slot):
+
+- Identity of a gap is the business key `(district_id, service_date,
+  congregation_id, planning_slot_id)`.
+- New gaps are reported once and recorded; ledger rows and queued events commit
+  together (`publish_after_commit`).
+- Reports whose gap is gone (assignment created, slot cancelled, moved, or out
+  of the window) are deleted, so a gap that opens again is reported again.
+  Deleting the slot cascades its ledger row.
+- The gap rule is the matrix rule: active `Gottesdienst` slot, no assignment by
+  `planning_slot_id` or the legacy `event_id`, invitation copies excluded.
+- The ledger is written only by the system worker (RLS forced, system worker
+  and superadmin only).

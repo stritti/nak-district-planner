@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """CSRF Token Service for NAK District Planner.
 
 This module provides HMAC-SHA256 based CSRF token generation and validation

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """OpenTelemetry setup for the NAK District Planner backend.
 
 Initialises tracing and metrics providers with OTLP/HTTP exporters when

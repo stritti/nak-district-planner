@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/domain/models/calendar_integration.py: Module."""
 
 from __future__ import annotations
@@ -5,7 +8,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
+
+
+class SyncDeleteMode(StrEnum):
+    MARK_CANCELLED = "MARK_CANCELLED"
+    HARD_DELETE = "HARD_DELETE"
 
 
 class CalendarType(StrEnum):
@@ -15,6 +23,11 @@ class CalendarType(StrEnum):
     MICROSOFT = "MICROSOFT"
     CALDAV = "CALDAV"
     ICS = "ICS"
+
+
+# Version 1.0 scope (#467): Google/Microsoft have no OAuth flow/token refresh,
+# so they are not offered. Their connectors stay for the post-1.0 backlog.
+SUPPORTED_CALENDAR_TYPES = frozenset({CalendarType.ICS, CalendarType.CALDAV})
 
 
 class CalendarCapability(StrEnum):
@@ -46,6 +59,8 @@ class CalendarIntegration:
     congregation_id: uuid.UUID | None = None
     default_category: str | None = None
     last_sync_error: str | None = None
+    last_attempt_at: datetime | None = None
+    delete_behavior: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
 
     @classmethod
     def create(
@@ -59,6 +74,7 @@ class CalendarIntegration:
         capabilities: list[CalendarCapability] | None = None,
         congregation_id: uuid.UUID | None = None,
         default_category: str | None = None,
+        delete_behavior: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED,
     ) -> CalendarIntegration:
         now = datetime.now(UTC)
         return cls(
@@ -73,7 +89,9 @@ class CalendarIntegration:
             is_active=True,
             last_synced_at=None,
             last_sync_error=None,
+            last_attempt_at=None,
             created_at=now,
             updated_at=now,
             default_category=default_category,
+            delete_behavior=delete_behavior,
         )

@@ -1,5 +1,9 @@
 #!/bin/bash
-# Phase 4b Backward Compatibility Verification Script
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Historical Phase 4b Backward Compatibility Verification Script
+# This legacy script is not a v1.0 release/security gate.
 # Verifies that Phase 4b maintains compatibility with Phase 4a
 
 set -e
@@ -84,7 +88,7 @@ print_header "Check 3: Documentation"
 
 DOC_FILES=(
     "README.md"
-    "MIGRATION_GUIDE.md"
+    "docs/archive/phase4a-to-4b-oidc-migration.md"
     "PHASE_4B_SUMMARY.md"
 )
 

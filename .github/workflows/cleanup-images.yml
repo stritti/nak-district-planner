@@ -1,0 +1,51 @@
+name: Cleanup non-release container images
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "preview = show candidates; delete = remove CI-only versions"
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - delete
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/cleanup-images.yml'
+      - 'scripts/cleanup-container-images.cjs'
+      - 'scripts/cleanup-container-images.test.cjs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cleanup-container-images
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test container cleanup safeguards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run cleanup safety tests
+        run: node --test scripts/cleanup-container-images.test.cjs
+
+  cleanup:
+    name: Preview or delete CI-only images
+    needs: test
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'stritti/nak-district-planner'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Clean up container versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLEANUP_MODE: ${{ inputs.mode }}
+        run: node scripts/cleanup-container-images.cjs

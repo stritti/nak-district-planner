@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/api/routers/calendar_integrations.py: Module."""
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ from app.adapters.api.deps import (
     DbSession,
     get_calendar_integration_repository,
     get_calendar_integration_service,
+    get_congregation_repository,
 )
 from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationCreate,
@@ -20,21 +24,45 @@ from app.adapters.api.schemas.calendar_integration import (
     CalendarIntegrationUpdate,
     SyncResult,
 )
+from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_congregation,
     require_role_in_district,
 )
+from app.adapters.calendar.url_guard import UnsafeCalendarUrlError, validate_calendar_url
 from app.adapters.db.repositories.calendar_integration import SqlCalendarIntegrationRepository
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.worker.tasks import record_sync_attempt
 from app.application.crypto import CryptoError, encrypt_credentials
+from app.application.services.calendar_integration_commands import (
+    CalendarIntegrationCreateCommand,
+    CalendarIntegrationUpdateCommand,
+)
 from app.application.services.calendar_integration_service import CalendarIntegrationService
 from app.application.sync_service import run_sync
-from app.domain.models.calendar_integration import CalendarIntegration
+from app.domain.errors import UnsupportedCalendarTypeError
+from app.domain.models.calendar_integration import (
+    SUPPORTED_CALENDAR_TYPES,
+    CalendarIntegration,
+    CalendarType,
+)
 from app.domain.models.role import Role
 from app.domain.ports.calendar import CalendarConnectorError
 
 router = APIRouter(prefix="/api/v1/calendar-integrations", tags=["calendar-integrations"])
+
+_URL_BASED_TYPES = {CalendarType.ICS, CalendarType.CALDAV}
+
+
+def _validate_credentials_url(calendar_type: CalendarType, credentials: dict) -> None:
+    """Reject unsafe calendar URLs before they are stored (SSRF, #463)."""
+    if "url" not in credentials and calendar_type not in _URL_BASED_TYPES:
+        return
+    try:
+        validate_calendar_url(credentials.get("url"))
+    except UnsafeCalendarUrlError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 def _to_response(integration: CalendarIntegration) -> CalendarIntegrationResponse:
@@ -49,9 +77,11 @@ def _to_response(integration: CalendarIntegration) -> CalendarIntegrationRespons
         is_active=integration.is_active,
         last_synced_at=integration.last_synced_at,
         last_sync_error=integration.last_sync_error,
+        last_attempt_at=integration.last_attempt_at,
         created_at=integration.created_at,
         updated_at=integration.updated_at,
         default_category=integration.default_category,
+        delete_behavior=integration.delete_behavior,
     )
 
 
@@ -61,13 +91,13 @@ async def create_calendar_integration(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     service: CalendarIntegrationService = Depends(get_calendar_integration_service),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
 ) -> CalendarIntegrationResponse:
     # Check permission: district-level DISTRICT_ADMIN or congregation-level CONGREGATION_ADMIN
     if body.congregation_id is not None:
         try:
             assert_has_role_in_congregation(auth, Role.CONGREGATION_ADMIN, body.congregation_id)
             # Validate congregation belongs to the specified district
-            cong_repo = SqlCongregationRepository(db)
             congregation = await cong_repo.get(body.congregation_id)
             if congregation is None or congregation.district_id != body.district_id:
                 raise HTTPException(
@@ -78,8 +108,25 @@ async def create_calendar_integration(
             require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
     else:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    await ensure_congregation_in_district(db, body.district_id, body.congregation_id)
 
-    integration = await service.create_integration(body)
+    if body.type not in SUPPORTED_CALENDAR_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(UnsupportedCalendarTypeError(body.type)),
+        )
+    _validate_credentials_url(body.type, body.credentials)
+    integration = await service.create_integration(CalendarIntegrationCreateCommand(
+        district_id=body.district_id,
+        congregation_id=body.congregation_id,
+        name=body.name,
+        type=body.type,
+        credentials=body.credentials,
+        sync_interval=body.sync_interval,
+        capabilities=body.capabilities,
+        default_category=body.default_category,
+        delete_behavior=body.delete_behavior,
+    ))
     return _to_response(integration)
 
 
@@ -90,6 +137,7 @@ async def list_calendar_integrations(
     repo: SqlCalendarIntegrationRepository = Depends(get_calendar_integration_repository),
     district_id: uuid.UUID | None = None,
     congregation_id: uuid.UUID | None = None,
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
 ) -> CalendarIntegrationListResponse:
     if congregation_id is not None:
         # Congregation-scoped listing: require CONGREGATION_ADMIN for that congregation
@@ -99,7 +147,6 @@ async def list_calendar_integrations(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
         # When district_id is also provided, validate the congregation belongs to it
         if district_id is not None:
-            cong_repo = SqlCongregationRepository(db)
             congregation = await cong_repo.get(congregation_id)
             if congregation is None or congregation.district_id != district_id:
                 raise HTTPException(
@@ -143,16 +190,30 @@ async def trigger_sync(
     # Check if user has DISTRICT_ADMIN role in the district (sync requires admin access)
     require_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
 
+    await record_sync_attempt(integration_id)
     try:
         summary = await run_sync(integration_id, db)
-    except (ValueError, CryptoError, CalendarConnectorError) as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        # The sync session contains uncommitted event changes. Roll it back
+        # before persisting the error using a separate, independent session.
+        await db.rollback()
+        if not isinstance(exc, UnsupportedCalendarTypeError):
+            await record_sync_attempt(
+                integration_id, f"Synchronisierung fehlgeschlagen ({type(exc).__name__})"
+            )
+        if isinstance(exc, UnsupportedCalendarTypeError):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        if isinstance(exc, (ValueError, CryptoError, CalendarConnectorError)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise
     return SyncResult(
         integration_id=integration_id,
         created=summary.created,
         updated=summary.updated,
         cancelled=summary.cancelled,
         auto_matched=summary.auto_matched,
+        skipped=summary.skipped,
+        failed=summary.failed,
     )
 
 
@@ -182,7 +243,17 @@ async def update_calendar_integration(
     else:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, integration.district_id)
 
-    integration = await service.update_integration(integration, body)
+    if body.credentials is not None:
+        _validate_credentials_url(integration.type, body.credentials)
+    integration = await service.update_integration(integration, CalendarIntegrationUpdateCommand(
+        name=body.name,
+        credentials=body.credentials,
+        sync_interval=body.sync_interval,
+        capabilities=body.capabilities,
+        default_category=body.default_category,
+        delete_behavior=body.delete_behavior,
+        provided_fields=frozenset(body.model_fields_set),
+    ))
     return _to_response(integration)
 
 

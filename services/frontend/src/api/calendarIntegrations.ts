@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { apiFetch } from './client'
 
 export type CalendarType = 'ICS' | 'CALDAV' | 'GOOGLE' | 'MICROSOFT'
@@ -24,6 +27,25 @@ export interface CalendarIntegrationListResponse {
   total: number
 }
 
+export interface CalendarIntegrationCreate {
+  district_id: string
+  congregation_id?: string | null
+  name: string
+  type: CalendarType
+  credentials: Record<string, string>
+  sync_interval: number
+  capabilities: CalendarCapability[]
+  default_category?: string | null
+}
+
+export interface CalendarIntegrationUpdate {
+  name?: string
+  credentials?: Record<string, string>
+  sync_interval?: number
+  capabilities?: CalendarCapability[]
+  default_category?: string | null
+}
+
 export interface SyncResult {
   integration_id: string
   created: number
@@ -37,16 +59,7 @@ export function listIntegrations(districtId?: string): Promise<CalendarIntegrati
   return apiFetch(`/api/v1/calendar-integrations${params}`)
 }
 
-export function createIntegration(payload: {
-  district_id: string
-  congregation_id?: string | null
-  name: string
-  type: CalendarType
-  credentials: Record<string, string>
-  sync_interval: number
-  capabilities: CalendarCapability[]
-  default_category?: string | null
-}): Promise<CalendarIntegrationResponse> {
+export function createIntegration(payload: CalendarIntegrationCreate): Promise<CalendarIntegrationResponse> {
   return apiFetch('/api/v1/calendar-integrations', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -59,13 +72,7 @@ export function triggerSync(integrationId: string): Promise<SyncResult> {
 
 export function updateIntegration(
   integrationId: string,
-  payload: {
-    name?: string
-    credentials?: Record<string, string>
-    sync_interval?: number
-    capabilities?: CalendarCapability[]
-    default_category?: string | null
-  },
+  payload: CalendarIntegrationUpdate,
 ): Promise<CalendarIntegrationResponse> {
   return apiFetch(`/api/v1/calendar-integrations/${integrationId}`, {
     method: 'PATCH',

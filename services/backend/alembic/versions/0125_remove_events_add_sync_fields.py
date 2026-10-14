@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Remove legacy events table, add M3 sync fields to event_instances.
 
 M3 — Sync Algorithm Hardening:

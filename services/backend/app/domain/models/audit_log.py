@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Audit Log domain model.
 
 Represents audit log entries for tracking security-relevant operations.
@@ -22,6 +25,7 @@ class AuditAction(str, Enum):
     EXPORT = "EXPORT"
     IMPORT = "IMPORT"
     BULK_OPERATION = "BULK_OPERATION"
+    ACCESS_DENIED = "ACCESS_DENIED"
 
 
 class AuditStatus(str, Enum):

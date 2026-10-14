@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tests for leaders and service-assignments routers (Event-free architecture).
 
 Replaces the legacy Event-based tests with PlanningSlot/EventInstance patterns.
@@ -112,47 +115,45 @@ def _auth_context(
 
 @pytest.mark.asyncio
 async def test_leader_crud_and_self_link_paths() -> None:
-    """Create, list, update, and self-link/unlink a leader."""
+    """List, create, update, link-self, unlink-self, and get-self-link happy paths."""
     district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=district_id)
     db = AsyncMock()
-    with (
-        patch("app.adapters.api.routers.leaders.require_role_in_district"),
-        patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
-        patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls,
-    ):
-        district_repo = AsyncMock()
-        district_repo.get.return_value = District.create(name="D")
-        district_repo_cls.return_value = district_repo
-
-        leader_repo = AsyncMock()
-        leader_repo.list_by_district.return_value = [leader]
-        leader_repo.get.return_value = leader
-        leader_repo.get_by_user_sub.return_value = None
-        leader_repo_cls.return_value = leader_repo
-
-        listed = await leaders_router.list_leaders(district_id, _auth_context(), db)
+    district_repo = AsyncMock()
+    district_repo.get.return_value = District.create(name="D")
+    leader_repo = AsyncMock()
+    leader_repo.list_by_district.return_value = [leader]
+    leader_repo.get.return_value = leader
+    leader_repo.get_by_user_sub.return_value = None
+    with patch("app.adapters.api.routers.leaders.require_role_in_district"):
+        listed = await leaders_router.list_leaders(
+            district_id, _auth_context(), db, districts=district_repo, leaders_repo=leader_repo
+        )
         created = await leaders_router.create_leader(
-            district_id, LeaderCreate(name="Neu", rank=None), object(), db
+            district_id, LeaderCreate(name="Neu", rank=None), object(), db,
+            districts=district_repo, leaders_repo=leader_repo,
         )
         updated = await leaders_router.update_leader(
-            district_id, leader.id, LeaderUpdate(name="X"), object(), db
+            district_id, leader.id, LeaderUpdate(name="X"), object(), db, leaders_repo=leader_repo
         )
         link = await leaders_router.link_self_to_leader(
             district_id,
             LeaderSelfLinkRequest(leader_id=leader.id),
             _auth_context(district_id=district_id),
             db,
+            leaders_repo=leader_repo,
         )
         unlink = await leaders_router.unlink_self_from_leader(
             district_id,
             _auth_context(district_id=district_id),
             db,
+            leaders_repo=leader_repo,
         )
         self_link = await leaders_router.get_self_link(
             district_id,
             _auth_context(district_id=district_id),
             db,
+            leaders_repo=leader_repo,
         )
 
     assert listed
@@ -162,7 +163,6 @@ async def test_leader_crud_and_self_link_paths() -> None:
     assert unlink.linked is False
     assert self_link is not None
 
-
 @pytest.mark.asyncio
 async def test_leader_crud_forbidden_without_permission() -> None:
     """Creating, updating, and deleting leaders require PLANNER role."""
@@ -170,92 +170,71 @@ async def test_leader_crud_forbidden_without_permission() -> None:
     leader = Leader.create(name="L", district_id=district_id)
     db = AsyncMock()
     auth = type("A", (), {"memberships": [], "user_sub": "u", "user": None})()
-
-    with (
-        patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
-        patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls,
-        patch(
-            "app.adapters.api.routers.leaders.require_role_in_district",
-            side_effect=HTTPException(status_code=403, detail="forbidden"),
-        ),
+    district_repo = AsyncMock()
+    district_repo.get.return_value = District.create(name="D")
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = leader
+    with patch(
+        "app.adapters.api.routers.leaders.require_role_in_district",
+        side_effect=HTTPException(status_code=403, detail="forbidden"),
     ):
-        district_repo = AsyncMock()
-        district_repo.get.return_value = District.create(name="D")
-        district_repo_cls.return_value = district_repo
-
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
         with pytest.raises(HTTPException) as create_exc:
-            await leaders_router.create_leader(district_id, LeaderCreate(name="Neu"), auth, db)
+            await leaders_router.create_leader(
+                district_id, LeaderCreate(name="N"), auth, db, districts=district_repo, leaders_repo=leader_repo
+            )
         with pytest.raises(HTTPException) as update_exc:
             await leaders_router.update_leader(
-                district_id,
-                leader.id,
-                LeaderUpdate(name="X"),
-                auth,
-                db,
+                district_id, leader.id, LeaderUpdate(name="X"), auth, db, leaders_repo=leader_repo
             )
         with pytest.raises(HTTPException) as delete_exc:
-            await leaders_router.delete_leader(district_id, leader.id, auth, db)
+            await leaders_router.delete_leader(district_id, leader.id, auth, db, leaders_repo=leader_repo)
 
     assert create_exc.value.status_code == 403
     assert update_exc.value.status_code == 403
     assert delete_exc.value.status_code == 403
-
 
 @pytest.mark.asyncio
 async def test_leader_list_forbidden_without_permission() -> None:
     """Listing leaders requires VIEWER role."""
     district_id = uuid.uuid4()
     db = AsyncMock()
-
-    with (
-        patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
-        patch(
-            "app.adapters.api.routers.leaders.require_role_in_district",
-            side_effect=HTTPException(status_code=403, detail="forbidden"),
-        ),
+    district_repo = AsyncMock()
+    district_repo.get.return_value = District.create(name="D")
+    with patch(
+        "app.adapters.api.routers.leaders.require_role_in_district",
+        side_effect=HTTPException(status_code=403, detail="forbidden"),
     ):
-        district_repo = AsyncMock()
-        district_repo.get.return_value = District.create(name="D")
-        district_repo_cls.return_value = district_repo
-
         with pytest.raises(HTTPException) as exc:
-            await leaders_router.list_leaders(district_id, _auth_context(is_superadmin=False), db)
+            await leaders_router.list_leaders(
+                district_id, _auth_context(is_superadmin=False), db, districts=district_repo, leaders_repo=AsyncMock()
+            )
 
     assert exc.value.status_code == 403
-
 
 @pytest.mark.asyncio
 async def test_leader_not_found_paths() -> None:
     """List/create return 404 when district not found; update/delete when leader not found."""
     district_id = uuid.uuid4()
     db = AsyncMock()
-    with (
-        patch("app.adapters.api.routers.leaders.SqlDistrictRepository") as district_repo_cls,
-        patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls,
-    ):
-        district_repo = AsyncMock()
-        district_repo.get.return_value = None
-        district_repo_cls.return_value = district_repo
-        with pytest.raises(HTTPException):
-            await leaders_router.list_leaders(district_id, _auth_context(), db)
-        with pytest.raises(HTTPException):
-            await leaders_router.create_leader(district_id, LeaderCreate(name="N"), object(), db)
-
-        district_repo.get.return_value = District.create(name="D")
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = None
-        leader_repo_cls.return_value = leader_repo
-        with pytest.raises(HTTPException):
-            await leaders_router.update_leader(
-                district_id, uuid.uuid4(), LeaderUpdate(name="N"), object(), db
-            )
-        with pytest.raises(HTTPException):
-            await leaders_router.delete_leader(district_id, uuid.uuid4(), object(), db)
-
+    district_repo = AsyncMock()
+    district_repo.get.return_value = None
+    with pytest.raises(HTTPException):
+        await leaders_router.list_leaders(
+            district_id, _auth_context(), db, districts=district_repo, leaders_repo=AsyncMock()
+        )
+    with pytest.raises(HTTPException):
+        await leaders_router.create_leader(
+            district_id, LeaderCreate(name="N"), _auth_context(), db, districts=district_repo, leaders_repo=AsyncMock()
+        )
+    district_repo.get.return_value = District.create(name="D")
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = None
+    with pytest.raises(HTTPException):
+        await leaders_router.update_leader(
+            district_id, uuid.uuid4(), LeaderUpdate(name="N"), _auth_context(), db, leader_repo
+        )
+    with pytest.raises(HTTPException):
+        await leaders_router.delete_leader(district_id, uuid.uuid4(), _auth_context(), db, leaders_repo=leader_repo)
 
 @pytest.mark.asyncio
 async def test_leader_update_wrong_district() -> None:
@@ -264,24 +243,14 @@ async def test_leader_update_wrong_district() -> None:
     other_district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=other_district_id)
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = leader
+    with pytest.raises(HTTPException) as exc:
+        await leaders_router.update_leader(
+            district_id, leader.id, LeaderUpdate(name="X"), _auth_context(), db, leader_repo
+        )
 
-    with (
-        patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls,
-    ):
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await leaders_router.update_leader(
-                district_id,
-                leader.id,
-                LeaderUpdate(name="X"),
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
 
 @pytest.mark.asyncio
 async def test_leader_delete_wrong_district() -> None:
@@ -290,23 +259,14 @@ async def test_leader_delete_wrong_district() -> None:
     other_district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=other_district_id)
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = leader
+    with pytest.raises(HTTPException) as exc:
+        await leaders_router.delete_leader(
+            district_id, leader.id, _auth_context(), db, leaders_repo=leader_repo
+        )
 
-    with (
-        patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls,
-    ):
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await leaders_router.delete_leader(
-                district_id,
-                leader.id,
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
 
 @pytest.mark.asyncio
 async def test_leader_link_self_forbidden_without_district_membership() -> None:
@@ -314,21 +274,18 @@ async def test_leader_link_self_forbidden_without_district_membership() -> None:
     district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=district_id)
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = leader
+    with pytest.raises(HTTPException) as exc:
+        await leaders_router.link_self_to_leader(
+            district_id,
+            LeaderSelfLinkRequest(leader_id=leader.id),
+            _auth_context(is_superadmin=False),
+            db,
+            leaders_repo=leader_repo,
+        )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await leaders_router.link_self_to_leader(
-                district_id,
-                LeaderSelfLinkRequest(leader_id=leader.id),
-                _auth_context(is_superadmin=False),
-                db,
-            )
     assert exc.value.status_code == 403
-
 
 @pytest.mark.asyncio
 async def test_leader_link_self_success_with_district_membership() -> None:
@@ -336,20 +293,17 @@ async def test_leader_link_self_success_with_district_membership() -> None:
     district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=district_id)
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = leader
+    result = await leaders_router.link_self_to_leader(
+        district_id,
+        LeaderSelfLinkRequest(leader_id=leader.id),
+        _auth_context(is_superadmin=False, district_id=district_id),
+        db,
+        leaders_repo=leader_repo,
+    )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        result = await leaders_router.link_self_to_leader(
-            district_id,
-            LeaderSelfLinkRequest(leader_id=leader.id),
-            _auth_context(is_superadmin=False, district_id=district_id),
-            db,
-        )
     assert result.linked is True
-
 
 @pytest.mark.asyncio
 async def test_leader_link_self_success_with_congregation_membership() -> None:
@@ -363,20 +317,17 @@ async def test_leader_link_self_success_with_congregation_membership() -> None:
     congregation_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=district_id, congregation_id=congregation_id)
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = leader
+    result = await leaders_router.link_self_to_leader(
+        district_id,
+        LeaderSelfLinkRequest(leader_id=leader.id),
+        _auth_context(is_superadmin=False, congregation_id=congregation_id),
+        db,
+        leaders_repo=leader_repo,
+    )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        result = await leaders_router.link_self_to_leader(
-            district_id,
-            LeaderSelfLinkRequest(leader_id=leader.id),
-            _auth_context(is_superadmin=False, congregation_id=congregation_id),
-            db,
-        )
     assert result.linked is True
-
 
 @pytest.mark.asyncio
 async def test_leader_link_self_conflict() -> None:
@@ -384,42 +335,36 @@ async def test_leader_link_self_conflict() -> None:
     district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=district_id, user_sub="other-user")
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = leader
+    with pytest.raises(HTTPException) as exc:
+        await leaders_router.link_self_to_leader(
+            district_id,
+            LeaderSelfLinkRequest(leader_id=leader.id),
+            _auth_context(district_id=district_id),
+            db,
+            leaders_repo=leader_repo,
+        )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await leaders_router.link_self_to_leader(
-                district_id,
-                LeaderSelfLinkRequest(leader_id=leader.id),
-                _auth_context(district_id=district_id),
-                db,
-            )
     assert exc.value.status_code == 409
-
 
 @pytest.mark.asyncio
 async def test_leader_link_self_leader_not_found() -> None:
     """Linking to a leader that does not exist returns 404."""
     district_id = uuid.uuid4()
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        await leaders_router.link_self_to_leader(
+            district_id,
+            LeaderSelfLinkRequest(leader_id=uuid.uuid4()),
+            _auth_context(district_id=district_id),
+            db,
+            leaders_repo=leader_repo,
+        )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = None
-        leader_repo_cls.return_value = leader_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await leaders_router.link_self_to_leader(
-                district_id,
-                LeaderSelfLinkRequest(leader_id=uuid.uuid4()),
-                _auth_context(district_id=district_id),
-                db,
-            )
     assert exc.value.status_code == 404
-
 
 @pytest.mark.asyncio
 async def test_leader_link_self_leader_wrong_district() -> None:
@@ -428,41 +373,35 @@ async def test_leader_link_self_leader_wrong_district() -> None:
     other_district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=other_district_id)
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = leader
+    with pytest.raises(HTTPException) as exc:
+        await leaders_router.link_self_to_leader(
+            district_id,
+            LeaderSelfLinkRequest(leader_id=leader.id),
+            _auth_context(district_id=district_id),
+            db,
+            leaders_repo=leader_repo,
+        )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await leaders_router.link_self_to_leader(
-                district_id,
-                LeaderSelfLinkRequest(leader_id=leader.id),
-                _auth_context(district_id=district_id),
-                db,
-            )
     assert exc.value.status_code == 404
-
 
 @pytest.mark.asyncio
 async def test_leader_unlink_self_forbidden_without_district_membership() -> None:
     """Unlinking from a leader without VIEWER role in district returns 403."""
     district_id = uuid.uuid4()
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get_by_user_sub.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        await leaders_router.unlink_self_from_leader(
+            district_id,
+            _auth_context(is_superadmin=False),
+            db,
+            leaders_repo=leader_repo,
+        )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get_by_user_sub.return_value = None
-        leader_repo_cls.return_value = leader_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await leaders_router.unlink_self_from_leader(
-                district_id,
-                _auth_context(is_superadmin=False),
-                db,
-            )
     assert exc.value.status_code == 403
-
 
 @pytest.mark.asyncio
 async def test_leader_unlink_self_success_with_district_membership() -> None:
@@ -470,19 +409,16 @@ async def test_leader_unlink_self_success_with_district_membership() -> None:
     district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=district_id, user_sub="u")
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get_by_user_sub.return_value = leader
+    result = await leaders_router.unlink_self_from_leader(
+        district_id,
+        _auth_context(is_superadmin=False, district_id=district_id),
+        db,
+        leaders_repo=leader_repo,
+    )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get_by_user_sub.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        result = await leaders_router.unlink_self_from_leader(
-            district_id,
-            _auth_context(is_superadmin=False, district_id=district_id),
-            db,
-        )
     assert result.linked is False
-
 
 @pytest.mark.asyncio
 async def test_leader_unlink_self_success_with_congregation_membership() -> None:
@@ -493,59 +429,50 @@ async def test_leader_unlink_self_success_with_congregation_membership() -> None
         name="L", district_id=district_id, congregation_id=congregation_id, user_sub="u"
     )
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get_by_user_sub.return_value = leader
+    result = await leaders_router.unlink_self_from_leader(
+        district_id,
+        _auth_context(is_superadmin=False, congregation_id=congregation_id),
+        db,
+        leaders_repo=leader_repo,
+    )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get_by_user_sub.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        result = await leaders_router.unlink_self_from_leader(
-            district_id,
-            _auth_context(is_superadmin=False, congregation_id=congregation_id),
-            db,
-        )
     assert result.linked is False
-
 
 @pytest.mark.asyncio
 async def test_leader_unlink_self_no_link() -> None:
     """Unlinking when no self-link exists returns linked=False."""
     district_id = uuid.uuid4()
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get_by_user_sub.return_value = None
+    result = await leaders_router.unlink_self_from_leader(
+        district_id,
+        _auth_context(district_id=district_id),
+        db,
+        leaders_repo=leader_repo,
+    )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get_by_user_sub.return_value = None
-        leader_repo_cls.return_value = leader_repo
-
-        result = await leaders_router.unlink_self_from_leader(
-            district_id,
-            _auth_context(district_id=district_id),
-            db,
-        )
     assert result.linked is False
     assert result.leader is None
-
 
 @pytest.mark.asyncio
 async def test_leader_get_self_link_forbidden_without_district_membership() -> None:
     """Getting self-link without VIEWER role in district returns 403."""
     district_id = uuid.uuid4()
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get_by_user_sub.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        await leaders_router.get_self_link(
+            district_id,
+            _auth_context(is_superadmin=False),
+            db,
+            leaders_repo=leader_repo,
+        )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get_by_user_sub.return_value = None
-        leader_repo_cls.return_value = leader_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await leaders_router.get_self_link(
-                district_id,
-                _auth_context(is_superadmin=False),
-                db,
-            )
     assert exc.value.status_code == 403
-
 
 @pytest.mark.asyncio
 async def test_leader_get_self_link_success_with_district_membership() -> None:
@@ -553,67 +480,53 @@ async def test_leader_get_self_link_success_with_district_membership() -> None:
     district_id = uuid.uuid4()
     leader = Leader.create(name="L", district_id=district_id, user_sub="u")
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get_by_user_sub.return_value = leader
+    result = await leaders_router.get_self_link(
+        district_id,
+        _auth_context(district_id=district_id),
+        db,
+        leaders_repo=leader_repo,
+    )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get_by_user_sub.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        result = await leaders_router.get_self_link(
-            district_id,
-            _auth_context(is_superadmin=False, district_id=district_id),
-            db,
-        )
     assert result.linked is True
-
 
 @pytest.mark.asyncio
 async def test_leader_get_self_link_success_with_congregation_membership() -> None:
-    """Getting self-link with VIEWER role only in the linked leader's congregation succeeds."""
+    """Getting self-link with VIEWER role only in the leader's congregation succeeds."""
     district_id = uuid.uuid4()
     congregation_id = uuid.uuid4()
     leader = Leader.create(
         name="L", district_id=district_id, congregation_id=congregation_id, user_sub="u"
     )
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get_by_user_sub.return_value = leader
+    result = await leaders_router.get_self_link(
+        district_id,
+        _auth_context(is_superadmin=False, congregation_id=congregation_id),
+        db,
+        leaders_repo=leader_repo,
+    )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get_by_user_sub.return_value = leader
-        leader_repo_cls.return_value = leader_repo
-
-        result = await leaders_router.get_self_link(
-            district_id,
-            _auth_context(is_superadmin=False, congregation_id=congregation_id),
-            db,
-        )
     assert result.linked is True
-
 
 @pytest.mark.asyncio
 async def test_leader_get_self_link_no_link() -> None:
     """Getting self-link when none exists returns linked=False."""
     district_id = uuid.uuid4()
     db = AsyncMock()
+    leader_repo = AsyncMock()
+    leader_repo.get_by_user_sub.return_value = None
+    result = await leaders_router.get_self_link(
+        district_id,
+        _auth_context(district_id=district_id),
+        db,
+        leaders_repo=leader_repo,
+    )
 
-    with patch("app.adapters.api.routers.leaders.SqlLeaderRepository") as leader_repo_cls:
-        leader_repo = AsyncMock()
-        leader_repo.get_by_user_sub.return_value = None
-        leader_repo_cls.return_value = leader_repo
-
-        result = await leaders_router.get_self_link(
-            district_id,
-            _auth_context(district_id=district_id),
-            db,
-        )
     assert result.linked is False
     assert result.leader is None
-
-
-# ===================================================================
-# Service Assignment tests
-# ===================================================================
-
 
 @pytest.mark.asyncio
 async def test_service_assignment_crud_paths() -> None:
@@ -623,34 +536,26 @@ async def test_service_assignment_crud_paths() -> None:
     assignment = ServiceAssignment.create(event_id=slot.id, leader_name="Pr. X")
     db = AsyncMock()
 
-    with (
-        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-        ) as sa_repo_cls,
-    ):
-        slot_repo = AsyncMock()
-        slot_repo.get.return_value = slot
-        slot_repo_cls.return_value = slot_repo
-
-        sa_repo = AsyncMock()
-        sa_repo.get.return_value = assignment
-        sa_repo.list_by_planning_slot.return_value = [assignment]
-        sa_repo_cls.return_value = sa_repo
-
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = assignment
+    sa_repo.list_by_planning_slot.return_value = [assignment]
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
         created = await sa_router.create_assignment(
             slot.id,
             ServiceAssignmentCreate(leader_name="Pr. Y"),
             _auth_context(),
             db,
+            slot_repo,
+            sa_repo,
         )
         listed = await sa_router.list_assignments(
             slot.id,
             _auth_context(),
             db,
+            slot_repo,
+            sa_repo,
         )
         updated = await sa_router.update_assignment(
             slot.id,
@@ -658,14 +563,17 @@ async def test_service_assignment_crud_paths() -> None:
             ServiceAssignmentUpdate(status=AssignmentStatus.CONFIRMED),
             _auth_context(),
             db,
+            slot_repo,
+            sa_repo,
         )
         deleted = await sa_router.delete_assignment(
             slot.id,
             assignment.id,
             _auth_context(),
             db,
+            slot_repo,
+            sa_repo,
         )
-
     assert created.leader_name == "Pr. Y"
     assert len(listed) == 1
     assert updated.status == AssignmentStatus.CONFIRMED
@@ -674,16 +582,46 @@ async def test_service_assignment_crud_paths() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["create", "update", "delete"])
+async def test_service_assignment_writes_touch_planning_slot(action: str) -> None:
+    """Assignment changes bump the slot revision so ICS feeds re-sync (#466)."""
+    slot = _planning_slot(district_id=uuid.uuid4())
+    before = datetime(2026, 1, 1, tzinfo=UTC)
+    slot.updated_at = before
+    assignment = ServiceAssignment.create(event_id=slot.id, leader_name="Pr. X")
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = assignment
+    args = (_auth_context(), AsyncMock(), slot_repo, sa_repo)
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
+        if action == "create":
+            await sa_router.create_assignment(
+                slot.id, ServiceAssignmentCreate(leader_name="Pr. Y"), *args
+            )
+        elif action == "update":
+            await sa_router.update_assignment(
+                slot.id, assignment.id, ServiceAssignmentUpdate(leader_name="Pr. Z"), *args
+            )
+        else:
+            await sa_router.delete_assignment(slot.id, assignment.id, *args)
+
+    assert slot.updated_at > before
+    slot_repo.save.assert_awaited_once_with(slot)
+
+
+@pytest.mark.asyncio
 async def test_service_assignment_create_blocks_conflict() -> None:
     slot = _planning_slot()
     db = AsyncMock()
+    db.scalar.return_value = slot.district_id  # leader belongs to the district
     leader_id = uuid.uuid4()
+    slot_repo = AsyncMock()
+    slot_repo.get = AsyncMock(return_value=slot)
+    sa_repo = AsyncMock()
+    sa_repo.save = AsyncMock()
     with (
         patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
-        patch("app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository") as slot_cls,
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-        ) as repo_cls,
         patch(
             "app.adapters.api.routers.service_assignments.check_service_assignment_conflicts",
             new=AsyncMock(
@@ -691,31 +629,31 @@ async def test_service_assignment_create_blocks_conflict() -> None:
             ),
         ),
     ):
-        slot_cls.return_value.get = AsyncMock(return_value=slot)
-        repo_cls.return_value.save = AsyncMock()
         with pytest.raises(HTTPException) as exc:
             await sa_router.create_assignment(
                 slot.id,
                 ServiceAssignmentCreate(leader_id=leader_id),
                 _auth_context(),
                 db,
+                slot_repo,
+                sa_repo,
             )
 
     assert exc.value.status_code == 409
-    repo_cls.return_value.save.assert_not_awaited()
-
+    sa_repo.save.assert_not_awaited()
 
 @pytest.mark.asyncio
 async def test_service_assignment_create_allows_confirmed_warning() -> None:
     slot = _planning_slot()
     db = AsyncMock()
+    db.scalar.return_value = slot.district_id  # leader belongs to the district
     leader_id = uuid.uuid4()
+    slot_repo = AsyncMock()
+    slot_repo.get = AsyncMock(return_value=slot)
+    sa_repo = AsyncMock()
+    sa_repo.save = AsyncMock()
     with (
         patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
-        patch("app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository") as slot_cls,
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-        ) as repo_cls,
         patch(
             "app.adapters.api.routers.service_assignments.check_service_assignment_conflicts",
             new=AsyncMock(
@@ -723,62 +661,50 @@ async def test_service_assignment_create_allows_confirmed_warning() -> None:
             ),
         ),
     ):
-        slot_cls.return_value.get = AsyncMock(return_value=slot)
-        repo_cls.return_value.save = AsyncMock()
         result = await sa_router.create_assignment(
             slot.id,
             ServiceAssignmentCreate(leader_id=leader_id, confirm_warnings=True),
             _auth_context(),
             db,
+            slot_repo,
+            sa_repo,
         )
 
     assert result.leader_id == leader_id
-    repo_cls.return_value.save.assert_awaited_once()
-
-
+    sa_repo.save.assert_awaited_once()
 @pytest.mark.asyncio
 async def test_service_assignment_create_planning_slot_not_found() -> None:
     """Creating an assignment for a non-existent planning slot returns 404."""
     db = AsyncMock()
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        await sa_router.create_assignment(
+            uuid.uuid4(),
+            ServiceAssignmentCreate(leader_name="X"),
+            _auth_context(),
+            db,
+            slot_repo,
+            AsyncMock(),
+        )
 
-    with patch(
-        "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
-    ) as slot_repo_cls:
-        slot_repo = AsyncMock()
-        slot_repo.get.return_value = None
-        slot_repo_cls.return_value = slot_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await sa_router.create_assignment(
-                uuid.uuid4(),
-                ServiceAssignmentCreate(leader_name="X"),
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_list_planning_slot_not_found() -> None:
     """Listing assignments for a non-existent planning slot returns 404."""
     db = AsyncMock()
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        await sa_router.list_assignments(
+            uuid.uuid4(),
+            _auth_context(),
+            db,
+            slot_repo,
+            AsyncMock(),
+        )
 
-    with patch(
-        "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
-    ) as slot_repo_cls:
-        slot_repo = AsyncMock()
-        slot_repo.get.return_value = None
-        slot_repo_cls.return_value = slot_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await sa_router.list_assignments(
-                uuid.uuid4(),
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_create_forbidden() -> None:
     """Creating assignments without PLANNER role returns 403."""
@@ -786,30 +712,23 @@ async def test_service_assignment_create_forbidden() -> None:
     slot = _planning_slot(district_id=district_id)
     db = AsyncMock()
     auth = type("A", (), {"memberships": [], "user_sub": "u", "user": None})()
-
-    with (
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.adapters.api.routers.service_assignments.require_role_in_district",
-            side_effect=HTTPException(status_code=403, detail="forbidden"),
-        ),
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    with patch(
+        "app.adapters.api.routers.service_assignments.require_role_in_district",
+        side_effect=HTTPException(status_code=403, detail="forbidden"),
     ):
-        slot_repo = AsyncMock()
-        slot_repo.get.return_value = slot
-        slot_repo_cls.return_value = slot_repo
-
         with pytest.raises(HTTPException) as exc:
             await sa_router.create_assignment(
                 slot.id,
                 ServiceAssignmentCreate(leader_name="Pr. Y"),
                 auth,
                 db,
+                slot_repo,
+                AsyncMock(),
             )
+
     assert exc.value.status_code == 403
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_list_forbidden() -> None:
     """Listing assignments without VIEWER role returns 403."""
@@ -817,54 +736,42 @@ async def test_service_assignment_list_forbidden() -> None:
     slot = _planning_slot(district_id=district_id)
     db = AsyncMock()
     auth = type("A", (), {"memberships": [], "user_sub": "u", "user": None})()
-
-    with (
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.adapters.api.routers.service_assignments.require_role_in_district",
-            side_effect=HTTPException(status_code=403, detail="forbidden"),
-        ),
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    with patch(
+        "app.adapters.api.routers.service_assignments.require_role_in_district",
+        side_effect=HTTPException(status_code=403, detail="forbidden"),
     ):
-        slot_repo = AsyncMock()
-        slot_repo.get.return_value = slot
-        slot_repo_cls.return_value = slot_repo
-
         with pytest.raises(HTTPException) as exc:
             await sa_router.list_assignments(
                 slot.id,
                 auth,
                 db,
+                slot_repo,
+                AsyncMock(),
             )
+
     assert exc.value.status_code == 403
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_update_not_found() -> None:
     """Updating a non-existent assignment returns 404."""
     district_id = uuid.uuid4()
     slot = _planning_slot(district_id=district_id)
     db = AsyncMock()
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        await sa_router.update_assignment(
+            slot.id,
+            uuid.uuid4(),
+            ServiceAssignmentUpdate(leader_name="X"),
+            _auth_context(),
+            db,
+            AsyncMock(),
+            sa_repo,
+        )
 
-    with patch(
-        "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-    ) as sa_repo_cls:
-        sa_repo = AsyncMock()
-        sa_repo.get.return_value = None
-        sa_repo_cls.return_value = sa_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await sa_router.update_assignment(
-                slot.id,
-                uuid.uuid4(),
-                ServiceAssignmentUpdate(leader_name="X"),
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_update_event_id_mismatch() -> None:
     """Updating with an assignment whose event_id differs from the URL returns 404."""
@@ -873,25 +780,20 @@ async def test_service_assignment_update_event_id_mismatch() -> None:
     slot_b = _planning_slot(district_id=district_id)
     assignment = ServiceAssignment.create(event_id=slot_a.id, leader_name="Pr. X")
     db = AsyncMock()
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = assignment  # event_id = slot_a.id
+    with pytest.raises(HTTPException) as exc:
+        await sa_router.update_assignment(
+            slot_b.id,  # URL has slot_b.id
+            assignment.id,
+            ServiceAssignmentUpdate(leader_name="Pr. Y"),
+            _auth_context(),
+            db,
+            AsyncMock(),
+            sa_repo,
+        )
 
-    with patch(
-        "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-    ) as sa_repo_cls:
-        sa_repo = AsyncMock()
-        sa_repo.get.return_value = assignment  # event_id = slot_a.id
-        sa_repo_cls.return_value = sa_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await sa_router.update_assignment(
-                slot_b.id,  # URL has slot_b.id
-                assignment.id,
-                ServiceAssignmentUpdate(leader_name="Pr. Y"),
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_update_planning_slot_not_found() -> None:
     """Updating fails when the planning slot lookup returns None."""
@@ -900,58 +802,41 @@ async def test_service_assignment_update_planning_slot_not_found() -> None:
     wrong_slot_id = uuid.uuid4()
     assignment = ServiceAssignment.create(event_id=slot.id, leader_name="Pr. X")
     db = AsyncMock()
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = None
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = assignment
+    with pytest.raises(HTTPException) as exc:
+        await sa_router.update_assignment(
+            wrong_slot_id,
+            assignment.id,
+            ServiceAssignmentUpdate(leader_name="Pr. Y"),
+            _auth_context(),
+            db,
+            slot_repo,
+            sa_repo,
+        )
 
-    with (
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-        ) as sa_repo_cls,
-    ):
-        slot_repo = AsyncMock()
-        slot_repo.get.return_value = None
-        slot_repo_cls.return_value = slot_repo
-
-        sa_repo = AsyncMock()
-        sa_repo.get.return_value = assignment
-        sa_repo_cls.return_value = sa_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await sa_router.update_assignment(
-                wrong_slot_id,
-                assignment.id,
-                ServiceAssignmentUpdate(leader_name="Pr. Y"),
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_delete_not_found() -> None:
     """Deleting a non-existent assignment returns 404."""
     district_id = uuid.uuid4()
     slot = _planning_slot(district_id=district_id)
     db = AsyncMock()
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        await sa_router.delete_assignment(
+            slot.id,
+            uuid.uuid4(),
+            _auth_context(),
+            db,
+            AsyncMock(),
+            sa_repo,
+        )
 
-    with patch(
-        "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-    ) as sa_repo_cls:
-        sa_repo = AsyncMock()
-        sa_repo.get.return_value = None
-        sa_repo_cls.return_value = sa_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await sa_router.delete_assignment(
-                slot.id,
-                uuid.uuid4(),
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_delete_event_id_mismatch() -> None:
     """Deleting with an assignment whose event_id differs from the URL returns 404."""
@@ -960,85 +845,93 @@ async def test_service_assignment_delete_event_id_mismatch() -> None:
     slot_b = _planning_slot(district_id=district_id)
     assignment = ServiceAssignment.create(event_id=slot_a.id, leader_name="Pr. X")
     db = AsyncMock()
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = assignment
+    with pytest.raises(HTTPException) as exc:
+        await sa_router.delete_assignment(
+            slot_b.id,
+            assignment.id,
+            _auth_context(),
+            db,
+            AsyncMock(),
+            sa_repo,
+        )
 
-    with patch(
-        "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-    ) as sa_repo_cls:
-        sa_repo = AsyncMock()
-        sa_repo.get.return_value = assignment
-        sa_repo_cls.return_value = sa_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await sa_router.delete_assignment(
-                slot_b.id,
-                assignment.id,
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_delete_planning_slot_not_found() -> None:
     """Delete fails with 404 when the planning slot is missing even if assignment exists."""
     slot = _planning_slot()
     assignment = ServiceAssignment.create(event_id=slot.id, leader_name="Pr. X")
     db = AsyncMock()
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = None
+    sa_repo = AsyncMock()
+    sa_repo.get.return_value = assignment
+    with pytest.raises(HTTPException) as exc:
+        await sa_router.delete_assignment(
+            slot.id,
+            assignment.id,
+            _auth_context(),
+            db,
+            slot_repo,
+            sa_repo,
+        )
 
-    with (
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-        ) as sa_repo_cls,
-    ):
-        slot_repo = AsyncMock()
-        slot_repo.get.return_value = None
-        slot_repo_cls.return_value = slot_repo
-
-        sa_repo = AsyncMock()
-        sa_repo.get.return_value = assignment
-        sa_repo_cls.return_value = sa_repo
-
-        with pytest.raises(HTTPException) as exc:
-            await sa_router.delete_assignment(
-                slot.id,
-                assignment.id,
-                _auth_context(),
-                db,
-            )
     assert exc.value.status_code == 404
-
-
 @pytest.mark.asyncio
 async def test_service_assignment_list_empty() -> None:
     """List returns an empty list when no assignments exist for a slot."""
     district_id = uuid.uuid4()
     slot = _planning_slot(district_id=district_id)
     db = AsyncMock()
-
-    with (
-        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository"
-        ) as slot_repo_cls,
-        patch(
-            "app.adapters.api.routers.service_assignments.SqlServiceAssignmentRepository"
-        ) as sa_repo_cls,
-    ):
-        slot_repo = AsyncMock()
-        slot_repo.get.return_value = slot
-        slot_repo_cls.return_value = slot_repo
-
-        sa_repo = AsyncMock()
-        sa_repo.list_by_planning_slot.return_value = []
-        sa_repo_cls.return_value = sa_repo
-
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    sa_repo = AsyncMock()
+    sa_repo.list_by_planning_slot.return_value = []
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
         result = await sa_router.list_assignments(
             slot.id,
             _auth_context(),
             db,
+            slot_repo,
+            sa_repo,
         )
 
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_leader_routes_check_role_before_loading_foreign_rows() -> None:
+    """Outsiders get 403 (audited as ACCESS_DENIED), not 404 from an RLS-hidden row."""
+    district_id = uuid.uuid4()
+    outsider = _auth_context(is_superadmin=False)
+    db = AsyncMock()
+    district_repo = AsyncMock()
+    district_repo.get.return_value = None
+    leader_repo = AsyncMock()
+    leader_repo.get.return_value = None
+
+    calls = [
+        leaders_router.list_leaders(
+            district_id, outsider, db, districts=district_repo, leaders_repo=leader_repo
+        ),
+        leaders_router.create_leader(
+            district_id, LeaderCreate(name="N"), outsider, db,
+            districts=district_repo, leaders_repo=leader_repo,
+        ),
+        leaders_router.update_leader(
+            district_id, uuid.uuid4(), LeaderUpdate(name="X"), outsider, db, leader_repo
+        ),
+        leaders_router.delete_leader(
+            district_id, uuid.uuid4(), outsider, db, leaders_repo=leader_repo
+        ),
+    ]
+    for call in calls:
+        with pytest.raises(HTTPException) as exc:
+            await call
+        assert exc.value.status_code == 403
+
+    district_repo.get.assert_not_awaited()
+    leader_repo.get.assert_not_awaited()
+    leader_repo.delete.assert_not_awaited()

@@ -1,13 +1,11 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tests for the production_guard startup validator.
 
 NOTE: the ``validate_oidc_settings`` model-validator inside ``Settings`` catches
 placeholder OIDC values (OIDC_CLIENT_SECRET, OIDC_DISCOVERY_URL, OIDC_CLIENT_ID)
-*before* ``production_guard`` runs.  The tests below therefore focus on the
-unique value-add of ``production_guard``:
-- ``SECRET_KEY`` length / default checks
-- IDP provisioning checks
-- non-HTTPS OIDC discovery warning
-- Comprehensive multi-issue error grouping
+*before* ``production_guard`` runs. These tests cover additional guard rules.
 """
 
 import pytest
@@ -16,15 +14,7 @@ from app.config import Settings, production_guard
 
 
 def _valid_prod_settings(**overrides: object) -> Settings:
-    """Helper: return a Settings object with all OIDC fields set to valid
-    production values.  Individual fields can be overridden for testing.
-
-    Passes ``_env_file=None`` so these tests are deterministic regardless of
-    whatever ``.env`` a developer happens to have checked out locally (e.g. a
-    dev ``.env`` with ``IDP_PROVISIONING_PROVIDER=keycloak`` would otherwise
-    silently override fields this helper doesn't set explicitly, since
-    ``Settings.model_config`` loads ``env_file=".env"` by default).
-    """
+    """Create deterministic, fully configured production settings for tests."""
     kwargs: dict = {
         "app_env": "production",
         "secret_key": "a-32-char-string-abcdef1234567890",
@@ -34,26 +24,22 @@ def _valid_prod_settings(**overrides: object) -> Settings:
         ),
         "oidc_client_id": "nak-planner-backend",
         "backup_encrypt_key": "backup@nak-district-planner.example",
+        "smtp_host": "smtp.example.org",
+        "email_from_address": "sender@example.org",
     }
     kwargs.update(overrides)
     return Settings(_env_file=None, **kwargs)
 
 
-# ── SECRET_KEY ──────────────────────────────────────────────────────────────
-
-
 def test_production_guard_skipped_in_dev() -> None:
-    """production_guard does nothing when APP_ENV is not 'production'."""
     settings = _valid_prod_settings(
         app_env="development", secret_key="replace-with-a-long-random-secret-key"
     )
-    production_guard(settings)  # should not raise
+    production_guard(settings)
 
 
 def test_production_guard_default_secret_key() -> None:
-    settings = _valid_prod_settings(
-        secret_key="replace-with-a-long-random-secret-key",
-    )
+    settings = _valid_prod_settings(secret_key="replace-with-a-long-random-secret-key")
     with pytest.raises(RuntimeError, match="SECRET_KEY"):
         production_guard(settings)
 
@@ -70,22 +56,15 @@ def test_production_guard_short_secret_key() -> None:
         production_guard(settings)
 
 
-# ── OIDC discovery HTTPS (model-validator checks URL, guard checks scheme) ──
-
-
 def test_production_guard_non_https_oidc_discovery() -> None:
     settings = _valid_prod_settings(
-        oidc_discovery_url="http://auth.example.com/.well-known/openid-configuration",
+        oidc_discovery_url="http://auth.example.com/.well-known/openid-configuration"
     )
     with pytest.raises(RuntimeError, match="HTTPS"):
         production_guard(settings)
 
 
-# ── Comprehensive multi-issue error ─────────────────────────────────────────
-
-
 def test_production_guard_all_defaults_at_once() -> None:
-    """SECRET_KEY default + IDP misconfig produce a multi-issue error."""
     settings = _valid_prod_settings(
         secret_key="replace-with-a-long-random-secret-key",
         idp_provisioning_enabled=True,
@@ -98,9 +77,6 @@ def test_production_guard_all_defaults_at_once() -> None:
     assert "SECRET_KEY" in msg
     assert "IDP_PROVISIONING_API_KEY" in msg
     assert "IDP_PROVISIONING_ENDPOINT" in msg
-
-
-# ── BACKUP_ENCRYPT_KEY ──────────────────────────────────────────────────────
 
 
 def test_production_guard_missing_backup_encrypt_key() -> None:
@@ -117,19 +93,30 @@ def test_production_guard_empty_backup_encrypt_key() -> None:
 
 def test_production_guard_with_backup_encrypt_key() -> None:
     settings = _valid_prod_settings(backup_encrypt_key="backup@nak-district-planner.example")
-    production_guard(settings)  # should not raise
-
-
-# ── Valid config ────────────────────────────────────────────────────────────
+    production_guard(settings)
 
 
 def test_production_guard_valid_config() -> None:
-    """All valid production values pass without errors."""
-    settings = _valid_prod_settings()
-    production_guard(settings)  # should not raise
+    production_guard(_valid_prod_settings())
 
 
-# ── IDP provisioning ────────────────────────────────────────────────────────
+def test_production_guard_missing_smtp_host() -> None:
+    with pytest.raises(RuntimeError, match="SMTP_HOST"):
+        production_guard(_valid_prod_settings(smtp_host=""))
+
+
+def test_production_guard_missing_mail_sender() -> None:
+    with pytest.raises(RuntimeError, match="EMAIL_FROM_ADDRESS"):
+        production_guard(_valid_prod_settings(email_from_address=""))
+
+
+def test_production_guard_incomplete_smtp_credentials() -> None:
+    with pytest.raises(RuntimeError, match="SMTP_USER and SMTP_PASSWORD"):
+        production_guard(_valid_prod_settings(smtp_user="someone", smtp_password=None))
+
+
+def test_production_guard_accepts_authenticated_smtp() -> None:
+    production_guard(_valid_prod_settings(smtp_user="someone", smtp_password="password"))
 
 
 def test_production_guard_idp_provisioning_checks() -> None:
@@ -161,14 +148,10 @@ def test_production_guard_idp_provisioning_valid() -> None:
         idp_provisioning_api_key="some-api-key",
         idp_provisioning_endpoint="https://idp.example.com/provision",
     )
-    production_guard(settings)  # should not raise
-
-
-# ── IDP provisioning: keycloak provider ────────────────────────────────────
+    production_guard(settings)
 
 
 def test_production_guard_idp_keycloak_missing_config() -> None:
-    """Keycloak provider requires keycloak-specific fields, not webhook fields."""
     settings = _valid_prod_settings(
         idp_provisioning_enabled=True,
         idp_provisioning_provider="keycloak",
@@ -184,13 +167,11 @@ def test_production_guard_idp_keycloak_missing_config() -> None:
     assert "IDP_PROVISIONING_KEYCLOAK_REALM" in msg
     assert "IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME" in msg
     assert "IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD" in msg
-    # Webhook-specific fields should NOT be required for keycloak
     assert "IDP_PROVISIONING_API_KEY" not in msg
     assert "IDP_PROVISIONING_ENDPOINT" not in msg
 
 
 def test_production_guard_idp_keycloak_valid() -> None:
-    """Valid keycloak config passes without errors."""
     settings = _valid_prod_settings(
         idp_provisioning_enabled=True,
         idp_provisioning_provider="keycloak",
@@ -199,14 +180,10 @@ def test_production_guard_idp_keycloak_valid() -> None:
         idp_provisioning_keycloak_admin_username="admin",
         idp_provisioning_keycloak_admin_password="strong-admin-password-123",
     )
-    production_guard(settings)  # should not raise
-
-
-# ── production_guard OIDC default checks (model-validator skipped in dev) ──
+    production_guard(settings)
 
 
 def test_production_guard_oidc_client_secret_default() -> None:
-    """production_guard catches default OIDC_CLIENT_SECRET when constructed in dev mode."""
     settings = Settings(
         _env_file=None,
         app_env="development",
@@ -218,7 +195,6 @@ def test_production_guard_oidc_client_secret_default() -> None:
 
 
 def test_production_guard_oidc_discovery_url_default() -> None:
-    """production_guard catches default OIDC_DISCOVERY_URL when constructed in dev mode."""
     settings = Settings(
         _env_file=None,
         app_env="development",
@@ -230,7 +206,6 @@ def test_production_guard_oidc_discovery_url_default() -> None:
 
 
 def test_production_guard_oidc_client_id_default() -> None:
-    """production_guard catches default OIDC_CLIENT_ID when constructed in dev mode."""
     settings = Settings(
         _env_file=None,
         app_env="development",
@@ -239,3 +214,67 @@ def test_production_guard_oidc_client_id_default() -> None:
     settings.app_env = "production"
     with pytest.raises(RuntimeError, match="OIDC_CLIENT_ID"):
         production_guard(settings)
+
+
+def test_insecure_calendar_urls_rejected_when_settings_are_built_in_production() -> None:
+    # Enforced at Settings construction so every process (API, Celery worker,
+    # beat) refuses it — not only the FastAPI lifespan's production_guard.
+    with pytest.raises(ValueError, match="CALENDAR_ALLOW_INSECURE_URLS"):
+        _valid_prod_settings(calendar_allow_insecure_urls=True)
+
+
+def test_insecure_calendar_urls_allowed_outside_production() -> None:
+    settings = _valid_prod_settings(app_env="development", calendar_allow_insecure_urls=True)
+    assert settings.calendar_allow_insecure_urls is True
+
+
+def test_calendar_insecure_urls_default_off() -> None:
+    assert _valid_prod_settings().calendar_allow_insecure_urls is False
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2001:db8::/33",  # not an RFC 6052 prefix length
+        "2001:db8::/128",
+        "10.0.0.0/8",  # IPv4
+        "not-a-prefix",
+        "2001:db8::1/64",  # host bits set
+    ],
+)
+def test_invalid_calendar_nat64_prefixes_fail_settings_construction(value) -> None:
+    with pytest.raises(ValueError, match="CALENDAR_NAT64_PREFIXES"):
+        _valid_prod_settings(app_env="development", calendar_nat64_prefixes=value)
+
+
+def test_valid_calendar_nat64_prefixes_are_parsed() -> None:
+    settings = _valid_prod_settings(
+        calendar_nat64_prefixes=" 2001:db8::/32 , 2001:db8:122:344::/96 "
+    )
+    assert [str(n) for n in settings.calendar_nat64_networks] == [
+        "2001:db8::/32",
+        "2001:db8:122:344::/96",
+    ]
+    assert _valid_prod_settings().calendar_nat64_networks == ()
+
+
+@pytest.mark.parametrize("name", ["POSTGRES_PASSWORD", "MIGRATION_DATABASE_URL"])
+def test_owner_credentials_in_runtime_environment_block_startup(monkeypatch, name) -> None:
+    """A legacy ``.env`` may still carry the DB owner password into runtime services."""
+    monkeypatch.setenv(name, "owner-secret")
+
+    with pytest.raises(RuntimeError, match=name):
+        production_guard(_valid_prod_settings())
+
+
+def test_owner_credentials_check_ignores_development(monkeypatch) -> None:
+    monkeypatch.setenv("POSTGRES_PASSWORD", "changeme")
+
+    production_guard(Settings(_env_file=None, app_env="development"))
+
+
+def test_runtime_without_owner_credentials_passes(monkeypatch) -> None:
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    monkeypatch.delenv("MIGRATION_DATABASE_URL", raising=False)
+
+    production_guard(_valid_prod_settings())

@@ -4,6 +4,7 @@
     ".": {
       "release-type": "simple",
       "changelog-path": "CHANGELOG.md",
+      "prerelease": false,
       "extra-files": [
         {
           "path": "package.json",

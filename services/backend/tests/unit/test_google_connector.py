@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for GoogleCalendarConnector.
 
 All HTTP calls are intercepted via a mock httpx.AsyncClient — no network needed.
@@ -11,11 +14,9 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from app.adapters.calendar.google_connector import (
-    GoogleCalendarConnector,
-    _content_hash,
-)
+from app.adapters.calendar.google_connector import GoogleCalendarConnector
 from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 
 CREDS = {"access_token": "test_token"}
 
@@ -333,6 +334,45 @@ class TestFetchEvents:
         assert len(raw_events) == 1
         assert raw_events[0].uid == "early"
 
+
+    async def test_paginates_using_next_page_token(
+        self, connector: GoogleCalendarConnector, mock_client: MagicMock
+    ) -> None:
+        first = MagicMock()
+        first.headers = {"content-type": "application/json"}
+        first.raise_for_status.return_value = None
+        first.json.return_value = {
+            "items": [
+                _make_event(
+                    id="page-1",
+                    summary="Page 1",
+                    start={"dateTime": "2026-04-05T10:00:00Z"},
+                    end={"dateTime": "2026-04-05T11:00:00Z"},
+                )
+            ],
+            "nextPageToken": "next-token",
+        }
+        second = MagicMock()
+        second.headers = {"content-type": "application/json"}
+        second.raise_for_status.return_value = None
+        second.json.return_value = {
+            "items": [
+                _make_event(
+                    id="page-2",
+                    summary="Page 2",
+                    start={"dateTime": "2026-04-05T12:00:00Z"},
+                    end={"dateTime": "2026-04-05T13:00:00Z"},
+                )
+            ]
+        }
+        mock_client.get = AsyncMock(side_effect=[first, second])
+
+        raw_events = await connector.fetch_events(CREDS)
+
+        assert [event.uid for event in raw_events] == ["page-1", "page-2"]
+        assert mock_client.get.await_count == 2
+        assert mock_client.get.await_args_list[1].kwargs["params"]["pageToken"] == "next-token"
+
     async def test_http_404_raises_value_error(
         self, connector: GoogleCalendarConnector, mock_client: MagicMock
     ) -> None:
@@ -342,7 +382,7 @@ class TestFetchEvents:
         )
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(CalendarConnectorError, match="HTTP 404"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_http_401_raises_value_error(
@@ -354,7 +394,7 @@ class TestFetchEvents:
         )
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(CalendarConnectorError, match="HTTP 401"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_http_500_raises_value_error(
@@ -366,7 +406,7 @@ class TestFetchEvents:
         )
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with pytest.raises(CalendarConnectorError, match="HTTP 500"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_html_response_raises_value_error(
@@ -400,3 +440,22 @@ class TestFetchEvents:
 
         raw_events = await connector.fetch_events(CREDS)
         assert len(raw_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_timestamp_less_cancellation_tombstone_is_retained(
+    connector: GoogleCalendarConnector, mock_client: MagicMock
+) -> None:
+    _setup_mock_client(
+        mock_client,
+        {"items": [{"id": "deleted-event", "status": "cancelled", "etag": '"rev-2"'}]},
+    )
+
+    raw_events = await connector.fetch_events(
+        CREDS, from_dt=datetime(2026, 4, 1, tzinfo=UTC)
+    )
+
+    assert len(raw_events) == 1
+    assert raw_events[0].uid == "deleted-event"
+    assert raw_events[0].is_cancelled is True
+    assert raw_events[0].revision_marker == '"rev-2"'

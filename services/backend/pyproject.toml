@@ -4,38 +4,40 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nak-district-planner-backend"
-version = "0.33.0"
-requires-python = ">=3.11"
+version = "1.0.0"
+requires-python = ">=3.14"
 dependencies = [
-    "fastapi>=0.141.1",
-    "starlette>=1.6.0",
-    "uvicorn[standard]>=0.53.0",
-    "sqlalchemy[asyncio]>=2.0.52",
+    "fastapi>=0.142.2",
+    "starlette>=1.7.0",
+    "uvicorn[standard]>=0.54.0",
+    "sqlalchemy[asyncio]>=2.1.3",
     "asyncpg>=0.29",
-    "alembic>=1.19.2",
-    "celery[sqlalchemy]>=5.6.3",
+    "alembic>=1.20.0",
+    "celery[redis]>=5.6.3",
     "click>=8.5.0",
     "psycopg2-binary>=2.9.13",
     "pydantic[email]>=2.13.5",
     "pydantic-settings>=2.15.0",
-    "PyJWT[crypto]>=2.13.0",
-    "passlib[bcrypt]>=1.7.4",
+    "PyJWT[crypto]>=2.14.0",
     "httpx>=0.27",
     "authlib>=1.8.0",
     "icalendar>=7.3.0",
     "joserfc>=1.7.5",
-    "mako>=1.4.1",
-    "cryptography>=50.0.1",
+    "mako>=1.4.3",
+    "cryptography>=50.0.2",
     "defusedxml>=0.7",
     "opentelemetry-sdk>=1.25",
-    "opentelemetry-exporter-otlp-proto-http>=1.43.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.1",
     "opentelemetry-instrumentation-fastapi>=0.62b1",
-    "opentelemetry-instrumentation-sqlalchemy>=0.64b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.66b1",
     "opentelemetry-instrumentation-httpx>=0.62b0",
-    "opentelemetry-instrumentation-celery>=0.65b0",
+    "opentelemetry-instrumentation-celery>=0.66b0",
     "valkey>=6.1.1",
     "requests>=2.33.1",
-    "starlette>=1.6.0",
+    "tenacity>=9.2.1",
+    "starlette>=1.7.0",
+    "recurring-ical-events>=3.8.2",
+    "python-dateutil>=2.8.1",
 ]
 
 [project.optional-dependencies]
@@ -53,10 +55,21 @@ include = ["app*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "postgres: requires a migrated PostgreSQL database (see tests/integration/test_rls_postgres.py)",
+]
+# Un-awaited coroutines hide real bugs (lost writes, skipped side effects) and
+# usually mean a mock is not modelled as awaitable.  Fail the run instead of
+# warning (#435).  The warning is emitted during garbage collection, so pytest
+# reports it via its unraisable-exception hook -> also escalate that.
+filterwarnings = [
+    "error:coroutine .* was never awaited:RuntimeWarning",
+    "error:(?s).*coroutine .* was never awaited:pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "D", "RUF"]
@@ -96,5 +109,5 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.0.0",
-    "ruff>=0.16.7",
+    "ruff>=0.16.10",
 ]

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import uuid
@@ -194,3 +197,31 @@ def test_extract_memberships_skips_claims_with_missing_fields() -> None:
         {"memberships": [{"role": "VIEWER", "scope_type": "DISTRICT", "scope_id": ""}]}
     )
     assert result == []
+
+def test_congregation_helper_rejects_unrelated_district_admin_membership() -> None:
+    """District permissions require a verified congregation-to-district mapping."""
+    district_id = uuid.uuid4()
+    congregation_id = uuid.uuid4()
+    context = _auth([
+        Membership.create(
+            user_sub="oidc|x",
+            role=Role.DISTRICT_ADMIN,
+            scope_type=ScopeType.DISTRICT,
+            scope_id=district_id,
+        ),
+    ])
+    assert has_role_in_district(context, Role.DISTRICT_ADMIN, district_id)
+    assert not has_role_in_congregation(context, Role.VIEWER, congregation_id)
+    with pytest.raises(PermissionError):
+        assert_has_role_in_congregation(context, Role.VIEWER, congregation_id)
+
+    direct = _auth([
+        Membership.create(
+            user_sub="oidc|x",
+            role=Role.CONGREGATION_ADMIN,
+            scope_type=ScopeType.CONGREGATION,
+            scope_id=congregation_id,
+        ),
+    ])
+    assert has_role_in_congregation(direct, Role.VIEWER, congregation_id)
+    assert not has_role_in_congregation(direct, Role.VIEWER, uuid.uuid4())

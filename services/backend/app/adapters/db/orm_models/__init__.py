@@ -1,11 +1,21 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Side-effect imports: register all ORM models on Base.metadata (required for Alembic autogenerate)
 from app.adapters.db.orm_models.audit_log import AuditLogORM
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.congregation_group import CongregationGroupORM
+from app.adapters.db.orm_models.deleted_generation_key import DeletedGenerationKeyORM
 from app.adapters.db.orm_models.district import DistrictORM
+from app.adapters.db.orm_models.district_reminder_config import (
+    DistrictReminderConfigORM,
+    ReminderDeliveryORM,
+)
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
+from app.adapters.db.orm_models.event_mail_hook import EventMailHookORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
+from app.adapters.db.orm_models.external_event_candidate import ExternalEventCandidateORM
 from app.adapters.db.orm_models.external_event_link import ExternalEventLinkORM
 from app.adapters.db.orm_models.invitation import CongregationInvitationORM
 from app.adapters.db.orm_models.invitation_overwrite_request import (
@@ -18,5 +28,10 @@ from app.adapters.db.orm_models.membership import MembershipORM
 from app.adapters.db.orm_models.notification import NotificationORM
 from app.adapters.db.orm_models.planning_series import PlanningSeriesORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+from app.adapters.db.orm_models.recurring_event import (
+    RecurringEventDecisionORM,
+    RecurringEventTemplateORM,
+)
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
+from app.adapters.db.orm_models.slot_gap_alert import SlotGapAlertORM
 from app.adapters.db.orm_models.user import UserORM

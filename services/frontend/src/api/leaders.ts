@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { apiFetch } from './client'
 
 export const LEADER_RANKS = [
@@ -21,6 +24,18 @@ export const SPECIAL_ROLES = [
 ] as const
 
 export type SpecialRole = (typeof SPECIAL_ROLES)[number]['value']
+
+export function leaderDisplayName(leader: LeaderResponse): string {
+  return leader.rank ? `${leader.rank} ${leader.name}` : leader.name
+}
+
+export function leaderNameFromId(
+  leaderId: string,
+  leaders: LeaderResponse[],
+): string {
+  const leader = leaders.find((l) => l.id === leaderId)
+  return leader ? leaderDisplayName(leader) : '—'
+}
 
 export interface LeaderResponse {
   id: string

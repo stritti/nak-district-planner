@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Rate Limiter — Valkey-based rate limiting with sliding window algorithm.
 
 Provides protection against DoS attacks by limiting request rates.
@@ -57,6 +60,7 @@ class RateLimitConfig:
     burst_window_seconds: int = 1
 
     def __post_init__(self):
+        """Apply defaults for mutable config fields."""
         if self.endpoint_limits is None:
             self.endpoint_limits = {}
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Authorization checks for notifications (in-app notifications UC).
 
 When notifications are implemented, this module provides utilities to enforce

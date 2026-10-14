@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for feiertage_service module."""
 
 from __future__ import annotations
@@ -224,6 +227,7 @@ class TestImportKirchlicheFesttage:
         assert result["updated"] == 0
         assert result["skipped"] == 0
         assert slot_repo_mock.save.call_count == result["created"]
+        assert all(c.args[0].applicability == ["all"] for c in slot_repo_mock.save.call_args_list)
 
     async def test_import_kirchliche_festtage_skips_existing_unchanged(self):
         """Existing slots with same title/date should be skipped (idempotent)."""
@@ -334,6 +338,10 @@ class TestImportFeiertage:
         assert result["updated"] == 0
         assert result["skipped"] == 0
         assert slot_repo_mock.save.call_count == 2
+        # Released to every congregation, also ones created after the import (#466)
+        later_congregation = uuid.uuid4()
+        for call in slot_repo_mock.save.call_args_list:
+            assert call.args[0].is_distributed_to(later_congregation)
 
     async def test_import_feiertage_filters_by_state_code(self):
         """Only national + matching-state holidays should be imported."""

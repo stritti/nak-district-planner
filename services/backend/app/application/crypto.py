@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Credential encryption/decryption using Fernet symmetric encryption.
 
 A 32-byte key is derived from settings.secret_key via SHA-256, then

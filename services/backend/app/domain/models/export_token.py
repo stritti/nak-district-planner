@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/domain/models/export_token.py: Module."""
 
 from __future__ import annotations
@@ -26,6 +29,16 @@ class ExportToken:
     congregation_id: uuid.UUID | None
     leader_id: uuid.UUID | None
     created_at: datetime
+
+    def confirmed_only(self, requested: str | None) -> bool:
+        """Whether the ICS feed may contain only CONFIRMED slots (UC-05).
+
+        PUBLIC tokens are shared outside the planning team, so they never expose
+        PLANNED drafts, whatever the caller requests. INTERNAL tokens (including
+        personal leader feeds) include drafts unless ``"confirmed_only"`` is
+        requested.
+        """
+        return self.token_type == TokenType.PUBLIC or requested == "confirmed_only"
 
     @staticmethod
     def create(

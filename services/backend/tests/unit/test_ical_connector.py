@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for ICalConnector.
 
 All HTTP calls are intercepted via a mock httpx.AsyncClient — no network needed.
@@ -11,8 +14,10 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from app.adapters.calendar.ical_connector import ICalConnector, _content_hash, _to_utc
+from app.adapters.calendar.ical_connector import ICalConnector
+from app.adapters.calendar.ical_events import to_utc as _to_utc
 from app.domain.ports.calendar import CalendarConnectorError
+from app.domain.services.external_event_fingerprint import compute_content_hash as _content_hash
 
 # ── ICS helpers ───────────────────────────────────────────────────────────────
 
@@ -118,12 +123,12 @@ class TestToUtc:
         aware = datetime(2026, 3, 1, 11, 0, tzinfo=cet)
         assert _to_utc(aware) == datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
 
-    def test_naive_datetime_treated_as_utc(self):
-        naive = datetime(2026, 3, 1, 10, 0)
-        assert _to_utc(naive) == datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    def test_naive_datetime_is_local_to_district_timezone(self):
+        naive = datetime(2026, 3, 1, 10, 0)  # floating, Europe/Berlin (CET)
+        assert _to_utc(naive) == datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
 
-    def test_date_becomes_midnight_utc(self):
-        assert _to_utc(date(2026, 3, 15)) == datetime(2026, 3, 15, 0, 0, tzinfo=UTC)
+    def test_date_becomes_local_midnight(self):
+        assert _to_utc(date(2026, 3, 15)) == datetime(2026, 3, 14, 23, 0, tzinfo=UTC)
 
 
 # ── _content_hash ─────────────────────────────────────────────────────────────
@@ -172,11 +177,11 @@ class TestFetchEvents:
         assert len(events) == 1
         assert events[0].is_cancelled is True
 
-    async def test_all_day_event_becomes_midnight_utc(self):
+    async def test_all_day_event_starts_at_local_midnight(self):
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_ALLDAY)))
         events = await connector.fetch_events(CREDS)
         assert len(events) == 1
-        assert events[0].start_at == datetime(2026, 3, 15, 0, 0, tzinfo=UTC)
+        assert events[0].start_at == datetime(2026, 3, 14, 23, 0, tzinfo=UTC)  # 00:00 CET
 
     async def test_event_without_uid_is_skipped(self):
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_NO_UID)))
@@ -195,10 +200,10 @@ class TestFetchEvents:
         # default: start + 1 day
         assert events[0].end_at == events[0].start_at + timedelta(days=1)
 
-    async def test_content_hash_is_populated(self):
+    async def test_connector_does_not_precompute_unused_content_hash(self):
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_BASIC)))
         events = await connector.fetch_events(CREDS)
-        assert len(events[0].content_hash) == 64  # SHA-256 hex
+        assert not hasattr(events[0], "content_hash")
 
     async def test_multiple_events_returned(self):
         connector = ICalConnector(
@@ -212,30 +217,33 @@ class TestFetchEvents:
         cutoff = datetime(2026, 3, 2, tzinfo=UTC)
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_BASIC, VEVENT_CANCELLED)))
         events = await connector.fetch_events(CREDS, from_dt=cutoff)
-        assert len(events) == 1
-        assert events[0].uid == "uid-cancelled@test"
+        in_window = [event.uid for event in events if not event.outside_window]
+        assert in_window == ["uid-cancelled@test"]
+        # Events outside the window are reported as presence only (#483).
+        assert [e.uid for e in events if e.outside_window] == ["uid-basic@test"]
 
     async def test_to_dt_filter_excludes_future_events(self):
         # VEVENT_CANCELLED starts 2026-03-05 — cutoff is 2026-03-04 → excluded
         to = datetime(2026, 3, 4, tzinfo=UTC)
         connector = ICalConnector(client=_mock_http(_ics(VEVENT_BASIC, VEVENT_CANCELLED)))
         events = await connector.fetch_events(CREDS, to_dt=to)
-        assert len(events) == 1
-        assert events[0].uid == "uid-basic@test"
+        in_window = [event.uid for event in events if not event.outside_window]
+        assert in_window == ["uid-basic@test"]
+        assert [e.uid for e in events if e.outside_window] == ["uid-cancelled@test"]
 
     async def test_http_404_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(404)))
-        with pytest.raises(CalendarConnectorError, match="404"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_http_401_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(401)))
-        with pytest.raises(CalendarConnectorError, match="401"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_http_500_raises_value_error(self):
         connector = ICalConnector(client=_mock_http(b"", raise_error=_http_error(500)))
-        with pytest.raises(CalendarConnectorError, match="500"):
+        with pytest.raises(CalendarConnectorError, match="konnte nicht geladen werden"):
             await connector.fetch_events(CREDS)
 
     async def test_html_response_raises_value_error(self):

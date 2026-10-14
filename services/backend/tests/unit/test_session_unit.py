@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tests for app/adapters/db/session.py — get_db_session generator."""
 
 from __future__ import annotations

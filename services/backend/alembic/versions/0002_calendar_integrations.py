@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Phase 2: calendar_integrations table + extend events for external sync
 
 Revision ID: 0002
@@ -65,9 +68,12 @@ def upgrade() -> None:
     )
 
     # --- Extend event_status ENUM: add CANCELLED ---
-    # ALTER TYPE ... ADD VALUE cannot run inside a transaction; Alembic handles
-    # this correctly because PostgreSQL auto-commits DDL for ENUM alterations.
-    op.execute("ALTER TYPE event_status ADD VALUE IF NOT EXISTS 'CANCELLED'")
+    # A new enum value must be committed before any later statement uses it.
+    # All revisions of one `alembic upgrade` share a transaction, so without the
+    # autocommit block a fresh database fails in 0125 with
+    # UnsafeNewEnumValueUsageError. Already migrated databases are unaffected.
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE event_status ADD VALUE IF NOT EXISTS 'CANCELLED'")
 
     # --- Extend events table with external sync columns ---
     op.add_column("events", sa.Column("external_uid", sa.String(500), nullable=True))

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/api/routers/districts.py: Module."""
 
 from __future__ import annotations
@@ -6,9 +9,22 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.adapters.api.deps import CurrentUser, CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUser,
+    CurrentUserWithMemberships,
+    DbSession,
+    get_congregation_group_repository,
+    get_congregation_repository,
+    get_district_repository,
+    get_event_instance_repository,
+    get_invitation_repository,
+    get_leader_repository,
+    get_planning_series_repository,
+    get_planning_slot_repository,
+    get_service_assignment_repository,
+)
 from app.adapters.api.schemas.district import (
     CongregationCreate,
     CongregationGroupCreate,
@@ -24,24 +40,24 @@ from app.adapters.api.schemas.district import (
     ServiceTime,
 )
 from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
+from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import (
     PermissionError,
     assert_has_role_in_congregation,
     assert_has_role_in_district,
     get_districts_where_user_has_role,
     require_role_in_district,
+    require_superadmin,
 )
-from app.adapters.db.repositories import (
-    SqlCongregationGroupRepository,
-    SqlCongregationRepository,
-    SqlDistrictRepository,
-    SqlEventInstanceRepository,
-    SqlLeaderRepository,
-    SqlPlanningSeriesRepository,
-    SqlPlanningSlotRepository,
-    SqlServiceAssignmentRepository,
-)
+from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.db.repositories.congregation_group import SqlCongregationGroupRepository
+from app.adapters.db.repositories.district import SqlDistrictRepository
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.invitation import SqlInvitationRepository
+from app.adapters.db.repositories.leader import SqlLeaderRepository
+from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
+from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
+from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.application.draft_service_generation import GenerateDraftServicesUseCase
 from app.application.feiertage_service import (
     DE_STATES,
@@ -55,19 +71,11 @@ from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import CongregationInvitation
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
 
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
-
-
-def _assert_superadmin(user: CurrentUser) -> None:
-    if not getattr(user, "is_superadmin", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Nur Superadmin darf Bezirke anlegen",
-        )
 
 
 def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -> list[str]:
@@ -92,9 +100,12 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
 
 @router.post("", response_model=DistrictResponse, status_code=status.HTTP_201_CREATED)
 async def create_district(
-    body: DistrictCreate, user: CurrentUser, db: DbSession
+    body: DistrictCreate,
+    user: CurrentUser,
+    db: DbSession,
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
 ) -> DistrictResponse:
-    _assert_superadmin(user)
+    require_superadmin(user, "Nur Superadmin darf Bezirke anlegen")
 
     state_code = body.state_code.upper() if body.state_code else None
     if state_code and state_code not in DE_STATES:
@@ -104,7 +115,7 @@ async def create_district(
         )
 
     district = District.create(name=body.name, state_code=state_code)
-    await SqlDistrictRepository(db).save(district)
+    await district_repo.save(district)
 
     year = datetime.now(UTC).year
     if district.state_code:
@@ -130,8 +141,12 @@ async def create_district(
 
 
 @router.get("", response_model=list[DistrictResponse])
-async def list_districts(auth: CurrentUserWithMemberships, db: DbSession) -> list[DistrictResponse]:
-    districts = await SqlDistrictRepository(db).list_all()
+async def list_districts(
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+) -> list[DistrictResponse]:
+    districts = await district_repo.list_all()
     if not auth.user.is_superadmin:
         allowed_district_ids = set(get_districts_where_user_has_role(auth, Role.VIEWER))
         districts = [district for district in districts if district.id in allowed_district_ids]
@@ -144,8 +159,8 @@ async def update_district(
     body: DistrictUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlDistrictRepository = Depends(get_district_repository),
 ) -> DistrictResponse:
-    repo = SqlDistrictRepository(db)
     district = await repo.get(district_id)
     if not district:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
@@ -183,11 +198,18 @@ async def create_congregation(
     body: CongregationCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
 ) -> CongregationResponse:
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-    await _validate_group_assignment(db, district_id, body.group_id)
+    await _validate_group_assignment(group_repo, district_id, body.group_id)
+    await ensure_congregation_in_district(
+        db, district_id, body.invitation_target_congregation_id,
+        field="invitation_target_congregation_id",
+    )
     service_times = (
         [st.model_dump() for st in body.service_times] if body.service_times is not None else None
     )
@@ -200,7 +222,7 @@ async def create_congregation(
         invitation_target_congregation_id=body.invitation_target_congregation_id,
         invitation_external_note=body.invitation_external_note,
     )
-    await SqlCongregationRepository(db).save(congregation)
+    await cong_repo.save(congregation)
     await reference_feiertage_for_congregation(
         district_id=district_id,
         congregation_id=congregation.id,
@@ -208,7 +230,7 @@ async def create_congregation(
     )
     group_name = None
     if congregation.group_id is not None:
-        group = await SqlCongregationGroupRepository(db).get(congregation.group_id)
+        group = await group_repo.get(congregation.group_id)
         group_name = group.name if group and group.district_id == district_id else None
     return _cong_response(congregation, group_name=group_name)
 
@@ -219,14 +241,17 @@ async def list_congregations(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     group_id: uuid.UUID | None = Query(None),
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
 ) -> list[CongregationResponse]:
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.VIEWER, district_id)
-    congregations = await SqlCongregationRepository(db).list_by_district(
+    congregations = await cong_repo.list_by_district(
         district_id, group_id=group_id
     )
-    groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
+    groups = await group_repo.list_by_district(district_id)
     group_names = {group.id: group.name for group in groups}
     return [
         _cong_response(c, group_name=group_names.get(c.group_id) if c.group_id else None)
@@ -241,9 +266,10 @@ async def update_congregation(
     body: CongregationUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
 ) -> CongregationResponse:
-    repo = SqlCongregationRepository(db)
-    congregation = await repo.get(congregation_id)
+    congregation = await cong_repo.get(congregation_id)
     if not congregation or congregation.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gemeinde nicht gefunden")
     # Determine if request comes through congregation_admin fallback
@@ -266,31 +292,35 @@ async def update_congregation(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Nur DISTRICT_ADMIN darf die Gruppenzugehörigkeit ändern",
             )
-        await _validate_group_assignment(db, district_id, body.group_id)
+        await _validate_group_assignment(group_repo, district_id, body.group_id)
         congregation.group_id = body.group_id
     if "invitation_target_type" in body.model_fields_set:
         congregation.invitation_target_type = body.invitation_target_type
     if "invitation_target_congregation_id" in body.model_fields_set:
+        await ensure_congregation_in_district(
+            db, district_id, body.invitation_target_congregation_id,
+            field="invitation_target_congregation_id",
+        )
         congregation.invitation_target_congregation_id = body.invitation_target_congregation_id
     if "invitation_external_note" in body.model_fields_set:
         congregation.invitation_external_note = body.invitation_external_note
     congregation.updated_at = datetime.now(UTC)
-    await repo.save(congregation)
+    await cong_repo.save(congregation)
     group_name = None
     if congregation.group_id is not None:
-        group = await SqlCongregationGroupRepository(db).get(congregation.group_id)
+        group = await group_repo.get(congregation.group_id)
         group_name = group.name if group and group.district_id == district_id else None
     return _cong_response(congregation, group_name=group_name)
 
 
 async def _validate_group_assignment(
-    db: DbSession,
+    group_repo: SqlCongregationGroupRepository,
     district_id: uuid.UUID,
     group_id: uuid.UUID | None,
 ) -> None:
     if group_id is None:
         return
-    group = await SqlCongregationGroupRepository(db).get(group_id)
+    group = await group_repo.get(group_id)
     if group is None or group.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -327,12 +357,14 @@ async def create_group(
     body: CongregationGroupCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
 ) -> CongregationGroupResponse:
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     group = CongregationGroup.create(name=body.name, district_id=district_id)
-    await SqlCongregationGroupRepository(db).save(group)
+    await group_repo.save(group)
     return _group_response(group)
 
 
@@ -341,11 +373,13 @@ async def list_groups(
     district_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
 ) -> list[CongregationGroupResponse]:
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.VIEWER, district_id)
-    groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
+    groups = await group_repo.list_by_district(district_id)
     return [_group_response(g) for g in groups]
 
 
@@ -356,16 +390,16 @@ async def update_group(
     body: CongregationGroupUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
 ) -> CongregationGroupResponse:
-    repo = SqlCongregationGroupRepository(db)
-    group = await repo.get(group_id)
+    group = await group_repo.get(group_id)
     if not group or group.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gruppe nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     if body.name is not None:
         group.name = body.name
     group.updated_at = datetime.now(UTC)
-    await repo.save(group)
+    await group_repo.save(group)
     return _group_response(group)
 
 
@@ -375,13 +409,13 @@ async def delete_group(
     group_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
 ) -> None:
-    repo = SqlCongregationGroupRepository(db)
-    group = await repo.get(group_id)
+    group = await group_repo.get(group_id)
     if not group or group.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gruppe nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-    await repo.delete(group_id)
+    await group_repo.delete(group_id)
 
 
 def _group_response(g: CongregationGroup) -> CongregationGroupResponse:
@@ -405,6 +439,14 @@ async def get_matrix(
     from_dt: datetime | None = Query(None),
     to_dt: datetime | None = Query(None),
     group_id: uuid.UUID | None = Query(None),
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    leader_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    sa_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    inv_repo: SqlInvitationRepository = Depends(get_invitation_repository),
 ) -> MatrixResponse:
     """Return matrix view for a district.
 
@@ -414,7 +456,7 @@ async def get_matrix(
 
     **RBAC:** Requires VIEWER role in the district.
     """
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.VIEWER, district_id)
 
@@ -453,7 +495,7 @@ async def get_matrix(
             detail="to_dt muss groesser oder gleich from_dt sein",
         )
 
-    congregations = await SqlCongregationRepository(db).list_by_district(
+    congregations = await cong_repo.list_by_district(
         district_id, group_id=group_id
     )
     from_date = effective_from_dt.date()
@@ -464,13 +506,17 @@ async def get_matrix(
         c.id: _expected_dates(c.service_times, from_date, to_date) for c in congregations
     }
 
-    # Load all PlanningSlots for the district in the date range
-    # This includes both Gottesdienst and Feiertag slots
-    all_slots: list[PlanningSlot] = await SqlPlanningSlotRepository(db).list_for_date_range(
-        district_id=district_id,
-        from_date=from_date,
-        to_date=to_date,
-    )
+    # Load all ACTIVE PlanningSlots for the district in the date range (Gottesdienst
+    # and Feiertag). CANCELLED slots are neither gaps nor services (issue #466).
+    all_slots: list[PlanningSlot] = [
+        slot
+        for slot in await slot_repo.list_for_date_range(
+            district_id=district_id,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        if slot.status == PlanningSlotStatus.ACTIVE
+    ]
 
     # Separate slots by category
     gottesdienst_slots: list[PlanningSlot] = [
@@ -493,22 +539,41 @@ async def get_matrix(
         all_dates.add(slot.planning_date.isoformat())
     sorted_dates: list[str] = sorted(all_dates)
 
-    # Build slot lookup: (owner_id, date_key) -> slot
-    # For Gottesdienst slots, owner can be congregation or district
-    slot_by_owner_date: dict[tuple[uuid.UUID, str], PlanningSlot] = {}
+    gottesdienst_slots_by_date: dict[str, list[PlanningSlot]] = {}
     for slot in gottesdienst_slots:
-        owner_id = slot.congregation_id or slot.district_id
-        key = (owner_id, slot.planning_date.isoformat())
-        existing_slot = slot_by_owner_date.get(key)
-        if existing_slot is None or slot.planning_time < existing_slot.planning_time:
-            slot_by_owner_date[key] = slot
+        gottesdienst_slots_by_date.setdefault(slot.planning_date.isoformat(), []).append(slot)
+
+    def _cell_slot(congregation_id: uuid.UUID, date_key: str) -> PlanningSlot | None:
+        """Own slot before a distributed district slot; earliest time first.
+
+        An invited congregation attends the host's service instead of holding its
+        own, so the invitation copy wins over its own slots without a leader.
+        """
+        visible = [
+            slot
+            for slot in gottesdienst_slots_by_date.get(date_key, [])
+            if slot.is_visible_to(congregation_id)
+        ]
+        copies = [s for s in visible if s.invitation_source_event_id is not None]
+        if copies:
+            led_own = [
+                s
+                for s in visible
+                if s.invitation_source_event_id is None and s.id in assignment_by_slot_id
+            ]
+            visible = led_own or copies
+        return min(
+            visible,
+            key=lambda slot: (slot.congregation_id is None, slot.planning_time),
+            default=None,
+        )
 
     # Batch-load leaders for this district
-    leaders = await SqlLeaderRepository(db).list_by_district(district_id)
+    leaders = await leader_repo.list_by_district(district_id)
     leaders_by_id = {leader.id: leader for leader in leaders}
 
     # Load EventInstances for all Gottesdienst slots
-    instances: list[EventInstance] = await SqlEventInstanceRepository(db).list_by_planning_slots(
+    instances: list[EventInstance] = await instance_repo.list_by_planning_slots(
         [slot.id for slot in gottesdienst_slots]
     )
     instance_by_slot_id: dict[uuid.UUID, EventInstance] = {
@@ -516,9 +581,9 @@ async def get_matrix(
     }
 
     # Load assignments for all Gottesdienst slots
-    assignments: list[ServiceAssignment] = await SqlServiceAssignmentRepository(
-        db
-    ).list_by_planning_slots([slot.id for slot in gottesdienst_slots])
+    assignments: list[ServiceAssignment] = await sa_repo.list_by_planning_slots(
+        [slot.id for slot in gottesdienst_slots]
+    )
     assignment_by_slot_id: dict[uuid.UUID, ServiceAssignment] = {}
     for a in assignments:
         # `event_id` is kept as a temporary compatibility key for older assignment rows.
@@ -528,7 +593,7 @@ async def get_matrix(
 
     # Build matrix rows
     rows: list[MatrixRow] = []
-    groups = await SqlCongregationGroupRepository(db).list_by_district(district_id)
+    groups = await group_repo.list_by_district(district_id)
     group_names = {group.id: group.name for group in groups}
     congregation_name_by_id = {c.id: c.name for c in congregations}
 
@@ -540,7 +605,7 @@ async def get_matrix(
     }
     source_congregation_names: dict[uuid.UUID, str] = congregation_name_by_id.copy()
     if source_congregation_ids:
-        source_congregations = await SqlCongregationRepository(db).list_by_ids(
+        source_congregations = await cong_repo.list_by_ids(
             list(source_congregation_ids)
         )
         for source in source_congregations:
@@ -551,9 +616,9 @@ async def get_matrix(
     source_slot_ids: list[uuid.UUID] = [
         slot.id for slot in gottesdienst_slots if slot.invitation_source_event_id is None
     ]
-    invitations: list[CongregationInvitation] = await SqlInvitationRepository(
-        db
-    ).list_by_source_planning_slots(source_slot_ids)
+    invitations: list[CongregationInvitation] = await inv_repo.list_by_source_planning_slots(
+        source_slot_ids
+    )
     invitation_by_source_slot: dict[uuid.UUID, list[CongregationInvitation]] = {}
     for invitation in invitations:
         if invitation.source_planning_slot_id:
@@ -562,26 +627,13 @@ async def get_matrix(
             )
 
     for congregation in congregations:
-        cong_expected: set[str] = set(expected_by_cong[congregation.id])
         cells: dict[str, MatrixCell] = {}
 
         for date_key in sorted_dates:
-            # Check if this date is expected for this congregation
-            if date_key not in cong_expected:
-                # Check if there's a Feiertag on this date (always shown as column)
-                if date_key not in holidays:
-                    # Neither expected by schedule nor a holiday
-                    cells[date_key] = MatrixCell()
-                    continue
-
-            # Get slot for this congregation and date
-            slot: PlanningSlot | None = slot_by_owner_date.get((congregation.id, date_key))
-            if slot is None:
-                # Try district-level slot
-                slot = slot_by_owner_date.get((district_id, date_key))
+            slot: PlanningSlot | None = _cell_slot(congregation.id, date_key)
 
             if slot is None:
-                # Expected by schedule but no slot exists yet
+                # No visible slot for this congregation on this date
                 cells[date_key] = MatrixCell()
                 continue
 
@@ -633,7 +685,11 @@ async def get_matrix(
                 category=slot.category,
                 approval_status=slot.approval_status,
                 is_gap=(assignment is None and not is_invitation_copy),
-                planned_time=slot.planning_time,
+                planned_time=(
+                    datetime.combine(slot.planning_date, slot.planning_time, tzinfo=UTC)
+                    if slot.planning_time is not None
+                    else None
+                ),
                 actual_start_at=(instance.actual_start_at if instance is not None else None),
                 actual_end_at=(instance.actual_end_at if instance is not None else None),
                 has_deviation=instance.deviation_flag if instance is not None else False,
@@ -677,8 +733,12 @@ async def generate_matrix_drafts(
     db: DbSession,
     from_dt: datetime = Query(...),
     to_dt: datetime = Query(...),
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    congregation_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
 ) -> dict[str, int]:
-    district = await SqlDistrictRepository(db).get(district_id)
+    district = await district_repo.get(district_id)
     if not district:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
 
@@ -693,10 +753,10 @@ async def generate_matrix_drafts(
         )
 
     use_case = GenerateDraftServicesUseCase(
-        district_repo=SqlDistrictRepository(db),
-        congregation_repo=SqlCongregationRepository(db),
-        slot_repo=SqlPlanningSlotRepository(db),
-        instance_repo=SqlEventInstanceRepository(db),
+        district_repo=district_repo,
+        congregation_repo=congregation_repo,
+        slot_repo=slot_repo,
+        instance_repo=instance_repo,
     )
     full_result = await use_case.run_for_window(
         from_date=from_date,
@@ -718,50 +778,21 @@ async def generate_planning_series_slots(
     db: DbSession,
     from_dt: datetime = Query(...),
     to_dt: datetime = Query(...),
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
+    congregation_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
 ) -> dict[str, int]:
     """Manually trigger PlanningSlot generation from active PlanningSeries."""
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
     generator = PlanningSeriesGenerator(
-        series_repo=SqlPlanningSeriesRepository(db),
-        slot_repo=SqlPlanningSlotRepository(db),
-        instance_repo=SqlEventInstanceRepository(db),
-        district_repo=SqlDistrictRepository(db),
-        congregation_repo=SqlCongregationRepository(db),
-    )
-    result = await generator.run_for_window(
-        from_date=from_dt.date(),
-        to_date_exclusive=to_dt.date() + timedelta(days=1),
-        district_ids={district_id},
-    )
-    await db.commit()
-    return result
-
-
-# ── PlanningSeries Auto-Generation ────────────────────────────────────────────
-
-
-@router.post("/{district_id}/generate-planning-series")
-async def generate_planning_series_slots(
-    district_id: uuid.UUID,
-    auth: CurrentUserWithMemberships,
-    db: DbSession,
-    from_dt: datetime = Query(...),
-    to_dt: datetime = Query(...),
-) -> dict[str, int]:
-    """Manually trigger PlanningSlot generation from active PlanningSeries."""
-    if not await SqlDistrictRepository(db).get(district_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-
-    generator = PlanningSeriesGenerator(
-        series_repo=SqlPlanningSeriesRepository(db),
-        slot_repo=SqlPlanningSlotRepository(db),
-        instance_repo=SqlEventInstanceRepository(db),
-        district_repo=SqlDistrictRepository(db),
-        congregation_repo=SqlCongregationRepository(db),
+        series_repo=series_repo,
+        slot_repo=slot_repo,
+        instance_repo=instance_repo,
     )
     result = await generator.run_for_window(
         from_date=from_dt.date(),
@@ -787,9 +818,10 @@ async def import_feiertage_endpoint(
     body: FeiertageImportRequest,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    district_repo: SqlDistrictRepository = Depends(get_district_repository),
 ) -> FeiertageImportResult:
     """Import German public holidays from Nager.Date API into the district (idempotent)."""
-    if not await SqlDistrictRepository(db).get(district_id):
+    if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 

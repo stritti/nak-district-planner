@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import uuid
@@ -16,7 +19,7 @@ from app.adapters.idp.base import IdpProvisioningError
 from app.adapters.idp.keycloak_provisioner import KeycloakProvisioningAdapter
 from app.adapters.idp.webhook_provisioner import HttpIdpProvisioningAdapter
 from app.application.init import seed_canonical_roles
-from app.celery_app import _make_sync_db_url
+from app.celery_app import celery
 from app.config import Settings
 from app.domain.models.invitation import (
     CongregationInvitation,
@@ -211,7 +214,7 @@ async def test_keycloak_provisioning_adapter_existing_user() -> None:
     token_resp.json.return_value = {"access_token": "t"}
 
     lookup_existing = MagicMock(status_code=200)
-    lookup_existing.json.return_value = [{"id": "existing-1"}]
+    lookup_existing.json.return_value = [{"id": "existing-1", "emailVerified": True}]
 
     client_ctx = AsyncMock()
     c = client_ctx.__aenter__.return_value
@@ -230,6 +233,75 @@ async def test_keycloak_provisioning_adapter_existing_user() -> None:
         )
     assert result.status == "EXISTING"
     assert result.user_sub == "existing-1"
+
+
+def _kc_adapter(invite: bool) -> KeycloakProvisioningAdapter:
+    return KeycloakProvisioningAdapter(
+        base_url="https://kc.example.com",
+        realm="nak-planner",
+        admin_username="admin",
+        admin_password="secret",
+        timeout_seconds=2,
+        invite_on_approval=invite,
+    )
+
+
+async def _kc_provision(adapter: KeycloakProvisioningAdapter, client_ctx: AsyncMock):
+    with patch("app.adapters.idp.keycloak_provisioner.httpx.AsyncClient", return_value=client_ctx):
+        return await adapter.provision_user(
+            email="victim@example.com",
+            name="Victim",
+            district_id=str(uuid.uuid4()),
+            registration_id=str(uuid.uuid4()),
+            role="DISTRICT_ADMIN",
+            scope_type="DISTRICT",
+            scope_id=str(uuid.uuid4()),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry_extra", [{}, {"emailVerified": False}, {"emailVerified": "true"}])
+@pytest.mark.parametrize("invite", [False, True])
+async def test_keycloak_existing_unverified_account_is_not_bound(
+    entry_extra: dict, invite: bool
+) -> None:
+    """Issue #461: an existing Keycloak account whose email is not verified
+    must not be bound to the registration (no user_sub returned).
+    """
+    token_resp = MagicMock(status_code=200)
+    token_resp.json.return_value = {"access_token": "t"}
+    lookup = MagicMock(status_code=200)
+    lookup.json.return_value = [{"id": "attacker-1", **entry_extra}]
+    client_ctx = AsyncMock()
+    c = client_ctx.__aenter__.return_value
+    c.post = AsyncMock(return_value=token_resp)
+    c.get = AsyncMock(return_value=lookup)
+    c.put = AsyncMock(return_value=MagicMock(status_code=204, text=""))
+
+    result = await _kc_provision(_kc_adapter(invite), client_ctx)
+
+    assert result.user_sub is None
+    assert result.status == ("EXISTING_UNVERIFIED_INVITED" if invite else "EXISTING_UNVERIFIED")
+
+
+@pytest.mark.asyncio
+async def test_keycloak_conflict_on_create_does_not_bind_unverified_account() -> None:
+    """A 409 race on create must apply the same emailVerified check."""
+    token_resp = MagicMock(status_code=200)
+    token_resp.json.return_value = {"access_token": "t"}
+    lookup_empty = MagicMock(status_code=200)
+    lookup_empty.json.return_value = []
+    lookup_unverified = MagicMock(status_code=200)
+    lookup_unverified.json.return_value = [{"id": "attacker-1", "emailVerified": False}]
+    client_ctx = AsyncMock()
+    c = client_ctx.__aenter__.return_value
+    c.post = AsyncMock(side_effect=[token_resp, MagicMock(status_code=409, text="exists")])
+    c.get = AsyncMock(side_effect=[lookup_empty, lookup_unverified])
+
+    result = await _kc_provision(_kc_adapter(False), client_ctx)
+
+    assert result.user_sub is None
+    assert result.status == "EXISTING_UNVERIFIED"
 
 
 def test_settings_parsing_and_validation() -> None:
@@ -286,10 +358,31 @@ def test_congregation_invitation_create_validation() -> None:
         )
 
 
-def test_make_sync_db_url_valid() -> None:
-    """_make_sync_db_url converts async URL to sync URL."""
-    result = _make_sync_db_url("postgresql+asyncpg://user:pass@localhost:5432/db")
-    assert result == "postgresql+psycopg2://user:pass@localhost:5432/db"
+def test_celery_uses_valkey_redis_transport() -> None:
+    """Celery must use Redis-compatible Valkey, never the experimental SQL broker."""
+    assert celery.conf.broker_url.startswith("redis://")
+    assert celery.conf.result_backend.startswith("redis://")
+
+
+def test_settings_redis_url_scheme_conversion() -> None:
+    """Valkey and Redis schemes map to redis-py URLs; unknown schemes fail loudly."""
+    for valkey_url, expected in [
+        ("valkey://valkey:6379/0", "redis://valkey:6379/0"),
+        ("valkeys://valkey:6379/0", "rediss://valkey:6379/0"),
+        ("redis://redis:6379/1", "redis://redis:6379/1"),
+        ("rediss://redis:6379/1", "rediss://redis:6379/1"),
+    ]:
+        s = Settings(valkey_url=valkey_url)
+        assert s.redis_url == expected
+    invalid = Settings(valkey_url="kafka://broker:9092")
+    with pytest.raises(ValueError, match="VALKEY_URL"):
+        _ = invalid.redis_url
+    sync_task = celery.tasks["sync_calendar_integration"]
+    assert sync_task.acks_late is True
+    assert sync_task.reject_on_worker_lost is True
+    assert sync_task.soft_time_limit == 240
+    assert sync_task.time_limit == 300
+    assert celery.conf.task_acks_late is False
 
 
 def test_settings_production_oidc_discovery_url_must_be_http() -> None:
@@ -334,11 +427,6 @@ def test_settings_app_version_package_not_found() -> None:
         s = Settings(app_env="development", oidc_scopes="openid profile")
         assert s.app_version == "0.0.0"
 
-
-def test_make_sync_db_url_invalid() -> None:
-    """_make_sync_db_url raises ValueError for non-asyncpg URLs."""
-    with pytest.raises(ValueError, match="DATABASE_URL must start with"):
-        _make_sync_db_url("sqlite:///db.sqlite3")
 
 
 def test_congregation_invitation_external_note_validation() -> None:

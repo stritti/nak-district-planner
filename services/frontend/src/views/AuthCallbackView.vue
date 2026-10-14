@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div class="flex items-center justify-center min-h-screen bg-gray-50 p-4">
     <div v-if="loading" class="text-center">

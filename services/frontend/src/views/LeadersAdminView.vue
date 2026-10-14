@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div class="p-4 sm:p-6 max-w-5xl">
     <h1 class="page-title">Amtstragende</h1>
@@ -43,6 +46,16 @@
             class="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700"
           >{{ pendingCount }}</span>
         </button>
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-t transition-colors"
+          :class="activeTab === 'unavailabilities'
+            ? 'border-b-2 border-blue-600 text-blue-600'
+            : 'text-gray-500 hover:text-gray-800'"
+          data-testid="unavailability-tab"
+          @click="switchToUnavailabilities()"
+        >
+          Abwesenheiten
+        </button>
       </div>
       <!-- Leaders tab -->
       <template v-if="activeTab === 'leaders'">
@@ -68,15 +81,74 @@
         </div>
 
         <!-- Empty state -->
-        <div
+        <EmptyState
           v-if="leadersForSection(section.congregationId).length === 0"
-          class="text-xs text-gray-400 dark:text-gray-500 py-2 pl-1"
-        >
-          Keine Amtstragende angelegt.
+          message="Keine Amtstragende angelegt."
+          compact
+        />
+
+        <!-- Leaders: mobile card list (no horizontal scroll needed) -->
+        <div v-else class="md:hidden space-y-2">
+          <div
+            v-for="leader in leadersForSection(section.congregationId)"
+            :key="leader.id"
+            class="card p-3"
+            :class="!leader.is_active ? 'opacity-50' : ''"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
+                    {{ leader.rank ?? '—' }}
+                  </span>
+                  <p class="font-medium text-gray-800 dark:text-gray-200 break-words min-w-0">{{ leader.name }}</p>
+                </div>
+                <p v-if="section.congregationId === null" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {{ congregationName(leader.congregation_id) || '—' }}
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {{ leader.email || '—' }} · {{ leader.phone || '—' }}
+                </p>
+                <p v-if="leader.special_role" class="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">Beauftragung: {{ leader.special_role }}</p>
+              </div>
+              <span
+                class="badge shrink-0"
+                :class="leader.is_active ? 'bg-green-100 dark:bg-green-900/20 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'"
+              >
+                {{ leader.is_active ? 'Aktiv' : 'Inaktiv' }}
+              </span>
+            </div>
+            <div class="mt-2 flex items-center justify-end gap-1">
+              <button class="btn-icon" title="Bearbeiten" @click="openEditModal(leader)">
+                <PencilSquareIcon class="h-4 w-4" />
+              </button>
+              <button
+                class="btn-icon hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400"
+                title="Abwesenheiten verwalten"
+                @click="openUnavailabilitiesFor(leader)"
+              >
+                <CalendarDaysIcon class="h-4 w-4" />
+              </button>
+              <button
+                class="btn-icon hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400"
+                title="ICS-Export-Token erstellen"
+                @click="openExportModal(leader)"
+              >
+                <LinkIcon class="h-4 w-4" />
+              </button>
+              <button
+                class="btn-icon hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                title="Löschen"
+                @click="confirmDelete(leader)"
+              >
+                <TrashIcon class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
 
-        <!-- Leaders table -->
-        <div v-else class="card overflow-hidden">
+        <!-- Leaders: desktop table -->
+        <div v-if="leadersForSection(section.congregationId).length > 0" class="card overflow-hidden hidden md:block">
           <div class="table-scroll">
           <table class="table-min-w w-full text-sm">
             <thead class="table-thead">
@@ -136,6 +208,13 @@
                       <PencilSquareIcon class="h-4 w-4" />
                     </button>
                     <button
+                      class="btn-icon hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400"
+                      title="Abwesenheiten verwalten"
+                      @click="openUnavailabilitiesFor(leader)"
+                    >
+                      <CalendarDaysIcon class="h-4 w-4" />
+                    </button>
+                    <button
                       class="btn-icon hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400"
                       title="ICS-Export-Token erstellen"
                       @click="openExportModal(leader)"
@@ -164,9 +243,11 @@
     <template v-else-if="activeTab === 'registrations'">
       <div v-if="regLoading" class="text-sm text-gray-500">Lade Registrierungen…</div>
 
-      <div v-else-if="registrations.length === 0" class="text-sm text-gray-400 py-4">
-        Keine Registrierungsanfragen vorhanden.
-      </div>
+      <EmptyState
+        v-else-if="registrations.length === 0"
+        message="Keine Registrierungsanfragen vorhanden."
+        compact
+      />
 
       <div v-else class="border border-gray-200 rounded-lg overflow-hidden">
         <div class="table-scroll">
@@ -263,6 +344,36 @@
       </div>
     </template>
     <!-- /Registrations tab -->
+
+    <!-- Unavailabilities tab -->
+    <template v-else-if="activeTab === 'unavailabilities'">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2">
+          <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Erfasste Abwesenheiten</h2>
+          <LeaderUnavailabilityList
+            :items="unavailabilitiesStore.items"
+            :leaders="leaders"
+            :loading="unavailabilitiesStore.loading"
+            :preset-leader-id="unavailabilityFilterLeaderId"
+            @update:filter-leader-id="unavailabilityFilterLeaderId = $event"
+            :can-delete="canManageUnavailabilities"
+            @delete="confirmDeleteUnavailability"
+          />
+        </div>
+        <div v-if="canManageUnavailabilities">
+          <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Neue Abwesenheit</h2>
+          <LeaderUnavailabilityForm
+            ref="unavailabilityFormRef"
+            :leaders="leaders"
+            :preset-leader-id="unavailabilityFilterLeaderId"
+            @update:filter-leader-id="unavailabilityFilterLeaderId = $event"
+            :saving="unavailabilitySavingDistrictId === selectedDistrictId"
+            @submit="saveUnavailability"
+          />
+        </div>
+      </div>
+    </template>
+    <!-- /Unavailabilities tab -->
 
     <!-- Approve registration modal -->
     <div
@@ -399,6 +510,20 @@
       @cancel="pendingDeleteLeader = null"
     />
 
+    <!-- Delete unavailability confirm dialog -->
+    <ConfirmDialog
+      :open="pendingDeleteUnavailability !== null"
+      variant="danger"
+      title="Abwesenheit löschen?"
+      :message="pendingDeleteUnavailability
+        ? `Die Abwesenheit vom ${formatUnavailabilityPeriod(pendingDeleteUnavailability)} wird gelöscht.`
+        : ''"
+      confirm-text="Löschen"
+      :loading="unavailabilityDeleting"
+      @confirm="executeDeleteUnavailability"
+      @cancel="pendingDeleteUnavailability = null"
+    />
+
     <div
       v-if="addModal.open"
       class="modal-backdrop"
@@ -421,8 +546,8 @@
           </span>
         </div>
 
-        <div class="grid grid-cols-2 gap-4 mb-4">
-          <div class="col-span-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div class="col-span-1 sm:col-span-2">
             <label class="form-label">Name *</label>
             <input
               v-model="addModal.name"
@@ -511,8 +636,8 @@
           </button>
         </div>
 
-        <div class="grid grid-cols-2 gap-4 mb-4">
-          <div class="col-span-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div class="col-span-1 sm:col-span-2">
             <label class="form-label">Name *</label>
             <input
               v-model="editModal.name"
@@ -572,7 +697,7 @@
             />
           </div>
 
-          <div class="col-span-2">
+          <div class="col-span-1 sm:col-span-2">
             <label class="form-label">Notizen</label>
             <textarea
               v-model="editModal.notes"
@@ -632,14 +757,8 @@
               readonly
               class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono"
             />
-            <button
-              class="btn-primary shrink-0 px-3 py-2"
-              @click="copyUrl"
-            >
-              Kopieren
-            </button>
+            <CopyButton :value="exportModal.icsUrl" />
           </div>
-          <p v-if="exportModal.copied" class="text-xs text-green-600">Kopiert!</p>
         </template>
 
         <template v-else>
@@ -671,9 +790,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import CopyButton from '../components/CopyButton.vue'
+import EmptyState from '../components/EmptyState.vue'
+import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
+import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
 import {
   BuildingOffice2Icon,
+  CalendarDaysIcon,
   CheckIcon,
   HomeModernIcon,
   LinkIcon,
@@ -693,6 +818,7 @@ import {
   updateLeader,
   LEADER_RANKS,
   SPECIAL_ROLES,
+  leaderNameFromId,
   type LeaderRank,
   type LeaderResponse,
   type SpecialRole,
@@ -705,11 +831,20 @@ import {
   rejectRegistration,
   type RegistrationResponse,
 } from '../api/registrations'
+import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
+import { useLeaderUnavailabilitiesStore } from '../stores/leaderUnavailabilities'
 import { useToastStore } from '../stores/toast'
+import {
+  formatUnavailabilityPeriod,
+  type LeaderUnavailabilityCreate,
+  type LeaderUnavailabilityResponse,
+} from '../api/leaderUnavailabilities'
 
+const authStore = useAuthStore()
 const districtsStore = useDistrictsStore()
 const toastStore = useToastStore()
+const unavailabilitiesStore = useLeaderUnavailabilitiesStore()
 const congregations = ref<CongregationResponse[]>([])
 const leaders = ref<LeaderResponse[]>([])
 const selectedDistrictId = computed({
@@ -726,7 +861,7 @@ const selfLinkError = ref('')
 
 // ── Tab state ──────────────────────────────────────────────────────────────────
 
-const activeTab = ref<'leaders' | 'registrations'>('leaders')
+const activeTab = ref<'leaders' | 'registrations' | 'unavailabilities'>('leaders')
 
 // ── Registrations ─────────────────────────────────────────────────────────────
 
@@ -750,6 +885,85 @@ async function loadRegistrations() {
 async function switchToRegistrations() {
   activeTab.value = 'registrations'
   await loadRegistrations()
+}
+
+// ── Unavailabilities ─────────────────────────────────────────────
+
+const unavailabilityFilterLeaderId = ref('')
+useSessionViewSettings('leaders', () => authStore.user?.sub ?? null, () => selectedDistrictId.value, {
+  leader: sessionField(unavailabilityFilterLeaderId, () => '', sessionText),
+})
+const unavailabilitySavingDistrictId = ref('')
+let districtLoadGeneration = 0
+const unavailabilityDeleting = ref(false)
+const unavailabilityFormRef = ref<InstanceType<typeof LeaderUnavailabilityForm> | null>(null)
+const pendingDeleteUnavailability = ref<LeaderUnavailabilityResponse | null>(null)
+
+const canManageUnavailabilities = computed(() => {
+  if (authStore.isSuperadmin) return true
+  return authStore.memberships.some(
+    (membership) =>
+      membership.scope_type === 'DISTRICT' &&
+      membership.scope_id === selectedDistrictId.value &&
+      ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(membership.role),
+  )
+})
+
+async function switchToUnavailabilities(leaderId?: string) {
+  activeTab.value = 'unavailabilities'
+  if (leaderId !== undefined) unavailabilityFilterLeaderId.value = leaderId
+  try {
+    await unavailabilitiesStore.fetchUnavailabilities(selectedDistrictId.value)
+  } catch (e) {
+    toastStore.error('Abwesenheiten konnten nicht geladen werden', e instanceof Error ? e.message : undefined)
+  }
+}
+
+function openUnavailabilitiesFor(leader: LeaderResponse) {
+  switchToUnavailabilities(leader.id)
+}
+
+async function saveUnavailability(body: LeaderUnavailabilityCreate) {
+  const districtId = selectedDistrictId.value
+  if (!districtId || !canManageUnavailabilities.value) return
+  const leaderSnapshot = [...leaders.value]
+  unavailabilitySavingDistrictId.value = districtId
+  try {
+    const created = await unavailabilitiesStore.addUnavailability(body)
+    if (selectedDistrictId.value === districtId) {
+      unavailabilityFormRef.value?.reset()
+      toastStore.success(
+        'Abwesenheit erfasst',
+        `${leaderNameFromId(created.leader_id, leaderSnapshot)}: ${formatUnavailabilityPeriod(created)}`,
+      )
+    }
+  } catch (e) {
+    toastStore.error(
+      'Abwesenheit konnte nicht erfasst werden',
+      e instanceof Error ? e.message : undefined,
+    )
+  } finally {
+    if (unavailabilitySavingDistrictId.value === districtId) unavailabilitySavingDistrictId.value = ''
+  }
+}
+
+function confirmDeleteUnavailability(item: LeaderUnavailabilityResponse) {
+  pendingDeleteUnavailability.value = item
+}
+
+async function executeDeleteUnavailability() {
+  if (!pendingDeleteUnavailability.value || !selectedDistrictId.value || !canManageUnavailabilities.value) return
+  const item = pendingDeleteUnavailability.value
+  unavailabilityDeleting.value = true
+  try {
+    await unavailabilitiesStore.removeUnavailability(item.id)
+    pendingDeleteUnavailability.value = null
+    toastStore.success('Abwesenheit gelöscht', formatUnavailabilityPeriod(item))
+  } catch (e) {
+    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
+  } finally {
+    unavailabilityDeleting.value = false
+  }
 }
 
 // Approve modal
@@ -933,7 +1147,14 @@ onMounted(async () => {
 })
 
 async function onDistrictChange() {
-  if (!selectedDistrictId.value) {
+  const loadGeneration = ++districtLoadGeneration
+  const districtId = selectedDistrictId.value
+  pendingDeleteUnavailability.value = null
+  unavailabilityFormRef.value?.reset()
+  leaders.value = []
+  await unavailabilitiesStore.fetchUnavailabilities('')
+  if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
+  if (!districtId) {
     selfLinkedLeader.value = null
     selfSelectedLeaderId.value = ''
     selfLinkError.value = ''
@@ -941,13 +1162,21 @@ async function onDistrictChange() {
   }
   loading.value = true
   try {
-    ;[leaders.value, congregations.value] = await Promise.all([
-      listLeaders(selectedDistrictId.value),
-      listCongregations(selectedDistrictId.value),
+    const [loadedLeaders, loadedCongregations] = await Promise.all([
+      listLeaders(districtId),
+      listCongregations(districtId),
     ])
+    if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
+    leaders.value = loadedLeaders
+    if (unavailabilityFilterLeaderId.value && !loadedLeaders.some((leader) => leader.id === unavailabilityFilterLeaderId.value)) {
+      unavailabilityFilterLeaderId.value = ''
+    }
+    congregations.value = loadedCongregations
     await loadSelfLink()
+    if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
+    if (activeTab.value === 'unavailabilities') await switchToUnavailabilities()
   } finally {
-    loading.value = false
+    if (loadGeneration === districtLoadGeneration) loading.value = false
   }
 }
 
@@ -1129,7 +1358,6 @@ const exportModal = reactive({
   leaderName: '',
   leaderRank: '',
   icsUrl: '',
-  copied: false,
   error: '',
 })
 
@@ -1139,7 +1367,6 @@ function openExportModal(leader: LeaderResponse) {
   exportModal.leaderName = leader.name
   exportModal.leaderRank = leader.rank ?? ''
   exportModal.icsUrl = ''
-  exportModal.copied = false
   exportModal.error = ''
 }
 
@@ -1166,11 +1393,4 @@ async function createExportToken() {
   }
 }
 
-async function copyUrl() {
-  await navigator.clipboard.writeText(exportModal.icsUrl)
-  exportModal.copied = true
-  setTimeout(() => {
-    exportModal.copied = false
-  }, 2000)
-}
 </script>

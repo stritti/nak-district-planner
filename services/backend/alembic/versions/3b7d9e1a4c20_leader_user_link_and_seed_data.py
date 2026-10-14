@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Link leaders to users and seed base demo data.
 
 Revision ID: 3b7d9e1a4c20

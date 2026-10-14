@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { createRouter, createWebHistory, type NavigationGuardNext, type RouteLocationNormalized } from 'vue-router'
 import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
@@ -7,9 +10,11 @@ import DistrictsAdminView from '../views/DistrictsAdminView.vue'
 import LeadersAdminView from '../views/LeadersAdminView.vue'
 import CalendarIntegrationsView from '../views/CalendarIntegrationsView.vue'
 import ExportTokensView from '../views/ExportTokensView.vue'
+import ReminderConfigsView from '../views/ReminderConfigsView.vue'
 import AuthCallbackView from '../views/AuthCallbackView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegistrationView from '../views/RegistrationView.vue'
+import { useOIDC } from '../composables/useOIDC'
 import { useAuthStore } from '../stores/auth'
 
 // Create a standalone pinia instance for router guards (not using the app instance)
@@ -24,10 +29,10 @@ function getPinia() {
   return pinia
 }
 
-function requireAuth(
+async function requireAuth(
   to: RouteLocationNormalized,
   from: RouteLocationNormalized,
-  next: NavigationGuardNext
+  next: NavigationGuardNext,
 ) {
   try {
     const piniaInstance = getPinia()
@@ -35,12 +40,25 @@ function requireAuth(
 
     if (authStore.isAuthenticated) {
       next()
-    } else {
-      next('/login')
+      return
     }
-  } catch (err) {
-    // If pinia isn't available, redirect to login to be safe
-    console.debug('Auth guard: pinia not ready, redirecting to login', err)
+
+    // The access token is memory-only. On a direct reload of a protected
+    // route, rebuild it from the server-held HttpOnly refresh session before
+    // deciding whether the user is logged out.
+    const restored = await useOIDC(router).ensureSession()
+    if (!restored || !authStore.isAuthenticated) {
+      next('/login')
+      return
+    }
+
+    // Rehydrate authorization facts once the bearer exists. The store handles
+    // transient API failures fail-closed by resetting privileged flags.
+    await authStore.refreshCurrentUserFlags()
+    next()
+  } catch {
+    // Restore errors fail closed; protected navigation never proceeds without
+    // an established in-memory session.
     next('/login')
   }
 }
@@ -73,6 +91,12 @@ export const router = createRouter({
       beforeEnter: requireAuth,
     },
     {
+      path: '/recurring-events',
+      name: 'recurring-events',
+      component: () => import('../views/RecurringEventsView.vue'),
+      beforeEnter: requireAuth,
+    },
+    {
       path: '/matrix',
       name: 'matrix',
       component: MatrixView,
@@ -97,6 +121,20 @@ export const router = createRouter({
       beforeEnter: requireAuth,
     },
     {
+      path: '/admin/reminders',
+      name: 'admin-reminders',
+      component: ReminderConfigsView,
+      beforeEnter: requireAuth,
+    },
+    {
+      path: '/admin/external-candidates',
+      name: 'admin-external-candidates',
+      // Keep this view lazy: its API client depends on the router for auth recovery.
+      // A top-level import here would therefore create router -> view -> API -> router.
+      component: () => import('../views/ExternalCandidatesView.vue'),
+      beforeEnter: requireAuth,
+    },
+    {
       path: '/admin/export',
       name: 'admin-export',
       component: ExportTokensView,
@@ -107,6 +145,11 @@ export const router = createRouter({
       path: '/register',
       name: 'register',
       component: RegistrationView,
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../views/NotFoundView.vue'),
     },
   ],
 })

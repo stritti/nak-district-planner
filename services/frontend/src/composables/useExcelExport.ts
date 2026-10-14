@@ -1,9 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Minimal XLSX (.xlsx) writer — no external dependencies.
  * Generates a ZIP archive (Store method, no compression) with OOXML SpreadsheetML XML.
  */
 import type { MatrixResponse } from '../api/matrix'
-import type { EventResponse } from '../api/events'
+import type { EventResponse, PlanningSlotStatus } from '../api/events'
 
 // ── Date/time formatting ──────────────────────────────────────────────────────
 
@@ -302,8 +305,8 @@ export async function exportMatrixToExcel(
 
 // ── Events Export ─────────────────────────────────────────────────────────────
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Entwurf', PUBLISHED: 'Veröffentlicht', CANCELLED: 'Abgesagt',
+const STATUS_LABELS: Record<PlanningSlotStatus, string> = {
+  ACTIVE: 'Aktiv', CANCELLED: 'Abgesagt',
 }
 const SOURCE_LABELS: Record<string, string> = {
   INTERNAL: 'Intern', EXTERNAL: 'Extern',

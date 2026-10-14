@@ -1,7 +1,16 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchMatrix, type MatrixResponse } from '../api/matrix'
-import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
+import { parseConflictError } from '../api/errors'
+import {
+  createAssignment,
+  deleteAssignment,
+  type AssignmentOptions,
+  updateAssignment,
+} from '../api/serviceAssignments'
 import { generateMatrixDraftServices } from '../api/districts'
 
 export const useMatrixStore = defineStore('matrix', () => {
@@ -14,6 +23,8 @@ export const useMatrixStore = defineStore('matrix', () => {
   const groupId = ref<string>('')
   const fromDt = ref<string>('')
   const toDt = ref<string>('')
+  /** Client-side text filter on congregation names; not sent to the API. */
+  const congregationQuery = ref<string>('')
 
   async function fetch() {
     if (!districtId.value || !fromDt.value || !toDt.value) return
@@ -36,17 +47,25 @@ export const useMatrixStore = defineStore('matrix', () => {
   async function assign(
     eventId: string,
     assignmentId: string | null,
-    options: { leaderId?: string | null; leaderName?: string | null },
+    options: AssignmentOptions,
     assignmentStatus?: 'OPEN' | 'ASSIGNED' | 'CONFIRMED',
   ) {
-    if (assignmentId) {
-      if (assignmentStatus) {
-        await updateAssignment(eventId, assignmentId, options, assignmentStatus)
+    try {
+      if (assignmentId) {
+        if (assignmentStatus) {
+          await updateAssignment(eventId, assignmentId, options, assignmentStatus)
+        } else {
+          await updateAssignment(eventId, assignmentId, options)
+        }
       } else {
-        await updateAssignment(eventId, assignmentId, options)
+        await createAssignment(eventId, options, assignmentStatus ?? 'ASSIGNED')
       }
-    } else {
-      await createAssignment(eventId, options, assignmentStatus ?? 'ASSIGNED')
+    } catch (e) {
+      const conflictError = parseConflictError(e)
+      if (conflictError) {
+        throw conflictError
+      }
+      throw e
     }
     await fetch() // refresh matrix
   }
@@ -78,11 +97,10 @@ export const useMatrixStore = defineStore('matrix', () => {
     groupId,
     fromDt,
     toDt,
+    congregationQuery,
     fetch,
     assign,
     clearAssignment,
     generateDraftsForCurrentRange,
   }
-}, {
-  persist: { pick: ['districtId', 'groupId', 'fromDt', 'toDt'] },
 })

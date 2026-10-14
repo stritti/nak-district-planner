@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/api/schemas/calendar_integration.py: Module."""
 
 from __future__ import annotations
@@ -7,7 +10,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.domain.models.calendar_integration import CalendarCapability, CalendarType
+from app.domain.models.calendar_integration import CalendarCapability, CalendarType, SyncDeleteMode
 
 
 class CalendarIntegrationCreate(BaseModel):
@@ -18,11 +21,12 @@ class CalendarIntegrationCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     type: CalendarType
     credentials: dict  # plain dict — encrypted before storage
-    sync_interval: int = Field(60, ge=1, le=10080)  # 1 min – 1 week
+    sync_interval: int = Field(60, ge=1, le=10080)  # 1 min – 1 week; effective minimum between attempts is 30 min after a failure
     capabilities: list[CalendarCapability] = Field(
         default_factory=lambda: [CalendarCapability.READ]
     )
     default_category: str | None = None
+    delete_behavior: SyncDeleteMode = SyncDeleteMode.MARK_CANCELLED
 
 
 class CalendarIntegrationResponse(BaseModel):
@@ -38,22 +42,27 @@ class CalendarIntegrationResponse(BaseModel):
     is_active: bool
     last_synced_at: datetime | None
     last_sync_error: str | None = None
+    last_attempt_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     default_category: str | None = None
+    delete_behavior: SyncDeleteMode
     # credentials_enc is intentionally omitted from responses
 
     model_config = {"from_attributes": True}
 
 
 class CalendarIntegrationUpdate(BaseModel):
-    """CalendarIntegrationUpdate."""
+    """CalendarIntegrationUpdate. The type is immutable; unknown fields are rejected (422)."""
+
+    model_config = {"extra": "forbid"}
 
     name: str | None = Field(None, min_length=1, max_length=255)
     credentials: dict | None = None  # if provided, re-encrypted before storage
     sync_interval: int | None = Field(None, ge=1, le=10080)
     capabilities: list[CalendarCapability] | None = None
     default_category: str | None = None
+    delete_behavior: SyncDeleteMode | None = None
 
 
 class CalendarIntegrationListResponse(BaseModel):
@@ -71,3 +80,5 @@ class SyncResult(BaseModel):
     updated: int
     cancelled: int
     auto_matched: int
+    skipped: int = 0
+    failed: int = 0

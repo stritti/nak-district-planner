@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Guard against the `try/except PermissionError` anti-pattern in API routers.
 
 Routers must call `require_role_in_district()` / `require_role_in_congregation()`

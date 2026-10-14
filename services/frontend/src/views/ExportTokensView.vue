@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div class="p-4 sm:p-6 max-w-3xl">
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-2">
@@ -48,13 +51,11 @@
               <code class="text-xs bg-gray-100 dark:bg-gray-700 rounded px-2 py-1 text-gray-700 dark:text-gray-300 truncate max-w-sm block">
                 {{ icsUrl(t.token, tokenFilter[t.id]) }}
               </code>
-              <button
-                class="btn-icon shrink-0"
-                title="URL kopieren"
-                @click="copyUrl(t.token, tokenFilter[t.id])"
-              >
-                <ClipboardDocumentIcon class="h-4 w-4" />
-              </button>
+              <CopyButton
+                :value="icsUrl(t.token, tokenFilter[t.id])"
+                label="URL kopieren"
+                variant="icon"
+              />
               <a
                 :href="icsUrl(t.token, tokenFilter[t.id])"
                 target="_blank"
@@ -64,8 +65,8 @@
                 <ArrowTopRightOnSquareIcon class="h-4 w-4" />
               </a>
             </div>
-            <!-- approval_status filter -->
-            <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+            <!-- approval_status filter (PUBLIC tokens are always confirmed-only) -->
+            <div v-if="t.token_type === 'INTERNAL'" class="flex items-center gap-2 mt-1.5 flex-wrap">
               <span class="text-[11px] text-gray-400 dark:text-gray-500">Freigabe:</span>
               <button
                 class="text-[11px] px-2 py-0.5 rounded border transition-colors"
@@ -86,7 +87,6 @@
                 Inkl. Geplante
               </button>
             </div>
-            <p v-if="copiedToken === t.token" class="text-xs text-green-600 mt-1">Kopiert!</p>
           </div>
           <button
             class="btn-icon hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
@@ -210,13 +210,13 @@
 import { onMounted, reactive, ref } from 'vue'
 import {
   ArrowTopRightOnSquareIcon,
-  ClipboardDocumentIcon,
   LinkIcon,
   PlusIcon,
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import CopyButton from '../components/CopyButton.vue'
 import {
   createExportToken,
   deleteExportToken,
@@ -232,7 +232,6 @@ const toastStore = useToastStore()
 const tokens = ref<ExportTokenResponse[]>([])
 const loading = ref(false)
 const error = ref('')
-const copiedToken = ref<string | null>(null)
 const deleteTarget = ref<ExportTokenResponse | null>(null)
 const deleting = ref(false)
 const formCongregations = ref<CongregationResponse[]>([])
@@ -281,8 +280,8 @@ function congregationName(id: string): string {
 }
 
 function defaultFilter(t: ExportTokenResponse): 'confirmed_only' | 'include_planned' {
-  // Match backend logic: public tokens without leader → confirmed_only, else include_planned
-  if (t.token_type === 'PUBLIC' && !t.leader_id) return 'confirmed_only'
+  // Match backend logic: public tokens are always confirmed_only, internal default include_planned
+  if (t.token_type === 'PUBLIC') return 'confirmed_only'
   return 'include_planned'
 }
 
@@ -290,12 +289,6 @@ function icsUrl(token: string, filter?: 'confirmed_only' | 'include_planned'): s
   const base = `${window.location.origin}/api/v1/export/${token}/calendar.ics`
   if (filter) return `${base}?approval_status=${filter}`
   return base
-}
-
-async function copyUrl(token: string, filter?: 'confirmed_only' | 'include_planned') {
-  await navigator.clipboard.writeText(icsUrl(token, filter))
-  copiedToken.value = token
-  setTimeout(() => { copiedToken.value = null }, 2000)
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────

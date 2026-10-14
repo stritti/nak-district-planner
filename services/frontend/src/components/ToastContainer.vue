@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <Teleport to="body">
     <div
@@ -5,7 +8,12 @@
       aria-relevant="additions removals"
       class="fixed bottom-4 right-4 z-50 flex flex-col-reverse gap-2"
     >
-      <TransitionGroup name="toast">
+      <TransitionGroup
+        enter-active-class="transition-all duration-300 ease-out"
+        leave-active-class="transition-all duration-200 ease-in"
+        enter-from-class="translate-x-4 opacity-0"
+        leave-to-class="translate-x-4 scale-95 opacity-0"
+      >
         <div
           v-for="msg in messages"
           :key="msg.id"
@@ -159,31 +167,3 @@ const progressFgClass = (t: ToastType): string => {
 }
 </script>
 
-<style scoped>
-.toast-enter-active {
-  transition: all 0.3s ease-out;
-}
-.toast-leave-active {
-  transition: all 0.2s ease-in;
-}
-.toast-enter-from {
-  opacity: 0;
-  transform: translateX(1rem);
-}
-.toast-leave-to {
-  opacity: 0;
-  transform: translateX(1rem) scale(0.95);
-}
-
-@keyframes progress {
-  from {
-    transform: scaleX(1);
-  }
-  to {
-    transform: scaleX(0);
-  }
-}
-.animate-progress {
-  animation: progress linear forwards;
-}
-</style>

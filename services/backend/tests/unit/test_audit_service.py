@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit tests for Audit Service."""
 
 import asyncio
@@ -351,6 +354,8 @@ class TestAuditService:
         await service.start()
 
         mock_session = AsyncMock()
+        mock_session.__aenter__.return_value = mock_session
+        mock_session.add = MagicMock()  # AsyncSession.add is synchronous
         mock_session.commit.return_value = None
         mock_session.rollback.return_value = None
 
@@ -366,6 +371,10 @@ class TestAuditService:
             await asyncio.sleep(0.05)
 
         await service.stop()
+
+        mock_session.add.assert_called_once()
+        mock_session.commit.assert_awaited_once()
+        mock_session.rollback.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_writer_handles_db_error(self):

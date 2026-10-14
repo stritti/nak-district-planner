@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/application/matrix_service.py: Service for building matrix data with deviation detection."""
 
 from __future__ import annotations
@@ -5,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 
+from app.config import settings
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.planning_slot import PlanningSlot
 
@@ -29,11 +33,16 @@ class MatrixService:
     @staticmethod
     def _expected_times(
         slot: PlanningSlot,
-        default_duration_minutes: int = 90,
+        default_duration_minutes: int | None = None,
     ) -> _ExpectedTimes:
         """Compute expected start/end from a PlanningSlot (Soll-Zeiten)."""
         expected_start = datetime.combine(slot.planning_date, slot.planning_time)
-        expected_end = expected_start + timedelta(minutes=default_duration_minutes)
+        duration = (
+            settings.sync_expected_duration_minutes
+            if default_duration_minutes is None
+            else default_duration_minutes
+        )
+        expected_end = expected_start + timedelta(minutes=duration)
         return _ExpectedTimes(expected_start=expected_start, expected_end=expected_end)
 
     @staticmethod
@@ -48,14 +57,14 @@ class MatrixService:
     def calculate_deviation_minutes(
         slot: PlanningSlot,
         instance: EventInstance,
-        default_duration_minutes: int = 90,
+        default_duration_minutes: int | None = None,
     ) -> tuple[int | None, int | None]:
         """Calculate deviation in minutes between PlanningSlot and EventInstance.
 
         Args:
             slot: The PlanningSlot (Soll)
             instance: The EventInstance (Ist)
-            default_duration_minutes: Default duration for events (default: 90)
+            default_duration_minutes: Optional override for the configured sync duration
 
         Returns:
             Tuple of (start_difference_minutes, end_difference_minutes)
@@ -90,7 +99,7 @@ class MatrixService:
     def has_deviation(
         slot: PlanningSlot,
         instance: EventInstance | None,
-        default_duration_minutes: int = 90,
+        default_duration_minutes: int | None = None,
     ) -> bool:
         """Check if there's a deviation between slot and instance."""
         if not instance:

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/db/orm_models/calendar_integration.py: Module."""
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.adapters.db.base import Base
-from app.domain.models.calendar_integration import CalendarType
+from app.domain.models.calendar_integration import CalendarType, SyncDeleteMode
 
 
 class CalendarIntegrationORM(Base):
@@ -37,6 +40,10 @@ class CalendarIntegrationORM(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_sync_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     default_category: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    delete_behavior: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=SyncDeleteMode.MARK_CANCELLED.value
+    )

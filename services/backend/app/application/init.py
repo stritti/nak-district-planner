@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Initialization module for seeding canonical system data.
 
 Currently handles RBAC initialization (roles are enum-based, so no DB seeding needed).

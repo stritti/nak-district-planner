@@ -1,9 +1,23 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, time
 
-from sqlalchemy import ARRAY, Date, DateTime, ForeignKey, String, Time
+from sqlalchemy import (
+    ARRAY,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Time,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -14,6 +28,29 @@ from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlotSta
 
 class PlanningSlotORM(Base):
     __tablename__ = "planning_slots"
+    __table_args__ = (
+        UniqueConstraint("id", "district_id", name="uq_planning_slots_id_district"),
+        Index("ix_planning_slots_district_date", "district_id", "planning_date"),
+        Index("ix_planning_slots_congregation_date", "congregation_id", "planning_date"),
+        # A congregation cannot hold two active slots at the same date and time.
+        Index(
+            "no_overlapping_planning_slots",
+            "congregation_id",
+            "planning_date",
+            "planning_time",
+            unique=True,
+            postgresql_where=text("congregation_id IS NOT NULL AND status = 'ACTIVE'"),
+        ),
+        # One slot per generator occurrence, whatever its status, so a re-run
+        # (or a concurrent run) cannot re-create a moved or cancelled draft.
+        Index(
+            "uq_planning_slots_generation_key",
+            "district_id",
+            "generation_key",
+            unique=True,
+            postgresql_where=text("generation_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     series_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -42,6 +79,11 @@ class PlanningSlotORM(Base):
     # List of congregation IDs (as strings) that this slot applies to (for district-wide holidays)
     # Supports "all" sentinel string for district-wide applicability
     applicability: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=[])
+    generation_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    generation_key_detached: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     planning_date: Mapped[date] = mapped_column(Date, nullable=False)
     planning_time: Mapped[time] = mapped_column(Time(timezone=False), nullable=False)
     status: Mapped[PlanningSlotStatus] = mapped_column(

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """User ORM model — SQLAlchemy representation of User in the database.
 
 Stores user information extracted from OIDC tokens.
@@ -9,7 +12,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,10 +23,12 @@ class UserORM(Base):
     """User ORM model."""
 
     __tablename__ = "users"
+    # The constraint's index also serves lookups by sub.
+    __table_args__ = (UniqueConstraint("sub", name="uq_users_sub"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # OIDC subject (user ID from identity provider) — globally unique
-    sub: Mapped[str] = mapped_column(String(512), nullable=False, unique=True, index=True)
+    sub: Mapped[str] = mapped_column(String(512), nullable=False)
     # Email address (extracted from OIDC token)
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     # Username (preferred_username or email)

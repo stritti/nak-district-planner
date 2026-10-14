@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/api/schemas/service_assignment.py: Module."""
 
 import uuid
@@ -17,7 +20,7 @@ class ServiceAssignmentCreate(BaseModel):
     confirm_warnings: bool = False
 
     @model_validator(mode="after")
-    def check_leader(self) -> "ServiceAssignmentCreate":
+    def check_leader(self) -> ServiceAssignmentCreate:
         if self.leader_id is None and not self.leader_name:
             raise ValueError("Entweder leader_id oder leader_name muss gesetzt sein")
         return self

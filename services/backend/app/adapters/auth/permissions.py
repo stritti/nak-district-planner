@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Authorization guards and permission checks for role-based access control.
 
 Enforces permission boundaries at the application service level based on:
@@ -74,8 +77,10 @@ def has_role_in_congregation(
 ) -> bool:
     """Check if user has the required role (or higher) in a congregation.
 
-    Direct congregation membership and district-level roles are considered.
-    A DISTRICT_ADMIN has all permissions in all congregations within the district.
+    Only direct CONGREGATION memberships are checked (plus superadmin).
+    The helper has no congregation-to-district mapping; callers that allow
+    DISTRICT_ADMIN access must separately check the actual parent district.
+    It must not infer a congregation's district from unrelated memberships.
     """
     if getattr(getattr(auth_context, "user", None), "is_superadmin", False):
         return True
@@ -133,6 +138,17 @@ def require_role_in_district(
         from fastapi import HTTPException, status
 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+
+
+def require_superadmin(user: object, detail: str = "Nur Superadmin berechtigt") -> None:
+    """Raise 403 unless the user carries the database-reconciled superadmin flag.
+
+    Fails closed: objects without an ``is_superadmin`` attribute are rejected.
+    """
+    if getattr(user, "is_superadmin", False) is not True:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 def assert_has_role_in_congregation(

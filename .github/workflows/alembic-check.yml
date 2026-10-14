@@ -2,10 +2,7 @@ name: Alembic Migration Check
 
 on:
   pull_request:
-    paths:
-      - "services/backend/alembic/**"
-      - "services/backend/app/adapters/db/**"
-      - "services/backend/app/domain/models/**"
+    branches: [main]
   push:
     branches: [main, develop]
     paths:
@@ -22,7 +19,7 @@ permissions:
   pull-requests: write
 
 env:
-  PYTHON_VERSION: "3.13"
+  PYTHON_VERSION: "3.14.7"
   DATABASE_URL: postgresql+asyncpg://nak:changeme@localhost:5432/nak_planner_test
 
 jobs:
@@ -35,7 +32,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18-alpine
+        image: postgres:18.6-alpine
         env:
           POSTGRES_USER: nak
           POSTGRES_PASSWORD: changeme
@@ -49,16 +46,20 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "latest"
+          version: "0.12.23"
           python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            services/backend/pyproject.toml
+            services/backend/uv.lock
 
       - name: Install Python dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --locked
 
       - name: Check for exactly one migration head
         run: |
@@ -112,24 +113,10 @@ jobs:
           uv run python seed_testdata.py --dry-run 2>&1
           echo "✅ Seed dry-run consistent with migrated schema"
 
-      - name: Model/DB schema drift check (informational)
-        id: alembic_check
-        continue-on-error: true
+      - name: Model/DB schema drift check
         run: |
           set -o pipefail
           uv run alembic check 2>&1 | tee alembic-check-output.txt
-
-      - name: Report schema drift (non-blocking)
-        if: always()
-        run: |
-          if [ "${{ steps.alembic_check.outcome }}" = "success" ]; then
-            echo "✅ No drift between ORM models and migrated schema"
-          else
-            echo "⚠️  alembic check reports drift between ORM models and the migrated schema."
-            echo "    This does not fail the build (see openspec/changes/p0-strukturell-multi-tenant-operations"
-            echo "    tasks.md, section 3, for the known pre-existing drift and why reconciling it is a"
-            echo "    separate follow-up rather than a blocking gate)."
-          fi
 
       - name: Post migration check summary to PR
         if: always() && github.event_name == 'pull_request'
@@ -147,7 +134,7 @@ jobs:
           | **Chain Consistent** | ${{ job.status == 'success' && '✅' || '❌' }} |
           | **Downgrade/Upgrade Roundtrip** | ${{ job.status == 'success' && '✅' || '❌' }} |
           | **Seed Dry-Run** | ${{ job.status == 'success' && '✅' || '❌' }} |
-          | **Model/DB Drift (informational)** | ${{ steps.alembic_check.outcome == 'success' && '✅' || '⚠️ drift present, non-blocking' }} |
+          | **Model/DB Drift** | ${{ job.status == 'success' && '✅' || '❌' }} |
           "
 
           if [ "${{ job.status }}" = "success" ]; then

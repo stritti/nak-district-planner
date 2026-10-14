@@ -1,30 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/api/routers/planning_series.py: API endpoints for PlanningSeries management."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
-from typing import Any
+from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_planning_series_repository,
+    get_planning_slot_repository,
+)
 from app.adapters.api.schemas.planning_series import (
     PlanningSeriesCreate,
     PlanningSeriesResponse,
     PlanningSeriesUpdate,
 )
-from app.adapters.auth.permissions import require_role_in_district
+from app.adapters.api.tenant_references import ensure_congregation_in_district
+from app.adapters.auth.permissions import require_role_in_district, require_superadmin
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.planning_series import SqlPlanningSeriesRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.application.planning_series_service import PlanningSeriesSlotGenerationService
 from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.role import Role
-from app.domain.ports.repositories import (
-    PlanningSeriesRepository,
-    PlanningSlotRepository,
-)
 
 router = APIRouter(prefix="/api/v1/planning-series", tags=["planning-series"])
 
@@ -74,12 +79,14 @@ async def create_planning_series(
     body: PlanningSeriesCreate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
 ) -> PlanningSeriesResponse:
     """Create a new PlanningSeries.
 
     **RBAC:** Requires DISTRICT_ADMIN role in the district.
     """
     require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    await ensure_congregation_in_district(db, body.district_id, body.congregation_id)
 
     series = PlanningSeries.create(
         district_id=body.district_id,
@@ -92,7 +99,6 @@ async def create_planning_series(
         is_active=body.is_active if body.is_active is not None else True,
     )
 
-    repo = SqlPlanningSeriesRepository(db)
     await repo.save(series)
     await db.commit()
 
@@ -104,12 +110,12 @@ async def get_planning_series(
     series_id: uuid.UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
 ) -> PlanningSeriesResponse:
     """Get a PlanningSeries by ID.
 
     **RBAC:** Requires VIEWER role in the series' district.
     """
-    repo = SqlPlanningSeriesRepository(db)
     series = await repo.get(series_id)
 
     if not series:
@@ -129,12 +135,12 @@ async def update_planning_series(
     body: PlanningSeriesUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
 ) -> PlanningSeriesResponse:
     """Update a PlanningSeries.
 
     **RBAC:** Requires DISTRICT_ADMIN role in the series' district.
     """
-    repo = SqlPlanningSeriesRepository(db)
     series = await repo.get(series_id)
 
     if not series:
@@ -148,6 +154,7 @@ async def update_planning_series(
     # Apply updates
     fields = body.model_fields_set
     if "congregation_id" in fields and body.congregation_id is not None:
+        await ensure_congregation_in_district(db, series.district_id, body.congregation_id)
         series.congregation_id = body.congregation_id
     if "category" in fields and body.category is not None:
         series.category = body.category
@@ -162,7 +169,7 @@ async def update_planning_series(
     if "is_active" in fields and body.is_active is not None:
         series.is_active = body.is_active
 
-    series.updated_at = datetime.now()
+    series.updated_at = datetime.now(UTC)
     await repo.save(series)
     await db.commit()
 
@@ -179,13 +186,14 @@ async def generate_slots_for_series(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     body: SlotGenerationRequest = SlotGenerationRequest(),
+    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> SlotGenerationResponse:
     """Generate PlanningSlots for a specific PlanningSeries.
 
     **RBAC:** Requires DISTRICT_ADMIN role in the series' district.
     """
-    repo = SqlPlanningSeriesRepository(db)
-    series = await repo.get(series_id)
+    series = await series_repo.get(series_id)
 
     if not series:
         raise HTTPException(
@@ -196,8 +204,9 @@ async def generate_slots_for_series(
     require_role_in_district(auth, Role.DISTRICT_ADMIN, series.district_id)
 
     service = PlanningSeriesSlotGenerationService(
-        series_repo=SqlPlanningSeriesRepository(db),
-        slot_repo=SqlPlanningSlotRepository(db),
+        series_repo=series_repo,
+        slot_repo=slot_repo,
+        instance_repo=SqlEventInstanceRepository(db),
     )
 
     result = await service.generate_slots_for_series(
@@ -222,6 +231,8 @@ async def generate_slots_for_district(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     body: SlotGenerationRequest = SlotGenerationRequest(),
+    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> SlotGenerationResponse:
     """Generate PlanningSlots for all active PlanningSeries in a district.
 
@@ -230,8 +241,9 @@ async def generate_slots_for_district(
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
 
     service = PlanningSeriesSlotGenerationService(
-        series_repo=SqlPlanningSeriesRepository(db),
-        slot_repo=SqlPlanningSlotRepository(db),
+        series_repo=series_repo,
+        slot_repo=slot_repo,
+        instance_repo=SqlEventInstanceRepository(db),
     )
 
     result = await service.generate_slots_for_district(
@@ -255,20 +267,19 @@ async def generate_all_slots(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     body: SlotGenerationRequest = SlotGenerationRequest(),
+    series_repo: SqlPlanningSeriesRepository = Depends(get_planning_series_repository),
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
 ) -> SlotGenerationResponse:
     """Generate PlanningSlots for all active PlanningSeries across all districts.
 
     **RBAC:** Requires SUPERADMIN role.
     """
-    if not getattr(auth.user, "is_superadmin", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Nur Superadmin darf Slots für alle Bezirke generieren",
-        )
+    require_superadmin(auth.user, "Nur Superadmin darf Slots für alle Bezirke generieren")
 
     service = PlanningSeriesSlotGenerationService(
-        series_repo=SqlPlanningSeriesRepository(db),
-        slot_repo=SqlPlanningSlotRepository(db),
+        series_repo=series_repo,
+        slot_repo=slot_repo,
+        instance_repo=SqlEventInstanceRepository(db),
     )
 
     result = await service.generate_all_slots(

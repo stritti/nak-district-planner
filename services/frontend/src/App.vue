@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+     SPDX-License-Identifier: AGPL-3.0-only -->
+
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-950">
     <AppNav />
@@ -11,9 +14,12 @@
       </div>
     </div>
     <main :class="mainClass">
+      <ContextualHelp v-if="route.name === 'events'" context="events" />
       <RouterView />
     </main>
+    <AppFooter />
     <ToastContainer />
+    <ConfirmHost />
   </div>
 </template>
 
@@ -22,7 +28,10 @@ import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppNav from './components/AppNav.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
+import AppFooter from './components/AppFooter.vue'
 import ToastContainer from './components/ToastContainer.vue'
+import ContextualHelp from './components/ContextualHelp.vue'
+import ConfirmHost from './components/ConfirmHost.vue'
 import { useOIDC } from './composables/useOIDC'
 import { useAuthStore } from './stores/auth'
 

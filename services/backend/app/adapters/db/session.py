@@ -1,15 +1,29 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """app/adapters/db/session.py: Module."""
 
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session
 
+from app.adapters.db.domain_audit import record_domain_audit
 from app.config import settings
 
 engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
 
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+class AuditedSession(Session):
+    """Session that records domain audit entries on every flush."""
+
+
+event.listen(AuditedSession, "after_flush", record_domain_audit)
+
+AsyncSessionLocal = async_sessionmaker(
+    engine, expire_on_commit=False, sync_session_class=AuditedSession
+)
 
 
 def _set_tenant_gucs(connection, **kwargs):
@@ -60,7 +74,7 @@ def _set_tenant_gucs(connection, **kwargs):
 event.listen(engine.sync_engine, "begin", _set_tenant_gucs)
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_db_session() -> AsyncGenerator[AsyncSession]:
     async with AsyncSessionLocal() as session:
         try:
             yield session

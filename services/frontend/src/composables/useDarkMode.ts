@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { effectScope, ref, watch } from 'vue'
 
 const STORAGE_KEY = 'nak-planer-theme'

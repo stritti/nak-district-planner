@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """change applicability from UUID[] to TEXT[]
 
 Revision ID: change_applicability_to_text
