@@ -11,6 +11,8 @@ import { useLeadersStore } from '@/stores/leaders'
 import { useAuthStore } from '@/stores/auth'
 import * as assignmentsApi from '@/api/serviceAssignments'
 import type { MatrixResponse } from '@/api/matrix'
+import { ApiError } from '@/api/errors'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 vi.mock('@/api/serviceAssignments', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/serviceAssignments')>()),
@@ -185,5 +187,113 @@ describe('MatrixTable coverage gaps', () => {
     })
 
     expect(wrapper.text()).toContain('Keine Ereignisse im gewählten Zeitraum.')
+  })
+
+  describe('inline assignment conflicts', () => {
+    const savedResult = {
+      id: 'a1', event_id: 'normal', leader_id: 'l3', leader_name: null,
+      status: 'ASSIGNED' as const, event_revision: '"rev-2"', created_at: '', updated_at: '',
+    }
+
+    beforeEach(() => {
+      vi.mocked(assignmentsApi.changeAssignmentInline).mockReset()
+    })
+
+    function mountEditable() {
+      const matrixStore = useMatrixStore()
+      const auth = useAuthStore()
+      const leaders = useLeadersStore()
+      matrixStore.districtId = 'd1'
+      matrixStore.matrix = structuredClone(richMatrix)
+      matrixStore.matrix!.rows[0].cells['2026-10-05'].revision = '"rev-1"'
+      auth.memberships = [{
+        scope_type: 'DISTRICT', scope_id: 'd1', role: 'PLANNER',
+      }] as typeof auth.memberships
+      leaders.leaders = [
+        { id: 'l1', name: 'Max Muster', rank: 'Pr.', is_active: true },
+        { id: 'l3', name: 'Neu', rank: 'Di.', is_active: true },
+      ] as typeof leaders.leaders
+
+      const wrapper = mount(MatrixTable, {
+        props: { compactMode: false, matrixSortMode: 'default' },
+      })
+      return { wrapper, matrixStore }
+    }
+
+    async function submitLeader(wrapper: ReturnType<typeof mountEditable>['wrapper']) {
+      const editable = wrapper.get('[data-inline-cell-id="matrix-leader-c1-2026-10-05"]')
+      await editable.trigger('click')
+      await flushPromises()
+      await editable.get('select').setValue('l3')
+      await editable.get('select').trigger('keydown', { key: 'Enter' })
+      await flushPromises()
+    }
+
+    function conflictError(severity: 'WARN' | 'BLOCK') {
+      return new ApiError(409, 'Conflict', {
+        detail: { conflicts: [{ rule_id: 'R1', severity, message: `Konflikt ${severity}`, details: {} }] },
+      })
+    }
+
+    it('acknowledges warning-only conflicts and resends with confirm_warnings', async () => {
+      vi.mocked(assignmentsApi.changeAssignmentInline)
+        .mockRejectedValueOnce(conflictError('WARN'))
+        .mockResolvedValueOnce(savedResult)
+      const { wrapper, matrixStore } = mountEditable()
+      await submitLeader(wrapper)
+
+      const dialog = wrapper.findComponent(ConfirmDialog)
+      expect(dialog.props('open')).toBe(true)
+      dialog.vm.$emit('confirm')
+      await flushPromises()
+
+      expect(assignmentsApi.changeAssignmentInline).toHaveBeenLastCalledWith('normal', 'l3', '"rev-1"', true)
+      expect(matrixStore.matrix!.rows[0].cells['2026-10-05'].revision).toBe('"rev-2"')
+      wrapper.unmount()
+    })
+
+    it('keeps the draft and sends nothing more when the warning is cancelled', async () => {
+      vi.mocked(assignmentsApi.changeAssignmentInline).mockRejectedValueOnce(conflictError('WARN'))
+      const { wrapper } = mountEditable()
+      await submitLeader(wrapper)
+
+      wrapper.findComponent(ConfirmDialog).vm.$emit('cancel')
+      await flushPromises()
+
+      expect(assignmentsApi.changeAssignmentInline).toHaveBeenCalledOnce()
+      expect(wrapper.get('[role="alert"]').text()).toContain('abgebrochen')
+      expect(wrapper.find('select').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('shows blocking conflicts without offering acknowledgement', async () => {
+      vi.mocked(assignmentsApi.changeAssignmentInline).mockRejectedValueOnce(conflictError('BLOCK'))
+      const { wrapper } = mountEditable()
+      await submitLeader(wrapper)
+
+      expect(wrapper.findComponent(ConfirmDialog).props('open')).toBe(false)
+      expect(wrapper.get('[role="alert"]').text()).toContain('Konflikt BLOCK')
+      expect(assignmentsApi.changeAssignmentInline).toHaveBeenCalledOnce()
+      wrapper.unmount()
+    })
+
+    it('sends a single request on repeated submit while saving', async () => {
+      let finish: (value: typeof savedResult) => void = () => {}
+      vi.mocked(assignmentsApi.changeAssignmentInline).mockImplementation(
+        () => new Promise((resolve) => { finish = resolve }),
+      )
+      const { wrapper } = mountEditable()
+      const editable = wrapper.get('[data-inline-cell-id="matrix-leader-c1-2026-10-05"]')
+      await editable.trigger('click')
+      await flushPromises()
+      await editable.get('select').setValue('l3')
+      await editable.get('select').trigger('keydown', { key: 'Enter' })
+      await editable.get('select').trigger('keydown', { key: 'Enter' })
+      expect(assignmentsApi.changeAssignmentInline).toHaveBeenCalledOnce()
+
+      finish(savedResult)
+      await flushPromises()
+      wrapper.unmount()
+    })
   })
 })

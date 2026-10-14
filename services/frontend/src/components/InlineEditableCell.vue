@@ -119,6 +119,8 @@ function saveError(cause: unknown): string {
   if (cause instanceof ApiError) {
     const detail = (cause.body as { detail?: unknown } | null)?.detail
     if (typeof detail === 'string' && detail.trim()) return detail
+    const conflicts = (detail as { conflicts?: { message: string }[] } | undefined)?.conflicts
+    if (conflicts?.length) return conflicts.map((item) => item.message).join(' ')
     if (cause.status === 412) return 'Der Eintrag wurde geändert. Bitte neu laden und vergleichen.'
     if (cause.status === 428) return 'Die Versionsinformation fehlt. Bitte neu laden.'
     if (cause.status === 403) return 'Keine Berechtigung zum Bearbeiten.'
@@ -135,7 +137,8 @@ async function commit(): Promise<boolean> {
   const nextValue = draft.value.trim()
   if (props.required && !nextValue) {
     error.value = 'Dieses Feld darf nicht leer sein.'
-    (input.value ?? selectInput.value)?.focus()
+    const editor = input.value ?? selectInput.value
+    editor?.focus()
     return false
   }
   if (props.maxLength && nextValue.length > props.maxLength) {
@@ -160,7 +163,8 @@ async function commit(): Promise<boolean> {
       announcement.value = error.value
       saving.value = false
       await nextTick()
-      (input.value ?? selectInput.value)?.focus()
+      const editor = input.value ?? selectInput.value
+      editor?.focus()
       return false
     } finally {
       saving.value = false

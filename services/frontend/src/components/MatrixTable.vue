@@ -228,6 +228,15 @@
       action-label="Filter zurücksetzen"
       @action="matrixStore.congregationQuery = ''"
     />
+    <ConfirmDialog
+      :open="warnPrompt !== null"
+      title="Trotz Konflikt zuweisen?"
+      :message="warnPrompt?.message ?? ''"
+      confirm-text="Trotzdem zuweisen"
+      variant="warning"
+      @confirm="resolveWarnPrompt(true)"
+      @cancel="resolveWarnPrompt(false)"
+    />
   </div>
 
   <div
@@ -247,8 +256,10 @@ import { useDistrictsStore } from '../stores/districts'
 import { useLeadersStore } from '../stores/leaders'
 import { useAuthStore } from '../stores/auth'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
-import { changeAssignmentInline } from '../api/serviceAssignments'
+import { changeAssignmentInline, type InlineAssignmentResult } from '../api/serviceAssignments'
+import { ApiError } from '../api/errors'
 import InlineEditableCell from './InlineEditableCell.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 import type { MatrixCell, MatrixRow } from '../api/matrix'
 import { filterMatrixRows, sortMatrixRows } from '../utils/matrixRows'
 import { useScrollShadow } from '../composables/useScrollShadow'
@@ -293,10 +304,44 @@ function canInlineAssign(cell: MatrixCell): boolean {
     ))
 }
 
+interface WarnPrompt {
+  message: string
+  resolve: (confirmed: boolean) => void
+}
+const warnPrompt = ref<WarnPrompt | null>(null)
+
+function askWarningConfirmation(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    warnPrompt.value = { message, resolve }
+  })
+}
+
+function resolveWarnPrompt(confirmed: boolean): void {
+  warnPrompt.value?.resolve(confirmed)
+  warnPrompt.value = null
+}
+
+/** Warning-only 409 responses can be acknowledged; blocking conflicts cannot. */
+function conflictWarningMessage(cause: unknown): string | null {
+  if (!(cause instanceof ApiError) || cause.status !== 409) return null
+  const body = cause.body as { detail?: { conflicts?: { severity: string; message: string }[] } } | null
+  const conflicts = body?.detail?.conflicts
+  if (!conflicts?.length || conflicts.some((item) => item.severity === 'BLOCK')) return null
+  return conflicts.map((item) => item.message).join(' ')
+}
+
 async function saveInlineAssignment(cell: MatrixCell, leaderId: string, revision: string): Promise<void> {
   const eventId = cell.assignment_event_id ?? cell.event_id
   if (!eventId) throw new Error('Planungseintrag fehlt')
-  const saved = await changeAssignmentInline(eventId, leaderId, revision)
+  let saved: InlineAssignmentResult
+  try {
+    saved = await changeAssignmentInline(eventId, leaderId, revision)
+  } catch (cause) {
+    const message = conflictWarningMessage(cause)
+    if (!message) throw cause
+    if (!(await askWarningConfirmation(message))) throw new Error('Zuweisung abgebrochen.')
+    saved = await changeAssignmentInline(eventId, leaderId, revision, true)
+  }
   // Apply authoritative response without unmounting the table during focus navigation.
   cell.assignment_id = saved.id
   cell.assignment_status = saved.status
