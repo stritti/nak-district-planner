@@ -35,6 +35,10 @@ export const useEventsStore = defineStore('events', () => {
     }
   }
 
+  function updateCached(saved: EventResponse) {
+    items.value = items.value.map((item) => item.id === saved.id ? saved : item)
+  }
+
   function setFilter(patch: Partial<EventListParams>) {
     filters.value = { ...filters.value, ...patch, offset: 0 }
   }
@@ -43,5 +47,5 @@ export const useEventsStore = defineStore('events', () => {
     filters.value = { ...filters.value, offset: (page - 1) * PAGE_SIZE }
   }
 
-  return { items, total, loading, error, filters, currentPage, totalPages, fetch, setFilter, goToPage }
+  return { items, total, loading, error, filters, currentPage, totalPages, fetch, updateCached, setFilter, goToPage }
 })
