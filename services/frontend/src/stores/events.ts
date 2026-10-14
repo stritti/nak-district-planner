@@ -29,7 +29,7 @@ export const useEventsStore = defineStore('events', () => {
       items.value = res.items
       total.value = res.total
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Fehler beim Laden'
+      if (!preserveRows) error.value = e instanceof Error ? e.message : 'Fehler beim Laden'
     } finally {
       if (!options.preserveRows) loading.value = false
     }
