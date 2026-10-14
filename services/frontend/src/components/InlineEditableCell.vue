@@ -18,7 +18,24 @@
     @focusout="onFocusOut"
   >
     <div v-if="editing" class="flex flex-col gap-1 min-w-[10rem]">
+      <select
+        v-if="choices"
+        ref="selectInput"
+        v-model="draft"
+        :aria-label="label"
+        :aria-invalid="!!error"
+        :aria-describedby="error ? id + '-error' : undefined"
+        class="w-full rounded border border-blue-500 bg-white dark:bg-gray-800 px-2 py-1 text-sm"
+        :disabled="saving"
+        @keydown="onEditorKeydown"
+      >
+        <option value="">Auswählen…</option>
+        <option v-for="choice in choices" :key="choice.value" :value="choice.value">
+          {{ choice.label }}
+        </option>
+      </select>
       <input
+        v-else
         ref="input"
         v-model="draft"
         type="text"
@@ -33,7 +50,7 @@
       <span v-if="saving" role="status" class="text-xs text-blue-700">Speichern…</span>
       <span v-if="error" :id="id + '-error'" role="alert" class="text-xs text-red-700">{{ error }}</span>
     </div>
-    <span v-else class="block truncate" :title="value || undefined">{{ value || '—' }}</span>
+    <span v-else class="block truncate" :title="displayValue ?? value ?? undefined">{{ displayValue ?? value ?? '—' }}</span>
     <span class="sr-only" aria-live="polite">{{ announcement }}</span>
   </component>
 </template>
@@ -46,6 +63,8 @@ import type { InlineCellCoordinator } from '../composables/useInlineCellCoordina
 const props = withDefaults(defineProps<{
   id: string
   value: string | null | undefined
+  displayValue?: string | null
+  choices?: { value: string; label: string }[]
   label: string
   editable: boolean
   coordinator: InlineCellCoordinator
@@ -58,6 +77,7 @@ const props = withDefaults(defineProps<{
 
 const root = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)
+const selectInput = ref<HTMLSelectElement | null>(null)
 const draft = ref(props.value ?? '')
 const startingRevision = ref(props.revision)
 const error = ref('')
@@ -82,7 +102,8 @@ async function activate(): Promise<void> {
   error.value = ''
   announcement.value = ''
   await nextTick()
-  input.value?.focus()
+  const editor = input.value ?? selectInput.value
+  editor?.focus()
   input.value?.select()
 }
 
@@ -98,6 +119,8 @@ function saveError(cause: unknown): string {
   if (cause instanceof ApiError) {
     const detail = (cause.body as { detail?: unknown } | null)?.detail
     if (typeof detail === 'string' && detail.trim()) return detail
+    const conflicts = (detail as { conflicts?: { message: string }[] } | undefined)?.conflicts
+    if (conflicts?.length) return conflicts.map((item) => item.message).join(' ')
     if (cause.status === 412) return 'Der Eintrag wurde geändert. Bitte neu laden und vergleichen.'
     if (cause.status === 428) return 'Die Versionsinformation fehlt. Bitte neu laden.'
     if (cause.status === 403) return 'Keine Berechtigung zum Bearbeiten.'
@@ -114,7 +137,8 @@ async function commit(): Promise<boolean> {
   const nextValue = draft.value.trim()
   if (props.required && !nextValue) {
     error.value = 'Dieses Feld darf nicht leer sein.'
-    input.value?.focus()
+    const editor = input.value ?? selectInput.value
+    editor?.focus()
     return false
   }
   if (props.maxLength && nextValue.length > props.maxLength) {
@@ -137,8 +161,10 @@ async function commit(): Promise<boolean> {
     } catch (cause) {
       error.value = saveError(cause)
       announcement.value = error.value
+      saving.value = false
       await nextTick()
-      input.value?.focus()
+      const editor = input.value ?? selectInput.value
+      editor?.focus()
       return false
     } finally {
       saving.value = false

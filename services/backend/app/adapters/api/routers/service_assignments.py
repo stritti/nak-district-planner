@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.adapters.api.deps import (
@@ -18,8 +19,11 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
+from app.adapters.api.revisions import slot_revision
 from app.adapters.api.schemas.conflict import ConflictItem, ConflictResponse
 from app.adapters.api.schemas.service_assignment import (
+    InlineAssignmentChange,
+    InlineAssignmentResult,
     ServiceAssignmentCreate,
     ServiceAssignmentResponse,
     ServiceAssignmentUpdate,
@@ -33,7 +37,7 @@ from app.adapters.db.repositories.service_assignment import SqlServiceAssignment
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.domain.event_payloads import assignment_confirmed
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
@@ -73,7 +77,10 @@ async def _touch_slot(slots: SqlPlanningSlotRepository, planning_slot: PlanningS
     ICS feeds derive DTSTAMP/LAST-MODIFIED/SEQUENCE from the slot's updated_at;
     touching it also covers deletions, which leave no assignment row behind.
     """
-    planning_slot.updated_at = datetime.now(UTC)
+    previous = planning_slot.updated_at
+    if previous.tzinfo is None:
+        previous = previous.replace(tzinfo=UTC)
+    planning_slot.updated_at = max(datetime.now(UTC), previous + timedelta(microseconds=1))
     await slots.save(planning_slot)
 
 
@@ -190,6 +197,72 @@ async def list_assignments(
 
     assignments = await assignments_repo.list_by_planning_slot(event_id)
     return [_assignment_response(a) for a in assignments]
+
+
+@router.put("/inline", response_model=InlineAssignmentResult)
+async def inline_change_assignment(
+    event_id: uuid.UUID,
+    body: InlineAssignmentChange,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+) -> InlineAssignmentResult:
+    """Change an assigned minister atomically against the event's strong revision.
+
+    Clearing or deleting an assignment must use the existing confirmed dialog,
+    not this text-cell mutation.
+    """
+    slot = await (slots.get_for_update(event_id) if if_match is not None else slots.get(event_id))
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Planungseintrag nicht gefunden")
+    require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    if slot.invitation_source_event_id is not None:
+        raise HTTPException(status_code=403, detail="Eingeladene Gemeinde darf Gastgeber-Zuweisung nicht ändern.")
+    if slot.status != PlanningSlotStatus.ACTIVE:
+        raise HTTPException(status_code=409, detail="Abgesagte Termine können nicht inline zugewiesen werden.")
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    if if_match != slot_revision(slot):
+        raise HTTPException(status_code=412, detail="Zuweisung wurde zwischenzeitlich geändert.")
+
+    assignments = await assignments_repo.list_by_planning_slot(event_id)
+    if len(assignments) > 1:
+        raise HTTPException(status_code=409, detail="Mehrere Zuweisungen für Planungseintrag.")
+    existing = assignments[0] if assignments else None
+    if existing is not None and existing.leader_id == body.leader_id:
+        return InlineAssignmentResult(
+            **_assignment_response(existing).model_dump(),
+            event_revision=slot_revision(slot),
+        )
+
+    await _check_leader(
+        db,
+        district_id=slot.district_id,
+        event_id=event_id,
+        leader_id=body.leader_id,
+        confirm_warnings=body.confirm_warnings,
+        exclude_assignment_id=existing.id if existing else None,
+    )
+    if existing is None:
+        assignment = ServiceAssignment.create(
+            event_id=event_id,
+            leader_id=body.leader_id,
+            status=AssignmentStatus.ASSIGNED,
+        )
+    else:
+        assignment = existing
+        assignment.leader_id = body.leader_id
+        assignment.leader_name = None
+        assignment.status = AssignmentStatus.ASSIGNED
+        assignment.updated_at = datetime.now(UTC)
+    await _save(assignments_repo, assignment)
+    await _touch_slot(slots, slot)
+    return InlineAssignmentResult(
+        **_assignment_response(assignment).model_dump(),
+        event_revision=slot_revision(slot),
+    )
 
 
 @router.put("/{assignment_id}", response_model=ServiceAssignmentResponse)

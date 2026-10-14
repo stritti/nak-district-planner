@@ -25,6 +25,7 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
+from app.adapters.api.revisions import slot_revision
 from app.adapters.api.schemas.district import (
     CongregationCreate,
     CongregationGroupCreate,
@@ -673,6 +674,7 @@ async def get_matrix(
             cells[date_key] = MatrixCell(
                 event_id=slot.id,
                 planning_slot_id=slot.id,
+                revision=slot_revision(slot),
                 assignment_event_id=assignment_slot_id,
                 invitation_source_congregation_name=source_congregation_names.get(
                     slot.invitation_source_congregation_id

@@ -29,6 +29,7 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
+from app.adapters.api.revisions import slot_revision as _slot_revision
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
@@ -166,11 +167,6 @@ class BulkApprovalStatusRequest(BaseModel):
 
 class BulkApprovalStatusResponse(BaseModel):
     updated_count: int
-
-
-def _slot_revision(slot: PlanningSlot) -> str:
-    """Opaque strong validator for the locked planning-slot snapshot."""
-    return '"' + str(slot.id) + ':' + _to_utc(slot.updated_at).isoformat(timespec="microseconds") + '"'
 
 
 def _slot_start_at(slot: PlanningSlot) -> datetime:

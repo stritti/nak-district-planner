@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('./client')
 
 import * as client from './client'
-import { createAssignment, deleteAssignment, updateAssignment } from './serviceAssignments'
+import { changeAssignmentInline, createAssignment, deleteAssignment, updateAssignment } from './serviceAssignments'
 
 const apiFetch = vi.mocked(client.apiFetch)
 
@@ -63,6 +63,21 @@ describe('service assignment API', () => {
         confirm_warnings: true,
       }),
     })
+  })
+
+  it('sends a conditional inline mutation and an explicit warning acknowledgment', async () => {
+    await changeAssignmentInline('event-1', 'leader-1', '"rev-1"', true)
+    expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/events/event-1/assignments/inline', {
+      method: 'PUT',
+      headers: { 'If-Match': '"rev-1"' },
+      body: JSON.stringify({ leader_id: 'leader-1', confirm_warnings: true }),
+    })
+  })
+
+  it('never sends an inline assignment without revision or selected leader', async () => {
+    await expect(changeAssignmentInline('e', 'l', '')).rejects.toThrow('Versionsinformation')
+    await expect(changeAssignmentInline('e', '', '"rev"')).rejects.toThrow('Person erforderlich')
+    expect(apiFetch).not.toHaveBeenCalled()
   })
 
   it('deletes an assignment', async () => {
