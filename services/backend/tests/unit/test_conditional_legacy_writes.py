@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from app.adapters.api.routers import events, leaders
 from app.adapters.api.schemas.leader import LeaderUpdate
 from app.domain.models.leader import Leader
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 
 
 def _slot() -> PlanningSlot:
@@ -90,3 +90,26 @@ async def test_event_snapshot_hides_other_tenants():
     ):
         await events.get_event(uuid.uuid4(), object(), slot_repo=slots)
     assert error.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_cancelled_event_cannot_be_changed_using_inline_path():
+    slot = _slot()
+    slot.status = PlanningSlotStatus.CANCELLED
+    slots = AsyncMock()
+    slots.get_for_update.return_value = slot
+    with (
+        patch.object(events, "require_role_in_district"),
+        pytest.raises(HTTPException) as error,
+    ):
+        await events.inline_update_event(
+            slot.id,
+            events.EventInlineUpdate(title="Versteckte Änderung"),
+            object(),
+            AsyncMock(),
+            if_match=events._slot_revision(slot),
+            slot_repo=slots,
+        )
+    assert error.value.status_code == 409
+    slots.save.assert_not_awaited()
+    assert slot.title == "Gottesdienst"
