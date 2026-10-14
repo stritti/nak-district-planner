@@ -136,7 +136,9 @@ async def update_leader(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
-    if if_match is not None and if_match != _leader_revision(leader):
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    if if_match != _leader_revision(leader):
         raise HTTPException(status_code=412, detail="Datensatz wurde zwischenzeitlich geändert.")
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
