@@ -387,14 +387,14 @@
           <button
             class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage <= 1"
-            @click="eventsStore.goToPage(eventsStore.currentPage - 1); eventsStore.fetch()"
+            @click="navigatePage(eventsStore.currentPage - 1)"
           >
             ← Zurück
           </button>
           <button
             class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage >= eventsStore.totalPages"
-            @click="eventsStore.goToPage(eventsStore.currentPage + 1); eventsStore.fetch()"
+            @click="navigatePage(eventsStore.currentPage + 1)"
           >
             Weiter →
           </button>
@@ -669,6 +669,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSessionViewSettings, sessionField, sessionText, sessionDate } from '../composables/useSessionViewSettings'
 import {
@@ -723,6 +724,7 @@ const canManageEvents = computed(() => auth.isSuperadmin || auth.memberships.som
 ))
 
 const inlineCoordinator = useInlineCellCoordinator()
+onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditEvent(event: EventResponse): boolean {
   return (auth.isSuperadmin || auth.memberships.some((m) =>
@@ -777,7 +779,8 @@ function startOfWeek(d: Date): Date {
   return r
 }
 
-function setViewMode(mode: ViewMode) {
+async function setViewMode(mode: ViewMode) {
+  if (!(await inlineCoordinator.finish())) return
   viewMode.value = mode
   if (mode === 'list') {
     applyFilters()
@@ -1040,9 +1043,16 @@ function onGroupChange() {
   onFilterChange()
 }
 
-function onFilterChange() {
+async function onFilterChange() {
+  if (!(await inlineCoordinator.finish())) return
   if (viewMode.value === 'list') applyFilters()
   else fetchCalendar()
+}
+
+async function navigatePage(page: number) {
+  if (!(await inlineCoordinator.finish())) return
+  eventsStore.goToPage(page)
+  await eventsStore.fetch()
 }
 
 function applyFilters() {
