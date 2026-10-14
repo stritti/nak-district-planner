@@ -218,6 +218,8 @@ async def inline_change_assignment(
     if slot is None:
         raise HTTPException(status_code=404, detail="Planungseintrag nicht gefunden")
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    if slot.invitation_source_event_id is not None:
+        raise HTTPException(status_code=403, detail="Eingeladene Gemeinde darf Gastgeber-Zuweisung nicht ändern.")
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     if if_match != slot_revision(slot):
