@@ -124,6 +124,7 @@ async def test_leader_crud_and_self_link_paths() -> None:
     leader_repo = AsyncMock()
     leader_repo.list_by_district.return_value = [leader]
     leader_repo.get.return_value = leader
+    leader_repo.get_for_update.return_value = leader
     leader_repo.get_by_user_sub.return_value = None
     with patch("app.adapters.api.routers.leaders.require_role_in_district"):
         listed = await leaders_router.list_leaders(
@@ -134,7 +135,8 @@ async def test_leader_crud_and_self_link_paths() -> None:
             districts=district_repo, leaders_repo=leader_repo,
         )
         updated = await leaders_router.update_leader(
-            district_id, leader.id, LeaderUpdate(name="X"), object(), db, leaders_repo=leader_repo
+            district_id, leader.id, LeaderUpdate(name="X"), object(), db, leaders_repo=leader_repo,
+            if_match=leaders_router._leader_revision(leader),
         )
         link = await leaders_router.link_self_to_leader(
             district_id,
