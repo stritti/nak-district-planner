@@ -29,6 +29,7 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
+from app.adapters.api.revisions import slot_revision as _slot_revision
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
@@ -168,14 +169,6 @@ class BulkApprovalStatusResponse(BaseModel):
     updated_count: int
 
 
-def _slot_revision(slot: PlanningSlot, instance: EventInstance | None = None) -> str:
-    """Strong validator for both halves of the event's persisted snapshot."""
-    slot_updated = _to_utc(slot.updated_at).isoformat(timespec="microseconds")
-    instance_updated = (
-        _to_utc(instance.updated_at).isoformat(timespec="microseconds")
-        if instance is not None else "none"
-    )
-    return f'"{slot.id}:{slot_updated}:{instance_updated}"'
 def _slot_start_at(slot: PlanningSlot) -> datetime:
     return datetime.combine(slot.planning_date, slot.planning_time or time.min, tzinfo=UTC)
 
