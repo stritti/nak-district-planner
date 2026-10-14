@@ -14,15 +14,20 @@ export function useInlineCellCoordinator(): InlineCellCoordinator {
   const activeId = ref<string | null>(null)
   let finishActive: (() => Promise<boolean>) | null = null
   let transition: Promise<boolean> | null = null
+  let requestId = 0
 
   async function activate(id: string, finishPrevious: () => Promise<boolean>): Promise<boolean> {
     if (activeId.value === id) return true
+    const mine = ++requestId
     if (transition && !(await transition)) return false
+    // A newer activation supersedes this request after any asynchronous wait.
+    if (mine !== requestId) return false
     if (finishActive) {
       const previous = finishActive
       transition = previous()
       try {
         if (!(await transition)) return false
+        if (mine !== requestId) return false
       } finally {
         transition = null
       }

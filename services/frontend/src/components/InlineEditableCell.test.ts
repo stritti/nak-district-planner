@@ -169,6 +169,16 @@ describe('InlineEditableCell', () => {
     expect((wrapper.get('input').element as HTMLInputElement).value).toBe('Entwurf')
   })
 
+  it('prefers a human-readable backend detail over fallback text', async () => {
+    const save = vi.fn().mockRejectedValue(new ApiError(409, 'Conflict', { detail: 'Bitte Konflikt prüfen.' }))
+    const { wrapper } = setup({ save })
+    await open(wrapper)
+    await wrapper.get('input').setValue('Neu')
+    await wrapper.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe('Bitte Konflikt prüfen.')
+  })
+
   it('allows retry after a transport failure without losing draft', async () => {
     const save = vi.fn().mockRejectedValueOnce(new Error('Netzwerk')).mockResolvedValue(undefined)
     const { wrapper } = setup({ save })
