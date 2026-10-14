@@ -723,7 +723,7 @@ const inlineCoordinator = useInlineCellCoordinator()
 
 function canInlineEditEvent(event: EventResponse): boolean {
   return (auth.isSuperadmin || auth.memberships.some((m) =>
-    m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId && m.role === 'PLANNER'
+    m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId && ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role)
   )) &&
     event.district_id === districtsStore.selectedDistrictId &&
     event.status === 'ACTIVE' &&
@@ -732,7 +732,8 @@ function canInlineEditEvent(event: EventResponse): boolean {
 }
 
 async function saveInlineTitle(event: EventResponse, value: string, revision: string): Promise<void> {
-  await updateEventInline(event.id, { title: value }, revision)
+  const saved = await updateEventInline(event.id, { title: value }, revision)
+  eventsStore.updateCached(saved)
   await eventsStore.fetch()
 }
 
