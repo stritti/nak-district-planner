@@ -45,3 +45,18 @@ class ServiceAssignmentResponse(BaseModel):
     status: AssignmentStatus
     created_at: datetime
     updated_at: datetime
+
+
+class InlineAssignmentChange(BaseModel):
+    """A non-destructive, id-backed minister change; removal stays a confirmed action."""
+
+    model_config = {"extra": "forbid"}
+
+    leader_id: uuid.UUID
+    confirm_warnings: bool = False
+
+
+class InlineAssignmentResult(ServiceAssignmentResponse):
+    """Saved assignment plus the new event revision for subsequent cell edits."""
+
+    event_revision: str
