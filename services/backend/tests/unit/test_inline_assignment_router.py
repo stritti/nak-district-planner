@@ -4,6 +4,7 @@
 """Conditional inline minister assignment contract and edge cases."""
 
 import uuid
+from datetime import date, time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -19,8 +20,6 @@ from app.domain.models.service_assignment import AssignmentStatus, ServiceAssign
 
 
 def _slot() -> PlanningSlot:
-    from datetime import date, time
-
     return PlanningSlot.create(
         district_id=uuid.uuid4(),
         planning_date=date(2026, 10, 14),
@@ -29,7 +28,7 @@ def _slot() -> PlanningSlot:
     )
 
 
-async def _call(slot: PlanningSlot, *, revision: str | None, existing=None, permitted=True):
+async def _call(slot: PlanningSlot, *, revision: str | None, existing=None, permitted=True, conflict=False):
     slots, assignments = AsyncMock(), AsyncMock()
     slots.get.return_value = slot
     slots.get_for_update.return_value = slot
@@ -41,6 +40,8 @@ async def _call(slot: PlanningSlot, *, revision: str | None, existing=None, perm
     ):
         if not permitted:
             authorize.side_effect = HTTPException(status_code=403, detail="Not allowed")
+        if conflict:
+            check.side_effect = HTTPException(status_code=409, detail="Assignment conflict")
         try:
             result = await service_assignments.inline_change_assignment(
                 slot.id,
@@ -93,6 +94,14 @@ async def test_inline_enforces_planner_permission():
     with pytest.raises(HTTPException) as error:
         await _call(slot, revision=slot_revision(slot), permitted=False)
     assert error.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_inline_preserves_warning_conflicts_without_mutation():
+    slot = _slot()
+    with pytest.raises(HTTPException) as error:
+        await _call(slot, revision=slot_revision(slot), conflict=True)
+    assert error.value.status_code == 409
 
 
 @pytest.mark.asyncio
