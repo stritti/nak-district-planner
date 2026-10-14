@@ -674,7 +674,7 @@ async def get_matrix(
             cells[date_key] = MatrixCell(
                 event_id=slot.id,
                 planning_slot_id=slot.id,
-                revision=slot_revision(slot),
+                revision=slot_revision(slot, instance),
                 assignment_event_id=assignment_slot_id,
                 invitation_source_congregation_name=source_congregation_names.get(
                     slot.invitation_source_congregation_id
