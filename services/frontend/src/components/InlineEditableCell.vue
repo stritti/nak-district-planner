@@ -180,7 +180,7 @@ async function onEditorKeydown(event: KeyboardEvent): Promise<void> {
         const origin = currentIndex >= 0 ? currentIndex : fromRoot
         const next = direction > 0
           ? candidates.find((element) => focusable.indexOf(element) > origin)
-          : candidates.findLast((element) => focusable.indexOf(element) < origin)
+          : [...candidates].reverse().find((element) => focusable.indexOf(element) < origin)
         next?.focus()
       } else {
         root.value?.focus()
