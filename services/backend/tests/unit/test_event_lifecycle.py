@@ -61,6 +61,7 @@ async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
         kwargs["if_match"] = events._slot_revision(slot)
     return await events.update_event(event_id, body, auth, session, **kwargs)
 
+
 @pytest.mark.asyncio
 async def test_create_manual_draft_with_instance_and_utc_times():
     request = body(category="Gottesdienst", description="Beschreibung")
