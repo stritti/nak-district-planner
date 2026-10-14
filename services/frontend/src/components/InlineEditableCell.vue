@@ -137,6 +137,7 @@ async function commit(): Promise<boolean> {
     } catch (cause) {
       error.value = saveError(cause)
       announcement.value = error.value
+      saving.value = false
       await nextTick()
       input.value?.focus()
       return false
@@ -169,7 +170,21 @@ async function onEditorKeydown(event: KeyboardEvent): Promise<void> {
     if (!(await commit())) return
     await nextTick()
     if (!destination) {
-      root.value?.focus()
+      if (event.key === 'Tab') {
+        const scopeElement = scope ?? root.value
+        const focusable = Array.from(document.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+          .filter((element) => element.getClientRects().length > 0 && !element.closest('[inert]'))
+        const currentIndex = focusable.indexOf(scopeElement as HTMLElement)
+        const candidates = focusable.filter((element) => !scopeElement?.contains(element))
+        const fromRoot = focusable.indexOf(root.value as HTMLElement)
+        const origin = currentIndex >= 0 ? currentIndex : fromRoot
+        const next = direction > 0
+          ? candidates.find((element) => focusable.indexOf(element) > origin)
+          : candidates.findLast((element) => focusable.indexOf(element) < origin)
+        next?.focus()
+      } else {
+        root.value?.focus()
+      }
       return
     }
     destination.focus()
