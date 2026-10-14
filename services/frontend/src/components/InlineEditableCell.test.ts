@@ -167,6 +167,7 @@ describe('InlineEditableCell', () => {
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain(message)
     expect((wrapper.get('input').element as HTMLInputElement).value).toBe('Entwurf')
+    expect(wrapper.get('input').element).toBe(document.activeElement)
   })
 
   it('prefers a human-readable backend detail over fallback text', async () => {
