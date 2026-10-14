@@ -102,13 +102,14 @@ async def test_dependent_change_with_stale_revision_is_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_non_dependent_change_does_not_require_if_match() -> None:
+async def test_non_dependent_change_still_requires_if_match() -> None:
     slot = _slot()
     repos = _repos(slot)
     with _patches():
-        result = await _update(slot, repos, events.EventUpdate(title="Neu"))
-    assert result.title == "Neu"
-    repos[0].save.assert_awaited_once()
+        with pytest.raises(HTTPException) as exc:
+            await _update(slot, repos, events.EventUpdate(title="Neu"))
+    assert exc.value.status_code == 428
+    repos[0].save.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -199,6 +200,7 @@ async def test_preview_reports_warning_impact_without_writing() -> None:
             events.EventChangeImpactRequest(start_at=NEW_START),
             object(),
             AsyncMock(),
+            if_match=events._slot_revision(slot),
             slot_repo=slot_repo,
             inst_repo=inst_repo,
             assignments_repo=assignments_repo,
@@ -281,3 +283,22 @@ async def test_preview_rejects_end_before_start() -> None:
             assignments_repo=assignments_repo,
         )
     assert error.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_impact_preview_rejects_missing_and_stale_snapshot() -> None:
+    slot = _slot()
+    slot_repo, inst_repo, assignments_repo = _repos(slot, [_assigned(slot)])
+    with _patches() as mocks:
+        for revision, expected in ((None, 428), ('"stale"', 412)):
+            with pytest.raises(HTTPException) as exc:
+                await events.preview_event_change(
+                    slot.id,
+                    events.EventChangeImpactRequest(start_at=NEW_START),
+                    object(), AsyncMock(), if_match=revision,
+                    slot_repo=slot_repo, inst_repo=inst_repo,
+                    assignments_repo=assignments_repo,
+                )
+            assert exc.value.status_code == expected
+    mocks["check_service_assignment_conflicts"].assert_not_awaited()
+    slot_repo.save.assert_not_awaited()
