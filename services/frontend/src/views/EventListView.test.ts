@@ -555,6 +555,10 @@ describe('Inline editing in the event overview', () => {
     } as assignmentsApi.InlineAssignmentResult)
     const { wrapper, eventsStore } = setup([event()])
     await flushPromises()
+    vi.mocked(eventsApi.listEvents).mockResolvedValue(response([event({
+      revision: '"revision-2"',
+      responsible: { assignment_id: 'a1', leader_id: 'l1', name: 'Max', status: 'ASSIGNED' },
+    })]))
     const cell = wrapper.get('[data-inline-cell-id="responsible-desktop-e1"]')
     await cell.trigger('click')
     await flushPromises()
