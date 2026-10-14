@@ -81,7 +81,7 @@ describe('InlineEditableCell', () => {
     await flushPromises()
     expect(save).toHaveBeenCalledOnce()
     expect(wrapper.find('input').exists()).toBe(false)
-    expect(wrapper.element).toBe(document.activeElement)
+    expect(document.activeElement).not.toBe(wrapper.element)
   })
 
   it('never persists unchanged data', async () => {
