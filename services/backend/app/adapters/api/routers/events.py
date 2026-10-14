@@ -424,7 +424,9 @@ async def update_event(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
 
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
-    if if_match is not None and if_match != _slot_revision(slot):
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    if if_match != _slot_revision(slot):
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail="Ereignis wurde zwischenzeitlich geändert. Bitte Daten neu laden.",
@@ -434,7 +436,7 @@ async def update_event(
     if slot.was_released and slot.status == PlanningSlotStatus.CANCELLED and body.status == PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Eine veröffentlichte Absage kann nicht zurückgenommen werden.")
     instance = await inst_repo.get_by_planning_slot(event_id)
-    if if_match is not None and instance is not None and instance.source == EventSource.EXTERNAL:
+    if instance is not None and instance.source == EventSource.EXTERNAL:
         raise HTTPException(status_code=403, detail="Extern verwaltete Ereignisse sind nicht inline bearbeitbar.")
 
     if "congregation_id" in body.model_fields_set:
