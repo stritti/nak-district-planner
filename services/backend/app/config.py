@@ -6,6 +6,7 @@
 import importlib.metadata
 import ipaddress
 import os
+import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator, model_validator
@@ -219,6 +220,21 @@ def production_guard(settings: Settings) -> None:
         for name in OWNER_CREDENTIAL_VARIABLES
         if os.environ.get(name)
     )
+
+    # Reject trivially guessable runtime credentials; owner credentials must
+    # never enter a production runtime at all (checked above).
+    for name in ("APP_DB_PASSWORD", "VALKEY_PASSWORD"):
+        value = os.environ.get(name)
+        if value is None or value.strip().lower() in {"", "changeme", "password", "default"}:
+            errors.append(f"{name} must be set to a non-default value in production")
+        elif not re.fullmatch(r"[A-Za-z0-9._~-]+", value):
+            # Compose embeds both runtime credentials directly in connection
+            # URIs; reserved characters would change their parsed components.
+            errors.append(
+                f"{name} must contain only URL-safe ASCII characters "
+                "(letters, digits, dot, underscore, tilde or hyphen); "
+                "generate one with: openssl rand -hex 32"
+            )
 
     # SECRET_KEY must be non-default and have sufficient entropy
     if settings.secret_key in (

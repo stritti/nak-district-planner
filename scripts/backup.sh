@@ -73,26 +73,48 @@ mkdir -p "$BACKUP_DIR"
 
 timestamp="$(date -u +%Y%m%d_%H%M%S)"
 dump_file="$BACKUP_DIR/${POSTGRES_DB}_${timestamp}.dump"
+roles_file="$BACKUP_DIR/${POSTGRES_DB}_${timestamp}.roles.sql"
+
+# Fail closed when pg_dumpall produces no role metadata at all.
+# Preserve the plaintext only in the pipe; never write it to host storage.
+require_nonempty_roles() {
+  local first_char
+  if ! IFS= read -r -N 1 first_char; then
+    echo "ERROR: pg_dumpall produced an empty roles archive." >&2
+    return 1
+  fi
+  printf '%s' "$first_char"
+  cat
+}
 
 echo "==> Dumping database '$POSTGRES_DB' from container '$DB_CONTAINER'..."
-docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc >"$dump_file"
-
 if [[ -n "${BACKUP_ENCRYPT_KEY:-}" ]]; then
-  echo "==> Encrypting backup for recipient '$BACKUP_ENCRYPT_KEY'..."
-  gpg --batch --yes --trust-model always --encrypt --recipient "$BACKUP_ENCRYPT_KEY" \
-    --output "${dump_file}.gpg" "$dump_file"
-  rm -f "$dump_file"
+  # Neither the database contents nor role metadata touch disk unencrypted.
+  docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc |
+    gpg --batch --yes --trust-model always --encrypt --recipient "$BACKUP_ENCRYPT_KEY" \
+      --output "${dump_file}.gpg"
+  # pg_dump does not include cluster-global roles; save them separately.
+  # No password hashes: operators explicitly rotate passwords after recovery.
+  docker exec "$DB_CONTAINER" pg_dumpall -U "$POSTGRES_USER" --roles-only --no-role-passwords |
+    require_nonempty_roles |
+    gpg --batch --yes --trust-model always --encrypt --recipient "$BACKUP_ENCRYPT_KEY" \
+      --output "${roles_file}.gpg"
   final_file="${dump_file}.gpg"
+  final_roles="${roles_file}.gpg"
 else
-  echo "WARNING: BACKUP_ENCRYPT_KEY is not set — storing an UNENCRYPTED backup." >&2
-  echo "         This is only acceptable for local development. Production startup" >&2
-  echo "         is blocked by production_guard() until BACKUP_ENCRYPT_KEY is set." >&2
+  echo "WARNING: BACKUP_ENCRYPT_KEY is not set — storing UNENCRYPTED database and role backups." >&2
+  echo "         Only acceptable for local development." >&2
+  docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc > "$dump_file"
+  docker exec "$DB_CONTAINER" pg_dumpall -U "$POSTGRES_USER" --roles-only --no-role-passwords |
+    require_nonempty_roles > "$roles_file"
   final_file="$dump_file"
+  final_roles="$roles_file"
 fi
 
 if [[ "$BACKUP_RETENTION_DAYS" -gt 0 ]]; then
   echo "==> Pruning backups older than ${BACKUP_RETENTION_DAYS} days..."
-  find "$BACKUP_DIR" -maxdepth 1 -name "${POSTGRES_DB}_*.dump*" -mtime "+${BACKUP_RETENTION_DAYS}" -print -delete
+  find "$BACKUP_DIR" -maxdepth 1 -type f \( -name "${POSTGRES_DB}_*.dump*" -o -name "${POSTGRES_DB}_*.roles.sql*" \) -mtime "+${BACKUP_RETENTION_DAYS}" -print -delete
 fi
 
 echo "==> Backup complete: $final_file ($(du -h "$final_file" | cut -f1))"
+echo "==> Role metadata: $final_roles (restore BEFORE pg_restore, then reset role passwords)"

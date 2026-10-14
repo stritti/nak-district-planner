@@ -116,6 +116,48 @@ Jeder Pull Request gegen `main` muss den stabilen Check `Build documentation` er
 
 ---
 
+## Verbindliche Release-Hinweise bei produktiven Änderungen
+
+Releaserelevante Änderungen, die einen manuellen Eingriff an einer bestehenden
+Produktivinstallation erfordern, erhalten **zusätzlich zum automatischen
+CHANGELOG einen eigenständigen Upgrade-Hinweis**. Beispiele sind neue
+Pflichtvariablen, geänderte Datenbank- oder Queue-Credentials, interne
+Ports/Proxy-Routen, erforderliche Migrationen, Änderungen an IdP-Deployments
+und geänderte Backup- oder Restore-Abläufe.
+
+1. Mit dem entsprechenden Feature-/Fix-PR eine **neue Datei**
+   `docs/operations/release-notes/<issue>-<thema>.md` hinzufügen. Kein Release-Tag
+   und keine vorweggenommene Versionsnummer im Dateinamen. Bereits veröffentlichte
+   Notizen nicht für spätere Releases erneut verwenden.
+2. Der Hinweis beginnt mit einer präzisen `###`-Überschrift und enthält
+   **Betroffen**, **Vor dem Update** und **Nach dem Update** als fett markierte
+   Abschnitte. Er nennt alle neuen Pflichtwerte, Vorbedingungen,
+   manuelle Schritte und Verifikationen; optionale Änderungen sind als solche
+   zu kennzeichnen. Secrets dürfen nur als Variablennamen vorkommen.
+3. Im Release-PR prüfen, dass Hinweise für sämtliche Betreiberaktionen seit
+   dem vorherigen Release vorhanden und fachlich korrekt sind. Änderungen
+   ohne manuellen Handlungsbedarf benötigen keine solche Datei.
+4. Nach der Veröffentlichung durch release-please bestimmt der
+   `publish-upgrade-notes`-Job alle **seit dem letzten Release neu hinzugefügten**
+   Notizen und stellt sie ganz an den **Anfang der GitHub-Release-Beschreibung**
+   unter `WICHTIG: Anpassungen bei produktiven Installationen`. Der bisherige
+   automatisch erzeugte CHANGELOG bleibt unverändert darunter. Bereits
+   veröffentlichte Notizen erscheinen in Folgeversionen nicht erneut.
+5. Ohne neue Upgrade-Hinweise bleibt die Release-Beschreibung unverändert.
+   Ungültige Notizen oder fehlgeschlagene Veröffentlichung lassen den Job
+   fehlschlagen. Der anschließende `docker-build`-Job wartet auf dessen Erfolg,
+   damit Release-Images nicht ohne vorgeschriebene Betreiberanweisungen
+   veröffentlicht werden. Die eigentliche Erstellung des GitHub Releases
+   durch release-please findet vorher statt.
+
+Der Publisher ist idempotent; erneute Workflows erzeugen keine Duplikate.
+Die zugehörigen Regressionstests laufen im Dokumentations-CI-Job
+(`python3 -m unittest discover -s scripts -p 'test_publish_release_upgrade_notes.py'`).
+Erstmalig wird dieses Verfahren für die
+[Produktionshärtung #472](./release-notes/472-production-hardening.md) genutzt.
+
+---
+
 ## Release-PR Workflow
 
 1. Entwickler pushen Feature-Branches und erstellen Pull Requests auf `main`.
@@ -130,7 +172,8 @@ Jeder Pull Request gegen `main` muss den stabilen Check `Build documentation` er
 6. release-please erstellt automatisch:
    - Einen Git-Tag
    - Einen GitHub Release mit dem CHANGELOG als Beschreibung
-7. Der `docker-build`-Job im selben Workflow-Run (`needs: release-please`, nur bei `releases_created == 'true'`) checkt den Release-Tag aus und baut und veröffentlicht Docker-Images mit den für den Release-Typ erlaubten Tags.
+7. Der `publish-upgrade-notes`-Job ergänzt bei manuellen Betriebsänderungen die GitHub-Release-Beschreibung um verbindliche Upgrade-Schritte.
+8. Erst danach veröffentlicht `docker-build` (`needs: [release-please, publish-upgrade-notes]`) die Docker-Images aus dem Release-Tag.
 
 ---
 

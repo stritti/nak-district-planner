@@ -363,10 +363,16 @@ describe('EventListView', () => {
   })
 
   it('updates calendar events and surfaces edit failures without closing the modal', async () => {
-    // The fixture is on Monday 2026-10-05; make the displayed week deterministic.
+    // Freeze the calendar clock at a known Monday and derive fixture dates
+    // from it, so the test is independent of real CI dates and time zones.
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-05T12:00:00Z'))
-    const { wrapper } = setup([event()])
+    const startAt = new Date()
+    const endAt = new Date(startAt.getTime() + 60 * 60 * 1000)
+    const { wrapper } = setup([event({
+      start_at: startAt.toISOString(),
+      end_at: endAt.toISOString(),
+    })])
     await flushPromises()
     await wrapper.findAll('button').find((button) => button.text() === 'Woche')!.trigger('click')
     await flushPromises()

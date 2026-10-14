@@ -27,7 +27,7 @@ services:
       - traefik.http.routers.nak-app.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
       - traefik.http.routers.nak-app.middlewares=nak-hsts
       - traefik.http.routers.nak-app.service=nak-app
-      - traefik.http.services.nak-app.loadbalancer.server.port=80
+      - traefik.http.services.nak-app.loadbalancer.server.port=8080
       - traefik.http.middlewares.nak-hsts.headers.stsSeconds=31536000
       - traefik.http.middlewares.nak-hsts.headers.stsIncludeSubdomains=true
 
