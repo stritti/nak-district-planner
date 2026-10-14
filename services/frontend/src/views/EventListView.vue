@@ -180,7 +180,7 @@
               v-model="fromDate"
               type="date"
               class="form-select px-2"
-              @change="applyFilters"
+              @change="onFilterChange"
             />
           </div>
           <div class="w-full sm:w-auto">
@@ -189,7 +189,7 @@
               v-model="toDate"
               type="date"
               class="form-select px-2"
-              @change="applyFilters"
+              @change="onFilterChange"
             />
           </div>
         </template>
