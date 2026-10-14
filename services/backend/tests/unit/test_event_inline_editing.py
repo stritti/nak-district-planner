@@ -57,7 +57,7 @@ async def _update(context, body, revision):
 @pytest.mark.asyncio
 async def test_conditional_inline_title_save_increments_revision_and_updates_instance():
     ctx = _context()
-    before = events._slot_revision(ctx[0])
+    before = events._slot_revision(ctx[0], ctx[1])
     result = await _update(ctx, events.EventUpdate(title="Neu"), before)
     assert result.title == "Neu"
     assert result.revision != before
@@ -72,7 +72,7 @@ async def test_conditional_inline_title_save_increments_revision_and_updates_ins
 async def test_description_can_be_cleared_and_still_has_a_new_revision():
     ctx = _context()
     ctx[1].description = "Alt"
-    result = await _update(ctx, events.EventUpdate(description=None), events._slot_revision(ctx[0]))
+    result = await _update(ctx, events.EventUpdate(description=None), events._slot_revision(ctx[0], ctx[1]))
     assert result.description is None
     ctx[3].save.assert_awaited_once()
 
@@ -117,7 +117,7 @@ async def test_workflow_fields_are_rejected_by_the_inline_contract(payload):
 async def test_invalid_inline_payloads_are_never_mutated(body):
     ctx = _context()
     with pytest.raises(HTTPException) as err:
-        await _update(ctx, body, events._slot_revision(ctx[0]))
+        await _update(ctx, body, events._slot_revision(ctx[0], ctx[1]))
     assert err.value.status_code == 422
     ctx[3].save.assert_not_awaited()
 
@@ -127,7 +127,7 @@ async def test_external_authority_is_denied():
     ctx = _context()
     ctx[1].source = EventSource.EXTERNAL
     with pytest.raises(HTTPException) as err:
-        await _update(ctx, events.EventUpdate(title="Neu"), events._slot_revision(ctx[0]))
+        await _update(ctx, events.EventUpdate(title="Neu"), events._slot_revision(ctx[0], ctx[1]))
     assert err.value.status_code == 403
     ctx[3].save.assert_not_awaited()
 
@@ -137,7 +137,7 @@ async def test_missing_event_is_404():
     ctx = _context()
     ctx[3].get_for_update.return_value = None
     with pytest.raises(HTTPException) as err:
-        await _update(ctx, events.EventUpdate(title="Neu"), events._slot_revision(ctx[0]))
+        await _update(ctx, events.EventUpdate(title="Neu"), events._slot_revision(ctx[0], ctx[1]))
     assert err.value.status_code == 404
 
 
@@ -151,7 +151,7 @@ async def test_permission_failure_stops_writes():
     ):
         await events.inline_update_event(
             ctx[0].id, events.EventUpdate(title="Neu"), ctx[2], AsyncMock(),
-            if_match=events._slot_revision(ctx[0]),
+            if_match=events._slot_revision(ctx[0], ctx[1]),
             slot_repo=ctx[3], inst_repo=ctx[4], cong_repo=ctx[5],
             assignments_repo=ctx[6], leaders_repo=ctx[7],
         )
@@ -164,5 +164,5 @@ async def test_business_conflict_remains_409_not_412():
     ctx = _context()
     ctx[3].save.side_effect = ReleasedEventError("Freigegeben")
     with pytest.raises(HTTPException) as err:
-        await _update(ctx, events.EventUpdate(title="Neu"), events._slot_revision(ctx[0]))
+        await _update(ctx, events.EventUpdate(title="Neu"), events._slot_revision(ctx[0], ctx[1]))
     assert err.value.status_code == 409
