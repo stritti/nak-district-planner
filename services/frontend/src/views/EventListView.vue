@@ -226,6 +226,7 @@
                 :editable="canInlineEditEvent(event)"
                 :coordinator="inlineCoordinator"
                 :save="(value, revision) => saveInlineTitle(event, value, revision)"
+                :reload="() => reloadInlineTitle(event)"
                 required
                 :max-length="500"
               />
@@ -317,6 +318,7 @@
                 :editable="canInlineEditEvent(event)"
                 :coordinator="inlineCoordinator"
                 :save="(value, revision) => saveInlineTitle(event, value, revision)"
+                :reload="() => reloadInlineTitle(event)"
                 required
                 :max-length="500"
               />
@@ -683,6 +685,7 @@ import { useLeadersStore } from '../stores/leaders'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import {
   listEvents,
+  getEvent,
   createEvent,
   deleteEvent,
   updateEvent,
@@ -729,6 +732,12 @@ function canInlineEditEvent(event: EventResponse): boolean {
     event.status === 'ACTIVE' &&
     event.source === 'INTERNAL' &&
     !!event.revision
+}
+
+async function reloadInlineTitle(event: EventResponse): Promise<{ value: string; revision: string }> {
+  const latest = await getEvent(event.id)
+  eventsStore.updateCached(latest)
+  return { value: latest.title, revision: latest.revision ?? '' }
 }
 
 async function saveInlineTitle(event: EventResponse, value: string, revision: string): Promise<void> {
