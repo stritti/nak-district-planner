@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 
+from app.adapters.api.revisions import slot_revision as _slot_revision
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
@@ -166,11 +167,6 @@ class BulkApprovalStatusRequest(BaseModel):
 
 class BulkApprovalStatusResponse(BaseModel):
     updated_count: int
-
-
-def _slot_revision(slot: PlanningSlot) -> str:
-    """Opaque strong validator for the locked planning-slot snapshot."""
-    return '"' + str(slot.id) + ':' + _to_utc(slot.updated_at).isoformat(timespec="microseconds") + '"'
 
 
 def _slot_start_at(slot: PlanningSlot) -> datetime:
