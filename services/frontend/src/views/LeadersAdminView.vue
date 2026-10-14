@@ -29,7 +29,7 @@
           :class="activeTab === 'leaders'
             ? 'border-b-2 border-blue-600 text-blue-600'
             : 'text-gray-500 hover:text-gray-800'"
-          @click="activeTab = 'leaders'"
+          @click="returnToLeaders"
         >
           Amtstragende
         </button>
@@ -859,6 +859,7 @@
 </template>
 
 <script setup lang="ts">
+import { onBeforeRouteLeave } from 'vue-router'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -927,6 +928,7 @@ const selectedDistrictId = computed({
 const loading = ref(false)
 const saving = ref(false)
 const inlineCoordinator = useInlineCellCoordinator()
+onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditLeader(leader: LeaderResponse): boolean {
   return (authStore.isSuperadmin || authStore.memberships.some((m) =>
@@ -997,7 +999,12 @@ async function loadRegistrations() {
   }
 }
 
+async function returnToLeaders() {
+  if (await inlineCoordinator.finish()) activeTab.value = 'leaders'
+}
+
 async function switchToRegistrations() {
+  if (!(await inlineCoordinator.finish())) return
   activeTab.value = 'registrations'
   await loadRegistrations()
 }
@@ -1025,6 +1032,7 @@ const canManageUnavailabilities = computed(() => {
 })
 
 async function switchToUnavailabilities(leaderId?: string) {
+  if (!(await inlineCoordinator.finish())) return
   activeTab.value = 'unavailabilities'
   if (leaderId !== undefined) unavailabilityFilterLeaderId.value = leaderId
   try {
