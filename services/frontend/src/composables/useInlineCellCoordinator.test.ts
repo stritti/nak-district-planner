@@ -62,6 +62,19 @@ describe('useInlineCellCoordinator', () => {
     expect(finish).toHaveBeenCalledOnce()
   })
 
+  it('lets only the latest concurrent activation win after a successful save', async () => {
+    const state = useInlineCellCoordinator()
+    let resolve!: (value: boolean) => void
+    const waiting = new Promise<boolean>((done) => { resolve = done })
+    await state.activate('a', vi.fn().mockReturnValue(waiting))
+    const first = state.activate('b', vi.fn())
+    const latest = state.activate('c', vi.fn())
+    resolve(true)
+    expect(await first).toBe(false)
+    expect(await latest).toBe(true)
+    expect(state.activeId.value).toBe('c')
+  })
+
   it('allows recovery after a rejected pending save', async () => {
     const state = useInlineCellCoordinator()
     const finish = vi.fn()
