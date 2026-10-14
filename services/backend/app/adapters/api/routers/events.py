@@ -555,6 +555,12 @@ async def inline_update_event(
         "title" in fields and body.title is None
     ):
         raise HTTPException(status_code=422, detail="Dieses Feld kann nicht inline bearbeitet werden.")
+    slot = await slot_repo.get_for_update(event_id)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    if slot.status != PlanningSlotStatus.ACTIVE:
+        raise HTTPException(status_code=409, detail="Abgesagte Termine können nicht inline bearbeitet werden.")
     return await update_event(
         event_id, EventUpdate.model_validate(body.model_dump(exclude_unset=True)), auth, session, slot_repo=slot_repo, cong_repo=cong_repo,
         inst_repo=inst_repo, assignments_repo=assignments_repo,
