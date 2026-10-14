@@ -20,7 +20,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 
-from app.adapters.api.revisions import slot_revision as _slot_revision
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
@@ -30,6 +29,7 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
+from app.adapters.api.revisions import slot_revision as _slot_revision
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
