@@ -9,9 +9,9 @@
     <div class="mb-6">
         <label class="filter-label">Bezirk</label>
         <select
-          v-model="selectedDistrictId"
+          :value="selectedDistrictId"
           class="form-select"
-          @change="onDistrictChange"
+          @change="requestDistrictChange"
         >
           <option value="">Bezirk wählen…</option>
           <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">{{ d.name }}</option>
@@ -1268,6 +1268,18 @@ onMounted(async () => {
     await onDistrictChange()
   }
 })
+
+async function requestDistrictChange(event: Event) {
+  const selector = event.target as HTMLSelectElement
+  const requestedDistrict = selector.value
+  if (!(await inlineCoordinator.finish())) {
+    selector.value = selectedDistrictId.value
+    return
+  }
+  if (requestedDistrict === selectedDistrictId.value) return
+  selectedDistrictId.value = requestedDistrict
+  await onDistrictChange()
+}
 
 async function onDistrictChange() {
   const loadGeneration = ++districtLoadGeneration
