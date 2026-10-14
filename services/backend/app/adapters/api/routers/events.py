@@ -406,6 +406,25 @@ async def delete_event(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.get("/{event_id}", response_model=EventResponse)
+async def get_event(
+    event_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+) -> EventResponse:
+    """Fetch an authoritative event snapshot for conditional writes in detail dialogs."""
+    slot = await slot_repo.get(event_id)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.VIEWER, slot.district_id)
+    instance = await inst_repo.get_by_planning_slot(event_id)
+    responsible = await _load_responsible(assignments_repo, leaders_repo, [slot])
+    return _slot_to_event(slot, instance, responsible.get(slot.id))
+
+
 @router.patch("/{event_id}", response_model=EventResponse)
 async def update_event(
     event_id: uuid.UUID,
