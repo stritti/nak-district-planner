@@ -78,6 +78,7 @@ async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
         kwargs["if_match"] = events._slot_revision(slot)
     return await events.update_event(event_id, body, auth, session, **kwargs)
 
+
 @pytest.mark.asyncio
 async def test_resolve_deviation_restores_planned_duration():
     from app.domain.models.event_instance import SyncState
