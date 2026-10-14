@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from app.adapters.api.revisions import slot_revision
 from app.adapters.api.routers import service_assignments
 from app.adapters.api.schemas.service_assignment import InlineAssignmentChange
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 
@@ -111,6 +111,15 @@ async def test_invited_congregation_cannot_mutate_host_assignment():
     with pytest.raises(HTTPException) as error:
         await _call(slot, revision=slot_revision(slot))
     assert error.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_cancelled_planning_slot_rejects_inline_assignment():
+    slot = _slot()
+    slot.status = PlanningSlotStatus.CANCELLED
+    with pytest.raises(HTTPException) as error:
+        await _call(slot, revision=slot_revision(slot))
+    assert error.value.status_code == 409
 
 
 @pytest.mark.asyncio
