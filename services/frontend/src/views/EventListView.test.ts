@@ -138,6 +138,7 @@ beforeEach(() => {
       : [congregation('c3', 'Gemeinde Drei', 'd2')]
   ))
   vi.mocked(leadersApi.listLeaders).mockResolvedValue([])
+  vi.mocked(eventsApi.previewEventChange).mockResolvedValue({ blocked: false, requires_confirmation: false, items: [] })
   vi.mocked(districtsApi.listGroups).mockResolvedValue([
     { id: 'g1', name: 'Gruppe Eins', district_id: 'd1', created_at: now, updated_at: now },
   ])
@@ -358,9 +359,65 @@ describe('EventListView', () => {
       approval_status: 'CONFIRMED',
       category: 'Neu',
       applicability: [],
-    }))
+    }), '"revision-1"')
     expect(eventsStore.items[0].status).toBe('CANCELLED')
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Termin gespeichert', 'Gottesdienst')
+  })
+
+  it('previews a congregation move, asks for warnings and sends the edited revision', async () => {
+    vi.mocked(eventsApi.previewEventChange).mockResolvedValue({
+      blocked: false,
+      requires_confirmation: true,
+      items: [{
+        assignment_id: 'a1',
+        leader_id: 'l1',
+        conflicts: [{ rule_id: 'TRAVEL', severity: 'WARN', message: 'Reisezeit knapp', details: {} }],
+      }],
+    })
+    vi.mocked(eventsApi.updateEvent).mockResolvedValue(event({ congregation_id: 'c2' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    const modal = wrapper.find('.modal-panel')
+    await modal.findAll('select')[0].setValue('c2')
+
+    mocks.confirm.mockResolvedValueOnce(true)
+    await modal.findAll('button').find((button) => button.text() === 'Speichern')!.trigger('click')
+    await flushPromises()
+
+    expect(eventsApi.previewEventChange).toHaveBeenCalledWith('e1', { congregation_id: 'c2' })
+    expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'Konflikt durch Gemeindewechsel' }))
+    expect(eventsApi.updateEvent).toHaveBeenCalledWith(
+      'e1',
+      expect.objectContaining({ congregation_id: 'c2', confirm_warnings: true }),
+      '"revision-1"',
+    )
+  })
+
+  it('keeps the draft and sends nothing when the congregation move is blocked', async () => {
+    vi.mocked(eventsApi.previewEventChange).mockResolvedValue({
+      blocked: true,
+      requires_confirmation: false,
+      items: [{
+        assignment_id: 'a1',
+        leader_id: 'l1',
+        conflicts: [{ rule_id: 'UNAVAILABLE', severity: 'BLOCK', message: 'Leiter nicht verfügbar', details: {} }],
+      }],
+    })
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    const modal = wrapper.find('.modal-panel')
+    await modal.findAll('select')[0].setValue('c2')
+
+    await modal.findAll('button').find((button) => button.text() === 'Speichern')!.trigger('click')
+    await flushPromises()
+
+    expect(eventsApi.updateEvent).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Leiter nicht verfügbar')
+    expect(wrapper.find('.modal-panel').findAll('select')[0].element).toHaveProperty('value', 'c2')
   })
 
   it('updates calendar events and surfaces edit failures without closing the modal', async () => {

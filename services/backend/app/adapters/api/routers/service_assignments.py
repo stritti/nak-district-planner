@@ -12,6 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
+from app.adapters.api.conflict_http import raise_for_conflicts
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
@@ -20,7 +21,6 @@ from app.adapters.api.deps import (
     get_service_assignment_repository,
 )
 from app.adapters.api.revisions import slot_revision
-from app.adapters.api.schemas.conflict import ConflictItem, ConflictResponse
 from app.adapters.api.schemas.service_assignment import (
     InlineAssignmentChange,
     InlineAssignmentResult,
@@ -45,30 +45,6 @@ router = APIRouter(
     prefix="/api/v1/events/{event_id}/assignments",
     tags=["service-assignments"],
 )
-
-
-def _conflict_detail(conflicts: list) -> ConflictResponse:
-    return ConflictResponse(
-        conflicts=[
-            ConflictItem(
-                rule_id=conflict.rule_id,
-                severity=conflict.severity,
-                message=conflict.message,
-                details=conflict.details,
-            )
-            for conflict in conflicts
-        ]
-    )
-
-
-def _raise_blocking_conflicts(conflicts: list, *, confirm_warnings: bool) -> None:
-    blocking = [conflict for conflict in conflicts if conflict.severity.value == "BLOCK"]
-    warnings = [conflict for conflict in conflicts if conflict.severity.value == "WARN"]
-    if blocking or (warnings and not confirm_warnings):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_conflict_detail(blocking + warnings).model_dump(mode="json"),
-        )
 
 
 async def _touch_slot(slots: SqlPlanningSlotRepository, planning_slot: PlanningSlot) -> None:
@@ -103,7 +79,7 @@ async def _check_leader(
     conflicts = await check_service_assignment_conflicts(
         db, event_id=event_id, leader_id=leader_id, exclude_assignment_id=exclude_assignment_id
     )
-    _raise_blocking_conflicts(conflicts, confirm_warnings=confirm_warnings)
+    raise_for_conflicts(conflicts, confirm_warnings=confirm_warnings)
 
 
 _ONE_ASSIGNMENT_PER_SLOT = "ix_service_assignments_planning_slot_id"

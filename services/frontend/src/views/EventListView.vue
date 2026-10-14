@@ -685,6 +685,7 @@ import {
   listEvents,
   createEvent,
   deleteEvent,
+  previewEventChange,
   updateEvent,
   updateEventInline,
   type EventApprovalStatus,
@@ -1290,14 +1291,38 @@ async function saveEdit() {
   editError.value  = ''
   try {
     const isDistrictLevel = !editForm.congregation_id
-    const updated = await updateEvent(target.id, {
-      congregation_id: editForm.congregation_id || null,
-      status:          editForm.status,
-      approval_status: editForm.approval_status,
-      category:        editForm.category || null,
-      // Congregation-level events are never distributed; the backend clears it.
-      ...(isDistrictLevel && { applicability: editForm.applicability }),
-    })
+    const congregationId = editForm.congregation_id || null
+    const congregationChanged = congregationId !== (target.congregation_id ?? null)
+    let acknowledgedWarnings = false
+    if (congregationChanged) {
+      const impact = await previewEventChange(target.id, { congregation_id: congregationId })
+      const messages = impact.items.flatMap((item) => item.conflicts.map((c) => c.message))
+      if (impact.blocked) throw new Error(messages.join(' '))
+      if (impact.requires_confirmation) {
+        const ok = await confirm({
+          title: 'Konflikt durch Gemeindewechsel',
+          message: messages.join(' '),
+          confirmText: 'Trotzdem speichern',
+          variant: 'warning',
+        })
+        if (!ok) return
+        acknowledgedWarnings = true
+      }
+    }
+    const updated = await updateEvent(
+      target.id,
+      {
+        congregation_id: congregationId,
+        status:          editForm.status,
+        approval_status: editForm.approval_status,
+        category:        editForm.category || null,
+        // Congregation-level events are never distributed; the backend clears it.
+        ...(isDistrictLevel && { applicability: editForm.applicability }),
+        ...(congregationChanged && { confirm_warnings: acknowledgedWarnings }),
+      },
+      // Only schedule-changing saves carry the revision; the server rejects stale ones with 412.
+      congregationChanged ? target.revision : undefined,
+    )
     let assignmentError: unknown = null
     try {
       updated.responsible = await saveResponsible(target)
