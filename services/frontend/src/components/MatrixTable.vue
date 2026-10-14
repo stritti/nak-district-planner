@@ -140,7 +140,7 @@
                     <template v-else>{{ row.cells[date].event_title }}</template>
                   </div>
                   <div
-                    v-if="row.cells[date].leader_name"
+                    v-if="row.cells[date].leader_name && !canInlineAssign(row.cells[date])"
                     v-overflow-title="row.cells[date].leader_name ?? ''"
                     :class="leaderNameClass"
                   >
