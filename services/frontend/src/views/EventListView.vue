@@ -1326,6 +1326,18 @@ async function saveEdit() {
       assignmentError = e
       updated.responsible = target.responsible ?? null
     }
+    const responsibleChanged = (target.responsible?.leader_id ?? null) !== (updated.responsible?.leader_id ?? null)
+      || (target.responsible?.name ?? '') !== (updated.responsible?.name ?? '')
+    if (responsibleChanged) {
+      // Assignment endpoints advance the PlanningSlot revision after event PATCH.
+      try {
+        Object.assign(updated, await getEvent(target.id))
+      } catch (e) {
+        // The writes already succeeded; prevent stale edits until a new snapshot is available.
+        updated.revision = ''
+        toast.error('Termin gespeichert, Aktualisierung fehlgeschlagen. Bitte neu laden.', e)
+      }
+    }
     // In-place update je nach aktiver Ansicht
     if (viewMode.value === 'list') {
       const idx = eventsStore.items.findIndex(e => e.id === updated.id)
@@ -1335,6 +1347,7 @@ async function saveEdit() {
       if (idx !== -1) calendarEvents.value[idx] = updated
     }
     if (assignmentError) {
+      editTarget.value = updated
       editError.value = errorMessage(assignmentError, 'Zuordnung fehlgeschlagen')
       toast.error('Termin gespeichert, Zuordnung fehlgeschlagen', assignmentError)
       return
