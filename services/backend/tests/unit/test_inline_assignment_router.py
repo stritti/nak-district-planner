@@ -105,6 +105,15 @@ async def test_inline_preserves_warning_conflicts_without_mutation():
 
 
 @pytest.mark.asyncio
+async def test_invited_congregation_cannot_mutate_host_assignment():
+    slot = _slot()
+    slot.invitation_source_event_id = uuid.uuid4()
+    with pytest.raises(HTTPException) as error:
+        await _call(slot, revision=slot_revision(slot))
+    assert error.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_inline_updates_assignment_without_removing_historical_record():
     slot = _slot()
     existing = ServiceAssignment.create(event_id=slot.id, leader_id=uuid.uuid4(),
