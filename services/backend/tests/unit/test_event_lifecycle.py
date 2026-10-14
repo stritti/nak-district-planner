@@ -59,6 +59,7 @@ async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
     if isinstance(slot, PlanningSlot):
         slots.get_for_update.return_value = slot
         kwargs["if_match"] = events._slot_revision(slot)
+
     return await events.update_event(event_id, body, auth, session, **kwargs)
 
 
@@ -249,6 +250,7 @@ async def test_update_rejects_unpublication_and_reactivation():
     value = slot(confirmed=True)
     repo, instances = AsyncMock(), AsyncMock()
     repo.get.return_value = value
+    instances.get_by_planning_slot.return_value = None
     with patch.object(events, "require_role_in_district"):
         with pytest.raises(HTTPException) as exc:
             await _update_event_with_revision(value.id, events.EventUpdate(approval_status="PLANNED"),
