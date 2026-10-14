@@ -128,6 +128,7 @@
                     :editable="canInlineEditLeader(leader)"
                     :coordinator="inlineCoordinator"
                     :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                    :max-length="255"
                   />
                   <InlineEditableCell
                     :id="'leader-phone-mobile-' + leader.id"
@@ -138,6 +139,7 @@
                     :editable="canInlineEditLeader(leader)"
                     :coordinator="inlineCoordinator"
                     :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                    :max-length="100"
                   />
                 </div>
                 <p v-if="leader.special_role" class="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">Beauftragung: {{ leader.special_role }}</p>
@@ -239,6 +241,7 @@
                   :editable="canInlineEditLeader(leader)"
                   :coordinator="inlineCoordinator"
                   :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                    :max-length="255"
                 />
                 <InlineEditableCell
                   :id="'leader-phone-desktop-' + leader.id"
@@ -249,6 +252,7 @@
                   :editable="canInlineEditLeader(leader)"
                   :coordinator="inlineCoordinator"
                   :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                    :max-length="100"
                 />
                 <td class="table-td py-2 text-center">
                   <span
@@ -920,7 +924,7 @@ const inlineCoordinator = useInlineCellCoordinator()
 
 function canInlineEditLeader(leader: LeaderResponse): boolean {
   return (authStore.isSuperadmin || authStore.memberships.some((m) =>
-    m.scope_type === 'DISTRICT' && m.scope_id === selectedDistrictId.value && m.role === 'PLANNER'
+    m.scope_type === 'DISTRICT' && m.scope_id === selectedDistrictId.value && ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role)
   )) &&
     leader.district_id === selectedDistrictId.value &&
     !!leader.revision
@@ -933,12 +937,18 @@ async function saveInlineLeader(
   revision: string,
 ): Promise<void> {
   const districtId = leader.district_id
-  await updateLeaderInline(
+  const saved = await updateLeaderInline(
     districtId, leader.id, { [field]: value || null }, revision,
   )
-  // Refresh canonical ordering and all fields, but not a newly selected district.
-  const current = await listLeaders(districtId)
-  if (selectedDistrictId.value === districtId) leaders.value = current
+  if (selectedDistrictId.value !== districtId) return
+  leaders.value = leaders.value.map((item) => item.id === saved.id ? saved : item)
+  // A failed canonical refresh must not turn an already persisted mutation into an error.
+  try {
+    const current = await listLeaders(districtId)
+    if (selectedDistrictId.value === districtId) leaders.value = current
+  } catch {
+    // The authoritative PATCH response already updated the visible record.
+  }
 }
 
 const selfLinkedLeader = ref<LeaderResponse | null>(null)
