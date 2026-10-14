@@ -130,9 +130,13 @@ export interface EventChangeImpact {
 }
 
 /** Read-only preview; nothing is persisted until the matching PATCH is sent. */
-export function previewEventChange(id: string, data: EventChangeImpactRequest): Promise<EventChangeImpact> {
+export function previewEventChange(
+  id: string, data: EventChangeImpactRequest, revision: string,
+): Promise<EventChangeImpact> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
   return apiFetch(`/api/v1/events/${id}/change-impact`, {
     method: 'POST',
+    headers: { 'If-Match': revision },
     body: JSON.stringify(data),
   })
 }
