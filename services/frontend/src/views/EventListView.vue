@@ -1385,7 +1385,7 @@ async function saveEdit() {
     const congregationChanged = congregationId !== (target.congregation_id ?? null)
     let acknowledgedWarnings = false
     if (congregationChanged) {
-      const impact = await previewEventChange(target.id, { congregation_id: congregationId })
+      const impact = await previewEventChange(target.id, { congregation_id: congregationId }, target.revision ?? '')
       const messages = impact.items.flatMap((item) => item.conflicts.map((c) => c.message))
       if (impact.blocked) throw new Error(messages.join(' '))
       if (impact.requires_confirmation) {
@@ -1410,8 +1410,8 @@ async function saveEdit() {
         ...(isDistrictLevel && { applicability: editForm.applicability }),
         ...(congregationChanged && { confirm_warnings: acknowledgedWarnings }),
       },
-      // Only schedule-changing saves carry the revision; the server rejects stale ones with 412.
-      congregationChanged ? target.revision : undefined,
+      // All full-editor writes are conditional, including status-only changes.
+      target.revision ?? '',
     )
     let assignmentError: unknown = null
     try {
