@@ -9,7 +9,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict\nfrom fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, ConfigDict
 
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
