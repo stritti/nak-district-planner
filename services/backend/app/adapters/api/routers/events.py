@@ -455,9 +455,6 @@ async def update_event(
     if slot.was_released and slot.status == PlanningSlotStatus.CANCELLED and body.status == PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Eine veröffentlichte Absage kann nicht zurückgenommen werden.")
     instance = await inst_repo.get_by_planning_slot(event_id)
-    if instance is not None and instance.source == EventSource.EXTERNAL:
-        raise HTTPException(status_code=403, detail="Extern verwaltete Ereignisse sind nicht inline bearbeitbar.")
-
     if "congregation_id" in body.model_fields_set:
         if body.congregation_id is None:
             slot.congregation_id = None
@@ -561,6 +558,9 @@ async def inline_update_event(
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
     if slot.status != PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Abgesagte Termine können nicht inline bearbeitet werden.")
+    instance = await inst_repo.get_by_planning_slot(event_id)
+    if instance is not None and instance.source == EventSource.EXTERNAL:
+        raise HTTPException(status_code=403, detail="Extern verwaltete Ereignisse sind nicht inline bearbeitbar.")
     return await update_event(
         event_id, EventUpdate.model_validate(body.model_dump(exclude_unset=True)), auth, session, slot_repo=slot_repo, cong_repo=cong_repo,
         inst_repo=inst_repo, assignments_repo=assignments_repo,
