@@ -152,12 +152,21 @@ class TestInventoryMechanics:
         package = tmp_path / "rbac_fixture_routers"
         package.mkdir()
         (package / "__init__.py").write_text("")
+        (package / "policy.py").write_text(textwrap.dedent(
+            """
+            from app.adapters.auth.permissions import require_role_in_district
+
+            def shared_guard(auth):
+                require_role_in_district(auth, None, None)
+            """
+        ))
         (package / "sample.py").write_text(
             textwrap.dedent(
                 """
                 from fastapi import APIRouter
 
                 from app.adapters.api.deps import CurrentUserWithMemberships
+                from rbac_fixture_routers.policy import shared_guard
                 from app.adapters.auth.permissions import (
                     require_role_in_district,
                     require_superadmin,
@@ -194,6 +203,11 @@ class TestInventoryMechanics:
                     _load_and_check(auth)
 
 
+                @router.get("/imported")
+                async def imported(auth: CurrentUserWithMemberships):
+                    shared_guard(auth)
+
+
                 @router.get("/attribute")
                 async def attribute(auth: CurrentUserWithMemberships):
                     return auth.user.is_superadmin                """
@@ -225,6 +239,9 @@ class TestInventoryMechanics:
 
     def test_guard_in_transitive_module_helper(self, synthetic_routes) -> None:
         assert synthetic_routes["sample.transitive"].guards == {"require_role_in_district"}
+
+    def test_guard_in_imported_policy_helper_is_detected(self, synthetic_routes) -> None:
+        assert synthetic_routes["sample.imported"].guards == {"require_role_in_district"}
 
     def test_superadmin_attribute_check(self, synthetic_routes) -> None:
         assert synthetic_routes["sample.attribute"].guards == {"is_superadmin"}

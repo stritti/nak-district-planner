@@ -11,7 +11,7 @@ Die Events-API, die bestehenden PLANNED/CONFIRMED-Freigaben, District-applicabil
 Ein neues Domänenmodell RecurringEventTemplate enthält:
 - id, district_id, congregation_id optional (null = Bezirkstermin)
 - title, description optional, category (kein Gottesdienst im ersten Ausbauschritt), start_time als lokale Uhrzeit, duration_minutes > 0
-- recurrence als validierte, versionierte Regel mit verpflichtendem anchor_date; active_from, active_until optional; is_active; revision / updated_at
+- recurrence als validierte, versionierte Regel mit verpflichtendem anchor_date; active_from, active_until optional; excluded_dates als eindeutige Liste einzelner lokaler Ausnahme-Daten (kein stilles Verschieben); is_active; revision / updated_at
 - applicability nur bei Bezirksterminen: [] = nur auf Bezirksebene, ["all"] oder eine eindeutige Menge bezirkszugehöriger Gemeinden; niemals bei Gemeindeterminen
 - timezone = Europe/Berlin in der ersten Ausbaustufe
 
@@ -38,9 +38,9 @@ RecurringEventDecision:
 - ACCEPTED referenziert den entstandenen oder bewusst zugeordneten PlanningSlot; SKIPPED besitzt keine slot_id
 - Fremdschlüssel mit geprüfter Bezirkszugehörigkeit; planning_slot_id ist nullable und verwendet ON DELETE SET NULL, damit eine gelöschte Slot-Referenz (auch durch Retention Cleanup) die Entscheidung nicht löscht. ACCEPTED + null wird als NEEDS_REVIEW projiziert, nie ungeprüft neu angelegt
 
-Die Darstellung unterscheidet OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW. CONFLICT ist ein aus der aktuellen Planungsrealität abgeleiteter Zustand und keine automatische Ablehnung. Entscheidungen bleiben erhalten, wenn eine Vorlage später inaktiv wird oder ihre Regel bearbeitet wird; der Monatsstatus kann weiterhin als historischer Eintrag angezeigt werden. Ein verschobener akzeptierter Termin bleibt dem ursprünglichen Vorkommen zugeordnet, auch wenn er einen anderen Monat erreicht.
+Die Darstellung unterscheidet OPEN, ACCEPTED, SKIPPED, CONFLICT und NEEDS_REVIEW. Zusätzlich liefert die API decision_status (ACCEPTED, SKIPPED oder null), damit ein fehlender akzeptierter Slot von einer nur wegen Sommerzeit prüfbedürftigen Vorschau unterschieden wird. CONFLICT ist ein aus der aktuellen Planungsrealität abgeleiteter Zustand und keine automatische Ablehnung. Entscheidungen bleiben erhalten, wenn eine Vorlage später inaktiv wird oder ihre Regel bearbeitet wird; der Monatsstatus kann weiterhin als historischer Eintrag angezeigt werden. Ein verschobener akzeptierter Termin bleibt dem ursprünglichen Vorkommen zugeordnet, auch wenn er einen anderen Monat erreicht.
 
-Ein übersprungener Vorschlag kann explizit wieder geöffnet werden (Entscheidung entfernen); ACCEPTED mit existierendem Slot wird durch dessen normale Event-Bearbeitung oder Stornierung verwaltet. Wird der Slot endgültig gelöscht, zeigt die Checkliste NEEDS_REVIEW. Ein dedizierter Resolve-Use-Case erlaubt dann nur explizit und atomar: LINK_EXISTING (einen passenden, noch nicht anders zugeordneten Slot derselben Gemeinde bzw. desselben Bezirksscopes verknüpfen), MARK_SKIPPED (Entscheidung behalten, slot_id null) oder REOPEN (Entscheidung löschen, nur falls die aktuell aktive Vorlage das ursprüngliche Vorkommen weiterhin erzeugt). Vor jedem Schritt werden Scope, bestehende Verknüpfung und Revisionskonflikte geprüft. Ohne Entscheidung bleibt NEEDS_REVIEW und es erfolgt keine automatische Neuanlage.
+Ein übersprungener Vorschlag kann explizit wieder geöffnet werden (Entscheidung entfernen); ACCEPTED mit existierendem Slot wird durch dessen normale Event-Bearbeitung oder Stornierung verwaltet. Wird der Slot endgültig gelöscht, zeigt die Checkliste NEEDS_REVIEW. Ein dedizierter Resolve-Use-Case erlaubt dann nur explizit und atomar: LINK_EXISTING (einen passenden, noch nicht anders zugeordneten Slot derselben Gemeinde bzw. desselben Bezirksscopes verknüpfen), MARK_SKIPPED (Entscheidung behalten, slot_id null) oder REOPEN (Entscheidung löschen, nur falls die aktuell aktive Vorlage das ursprüngliche Vorkommen weiterhin erzeugt). Vor jedem Schritt werden Scope, bestehende Verknüpfung und Revisionskonflikte geprüft. LINK_EXISTING verlangt außerdem, dass das UTC-Planungsdatum des Slots dem aus dem ursprünglichen lokalen Vorkommen und der Vorlagenstartzeit abgeleiteten UTC-Datum entspricht; Verschiebungen erfolgen über die normale Terminbearbeitung. Die Monatsprojektion lädt referenzierte Slots gesammelt statt mit einer Abfrage je Entscheidung. Ohne Entscheidung bleibt NEEDS_REVIEW und es erfolgt keine automatische Neuanlage.
 
 ### 4. Übernahme, Konflikte und Freigabe
 
@@ -71,9 +71,32 @@ Alle Endpunkte sind in Backend-Ports, Domänenservices und API-Adapter getrennt.
 
 ### 6. UI und Fehlerführung
 
+Ein Statusfilter begrenzt nur die zurückgegebenen Checklistenzeilen und den paginierten `total`-Wert. Die `counts` der Statusleiste spiegeln die Verteilung sämtlicher berechtigter Such-/Kategorie-Ergebnisse desselben Monats vor dem Statusfilter wider.
+
+Einmalig selektierte Checkboxen werden beim Seitenwechsel zurückgesetzt. Mehrfachübernahmen betreffen ausschließlich die aktuelle Checklisten-Seite (maximal 50 Einträge); dies wird im Frontend ausdrücklich erläutert.
+
+Die Write-RLS `_DECISION_WRITE` erlaubt reguläre `CONGREGATION_ADMIN`-Sessions für Entscheidungen zu Vorlagen ihrer eigenen Gemeinde, aber nicht für Bezirksvorlagen oder fremde Gemeinde-IDs. `LINK_EXISTING` bindet nur Slots desselben Bezirk-/Gemeindescopes; ein Bezirksvorkommen wird nicht implizit einem Gemeindeslot zugeordnet. Fremde Zielslots werden sowohl durch die Slot-RLS als auch durch die Service-Scope-Prüfung abgewehrt.
+
 Die Monatsplanung zeigt einen Abschnitt "Wiederkehrende Termine" mit Monatsnavigation, Scope-/Gemeindefilter, serverseitiger Freitextsuche (Titel/Beschreibung), Kategorie- und Statusfilter, Fortschritt offen/übernommen/ausgelassen und Checkboxen bzw. Aktionen zur bewussten Übernahme. Ein Vorschau-Dialog ermöglicht das Ändern einzelner konkreter Termindaten vor dem Bestätigen. Konflikte und ungültige lokale Zeiten haben eine eigene erkennbare Darstellung und blockieren ausschließlich die betroffenen Übernahmen. Eine Statusänderung wird erst nach erfolgreicher API-Antwort angezeigt; API-Fehler lassen die Auswahl bearbeitbar.
 
 Die Vorlagenverwaltung nutzt denselben globalen Bezirkskontext wie die übrigen geschützten Ansichten. Liste und Checkliste sind auf schmalen Bildschirmen nutzbar. Bestehende Eventliste, Monatsansicht und Export erhalten nach Übernahme ihre Daten über die vorhandene API, ohne neue Anzeige-Logik für virtuelle Vorschläge.
+
+Für Teilfehler bei `bulk-accept` enthält jedes Item statt eines rohen Exception-Texts einen stabilen Fehlercode im bestehenden `error`-Feld: `STALE_TEMPLATE`, `OCCURRENCE_CONFLICT`, `INVALID_OCCURRENCE`, `AMBIGUOUS_LOCAL_TIME`, `NONEXISTENT_LOCAL_TIME` oder `INVALID_INPUT`. Das Frontend lokalisiert die Codes; interne SQL-/Validierungsdetails werden nie an Clients übertragen. Erfolge bleiben pro Item unabhängig davon erhalten.
+
+Die Vorlagenliste unterstützt `limit` (1 bis 100, Standard 50) und `offset` (ab 0) und liefert `total`, `limit` und `offset`. Gemeinde-Sichtbarkeit und Bezirkszugehörigkeit werden in der SQL-Abfrage vor `LIMIT/OFFSET` ausgewertet. Die Oberfläche navigiert seitenweise statt sämtliche Vorlagen gleichzeitig zu laden.
+
+Die Monatscheckliste lädt höchstens 500 berechtigte Vorlagen für eine Vorschau. Scope- und optionaler Gemeindefilter werden vor diesem Limit in PostgreSQL angewendet. Größere Mengen antworten mit HTTP 413 und verlangen eine gezieltere Gemeindeauswahl; niemals wird eine abgeschnittene Teilmenge als vollständiger Monat ausgegeben.
+
+### 6.1 Codex-Review: Grenzfälle und Datenintegrität
+
+- Vorlagen-PATCH sendet ausschließlich Felder aus `RecurringTemplateInput`, nicht die nur lesbaren Response-Metadaten `id`, `district_id`, `revision`, `timezone`. Die Revision wird separat als `expected_revision` übertragen.
+- `applicability`-UUIDs werden vor Speicherung und Dublettenprüfung kanonisiert. PostgreSQL-RLS und Filter verwenden die gleiche kanonische UUID-Zeichenfolge.
+- Ein nicht-null `planning_slot_id` der Entscheidung garantiert mittels zusammengesetztem FK auf einen vorhandenen Slot, auch wenn die Slot-RLS ihn für bestimmte Gemeindeleser verbirgt. `NULL` entsteht beim Löschen und ergibt `NEEDS_REVIEW`.
+- Die Referenz auf einen Slot darf über alle Vorlagen hinweg nur zu genau einer Entscheidung gehören. Ein `UNIQUE (planning_slot_id)` lässt mehrere `NULL` bei Retention zu; konkurrierende Links werden vom bestehenden Integritätsfehler-Adapter als Konflikt behandelt.
+- `LINK_EXISTING` vergleicht das Datum des vorhandenen UTC-Slots nach Zeitzonen-Konvertierung mit dem ursprünglichen lokalen Vorkommensdatum. Der tatsächliche UTC-Zeitpunkt kann im DST-Fold ohne zusätzliche Fold-Entscheidung bestimmt werden.
+- Monatsfreigabe wird nach dem lokalen Kalendermonat `Europe/Berlin` entschieden; die Repository-Abfrage berücksichtigt deshalb auch den vorangehenden UTC-Tag und filtert dann auf das lokale Datum.
+- Der Template-Tab bleibt bei HTTP 413 der Monatscheckliste bedienbar, damit Vorlagen bearbeitet/deaktiviert werden können. Nach Bulk-Teilerfolgen werden persistierte Ergebnisse nachgeladen, Fehler sichtbar gehalten und nur fehlgeschlagene Zeilen erneut markiert.
+- Ein Bezirkswechsel verwirft den bisherigen Gemeindefilter; Datum-Overrides vor 1900 werden vor jeder UTC-Konvertierung abgelehnt.
 
 ### 7. API-Kontrakt (Planungsentwurf)
 

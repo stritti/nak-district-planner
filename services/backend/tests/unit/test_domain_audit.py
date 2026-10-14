@@ -27,6 +27,10 @@ from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationO
 from app.adapters.db.orm_models.export_token import ExportTokenORM
 from app.adapters.db.orm_models.notification import NotificationORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+from app.adapters.db.orm_models.recurring_event import (
+    RecurringEventDecisionORM,
+    RecurringEventTemplateORM,
+)
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.domain.models.planning_slot import EventApprovalStatus
 from app.domain.models.service_assignment import AssignmentStatus
@@ -145,6 +149,34 @@ class TestEntryFor:
         assert "token" not in entry.new_values
         assert "secret-token" not in repr(entry.new_values)
 
+    def test_recurring_template_creation_records_rules_and_scope(self) -> None:
+        template = RecurringEventTemplateORM(
+            id=uuid.uuid4(), district_id=DISTRICT, congregation_id=CONGREGATION,
+            title="Chor", category="Musik", start_time=time(19, 30),
+            duration_minutes=90,
+            recurrence={"kind": "WEEKLY", "anchor_date": "2026-11-03", "weekdays": [2]},
+            applicability=[], excluded_dates=[], revision=1, is_active=True,
+        )
+        entry = entry_for(AuditAction.CREATE, template)
+        assert entry.resource.resource_type == "recurring_event_template"
+        assert entry.new_values["recurrence"]["weekdays"] == [2]
+        assert entry.new_values["congregation_id"] == str(CONGREGATION)
+        assert entry.new_values["is_active"] is True
+
+    def test_recurring_decision_update_records_state_and_slot_link(self) -> None:
+        slot_id = uuid.uuid4()
+        decision = _loaded(RecurringEventDecisionORM(
+            id=uuid.uuid4(), district_id=DISTRICT, template_id=uuid.uuid4(),
+            occurrence_local_date=date(2026, 11, 3), status="ACCEPTED",
+            planning_slot_id=slot_id, created_by="user",
+        ))
+        decision.status = "SKIPPED"
+        decision.planning_slot_id = None
+        entry = entry_for(AuditAction.UPDATE, decision)
+        assert entry.resource.resource_type == "recurring_event_decision"
+        assert entry.old_values == {"status": "ACCEPTED", "planning_slot_id": str(slot_id)}
+        assert entry.new_values == {"status": "SKIPPED", "planning_slot_id": None}
+
     def test_unaudited_resources_are_ignored(self) -> None:
         assert entry_for(AuditAction.CREATE, NotificationORM()) is None
 
@@ -171,6 +203,22 @@ class TestRecordDomainAudit:
         assert row["extra_metadata"] == {"source": AUDIT_SOURCE}
         assert row["timestamp"] == row["created_at"]
         assert row["changes"] is None
+
+    def test_recurring_decision_audit_inherits_congregation_from_template(self) -> None:
+        decision = RecurringEventDecisionORM(
+            id=uuid.uuid4(), district_id=DISTRICT, template_id=uuid.uuid4(),
+            occurrence_local_date=date(2026, 11, 3), status="SKIPPED",
+            created_by="user",
+        )
+        session = _session(
+            new=[decision], db_tenant=SimpleNamespace(congregation_id=CONGREGATION),
+        )
+        record_domain_audit(session, None)
+        [row] = self._inserted_rows(session)
+        assert row["resource_type"] == "recurring_event_decision"
+        assert row["district_id"] == DISTRICT
+        assert row["congregation_id"] == CONGREGATION
+        assert row["new_values"]["occurrence_local_date"] == "2026-11-03"
 
     def test_redacted_fields_are_listed_under_changes(self) -> None:
         integration = _loaded(
