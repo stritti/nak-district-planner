@@ -7,6 +7,7 @@ export interface InlineCellCoordinator {
   activeId: Ref<string | null>
   activate: (id: string, finishPrevious: () => Promise<boolean>) => Promise<boolean>
   release: (id: string) => void
+  finish: () => Promise<boolean>
 }
 
 /** One active editor per overview; a failed save blocks switching to another cell. */
@@ -37,11 +38,16 @@ export function useInlineCellCoordinator(): InlineCellCoordinator {
     return true
   }
 
+  async function finish(): Promise<boolean> {
+    if (transition) return transition
+    return finishActive ? finishActive() : true
+  }
+
   function release(id: string): void {
     if (activeId.value !== id) return
     activeId.value = null
     finishActive = null
   }
 
-  return { activeId, activate, release }
+  return { activeId, activate, release, finish }
 }

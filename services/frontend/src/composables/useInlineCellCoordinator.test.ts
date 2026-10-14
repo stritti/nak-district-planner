@@ -25,6 +25,28 @@ describe('useInlineCellCoordinator', () => {
     expect(state.activeId.value).toBe('c')
   })
 
+  it('blocks navigation when the current editor cannot persist', async () => {
+    const state = useInlineCellCoordinator()
+    const fail = vi.fn().mockResolvedValue(false)
+    await state.activate('dirty', fail)
+    expect(await state.finish()).toBe(false)
+    expect(state.activeId.value).toBe('dirty')
+    expect(fail).toHaveBeenCalledOnce()
+  })
+
+  it('allows navigation only after the active draft resolves', async () => {
+    const state = useInlineCellCoordinator()
+    const finish = vi.fn().mockImplementation(async () => {
+      state.release('dirty')
+      return true
+    })
+    await state.activate('dirty', finish)
+    expect(await state.finish()).toBe(true)
+    expect(state.activeId.value).toBeNull()
+    expect(await state.finish()).toBe(true)
+    expect(finish).toHaveBeenCalledOnce()
+  })
+
   it('resolves the existing draft before switching', async () => {
     const state = useInlineCellCoordinator()
     const finish = vi.fn().mockImplementation(async () => {

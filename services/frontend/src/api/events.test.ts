@@ -10,6 +10,7 @@ import {
   bulkUpdateApprovalStatus,
   createEvent,
   deleteEvent,
+  getEvent,
   listEvents,
   resolveEventConflict,
   updateEvent,
@@ -84,11 +85,19 @@ describe('events api', () => {
 
   it('sends PATCH to /api/v1/events/:id with body', async () => {
     vi.mocked(client.apiFetch).mockResolvedValue({ id: '1' })
-    await updateEvent('1', { status: 'ACTIVE' })
+    await updateEvent('1', { status: 'ACTIVE' }, '"rev1"')
     expect(client.apiFetch).toHaveBeenCalledWith('/api/v1/events/1', {
       method: 'PATCH',
+      headers: { 'If-Match': '"rev1"' },
       body: JSON.stringify({ status: 'ACTIVE' }),
     })
+  })
+
+  it('rejects a blind legacy event PATCH and fetches authoritative event snapshots', async () => {
+    await expect(updateEvent('1', { title: 'Unsave' }, '')).rejects.toThrow('Versionsinformation')
+    expect(client.apiFetch).not.toHaveBeenCalled()
+    await getEvent('1')
+    expect(client.apiFetch).toHaveBeenCalledWith('/api/v1/events/1')
   })
 
   it('requires a version for an inline patch and sends an If-Match header', async () => {

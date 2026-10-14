@@ -29,7 +29,6 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
-from app.adapters.api.revisions import slot_revision as _slot_revision
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
@@ -169,6 +168,14 @@ class BulkApprovalStatusResponse(BaseModel):
     updated_count: int
 
 
+def _slot_revision(slot: PlanningSlot, instance: EventInstance | None = None) -> str:
+    """Strong validator for both halves of the event's persisted snapshot."""
+    slot_updated = _to_utc(slot.updated_at).isoformat(timespec="microseconds")
+    instance_updated = (
+        _to_utc(instance.updated_at).isoformat(timespec="microseconds")
+        if instance is not None else "none"
+    )
+    return f'"{slot.id}:{slot_updated}:{instance_updated}"'
 def _slot_start_at(slot: PlanningSlot) -> datetime:
     return datetime.combine(slot.planning_date, slot.planning_time or time.min, tzinfo=UTC)
 
@@ -200,7 +207,7 @@ def _slot_to_event(
         responsible=responsible,
         created_at=slot.created_at,
         updated_at=slot.updated_at,
-        revision=_slot_revision(slot),
+        revision=_slot_revision(slot, instance),
     )
 
 
@@ -402,6 +409,25 @@ async def delete_event(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.get("/{event_id}", response_model=EventResponse)
+async def get_event(
+    event_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+) -> EventResponse:
+    """Fetch an authoritative event snapshot for conditional writes in detail dialogs."""
+    slot = await slot_repo.get(event_id)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.VIEWER, slot.district_id)
+    instance = await inst_repo.get_by_planning_slot(event_id)
+    responsible = await _load_responsible(assignments_repo, leaders_repo, [slot])
+    return _slot_to_event(slot, instance, responsible.get(slot.id))
+
+
 @router.patch("/{event_id}", response_model=EventResponse)
 async def update_event(
     event_id: uuid.UUID,
@@ -420,7 +446,10 @@ async def update_event(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
 
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
-    if if_match is not None and if_match != _slot_revision(slot):
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
+    if if_match != _slot_revision(slot, instance):
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail="Ereignis wurde zwischenzeitlich geändert. Bitte Daten neu laden.",
@@ -429,10 +458,6 @@ async def update_event(
         raise HTTPException(status_code=409, detail="Eine Freigabe kann nicht zurückgenommen werden.")
     if slot.was_released and slot.status == PlanningSlotStatus.CANCELLED and body.status == PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Eine veröffentlichte Absage kann nicht zurückgenommen werden.")
-    instance = await inst_repo.get_by_planning_slot(event_id)
-    if if_match is not None and instance is not None and instance.source == EventSource.EXTERNAL:
-        raise HTTPException(status_code=403, detail="Extern verwaltete Ereignisse sind nicht inline bearbeitbar.")
-
     if "congregation_id" in body.model_fields_set:
         if body.congregation_id is None:
             slot.congregation_id = None
@@ -530,6 +555,15 @@ async def inline_update_event(
         "title" in fields and body.title is None
     ):
         raise HTTPException(status_code=422, detail="Dieses Feld kann nicht inline bearbeitet werden.")
+    slot = await slot_repo.get_for_update(event_id)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    if slot.status != PlanningSlotStatus.ACTIVE:
+        raise HTTPException(status_code=409, detail="Abgesagte Termine können nicht inline bearbeitet werden.")
+    instance = await inst_repo.get_by_planning_slot(event_id)
+    if instance is not None and instance.source == EventSource.EXTERNAL:
+        raise HTTPException(status_code=403, detail="Extern verwaltete Ereignisse sind nicht inline bearbeitbar.")
     return await update_event(
         event_id, EventUpdate.model_validate(body.model_dump(exclude_unset=True)), auth, session, slot_repo=slot_repo, cong_repo=cong_repo,
         inst_repo=inst_repo, assignments_repo=assignments_repo,

@@ -231,6 +231,7 @@ async def test_leader_create_rejects_foreign_congregation() -> None:
 @pytest.mark.asyncio
 async def test_leader_update_rejects_foreign_congregation() -> None:
     leaders_repo = _found(Leader.create(name="L", district_id=DISTRICT))
+    leaders_repo.get_for_update.return_value = leaders_repo.get.return_value
     with patch("app.adapters.api.routers.leaders.require_role_in_district"):
         with pytest.raises(HTTPException) as exc:
             await leaders_router.update_leader(
@@ -240,6 +241,7 @@ async def test_leader_update_rejects_foreign_congregation() -> None:
                 object(),
                 _db(),
                 leaders_repo=leaders_repo,
+                if_match=leaders_router._leader_revision(leaders_repo.get.return_value),
             )
 
     _assert_rejected(exc, "congregation_id")

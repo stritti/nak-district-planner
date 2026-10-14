@@ -9,9 +9,9 @@
     <div class="mb-6">
         <label class="filter-label">Bezirk</label>
         <select
-          v-model="selectedDistrictId"
+          :value="selectedDistrictId"
           class="form-select"
-          @change="onDistrictChange"
+          @change="requestDistrictChange"
         >
           <option value="">Bezirk wählen…</option>
           <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">{{ d.name }}</option>
@@ -29,7 +29,7 @@
           :class="activeTab === 'leaders'
             ? 'border-b-2 border-blue-600 text-blue-600'
             : 'text-gray-500 hover:text-gray-800'"
-          @click="activeTab = 'leaders'"
+          @click="returnToLeaders"
         >
           Amtstragende
         </button>
@@ -111,6 +111,7 @@
                     :editable="canInlineEditLeader(leader)"
                     :coordinator="inlineCoordinator"
                     :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'name')"
                     required
                     :max-length="255"
                   />
@@ -128,6 +129,8 @@
                     :editable="canInlineEditLeader(leader)"
                     :coordinator="inlineCoordinator"
                     :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'email')"
+                    :max-length="255"
                   />
                   <InlineEditableCell
                     :id="'leader-phone-mobile-' + leader.id"
@@ -138,6 +141,8 @@
                     :editable="canInlineEditLeader(leader)"
                     :coordinator="inlineCoordinator"
                     :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'phone')"
+                    :max-length="100"
                   />
                 </div>
                 <p v-if="leader.special_role" class="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">Beauftragung: {{ leader.special_role }}</p>
@@ -215,6 +220,7 @@
                   :editable="canInlineEditLeader(leader)"
                   :coordinator="inlineCoordinator"
                   :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'name')"
                   required
                   :max-length="255"
                 />
@@ -239,6 +245,8 @@
                   :editable="canInlineEditLeader(leader)"
                   :coordinator="inlineCoordinator"
                   :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'email')"
+                    :max-length="255"
                 />
                 <InlineEditableCell
                   :id="'leader-phone-desktop-' + leader.id"
@@ -249,6 +257,8 @@
                   :editable="canInlineEditLeader(leader)"
                   :coordinator="inlineCoordinator"
                   :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'phone')"
+                    :max-length="100"
                 />
                 <td class="table-td py-2 text-center">
                   <span
@@ -849,6 +859,7 @@
 </template>
 
 <script setup lang="ts">
+import { onBeforeRouteLeave } from 'vue-router'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -917,13 +928,26 @@ const selectedDistrictId = computed({
 const loading = ref(false)
 const saving = ref(false)
 const inlineCoordinator = useInlineCellCoordinator()
+onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditLeader(leader: LeaderResponse): boolean {
   return (authStore.isSuperadmin || authStore.memberships.some((m) =>
-    m.scope_type === 'DISTRICT' && m.scope_id === selectedDistrictId.value && m.role === 'PLANNER'
+    m.scope_type === 'DISTRICT' && m.scope_id === selectedDistrictId.value && ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role)
   )) &&
     leader.district_id === selectedDistrictId.value &&
     !!leader.revision
+}
+
+async function reloadInlineLeader(
+  leader: LeaderResponse,
+  field: 'name' | 'email' | 'phone',
+): Promise<{ value: string | null; revision: string }> {
+  const latest = (await listLeaders(leader.district_id)).find((entry) => entry.id === leader.id)
+  if (!latest) throw new Error('Amtstragende:r wurde zwischenzeitlich entfernt.')
+  if (selectedDistrictId.value === leader.district_id) {
+    leaders.value = leaders.value.map((entry) => entry.id === latest.id ? latest : entry)
+  }
+  return { value: latest[field], revision: latest.revision ?? '' }
 }
 
 async function saveInlineLeader(
@@ -933,12 +957,18 @@ async function saveInlineLeader(
   revision: string,
 ): Promise<void> {
   const districtId = leader.district_id
-  await updateLeaderInline(
+  const saved = await updateLeaderInline(
     districtId, leader.id, { [field]: value || null }, revision,
   )
-  // Refresh canonical ordering and all fields, but not a newly selected district.
-  const current = await listLeaders(districtId)
-  if (selectedDistrictId.value === districtId) leaders.value = current
+  if (selectedDistrictId.value !== districtId) return
+  leaders.value = leaders.value.map((item) => item.id === saved.id ? saved : item)
+  // A failed canonical refresh must not turn an already persisted mutation into an error.
+  try {
+    const current = await listLeaders(districtId)
+    if (selectedDistrictId.value === districtId) leaders.value = current
+  } catch {
+    // The authoritative PATCH response already updated the visible record.
+  }
 }
 
 const selfLinkedLeader = ref<LeaderResponse | null>(null)
@@ -969,7 +999,12 @@ async function loadRegistrations() {
   }
 }
 
+async function returnToLeaders() {
+  if (await inlineCoordinator.finish()) activeTab.value = 'leaders'
+}
+
 async function switchToRegistrations() {
+  if (!(await inlineCoordinator.finish())) return
   activeTab.value = 'registrations'
   await loadRegistrations()
 }
@@ -997,6 +1032,7 @@ const canManageUnavailabilities = computed(() => {
 })
 
 async function switchToUnavailabilities(leaderId?: string) {
+  if (!(await inlineCoordinator.finish())) return
   activeTab.value = 'unavailabilities'
   if (leaderId !== undefined) unavailabilityFilterLeaderId.value = leaderId
   try {
@@ -1233,6 +1269,18 @@ onMounted(async () => {
   }
 })
 
+async function requestDistrictChange(event: Event) {
+  const selector = event.target as HTMLSelectElement
+  const requestedDistrict = selector.value
+  if (!(await inlineCoordinator.finish())) {
+    selector.value = selectedDistrictId.value
+    return
+  }
+  if (requestedDistrict === selectedDistrictId.value) return
+  selectedDistrictId.value = requestedDistrict
+  await onDistrictChange()
+}
+
 async function onDistrictChange() {
   const loadGeneration = ++districtLoadGeneration
   const districtId = selectedDistrictId.value
@@ -1362,6 +1410,7 @@ async function saveAdd() {
 const editModal = reactive({
   open: false,
   leaderId: '',
+  revision: '',
   name: '',
   rank: '' as LeaderRank | '',
   congregation_id: null as string | null,
@@ -1376,6 +1425,7 @@ const editModal = reactive({
 function openEditModal(leader: LeaderResponse) {
   editModal.open = true
   editModal.leaderId = leader.id
+  editModal.revision = leader.revision ?? ''
   editModal.name = leader.name
   editModal.rank = leader.rank ?? ''
   editModal.congregation_id = leader.congregation_id
@@ -1401,7 +1451,7 @@ async function saveEdit() {
       phone: editModal.phone.trim() || null,
       notes: editModal.notes.trim() || null,
       is_active: editModal.is_active,
-    })
+    }, editModal.revision)
     const idx = leaders.value.findIndex((l) => l.id === editModal.leaderId)
     if (idx !== -1) leaders.value[idx] = updated
     editModal.open = false

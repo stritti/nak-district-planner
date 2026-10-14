@@ -5,13 +5,14 @@
   <component
     :is="as"
     ref="root"
-    :tabindex="editable ? 0 : undefined"
-    :aria-label="editable ? label + ': ' + (value || 'Leer') + '. Enter oder F2 zum Bearbeiten' : undefined"
+    :tabindex="0"
+    :aria-label="(editable ? label : label.split(':')[0]) + ': ' + (value || 'Leer') + (editable ? '. Enter oder F2 zum Bearbeiten' : '. Nur lesbar')"
     :data-inline-cell-id="id"
     :data-inline-editable="editable ? 'true' : undefined"
     :class="[
       as === 'td' ? 'table-td' : '',
-      editable ? 'cursor-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600' : '',
+      'focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600',
+      editable ? 'cursor-text' : '',
     ]"
     @click="activate"
     @keydown="onCellKeydown"
@@ -49,6 +50,18 @@
       />
       <span v-if="saving" role="status" class="text-xs text-blue-700">Speichern…</span>
       <span v-if="error" :id="id + '-error'" role="alert" class="text-xs text-red-700">{{ error }}</span>
+      <div v-if="remoteSnapshot" class="text-xs text-gray-600 dark:text-gray-300">
+        Aktueller gespeicherter Wert: {{ remoteSnapshot.value || '—' }}. Dein Entwurf bleibt erhalten.
+      </div>
+      <button
+        v-if="stale && reload"
+        type="button"
+        class="text-left text-xs text-blue-700 underline"
+        :disabled="recovering"
+        @click.stop.prevent="reloadLatest"
+      >
+        {{ recovering ? 'Lade aktuellen Stand…' : 'Aktuellen Stand zum Vergleichen laden' }}
+      </button>
     </div>
     <span v-else class="block truncate" :title="displayValue ?? value ?? undefined">{{ displayValue ?? value ?? '—' }}</span>
     <span class="sr-only" aria-live="polite">{{ announcement }}</span>
@@ -69,6 +82,7 @@ const props = withDefaults(defineProps<{
   editable: boolean
   coordinator: InlineCellCoordinator
   save: (draft: string, revision: string) => Promise<void>
+  reload?: () => Promise<{ value: string | null | undefined; revision: string }>
   revision: string
   as?: 'td' | 'div'
   required?: boolean
@@ -83,6 +97,9 @@ const startingRevision = ref(props.revision)
 const error = ref('')
 const announcement = ref('')
 const saving = ref(false)
+const stale = ref(false)
+const recovering = ref(false)
+const remoteSnapshot = ref<{ value: string | null | undefined; revision: string } | null>(null)
 const editing = computed(() => props.coordinator.activeId.value === props.id)
 let pendingSave: Promise<boolean> | null = null
 
@@ -99,6 +116,8 @@ async function activate(): Promise<void> {
   if (!(await props.coordinator.activate(props.id, commit))) return
   draft.value = props.value ?? ''
   startingRevision.value = props.revision
+  remoteSnapshot.value = null
+  stale.value = false
   error.value = ''
   announcement.value = ''
   await nextTick()
@@ -110,6 +129,8 @@ async function activate(): Promise<void> {
 function cancel(): void {
   if (saving.value) return
   draft.value = props.value ?? ''
+  remoteSnapshot.value = null
+  stale.value = false
   error.value = ''
   props.coordinator.release(props.id)
   nextTick(() => root.value?.focus())
@@ -160,6 +181,7 @@ async function commit(): Promise<boolean> {
       return true
     } catch (cause) {
       error.value = saveError(cause)
+      stale.value = cause instanceof ApiError && cause.status === 412
       announcement.value = error.value
       saving.value = false
       await nextTick()
@@ -174,6 +196,23 @@ async function commit(): Promise<boolean> {
     return await pendingSave
   } finally {
     pendingSave = null
+  }
+}
+
+async function reloadLatest(): Promise<void> {
+  if (!props.reload || recovering.value) return
+  recovering.value = true
+  try {
+    const snapshot = await props.reload()
+    if (!snapshot.revision) throw new Error('Versionsinformation fehlt. Bitte neu laden.')
+    remoteSnapshot.value = snapshot
+    startingRevision.value = snapshot.revision
+    stale.value = false
+    error.value = 'Aktueller Stand geladen. Bitte den Entwurf vergleichen und erneut speichern.'
+  } catch (cause) {
+    error.value = saveError(cause)
+  } finally {
+    recovering.value = false
   }
 }
 
@@ -195,7 +234,21 @@ async function onEditorKeydown(event: KeyboardEvent): Promise<void> {
     if (!(await commit())) return
     await nextTick()
     if (!destination) {
-      root.value?.focus()
+      if (event.key === 'Tab') {
+        const scopeElement = scope ?? root.value
+        const focusable = Array.from(document.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+          .filter((element) => element.getClientRects().length > 0 && !element.closest('[inert]'))
+        const currentIndex = focusable.indexOf(scopeElement as HTMLElement)
+        const candidates = focusable.filter((element) => !scopeElement?.contains(element))
+        const fromRoot = focusable.indexOf(root.value as HTMLElement)
+        const origin = currentIndex >= 0 ? currentIndex : fromRoot
+        const next = direction > 0
+          ? candidates.find((element) => focusable.indexOf(element) > origin)
+          : [...candidates].reverse().find((element) => focusable.indexOf(element) < origin)
+        next?.focus()
+      } else {
+        root.value?.focus()
+      }
       return
     }
     destination.focus()

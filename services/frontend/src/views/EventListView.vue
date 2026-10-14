@@ -180,7 +180,7 @@
               v-model="fromDate"
               type="date"
               class="form-select px-2"
-              @change="applyFilters"
+              @change="onFilterChange"
             />
           </div>
           <div class="w-full sm:w-auto">
@@ -189,7 +189,7 @@
               v-model="toDate"
               type="date"
               class="form-select px-2"
-              @change="applyFilters"
+              @change="onFilterChange"
             />
           </div>
         </template>
@@ -226,6 +226,7 @@
                 :editable="canInlineEditEvent(event)"
                 :coordinator="inlineCoordinator"
                 :save="(value, revision) => saveInlineTitle(event, value, revision)"
+                :reload="() => reloadInlineTitle(event)"
                 required
                 :max-length="500"
               />
@@ -331,6 +332,7 @@
                 :editable="canInlineEditEvent(event)"
                 :coordinator="inlineCoordinator"
                 :save="(value, revision) => saveInlineTitle(event, value, revision)"
+                :reload="() => reloadInlineTitle(event)"
                 required
                 :max-length="500"
               />
@@ -413,14 +415,14 @@
           <button
             class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage <= 1"
-            @click="eventsStore.goToPage(eventsStore.currentPage - 1); eventsStore.fetch()"
+            @click="navigatePage(eventsStore.currentPage - 1)"
           >
             ← Zurück
           </button>
           <button
             class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage >= eventsStore.totalPages"
-            @click="eventsStore.goToPage(eventsStore.currentPage + 1); eventsStore.fetch()"
+            @click="navigatePage(eventsStore.currentPage + 1)"
           >
             Weiter →
           </button>
@@ -694,7 +696,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSessionViewSettings, sessionField, sessionText, sessionDate } from '../composables/useSessionViewSettings'
 import {
@@ -711,6 +714,7 @@ import { useLeadersStore } from '../stores/leaders'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import {
   listEvents,
+  getEvent,
   createEvent,
   deleteEvent,
   updateEvent,
@@ -748,15 +752,22 @@ const canManageEvents = computed(() => auth.isSuperadmin || auth.memberships.som
 ))
 
 const inlineCoordinator = useInlineCellCoordinator()
+onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditEvent(event: EventResponse): boolean {
   return (auth.isSuperadmin || auth.memberships.some((m) =>
-    m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId && m.role === 'PLANNER'
+    m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId && ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role)
   )) &&
     event.district_id === districtsStore.selectedDistrictId &&
     event.status === 'ACTIVE' &&
     event.source === 'INTERNAL' &&
     !!event.revision
+}
+
+async function reloadInlineTitle(event: EventResponse): Promise<{ value: string; revision: string }> {
+  const latest = await getEvent(event.id)
+  eventsStore.updateCached(latest)
+  return { value: latest.title, revision: latest.revision ?? '' }
 }
 
 const inlineLeaderChoices = computed(() => leadersStore.activeLeaders().map((leader) => ({
@@ -800,8 +811,10 @@ async function saveInlineResponsible(event: EventResponse, leaderId: string, rev
 }
 
 async function saveInlineTitle(event: EventResponse, value: string, revision: string): Promise<void> {
-  await updateEventInline(event.id, { title: value }, revision)
-  await eventsStore.fetch()
+  const saved = await updateEventInline(event.id, { title: value }, revision)
+  eventsStore.updateCached(saved)
+  // Keep the edited row mounted while the shared editor completes Tab navigation.
+  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
 }
 
 // ── Ansichts-Modus ───────────────────────────────────────────────────────────
@@ -834,7 +847,8 @@ function startOfWeek(d: Date): Date {
   return r
 }
 
-function setViewMode(mode: ViewMode) {
+async function setViewMode(mode: ViewMode) {
+  if (!(await inlineCoordinator.finish())) return
   viewMode.value = mode
   if (mode === 'list') {
     applyFilters()
@@ -1099,9 +1113,16 @@ function onGroupChange() {
   onFilterChange()
 }
 
-function onFilterChange() {
+async function onFilterChange() {
+  if (!(await inlineCoordinator.finish())) return
   if (viewMode.value === 'list') applyFilters()
   else fetchCalendar()
+}
+
+async function navigatePage(page: number) {
+  if (!(await inlineCoordinator.finish())) return
+  eventsStore.goToPage(page)
+  await eventsStore.fetch()
 }
 
 function applyFilters() {
@@ -1367,13 +1388,25 @@ async function saveEdit() {
       category:        editForm.category || null,
       // Congregation-level events are never distributed; the backend clears it.
       ...(isDistrictLevel && { applicability: editForm.applicability }),
-    })
+    }, target.revision ?? '')
     let assignmentError: unknown = null
     try {
       updated.responsible = await saveResponsible(target)
     } catch (e) {
       assignmentError = e
       updated.responsible = target.responsible ?? null
+    }
+    const responsibleChanged = (target.responsible?.leader_id ?? null) !== (updated.responsible?.leader_id ?? null)
+      || (target.responsible?.name ?? '') !== (updated.responsible?.name ?? '')
+    if (responsibleChanged) {
+      // Assignment endpoints advance the PlanningSlot revision after event PATCH.
+      try {
+        Object.assign(updated, await getEvent(target.id))
+      } catch (e) {
+        // The writes already succeeded; prevent stale edits until a new snapshot is available.
+        updated.revision = ''
+        toast.error('Termin gespeichert, Aktualisierung fehlgeschlagen. Bitte neu laden.', e)
+      }
     }
     // In-place update je nach aktiver Ansicht
     if (viewMode.value === 'list') {
@@ -1384,6 +1417,7 @@ async function saveEdit() {
       if (idx !== -1) calendarEvents.value[idx] = updated
     }
     if (assignmentError) {
+      editTarget.value = updated
       editError.value = errorMessage(assignmentError, 'Zuordnung fehlgeschlagen')
       toast.error('Termin gespeichert, Zuordnung fehlgeschlagen', assignmentError)
       return

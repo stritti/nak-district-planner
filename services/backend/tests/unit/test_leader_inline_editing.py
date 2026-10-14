@@ -122,3 +122,22 @@ async def test_permission_denied_and_never_saved():
         )
     assert err.value.status_code == 403
     ctx[2].save.assert_not_awaited()
+
+
+@pytest.mark.parametrize("payload", [
+    {"name": "X" * 256},
+    {"email": "x" * 256},
+    {"phone": "1" * 101},
+])
+def test_inline_contact_length_rejected_before_database_write(payload):
+    with pytest.raises(ValidationError):
+        leaders.LeaderInlineUpdate.model_validate(payload)
+
+
+@pytest.mark.parametrize("payload", [
+    {"name": "X" * 255},
+    {"email": "x" * 255},
+    {"phone": "1" * 100},
+])
+def test_inline_contact_length_boundary_is_accepted(payload):
+    assert leaders.LeaderInlineUpdate.model_validate(payload).model_fields_set == set(payload)
