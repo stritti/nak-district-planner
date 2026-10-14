@@ -75,7 +75,11 @@ async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
     slot = slots.get.return_value
     if isinstance(slot, PlanningSlot):
         slots.get_for_update.return_value = slot
-        kwargs["if_match"] = events._slot_revision(slot)
+        instances = kwargs.get("inst_repo")
+        instance = instances.get_by_planning_slot.return_value if instances is not None else None
+        kwargs["if_match"] = events._slot_revision(
+            slot, instance if isinstance(instance, EventInstance) else None
+        )
     return await events.update_event(event_id, body, auth, session, **kwargs)
 
 
@@ -954,3 +958,38 @@ async def test_resolve_conflict_with_unsupported_provider_returns_409() -> None:
     assert exc.value.status_code == 409
     assert "ICS" in exc.value.detail
     assert instance.sync_state == SyncState.CONFLICT
+
+
+def test_event_revision_detects_instance_only_mutation() -> None:
+    """The planning slot may be unchanged while an instance has been reconciled."""
+    slot = _slot()
+    instance = _instance(slot)
+    previous = events._slot_revision(slot, instance)
+    instance.updated_at += timedelta(microseconds=1)
+    assert events._slot_revision(slot, instance) != previous
+    assert events._slot_revision(slot, None) != previous
+
+
+@pytest.mark.asyncio
+async def test_external_event_full_editor_allowed_but_inline_forbidden() -> None:
+    slot = _slot()
+    instance = _instance(slot)
+    instance.source = EventSource.EXTERNAL
+    slot_repo = AsyncMock()
+    slot_repo.get.return_value = slot
+    instance_repo = AsyncMock()
+    instance_repo.get_by_planning_slot.return_value = instance
+    with patch.object(events, "require_role_in_district"):
+        full = await _update_event_with_revision(
+            slot.id, events.EventUpdate(category="Besonderer Termin"),
+            _auth(), AsyncMock(), slot_repo=slot_repo, inst_repo=instance_repo,
+        )
+        assert full.category == "Besonderer Termin"
+        with pytest.raises(HTTPException) as exc:
+            await events.inline_update_event(
+                slot.id, events.EventInlineUpdate(title="Unzulässig"),
+                _auth(), AsyncMock(),
+                if_match=full.revision, slot_repo=slot_repo, inst_repo=instance_repo,
+            )
+    assert exc.value.status_code == 403
+    instance_repo.save.assert_not_awaited()
