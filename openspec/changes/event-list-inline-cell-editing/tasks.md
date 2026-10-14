@@ -31,3 +31,12 @@ A conditional-write adapter and reusable editor are integrated for internal even
 The full event and cross-application scope remains open: assignment preconditions,
 domain-dependent changes and administrative list updates are not yet covered.
 See [table inventory](./table-inventory.md) for explicit deferred columns and reasons.
+
+## Delivery split and acceptance gate (2026-10-14)
+
+- **PR #576 (foundation):** Shared inline editor, event title and leader contact/name conditional writes. This PR is not the completion of this OpenSpec change. General legacy PATCH writers still need end-to-end conditional-write enforcement; the review remains open until every modal writer and backend contract participates. Focus, responsive keyboard navigation, permission hierarchy and refresh-failure recovery require passing regression tests.
+- **PR #577 (matrix):** Implement scoped responsible-person and organisational-duty assignment mutation contracts, conditional revisions (428/412), existing 409 acknowledgement and deletion confirmation, keyboard/touch UI and regression tests. Currently a planning draft.
+- **PR #578 (dependent event changes):** Implement atomic planning date/time, category and congregation changes with duty invalidation review, old-congregation private-assignment quarantine and minister service-end checks. Currently a planning draft.
+- **Remaining cross-application tranche:** Classify and migrate other eligible leader-administration fields and read-only tabular surfaces; verify accessible compact display and screen-by-screen keyboard, sorting and filtering regressions. This scope is not automatically covered by PRs #577 or #578 and must be tracked explicitly.
+
+**Acceptance:** Do not check off 1.2, 2.4-2.5, 3.1-3.4 or 4.3-4.6 until corresponding code, edge-case tests, OpenSpec validation and CI coverage over 80% are verified on their actual PR heads. A green foundation CI alone does not complete the change.
