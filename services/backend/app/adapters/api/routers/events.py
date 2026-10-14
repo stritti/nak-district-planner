@@ -450,7 +450,7 @@ async def update_event(
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
-    instance = await inst_repo.get_by_planning_slot(event_id)
+    instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
     if if_match != _slot_revision(slot, instance):
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
