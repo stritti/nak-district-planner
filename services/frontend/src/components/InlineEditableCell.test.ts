@@ -182,6 +182,27 @@ describe('InlineEditableCell', () => {
     expect(wrapper.get('[role="alert"]').text()).toBe('Bitte Konflikt prüfen.')
   })
 
+  it('recovers a stale revision through explicit comparison without dropping the draft', async () => {
+    const save = vi.fn()
+      .mockRejectedValueOnce(new ApiError(412, 'Stale', { detail: 'Zwischenzeitlich geändert' }))
+      .mockResolvedValueOnce(undefined)
+    const reload = vi.fn().mockResolvedValue({ value: 'Neuer Serverwert', revision: '"rev-2"' })
+    const { wrapper } = setup({ save, reload })
+    await open(wrapper)
+    await wrapper.get('input').setValue('Mein Entwurf')
+    await wrapper.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Aktuellen Stand zum Vergleichen laden')
+    await wrapper.findAll('button').find((button) => button.text().includes('Aktuellen Stand'))!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Neuer Serverwert')
+    expect((wrapper.get('input').element as HTMLInputElement).value).toBe('Mein Entwurf')
+    await wrapper.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(save).toHaveBeenNthCalledWith(1, 'Mein Entwurf', '"rev-1"')
+    expect(save).toHaveBeenNthCalledWith(2, 'Mein Entwurf', '"rev-2"')
+  })
+
   it('allows retry after a transport failure without losing draft', async () => {
     const save = vi.fn().mockRejectedValueOnce(new Error('Netzwerk')).mockResolvedValue(undefined)
     const { wrapper } = setup({ save })
