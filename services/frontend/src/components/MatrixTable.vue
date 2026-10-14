@@ -15,7 +15,7 @@
       aria-label="Dienstplan-Matrix, horizontal und vertikal scrollbar"
       tabindex="0"
     >
-      <table :class="tableClass" :style="{ width: `max(100%, ${tableWidth}px)` }">
+      <table data-inline-edit-scope :class="tableClass" :style="{ width: `max(100%, ${tableWidth}px)` }">
         <colgroup>
           <col :style="{ width: `${congregationColumnWidth}px` }" />
           <col v-for="date in matrixStore.matrix.dates" :key="date" :style="{ width: `${dateColumnWidth}px` }" />
