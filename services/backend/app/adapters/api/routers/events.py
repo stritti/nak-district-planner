@@ -638,16 +638,22 @@ async def preview_event_change(
     body: EventChangeImpactRequest,
     auth: CurrentUserWithMemberships,
     session: DbSession,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
     slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> EventChangeImpact:
     """Read-only impact of a date, time or congregation change on assigned ministers."""
-    slot = await slot_repo.get(event_id)
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    slot = await slot_repo.get_for_update(event_id)
     if slot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
-    proposed = _proposed_service(slot, await inst_repo.get_by_planning_slot(event_id), body)
+    instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
+    if if_match != _slot_revision(slot, instance):
+        raise HTTPException(status_code=412, detail="Ereignis wurde zwischenzeitlich geändert.")
+    proposed = _proposed_service(slot, instance, body)
     items: list[EventChangeImpactItem] = []
     for assignment in await assignments_repo.list_by_planning_slot(event_id):
         if assignment.leader_id is None:
