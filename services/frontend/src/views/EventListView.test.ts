@@ -358,7 +358,7 @@ describe('EventListView', () => {
       approval_status: 'CONFIRMED',
       category: 'Neu',
       applicability: [],
-    }))
+    }), '"revision-1"')
     expect(eventsStore.items[0].status).toBe('CANCELLED')
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Termin gespeichert', 'Gottesdienst')
   })
