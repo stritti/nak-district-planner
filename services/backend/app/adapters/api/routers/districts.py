@@ -11,7 +11,6 @@ from datetime import UTC, date, datetime, time, timedelta
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.adapters.api.revisions import slot_revision
 from app.adapters.api.deps import (
     CurrentUser,
     CurrentUserWithMemberships,
@@ -26,6 +25,7 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
+from app.adapters.api.revisions import slot_revision
 from app.adapters.api.schemas.district import (
     CongregationCreate,
     CongregationGroupCreate,
