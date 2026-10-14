@@ -6,7 +6,7 @@
     :is="as"
     ref="root"
     :tabindex="0"
-    :aria-label="label + ': ' + (value || 'Leer') + (editable ? '. Enter oder F2 zum Bearbeiten' : '. Nur lesbar')"
+    :aria-label="(editable ? label : label.split(':')[0]) + ': ' + (value || 'Leer') + (editable ? '. Enter oder F2 zum Bearbeiten' : '. Nur lesbar')"
     :data-inline-cell-id="id"
     :data-inline-editable="editable ? 'true' : undefined"
     :class="[
