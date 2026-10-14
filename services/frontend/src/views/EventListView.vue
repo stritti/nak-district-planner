@@ -247,7 +247,21 @@
             </template>
             <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
           </p>
-          <p v-if="event.responsible" class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+          <InlineEditableCell
+                  v-if="canInlineAssignEvent(event)"
+                  :id="'responsible-mobile-' + event.id"
+                  as="div"
+                  :value="event.responsible?.leader_id ?? ''"
+                  :display-value="event.responsible?.name ?? 'Dienstleiter zuweisen'"
+                  :choices="inlineLeaderChoices"
+                  :revision="event.revision ?? ''"
+                  :label="'Dienstleiter: ' + event.title"
+                  :editable="true"
+                  :coordinator="inlineCoordinator"
+                  :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
+                  required
+                />
+          <p v-else-if="event.responsible" class="mt-1 text-xs text-gray-600 dark:text-gray-400">
             {{ responsibleLabel(event) }}: {{ event.responsible.name }}
           </p>
           <p v-if="event.invitation_source_congregation_id" class="mt-1 text-xs text-amber-700 dark:text-amber-300">
@@ -331,7 +345,21 @@
                 <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
               </td>
               <td class="table-td text-xs" data-testid="responsible-cell">
-                <span v-if="event.responsible">{{ event.responsible.name }}</span>
+                <InlineEditableCell
+                  v-if="canInlineAssignEvent(event)"
+                  :id="'responsible-desktop-' + event.id"
+                  as="div"
+                  :value="event.responsible?.leader_id ?? ''"
+                  :display-value="event.responsible?.name ?? 'Dienstleiter zuweisen'"
+                  :choices="inlineLeaderChoices"
+                  :revision="event.revision ?? ''"
+                  :label="'Dienstleiter: ' + event.title"
+                  :editable="true"
+                  :coordinator="inlineCoordinator"
+                  :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
+                  required
+                />
+                <span v-else-if="event.responsible">{{ event.responsible.name }}</span>
                 <span v-else-if="event.is_service" class="text-red-600 dark:text-red-400">Lücke</span>
                 <span v-else class="text-gray-400 dark:text-gray-500">—</span>
               </td>
@@ -704,7 +732,7 @@ import AutocompleteInput, {
   type AutocompleteOption,
   type AutocompleteValue,
 } from '../components/AutocompleteInput.vue'
-import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
+import { changeAssignmentInline, createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
 import { parseConflictError } from '../api/errors'
 
 const eventsStore = useEventsStore()
@@ -729,6 +757,46 @@ function canInlineEditEvent(event: EventResponse): boolean {
     event.status === 'ACTIVE' &&
     event.source === 'INTERNAL' &&
     !!event.revision
+}
+
+const inlineLeaderChoices = computed(() => leadersStore.activeLeaders().map((leader) => ({
+  value: leader.id,
+  label: leader.rank ? `${leader.rank} ${leader.name}` : leader.name,
+})))
+
+function canInlineAssignEvent(event: EventResponse): boolean {
+  return canInlineEditEvent(event) && event.is_service && !event.invitation_source_event_id &&
+    leadersStore.districtId === event.district_id && inlineLeaderChoices.value.length > 0
+}
+
+async function saveInlineResponsible(event: EventResponse, leaderId: string, revision: string): Promise<void> {
+  let saved
+  try {
+    saved = await changeAssignmentInline(event.id, leaderId, revision)
+  } catch (cause) {
+    const conflict = parseConflictError(cause)
+    if (!conflict || conflict.blocking.length || !conflict.warnings.length) throw cause
+    const confirmed = await confirm({
+      title: 'Konflikt bei der Zuordnung',
+      message: conflict.warnings.map((warning) => warning.message).join(' '),
+      confirmText: 'Trotzdem zuordnen',
+      variant: 'warning',
+    })
+    if (!confirmed) throw new Error('Zuordnung abgebrochen')
+    saved = await changeAssignmentInline(event.id, leaderId, revision, true)
+  }
+  const selected = inlineLeaderChoices.value.find((leader) => leader.value === saved.leader_id)
+  eventsStore.updateCached({
+    ...event,
+    revision: saved.event_revision,
+    responsible: {
+      assignment_id: saved.id,
+      leader_id: saved.leader_id,
+      name: selected?.label ?? event.responsible?.name ?? '',
+      status: saved.status,
+    },
+  })
+  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
 }
 
 async function saveInlineTitle(event: EventResponse, value: string, revision: string): Promise<void> {
@@ -1003,8 +1071,10 @@ function setPreset(key: string) {
 
 async function onDistrictChange() {
   const districtId = districtsStore.selectedDistrictId
+  void leadersStore.fetchLeaders(districtId).catch(() => {})
   districtsStore.clearCongregations()
   if (districtsStore.selectedDistrictId) {
+    void leadersStore.fetchLeaders(districtsStore.selectedDistrictId).catch(() => {})
     await Promise.all([
       districtsStore.fetchCongregations(districtsStore.selectedDistrictId),
       districtsStore.fetchGroups(districtsStore.selectedDistrictId),
