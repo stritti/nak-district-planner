@@ -5,13 +5,14 @@
   <component
     :is="as"
     ref="root"
-    :tabindex="editable ? 0 : undefined"
-    :aria-label="editable ? label + ': ' + (value || 'Leer') + '. Enter oder F2 zum Bearbeiten' : undefined"
+    :tabindex="0"
+    :aria-label="label + ': ' + (value || 'Leer') + (editable ? '. Enter oder F2 zum Bearbeiten' : '. Nur lesbar')"
     :data-inline-cell-id="id"
     :data-inline-editable="editable ? 'true' : undefined"
     :class="[
       as === 'td' ? 'table-td' : '',
-      editable ? 'cursor-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600' : '',
+      'focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600',
+      editable ? 'cursor-text' : '',
     ]"
     @click="activate"
     @keydown="onCellKeydown"
