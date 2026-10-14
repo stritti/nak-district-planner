@@ -21,18 +21,22 @@ export const useEventsStore = defineStore('events', () => {
   const currentPage = computed(() => Math.floor((filters.value.offset ?? 0) / PAGE_SIZE) + 1)
   const totalPages = computed(() => Math.ceil(total.value / PAGE_SIZE))
 
-  async function fetch() {
-    loading.value = true
+  async function fetch(options: { preserveRows?: boolean } = {}) {
+    if (!options.preserveRows) loading.value = true
     error.value = null
     try {
       const res = await listEvents(filters.value)
       items.value = res.items
       total.value = res.total
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Fehler beim Laden'
+      if (!options.preserveRows) error.value = e instanceof Error ? e.message : 'Fehler beim Laden'
     } finally {
-      loading.value = false
+      if (!options.preserveRows) loading.value = false
     }
+  }
+
+  function updateCached(saved: EventResponse) {
+    items.value = items.value.map((item) => item.id === saved.id ? saved : item)
   }
 
   function setFilter(patch: Partial<EventListParams>) {
@@ -43,5 +47,5 @@ export const useEventsStore = defineStore('events', () => {
     filters.value = { ...filters.value, offset: (page - 1) * PAGE_SIZE }
   }
 
-  return { items, total, loading, error, filters, currentPage, totalPages, fetch, setFilter, goToPage }
+  return { items, total, loading, error, filters, currentPage, totalPages, fetch, updateCached, setFilter, goToPage }
 })

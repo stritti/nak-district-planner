@@ -70,6 +70,20 @@ describe('useEventsStore', () => {
     expect(store.loading).toBe(false)
   })
 
+  it('keeps authoritative saved event when the follow-up fetch fails', async () => {
+    const store = useEventsStore()
+    vi.mocked(eventsApi.listEvents).mockResolvedValueOnce(
+      makeListResponse([{ id: 'event-1', title: 'Vorher', revision: 'old' }], 1),
+    )
+    await store.fetch()
+    store.updateCached({ id: 'event-1', title: 'Gespeichert', revision: 'new' } as eventsApi.EventResponse)
+    vi.mocked(eventsApi.listEvents).mockRejectedValueOnce(new Error('Reload offline'))
+    await store.fetch()
+    expect(store.items[0]?.title).toBe('Gespeichert')
+    expect(store.items[0]?.revision).toBe('new')
+    expect(store.error).toBe('Reload offline')
+  })
+
   it('merges filters, resets pagination and navigates pages', () => {
     const store = useEventsStore()
     store.goToPage(3)

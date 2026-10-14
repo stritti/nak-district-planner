@@ -153,6 +153,7 @@ describe('MatrixTable coverage gaps', () => {
     const wrapper = mount(MatrixTable, {
       props: { compactMode: false, matrixSortMode: 'default' },
     })
+    expect(wrapper.get('table').attributes('data-inline-edit-scope')).toBeDefined()
     const editable = wrapper.get('[data-inline-cell-id="matrix-leader-c1-2026-10-05"]')
     await editable.trigger('click')
     await flushPromises()

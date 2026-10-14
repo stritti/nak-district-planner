@@ -102,11 +102,11 @@ export interface EventUpdate {
   confirm_warnings?: boolean
 }
 
-/** Schedule-changing updates pass the revision the user edited against (If-Match). */
-export function updateEvent(id: string, data: EventUpdate, revision?: string): Promise<EventResponse> {
+export function updateEvent(id: string, data: EventUpdate, revision: string): Promise<EventResponse> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
   return apiFetch(`/api/v1/events/${id}`, {
     method: 'PATCH',
-    headers: revision ? { 'If-Match': revision } : undefined,
+    headers: { 'If-Match': revision },
     body: JSON.stringify(data),
   })
 }
@@ -153,6 +153,11 @@ export function resolveEventConflict(id: string): Promise<EventResponse> {
   return apiFetch(`/api/v1/events/${id}/resolve-conflict`, {
     method: 'POST',
   })
+}
+
+/** Reload a canonical revision before opening a long-lived modal editor. */
+export function getEvent(id: string): Promise<EventResponse> {
+  return apiFetch<EventResponse>(`/api/v1/events/${id}`)
 }
 
 export function listEvents(params: EventListParams = {}): Promise<EventListResponse> {

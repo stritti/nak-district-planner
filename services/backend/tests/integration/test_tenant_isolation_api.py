@@ -222,7 +222,11 @@ async def test_planner_manages_leaders_in_own_district(api, owner, world) -> Non
     listed = await api.get(base, headers=headers)
     assert {leader["id"] for leader in listed.json()} >= {leader_id, str(world.a.leader_id)}
     assert str(world.b.leader_id) not in {leader["id"] for leader in listed.json()}
-    patched = await api.patch(f"{base}/{leader_id}", json={"name": "Umbenannt"}, headers=headers)
+    patched = await api.patch(
+        f"{base}/{leader_id}",
+        json={"name": "Umbenannt"},
+        headers={**headers, "If-Match": created.json()["revision"]},
+    )
     assert patched.json()["name"] == "Umbenannt"
     deleted = await api.delete(f"{base}/{leader_id}", headers=headers)
     assert deleted.status_code == 204

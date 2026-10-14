@@ -50,11 +50,14 @@ class SqlEventInstanceRepository(EventInstanceRepository):
         )
         return [_orm_to_domain(row) for row in result.scalars().all()]
 
-    async def get_by_planning_slot(self, planning_slot_id: uuid.UUID) -> EventInstance | None:
-        """Get the first EventInstance for a PlanningSlot (auto-matching)."""
-        result = await self._session.execute(
-            select(EventInstanceORM).where(EventInstanceORM.planning_slot_id == planning_slot_id)
-        )
+    async def get_by_planning_slot(
+        self, planning_slot_id: uuid.UUID, *, for_update: bool = False
+    ) -> EventInstance | None:
+        """Read an instance, optionally locking and refreshing its row for a versioned write."""
+        stmt = select(EventInstanceORM).where(EventInstanceORM.planning_slot_id == planning_slot_id)
+        if for_update:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        result = await self._session.execute(stmt)
         row = result.scalar_one_or_none()
         return _orm_to_domain(row) if row else None
 
