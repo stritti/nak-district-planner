@@ -1085,7 +1085,6 @@ function setPreset(key: string) {
 
 async function onDistrictChange() {
   const districtId = districtsStore.selectedDistrictId
-  void leadersStore.fetchLeaders(districtId).catch(() => {})
   districtsStore.clearCongregations()
   if (districtsStore.selectedDistrictId) {
     void leadersStore.fetchLeaders(districtsStore.selectedDistrictId).catch(() => {})
