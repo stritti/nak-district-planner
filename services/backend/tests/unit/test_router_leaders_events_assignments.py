@@ -133,8 +133,12 @@ async def test_leader_crud_and_self_link_paths() -> None:
             district_id, _auth_context(), db, districts=district_repo, leaders_repo=leader_repo
         )
         created = await leaders_router.create_leader(
-            district_id, LeaderCreate(name="Neu", rank=None), object(), db,
-            districts=district_repo, leaders_repo=leader_repo,
+            district_id,
+            LeaderCreate(name="Neu", rank=None),
+            object(),
+            db,
+            districts=district_repo,
+            leaders_repo=leader_repo,
         )
         updated = await leaders_router.update_leader(
             district_id, leader.id, LeaderUpdate(name="X"), object(), db, leaders_repo=leader_repo,
@@ -167,6 +171,7 @@ async def test_leader_crud_and_self_link_paths() -> None:
     assert unlink.linked is False
     assert self_link is not None
 
+
 @pytest.mark.asyncio
 async def test_leader_crud_forbidden_without_permission() -> None:
     """Creating, updating, and deleting leaders require PLANNER role."""
@@ -186,18 +191,26 @@ async def test_leader_crud_forbidden_without_permission() -> None:
     ):
         with pytest.raises(HTTPException) as create_exc:
             await leaders_router.create_leader(
-                district_id, LeaderCreate(name="N"), auth, db, districts=district_repo, leaders_repo=leader_repo
+                district_id,
+                LeaderCreate(name="N"),
+                auth,
+                db,
+                districts=district_repo,
+                leaders_repo=leader_repo,
             )
         with pytest.raises(HTTPException) as update_exc:
             await leaders_router.update_leader(
                 district_id, leader.id, LeaderUpdate(name="X"), auth, db, leaders_repo=leader_repo
             )
         with pytest.raises(HTTPException) as delete_exc:
-            await leaders_router.delete_leader(district_id, leader.id, auth, db, leaders_repo=leader_repo)
+            await leaders_router.delete_leader(
+                district_id, leader.id, auth, db, leaders_repo=leader_repo
+            )
 
     assert create_exc.value.status_code == 403
     assert update_exc.value.status_code == 403
     assert delete_exc.value.status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_leader_list_forbidden_without_permission() -> None:
@@ -212,10 +225,15 @@ async def test_leader_list_forbidden_without_permission() -> None:
     ):
         with pytest.raises(HTTPException) as exc:
             await leaders_router.list_leaders(
-                district_id, _auth_context(is_superadmin=False), db, districts=district_repo, leaders_repo=AsyncMock()
+                district_id,
+                _auth_context(is_superadmin=False),
+                db,
+                districts=district_repo,
+                leaders_repo=AsyncMock(),
             )
 
     assert exc.value.status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_leader_not_found_paths() -> None:
@@ -230,7 +248,12 @@ async def test_leader_not_found_paths() -> None:
         )
     with pytest.raises(HTTPException):
         await leaders_router.create_leader(
-            district_id, LeaderCreate(name="N"), _auth_context(), db, districts=district_repo, leaders_repo=AsyncMock()
+            district_id,
+            LeaderCreate(name="N"),
+            _auth_context(),
+            db,
+            districts=district_repo,
+            leaders_repo=AsyncMock(),
         )
     district_repo.get.return_value = District.create(name="D")
     leader_repo = AsyncMock()
@@ -240,7 +263,10 @@ async def test_leader_not_found_paths() -> None:
             district_id, uuid.uuid4(), LeaderUpdate(name="N"), _auth_context(), db, leader_repo
         )
     with pytest.raises(HTTPException):
-        await leaders_router.delete_leader(district_id, uuid.uuid4(), _auth_context(), db, leaders_repo=leader_repo)
+        await leaders_router.delete_leader(
+            district_id, uuid.uuid4(), _auth_context(), db, leaders_repo=leader_repo
+        )
+
 
 @pytest.mark.asyncio
 async def test_leader_update_wrong_district() -> None:
@@ -260,6 +286,7 @@ async def test_leader_update_wrong_district() -> None:
 
     assert exc.value.status_code == 404
 
+
 @pytest.mark.asyncio
 async def test_leader_delete_wrong_district() -> None:
     """Deleting a leader whose district_id does not match the URL returns 404."""
@@ -277,6 +304,7 @@ async def test_leader_delete_wrong_district() -> None:
         )
 
     assert exc.value.status_code == 404
+
 
 @pytest.mark.asyncio
 async def test_leader_link_self_forbidden_without_district_membership() -> None:
@@ -299,6 +327,7 @@ async def test_leader_link_self_forbidden_without_district_membership() -> None:
 
     assert exc.value.status_code == 403
 
+
 @pytest.mark.asyncio
 async def test_leader_link_self_success_with_district_membership() -> None:
     """Linking to a leader with VIEWER role in district succeeds."""
@@ -318,6 +347,7 @@ async def test_leader_link_self_success_with_district_membership() -> None:
     )
 
     assert result.linked is True
+
 
 @pytest.mark.asyncio
 async def test_leader_link_self_success_with_congregation_membership() -> None:
@@ -345,6 +375,7 @@ async def test_leader_link_self_success_with_congregation_membership() -> None:
 
     assert result.linked is True
 
+
 @pytest.mark.asyncio
 async def test_leader_link_self_conflict() -> None:
     """Linking to a leader that is already linked to a different user returns 409."""
@@ -366,6 +397,7 @@ async def test_leader_link_self_conflict() -> None:
 
     assert exc.value.status_code == 409
 
+
 @pytest.mark.asyncio
 async def test_leader_link_self_leader_not_found() -> None:
     """Linking to a leader that does not exist returns 404."""
@@ -383,6 +415,7 @@ async def test_leader_link_self_leader_not_found() -> None:
         )
 
     assert exc.value.status_code == 404
+
 
 @pytest.mark.asyncio
 async def test_leader_link_self_leader_wrong_district() -> None:
@@ -406,6 +439,7 @@ async def test_leader_link_self_leader_wrong_district() -> None:
 
     assert exc.value.status_code == 404
 
+
 @pytest.mark.asyncio
 async def test_leader_unlink_self_forbidden_without_district_membership() -> None:
     """Unlinking from a leader without VIEWER role in district returns 403."""
@@ -422,6 +456,7 @@ async def test_leader_unlink_self_forbidden_without_district_membership() -> Non
         )
 
     assert exc.value.status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_leader_unlink_self_success_with_district_membership() -> None:
@@ -440,6 +475,7 @@ async def test_leader_unlink_self_success_with_district_membership() -> None:
     )
 
     assert result.linked is False
+
 
 @pytest.mark.asyncio
 async def test_leader_unlink_self_success_with_congregation_membership() -> None:
@@ -462,6 +498,7 @@ async def test_leader_unlink_self_success_with_congregation_membership() -> None
 
     assert result.linked is False
 
+
 @pytest.mark.asyncio
 async def test_leader_unlink_self_no_link() -> None:
     """Unlinking when no self-link exists returns linked=False."""
@@ -478,6 +515,7 @@ async def test_leader_unlink_self_no_link() -> None:
 
     assert result.linked is False
     assert result.leader is None
+
 
 @pytest.mark.asyncio
 async def test_leader_get_self_link_forbidden_without_district_membership() -> None:
@@ -496,6 +534,7 @@ async def test_leader_get_self_link_forbidden_without_district_membership() -> N
 
     assert exc.value.status_code == 403
 
+
 @pytest.mark.asyncio
 async def test_leader_get_self_link_success_with_district_membership() -> None:
     """Getting self-link with VIEWER role in district succeeds."""
@@ -513,6 +552,7 @@ async def test_leader_get_self_link_success_with_district_membership() -> None:
     )
 
     assert result.linked is True
+
 
 @pytest.mark.asyncio
 async def test_leader_get_self_link_success_with_congregation_membership() -> None:
@@ -535,6 +575,7 @@ async def test_leader_get_self_link_success_with_congregation_membership() -> No
 
     assert result.linked is True
 
+
 @pytest.mark.asyncio
 async def test_leader_get_self_link_no_link() -> None:
     """Getting self-link when none exists returns linked=False."""
@@ -552,6 +593,7 @@ async def test_leader_get_self_link_no_link() -> None:
     assert result.linked is False
     assert result.leader is None
 
+
 @pytest.mark.asyncio
 async def test_service_assignment_crud_paths() -> None:
     """Create, list, update, and delete service assignments for a PlanningSlot."""
@@ -565,7 +607,10 @@ async def test_service_assignment_crud_paths() -> None:
     sa_repo = AsyncMock()
     sa_repo.get.return_value = assignment
     sa_repo.list_by_planning_slot.return_value = [assignment]
-    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
+    with (
+        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
+        patch("app.adapters.api.routers.service_assignments._check_typed_name", new=AsyncMock()),
+    ):
         created = await sa_router.create_assignment(
             slot.id,
             ServiceAssignmentCreate(leader_name="Pr. Y"),
@@ -618,7 +663,10 @@ async def test_service_assignment_writes_touch_planning_slot(action: str) -> Non
     sa_repo = AsyncMock()
     sa_repo.get.return_value = assignment
     args = (_auth_context(), AsyncMock(), slot_repo, sa_repo)
-    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
+    with (
+        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
+        patch("app.adapters.api.routers.service_assignments._check_typed_name", new=AsyncMock()),
+    ):
         if action == "create":
             await sa_router.create_assignment(
                 slot.id, ServiceAssignmentCreate(leader_name="Pr. Y"), *args
@@ -647,6 +695,14 @@ async def test_service_assignment_create_blocks_conflict() -> None:
     with (
         patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
         patch(
+            "app.adapters.api.routers.service_assignments.SqlLeaderRepository.get",
+            new=AsyncMock(return_value=Leader.create("Eligible", slot.district_id)),
+        ),
+        patch(
+            "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository.get",
+            new=AsyncMock(return_value=slot),
+        ),
+        patch(
             "app.adapters.api.routers.service_assignments.check_service_assignment_conflicts",
             new=AsyncMock(
                 return_value=[ConflictResult("no_double_booking", Severity.BLOCK, "Konflikt")]
@@ -666,6 +722,7 @@ async def test_service_assignment_create_blocks_conflict() -> None:
     assert exc.value.status_code == 409
     sa_repo.save.assert_not_awaited()
 
+
 @pytest.mark.asyncio
 async def test_service_assignment_create_allows_confirmed_warning() -> None:
     slot = _planning_slot()
@@ -678,6 +735,14 @@ async def test_service_assignment_create_allows_confirmed_warning() -> None:
     sa_repo.save = AsyncMock()
     with (
         patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
+        patch(
+            "app.adapters.api.routers.service_assignments.SqlLeaderRepository.get",
+            new=AsyncMock(return_value=Leader.create("Eligible", slot.district_id)),
+        ),
+        patch(
+            "app.adapters.api.routers.service_assignments.SqlPlanningSlotRepository.get",
+            new=AsyncMock(return_value=slot),
+        ),
         patch(
             "app.adapters.api.routers.service_assignments.check_service_assignment_conflicts",
             new=AsyncMock(
@@ -696,6 +761,8 @@ async def test_service_assignment_create_allows_confirmed_warning() -> None:
 
     assert result.leader_id == leader_id
     sa_repo.save.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_create_planning_slot_not_found() -> None:
     """Creating an assignment for a non-existent planning slot returns 404."""
@@ -713,6 +780,8 @@ async def test_service_assignment_create_planning_slot_not_found() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_list_planning_slot_not_found() -> None:
     """Listing assignments for a non-existent planning slot returns 404."""
@@ -729,6 +798,8 @@ async def test_service_assignment_list_planning_slot_not_found() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_create_forbidden() -> None:
     """Creating assignments without PLANNER role returns 403."""
@@ -753,6 +824,8 @@ async def test_service_assignment_create_forbidden() -> None:
             )
 
     assert exc.value.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_list_forbidden() -> None:
     """Listing assignments without VIEWER role returns 403."""
@@ -776,6 +849,8 @@ async def test_service_assignment_list_forbidden() -> None:
             )
 
     assert exc.value.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_update_not_found() -> None:
     """Updating a non-existent assignment returns 404."""
@@ -796,6 +871,8 @@ async def test_service_assignment_update_not_found() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_update_event_id_mismatch() -> None:
     """Updating with an assignment whose event_id differs from the URL returns 404."""
@@ -818,6 +895,8 @@ async def test_service_assignment_update_event_id_mismatch() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_update_planning_slot_not_found() -> None:
     """Updating fails when the planning slot lookup returns None."""
@@ -842,6 +921,8 @@ async def test_service_assignment_update_planning_slot_not_found() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_delete_not_found() -> None:
     """Deleting a non-existent assignment returns 404."""
@@ -861,6 +942,8 @@ async def test_service_assignment_delete_not_found() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_delete_event_id_mismatch() -> None:
     """Deleting with an assignment whose event_id differs from the URL returns 404."""
@@ -882,6 +965,8 @@ async def test_service_assignment_delete_event_id_mismatch() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_delete_planning_slot_not_found() -> None:
     """Delete fails with 404 when the planning slot is missing even if assignment exists."""
@@ -903,6 +988,8 @@ async def test_service_assignment_delete_planning_slot_not_found() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_service_assignment_list_empty() -> None:
     """List returns an empty list when no assignments exist for a slot."""
@@ -913,7 +1000,10 @@ async def test_service_assignment_list_empty() -> None:
     slot_repo.get.return_value = slot
     sa_repo = AsyncMock()
     sa_repo.list_by_planning_slot.return_value = []
-    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
+    with (
+        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
+        patch("app.adapters.api.routers.service_assignments._check_typed_name", new=AsyncMock()),
+    ):
         result = await sa_router.list_assignments(
             slot.id,
             _auth_context(),
@@ -941,8 +1031,12 @@ async def test_leader_routes_check_role_before_loading_foreign_rows() -> None:
             district_id, outsider, db, districts=district_repo, leaders_repo=leader_repo
         ),
         leaders_router.create_leader(
-            district_id, LeaderCreate(name="N"), outsider, db,
-            districts=district_repo, leaders_repo=leader_repo,
+            district_id,
+            LeaderCreate(name="N"),
+            outsider,
+            db,
+            districts=district_repo,
+            leaders_repo=leader_repo,
         ),
         leaders_router.update_leader(
             district_id, uuid.uuid4(), LeaderUpdate(name="X"), outsider, db, leader_repo

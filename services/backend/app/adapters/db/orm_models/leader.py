@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
@@ -41,5 +41,9 @@ class LeaderORM(Base):
     phone: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+    hidden_from_lists: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.false()
+    )
+    service_end_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)

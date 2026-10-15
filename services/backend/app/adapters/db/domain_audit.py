@@ -33,7 +33,14 @@ from sqlalchemy.orm.util import identity_key
 
 from app.adapters.db.orm_models.audit_log import AuditAction, AuditLogORM, AuditStatus
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
+from app.adapters.db.orm_models.event_duty import (
+    DutyNameSuggestionORM,
+    EventDutyAssignmentORM,
+    EventDutyCategoryORM,
+    EventTypeDutyConfigurationORM,
+)
 from app.adapters.db.orm_models.export_token import ExportTokenORM
+from app.adapters.db.orm_models.leader import LeaderORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.recurring_event import (
     RecurringEventDecisionORM,
@@ -93,6 +100,27 @@ class AuditedResource:
 
 
 AUDITED_RESOURCES: dict[type, AuditedResource] = {
+    LeaderORM: AuditedResource(
+        "leader", ("is_active", "hidden_from_lists", "service_end_date"), _own_tenant
+    ),
+    EventDutyCategoryORM: AuditedResource(
+        "event_duty_category", ("label", "enabled", "capacity", "event_categories"), _own_tenant
+    ),
+    EventTypeDutyConfigurationORM: AuditedResource(
+        "event_type_duty_configuration", ("enabled", "capacity", "event_categories"), _own_tenant
+    ),
+    EventDutyAssignmentORM: AuditedResource(
+        "event_duty_assignment",
+        ("planning_slot_id", "duty_category_id", "congregation_id"),
+        _own_tenant,
+        redacted=("display_name", "linked_user_sub", "normalized_name"),
+    ),
+    DutyNameSuggestionORM: AuditedResource(
+        "duty_name_suggestion",
+        ("hidden", "duty_category_id"),
+        _own_tenant,
+        redacted=("display_name", "normalized_name"),
+    ),
     PlanningSlotORM: AuditedResource(
         "planning_slot",
         (

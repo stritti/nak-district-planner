@@ -174,7 +174,7 @@
               </button>
               <button
                 class="btn-icon hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                title="Löschen"
+                title="Deaktivieren und ausblenden"
                 @click="confirmDelete(leader)"
               >
                 <TrashIcon class="h-4 w-4" />
@@ -293,7 +293,7 @@
                     </button>
                     <button
                       class="btn-icon hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      title="Löschen"
+                      title="Deaktivieren und ausblenden"
                       @click="confirmDelete(leader)"
                     >
                       <TrashIcon class="h-4 w-4" />
@@ -572,9 +572,9 @@
     <ConfirmDialog
       :open="pendingDeleteLeader !== null"
       variant="danger"
-      title="Amtsträger:in löschen?"
-      :message="pendingDeleteLeader ? `„${pendingDeleteLeader.rank ? pendingDeleteLeader.rank + ' ' : ''}${pendingDeleteLeader.name}“ wird unwiderruflich gelöscht.` : ''"
-      confirm-text="Löschen"
+      title="Amtsträger:in deaktivieren und ausblenden?"
+      :message="pendingDeleteLeader ? `„${pendingDeleteLeader.rank ? pendingDeleteLeader.rank + ' ' : ''}${pendingDeleteLeader.name}“ bleibt für historische Dienste erhalten und wird aus normalen Listen entfernt.` : ''"
+      confirm-text="Deaktivieren"
       :loading="saving"
       @confirm="executeDeleteLeader"
       @cancel="pendingDeleteLeader = null"
@@ -780,6 +780,14 @@
         <label class="flex items-center gap-2 text-sm mb-4">
           <input v-model="editModal.is_active" type="checkbox" class="rounded" />
           <span class="text-gray-700 dark:text-gray-300">Aktiv (für Dienstplan-Zuweisung verfügbar)</span>
+        </label>
+
+        <label class="flex items-center gap-2 text-sm mb-4">
+          <input v-model="editModal.hidden_from_lists" type="checkbox" class="rounded" />
+          <span>Aus normalen Listen ausblenden</span>
+        </label>
+        <label class="block text-sm mb-4">Dienstende (einschließlich)
+          <input v-model="editModal.service_end_date" type="date" class="form-input" />
         </label>
 
         <p v-if="editModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ editModal.error }}</p>
@@ -1031,6 +1039,15 @@ const canManageUnavailabilities = computed(() => {
   )
 })
 
+function canIncludeInactiveLeaders(districtId: string): boolean {
+  return authStore.isSuperadmin || authStore.memberships.some(
+    (membership) =>
+      membership.role === 'DISTRICT_ADMIN' &&
+      membership.scope_type === 'DISTRICT' &&
+      membership.scope_id === districtId,
+  )
+}
+
 async function switchToUnavailabilities(leaderId?: string) {
   if (!(await inlineCoordinator.finish())) return
   activeTab.value = 'unavailabilities'
@@ -1149,7 +1166,10 @@ async function doApprove() {
     if (idx !== -1) registrations.value[idx] = updated
     approveModal.open = false
     // Refresh leaders list in background so the new leader appears if user switches tab
-    listLeaders(selectedDistrictId.value).then((l) => (leaders.value = l))
+    listLeaders(
+      selectedDistrictId.value,
+      canIncludeInactiveLeaders(selectedDistrictId.value),
+    ).then((l) => (leaders.value = l))
   } catch (e) {
     approveModal.error = e instanceof Error ? e.message : 'Fehler beim Genehmigen'
   } finally {
@@ -1298,7 +1318,7 @@ async function onDistrictChange() {
   loading.value = true
   try {
     const [loadedLeaders, loadedCongregations] = await Promise.all([
-      listLeaders(districtId),
+      listLeaders(districtId, canIncludeInactiveLeaders(districtId)),
       listCongregations(districtId),
     ])
     if (loadGeneration !== districtLoadGeneration || districtId !== selectedDistrictId.value) return
@@ -1334,7 +1354,10 @@ async function connectSelfLink() {
   try {
     const result = await linkSelfToLeader(selectedDistrictId.value, selfSelectedLeaderId.value)
     selfLinkedLeader.value = result.leader
-    leaders.value = await listLeaders(selectedDistrictId.value)
+    leaders.value = await listLeaders(
+      selectedDistrictId.value,
+      canIncludeInactiveLeaders(selectedDistrictId.value),
+    )
   } catch (e) {
     selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Verknüpfen'
   } finally {
@@ -1350,7 +1373,10 @@ async function removeSelfLink() {
     await unlinkSelfFromLeader(selectedDistrictId.value)
     selfLinkedLeader.value = null
     selfSelectedLeaderId.value = ''
-    leaders.value = await listLeaders(selectedDistrictId.value)
+    leaders.value = await listLeaders(
+      selectedDistrictId.value,
+      canIncludeInactiveLeaders(selectedDistrictId.value),
+    )
   } catch (e) {
     selfLinkError.value = e instanceof Error ? e.message : 'Fehler beim Lösen'
   } finally {
@@ -1419,6 +1445,8 @@ const editModal = reactive({
   phone: '',
   notes: '',
   is_active: true,
+  hidden_from_lists: false,
+  service_end_date: '',
   error: '',
 })
 
@@ -1434,6 +1462,8 @@ function openEditModal(leader: LeaderResponse) {
   editModal.phone = leader.phone ?? ''
   editModal.notes = leader.notes ?? ''
   editModal.is_active = leader.is_active
+  editModal.hidden_from_lists = leader.hidden_from_lists ?? false
+  editModal.service_end_date = leader.service_end_date ?? ''
   editModal.error = ''
 }
 
@@ -1451,6 +1481,8 @@ async function saveEdit() {
       phone: editModal.phone.trim() || null,
       notes: editModal.notes.trim() || null,
       is_active: editModal.is_active,
+      hidden_from_lists: editModal.hidden_from_lists,
+      service_end_date: editModal.service_end_date || null,
     }, editModal.revision)
     const idx = leaders.value.findIndex((l) => l.id === editModal.leaderId)
     if (idx !== -1) leaders.value[idx] = updated
@@ -1479,9 +1511,9 @@ async function executeDeleteLeader() {
     await deleteLeader(selectedDistrictId.value, leader.id)
     leaders.value = leaders.value.filter((l) => l.id !== leader.id)
     pendingDeleteLeader.value = null
-    toastStore.success('Amtsträger:in gelöscht', leader.name)
+    toastStore.success('Amtsträger:in ausgeblendet', leader.name)
   } catch (e) {
-    toastStore.error('Löschen fehlgeschlagen', e instanceof Error ? e.message : undefined)
+    toastStore.error('Ausblenden fehlgeschlagen', e instanceof Error ? e.message : undefined)
   } finally {
     saving.value = false
   }

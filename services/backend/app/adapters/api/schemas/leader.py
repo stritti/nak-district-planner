@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -25,6 +25,8 @@ class LeaderCreate(BaseModel):
     phone: str | None = None
     notes: str | None = None
     is_active: bool = True
+    hidden_from_lists: bool = False
+    service_end_date: date | None = None
 
 
 class LeaderUpdate(BaseModel):
@@ -39,6 +41,8 @@ class LeaderUpdate(BaseModel):
     phone: str | None = None
     notes: str | None = None
     is_active: bool | None = None
+    hidden_from_lists: bool | None = None
+    service_end_date: date | None = None
 
 
 class LeaderResponse(BaseModel):
@@ -55,6 +59,8 @@ class LeaderResponse(BaseModel):
     phone: str | None
     notes: str | None
     is_active: bool
+    hidden_from_lists: bool = False
+    service_end_date: date | None = None
     created_at: datetime
     updated_at: datetime
     revision: str

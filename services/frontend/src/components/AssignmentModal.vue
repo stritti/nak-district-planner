@@ -282,7 +282,7 @@ const canSubmitInvitation = computed(() => {
 })
 
 const autocompleteOptions = computed((): AutocompleteOption[] => {
-  return leadersStore.activeLeaders().map((l) => ({
+  return leadersStore.activeLeaders(modal.date).map((l) => ({
     id: l.id,
     label: `${l.rank ? l.rank + ' ' : ''}${l.name}`,
     sublabel: l.congregation_id ? congregationName(l.congregation_id) : undefined,

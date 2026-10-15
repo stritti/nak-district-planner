@@ -12,6 +12,12 @@ from app.adapters.db.orm_models.district_reminder_config import (
     DistrictReminderConfigORM,
     ReminderDeliveryORM,
 )
+from app.adapters.db.orm_models.event_duty import (
+    DutyNameSuggestionORM,
+    EventDutyAssignmentORM,
+    EventDutyCategoryORM,
+    EventTypeDutyConfigurationORM,
+)
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
 from app.adapters.db.orm_models.event_mail_hook import EventMailHookORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM

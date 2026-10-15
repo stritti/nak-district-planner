@@ -91,6 +91,18 @@ export const router = createRouter({
       beforeEnter: requireAuth,
     },
     {
+      path: '/my-calendar',
+      name: 'personal-calendar',
+      component: () => import('../views/PersonalCalendarView.vue'),
+      beforeEnter: requireAuth,
+    },
+    {
+      path: '/admin/duties',
+      name: 'admin-duties',
+      component: () => import('../views/DutySettingsView.vue'),
+      beforeEnter: requireAuth,
+    },
+    {
       path: '/recurring-events',
       name: 'recurring-events',
       component: () => import('../views/RecurringEventsView.vue'),

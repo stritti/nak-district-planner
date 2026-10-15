@@ -22,6 +22,12 @@ class ExportTokenORM(Base):
     """ORM model for exporttokenorm."""
 
     __tablename__ = "export_tokens"
+    __table_args__ = (
+        sa.CheckConstraint(
+            "subject_sub IS NULL OR (token_type='INTERNAL' AND leader_id IS NULL AND congregation_id IS NULL)",
+            name="ck_export_tokens_subject_internal",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     token: Mapped[str] = mapped_column(sa.String(64), unique=True, nullable=False, index=True)
@@ -40,6 +46,11 @@ class ExportTokenORM(Base):
     leader_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         sa.ForeignKey("leaders.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    subject_sub: Mapped[str | None] = mapped_column(
+        sa.String(512),
+        sa.ForeignKey("users.sub", ondelete="CASCADE", name="fk_export_tokens_subject"),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(

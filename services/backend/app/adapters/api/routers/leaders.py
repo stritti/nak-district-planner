@@ -29,6 +29,7 @@ from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import (
     require_role_in_district,
 )
+from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.domain.models.leader import Leader
@@ -76,6 +77,8 @@ def _leader_response(leader: Leader) -> LeaderResponse:
         phone=leader.phone,
         notes=leader.notes,
         is_active=leader.is_active,
+        hidden_from_lists=leader.hidden_from_lists,
+        service_end_date=leader.service_end_date,
         created_at=leader.created_at,
         updated_at=leader.updated_at,
         revision=_leader_revision(leader),
@@ -89,11 +92,18 @@ async def list_leaders(
     db: DbSession,
     districts: SqlDistrictRepository = Depends(get_district_repository),
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    include_inactive: bool = False,
 ) -> list[LeaderResponse]:
     require_role_in_district(auth, Role.VIEWER, district_id)
     if not await districts.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
+    if include_inactive:
+        require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     leaders = await leaders_repo.list_by_district(district_id)
+    if not include_inactive:
+        leaders = [
+            leader for leader in leaders if leader.is_active and not leader.hidden_from_lists
+        ]
     return [_leader_response(leader) for leader in leaders]
 
 
@@ -110,6 +120,8 @@ async def create_leader(
     if not await districts.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     await ensure_congregation_in_district(db, district_id, body.congregation_id)
+    if not body.is_active or body.hidden_from_lists or body.service_end_date is not None:
+        require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     leader = Leader.create(
         name=body.name,
         district_id=district_id,
@@ -121,6 +133,8 @@ async def create_leader(
         phone=body.phone,
         notes=body.notes,
         is_active=body.is_active,
+        hidden_from_lists=body.hidden_from_lists,
+        service_end_date=body.service_end_date,
     )
     await leaders_repo.save(leader)
     return _leader_response(leader)
@@ -137,6 +151,9 @@ async def update_leader(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> LeaderResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
+    fields = body.model_fields_set
+    if fields & {"is_active", "hidden_from_lists", "service_end_date"}:
+        require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     repo = leaders_repo
     leader = await (repo.get_for_update(leader_id) if if_match is not None else repo.get(leader_id))
     if not leader or leader.district_id != district_id:
@@ -147,7 +164,6 @@ async def update_leader(
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     if if_match != _leader_revision(leader):
         raise HTTPException(status_code=412, detail="Datensatz wurde zwischenzeitlich geändert.")
-    fields = body.model_fields_set
     if "name" in fields and body.name is not None:
         leader.name = body.name
     if "rank" in fields:
@@ -167,6 +183,10 @@ async def update_leader(
         leader.notes = body.notes
     if "is_active" in fields and body.is_active is not None:
         leader.is_active = body.is_active
+    if "hidden_from_lists" in fields and body.hidden_from_lists is not None:
+        leader.hidden_from_lists = body.hidden_from_lists
+    if "service_end_date" in fields:
+        leader.service_end_date = body.service_end_date
     _touch_leader(leader)
     await repo.save(leader)
     return _leader_response(leader)
@@ -297,9 +317,14 @@ async def delete_leader(
 ) -> None:
     require_role_in_district(auth, Role.PLANNER, district_id)
     repo = leaders_repo
+    await acquire_advisory_xact_lock(db, leader_id)
     leader = await repo.get(leader_id)
     if not leader or leader.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
-    await repo.delete(leader_id)
+    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    leader.is_active = False
+    leader.hidden_from_lists = True
+    leader.updated_at = datetime.now(UTC)
+    await repo.save(leader)

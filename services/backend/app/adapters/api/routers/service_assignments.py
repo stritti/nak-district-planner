@@ -33,6 +33,7 @@ from app.adapters.db.repositories.service_assignment import SqlServiceAssignment
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.domain.event_payloads import assignment_confirmed
+from app.domain.models.leader import normalize_leader_name
 from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
@@ -91,12 +92,33 @@ async def _check_leader(
     The transaction-scoped advisory lock serializes concurrent assignments of the
     same leader, so check-then-insert cannot double-book; it is released on commit.
     """
-    await ensure_leader_in_district(db, district_id, leader_id)
     await acquire_advisory_xact_lock(db, leader_id)
+    await ensure_leader_in_district(db, district_id, leader_id)
+    leader = await SqlLeaderRepository(db).get(leader_id)
+    slot = await SqlPlanningSlotRepository(db).get(event_id)
+    if leader is None or slot is None or not leader.is_eligible_on(slot.planning_date):
+        raise HTTPException(
+            status_code=409, detail="Amtstragende:r ist an diesem Datum nicht dienstberechtigt"
+        )
     conflicts = await check_service_assignment_conflicts(
         db, event_id=event_id, leader_id=leader_id, exclude_assignment_id=exclude_assignment_id
     )
     _raise_blocking_conflicts(conflicts, confirm_warnings=confirm_warnings)
+
+
+async def _check_typed_name(db: DbSession, slot: PlanningSlot, name: str | None) -> None:
+    if not name:
+        return
+    repo = SqlLeaderRepository(db)
+    for leader in await repo.list_by_district(slot.district_id):
+        if normalize_leader_name(leader.name) == normalize_leader_name(name):
+            await acquire_advisory_xact_lock(db, leader.id)
+            current = await repo.get(leader.id)
+            if current is not None and not current.is_eligible_on(slot.planning_date):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Bekannte:r Amtstragende:r ist nicht dienstberechtigt; getrennte Gastzuweisung erforderlich",
+                )
 
 
 _ONE_ASSIGNMENT_PER_SLOT = "ix_service_assignments_planning_slot_id"
@@ -161,6 +183,9 @@ async def create_assignment(
             confirm_warnings=body.confirm_warnings,
         )
 
+    if body.leader_id is None:
+        await _check_typed_name(db, planning_slot, body.leader_name)
+
     assignment = ServiceAssignment.create(
         event_id=event_id,
         leader_id=body.leader_id,
@@ -218,21 +243,26 @@ async def update_assignment(
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     fields = body.model_fields_set
-    if "leader_id" in fields:
-        if body.leader_id is not None:
-            await _check_leader(
-                db,
-                district_id=planning_slot.district_id,
-                event_id=event_id,
-                leader_id=body.leader_id,
-                confirm_warnings=body.confirm_warnings,
-                exclude_assignment_id=assignment.id,
-            )
-        assignment.leader_id = body.leader_id
-    if "leader_name" in fields:
-        assignment.leader_name = body.leader_name
+    candidate_id = body.leader_id if "leader_id" in fields else assignment.leader_id
+    candidate_name = body.leader_name if "leader_name" in fields else assignment.leader_name
+    if candidate_id is not None:
+        await _check_leader(
+            db,
+            district_id=planning_slot.district_id,
+            event_id=event_id,
+            leader_id=candidate_id,
+            confirm_warnings=body.confirm_warnings,
+            exclude_assignment_id=assignment.id,
+        )
+    else:
+        await _check_typed_name(db, planning_slot, candidate_name)
+    if candidate_id is None and not candidate_name:
+        raise HTTPException(status_code=422, detail="Amtstragende:r oder Name erforderlich")
+    assignment.leader_id = candidate_id
+    assignment.leader_name = candidate_name
     newly_confirmed = (
-        body.status == AssignmentStatus.CONFIRMED and assignment.status != AssignmentStatus.CONFIRMED
+        body.status == AssignmentStatus.CONFIRMED
+        and assignment.status != AssignmentStatus.CONFIRMED
     )
     if body.status is not None:
         assignment.status = body.status

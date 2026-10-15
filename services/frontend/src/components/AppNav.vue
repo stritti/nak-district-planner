@@ -305,6 +305,8 @@ function handleNotificationClick(notification: NotificationItem) {
 
 const links = [
   { to: '/events',          label: 'Ereignisse',        icon: CalendarDaysIcon },
+  { to: '/my-calendar', label: 'Mein Kalender', icon: CalendarDaysIcon },
+  { to: '/admin/duties', label: 'Dienste', icon: UsersIcon },
   { to: '/matrix',          label: 'Dienstplan-Matrix', icon: TableCellsIcon },
   { to: '/recurring-events', label: 'Wiederholungen', icon: CalendarDaysIcon },
   { to: '/admin/districts', label: 'Bezirke & Gemeinden', icon: BuildingLibraryIcon },

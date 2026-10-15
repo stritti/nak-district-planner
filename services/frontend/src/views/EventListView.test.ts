@@ -11,6 +11,7 @@ import * as leadersApi from '../api/leaders'
 import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
 import EventListView from './EventListView.vue'
+import EventDutiesPanel from '../components/EventDutiesPanel.vue'
 import { useAuthStore } from '../stores/auth'
 
 const mocks = vi.hoisted(() => ({
@@ -144,6 +145,15 @@ beforeEach(() => {
 })
 
 describe('EventListView', () => {
+  it('allows congregation planners to manage duties for their own event', async () => {
+    const { wrapper } = setup([event()])
+    useAuthStore().memberships = [{ role: 'PLANNER', scope_type: 'CONGREGATION', scope_id: 'c1' }]
+    await flushPromises()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(EventDutiesPanel).props('canEdit')).toBe(true)
+  })
+
   it('restores controls and the matching API query after remounting with fresh stores', async () => {
     const first = setup()
     await flushPromises()
