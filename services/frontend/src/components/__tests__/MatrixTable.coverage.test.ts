@@ -135,6 +135,7 @@ describe('MatrixTable coverage gaps', () => {
     const matrixStore = useMatrixStore()
     const auth = useAuthStore()
     const leaders = useLeadersStore()
+    leaders.districtId = 'd1'
     matrixStore.districtId = 'd1'
     matrixStore.matrix = structuredClone(richMatrix)
     matrixStore.matrix!.rows[0].cells['2026-10-05'].revision = '"rev-1"'
@@ -222,6 +223,7 @@ describe('MatrixTable coverage gaps', () => {
       const matrixStore = useMatrixStore()
       const auth = useAuthStore()
       const leaders = useLeadersStore()
+    leaders.districtId = 'd1'
       matrixStore.districtId = 'd1'
       matrixStore.matrix = structuredClone(richMatrix)
       matrixStore.matrix!.rows[0].cells['2026-10-05'].revision = '"rev-1"'
@@ -294,6 +296,19 @@ describe('MatrixTable coverage gaps', () => {
       expect(useConfirmHost().isRevealed.value).toBe(false)
       expect(wrapper.get('[role="alert"]').text()).toContain('Konflikt BLOCK')
       expect(assignmentsApi.changeAssignmentInline).toHaveBeenCalledOnce()
+      wrapper.unmount()
+    })
+
+    it.each([
+      { district: 'd2', loading: false },
+      { district: 'd1', loading: true },
+    ])('hides choices that are mismatched or still loading: %j', async ({ district, loading }) => {
+      const { wrapper } = mountEditable()
+      const leaders = useLeadersStore()
+      leaders.districtId = district
+      leaders.loading = loading
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-inline-cell-id="matrix-leader-c1-2026-10-05"]').exists()).toBe(false)
       wrapper.unmount()
     })
 

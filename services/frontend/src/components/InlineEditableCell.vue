@@ -92,6 +92,7 @@ const props = withDefaults(defineProps<{
 const root = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)
 const selectInput = ref<HTMLSelectElement | null>(null)
+const currentEditor = () => input.value ?? selectInput.value
 const draft = ref(props.value ?? '')
 const startingRevision = ref(props.revision)
 const error = ref('')
@@ -121,7 +122,7 @@ async function activate(): Promise<void> {
   error.value = ''
   announcement.value = ''
   await nextTick()
-  const editor = input.value ?? selectInput.value
+  const editor = currentEditor()
   editor?.focus()
   if (editor instanceof HTMLInputElement) editor.select()
 }
@@ -158,13 +159,13 @@ async function commit(): Promise<boolean> {
   const nextValue = draft.value.trim()
   if (props.required && !nextValue) {
     error.value = 'Dieses Feld darf nicht leer sein.'
-    const editor = input.value ?? selectInput.value
+    const editor = currentEditor()
     editor?.focus()
     return false
   }
   if (props.maxLength && nextValue.length > props.maxLength) {
     error.value = 'Der Wert ist zu lang.'
-    input.value?.focus()
+    currentEditor()?.focus()
     return false
   }
   if (nextValue === (props.value ?? '')) {
@@ -185,7 +186,7 @@ async function commit(): Promise<boolean> {
       announcement.value = error.value
       saving.value = false
       await nextTick()
-      const editor = input.value ?? selectInput.value
+      const editor = currentEditor()
       editor?.focus()
       return false
     } finally {

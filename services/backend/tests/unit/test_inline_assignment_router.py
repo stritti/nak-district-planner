@@ -205,3 +205,32 @@ def test_inserting_instance_invalidates_slot_only_revision():
     slot = _slot()
     before = slot_revision(slot)
     assert slot_revision(slot, _instance(slot)) != before
+
+
+@pytest.mark.asyncio
+async def test_same_leader_assignment_is_noop_with_unchanged_status_and_revision():
+    slot = _slot()
+    existing = ServiceAssignment.create(
+        event_id=slot.id, leader_id=uuid.uuid4(), status=AssignmentStatus.CONFIRMED,
+    )
+    slots, assignments, instances = AsyncMock(), AsyncMock(), AsyncMock()
+    slots.get_for_update.return_value = slot
+    instances.get_by_planning_slot.return_value = None
+    assignments.list_by_planning_slot.return_value = [existing]
+    revision = slot_revision(slot)
+    with (
+        patch.object(service_assignments, "require_role_in_district"),
+        patch.object(service_assignments, "_check_leader", new_callable=AsyncMock) as check,
+    ):
+        response = await service_assignments.inline_change_assignment(
+            slot.id, InlineAssignmentChange(leader_id=existing.leader_id),
+            object(), AsyncMock(), if_match=revision, slots=slots,
+            assignments_repo=assignments, instance_repo=instances,
+        )
+    assert response.id == existing.id
+    assert response.status == AssignmentStatus.CONFIRMED
+    assert response.event_revision == revision
+    assert response.updated_at == existing.updated_at
+    check.assert_not_awaited()
+    assignments.save.assert_not_awaited()
+    slots.save.assert_not_awaited()

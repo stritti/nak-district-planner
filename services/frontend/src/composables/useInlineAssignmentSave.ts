@@ -5,7 +5,11 @@ import { parseConflictError } from '../api/errors'
 import { changeAssignmentInline, type InlineAssignmentResult } from '../api/serviceAssignments'
 import { useConfirm } from './useConfirm'
 
-/** Shared conditional write: acknowledge WARN only, retry once with the same snapshot. */
+/**
+ * Acknowledge WARN only and retry once with the original snapshot.
+ * A 409/412 (or any other failure) on that confirmed retry propagates to the
+ * cell unchanged; it never opens another prompt or starts a retry loop.
+ */
 export function useInlineAssignmentSave() {
   const confirm = useConfirm()
 

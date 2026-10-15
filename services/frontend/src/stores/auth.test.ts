@@ -208,3 +208,36 @@ describe('useAuthStore', () => {
     spyPending.mockRestore()
   })
 })
+
+
+describe('District planning permission', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it.each(['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'] as const)(
+    'honours district role %s only in the matching district',
+    (role) => {
+      const store = useAuthStore()
+      store.memberships = [{ role, scope_type: 'DISTRICT', scope_id: 'd1' }]
+      expect(store.canPlanDistrict('d1')).toBe(true)
+      expect(store.canPlanDistrict('d2')).toBe(false)
+      expect(store.canPlanDistrict(null)).toBe(false)
+    },
+  )
+
+  it('denies viewers, congregation-only memberships and unknown districts', () => {
+    const store = useAuthStore()
+    store.memberships = [
+      { role: 'VIEWER', scope_type: 'DISTRICT', scope_id: 'd1' },
+      { role: 'CONGREGATION_ADMIN', scope_type: 'CONGREGATION', scope_id: 'c1' },
+    ]
+    expect(store.canPlanDistrict('d1')).toBe(false)
+    expect(store.canPlanDistrict('c1')).toBe(false)
+    expect(store.canPlanDistrict('')).toBe(false)
+  })
+
+  it('honours superadmin independently of memberships', () => {
+    const store = useAuthStore()
+    store.isSuperadmin = true
+    expect(store.canPlanDistrict('d2')).toBe(true)
+  })
+})
