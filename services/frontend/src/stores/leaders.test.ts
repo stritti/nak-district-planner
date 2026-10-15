@@ -4,12 +4,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import * as leadersApi from '../api/leaders'
+import { apiFetch } from '../api/client'
 import { useLeadersStore } from './leaders'
 
-vi.mock('../api/leaders', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/leaders')>()),
-  listLeaders: vi.fn(),
-}))
+vi.mock('../api/client', () => ({ apiFetch: vi.fn() }))
 
 const leader = (id: string, isActive: boolean): leadersApi.LeaderResponse => ({
   id,
@@ -38,12 +36,12 @@ describe('useLeadersStore', () => {
 
     await store.fetchLeaders('')
 
-    expect(leadersApi.listLeaders).not.toHaveBeenCalled()
+    expect(apiFetch).not.toHaveBeenCalled()
     expect(store.loading).toBe(false)
   })
 
   it('loads leaders for a district and exposes active leaders only', async () => {
-    vi.mocked(leadersApi.listLeaders).mockResolvedValue([
+    vi.mocked(apiFetch).mockResolvedValue([
       leader('active', true),
       leader('inactive', false),
     ])
@@ -51,14 +49,14 @@ describe('useLeadersStore', () => {
 
     await store.fetchLeaders('district-1')
 
-    expect(leadersApi.listLeaders).toHaveBeenCalledWith('district-1')
+    expect(apiFetch).toHaveBeenCalledWith('/api/v1/districts/district-1/leaders')
     expect(store.districtId).toBe('district-1')
     expect(store.loading).toBe(false)
     expect(store.activeLeaders().map((item) => item.id)).toEqual(['active'])
   })
 
   it('always resets loading when the API fails', async () => {
-    vi.mocked(leadersApi.listLeaders).mockRejectedValue(new Error('boom'))
+    vi.mocked(apiFetch).mockRejectedValue(new Error('boom'))
     const store = useLeadersStore()
 
     await expect(store.fetchLeaders('district-1')).rejects.toThrow('boom')
@@ -78,7 +76,7 @@ describe('Leader choice ownership', () => {
     store.leaders = [leader('old', true)]
     store.districtId = 'district-1'
     let finish!: (items: leadersApi.LeaderResponse[]) => void
-    vi.mocked(leadersApi.listLeaders).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    vi.mocked(apiFetch).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
     const pending = store.fetchLeaders('district-2')
     expect(store.districtId).toBe('')
     expect(store.choices).toEqual([])
@@ -93,7 +91,7 @@ describe('Leader choice ownership', () => {
 
   it('ignores a slower response for a previously selected district', async () => {
     let finishFirst!: (items: leadersApi.LeaderResponse[]) => void
-    vi.mocked(leadersApi.listLeaders)
+    vi.mocked(apiFetch)
       .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve }))
       .mockResolvedValueOnce([{ ...leader('second', true), district_id: 'district-2' }])
     const store = useLeadersStore()
@@ -110,7 +108,7 @@ describe('Leader choice ownership', () => {
     const store = useLeadersStore()
     store.leaders = [leader('old', true)]
     store.districtId = 'district-1'
-    vi.mocked(leadersApi.listLeaders).mockRejectedValue(new Error('offline'))
+    vi.mocked(apiFetch).mockRejectedValue(new Error('offline'))
     await expect(store.fetchLeaders('district-2')).rejects.toThrow('offline')
     expect(store.districtId).toBe('')
     expect(store.choices).toEqual([])
@@ -119,7 +117,7 @@ describe('Leader choice ownership', () => {
 
   it('invalidates a pending response when the district selection is cleared', async () => {
     let finish!: (items: leadersApi.LeaderResponse[]) => void
-    vi.mocked(leadersApi.listLeaders).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    vi.mocked(apiFetch).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
     const store = useLeadersStore()
     const pending = store.fetchLeaders('district-1')
     await store.fetchLeaders('')
