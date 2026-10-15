@@ -31,9 +31,9 @@
 
 - [x] 5.1 Unit-Tests: Dienstag wöchentlich, alle zwei Wochen mit festem Anker, letzter Dienstag, erster/fünfter Wochentag, 29./30./31., Februar/Schaltjahr, Monats- und Jahreswechsel, Aktivitätsgrenzen.
 - [x] 5.2 Unit-Tests: lokale Zeit/UTC inkl. DST-Lücke und doppelter Stunde, Dauer, inaktive Vorlage, geänderte Vorlage, geändertes Vorkommen, ungültige Patterns.
-- [ ] 5.3 Integrations-/Race-Tests: doppelte und parallele Accepts, Bezirk-applicability, öffentlicher ICS-Export erst nach CONFIRMED, vorhandener manueller Termin, Skip/Reopen/Resolve, Retention-Löschung und ON DELETE SET NULL, verschobener Slot, per-item-Bulk-Commit trotz paralleler Unique-Fehler, unterschiedliche Gemeinden/Bezirke, bestehender Gottesdienstgenerator.
-- [ ] 5.4 API-/RLS-Tests für alle Rollen, gemeindebezogene Freigabe (eigene Gemeinde erlaubt, fremde/ganzes Bezirk verboten), Scope-Manipulation, Cross-Tenant-Zugriffe, Bulk-Teilkonflikte, Filter vor Pagination und stale Revisions.
-- [ ] 5.5 Frontend-Unit- und Browser-Tests für Monatswechsel, Checklistenstatus, Mehrfachübernahme, Fehlermeldungen und mobile Nutzung.
+- [x] 5.3 Integrations-/Race-Tests: doppelte und parallele Accepts, Bezirk-applicability, öffentlicher ICS-Export erst nach CONFIRMED, vorhandener manueller Termin, Skip/Reopen/Resolve, Retention-Löschung und ON DELETE SET NULL, verschobener Slot, per-item-Bulk-Commit trotz paralleler Unique-Fehler, unterschiedliche Gemeinden/Bezirke, bestehender Gottesdienstgenerator.
+- [x] 5.4 API-/RLS-Tests für alle Rollen, gemeindebezogene Freigabe (eigene Gemeinde erlaubt, fremde/ganzes Bezirk verboten), Scope-Manipulation, Cross-Tenant-Zugriffe, Bulk-Teilkonflikte, Filter vor Pagination und stale Revisions.
+- [x] 5.5 Frontend-Unit- und Browser-Tests für Monatswechsel, Checklistenstatus, Mehrfachübernahme, Fehlermeldungen und mobile Nutzung.
 - [x] 5.6 OpenSpec strikt validieren; bestehende Lint-, Sicherheits-, Build- und CI-Gates ohne Abschwächung bestehen; neue Produktionspfade mit >80 % Code Coverage und Ausnahmefällen abdecken.
 
 ## 6. CI-Regressionen vom 13. Oktober 2026
