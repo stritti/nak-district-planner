@@ -18,6 +18,7 @@ from sqlalchemy import select
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
+    RawCurrentUserWithMemberships,
     get_event_instance_repository,
     get_export_token_repository,
     get_leader_repository,
@@ -125,7 +126,7 @@ async def list_export_tokens(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_export_token(
-    auth: CurrentUserWithMemberships,
+    auth: RawCurrentUserWithMemberships,
     token_id: uuid.UUID,
     session: DbSession,
     repo: SqlExportTokenRepository = Depends(get_export_token_repository),
@@ -181,6 +182,11 @@ def _sequence(last_modified: datetime) -> int:
     return int((last_modified - _SEQUENCE_EPOCH).total_seconds())
 
 
+def _confirmed_personal_events(events):
+    """Filter on approval state without conflating it with cancellation status."""
+    return [event for event in events if event.approval_status == EventApprovalStatus.CONFIRMED]
+
+
 @router.get("/export/{token_str}/calendar.ics", include_in_schema=False)
 async def export_calendar_ics(
     token_str: str,
@@ -211,7 +217,7 @@ async def export_calendar_ics(
             datetime.now(UTC).date() + timedelta(days=730),
         )
         if approval_status == "confirmed_only":
-            events = [event for event in events if event.status != "TENTATIVE"]
+            events = _confirmed_personal_events(events)
         return _personal_ics_response(export_token.label, events)
 
     # RLS public export policies use app.current_export_token for scoped reads.

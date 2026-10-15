@@ -171,6 +171,7 @@ def test_projection_uses_instance_timing_and_ignores_name_only():
     assert event.title == "Actual"
     assert event.start_at == instance.actual_start_at
     assert event.status == "TENTATIVE"
+    assert event.approval_status == "PLANNED"
 
 
 def test_subject_ics_contains_one_uid_and_no_other_names():
@@ -186,6 +187,7 @@ def test_subject_ics_contains_one_uid_and_no_other_names():
         now,
         now,
         "TENTATIVE",
+        None,
         ["Organist"],
         None,
         now,
@@ -251,7 +253,6 @@ async def test_loader_filters_current_congregation_membership(monkeypatch):
     from unittest.mock import AsyncMock
 
     from app.adapters.api.routers import personal_calendar as router
-    from app.adapters.db.repositories import event_duties
 
     district, own, foreign, slot_id = [uuid.uuid4() for _ in range(4)]
     now = datetime(2026, 10, 13, tzinfo=UTC)
@@ -296,7 +297,7 @@ async def test_loader_filters_current_congregation_membership(monkeypatch):
         updated_at=now,
     )
     monkeypatch.setattr(
-        event_duties,
+        router,
         "SqlEventDutiesRepository",
         lambda session: Namespace(list_assignments=AsyncMock(return_value=[duty])),
     )
@@ -304,6 +305,103 @@ async def test_loader_filters_current_congregation_membership(monkeypatch):
         Namespace(), "alice", district, now.date(), now.date()
     )
     assert [event.planning_slot_id for event in result] == [slot_id]
+
+
+@pytest.mark.asyncio
+async def test_loader_includes_distributed_district_slot_for_congregation_member(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.adapters.api.routers import personal_calendar as router
+
+    district, congregation, slot_id = [uuid.uuid4() for _ in range(3)]
+    now = datetime(2026, 10, 13, tzinfo=UTC)
+    slot = Namespace(
+        id=slot_id,
+        district_id=district,
+        congregation_id=None,
+        applicability=[str(congregation)],
+        is_visible_to=lambda candidate: candidate == congregation,
+        planning_date=now.date(),
+        planning_time=None,
+        title="Verteilter Bezirksgottesdienst",
+        status="ACTIVE",
+        approval_status="CONFIRMED",
+        updated_at=now,
+    )
+    duty = Namespace(
+        planning_slot_id=slot_id,
+        district_id=district,
+        congregation_id=None,
+        linked_user_sub="alice",
+        duty_label="Organist",
+        updated_at=now,
+    )
+    monkeypatch.setattr(router, "personal_subject_context", AsyncMock(return_value=(False, {congregation})))
+    monkeypatch.setattr(
+        router,
+        "SqlPlanningSlotRepository",
+        lambda session: Namespace(list_for_date_range=AsyncMock(return_value=[slot])),
+    )
+    monkeypatch.setattr(
+        router,
+        "SqlEventInstanceRepository",
+        lambda session: Namespace(list_by_planning_slots=AsyncMock(return_value=[])),
+    )
+    monkeypatch.setattr(
+        router,
+        "SqlServiceAssignmentRepository",
+        lambda session: Namespace(list_by_planning_slots=AsyncMock(return_value=[])),
+    )
+    monkeypatch.setattr(
+        router,
+        "SqlLeaderRepository",
+        lambda session: Namespace(list_by_district=AsyncMock(return_value=[])),
+    )
+    monkeypatch.setattr(
+        router,
+        "SqlEventDutiesRepository",
+        lambda session: Namespace(list_assignments=AsyncMock(return_value=[duty])),
+        raising=False,
+    )
+
+    result = await router.load_personal_events(
+        Namespace(), "alice", district, now.date(), now.date()
+    )
+
+    assert [event.planning_slot_id for event in result] == [slot_id]
+
+
+def test_confirmed_only_personal_filter_excludes_cancelled_draft():
+    from app.adapters.api.routers.export import _confirmed_personal_events
+    from app.application.personal_calendar import PersonalCalendarEvent
+
+    now = datetime(2026, 10, 13, tzinfo=UTC)
+    draft = PersonalCalendarEvent(
+        uuid.uuid4(),
+        "draft@example",
+        "Draft",
+        now,
+        now,
+        "CANCELLED",
+        "PLANNED",
+        ["Organist"],
+        None,
+        now,
+    )
+    confirmed = PersonalCalendarEvent(
+        uuid.uuid4(),
+        "confirmed@example",
+        "Confirmed",
+        now,
+        now,
+        "CANCELLED",
+        "CONFIRMED",
+        ["Organist"],
+        None,
+        now,
+    )
+
+    assert _confirmed_personal_events([draft, confirmed]) == [confirmed]
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,7 @@ class PersonalCalendarEvent:
     start_at: datetime
     end_at: datetime
     status: str
+    approval_status: str | None
     duties: list[str]
     congregation_id: uuid.UUID | None
     updated_at: datetime
@@ -47,7 +48,6 @@ def project_personal_events(
             and duty.linked_user_sub == subject_sub
             and duty.district_id == slot.district_id
             and duty.congregation_id == slot.congregation_id
-            and not getattr(duty, "quarantined", False)
         ]
         labels = sorted({duty.duty_label for duty in own_duties})
         if slot.id in leader_slots:
@@ -82,6 +82,7 @@ def project_personal_events(
                 start,
                 end,
                 status,
+                getattr(slot, "approval_status", None),
                 labels,
                 slot.congregation_id,
                 max(revisions),

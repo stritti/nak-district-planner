@@ -236,6 +236,120 @@ def test_duty_rls_separates_planner_and_admin_writes(data, duty_rows):
         assert cur.rowcount == 0
 
 
+def test_eligible_user_picker_does_not_broaden_membership_rows(owner, data, duty_rows):
+    _, subject, _ = duty_rows
+    foreign_subject = data.sub(f"duty-foreign-candidate-{uuid.uuid4().hex[:8]}")
+    with owner.cursor() as cur:
+        cur.execute(
+            "INSERT INTO users (id,sub,email,username,is_superadmin,created_at,updated_at) "
+            "VALUES (%s,%s,%s,%s,false,now(),now())",
+            (
+                str(uuid.uuid4()),
+                foreign_subject,
+                f"{foreign_subject}@example.org",
+                foreign_subject,
+            ),
+        )
+        cur.execute(
+            "INSERT INTO memberships (id,user_sub,role,scope_type,scope_id,created_at,updated_at) "
+            "VALUES (%s,%s,'VIEWER','CONGREGATION',%s,now(),now())",
+            (str(uuid.uuid4()), foreign_subject, str(data.b.congregation_id)),
+        )
+    try:
+        with app_session(subject) as cur:
+            cur.execute("SELECT DISTINCT user_sub FROM memberships")
+            assert {row[0] for row in cur.fetchall()} == {subject}
+
+            cur.execute(
+                "SELECT * FROM eligible_duty_users(%s,%s)",
+                (str(data.a.district_id), str(data.a.congregation_id)),
+            )
+            assert [column.name for column in cur.description] == ["sub", "display_name"]
+            assert subject in {row[0] for row in cur.fetchall()}
+
+            cur.execute(
+                "SELECT * FROM eligible_duty_users(%s,%s)",
+                (str(data.a.district_id), str(data.b.congregation_id)),
+            )
+            assert foreign_subject not in {row[0] for row in cur.fetchall()}
+    finally:
+        with owner.cursor() as cur:
+            cur.execute("DELETE FROM memberships WHERE user_sub=%s", (foreign_subject,))
+            cur.execute("DELETE FROM users WHERE sub=%s", (foreign_subject,))
+
+
+def test_congregation_member_reads_distributed_district_slot(owner, data, duty_rows):
+    ids, other_subject, _ = duty_rows
+    subject = data.sub(f"duty-congregation-{uuid.uuid4().hex[:8]}")
+    slot_id = uuid.uuid4()
+    assignment_id = uuid.uuid4()
+    other_assignment_id = uuid.uuid4()
+    with owner.cursor() as cur:
+        cur.execute(
+            "INSERT INTO users (id,sub,email,username,is_superadmin,created_at,updated_at) "
+            "VALUES (%s,%s,%s,%s,false,now(),now())",
+            (str(uuid.uuid4()), subject, f"{subject}@example.org", subject),
+        )
+        cur.execute(
+            "INSERT INTO memberships (id,user_sub,role,scope_type,scope_id,created_at,updated_at) "
+            "VALUES (%s,%s,'VIEWER','CONGREGATION',%s,now(),now())",
+            (str(uuid.uuid4()), subject, str(data.a.congregation_id)),
+        )
+        cur.execute(
+            "INSERT INTO planning_slots "
+            "(id,district_id,congregation_id,category,planning_date,planning_time,status,"
+            "applicability,created_at,updated_at) VALUES "
+            "(%s,%s,NULL,'Gottesdienst','2027-03-02','10:00','ACTIVE',%s,now(),now())",
+            (
+                str(slot_id),
+                str(data.a.district_id),
+                [str(data.a.congregation_id)],
+            ),
+        )
+        cur.execute(
+            "INSERT INTO event_duty_assignments "
+            "(id,planning_slot_id,duty_category_id,district_id,congregation_id,display_name,"
+            "duty_label,linked_user_sub,normalized_name,suggestion_id) "
+            "VALUES (%s,%s,%s,%s,NULL,%s,'Testdienst',%s,NULL,NULL),"
+            "(%s,%s,%s,%s,NULL,%s,'Testdienst',%s,NULL,NULL)",
+            (
+                str(assignment_id),
+                str(slot_id),
+                str(ids["category_a"]),
+                str(data.a.district_id),
+                subject,
+                subject,
+                str(other_assignment_id),
+                str(slot_id),
+                str(ids["category_a"]),
+                str(data.a.district_id),
+                other_subject,
+                other_subject,
+            ),
+        )
+    try:
+        with app_session(subject) as cur:
+            assert _visible_ids(
+                cur,
+                "planning_slots",
+                [slot_id, ids["slot_b"]],
+            ) == {slot_id}
+            assert _visible_ids(
+                cur,
+                "event_duty_assignments",
+                [assignment_id, other_assignment_id, ids["assignment_b"]],
+            ) == {assignment_id}
+    finally:
+        with owner.cursor() as cur:
+            cur.execute(
+                "DELETE FROM event_duty_assignments WHERE id=ANY(%s::uuid[])",
+                ([str(assignment_id), str(other_assignment_id)],),
+            )
+            cur.execute("DELETE FROM planning_slots WHERE id=%s", (str(slot_id),))
+            cur.execute("DELETE FROM memberships WHERE user_sub=%s", (subject,))
+            cur.execute("DELETE FROM users WHERE sub=%s", (subject,))
+
+
 def test_subject_feed_is_restrictive_and_membership_aware(owner, duty_rows):
     ids, subject, token = duty_rows
     with export_session(token) as cur:
@@ -251,11 +365,14 @@ def test_subject_feed_is_restrictive_and_membership_aware(owner, duty_rows):
         cur.execute("DELETE FROM memberships WHERE user_sub=%s", (subject,))
     with export_session(token) as cur:
         assert _visible_ids(cur, "planning_slots", [ids["slot_a"], ids["slot_b"]]) == set()
-        assert _visible_ids(
-            cur,
-            "event_duty_assignments",
-            [ids["assignment_a"], ids["assignment_b"]],
-        ) == set()
+        assert (
+            _visible_ids(
+                cur,
+                "event_duty_assignments",
+                [ids["assignment_a"], ids["assignment_b"]],
+            )
+            == set()
+        )
     with app_session(subject) as cur:
         cur.execute("DELETE FROM export_tokens WHERE id=%s", (str(ids["token"]),))
         assert cur.rowcount == 1
@@ -269,7 +386,9 @@ async def capacity_tenant():
     subject = f"duty-capacity-{uuid.uuid4().hex}"
     async with sessions() as db:
         await db.execute(
-            text("INSERT INTO districts (id,name,created_at,updated_at) VALUES (:id,'D',now(),now())"),
+            text(
+                "INSERT INTO districts (id,name,created_at,updated_at) VALUES (:id,'D',now(),now())"
+            ),
             {"id": ids["district"]},
         )
         await db.execute(

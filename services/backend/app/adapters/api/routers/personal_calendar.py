@@ -5,27 +5,26 @@
 
 import uuid
 from datetime import date
-from types import SimpleNamespace
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import CurrentUserContext, CurrentUserWithMemberships, DbSession
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.orm_models.user import UserORM
+from app.adapters.db.repositories.event_duties import SqlEventDutiesRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.application.personal_calendar import PersonalCalendarEvent, project_personal_events
+from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/personal-calendar", tags=["personal-calendar"])
 
 
 def allowed_personal_scopes(auth, district_id, congregation_ids):
-    from app.domain.models.role import Role
-
     memberships = [m for m in auth.memberships if getattr(m, "role", None) in set(Role)]
     district_access = auth.user.is_superadmin or any(
         m.scope_type == "DISTRICT" and m.scope_id == district_id for m in memberships
@@ -53,7 +52,7 @@ async def personal_subject_context(session, subject_sub, district_id):
             )
         ).scalars()
     )
-    auth = SimpleNamespace(user=user, memberships=memberships)
+    auth = CurrentUserContext(user=user, memberships=memberships)
     district_access, congregation_access = allowed_personal_scopes(auth, district_id, congregations)
     if not district_access and not congregation_access:
         raise HTTPException(404, "Persönlicher Kalender nicht verfügbar")
@@ -61,15 +60,22 @@ async def personal_subject_context(session, subject_sub, district_id):
 
 
 async def load_personal_events(session, subject_sub, district_id, from_date, to_date):
-    from app.adapters.db.repositories.event_duties import SqlEventDutiesRepository
-
     district_access, congregation_access = await personal_subject_context(
         session, subject_sub, district_id
     )
     slots = await SqlPlanningSlotRepository(session).list_for_date_range(
         district_id=district_id, from_date=from_date, to_date=to_date
     )
-    slots = [s for s in slots if district_access or s.congregation_id in congregation_access]
+    slots = [
+        slot
+        for slot in slots
+        if district_access
+        or slot.congregation_id in congregation_access
+        or (
+            slot.congregation_id is None
+            and any(slot.is_visible_to(congregation_id) for congregation_id in congregation_access)
+        )
+    ]
     ids = [s.id for s in slots]
     instances = await SqlEventInstanceRepository(session).list_by_planning_slots(ids) if ids else []
     assignments = (

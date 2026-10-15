@@ -7,6 +7,12 @@ import unicodedata
 from dataclasses import dataclass, replace
 from uuid import UUID, uuid4
 
+DEFAULT_DUTY_CATEGORIES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("closing", "Schließdienst", ()),
+    ("organist", "Organist", ("Gottesdienst",)),
+    ("conductor", "Dirigent", ("Gottesdienst",)),
+)
+
 
 def display_name(value: str) -> str:
     value = " ".join(unicodedata.normalize("NFKC", value).split())
@@ -40,11 +46,7 @@ class EventDutyCategory:
     def defaults(cls, district_id):
         return [
             cls(uuid4(), district_id, None, code, label, categories)
-            for code, label, categories in (
-                ("closing", "Schließdienst", ()),
-                ("organist", "Organist", ("Gottesdienst",)),
-                ("conductor", "Dirigent", ("Gottesdienst",)),
-            )
+            for code, label, categories in DEFAULT_DUTY_CATEGORIES
         ]
 
 

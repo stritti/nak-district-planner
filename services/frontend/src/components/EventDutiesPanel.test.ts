@@ -18,6 +18,7 @@ it('keeps duties optional and uses text identity without linking by matching nam
  expect(w.text()).toContain('Optional'); expect(api.saveDutyAssignment).not.toHaveBeenCalled()
  await w.get('[data-testid="duty-name"]').setValue('Anna'); await w.get('form').trigger('submit'); await flushPromises()
  expect(api.saveDutyAssignment).toHaveBeenCalledWith('d','s',{duty_category_id:'cat',name:'Anna'},undefined)
+ expect(w.emitted('mutated')).toHaveLength(1)
 })
 it('saves selected verified account without supplying text identity', async () => {
  const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}}); await flushPromises()
@@ -74,4 +75,17 @@ it('surfaces suggestion, save, removal, and visibility failures',async()=>{
  const hideView=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
  await hideView.get('details button').trigger('click');await flushPromises()
  expect(hideView.get('[role="alert"]').text()).toContain('Änderung fehlgeschlagen')
+})
+
+it('guards suggestion visibility changes while another action is loading', async () => {
+ let release!: () => void
+ vi.mocked(api.setSuggestionHidden).mockImplementationOnce(() => new Promise(resolve => {
+  release = () => resolve({id:'name',display_name:'Anna',hidden:true} as never)
+ }))
+ const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
+ const button=w.get('details button')
+ await button.trigger('click')
+ await button.trigger('click')
+ expect(api.setSuggestionHidden).toHaveBeenCalledTimes(1)
+ release();await flushPromises()
 })

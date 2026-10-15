@@ -9,7 +9,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.adapters.api.schemas.event_duty import AssignmentWrite, CategoryCreate
-from app.application.event_duties import DutyConflictError, DutyNotFoundError, EventDutiesService
+from app.application.event_duties import (
+    DutyConflictError,
+    DutyNotFoundError,
+    EventDutiesService,
+)
 from app.domain.models.event_duty import (
     DutyNameSuggestion,
     EventDutyAssignment,
@@ -17,6 +21,8 @@ from app.domain.models.event_duty import (
     EventTypeDutyConfiguration,
     normalize_name,
 )
+
+_USE_STORED_ASSIGNMENT = object()
 
 
 class Repository:
@@ -32,13 +38,25 @@ class Repository:
         self.overrides, self.assignments, self.suggestions = [], [], []
         self.locks = []
         self.users = [{"sub": "verified", "display_name": "User Name"}]
+        self.assignment_lock_result = _USE_STORED_ASSIGNMENT
 
     async def lock_slot(self, slot_id, district_id):
         self.locks.append("slot")
         return self.slot if (slot_id, district_id) == (self.slot_id, self.district) else None
 
+    async def get_slot(self, slot_id, district_id):
+        return self.slot if (slot_id, district_id) == (self.slot_id, self.district) else None
+
     async def lock_category(self, category_id, district_id):
         self.locks.append("category")
+        return next(
+            (
+                category
+                for category in self.categories
+                if category.id == category_id and category.district_id == district_id
+            ),
+            None,
+        )
 
     async def catalog(self, *args):
         return self.categories, self.overrides
@@ -57,6 +75,15 @@ class Repository:
 
     async def get_suggestion(self, suggestion_id):
         return next((s for s in self.suggestions if s.id == suggestion_id), None)
+
+    async def get_assignment(self, assignment_id):
+        return next((a for a in self.assignments if a.id == assignment_id), None)
+
+    async def lock_assignment(self, assignment_id):
+        self.locks.append("assignment")
+        if self.assignment_lock_result is not _USE_STORED_ASSIGNMENT:
+            return self.assignment_lock_result
+        return await self.get_assignment(assignment_id)
 
     async def remember(self, district, congregation, category, name, activate=False):
         old = next(
@@ -85,11 +112,21 @@ class Repository:
     async def save_assignment(self, assignment):
         self.assignments = [a for a in self.assignments if a.id != assignment.id] + [assignment]
 
+    async def delete_assignment(self, assignment_id):
+        self.assignments = [a for a in self.assignments if a.id != assignment_id]
+
 
 async def add(repo, **kwargs):
-    return await EventDutiesService(repo).assign(
-        repo.district, repo.slot_id, repo.categories[0].id, **kwargs
-    )
+    service = EventDutiesService(repo)
+    replacing = kwargs.pop("replacing", None)
+    revalidate = kwargs.pop("revalidate", False)
+    if revalidate:
+        return await service.revalidate(repo.district, repo.slot_id, replacing)
+    if replacing:
+        return await service.replace(
+            repo.district, repo.slot_id, repo.categories[0].id, replacing, **kwargs
+        )
+    return await service.assign(repo.district, repo.slot_id, repo.categories[0].id, **kwargs)
 
 
 @pytest.mark.asyncio
@@ -128,20 +165,48 @@ async def test_reassignment_to_full_category_does_not_bypass_capacity():
     repo = Repository()
     source = await add(repo, name="Anna")
     destination = repo.categories[1]
-    await EventDutiesService(repo).assign(
-        repo.district, repo.slot_id, destination.id, name="Bob"
-    )
+    await EventDutiesService(repo).assign(repo.district, repo.slot_id, destination.id, name="Bob")
 
     with pytest.raises(DutyConflictError):
-        await EventDutiesService(repo).assign(
+        await EventDutiesService(repo).replace(
             repo.district,
             repo.slot_id,
             destination.id,
+            source,
             name="Anna",
-            replacing=source,
         )
 
     assert len(repo.assignments) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("revalidate", [False, True])
+async def test_deleted_assignment_is_not_recreated_by_replace_or_revalidation(revalidate):
+    repo = Repository()
+    row = await add(repo, name="Anna")
+    repo.assignment_lock_result = None
+
+    with pytest.raises(DutyNotFoundError):
+        await add(repo, name="Anna", replacing=row, revalidate=revalidate)
+
+    assert repo.assignments == [row]
+    assert repo.locks[-2:] == ["slot", "assignment"]
+
+
+@pytest.mark.asyncio
+async def test_concurrently_changed_assignment_is_not_overwritten():
+    repo = Repository()
+    row = await add(repo, name="Anna")
+    repo.assignment_lock_result = replace(
+        row,
+        display_name="Bereits geändert",
+        normalized_name="bereits geändert",
+    )
+
+    with pytest.raises(DutyConflictError, match="changed concurrently"):
+        await add(repo, name="Noch eine Änderung", replacing=row)
+
+    assert repo.assignments == [row]
 
 
 @pytest.mark.asyncio
@@ -235,6 +300,36 @@ def test_schema_exclusivity_and_positive_capacity():
             AssignmentWrite(duty_category_id=uuid4(), **kwargs)
     with pytest.raises(ValidationError):
         CategoryCreate(code="test", label="Test", capacity=0)
+
+
+@pytest.mark.parametrize("label", ["   ", "Valid\u0000Label"])
+def test_category_labels_reject_blank_or_control_characters(label):
+    with pytest.raises(ValidationError):
+        CategoryCreate(code="test", label=label)
+
+
+def test_event_category_values_are_bounded_before_persistence():
+    from app.adapters.api.schemas.event_duty import CategoryUpdate, ConfigurationWrite
+
+    too_long = "x" * 256
+    with pytest.raises(ValidationError):
+        CategoryCreate(code="test", label="Test", event_categories=[too_long])
+    with pytest.raises(ValidationError):
+        CategoryUpdate(event_categories=[too_long])
+    with pytest.raises(ValidationError):
+        ConfigurationWrite(
+            congregation_id=uuid4(),
+            duty_category_id=uuid4(),
+            event_categories=[too_long],
+        )
+
+
+def test_category_update_rejects_explicit_null_but_allows_omission():
+    from app.adapters.api.schemas.event_duty import CategoryUpdate
+
+    assert CategoryUpdate().model_fields_set == set()
+    with pytest.raises(ValidationError):
+        CategoryUpdate(event_categories=None)
 
 
 def test_overrides_are_exact_and_district_events_ignore_local_config():

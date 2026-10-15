@@ -61,6 +61,38 @@ describe('MatrixTable congregation filter', () => {
   })
 })
 
+describe('MatrixTable lifecycle review state', () => {
+  it('renders the backend review flag in the matrix cell', () => {
+    const store = useMatrixStore()
+    store.matrix = {
+      dates: ['2030-04-14'],
+      rows: [{
+        congregation_id: 'c',
+        congregation_name: 'Gemeinde',
+        cells: {
+          '2030-04-14': {
+            event_id: 'event',
+            event_title: 'Gottesdienst',
+            category: 'Gottesdienst',
+            is_gap: false,
+            assignment_id: 'assignment',
+            assignment_status: 'ASSIGNED',
+            leader_id: 'leader',
+            leader_name: 'Ehemalig',
+            needs_review: true,
+          },
+        },
+      }],
+      holidays: {},
+    }
+    const wrapper = mount(MatrixTable, {
+      props: { compactMode: false, matrixSortMode: 'default' },
+    })
+
+    expect(wrapper.text()).toContain('Prüfung erforderlich')
+  })
+})
+
 describe('MatrixTable scroll shadows', () => {
   it('renders both shadow overlays as decorative elements', () => {
     const { wrapper } = mountTable()

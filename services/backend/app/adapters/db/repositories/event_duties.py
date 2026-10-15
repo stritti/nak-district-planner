@@ -6,7 +6,7 @@
 from dataclasses import fields
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.adapters.db.orm_models.event_duty import (
@@ -15,9 +15,7 @@ from app.adapters.db.orm_models.event_duty import (
     EventDutyCategoryORM,
     EventTypeDutyConfigurationORM,
 )
-from app.adapters.db.orm_models.membership import MembershipORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
-from app.adapters.db.orm_models.user import UserORM
 from app.domain.models.event_duty import (
     DutyNameSuggestion,
     EventDutyAssignment,
@@ -26,10 +24,11 @@ from app.domain.models.event_duty import (
     display_name,
     normalize_name,
 )
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.ports.event_duties import EventDutiesRepository
 
 
-def domain(kind, row):
+def _to_domain(kind, row):
     values = {f.name: getattr(row, f.name) for f in fields(kind)}
     if "event_categories" in values:
         values["event_categories"] = tuple(values["event_categories"])
@@ -66,8 +65,8 @@ class SqlEventDutiesRepository(EventDutiesRepository):
             if congregation_id
             else []
         )
-        return [domain(EventDutyCategory, x) for x in rows], [
-            domain(EventTypeDutyConfiguration, x) for x in overrides
+        return [_to_domain(EventDutyCategory, x) for x in rows], [
+            _to_domain(EventTypeDutyConfiguration, x) for x in overrides
         ]
 
     async def list_assignments(self, slot_ids):
@@ -78,7 +77,7 @@ class SqlEventDutiesRepository(EventDutiesRepository):
                 .order_by(EventDutyAssignmentORM.id)
             )
         ).all()
-        return [domain(EventDutyAssignment, x) for x in rows]
+        return [_to_domain(EventDutyAssignment, x) for x in rows]
 
     async def count_assignments(self, slot_id, category_id):
         """Count every assignment, including quarantined rows hidden by RLS.
@@ -89,40 +88,97 @@ class SqlEventDutiesRepository(EventDutiesRepository):
         """
         return int(await self.session.scalar(func.duty_assignment_count(slot_id, category_id)) or 0)
 
+    async def get_slot(self, slot_id, district_id):
+        row = await self.session.scalar(
+            select(PlanningSlotORM).where(
+                PlanningSlotORM.id == slot_id, PlanningSlotORM.district_id == district_id
+            )
+        )
+        return _to_domain(PlanningSlot, row) if row else None
+
     async def lock_slot(self, slot_id, district_id):
-        return await self.session.scalar(
+        row = await self.session.scalar(
             select(PlanningSlotORM)
             .where(PlanningSlotORM.id == slot_id, PlanningSlotORM.district_id == district_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
+        return _to_domain(PlanningSlot, row) if row else None
 
     async def lock_category(self, category_id, district_id):
-        return await self.session.scalar(
+        row = await self.session.scalar(
             select(EventDutyCategoryORM)
             .where(
                 EventDutyCategoryORM.id == category_id,
                 EventDutyCategoryORM.district_id == district_id,
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return _to_domain(EventDutyCategory, row) if row else None
+
+    async def save_category(self, category):
+        row = await self.session.get(EventDutyCategoryORM, category.id)
+        values = {field.name: getattr(category, field.name) for field in fields(category)}
+        values["event_categories"] = list(category.event_categories)
+        if row is None:
+            row = EventDutyCategoryORM(**values)
+            self.session.add(row)
+        else:
+            for key, value in values.items():
+                setattr(row, key, value)
+        await self.session.flush()
+        return _to_domain(EventDutyCategory, row)
+
+    async def save_configuration(self, configuration):
+        row = await self.session.scalar(
+            select(EventTypeDutyConfigurationORM).where(
+                EventTypeDutyConfigurationORM.duty_category_id == configuration.duty_category_id,
+                EventTypeDutyConfigurationORM.congregation_id == configuration.congregation_id,
+            )
+        )
+        values = {field.name: getattr(configuration, field.name) for field in fields(configuration)}
+        values["event_categories"] = list(configuration.event_categories)
+        if row is None:
+            row = EventTypeDutyConfigurationORM(**values)
+            self.session.add(row)
+        else:
+            values.pop("id")
+            for key, value in values.items():
+                setattr(row, key, value)
+        await self.session.flush()
+        return _to_domain(EventTypeDutyConfiguration, row)
+
+    async def delete_configuration(self, district_id, congregation_id, category_id):
+        await self.session.execute(
+            delete(EventTypeDutyConfigurationORM).where(
+                EventTypeDutyConfigurationORM.district_id == district_id,
+                EventTypeDutyConfigurationORM.congregation_id == congregation_id,
+                EventTypeDutyConfigurationORM.duty_category_id == category_id,
+            )
         )
 
+    async def get_assignment(self, assignment_id):
+        row = await self.session.get(EventDutyAssignmentORM, assignment_id)
+        return _to_domain(EventDutyAssignment, row) if row else None
+
+    async def lock_assignment(self, assignment_id):
+        row = await self.session.scalar(
+            select(EventDutyAssignmentORM)
+            .where(EventDutyAssignmentORM.id == assignment_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return _to_domain(EventDutyAssignment, row) if row else None
+
     async def eligible_users(self, district_id, congregation_id):
-        scope = (MembershipORM.scope_type == "DISTRICT") & (MembershipORM.scope_id == district_id)
-        if congregation_id:
-            scope = scope | (
-                (MembershipORM.scope_type == "CONGREGATION")
-                & (MembershipORM.scope_id == congregation_id)
-            )
-        rows = (
-            await self.session.scalars(
-                select(UserORM)
-                .join(MembershipORM, MembershipORM.user_sub == UserORM.sub)
-                .where(scope)
-                .distinct()
-                .order_by(UserORM.sub)
-            )
-        ).all()
-        return [{"sub": u.sub, "display_name": u.name or u.username} for u in rows]
+        rows = await self.session.execute(
+            text(
+                "SELECT sub, display_name FROM eligible_duty_users(:district_id, :congregation_id)"
+            ),
+            {"district_id": district_id, "congregation_id": congregation_id},
+        )
+        return [dict(row) for row in rows.mappings().all()]
 
     async def save_assignment(self, assignment):
         row = await self.session.get(EventDutyAssignmentORM, assignment.id)
@@ -145,28 +201,59 @@ class SqlEventDutiesRepository(EventDutiesRepository):
             "normalized_name": normalize_name(name),
             "hidden": False,
         }
+        statement = insert(DutyNameSuggestionORM).values(**values)
+        conflict_columns = [
+            "district_id",
+            "congregation_id",
+            "duty_category_id",
+            "normalized_name",
+        ]
         statement = (
-            insert(DutyNameSuggestionORM)
-            .values(**values)
-            .on_conflict_do_update(
-                index_elements=[
-                    "district_id",
-                    "congregation_id",
-                    "duty_category_id",
-                    "normalized_name",
-                ],
-                set_={"hidden": False}
-                if activate
-                else {"normalized_name": values["normalized_name"]},
+            statement.on_conflict_do_update(
+                index_elements=conflict_columns,
+                set_={"hidden": False, "display_name": values["display_name"]},
             )
-            .returning(DutyNameSuggestionORM)
-        )
+            if activate
+            else statement.on_conflict_do_nothing(index_elements=conflict_columns)
+        ).returning(DutyNameSuggestionORM)
         row = await self.session.scalar(statement)
-        return domain(DutyNameSuggestion, row)
+        if row is None:
+            row = await self.session.scalar(
+                select(DutyNameSuggestionORM).where(
+                    DutyNameSuggestionORM.district_id == district_id,
+                    DutyNameSuggestionORM.congregation_id == congregation_id,
+                    DutyNameSuggestionORM.duty_category_id == category_id,
+                    DutyNameSuggestionORM.normalized_name == values["normalized_name"],
+                )
+            )
+        return _to_domain(DutyNameSuggestion, row)
 
     async def get_suggestion(self, suggestion_id):
         row = await self.session.get(DutyNameSuggestionORM, suggestion_id)
-        return domain(DutyNameSuggestion, row) if row else None
+        return _to_domain(DutyNameSuggestion, row) if row else None
+
+    async def list_suggestions(self, district_id, congregation_id, category_id):
+        rows = (
+            await self.session.scalars(
+                select(DutyNameSuggestionORM)
+                .where(
+                    DutyNameSuggestionORM.district_id == district_id,
+                    DutyNameSuggestionORM.congregation_id == congregation_id,
+                    DutyNameSuggestionORM.duty_category_id == category_id,
+                )
+                .order_by(DutyNameSuggestionORM.normalized_name)
+            )
+        ).all()
+        return [_to_domain(DutyNameSuggestion, row) for row in rows]
+
+    async def save_suggestion(self, suggestion):
+        row = await self.session.get(DutyNameSuggestionORM, suggestion.id)
+        if row is None:
+            raise ValueError("Suggestion not found")
+        for field in fields(suggestion):
+            setattr(row, field.name, getattr(suggestion, field.name))
+        await self.session.flush()
+        return _to_domain(DutyNameSuggestion, row)
 
     async def delete_assignment(self, assignment_id):
         row = await self.session.get(EventDutyAssignmentORM, assignment_id)

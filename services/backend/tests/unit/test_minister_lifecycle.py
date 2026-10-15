@@ -111,6 +111,33 @@ async def test_planner_cannot_change_lifecycle():
 
 
 @pytest.mark.asyncio
+async def test_planner_may_submit_unchanged_lifecycle_fields():
+    district = uuid.uuid4()
+    auth = _auth_context(is_superadmin=False, district_id=district)
+    auth.memberships[0].role = __import__("app.domain.models.role", fromlist=["Role"]).Role.PLANNER
+    leader = Leader.create("Minister", district)
+    repo = AsyncMock(get_for_update=AsyncMock(return_value=leader), save=AsyncMock())
+
+    result = await leader_router.update_leader(
+        district,
+        leader.id,
+        LeaderUpdate(
+            name="Neuer Name",
+            is_active=leader.is_active,
+            hidden_from_lists=leader.hidden_from_lists,
+            service_end_date=leader.service_end_date,
+        ),
+        auth,
+        AsyncMock(),
+        leaders_repo=repo,
+        if_match=leader_router._leader_revision(leader),
+    )
+
+    assert result.name == "Neuer Name"
+    repo.save.assert_awaited_once_with(leader)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "name,active,hidden,end",
     [

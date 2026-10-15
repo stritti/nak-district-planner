@@ -3,14 +3,17 @@
 
 """Scoped organisational duty administration and planner assignment APIs."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException
-from sqlalchemy import delete, select
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 
-from app.adapters.api.deps import CurrentUserWithMemberships, DbSession
+from app.adapters.api.deps import (
+    CurrentUserWithMemberships,
+    DbSession,
+    get_event_duties_repository,
+)
 from app.adapters.api.schemas.event_duty import (
     AssignmentWrite,
     CategoryCreate,
@@ -21,22 +24,15 @@ from app.adapters.api.schemas.event_duty import (
 )
 from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
-from app.adapters.db.orm_models.event_duty import (
-    DutyNameSuggestionORM,
-    EventDutyAssignmentORM,
-    EventDutyCategoryORM,
-    EventTypeDutyConfigurationORM,
+from app.application.event_duties import (
+    DutyConflictError,
+    DutyNotFoundError,
+    EventDutiesService,
 )
-from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
-from app.adapters.db.repositories.event_duties import SqlEventDutiesRepository, domain
-from app.application.event_duties import DutyConflictError, DutyNotFoundError, EventDutiesService
-from app.domain.models.event_duty import (
-    DutyNameSuggestion,
-    EventDutyCategory,
-    EventTypeDutyConfiguration,
-    effective_categories,
-)
+from app.domain.models.event_duty import EventDutyCategory, EventTypeDutyConfiguration
+from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
+from app.domain.ports.event_duties import EventDutiesRepository
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/duties", tags=["event-duties"])
 
@@ -52,35 +48,17 @@ async def scope(db, auth, district_id, congregation_id, role):
     guard(auth, district_id, congregation_id, role)
 
 
-async def slot_for(db, auth, district_id, slot_id, role):
-    slot = await db.scalar(
-        select(PlanningSlotORM).where(
-            PlanningSlotORM.id == slot_id, PlanningSlotORM.district_id == district_id
-        )
-    )
+async def slot_for(repository, auth, district_id, slot_id, role):
+    slot = await repository.get_slot(slot_id, district_id)
     if not slot:
         raise HTTPException(404, "Reference not found")
     guard(auth, district_id, slot.congregation_id, role)
     return slot
 
 
-async def run_assignment(
-    db, auth, district_id, slot_id, body, replacing=None, revalidate=False
-):
+async def assignment_result(operation):
     try:
-        return asdict(
-            await EventDutiesService(SqlEventDutiesRepository(db)).assign(
-                district_id,
-                slot_id,
-                category_id=body.duty_category_id,
-                **body.model_dump(exclude={"duty_category_id"}),
-                replacing=replacing,
-                revalidate=revalidate,
-                authorize_slot=lambda slot: guard(
-                    auth, district_id, slot.congregation_id, Role.PLANNER
-                ),
-            )
-        )
+        return asdict(await operation)
     except DutyNotFoundError as exc:
         raise HTTPException(404, "Reference not found") from exc
     except DutyConflictError as exc:
@@ -91,21 +69,38 @@ async def run_assignment(
         raise HTTPException(422, str(exc)) from exc
 
 
+def planner_congregation_ids(auth, district_id):
+    return frozenset(
+        membership.scope_id
+        for membership in auth.memberships
+        if membership.scope_type == ScopeType.CONGREGATION
+        and has_role_in_district(auth, Role.PLANNER, district_id, {membership.scope_id})
+    )
+
+
 @router.get("/categories")
 async def categories(
     district_id: UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
     congregation_id: UUID | None = None,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
     await scope(db, auth, district_id, congregation_id, Role.VIEWER)
-    cats, overrides = await SqlEventDutiesRepository(db).catalog(district_id, congregation_id)
-    return {"categories": [asdict(x) for x in cats], "overrides": [asdict(x) for x in overrides]}
+    category_rows, overrides = await repository.catalog(district_id, congregation_id)
+    return {
+        "categories": [asdict(category) for category in category_rows],
+        "overrides": [asdict(override) for override in overrides],
+    }
 
 
 @router.post("/categories", status_code=201)
 async def create_category(
-    district_id: UUID, body: CategoryCreate, auth: CurrentUserWithMemberships, db: DbSession
+    district_id: UUID,
+    body: CategoryCreate,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
     await scope(
         db,
@@ -114,10 +109,20 @@ async def create_category(
         body.congregation_id,
         Role.CONGREGATION_ADMIN if body.congregation_id else Role.DISTRICT_ADMIN,
     )
-    row = EventDutyCategoryORM(id=uuid4(), district_id=district_id, **body.model_dump())
-    db.add(row)
-    await db.flush()
-    return asdict(domain(EventDutyCategory, row))
+    category = EventDutyCategory(
+        id=uuid4(),
+        district_id=district_id,
+        congregation_id=body.congregation_id,
+        code=body.code,
+        label=body.label,
+        event_categories=tuple(body.event_categories),
+        enabled=body.enabled,
+        capacity=body.capacity,
+    )
+    try:
+        return asdict(await repository.save_category(category))
+    except IntegrityError as exc:
+        raise HTTPException(409, "Duty category code already exists in this scope") from exc
 
 
 @router.patch("/categories/{category_id}")
@@ -127,49 +132,46 @@ async def edit_category(
     body: CategoryUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
-    row = await SqlEventDutiesRepository(db).lock_category(category_id, district_id)
-    if not row:
+    category = await repository.lock_category(category_id, district_id)
+    if not category:
         raise HTTPException(404, "Reference not found")
     await scope(
         db,
         auth,
         district_id,
-        row.congregation_id,
-        Role.CONGREGATION_ADMIN if row.congregation_id else Role.DISTRICT_ADMIN,
+        category.congregation_id,
+        Role.CONGREGATION_ADMIN if category.congregation_id else Role.DISTRICT_ADMIN,
     )
-    for key, value in body.model_dump(exclude_unset=True).items():
-        if value is None:
-            raise HTTPException(422, "Null is not permitted")
-        setattr(row, key, value)
-    await db.flush()
-    return asdict(domain(EventDutyCategory, row))
+    changes = body.model_dump(exclude_unset=True)
+    if "event_categories" in changes:
+        changes["event_categories"] = tuple(changes["event_categories"])
+    return asdict(await repository.save_category(replace(category, **changes)))
 
 
 @router.put("/configuration")
 async def configure(
-    district_id: UUID, body: ConfigurationWrite, auth: CurrentUserWithMemberships, db: DbSession
+    district_id: UUID,
+    body: ConfigurationWrite,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
     await scope(db, auth, district_id, body.congregation_id, Role.CONGREGATION_ADMIN)
-    category = await SqlEventDutiesRepository(db).lock_category(body.duty_category_id, district_id)
+    category = await repository.lock_category(body.duty_category_id, district_id)
     if not category or category.congregation_id is not None:
         raise HTTPException(404, "Reference not found")
-    row = await db.scalar(
-        select(EventTypeDutyConfigurationORM).where(
-            EventTypeDutyConfigurationORM.duty_category_id == body.duty_category_id,
-            EventTypeDutyConfigurationORM.congregation_id == body.congregation_id,
-        )
+    configuration = EventTypeDutyConfiguration(
+        id=uuid4(),
+        district_id=district_id,
+        congregation_id=body.congregation_id,
+        duty_category_id=body.duty_category_id,
+        event_categories=tuple(body.event_categories),
+        enabled=body.enabled,
+        capacity=body.capacity,
     )
-    if not row:
-        row = EventTypeDutyConfigurationORM(
-            id=uuid4(), district_id=district_id, **body.model_dump()
-        )
-        db.add(row)
-    else:
-        for key, value in body.model_dump().items():
-            setattr(row, key, value)
-    await db.flush()
-    return asdict(domain(EventTypeDutyConfiguration, row))
+    return asdict(await repository.save_configuration(configuration))
 
 
 @router.delete("/configuration/{category_id}", status_code=204)
@@ -179,16 +181,12 @@ async def clear_configuration(
     congregation_id: UUID,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
     await scope(db, auth, district_id, congregation_id, Role.CONGREGATION_ADMIN)
-    await SqlEventDutiesRepository(db).lock_category(category_id, district_id)
-    await db.execute(
-        delete(EventTypeDutyConfigurationORM).where(
-            EventTypeDutyConfigurationORM.district_id == district_id,
-            EventTypeDutyConfigurationORM.congregation_id == congregation_id,
-            EventTypeDutyConfigurationORM.duty_category_id == category_id,
-        )
-    )
+    if not await repository.lock_category(category_id, district_id):
+        raise HTTPException(404, "Reference not found")
+    await repository.delete_configuration(district_id, congregation_id, category_id)
 
 
 @router.get("/slots/{planning_slot_id}")
@@ -198,36 +196,28 @@ async def assignments(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     include_quarantined: bool = False,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
-    slot = await slot_for(db, auth, district_id, planning_slot_id, Role.VIEWER)
-    repo = SqlEventDutiesRepository(db)
-    cats, overrides = await repo.catalog(district_id, slot.congregation_id)
-    effective = effective_categories(cats, overrides, slot.category, slot.congregation_id)
-    all_rows = await repo.list_assignments([planning_slot_id])
-    rows = []
-    for row in all_rows:
-        visible = row.visible_in(district_id, slot.congregation_id)
-        if not visible:
-            if not include_quarantined:
-                continue
-            try:
-                guard(auth, district_id, slot.congregation_id, Role.PLANNER)
-                guard(auth, row.district_id, row.congregation_id, Role.PLANNER)
-            except HTTPException as exc:
-                if exc.status_code == 403:
-                    continue
-                raise
-        category = next((c for c in effective if c.id == row.duty_category_id), None)
-        count = sum(x.duty_category_id == row.duty_category_id for x in all_rows)
-        rows.append(
+    slot = await slot_for(repository, auth, district_id, planning_slot_id, Role.VIEWER)
+    view = await EventDutiesService(repository).list_slot_duties(
+        district_id,
+        slot,
+        include_quarantined=include_quarantined,
+        district_wide_planner=has_role_in_district(auth, Role.PLANNER, district_id),
+        planner_congregation_ids=planner_congregation_ids(auth, district_id),
+    )
+    return {
+        "categories": [asdict(category) for category in view.categories],
+        "assignments": [
             dict(
-                asdict(row),
-                needs_review=not visible or category is None,
-                over_capacity=bool(category and count > category.capacity),
-                quarantined=not visible,
+                asdict(item.assignment),
+                needs_review=item.needs_review,
+                over_capacity=item.over_capacity,
+                quarantined=item.quarantined,
             )
-        )
-    return {"categories": [asdict(x) for x in effective], "assignments": rows}
+            for item in view.assignments
+        ],
+    }
 
 
 @router.post("/slots/{planning_slot_id}", status_code=201)
@@ -237,20 +227,26 @@ async def assign(
     body: AssignmentWrite,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
-    return await run_assignment(db, auth, district_id, planning_slot_id, body)
-
-
-async def assignment_for(db, auth, district_id, assignment_id):
-    row = await db.get(EventDutyAssignmentORM, assignment_id)
-    if not row or row.district_id != district_id:
-        raise HTTPException(404, "Reference not found")
-    guard(auth, row.district_id, row.congregation_id, Role.PLANNER)
-    return next(
-        x
-        for x in await SqlEventDutiesRepository(db).list_assignments([row.planning_slot_id])
-        if x.id == assignment_id
+    slot = await slot_for(repository, auth, district_id, planning_slot_id, Role.PLANNER)
+    return await assignment_result(
+        EventDutiesService(repository).assign(
+            district_id,
+            planning_slot_id,
+            body.duty_category_id,
+            **body.model_dump(exclude={"duty_category_id"}),
+            expected_congregation_id=slot.congregation_id,
+        )
     )
+
+
+async def assignment_for(repository, auth, district_id, assignment_id):
+    assignment = await repository.get_assignment(assignment_id)
+    if not assignment or assignment.district_id != district_id:
+        raise HTTPException(404, "Reference not found")
+    guard(auth, assignment.district_id, assignment.congregation_id, Role.PLANNER)
+    return assignment
 
 
 @router.patch("/assignments/{assignment_id}")
@@ -260,44 +256,70 @@ async def replace_assignment(
     body: AssignmentWrite,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
-    row = await assignment_for(db, auth, district_id, assignment_id)
-    return await run_assignment(
-        db, auth, district_id, row.planning_slot_id, body, replacing=row
+    assignment = await assignment_for(repository, auth, district_id, assignment_id)
+    slot = await slot_for(repository, auth, district_id, assignment.planning_slot_id, Role.PLANNER)
+    return await assignment_result(
+        EventDutiesService(repository).replace(
+            district_id,
+            assignment.planning_slot_id,
+            body.duty_category_id,
+            assignment,
+            **body.model_dump(exclude={"duty_category_id"}),
+            expected_congregation_id=slot.congregation_id,
+        )
     )
 
 
 @router.delete("/assignments/{assignment_id}", status_code=204)
 async def remove_assignment(
-    district_id: UUID, assignment_id: UUID, auth: CurrentUserWithMemberships, db: DbSession
+    district_id: UUID,
+    assignment_id: UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
-    row = await assignment_for(db, auth, district_id, assignment_id)
-    repo = SqlEventDutiesRepository(db)
-    slot = await repo.lock_slot(row.planning_slot_id, district_id)
+    assignment = await assignment_for(repository, auth, district_id, assignment_id)
+    slot = await repository.lock_slot(assignment.planning_slot_id, district_id)
     if not slot:
         raise HTTPException(404, "Reference not found")
     guard(auth, district_id, slot.congregation_id, Role.PLANNER)
-    await repo.delete_assignment(assignment_id)
+    locked_assignment = await repository.lock_assignment(assignment_id)
+    if (
+        not locked_assignment
+        or locked_assignment.district_id != district_id
+        or locked_assignment.planning_slot_id != assignment.planning_slot_id
+    ):
+        raise HTTPException(404, "Reference not found")
+    if locked_assignment != assignment:
+        raise HTTPException(409, "Duty assignment changed concurrently")
+    guard(
+        auth,
+        locked_assignment.district_id,
+        locked_assignment.congregation_id,
+        Role.PLANNER,
+    )
+    await repository.delete_assignment(assignment_id)
 
 
 @router.post("/assignments/{assignment_id}/revalidate")
 async def revalidate_assignment(
-    district_id: UUID, assignment_id: UUID, auth: CurrentUserWithMemberships, db: DbSession
+    district_id: UUID,
+    assignment_id: UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
-    row = await assignment_for(db, auth, district_id, assignment_id)
-    body = AssignmentWrite(
-        duty_category_id=row.duty_category_id,
-        name=row.display_name if not row.linked_user_sub else None,
-        linked_user_sub=row.linked_user_sub,
-    )
-    return await run_assignment(
-        db,
-        auth,
-        district_id,
-        row.planning_slot_id,
-        body,
-        replacing=row,
-        revalidate=True,
+    assignment = await assignment_for(repository, auth, district_id, assignment_id)
+    slot = await slot_for(repository, auth, district_id, assignment.planning_slot_id, Role.PLANNER)
+    return await assignment_result(
+        EventDutiesService(repository).revalidate(
+            district_id,
+            assignment.planning_slot_id,
+            assignment,
+            expected_congregation_id=slot.congregation_id,
+        )
     )
 
 
@@ -309,35 +331,33 @@ async def suggestions(
     db: DbSession,
     congregation_id: UUID | None = None,
     include_hidden: bool = False,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
     await scope(db, auth, district_id, congregation_id, Role.PLANNER)
-    rows = (
-        await db.scalars(
-            select(DutyNameSuggestionORM)
-            .where(
-                DutyNameSuggestionORM.district_id == district_id,
-                DutyNameSuggestionORM.congregation_id == congregation_id,
-                DutyNameSuggestionORM.duty_category_id == duty_category_id,
-            )
-            .order_by(DutyNameSuggestionORM.normalized_name)
-        )
-    ).all()
-    return [asdict(domain(DutyNameSuggestion, x)) for x in rows if include_hidden or not x.hidden]
+    rows = await repository.list_suggestions(district_id, congregation_id, duty_category_id)
+    return [asdict(row) for row in rows if include_hidden or not row.hidden]
 
 
 @router.post("/suggestions", status_code=201)
 async def remember(
-    district_id: UUID, body: SuggestionWrite, auth: CurrentUserWithMemberships, db: DbSession
+    district_id: UUID,
+    body: SuggestionWrite,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
     await scope(db, auth, district_id, body.congregation_id, Role.PLANNER)
-    repo = SqlEventDutiesRepository(db)
-    cats, _ = await repo.catalog(district_id, body.congregation_id)
-    if not any(c.id == body.duty_category_id for c in cats):
+    category_rows, _ = await repository.catalog(district_id, body.congregation_id)
+    if not any(category.id == body.duty_category_id for category in category_rows):
         raise HTTPException(404, "Reference not found")
     try:
         return asdict(
-            await repo.remember(
-                district_id, body.congregation_id, body.duty_category_id, body.name, activate=True
+            await repository.remember(
+                district_id,
+                body.congregation_id,
+                body.duty_category_id,
+                body.name,
+                activate=True,
             )
         )
     except ValueError as exc:
@@ -351,14 +371,13 @@ async def suppress(
     body: SuggestionUpdate,
     auth: CurrentUserWithMemberships,
     db: DbSession,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
-    row = await db.get(DutyNameSuggestionORM, suggestion_id)
-    if not row or row.district_id != district_id:
+    suggestion = await repository.get_suggestion(suggestion_id)
+    if not suggestion or suggestion.district_id != district_id:
         raise HTTPException(404, "Reference not found")
-    await scope(db, auth, district_id, row.congregation_id, Role.PLANNER)
-    row.hidden = body.hidden
-    await db.flush()
-    return asdict(domain(DutyNameSuggestion, row))
+    await scope(db, auth, district_id, suggestion.congregation_id, Role.PLANNER)
+    return asdict(await repository.save_suggestion(replace(suggestion, hidden=body.hidden)))
 
 
 @router.get("/eligible-users")
@@ -367,6 +386,7 @@ async def eligible_users(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     congregation_id: UUID | None = None,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
 ):
     await scope(db, auth, district_id, congregation_id, Role.PLANNER)
-    return await SqlEventDutiesRepository(db).eligible_users(district_id, congregation_id)
+    return await repository.eligible_users(district_id, congregation_id)

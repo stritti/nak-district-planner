@@ -163,9 +163,35 @@ def distributed_slot_export_sql(alias: str = "planning_slots") -> str:
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
+def distributed_slot_membership_sql(alias: str = "planning_slots") -> str:
+    """Congregation members may read district slots distributed to their scope."""
+    return f"""
+(
+    {alias}.congregation_id IS NULL
+    AND EXISTS (
+        SELECT 1
+        FROM memberships m
+        JOIN congregations c ON c.id = m.scope_id
+        WHERE m.user_sub = current_setting('app.current_user_sub', true)
+          AND m.scope_type = 'CONGREGATION'
+          AND c.district_id = {alias}.district_id
+          AND (
+              'all' = ANY({alias}.applicability)
+              OR m.scope_id::text = ANY({alias}.applicability)
+          )
+    )
+)
+"""
+
+
+# nosec B608 — interpolated aliases are internal code constants, never user input
 def planning_slot_row_read_sql(alias: str = "planning_slots") -> str:
     """SELECT visibility of planning-slot rows (and rows derived from them)."""
-    return f"({planning_slot_read_sql(alias)} OR {distributed_slot_export_sql(alias)})"
+    return (
+        f"({planning_slot_read_sql(alias)} "
+        f"OR {distributed_slot_membership_sql(alias)} "
+        f"OR {distributed_slot_export_sql(alias)})"
+    )
 
 
 # nosec B608 — interpolated aliases are internal code constants, never user input
@@ -454,6 +480,7 @@ def invitation_overwrite_request_visibility_factory(
 
     Derives tenant access through invitation_id -> congregation_invitations relationship.
     """
+
     def _factory(alias: str) -> str:
         return f"""(/* # nosec B608 — interpolated aliases are internal code constants, never user input */
             {SUPERADMIN_SQL}
@@ -480,6 +507,7 @@ def invitation_overwrite_request_visibility_factory(
                   )
             )
         )"""
+
     return _factory
 
 

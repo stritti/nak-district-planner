@@ -152,14 +152,26 @@ async def update_leader(
 ) -> LeaderResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
     fields = body.model_fields_set
-    if fields & {"is_active", "hidden_from_lists", "service_end_date"}:
-        require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     repo = leaders_repo
     leader = await (repo.get_for_update(leader_id) if if_match is not None else repo.get(leader_id))
     if not leader or leader.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
+    lifecycle_changed = (
+        ("is_active" in fields and body.is_active is not None and body.is_active != leader.is_active)
+        or (
+            "hidden_from_lists" in fields
+            and body.hidden_from_lists is not None
+            and body.hidden_from_lists != leader.hidden_from_lists
+        )
+        or (
+            "service_end_date" in fields
+            and body.service_end_date != leader.service_end_date
+        )
+    )
+    if lifecycle_changed:
+        require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     if if_match != _leader_revision(leader):

@@ -154,6 +154,31 @@ describe('EventListView', () => {
     expect(wrapper.findComponent(EventDutiesPanel).props('canEdit')).toBe(true)
   })
 
+  it('refreshes the event revision after a duty mutation before saving the modal', async () => {
+    vi.mocked(eventsApi.getEvent).mockResolvedValue(event({ revision: '"revision-2"' }))
+    vi.mocked(eventsApi.updateEvent).mockResolvedValue(event({ revision: '"revision-3"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+
+    wrapper.findComponent(EventDutiesPanel).vm.$emit('mutated')
+    await flushPromises()
+    const saveButton = wrapper
+      .find('.modal-panel')
+      .findAll('button')
+      .find(button => button.text() === 'Speichern')!
+    await saveButton.trigger('click')
+    await flushPromises()
+
+    expect(eventsApi.getEvent).toHaveBeenCalledWith('e1')
+    expect(eventsApi.updateEvent).toHaveBeenCalledWith(
+      'e1',
+      expect.any(Object),
+      '"revision-2"',
+    )
+  })
+
   it('restores controls and the matching API query after remounting with fresh stores', async () => {
     const first = setup()
     await flushPromises()

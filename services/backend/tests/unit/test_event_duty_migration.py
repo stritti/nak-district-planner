@@ -29,6 +29,12 @@ def test_upgrade_is_additive_and_keeps_leader_active_state():
     assert "ENABLE ROW LEVEL SECURITY" in sql
     assert "DROP POLICY IF EXISTS service_assignments_tenant_isolation_policy" in sql
     assert "duty_export_slot_allowed(ps.id)" in sql
+    assert "CREATE FUNCTION eligible_duty_users" in sql
+    assert "candidate.scope_id=p_congregation AND EXISTS" in sql
+    assert "m.scope_id::text = ANY(planning_slots.applicability)" in sql
+    assert "linked_user_sub=current_setting('app.current_user_sub',true)" in sql
+    assert "m.scope_id::text = ANY(ps.applicability)" in sql
+    assert "memberships_duty_read" not in sql
     assert "AS RESTRICTIVE" not in sql
     assert "service_assignments" not in "\n".join(
         str(call) for call in op.drop_table.call_args_list

@@ -653,6 +653,7 @@
           :slot-id="editTarget.id"
           :congregation-id="editTarget.congregation_id"
           :can-edit="canManageEventDuties(editTarget)"
+          @mutated="refreshEditTargetAfterDutyMutation"
         />
         <p v-if="editError" class="text-sm text-red-600 dark:text-red-400 mt-3">{{ editError }}</p>
         <div class="flex justify-end gap-3 mt-6">
@@ -1291,6 +1292,21 @@ async function openEdit(event: EventResponse) {
     : { id: null, text: '' }
   void leadersStore.fetchLeaders(event.district_id)
   listCongregations(event.district_id).then(cs => { editCongregations.value = cs }).catch(() => {})
+}
+
+async function refreshEditTargetAfterDutyMutation() {
+  const target = editTarget.value
+  if (!target) return
+  try {
+    const refreshed = await getEvent(target.id)
+    if (editTarget.value?.id === target.id) Object.assign(editTarget.value, refreshed)
+  } catch (cause) {
+    if (editTarget.value?.id === target.id) {
+      editTarget.value.revision = ''
+      editError.value = 'Dienst gespeichert, Terminstand konnte nicht aktualisiert werden.'
+    }
+    toast.error('Terminstand konnte nicht aktualisiert werden', cause)
+  }
 }
 
 async function removeEditTarget() {
