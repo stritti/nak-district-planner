@@ -20,6 +20,7 @@ from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.district_reminder_config import (
     SqlDistrictReminderConfigRepository,
 )
+from app.adapters.db.repositories.event_duties import SqlEventDutiesRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.event_mail_hook import SqlEventMailHookRepository
 from app.adapters.db.repositories.export_token import SqlExportTokenRepository
@@ -259,6 +260,7 @@ get_district_reminder_config_repository = make_repository_dependency(
 )
 get_district_repository = make_repository_dependency(SqlDistrictRepository)
 get_event_instance_repository = make_repository_dependency(SqlEventInstanceRepository)
+get_event_duties_repository = make_repository_dependency(SqlEventDutiesRepository)
 get_event_mail_hook_repository = make_repository_dependency(SqlEventMailHookRepository)
 get_export_token_repository = make_repository_dependency(SqlExportTokenRepository)
 get_invitation_overwrite_request_repository = make_repository_dependency(

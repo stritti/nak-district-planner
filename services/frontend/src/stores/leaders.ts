@@ -29,8 +29,9 @@ export const useLeadersStore = defineStore('leaders', () => {
     }
   }
 
-  function activeLeaders(): LeaderResponse[] {
-    return leaders.value.filter((l) => l.is_active)
+  function activeLeaders(localDate?: string): LeaderResponse[] {
+    return leaders.value.filter((l) => l.is_active && !l.hidden_from_lists &&
+      (!localDate || !l.service_end_date || localDate <= l.service_end_date))
   }
 
   const choices = computed(() => activeLeaders().map((leader) => ({

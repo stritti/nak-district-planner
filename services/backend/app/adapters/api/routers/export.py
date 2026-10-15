@@ -18,11 +18,16 @@ from sqlalchemy import select
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
+    RawCurrentUserWithMemberships,
     get_event_instance_repository,
     get_export_token_repository,
     get_leader_repository,
     get_planning_slot_repository,
     get_service_assignment_repository,
+)
+from app.adapters.api.routers.personal_calendar import (
+    load_personal_events,
+    personal_subject_context,
 )
 from app.adapters.api.schemas.export_token import ExportTokenCreate, ExportTokenResponse
 from app.adapters.api.tenant_references import (
@@ -63,7 +68,10 @@ async def create_export_token(
     session: DbSession,
     repo: SqlExportTokenRepository = Depends(get_export_token_repository),
 ) -> ExportTokenResponse:
-    require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    if body.subject_sub is None or body.subject_sub != auth.user_sub:
+        require_role_in_district(auth, Role.DISTRICT_ADMIN, body.district_id)
+    if body.subject_sub is not None:
+        await personal_subject_context(session, body.subject_sub, body.district_id)
     await ensure_congregation_in_district(session, body.district_id, body.congregation_id)
     await ensure_leader_in_district(session, body.district_id, body.leader_id)
 
@@ -73,6 +81,7 @@ async def create_export_token(
         district_id=body.district_id,
         congregation_id=body.congregation_id,
         leader_id=body.leader_id,
+        subject_sub=body.subject_sub,
     )
     await repo.save(token)
     return _token_response(token)
@@ -87,6 +96,7 @@ async def list_export_tokens(
     session: DbSession,
     district_id: uuid.UUID | None = None,
     repo: SqlExportTokenRepository = Depends(get_export_token_repository),
+    subject_sub: str | None = None,
 ) -> list[ExportTokenResponse]:
     if district_id is None and not auth.user.is_superadmin:
         raise HTTPException(
@@ -95,9 +105,19 @@ async def list_export_tokens(
         )
 
     if district_id is not None:
-        require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+        try:
+            require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+        except HTTPException as error:
+            if error.status_code != 403:
+                raise
+            if subject_sub is not None and subject_sub != auth.user_sub:
+                raise HTTPException(403, "Zugriff verweigert")
+            subject_sub = auth.user_sub
+            await personal_subject_context(session, subject_sub, district_id)
 
     tokens = await repo.list_by_district(district_id) if district_id else await repo.list_all()
+    if subject_sub is not None:
+        tokens = [t for t in tokens if t.subject_sub == subject_sub]
     return [_token_response(t) for t in tokens]
 
 
@@ -106,7 +126,7 @@ async def list_export_tokens(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_export_token(
-    auth: CurrentUserWithMemberships,
+    auth: RawCurrentUserWithMemberships,
     token_id: uuid.UUID,
     session: DbSession,
     repo: SqlExportTokenRepository = Depends(get_export_token_repository),
@@ -115,7 +135,8 @@ async def delete_export_token(
     if token is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht gefunden")
 
-    require_role_in_district(auth, Role.DISTRICT_ADMIN, token.district_id)
+    if token.subject_sub != auth.user_sub:
+        require_role_in_district(auth, Role.DISTRICT_ADMIN, token.district_id)
 
     await repo.delete(token_id)
 
@@ -130,6 +151,7 @@ def _token_response(token: ExportToken) -> ExportTokenResponse:
         congregation_id=token.congregation_id,
         leader_id=token.leader_id,
         created_at=token.created_at,
+        subject_sub=token.subject_sub,
     )
 
 
@@ -160,6 +182,11 @@ def _sequence(last_modified: datetime) -> int:
     return int((last_modified - _SEQUENCE_EPOCH).total_seconds())
 
 
+def _confirmed_personal_events(events):
+    """Filter on approval state without conflating it with cancellation status."""
+    return [event for event in events if event.approval_status == EventApprovalStatus.CONFIRMED]
+
+
 @router.get("/export/{token_str}/calendar.ics", include_in_schema=False)
 async def export_calendar_ics(
     token_str: str,
@@ -180,6 +207,18 @@ async def export_calendar_ics(
     export_token = await token_repo.get_by_token(token_str)
     if not export_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
+
+    if export_token.subject_sub is not None:
+        events = await load_personal_events(
+            session,
+            export_token.subject_sub,
+            export_token.district_id,
+            datetime.now(UTC).date() - timedelta(days=365),
+            datetime.now(UTC).date() + timedelta(days=730),
+        )
+        if approval_status == "confirmed_only":
+            events = _confirmed_personal_events(events)
+        return _personal_ics_response(export_token.label, events)
 
     # RLS public export policies use app.current_export_token for scoped reads.
 
@@ -231,7 +270,9 @@ async def export_calendar_ics(
 
     # Load assignments in one batch query (keyed by planning_slot_id via event_id)
     # An invitation copy shows the leader of the host's service.
-    host_slot_ids = {s.invitation_source_event_id for s in all_slots if s.invitation_source_event_id}
+    host_slot_ids = {
+        s.invitation_source_event_id for s in all_slots if s.invitation_source_event_id
+    }
     assignments = await sa_repo.list_by_planning_slots(list({*slot_ids, *host_slot_ids}))
 
     # Personal leader feed: only this leader's assignments and their slots
@@ -247,6 +288,24 @@ async def export_calendar_ics(
         leaders_by_id = {ldr.id: ldr for ldr in leaders}
     else:
         leaders_by_id = {}
+
+    # Legacy leader tokens keep their established slot selection. A verified
+    # link may enrich those entries solely with that subject's current duties.
+    personal_duties = {}
+    linked_leader = leaders_by_id.get(export_token.leader_id)
+    if export_token.token_type == TokenType.INTERNAL and linked_leader and linked_leader.user_sub:
+        try:
+            personal_entries = await load_personal_events(
+                session, linked_leader.user_sub, export_token.district_id, from_date, to_date
+            )
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+        else:
+            personal_duties = {
+                entry.planning_slot_id: [label for label in entry.duties if label != "Dienstleiter"]
+                for entry in personal_entries
+            }
 
     # Build assignment_map: prefer non-empty leader_name; fall back to leader_id lookup
     assignment_map: dict[uuid.UUID, str | None] = {}
@@ -355,8 +414,36 @@ async def export_calendar_ics(
             name = leader if show_names else "[Name anonymisiert]"
             vevent.add("comment", f"Dienstleiter: {name}")
 
+        if labels := personal_duties.get(slot.id):
+            vevent.add("comment", "Aufgaben: " + ", ".join(labels))
+
         cal.add_component(vevent)
 
+    return Response(
+        content=cal.to_ical(),
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="calendar.ics"'},
+    )
+
+
+def _personal_ics_response(label, events):
+    cal = Calendar()
+    cal.add("prodid", "-//NAK Bezirksplaner//nak-bezirksplaner//DE")
+    cal.add("version", "2.0")
+    cal.add("x-wr-calname", label)
+    for event in events:
+        component = ICalEvent()
+        component.add("uid", event.uid)
+        component.add("summary", event.title)
+        component.add("dtstart", event.start_at)
+        component.add("dtend", event.end_at)
+        component.add("dtstamp", event.updated_at)
+        component.add("last-modified", event.updated_at)
+        component.add("sequence", _sequence(event.updated_at))
+        component.add("comment", "Aufgaben: " + ", ".join(event.duties))
+        if event.status in {"CANCELLED", "TENTATIVE"}:
+            component.add("status", event.status)
+        cal.add_component(component)
     return Response(
         content=cal.to_ical(),
         media_type="text/calendar; charset=utf-8",

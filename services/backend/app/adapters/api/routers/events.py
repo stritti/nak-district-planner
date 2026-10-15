@@ -55,6 +55,7 @@ from app.domain.models.event_instance import (
     EventVisibility,
     SyncState,
 )
+from app.domain.models.leader import assignment_needs_review
 from app.domain.models.planning_slot import (
     DeletedPlanningSlotError,
     EventApprovalStatus,
@@ -78,6 +79,7 @@ class EventResponsible(BaseModel):
     """Person in charge of an event; for a Gottesdienst this is the Dienstleiter."""
 
     assignment_id: uuid.UUID
+    needs_review: bool = False
     leader_id: uuid.UUID | None
     name: str
     status: AssignmentStatus
@@ -95,6 +97,7 @@ class EventResponse(BaseModel):
     congregation_id: uuid.UUID | None
     category: str | None
     is_service: bool
+    planning_date: date | None = None
     source: EventSource
     status: PlanningSlotStatus
     approval_status: EventApprovalStatus | None
@@ -219,6 +222,7 @@ def _slot_to_event(
         congregation_id=slot.congregation_id,
         category=slot.category,
         is_service=slot.category == SERVICE_CATEGORY,
+        planning_date=slot.planning_date,
         source=instance.source if instance else EventSource.INTERNAL,
         status=slot.status,
         approval_status=slot.approval_status,
@@ -250,6 +254,7 @@ async def _load_responsible(
     """Responsible person per slot id (first assignment wins, as in the matrix)."""
     assignments = await assignments_repo.list_by_planning_slots([s.id for s in slots])
     district_by_slot = {s.id: s.district_id for s in slots}
+    date_by_slot = {s.id: s.planning_date for s in slots}
     leader_ids = {a.leader_id for a in assignments if a.leader_id is not None}
     leaders = {lid: await leaders_repo.get(lid) for lid in leader_ids}
     result: dict[uuid.UUID, EventResponsible] = {}
@@ -266,7 +271,11 @@ async def _load_responsible(
         else:
             name = a.leader_name or ""
         result[slot_id] = EventResponsible(
-            assignment_id=a.id, leader_id=a.leader_id, name=name, status=a.status
+            assignment_id=a.id,
+            leader_id=a.leader_id,
+            name=name,
+            status=a.status,
+            needs_review=assignment_needs_review(leader, date_by_slot[slot_id]),
         )
     return result
 
@@ -369,7 +378,9 @@ async def create_event(
         if congregation is None or congregation.district_id != body.district_id:
             raise HTTPException(status_code=400, detail="Gemeinde gehört nicht zum Bezirk.")
         if body.applicability:
-            raise HTTPException(status_code=400, detail="Gemeindetermine dürfen nicht verteilt werden.")
+            raise HTTPException(
+                status_code=400, detail="Gemeindetermine dürfen nicht verteilt werden."
+            )
 
     slot = PlanningSlot.create(
         district_id=body.district_id,
@@ -424,7 +435,9 @@ async def delete_event(
         raise HTTPException(status_code=404, detail="Ereignis nicht gefunden")
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
     if slot.was_released:
-        raise HTTPException(status_code=409, detail="Freigegebene Ereignisse dürfen nur abgesagt werden.")
+        raise HTTPException(
+            status_code=409, detail="Freigegebene Ereignisse dürfen nur abgesagt werden."
+        )
     try:
         # Repository rechecks publication under a row lock; FK cascades remove
         # EventInstance and linked assignments in the same transaction.
@@ -773,7 +786,9 @@ async def resolve_event_deviation(
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
     instance = await instance_repo.get_by_planning_slot(event_id)
     if instance is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden"
+        )
     resolved = await DeviationService(slot_repo, instance_repo).resolve_deviation(instance.id)
     if not resolved:
         raise HTTPException(
@@ -782,7 +797,9 @@ async def resolve_event_deviation(
         )
     current = await instance_repo.get(instance.id)
     if current is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden"
+        )
     try:
         if current.calendar_integration_id is not None:
             await push_deviation_resolution(current, session)
@@ -821,7 +838,9 @@ async def resolve_event_conflict(
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
     instance = await instance_repo.get_by_planning_slot(event_id)
     if instance is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="EventInstance nicht gefunden"
+        )
     if instance.sync_state != SyncState.CONFLICT:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -897,8 +916,13 @@ async def bulk_update_approval_status(
         and (body.congregation_id is None or slot.congregation_id == body.congregation_id)
     ]
 
-    if body.approval_status == EventApprovalStatus.PLANNED and any(slot.was_released for slot in all_slots):
-        raise HTTPException(status_code=409, detail="Bereits freigegebene Ereignisse können nicht zurückgestuft werden.")
+    if body.approval_status == EventApprovalStatus.PLANNED and any(
+        slot.was_released for slot in all_slots
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Bereits freigegebene Ereignisse können nicht zurückgestuft werden.",
+        )
 
     now_dt = datetime.now(UTC)
     for slot in all_slots:

@@ -248,16 +248,24 @@
             </template>
             <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
           </p>
-          <InlineAssignmentCell
-                  v-if="canInlineAssignEvent(event)"
-                  layout="mobile"
-                  :event="event"
-                  :choices="inlineLeaderChoices"
-                  :coordinator="inlineCoordinator"
-                  :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
-                />
+          <template v-if="canInlineAssignEvent(event)">
+            <InlineAssignmentCell
+              layout="mobile"
+              :event="event"
+              :choices="inlineLeaderChoices"
+              :coordinator="inlineCoordinator"
+              :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
+            />
+            <span
+              v-if="event.responsible?.needs_review"
+              class="mt-1 text-xs text-amber-700 dark:text-amber-300"
+            >Prüfung erforderlich</span>
+          </template>
           <p v-else-if="event.responsible" class="mt-1 text-xs text-gray-600 dark:text-gray-400">
             {{ responsibleLabel(event) }}: {{ event.responsible.name }}
+            <span v-if="event.responsible.needs_review" class="ml-1 text-amber-700 dark:text-amber-300">
+              Prüfung erforderlich
+            </span>
           </p>
           <p v-if="event.invitation_source_congregation_id" class="mt-1 text-xs text-amber-700 dark:text-amber-300">
             Einladung
@@ -341,15 +349,26 @@
                 <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
               </td>
               <td class="table-td text-xs" data-testid="responsible-cell">
-                <InlineAssignmentCell
-                  v-if="canInlineAssignEvent(event)"
-                  layout="desktop"
-                  :event="event"
-                  :choices="inlineLeaderChoices"
-                  :coordinator="inlineCoordinator"
-                  :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
-                />
-                <span v-else-if="event.responsible">{{ event.responsible.name }}</span>
+                <template v-if="canInlineAssignEvent(event)">
+                  <InlineAssignmentCell
+                    layout="desktop"
+                    :event="event"
+                    :choices="inlineLeaderChoices"
+                    :coordinator="inlineCoordinator"
+                    :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
+                  />
+                  <span
+                    v-if="event.responsible?.needs_review"
+                    class="ml-1 text-amber-700 dark:text-amber-300"
+                  >Prüfung erforderlich</span>
+                </template>
+                <template v-else-if="event.responsible">
+                  <span>{{ event.responsible.name }}</span>
+                  <span
+                    v-if="event.responsible.needs_review"
+                    class="ml-1 text-amber-700 dark:text-amber-300"
+                  >Prüfung erforderlich</span>
+                </template>
                 <span v-else-if="event.is_service" class="text-red-600 dark:text-red-400">Lücke</span>
                 <span v-else class="text-gray-400 dark:text-gray-500">—</span>
               </td>
@@ -655,6 +674,13 @@
           </div>
         </div>
 
+        <EventDutiesPanel
+          :district-id="editTarget.district_id"
+          :slot-id="editTarget.id"
+          :congregation-id="editTarget.congregation_id"
+          :can-edit="canManageEventDuties(editTarget)"
+          @mutated="refreshEditTargetAfterDutyMutation"
+        />
         <p v-if="editError" class="text-sm text-red-600 dark:text-red-400 mt-3">{{ editError }}</p>
         <div class="flex justify-end gap-3 mt-6">
           <button
@@ -717,6 +743,7 @@ import {
 import { exportEventsToExcel } from '../composables/useExcelExport'
 import { useConfirm } from '../composables/useConfirm'
 import { errorMessage, useToast } from '../composables/useToast'
+import EventDutiesPanel from '../components/EventDutiesPanel.vue'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 import InlineEditableCell from '../components/InlineEditableCell.vue'
 import InlineAssignmentCell from '../components/InlineAssignmentCell.vue'
@@ -739,6 +766,16 @@ const confirm = useConfirm()
 
 const auth = useAuthStore()
 const canManageEvents = computed(() => auth.canPlanDistrict(districtsStore.selectedDistrictId))
+
+function canManageEventDuties(event: EventResponse): boolean {
+  if (auth.isSuperadmin) return true
+  return auth.memberships.some((membership) =>
+    ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(membership.role) && (
+      (membership.scope_type === 'DISTRICT' && membership.scope_id === event.district_id) ||
+      (membership.scope_type === 'CONGREGATION' && membership.scope_id === event.congregation_id)
+    ),
+  )
+}
 
 const inlineCoordinator = useInlineCellCoordinator()
 const saveAssignment = useInlineAssignmentSave()
@@ -1239,7 +1276,7 @@ const editForm = reactive({
 const editLeader = ref<AutocompleteValue>({ id: null, text: '' })
 
 const leaderOptions = computed((): AutocompleteOption[] =>
-  leadersStore.activeLeaders().map((l) => ({
+  leadersStore.activeLeaders(editTarget.value?.planning_date ?? undefined).map((l) => ({
     id: l.id,
     label: `${l.rank ? l.rank + ' ' : ''}${l.name}`,
     sublabel: l.congregation_id ? congregationName(l.congregation_id) : undefined,
@@ -1304,6 +1341,21 @@ async function openEdit(event: EventResponse) {
     : { id: null, text: '' }
   void leadersStore.fetchLeaders(event.district_id)
   listCongregations(event.district_id).then(cs => { editCongregations.value = cs }).catch(() => {})
+}
+
+async function refreshEditTargetAfterDutyMutation() {
+  const target = editTarget.value
+  if (!target) return
+  try {
+    const refreshed = await getEvent(target.id)
+    if (editTarget.value?.id === target.id) Object.assign(editTarget.value, refreshed)
+  } catch (cause) {
+    if (editTarget.value?.id === target.id) {
+      editTarget.value.revision = ''
+      editError.value = 'Dienst gespeichert, Terminstand konnte nicht aktualisiert werden.'
+    }
+    toast.error('Terminstand konnte nicht aktualisiert werden', cause)
+  }
 }
 
 async function removeEditTarget() {

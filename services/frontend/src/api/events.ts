@@ -12,6 +12,7 @@ export type SyncState = 'CLEAN' | 'DIRTY_INTERNAL' | 'DIRTY_EXTERNAL' | 'CONFLIC
 
 export interface EventResponsible {
   assignment_id: string
+  needs_review?: boolean
   leader_id: string | null
   name: string
   status: 'OPEN' | 'ASSIGNED' | 'CONFIRMED'
@@ -27,6 +28,7 @@ export interface EventResponse {
   congregation_id: string | null
   category: string | null
   is_service: boolean
+  planning_date?: string | null
   source: EventSource
   status: PlanningSlotStatus
   approval_status: EventApprovalStatus | null

@@ -72,6 +72,7 @@ from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import CongregationInvitation
+from app.domain.models.leader import assignment_needs_review
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
@@ -700,6 +701,10 @@ async def get_matrix(
                 assignment_status=assignment.status if assignment else None,
                 leader_id=leader_id,
                 leader_name=leader_name,
+                needs_review=assignment_needs_review(
+                    leaders_by_id.get(leader_id) if leader_id is not None else None,
+                    slot.planning_date,
+                ),
                 invitation_count=invitation_count,
                 deviation_start_diff_minutes=None,
                 deviation_end_diff_minutes=None,

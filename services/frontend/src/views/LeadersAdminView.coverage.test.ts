@@ -310,6 +310,14 @@ beforeEach(() => {
 })
 
 describe('LeadersAdminView coverage gaps', () => {
+  it('does not request inactive leaders without district-admin permission', async () => {
+    const { vm, authStore } = setup()
+    authStore.isSuperadmin = false
+    authStore.memberships = [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'd1' }]
+    await loadView(vm)
+    expect(leadersApi.listLeaders).toHaveBeenCalledWith('d1', false)
+  })
+
   it('loads, sorts and exercises registration workflows', async () => {
     const { wrapper, vm, toastStore } = setup()
     const success = vi.spyOn(toastStore, 'success')
@@ -501,7 +509,7 @@ describe('LeadersAdminView coverage gaps', () => {
     vm.confirmDelete(leaders[0])
     vi.mocked(leadersApi.deleteLeader).mockRejectedValueOnce(new Error('Delete kaputt'))
     await vm.executeDeleteLeader()
-    expect(errorToast).toHaveBeenCalledWith('Löschen fehlgeschlagen', 'Delete kaputt')
+    expect(errorToast).toHaveBeenCalledWith('Ausblenden fehlgeschlagen', 'Delete kaputt')
 
     vm.openExportModal(leaders[0])
     vi.mocked(exportTokensApi.createExportToken).mockRejectedValueOnce(new Error('Export kaputt'))

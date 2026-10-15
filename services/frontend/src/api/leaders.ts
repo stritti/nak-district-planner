@@ -48,6 +48,8 @@ export interface LeaderResponse {
   email: string | null
   phone: string | null
   notes: string | null
+  hidden_from_lists?: boolean
+  service_end_date?: string | null
   is_active: boolean
   created_at: string
   updated_at: string
@@ -67,6 +69,8 @@ export interface LeaderCreate {
   email?: string | null
   phone?: string | null
   notes?: string | null
+  hidden_from_lists?: boolean
+  service_end_date?: string | null
   is_active?: boolean
 }
 
@@ -78,11 +82,13 @@ export interface LeaderUpdate {
   email?: string | null
   phone?: string | null
   notes?: string | null
+  hidden_from_lists?: boolean
+  service_end_date?: string | null
   is_active?: boolean
 }
 
-export function listLeaders(districtId: string): Promise<LeaderResponse[]> {
-  return apiFetch<LeaderResponse[]>(`/api/v1/districts/${districtId}/leaders`)
+export function listLeaders(districtId: string, includeInactive = false): Promise<LeaderResponse[]> {
+  return apiFetch<LeaderResponse[]>(`/api/v1/districts/${districtId}/leaders${includeInactive ? '?include_inactive=true' : ''}`)
 }
 
 export function createLeader(districtId: string, body: LeaderCreate): Promise<LeaderResponse> {
@@ -142,4 +148,9 @@ export function unlinkSelfFromLeader(districtId: string): Promise<LeaderSelfLink
   return apiFetch<LeaderSelfLinkResponse>(`/api/v1/districts/${districtId}/leaders/link-self`, {
     method: 'DELETE',
   })
+}
+
+export function isLeaderEligibleOn(leader: LeaderResponse, localDate?: string): boolean {
+  return leader.is_active && !leader.hidden_from_lists &&
+    (!localDate || !leader.service_end_date || localDate <= leader.service_end_date)
 }

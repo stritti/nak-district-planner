@@ -54,7 +54,7 @@ test.describe('Leader unavailabilities admin', () => {
         body: JSON.stringify([{ id: 'district-1', name: 'Bezirk München' }]),
       })
     })
-    await page.route('**/api/v1/districts/*/leaders', async (route) => {
+    await page.route('**/api/v1/districts/*/leaders*', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -134,7 +134,7 @@ test.describe('Leader unavailabilities admin', () => {
         body: JSON.stringify([{ id: 'district-1', name: 'Bezirk München' }]),
       })
     })
-    await page.route('**/api/v1/districts/*/leaders', async (route) => {
+    await page.route('**/api/v1/districts/*/leaders*', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -196,7 +196,7 @@ test.describe('Leader unavailabilities admin', () => {
         body: JSON.stringify([{ id: 'district-1', name: 'Bezirk München' }]),
       })
     })
-    await page.route('**/api/v1/districts/*/leaders', async (route) => {
+    await page.route('**/api/v1/districts/*/leaders*', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',

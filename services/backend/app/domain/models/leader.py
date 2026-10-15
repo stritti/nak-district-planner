@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import Enum, StrEnum
 
 
@@ -49,6 +49,16 @@ class Leader:
     created_at: datetime
     updated_at: datetime
 
+    hidden_from_lists: bool = False
+    service_end_date: date | None = None
+
+    def is_eligible_on(self, target_date: date) -> bool:
+        return (
+            self.is_active
+            and not self.hidden_from_lists
+            and (self.service_end_date is None or target_date <= self.service_end_date)
+        )
+
     @staticmethod
     def create(
         name: str,
@@ -61,6 +71,8 @@ class Leader:
         phone: str | None = None,
         notes: str | None = None,
         is_active: bool = True,
+        hidden_from_lists: bool = False,
+        service_end_date: date | None = None,
     ) -> Leader:
         now = datetime.now(UTC)
         return Leader(
@@ -75,6 +87,24 @@ class Leader:
             phone=phone,
             notes=notes,
             is_active=is_active,
+            hidden_from_lists=hidden_from_lists,
+            service_end_date=service_end_date,
             created_at=now,
             updated_at=now,
         )
+
+
+def normalize_leader_name(name: str) -> str:
+    """Compare typed names without case, compatibility or whitespace bypasses."""
+    import unicodedata
+
+    return " ".join(unicodedata.normalize("NFKC", name).casefold().split())
+
+
+def assignment_needs_review(
+    leader: Leader | None, target_date: date, *, today: date | None = None
+) -> bool:
+    """Retain historical records; flag future appointments affected by lifecycle changes."""
+    return bool(
+        leader and target_date >= (today or date.today()) and not leader.is_eligible_on(target_date)
+    )

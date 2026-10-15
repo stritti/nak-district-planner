@@ -611,6 +611,45 @@ async def test_get_matrix_not_found_and_invalid_range() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_matrix_marks_future_ineligible_leader_for_review() -> None:
+    district_id = uuid.uuid4()
+    congregation = Congregation.create(name="G", district_id=district_id)
+    day = datetime(2030, 4, 14, 9, 30, tzinfo=UTC)
+    slot = PlanningSlot.create(
+        district_id=district_id,
+        congregation_id=congregation.id,
+        planning_date=day.date(),
+        planning_time=day.time(),
+        category="Gottesdienst",
+        title="Gottesdienst",
+    )
+    leader = Leader.create("Ehemalig", district_id, is_active=False)
+    assignment = ServiceAssignment.create(
+        event_id=slot.id,
+        planning_slot_id=slot.id,
+        leader_id=leader.id,
+        status=AssignmentStatus.ASSIGNED,
+    )
+    result = await r.get_matrix(
+        district_id,
+        _superadmin_auth(),
+        AsyncMock(),
+        from_dt=day - timedelta(days=1),
+        to_dt=day + timedelta(days=1),
+        group_id=None,
+        **_matrix_repos(
+            district=District.create(name="D"),
+            congregations=[congregation],
+            slots=[slot],
+            assignments=[assignment],
+            leaders=[leader],
+        ),
+    )
+
+    assert result.rows[0].cells[day.date().isoformat()].needs_review is True
+
+
+@pytest.mark.asyncio
 async def test_get_matrix_shows_slot_outside_regular_service_times() -> None:
     """A Gottesdienst moved to a weekday outside service_times keeps its cell."""
     district_id = uuid.uuid4()

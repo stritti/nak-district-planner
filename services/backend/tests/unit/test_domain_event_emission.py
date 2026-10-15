@@ -228,6 +228,8 @@ async def _update_assignment(assignment: ServiceAssignment, body, leader_name: s
     leader_repo.get.return_value = SimpleNamespace(name=leader_name)
     with (
         patch.object(assignments_router, "require_role_in_district"),
+        patch.object(assignments_router, "_check_leader", new=AsyncMock()),
+        patch.object(assignments_router, "_check_typed_name", new=AsyncMock()),
         patch.object(assignments_router, "publish_after_commit") as publish,
     ):
         await assignments_router.update_assignment(

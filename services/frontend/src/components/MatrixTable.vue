@@ -146,6 +146,12 @@
                   >
                     {{ row.cells[date].leader_name }}
                   </div>
+                  <div
+                    v-if="row.cells[date].needs_review"
+                    class="text-[10px] text-amber-700 dark:text-amber-300"
+                  >
+                    Prüfung erforderlich
+                  </div>
                   <EventApprovalStatusBadge
                     v-if="row.cells[date].approval_status"
                     :status="row.cells[date].approval_status"

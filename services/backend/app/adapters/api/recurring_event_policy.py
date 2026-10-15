@@ -81,5 +81,3 @@ async def _require_read(
         return authorized
     require_role_in_district(auth, Role.VIEWER, district_id)
     return set()
-
-

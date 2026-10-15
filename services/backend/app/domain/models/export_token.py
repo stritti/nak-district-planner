@@ -30,6 +30,8 @@ class ExportToken:
     leader_id: uuid.UUID | None
     created_at: datetime
 
+    subject_sub: str | None = None
+
     def confirmed_only(self, requested: str | None) -> bool:
         """Whether the ICS feed may contain only CONFIRMED slots (UC-05).
 
@@ -47,7 +49,12 @@ class ExportToken:
         district_id: uuid.UUID,
         congregation_id: uuid.UUID | None,
         leader_id: uuid.UUID | None = None,
+        subject_sub: str | None = None,
     ) -> ExportToken:
+        if subject_sub is not None and (
+            token_type != TokenType.INTERNAL or leader_id or congregation_id
+        ):
+            raise ValueError("Subject tokens require INTERNAL visibility and district scope")
         return ExportToken(
             id=uuid.uuid4(),
             token=secrets.token_urlsafe(32),
@@ -57,4 +64,5 @@ class ExportToken:
             congregation_id=congregation_id,
             leader_id=leader_id,
             created_at=datetime.now(tz=UTC),
+            subject_sub=subject_sub,
         )

@@ -11,6 +11,7 @@ import * as leadersApi from '../api/leaders'
 import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
 import EventListView from './EventListView.vue'
+import EventDutiesPanel from '../components/EventDutiesPanel.vue'
 import { useAuthStore } from '../stores/auth'
 import { ApiError } from '../api/errors'
 
@@ -149,6 +150,40 @@ beforeEach(() => {
 })
 
 describe('EventListView', () => {
+  it('allows congregation planners to manage duties for their own event', async () => {
+    const { wrapper } = setup([event()])
+    useAuthStore().memberships = [{ role: 'PLANNER', scope_type: 'CONGREGATION', scope_id: 'c1' }]
+    await flushPromises()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(EventDutiesPanel).props('canEdit')).toBe(true)
+  })
+
+  it('refreshes the event revision after a duty mutation before saving the modal', async () => {
+    vi.mocked(eventsApi.getEvent).mockResolvedValue(event({ revision: '"revision-2"' }))
+    vi.mocked(eventsApi.updateEvent).mockResolvedValue(event({ revision: '"revision-3"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+
+    wrapper.findComponent(EventDutiesPanel).vm.$emit('mutated')
+    await flushPromises()
+    const saveButton = wrapper
+      .find('.modal-panel')
+      .findAll('button')
+      .find(button => button.text() === 'Speichern')!
+    await saveButton.trigger('click')
+    await flushPromises()
+
+    expect(eventsApi.getEvent).toHaveBeenCalledWith('e1')
+    expect(eventsApi.updateEvent).toHaveBeenCalledWith(
+      'e1',
+      expect.any(Object),
+      '"revision-2"',
+    )
+  })
+
   it('restores controls and the matching API query after remounting with fresh stores', async () => {
     const first = setup()
     await flushPromises()
@@ -580,6 +615,26 @@ describe('Create event district selection', () => {
 })
 
 describe('Inline editing in the event overview', () => {
+  it('keeps the lifecycle review warning next to an inline assignment', async () => {
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([
+      { id: 'l1', name: 'Max', district_id: 'd1', rank: null, is_active: true } as leadersApi.LeaderResponse,
+    ])
+    const { wrapper } = setup([event({
+      responsible: {
+        assignment_id: 'a1',
+        leader_id: 'l1',
+        name: 'Ehemalig',
+        status: 'ASSIGNED',
+        needs_review: true,
+      },
+    })])
+
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="responsible-cell"]').text()).toContain('Prüfung erforderlich')
+    expect(wrapper.get('[data-inline-cell-id="responsible-desktop-e1"]').exists()).toBe(true)
+  })
+
   it('sends the title with its original revision and refreshes canonical data', async () => {
     vi.mocked(eventsApi.updateEventInline).mockResolvedValue(event({ title: 'Geändert' }))
     const { wrapper } = setup([event()])

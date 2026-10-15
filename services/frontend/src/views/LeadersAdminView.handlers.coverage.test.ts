@@ -214,7 +214,7 @@ describe('LeadersAdminView rendered handlers', () => {
     await wrapper.get('button[title="ICS-Export-Token erstellen"]').trigger('click')
     await modalByTitle(wrapper, 'ICS-Export').get('button.modal-close').trigger('click')
 
-    await wrapper.get('button[title="Löschen"]').trigger('click')
+    await wrapper.get('button[title="Deaktivieren und ausblenden"]').trigger('click')
     await wrapper.get('[data-testid="confirm-dialog-cancel"]').trigger('click')
 
     await wrapper.get('button[title="Abwesenheiten verwalten"]').trigger('click')
@@ -291,7 +291,7 @@ describe('LeadersAdminView rendered handlers', () => {
     modal = modalByTitle(wrapper, 'ICS-Export')
     await modal.trigger('click')
 
-    const deleteButtons = wrapper.findAll('button[title="Löschen"]')
+    const deleteButtons = wrapper.findAll('button[title="Deaktivieren und ausblenden"]')
     expect(deleteButtons.length).toBeGreaterThanOrEqual(2)
     await deleteButtons[1]!.trigger('click')
     await wrapper.get('[data-testid="confirm-dialog-cancel"]').trigger('click')

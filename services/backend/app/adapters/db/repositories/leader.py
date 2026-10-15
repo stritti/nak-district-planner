@@ -28,6 +28,8 @@ def _orm_to_domain(row: LeaderORM) -> Leader:
         phone=row.phone,
         notes=row.notes,
         is_active=row.is_active,
+        hidden_from_lists=row.hidden_from_lists,
+        service_end_date=row.service_end_date,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -40,7 +42,7 @@ class SqlLeaderRepository(LeaderRepository):
         self._session = session
 
     async def get(self, leader_id: uuid.UUID) -> Leader | None:
-        row = await self._session.get(LeaderORM, leader_id)
+        row = await self._session.get(LeaderORM, leader_id, populate_existing=True)
         return _orm_to_domain(row) if row else None
 
     async def get_for_update(self, leader_id: uuid.UUID) -> Leader | None:
@@ -60,7 +62,7 @@ class SqlLeaderRepository(LeaderRepository):
         if congregation_id is not None:
             stmt = stmt.where(LeaderORM.congregation_id == congregation_id)
         if active_only:
-            stmt = stmt.where(LeaderORM.is_active.is_(True))
+            stmt = stmt.where(LeaderORM.is_active.is_(True), LeaderORM.hidden_from_lists.is_(False))
         stmt = stmt.order_by(LeaderORM.name)
         result = await self._session.execute(stmt)
         return [_orm_to_domain(r) for r in result.scalars().all()]
@@ -95,12 +97,14 @@ class SqlLeaderRepository(LeaderRepository):
         row.phone = leader.phone
         row.notes = leader.notes
         row.is_active = leader.is_active
+        row.hidden_from_lists = leader.hidden_from_lists
+        row.service_end_date = leader.service_end_date
         row.created_at = leader.created_at
         row.updated_at = leader.updated_at
         await self._session.flush()
 
     async def delete(self, leader_id: uuid.UUID) -> None:
-        row = await self._session.get(LeaderORM, leader_id)
+        row = await self._session.get(LeaderORM, leader_id, populate_existing=True)
         if row is not None:
             await self._session.delete(row)
             await self._session.flush()
