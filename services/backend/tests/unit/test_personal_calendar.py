@@ -32,7 +32,7 @@ def test_subject_token_rejects_other_identity_filters():
 
 
 def test_domain_subject_binding():
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         "private", TokenType.INTERNAL, uuid.uuid4(), None, subject_sub="alice"
     )
     assert token.subject_sub == "alice"
@@ -223,8 +223,8 @@ async def test_owner_token_listing_filters_other_subjects(monkeypatch):
 
     district = uuid.uuid4()
     auth = Namespace(user_sub="alice", user=Namespace(is_superadmin=False), memberships=[])
-    alice = ExportToken.create("a", TokenType.INTERNAL, district, None, subject_sub="alice")
-    bob = ExportToken.create("b", TokenType.INTERNAL, district, None, subject_sub="bob")
+    alice, _ = ExportToken.create("a", TokenType.INTERNAL, district, None, subject_sub="alice")
+    bob, _ = ExportToken.create("b", TokenType.INTERNAL, district, None, subject_sub="bob")
     monkeypatch.setattr(export, "personal_subject_context", AsyncMock(return_value=(True, set())))
     result = await export.list_export_tokens(
         auth,
@@ -241,7 +241,7 @@ async def test_owner_revokes_subject_token(monkeypatch):
 
     from app.adapters.api.routers import export
 
-    token = ExportToken.create("a", TokenType.INTERNAL, uuid.uuid4(), None, subject_sub="alice")
+    token, _ = ExportToken.create("a", TokenType.INTERNAL, uuid.uuid4(), None, subject_sub="alice")
     auth = Namespace(user_sub="alice", user=Namespace(is_superadmin=False), memberships=[])
     monkeypatch.setattr(export, "personal_subject_context", AsyncMock(return_value=(True, set())))
     repo = Namespace(get=AsyncMock(return_value=token), delete=AsyncMock())
