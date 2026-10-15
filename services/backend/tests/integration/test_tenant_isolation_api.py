@@ -258,7 +258,11 @@ async def test_planner_manages_leaders_in_own_district(api, owner, world) -> Non
                 {"id": uuid.UUID(leader_id)},
             )
         ).all()
-    assert trail == [("UPDATE", "SUCCESS"), ("DELETE", "SUCCESS")]
+    assert trail == [
+        ("UPDATE", "SUCCESS"),
+        ("ACCESS_DENIED", "FAILED"),
+        ("DELETE", "SUCCESS"),
+    ]
 
 
 @pytest.mark.parametrize(

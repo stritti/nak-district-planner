@@ -9,7 +9,15 @@ export token. They never return arbitrary account data and fix their search path
 
 from __future__ import annotations
 
-from app.adapters.db.migrations.rls_policies import SUPERADMIN_SQL
+from app.adapters.db.migrations.rls_policies import (
+    SUPERADMIN_SQL,
+    congregation_membership_sql,
+    district_membership_sql,
+    leader_read_sql,
+    leader_row_read_sql,
+    planning_slot_row_read_sql,
+    related_planning_slot_sql,
+)
 
 _TABLES = (
     "event_duty_categories",
@@ -100,6 +108,101 @@ _FUNCTIONS = (
 )
 
 
+def _subject_slot_read(alias: str, assignment_alias: str | None = None) -> str:
+    """Keep membership reads fast and constrain only subject-bound token reads."""
+    subject_assignment = ""
+    if assignment_alias is not None:
+        subject_assignment = f"""AND EXISTS (SELECT 1 FROM leaders l
+          WHERE l.id={assignment_alias}.leader_id AND l.user_sub=et.subject_sub)"""
+    return f"""(
+      {SUPERADMIN_SQL}
+      OR {district_membership_sql(alias)}
+      OR ({alias}.congregation_id IS NOT NULL AND {congregation_membership_sql(alias)})
+      OR EXISTS (SELECT 1 FROM export_tokens et
+        WHERE et.token=current_setting('app.current_export_token',true)
+        AND et.district_id={alias}.district_id
+        AND (et.congregation_id IS NULL OR et.congregation_id={alias}.congregation_id
+          OR (et.congregation_id IS NOT NULL AND {alias}.congregation_id IS NULL
+            AND ('all'=ANY({alias}.applicability)
+              OR et.congregation_id::text=ANY({alias}.applicability))))
+        AND (et.subject_sub IS NULL OR (
+          duty_export_slot_allowed({alias}.id) {subject_assignment}
+        )))
+    )"""
+
+
+def _subject_leader_read(alias: str = "leaders") -> str:
+    return f"""(
+      {leader_read_sql(alias)}
+      OR EXISTS (SELECT 1 FROM export_tokens et
+        WHERE et.token=current_setting('app.current_export_token',true)
+        AND et.district_id={alias}.district_id
+        AND ((et.subject_sub IS NULL AND
+          (et.leader_id={alias}.id OR (et.leader_id IS NULL AND et.token_type='INTERNAL')))
+          OR (et.subject_sub={alias}.user_sub
+            AND duty_subject_scope(et.subject_sub,{alias}.district_id,{alias}.congregation_id))))
+    )"""
+
+
+def _replace_select_policy(op, table: str, policy: str, using: str) -> None:
+    op.execute(f"DROP POLICY IF EXISTS {policy} ON {table}")
+    op.execute(f"CREATE POLICY {policy} ON {table} FOR SELECT USING {using}")
+
+
+def _install_subject_feed_policies(op) -> None:
+    """Integrate personal-token checks into export branches, not every row read."""
+    _replace_select_policy(
+        op,
+        "planning_slots",
+        "planning_slots_tenant_isolation_policy",
+        _subject_slot_read("planning_slots"),
+    )
+    _replace_select_policy(
+        op,
+        "event_instances",
+        "event_instances_tenant_isolation_policy",
+        related_planning_slot_sql("event_instances", _subject_slot_read),
+    )
+    _replace_select_policy(
+        op,
+        "service_assignments",
+        "service_assignments_tenant_isolation_policy",
+        related_planning_slot_sql(
+            "service_assignments",
+            lambda alias: _subject_slot_read(alias, "service_assignments"),
+        ),
+    )
+    _replace_select_policy(
+        op,
+        "leaders",
+        "leaders_tenant_isolation_policy",
+        _subject_leader_read(),
+    )
+
+
+def _restore_select_policies(op) -> None:
+    """Restore the SELECT policies that preceded subject-bound duty feeds."""
+    _replace_select_policy(
+        op,
+        "planning_slots",
+        "planning_slots_tenant_isolation_policy",
+        planning_slot_row_read_sql(),
+    )
+    for table in ("event_instances", "service_assignments"):
+        _replace_select_policy(
+            op,
+            table,
+            f"{table}_tenant_isolation_policy",
+            related_planning_slot_sql(table, planning_slot_row_read_sql),
+        )
+    _replace_select_policy(
+        op,
+        "leaders",
+        "leaders_tenant_isolation_policy",
+        leader_row_read_sql(),
+    )
+
+
 def install_duty_policies(op) -> None:
     """Install independently scoped duties policies and personal feed restrictions."""
     op.execute("""CREATE FUNCTION duty_assignment_count(p_slot uuid,p_category uuid) RETURNS bigint
@@ -137,20 +240,10 @@ def install_duty_policies(op) -> None:
         op.execute(f"CREATE POLICY {table}_delete ON {table} FOR DELETE USING {write}")
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
 
-    # Token possession grants only the bound subject's current scope and records.
-    # RESTRICTIVE policies also constrain the pre-existing broad INTERNAL policies.
-    restrictions = {
-        "planning_slots": "duty_export_slot_allowed(id)",
-        "event_instances": "duty_export_slot_allowed(planning_slot_id)",
-        "service_assignments": "duty_export_slot_allowed(planning_slot_id) AND EXISTS (SELECT 1 FROM leaders l WHERE l.id=leader_id AND l.user_sub=current_duty_export_subject())",
-        "leaders": "user_sub=current_duty_export_subject() AND duty_subject_scope(user_sub,district_id,congregation_id)",
-    }
-    for table, condition in restrictions.items():
-        op.execute(
-            f"CREATE POLICY {table}_subject_feed ON {table} AS RESTRICTIVE FOR SELECT USING ("
-            "NULLIF(current_setting('app.current_export_token',true),'') IS NULL "
-            f"OR NOT duty_export_is_subject_bound() OR ({condition}))"
-        )
+    # Subject checks live only in export-token branches of the established
+    # SELECT policies. This avoids adding per-row restrictive-policy overhead
+    # to normal authenticated planner and matrix queries.
+    _install_subject_feed_policies(op)
     op.execute("""CREATE POLICY memberships_duty_read ON memberships FOR SELECT USING (
       can_read_duty_membership(scope_type,scope_id)
       OR user_sub=current_duty_export_subject())""")
@@ -206,8 +299,7 @@ def remove_duty_policies(op) -> None:
     for table in _TABLES:
         for action in ("select", "insert", "update", "delete"):
             op.execute(f"DROP POLICY {table}_{action} ON {table}")
-    for table in ("planning_slots", "event_instances", "service_assignments", "leaders"):
-        op.execute(f"DROP POLICY {table}_subject_feed ON {table}")
+    _restore_select_policies(op)
     op.execute("DROP POLICY memberships_duty_read ON memberships")
     for action in ("read", "insert", "delete"):
         op.execute(f"DROP POLICY export_tokens_subject_{action} ON export_tokens")
