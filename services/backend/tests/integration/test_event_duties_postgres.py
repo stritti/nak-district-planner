@@ -55,7 +55,7 @@ def duty_rows(owner, data):
             "token",
         )
     }
-    subject = data.sub("duty-subject")
+    subject = data.sub(f"duty-subject-{uuid.uuid4().hex[:8]}")
     token = f"duty-{uuid.uuid4().hex}"
     with owner.cursor() as cur:
         cur.execute(
@@ -150,6 +150,18 @@ def duty_rows(owner, data):
     yield ids, subject, token
     with owner.cursor() as cur:
         cur.execute("DELETE FROM export_tokens WHERE id=%s", (str(ids["token"]),))
+        cur.execute(
+            "DELETE FROM event_duty_assignments WHERE id=ANY(%s::uuid[])",
+            ([str(ids["assignment_a"]), str(ids["assignment_b"])],),
+        )
+        cur.execute(
+            "DELETE FROM duty_name_suggestions WHERE id=ANY(%s::uuid[])",
+            ([str(ids["suggestion_a"]), str(ids["suggestion_b"])],),
+        )
+        cur.execute(
+            "DELETE FROM event_type_duty_configurations WHERE id=ANY(%s::uuid[])",
+            ([str(ids["config_a"]), str(ids["config_b"])],),
+        )
         cur.execute(
             "DELETE FROM planning_slots WHERE id=ANY(%s::uuid[])",
             ([str(ids["slot_a"]), str(ids["slot_b"])],),
@@ -271,7 +283,7 @@ async def capacity_tenant():
                 "INSERT INTO planning_slots "
                 "(id,district_id,congregation_id,category,planning_date,planning_time,status,"
                 "applicability,created_at,updated_at) VALUES "
-                "(:id,:district,:congregation,'Gottesdienst','2027-04-01','10:00','ACTIVE',"
+                "(:slot,:district,:congregation,'Gottesdienst','2027-04-01','10:00','ACTIVE',"
                 "'{}',now(),now())"
             ),
             ids,

@@ -228,12 +228,23 @@ async def test_planner_manages_leaders_in_own_district(api, owner, world) -> Non
         headers={**headers, "If-Match": created.json()["revision"]},
     )
     assert patched.json()["name"] == "Umbenannt"
-    deleted = await api.delete(f"{base}/{leader_id}", headers=headers)
-    assert deleted.status_code == 204
 
-    assert (
-        await _scalar(owner, "SELECT count(*) FROM leaders WHERE id = :id", id=uuid.UUID(leader_id))
-        == 0
+    # Lifecycle changes are deliberately more privileged than ordinary planner
+    # edits and retain the identity for historical references.
+    deleted = await api.delete(f"{base}/{leader_id}", headers=headers)
+    assert deleted.status_code == 403
+    async with owner.begin() as conn:
+        await conn.execute(
+            text("UPDATE memberships SET role='DISTRICT_ADMIN' WHERE user_sub=:sub"),
+            {"sub": world.a.planner_sub},
+        )
+    deleted = await api.delete(f"{base}/{leader_id}", headers=headers)
+    assert deleted.status_code == 204, deleted.text
+
+    assert await _scalar(
+        owner,
+        "SELECT NOT is_active AND hidden_from_lists FROM leaders WHERE id = :id",
+        id=uuid.UUID(leader_id),
     )
 
     await audit_module.audit_service.stop()

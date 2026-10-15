@@ -27,6 +27,7 @@ def test_upgrade_is_additive_and_keeps_leader_active_state():
     assert "uq_duty_assignment_name" in sql
     assert "NULLS NOT DISTINCT" in sql
     assert "ENABLE ROW LEVEL SECURITY" in sql
+    assert "NULLIF(current_setting('app.current_export_token',true),'') IS NULL" in sql
     assert "service_assignments" not in "\n".join(
         str(call) for call in op.drop_table.call_args_list
     )

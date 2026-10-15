@@ -147,7 +147,9 @@ def install_duty_policies(op) -> None:
     }
     for table, condition in restrictions.items():
         op.execute(
-            f"CREATE POLICY {table}_subject_feed ON {table} AS RESTRICTIVE FOR SELECT USING (NOT duty_export_is_subject_bound() OR ({condition}))"
+            f"CREATE POLICY {table}_subject_feed ON {table} AS RESTRICTIVE FOR SELECT USING ("
+            "NULLIF(current_setting('app.current_export_token',true),'') IS NULL "
+            f"OR NOT duty_export_is_subject_bound() OR ({condition}))"
         )
     op.execute("""CREATE POLICY memberships_duty_read ON memberships FOR SELECT USING (
       can_read_duty_membership(scope_type,scope_id)

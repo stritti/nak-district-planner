@@ -414,7 +414,12 @@ def test_district_routes_return_403(auth_client, method, path_template, role, me
             {"district_id": "{district_id}", "label": "L", "token_type": "PUBLIC"},
             None,
         ),
-        ("get", "/api/v1/export-tokens", None, {"district_id": "{district_id}"}),
+        (
+            "get",
+            "/api/v1/export-tokens",
+            None,
+            {"district_id": "{district_id}", "subject_sub": "other-user"},
+        ),
         ("delete", "/api/v1/export-tokens/{resource_id}", None, None),
     ],
 )
@@ -424,7 +429,11 @@ def test_calendar_and_export_routes_return_403(auth_client, method, path_templat
     integration_repo = AsyncMock()
     integration_repo.get.return_value = _integration_obj(district1)
     token_repo = AsyncMock()
-    token_repo.get.return_value = _district_obj(district1)
+    token_repo.get.return_value = SimpleNamespace(
+        id=resource_id,
+        district_id=district1,
+        subject_sub=None,
+    )
 
     # The calendar-integration routes resolve their repository through the
     # dependency injector, so the override must replace that dependency;
