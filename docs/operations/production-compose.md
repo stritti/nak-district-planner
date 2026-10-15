@@ -294,3 +294,22 @@ Das funktioniert nur, wenn Keycloak hinter demselben Traefik läuft.
   - nginx übernimmt die Client-IP nur vom `edge`-Netz.
   - Das Backend vertraut nur nginx (`TRUSTED_PROXIES`, Default `172.16.0.0/12`). `EDGE_SUBNET` und `APP_SUBNET` müssen deshalb innerhalb dieses Bereichs bleiben.
 - **Zusätzliche Härtung** (Read-only-Root-Filesystem, unprivilegiertes nginx, Valkey-Passwort) ist in #472 geplant.
+
+
+## Haertung seit Issue #472
+
+Die Images des Frontends verwenden ein gepinntes
+`nginxinc/nginx-unprivileged`-Image auf Port 8080.
+Sowohl die gebuendelten File-Provider-Routen als auch das Override fuer einen
+bestehenden Traefik zeigen deshalb auf `frontend:8080`. Host-Ports
+80/443 bleiben ausschliesslich bei Traefik.
+
+Backend, Worker, Beat, Frontend und Migration laufen mit `read_only`,
+`cap_drop: [ALL]`, `no-new-privileges`, tmpfs sowie PIDs- und Speicherlimits.
+Das Beat-Volume bleibt fuer den Scheduler beschreibbar.
+`VALKEY_PASSWORD` in `.env` ist verpflichtend und muss URL-sicher sein;
+`.env.docker` setzt die zugehoerige authentifizierte `VALKEY_URL` fuer
+Backend, Worker und Beat. Gesundheitspruefungen nutzen das
+Valkey-Passwort. Betreiberhinweise zur Rotation, zu Rollen-Backups und
+dem migrierten Restore-Drill stehen im
+[Production Runbook](/operations/production-runbook).

@@ -13,6 +13,14 @@ import pytest
 from app.config import Settings, production_guard
 
 
+@pytest.fixture(autouse=True)
+def _safe_production_runtime_passwords(monkeypatch) -> None:
+    """Most guard tests isolate one failure from otherwise safe runtime secrets."""
+    monkeypatch.setenv("APP_DB_PASSWORD", "valid-app-db-password")
+    monkeypatch.setenv("VALKEY_PASSWORD", "valid-valkey-password")
+
+
+
 def _valid_prod_settings(**overrides: object) -> Settings:
     """Create deterministic, fully configured production settings for tests."""
     kwargs: dict = {
@@ -277,4 +285,39 @@ def test_runtime_without_owner_credentials_passes(monkeypatch) -> None:
     monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
     monkeypatch.delenv("MIGRATION_DATABASE_URL", raising=False)
 
+    production_guard(_valid_prod_settings())
+
+
+@pytest.mark.parametrize("name", ["APP_DB_PASSWORD", "VALKEY_PASSWORD"])
+@pytest.mark.parametrize("placeholder", ["changeme", "CHANGEME", " password ", ""])
+def test_production_guard_blocks_runtime_placeholder_passwords(monkeypatch, name, placeholder) -> None:
+    monkeypatch.setenv(name, placeholder)
+    with pytest.raises(RuntimeError, match=name):
+        production_guard(_valid_prod_settings())
+
+
+@pytest.mark.parametrize("name", ["APP_DB_PASSWORD", "VALKEY_PASSWORD"])
+def test_production_guard_requires_runtime_passwords(monkeypatch, name) -> None:
+    monkeypatch.delenv(name)
+    with pytest.raises(RuntimeError, match=name):
+        production_guard(_valid_prod_settings())
+
+@pytest.mark.parametrize("name", ["APP_DB_PASSWORD", "VALKEY_PASSWORD"])
+@pytest.mark.parametrize(
+    "value", ["some@password", "with spaces", "a:b", "a/b", "a$bc", "äbc", "quoted'password"],
+)
+def test_production_guard_rejects_non_url_safe_runtime_passwords(
+    monkeypatch, name: str, value: str,
+) -> None:
+    monkeypatch.setenv(name, value)
+    with pytest.raises(RuntimeError, match=rf"{name}.*URL-safe"):
+        production_guard(_valid_prod_settings())
+
+
+@pytest.mark.parametrize("name", ["APP_DB_PASSWORD", "VALKEY_PASSWORD"])
+@pytest.mark.parametrize("value", ["A1bcdefghijk-_", "A1bcdefghijk.~"])
+def test_production_guard_accepts_url_safe_runtime_passwords(
+    monkeypatch, name: str, value: str,
+) -> None:
+    monkeypatch.setenv(name, value)
     production_guard(_valid_prod_settings())
