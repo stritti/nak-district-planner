@@ -536,6 +536,7 @@ async def test_update_event_rejects_congregation_from_another_district() -> None
             slot_repo=slot_repo,
             cong_repo=congregation_repo,
             inst_repo=instance_repo,
+            assignments_repo=AsyncMock(list_by_planning_slot=AsyncMock(return_value=[])),
             if_match=events._slot_revision(slot),
         )
 
