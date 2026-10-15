@@ -12,6 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
+from app.adapters.api.conflict_http import raise_for_conflicts
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
@@ -21,7 +22,6 @@ from app.adapters.api.deps import (
     get_service_assignment_repository,
 )
 from app.adapters.api.revisions import slot_revision
-from app.adapters.api.schemas.conflict import ConflictItem, ConflictResponse
 from app.adapters.api.schemas.service_assignment import (
     InlineAssignmentChange,
     InlineAssignmentResult,
@@ -48,30 +48,6 @@ router = APIRouter(
     prefix="/api/v1/events/{event_id}/assignments",
     tags=["service-assignments"],
 )
-
-
-def _conflict_detail(conflicts: list) -> ConflictResponse:
-    return ConflictResponse(
-        conflicts=[
-            ConflictItem(
-                rule_id=conflict.rule_id,
-                severity=conflict.severity,
-                message=conflict.message,
-                details=conflict.details,
-            )
-            for conflict in conflicts
-        ]
-    )
-
-
-def _raise_blocking_conflicts(conflicts: list, *, confirm_warnings: bool) -> None:
-    blocking = [conflict for conflict in conflicts if conflict.severity.value == "BLOCK"]
-    warnings = [conflict for conflict in conflicts if conflict.severity.value == "WARN"]
-    if blocking or (warnings and not confirm_warnings):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_conflict_detail(blocking + warnings).model_dump(mode="json"),
-        )
 
 
 async def _touch_slot(slots: SqlPlanningSlotRepository, planning_slot: PlanningSlot) -> None:
@@ -112,7 +88,7 @@ async def _check_leader(
     conflicts = await check_service_assignment_conflicts(
         db, event_id=event_id, leader_id=leader_id, exclude_assignment_id=exclude_assignment_id
     )
-    _raise_blocking_conflicts(conflicts, confirm_warnings=confirm_warnings)
+    raise_for_conflicts(conflicts, confirm_warnings=confirm_warnings)
 
 
 async def _check_typed_name(db: DbSession, slot: PlanningSlot, name: str | None) -> None:
@@ -175,7 +151,7 @@ async def create_assignment(
     slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> ServiceAssignmentResponse:
-    planning_slot = await slots.get(event_id)
+    planning_slot = await slots.get_for_update(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
@@ -306,19 +282,20 @@ async def update_assignment(
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> ServiceAssignmentResponse:
+    # Lock the slot before reading its assignment: dependent event updates hold
+    # the same lock, so every writer observes a consistent schedule snapshot.
+    planning_slot = await slots.get_for_update(event_id)
+    if not planning_slot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
+    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
+
     assignment = await assignments_repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
-
-    planning_slot = await slots.get(event_id)
-    if not planning_slot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
-        )
-
-    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     fields = body.model_fields_set
     candidate_id = body.leader_id if "leader_id" in fields else assignment.leader_id
@@ -380,19 +357,20 @@ async def delete_assignment(
     slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> None:
+    # Lock the slot before reading its assignment: dependent event updates hold
+    # the same lock, so every writer observes a consistent schedule snapshot.
+    planning_slot = await slots.get_for_update(event_id)
+    if not planning_slot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
+    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
+
     assignment = await assignments_repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
-
-    planning_slot = await slots.get(event_id)
-    if not planning_slot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
-        )
-
-    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     await assignments_repo.delete(assignment_id)
     await _touch_slot(slots, planning_slot)

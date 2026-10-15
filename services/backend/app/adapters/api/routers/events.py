@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 
+from app.adapters.api.conflict_http import conflict_items, raise_for_conflicts
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
@@ -30,7 +31,10 @@ from app.adapters.api.deps import (
     get_service_assignment_repository,
 )
 from app.adapters.api.revisions import aware_timestamp, slot_revision
+from app.adapters.api.schemas.conflict import ConflictItem
+from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
+from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
@@ -38,6 +42,10 @@ from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
+from app.application.service_assignment_conflict import (
+    ProposedService,
+    check_service_assignment_conflicts,
+)
 from app.application.sync_service import push_conflict_resolution, push_deviation_resolution
 from app.domain.errors import UnsupportedCalendarTypeError
 from app.domain.event_payloads import plan_finalized
@@ -58,6 +66,7 @@ from app.domain.models.planning_slot import (
 )
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus
+from app.domain.planning.conflict_result import ConflictResult
 from app.domain.ports.calendar import CalendarConnectorError, OccurrenceWriteBackError
 from app.domain.services.sync_policy import internal_state, resolve_conflict
 
@@ -138,7 +147,7 @@ class EventInlineUpdate(BaseModel):
 
 
 class EventUpdate(BaseModel):
-    """Patch fields for an event."""
+    """Strict full-editor request, including explicit workflow acknowledgement."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -153,6 +162,32 @@ class EventUpdate(BaseModel):
     applicability: list[Annotated[str, Field(min_length=1, max_length=64)]] | None = Field(
         None, max_length=500
     )
+    confirm_warnings: bool = Field(
+        False,
+        description="Acknowledge WARN conflicts on dependent changes; not an event data field.",
+    )
+
+
+class EventChangeImpactRequest(BaseModel):
+    """Schedule fields for a dry-run impact check; nothing is persisted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    congregation_id: uuid.UUID | None = None
+
+
+class EventChangeImpactItem(BaseModel):
+    assignment_id: uuid.UUID
+    leader_id: uuid.UUID
+    conflicts: list[ConflictItem]
+
+
+class EventChangeImpact(BaseModel):
+    blocked: bool
+    requires_confirmation: bool
+    items: list[EventChangeImpactItem]
 
 
 class BulkApprovalStatusRequest(BaseModel):
@@ -411,6 +446,80 @@ async def delete_event(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+def _validate_changed_event_window(start: datetime, end: datetime) -> None:
+    """Preview and PATCH share the same effective-start validation and message."""
+    if end < start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="end_at darf nicht vor der wirksamen Startzeit (start_at oder geplanter Beginn) liegen.",
+        )
+
+
+def _proposed_service(
+    slot: PlanningSlot,
+    instance: EventInstance | None,
+    body: EventUpdate | EventChangeImpactRequest,
+) -> ProposedService:
+    """Apply the requested schedule fields without touching the persisted slot."""
+    planning_date, planning_time = slot.planning_date, slot.planning_time
+    start = aware_timestamp(instance.actual_start_at) if instance else None
+    end = aware_timestamp(instance.actual_end_at) if instance else None
+    if body.start_at is not None:
+        start = aware_timestamp(body.start_at)
+        planning_date, planning_time = start.date(), start.timetz()
+    if body.end_at is not None:
+        end = aware_timestamp(body.end_at)
+    default_start = datetime.combine(planning_date, planning_time or time.min, tzinfo=UTC)
+    window_start = start if start is not None else default_start
+    window_end = end if end is not None else window_start
+    _validate_changed_event_window(window_start, window_end)
+    congregation_id = slot.congregation_id
+    if "congregation_id" in body.model_fields_set:
+        congregation_id = body.congregation_id
+    return ProposedService(
+        congregation_id=congregation_id,
+        planning_date=planning_date,
+        planning_time=planning_time,
+        actual_start_at=start if instance else None,
+        actual_end_at=end if instance else None,
+    )
+
+
+async def _revalidate_dependent_change(
+    session: DbSession,
+    *,
+    assignments_repo: SqlServiceAssignmentRepository,
+    slot: PlanningSlot,
+    proposed: ProposedService,
+    confirm_warnings: bool,
+) -> None:
+    """Re-check leaders only for effective schedule/location changes.
+
+    Existing IDs still require same-district ownership; inactivity is not
+    checked here. Invalid historic references are 422, never overridable WARN.
+    Leader advisory locks cover assignments across different events, which
+    row locks on this event's assignments cannot serialize.
+    """
+    assignments = [
+        a for a in await assignments_repo.list_by_planning_slot(slot.id) if a.leader_id is not None
+    ]
+    leader_ids = sorted({a.leader_id for a in assignments}, key=str)
+    for leader_id in leader_ids:
+        await ensure_leader_in_district(session, slot.district_id, leader_id)
+    for leader_id in leader_ids:
+        await acquire_advisory_xact_lock(session, leader_id)
+    conflicts: list[ConflictResult] = []
+    for assignment in assignments:
+        conflicts += await check_service_assignment_conflicts(
+            session,
+            event_id=slot.id,
+            leader_id=assignment.leader_id,
+            exclude_assignment_id=assignment.id,
+            proposed=proposed,
+        )
+    raise_for_conflicts(conflicts, confirm_warnings=confirm_warnings)
+
+
 @router.get("/{event_id}", response_model=EventResponse)
 async def get_event(
     event_id: uuid.UUID,
@@ -430,6 +539,28 @@ async def get_event(
     return _slot_to_event(slot, instance, responsible.get(slot.id))
 
 
+def _changes_service_dependencies(
+    slot: PlanningSlot, instance: EventInstance | None, body: EventUpdate
+) -> bool:
+    """Only effective schedule/location changes require assignment revalidation.
+
+    Category migration with existing assignments needs a separate explicit
+    workflow and is deliberately outside this dependency trigger.
+    """
+    fields = body.model_fields_set
+    if "congregation_id" in fields and body.congregation_id != slot.congregation_id:
+        return True
+    current_start = aware_timestamp(instance.actual_start_at) if instance else _slot_start_at(slot)
+    if "start_at" in fields and body.start_at is not None and aware_timestamp(body.start_at) != current_start:
+        return True
+    return (
+        "end_at" in fields
+        and body.end_at is not None
+        and instance is not None
+        and aware_timestamp(body.end_at) != aware_timestamp(instance.actual_end_at)
+    )
+
+
 @router.patch("/{event_id}", response_model=EventResponse)
 async def update_event(
     event_id: uuid.UUID,
@@ -443,13 +574,13 @@ async def update_event(
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> EventResponse:
-    slot = await (slot_repo.get_for_update(event_id) if if_match is not None else slot_repo.get(event_id))
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    slot = await slot_repo.get_for_update(event_id)
     if slot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
 
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
-    if if_match is None:
-        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
     if if_match != slot_revision(slot, instance):
         raise HTTPException(
@@ -460,6 +591,18 @@ async def update_event(
         raise HTTPException(status_code=409, detail="Eine Freigabe kann nicht zurückgenommen werden.")
     if slot.was_released and slot.status == PlanningSlotStatus.CANCELLED and body.status == PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Eine veröffentlichte Absage kann nicht zurückgenommen werden.")
+    proposed = _proposed_service(slot, instance, body)
+    dependent = _changes_service_dependencies(slot, instance, body)
+
+    if dependent:
+        await _revalidate_dependent_change(
+            session,
+            assignments_repo=assignments_repo,
+            slot=slot,
+            proposed=proposed,
+            confirm_warnings=body.confirm_warnings,
+        )
+
     if "congregation_id" in body.model_fields_set:
         if body.congregation_id is None:
             slot.congregation_id = None
@@ -508,11 +651,7 @@ async def update_event(
             body.start_at or (instance.actual_start_at if instance else _slot_start_at(slot))
         )
         new_end = aware_timestamp(body.end_at or (instance.actual_end_at if instance else new_start))
-        if new_end < new_start:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="end_at muss nach start_at liegen.",
-            )
+        _validate_changed_event_window(new_start, new_end)
         slot.planning_date = new_start.date()
         slot.planning_time = new_start.timetz()
         if instance is not None:
@@ -534,6 +673,59 @@ async def update_event(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     responsible = await _load_responsible(assignments_repo, leaders_repo, [slot])
     return _slot_to_event(slot, instance, responsible.get(slot.id))
+
+
+@router.post("/{event_id}/change-impact", response_model=EventChangeImpact)
+async def preview_event_change(
+    event_id: uuid.UUID,
+    body: EventChangeImpactRequest,
+    auth: CurrentUserWithMemberships,
+    session: DbSession,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+) -> EventChangeImpact:
+    """Read-only impact using row locks for a consistent multi-entity snapshot.
+
+    Locks serialize concurrent previews until this request transaction ends.
+    The later PATCH runs in a separate transaction and revalidates independently.
+    """
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    slot = await slot_repo.get_for_update(event_id)
+    if slot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
+    if if_match != slot_revision(slot, instance):
+        raise HTTPException(status_code=412, detail="Ereignis wurde zwischenzeitlich geändert.")
+    proposed = _proposed_service(slot, instance, body)
+    items: list[EventChangeImpactItem] = []
+    for assignment in await assignments_repo.list_by_planning_slot(event_id):
+        if assignment.leader_id is None:
+            continue
+        conflicts = await check_service_assignment_conflicts(
+            session,
+            event_id=event_id,
+            leader_id=assignment.leader_id,
+            exclude_assignment_id=assignment.id,
+            proposed=proposed,
+        )
+        if conflicts:
+            items.append(
+                EventChangeImpactItem(
+                    assignment_id=assignment.id,
+                    leader_id=assignment.leader_id,
+                    conflicts=conflict_items(conflicts),
+                )
+            )
+    severities = {conflict.severity.value for item in items for conflict in item.conflicts}
+    return EventChangeImpact(
+        blocked="BLOCK" in severities,
+        requires_confirmation="WARN" in severities,
+        items=items,
+    )
 
 
 @router.patch("/{event_id}/inline", response_model=EventResponse)

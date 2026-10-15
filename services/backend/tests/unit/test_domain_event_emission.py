@@ -223,6 +223,7 @@ async def _update_assignment(assignment: ServiceAssignment, body, leader_name: s
     assignment_repo.get.return_value = assignment
     slot_repo = AsyncMock()
     slot_repo.get.return_value = slot
+    slot_repo.get_for_update.return_value = slot
     leader_repo = AsyncMock()
     leader_repo.get.return_value = SimpleNamespace(name=leader_name)
     with (

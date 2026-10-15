@@ -35,6 +35,7 @@ def _slot() -> PlanningSlot:
 def _repo(value: object = None) -> AsyncMock:
     repo = AsyncMock()
     repo.get.return_value = value
+    repo.get_for_update.return_value = value
     return repo
 
 
