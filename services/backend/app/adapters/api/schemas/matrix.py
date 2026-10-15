@@ -17,6 +17,7 @@ class MatrixCell(BaseModel):
 
     event_id: uuid.UUID | None = None
     planning_slot_id: uuid.UUID | None = None
+    revision: str | None = None
     assignment_event_id: uuid.UUID | None = None
     invitation_source_congregation_name: str | None = None
     invitation_count: int = 0

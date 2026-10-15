@@ -6,6 +6,7 @@ import { apiFetch } from './client'
 export interface MatrixCell {
   event_id: string | null
   planning_slot_id?: string | null
+  revision?: string | null
   assignment_event_id?: string | null
   invitation_source_congregation_name?: string | null
   invitation_count?: number

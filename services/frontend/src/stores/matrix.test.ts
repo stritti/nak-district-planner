@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { useMatrixStore } from './matrix'
+import { useLeadersStore } from './leaders'
 import * as matrixApi from '../api/matrix'
 import * as assignmentsApi from '../api/serviceAssignments'
 import * as districtsApi from '../api/districts'
@@ -154,5 +155,73 @@ describe('useMatrixStore', () => {
       'd1', '2026-04-01', '2026-04-30',
     )
     expect(matrixApi.fetchMatrix).toHaveBeenCalledOnce()
+  })
+})
+
+
+describe('Inline matrix reconciliation', () => {
+  const saved: assignmentsApi.InlineAssignmentResult = {
+    id: 'a1', event_id: 'e1', leader_id: 'l1', leader_name: null,
+    status: 'ASSIGNED', event_revision: '"rev-2"', created_at: '', updated_at: '',
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  function setupCell() {
+    const store = useMatrixStore()
+    store.districtId = 'd1'
+    store.matrix = {
+      dates: ['day'], holidays: {},
+      rows: [{ congregation_id: 'c1', congregation_name: 'Gemeinde', cells: {
+        day: {
+          event_id: 'e1', event_title: 'Termin', category: 'Gottesdienst',
+          leader_id: null, leader_name: null, assignment_id: null, assignment_status: null,
+          is_gap: true, revision: '"rev-1"',
+        },
+      } }],
+    }
+    return { store, cell: store.matrix.rows[0].cells.day }
+  }
+
+  it('updates the mounted cell using the shared label without a matrix refetch', () => {
+    const { store, cell } = setupCell()
+    const leaders = useLeadersStore()
+    leaders.districtId = 'd1'
+    leaders.leaders = [{
+      id: 'l1', district_id: 'd1', name: 'Max', rank: 'Pr.', is_active: true,
+      email: null, congregation_id: null, special_role: null, user_sub: null,
+      phone: null, notes: null, created_at: '', updated_at: '',
+    }]
+    store.applyInlineAssignment('e1', saved)
+    expect(store.matrix!.rows[0].cells.day).toBe(cell)
+    expect(cell).toMatchObject({
+      assignment_id: 'a1', leader_id: 'l1', leader_name: 'Pr. Max',
+      revision: '"rev-2"', assignment_status: 'ASSIGNED', is_gap: false,
+    })
+    expect(matrixApi.fetchMatrix).not.toHaveBeenCalled()
+  })
+
+  it('prefers a server label and does not touch unrelated event cells', () => {
+    const { store, cell } = setupCell()
+    store.applyInlineAssignment('another-event', saved)
+    expect(cell.revision).toBe('"rev-1"')
+    store.applyInlineAssignment('e1', { ...saved, leader_name: 'Servername' })
+    expect(cell.leader_name).toBe('Servername')
+  })
+
+  it('never uses labels from another district after a delayed save', () => {
+    const { store, cell } = setupCell()
+    const leaders = useLeadersStore()
+    leaders.districtId = 'd2'
+    leaders.leaders = [{
+      id: 'l1', district_id: 'd2', name: 'Fremder Name', rank: null, is_active: true,
+      email: null, congregation_id: null, special_role: null, user_sub: null,
+      phone: null, notes: null, created_at: '', updated_at: '',
+    }]
+    store.applyInlineAssignment('e1', saved)
+    expect(cell.leader_name).toBeNull()
   })
 })

@@ -9,8 +9,10 @@ import {
   createAssignment,
   deleteAssignment,
   type AssignmentOptions,
+  type InlineAssignmentResult,
   updateAssignment,
 } from '../api/serviceAssignments'
+import { useLeadersStore } from './leaders'
 import { generateMatrixDraftServices } from '../api/districts'
 
 export const useMatrixStore = defineStore('matrix', () => {
@@ -41,6 +43,27 @@ export const useMatrixStore = defineStore('matrix', () => {
       error.value = e instanceof Error ? e.message : 'Unbekannter Fehler'
     } finally {
       loading.value = false
+    }
+  }
+
+  /** Reconcile the authoritative result in place so keyboard focus stays mounted. */
+  function applyInlineAssignment(eventId: string, saved: InlineAssignmentResult) {
+    const leaders = useLeadersStore()
+    const label = saved.leader_name ?? (
+      leaders.districtId === districtId.value ? leaders.labelFor(saved.leader_id) : null
+    )
+    for (const row of matrix.value?.rows ?? []) {
+      for (const cell of Object.values(row.cells)) {
+        if ((cell.assignment_event_id ?? cell.event_id) !== eventId) continue
+        Object.assign(cell, {
+          assignment_id: saved.id,
+          assignment_status: saved.status,
+          leader_id: saved.leader_id,
+          leader_name: label,
+          revision: saved.event_revision,
+          is_gap: false,
+        })
+      }
     }
   }
 
@@ -99,6 +122,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     toDt,
     congregationQuery,
     fetch,
+    applyInlineAssignment,
     assign,
     clearAssignment,
     generateDraftsForCurrentRange,
