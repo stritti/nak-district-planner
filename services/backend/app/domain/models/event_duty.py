@@ -7,6 +7,8 @@ import unicodedata
 from dataclasses import dataclass, replace
 from uuid import UUID, uuid4
 
+SERVICE_LEADER_LABEL = "Dienstleiter"
+
 DEFAULT_DUTY_CATEGORIES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("closing", "Schließdienst", ()),
     ("organist", "Organist", ("Gottesdienst",)),
