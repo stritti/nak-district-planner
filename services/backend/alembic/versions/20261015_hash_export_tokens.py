@@ -7,7 +7,6 @@ New tokens are hashed by the application. This migration converts legacy
 plaintext rows so a database leak never contains usable feed credentials.
 """
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "20261015_hash_export_tokens"
@@ -19,23 +18,11 @@ depends_on = None
 def upgrade() -> None:
     op.execute(
         """UPDATE export_tokens
-        SET token = 'sha256:' || encode(sha256(token::bytea), 'hex')
-        WHERE token NOT LIKE 'sha256:%'"""
-    )
-    op.alter_column(
-        "export_tokens",
-        "token",
-        existing_type=sa.String(64),
-        type_=sa.String(128),
-        existing_nullable=False,
+        SET token = encode(sha256(token::bytea), 'hex')
+        WHERE token !~ '^[0-9a-f]{64}$'"""
     )
 
 
 def downgrade() -> None:
-    op.alter_column(
-        "export_tokens",
-        "token",
-        existing_type=sa.String(128),
-        type_=sa.String(64),
-        existing_nullable=False,
-    )
+    """Hashing is one-way; the plaintext secret cannot be restored."""
+

@@ -12,18 +12,22 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
 
-TOKEN_HASH_PREFIX = "sha256"
+TOKEN_HASH_LENGTH = 64
 
 
 def hash_export_token(token: str) -> str:
-    """Return the storage form of an export token (prefixed SHA-256 hex)."""
-    return f"{TOKEN_HASH_PREFIX}:{hashlib.sha256(token.encode('utf-8')).hexdigest()}"
+    """Return the storage form of an export token (SHA-256 hex digest)."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def is_hashed_export_token(stored: str) -> bool:
-    """Whether a stored token value is already in hashed form."""
-    return stored.startswith(f"{TOKEN_HASH_PREFIX}:") and len(stored) == len(
-        hash_export_token("")
+    """Whether a stored token value is already in hashed form.
+
+    Legacy plaintext tokens are 43 chars from ``secrets.token_urlsafe(32)``;
+    a 64-char lowercase hex value is unambiguously a hash.
+    """
+    return len(stored) == TOKEN_HASH_LENGTH and all(
+        character in "0123456789abcdef" for character in stored
     )
 
 

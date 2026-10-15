@@ -166,7 +166,10 @@ describe('ExportTokensView', () => {
       district_id: 'district-1',
       congregation_id: 'congregation-1',
     })
-    expect(toast.success).toHaveBeenCalledWith('Export-Token erstellt', 'Bezirk öffentlich')
+    expect(toast.success).toHaveBeenCalledWith(
+      'Export-Token erstellt — Secret nur jetzt sichtbar',
+      `Bezirk öffentlich: ${window.location.origin}/api/v1/export/secret-path-token/calendar.ics`,
+    )
     expect(wrapper.text()).not.toContain('Neuer Export-Token')
   })
 

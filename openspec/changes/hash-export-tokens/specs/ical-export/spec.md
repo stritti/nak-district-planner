@@ -29,3 +29,18 @@
 ### Requirement: ICS feed endpoint
 
 `GET /api/v1/export/{token}/calendar.ics` SHALL be unauthenticated, respond with 404 for unknown tokens, hash the presented token for lookup and RLS context, and return `text/calendar` covering planning slots from one year back to two years ahead (narrowed to the congregation for congregation tokens). The `approval_status` query parameter SHALL accept `confirmed_only` or `include_planned`.
+
+#### Scenario: Unknown token
+
+- **WHEN** the feed is requested with an unknown token
+- **THEN** the endpoint responds with 404 without revealing whether a token exists
+
+#### Scenario: Invitation copy location
+
+- **WHEN** a slot is an invitation copy of another congregation's service
+- **THEN** its `LOCATION` is the host congregation, not the invited one, and the host's Dienstleiter appears in the `COMMENT` (anonymised in public feeds)
+
+#### Scenario: Default approval filter
+
+- **WHEN** a public token without leader scope is used without `approval_status`
+- **THEN** only `CONFIRMED` slots are exported; other tokens also export `PLANNED` slots marked `STATUS:TENTATIVE`

@@ -38,9 +38,11 @@ def test_hash_is_deterministic_and_salted_by_token_value():
     assert hash_export_token(raw_a) == hash_export_token(raw_a)
 
 
-def test_hashed_marker_requires_full_prefix_and_length():
+def test_hashed_marker_requires_hex_digest_shape():
     assert not is_hashed_export_token("sha256")
-    assert not is_hashed_export_token("plaintext-token")
+    assert not is_hashed_export_token("legacy-secret")
+    assert not is_hashed_export_token("a" * 63)
+    assert not is_hashed_export_token("A" * 64)
     assert is_hashed_export_token(hash_export_token("x"))
 
 
