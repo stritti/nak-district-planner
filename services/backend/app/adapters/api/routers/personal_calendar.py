@@ -4,10 +4,11 @@
 """Authenticated, district-scoped personal calendar adapter."""
 
 import uuid
+from dataclasses import dataclass
 from datetime import date
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.adapters.api.deps import CurrentUserContext, CurrentUserWithMemberships, DbSession
 from app.adapters.db.orm_models.congregation import CongregationORM
@@ -15,13 +16,19 @@ from app.adapters.db.orm_models.user import UserORM
 from app.adapters.db.repositories.event_duties import SqlEventDutiesRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
-from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.application.personal_calendar import PersonalCalendarEvent, project_personal_events
 from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/personal-calendar", tags=["personal-calendar"])
+
+
+@dataclass(frozen=True)
+class PersonalScope:
+    role: Role
+    scope_type: str
+    scope_id: uuid.UUID
 
 
 def allowed_personal_scopes(auth, district_id, congregation_ids):
@@ -44,7 +51,19 @@ async def personal_subject_context(session, subject_sub, district_id):
     ).scalar_one_or_none()
     if user is None:
         raise HTTPException(404, "Persönlicher Kalender nicht verfügbar")
-    memberships = await SqlMembershipRepository(session).get_all_by_user(subject_sub)
+    scope_rows = (
+        await session.execute(
+            text(
+                "SELECT role, scope_type, scope_id "
+                "FROM personal_calendar_scopes(:subject_sub, :district_id)"
+            ),
+            {"subject_sub": subject_sub, "district_id": district_id},
+        )
+    ).mappings().all()
+    memberships = [
+        PersonalScope(Role(row["role"]), row["scope_type"], row["scope_id"])
+        for row in scope_rows
+    ]
     congregations = set(
         (
             await session.execute(

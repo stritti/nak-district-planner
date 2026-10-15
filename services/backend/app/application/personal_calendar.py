@@ -71,7 +71,7 @@ def project_personal_events(
             "CANCELLED"
             if slot.status == "CANCELLED"
             else "TENTATIVE"
-            if getattr(slot, "approval_status", None) == "PLANNED"
+            if slot.approval_status == "PLANNED"
             else "ACTIVE"
         )
         result.append(
@@ -82,7 +82,7 @@ def project_personal_events(
                 start,
                 end,
                 status,
-                getattr(slot, "approval_status", None),
+                slot.approval_status,
                 labels,
                 slot.congregation_id,
                 max(revisions),

@@ -20,6 +20,7 @@ from app.adapters.api.schemas.service_assignment import (
     ServiceAssignmentUpdate,
 )
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
+from app.domain.models.leader import Leader, LeaderRank
 from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
 
@@ -46,6 +47,23 @@ def _integrity_error(constraint_name: str) -> IntegrityError:
     cause.constraint_name = constraint_name  # type: ignore[attr-defined]
     orig.__cause__ = cause
     return IntegrityError("INSERT", {}, orig)
+
+
+@pytest.mark.asyncio
+async def test_rank_prefixed_typed_name_cannot_bypass_lifecycle() -> None:
+    slot = _slot()
+    leader = Leader.create("Max Muster", slot.district_id, rank=LeaderRank.PRIESTER)
+    leader.is_active = False
+    repo = AsyncMock()
+    repo.list_by_district.return_value = [leader]
+    repo.get.return_value = leader
+    with (
+        patch(_ROUTER + "SqlLeaderRepository", return_value=repo),
+        patch(_ROUTER + "acquire_advisory_xact_lock", new=AsyncMock()),
+        pytest.raises(HTTPException) as caught,
+    ):
+        await sa_router._check_typed_name(AsyncMock(), slot, "Pr. Max Muster")
+    assert caught.value.status_code == 409
 
 
 def _patches(order: AsyncMock, slot: PlanningSlot):

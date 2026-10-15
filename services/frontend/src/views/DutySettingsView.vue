@@ -87,12 +87,23 @@ async function load() {
   }
 }
 
+async function loadDistrict(districtId: string) {
+  try {
+    scope.value = ''
+    if (districtId) await districts.fetchCongregations(districtId)
+    if (districts.selectedDistrictId === districtId) await load()
+  } catch (cause) {
+    if (districts.selectedDistrictId === districtId) {
+      error.value = cause instanceof Error
+        ? cause.message
+        : 'Gemeinden konnten nicht geladen werden'
+    }
+  }
+}
+
 watch(
   () => districts.selectedDistrictId,
-  () => {
-    scope.value = ''
-    void load()
-  },
+  districtId => { void loadDistrict(districtId) },
   { immediate: true },
 )
 watch(scope, () => { void load() })

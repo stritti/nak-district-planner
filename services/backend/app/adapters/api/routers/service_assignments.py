@@ -95,8 +95,12 @@ async def _check_typed_name(db: DbSession, slot: PlanningSlot, name: str | None)
     if not name:
         return
     repo = SqlLeaderRepository(db)
+    normalized_name = normalize_leader_name(name)
     for leader in await repo.list_by_district(slot.district_id):
-        if normalize_leader_name(leader.name) == normalize_leader_name(name):
+        known_names = {normalize_leader_name(leader.name)}
+        if leader.rank:
+            known_names.add(normalize_leader_name(f"{leader.rank.value} {leader.name}"))
+        if normalized_name in known_names:
             await acquire_advisory_xact_lock(db, leader.id)
             current = await repo.get(leader.id)
             if current is not None and not current.is_eligible_on(slot.planning_date):

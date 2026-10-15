@@ -284,10 +284,8 @@ class EventDutiesService:
             raise DutyConflictError("Duty capacity exceeded")
         linked_name = None
         if linked_user_sub:
-            eligible = await self.repository.eligible_users(district_id, slot.congregation_id)
-            linked_name = next(
-                (user["display_name"] for user in eligible if user["sub"] == linked_user_sub),
-                None,
+            linked_name = await self.repository.eligible_user_display_name(
+                district_id, slot.congregation_id, linked_user_sub
             )
             if not linked_name:
                 raise DutyNotFoundError("Reference not found")

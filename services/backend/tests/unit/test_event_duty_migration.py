@@ -30,6 +30,9 @@ def test_upgrade_is_additive_and_keeps_leader_active_state():
     assert "DROP POLICY IF EXISTS service_assignments_tenant_isolation_policy" in sql
     assert "duty_export_slot_allowed(ps.id)" in sql
     assert "CREATE FUNCTION eligible_duty_users" in sql
+    assert "CREATE FUNCTION personal_calendar_scopes" in sql
+    assert "et.subject_sub=p_subject" in sql
+    assert "et.district_id=p_district" in sql
     assert "candidate.scope_id=p_congregation AND EXISTS" in sql
     assert "m.scope_id::text = ANY(planning_slots.applicability)" in sql
     assert "linked_user_sub=current_setting('app.current_user_sub',true)" in sql

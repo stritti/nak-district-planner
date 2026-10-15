@@ -9,7 +9,11 @@ import { useDistrictsStore } from '../stores/districts'
 import DutySettingsView from './DutySettingsView.vue'
 import * as api from '../api/eventDuties'
 vi.mock('../api/eventDuties',()=>({listDutyCategories:vi.fn(),updateDutyCategory:vi.fn(),putDutyConfiguration:vi.fn(),restoreDutyInheritance:vi.fn(),createDutyCategory:vi.fn()}))
-beforeEach(()=>{setActivePinia(createPinia());vi.clearAllMocks();useDistrictsStore().selectedDistrictId='d';useDistrictsStore().congregations=[{id:'c',name:'Gemeinde',district_id:'d'}] as never;useAuthStore().isSuperadmin=true;vi.mocked(api.listDutyCategories).mockResolvedValue({categories:[{id:'cat',congregation_id:null,label:'Organist',code:'organist',event_categories:['Gottesdienst'],capacity:1,enabled:true}],overrides:[]} as never)})
+beforeEach(()=>{setActivePinia(createPinia());vi.clearAllMocks();useDistrictsStore().selectedDistrictId='d';useDistrictsStore().congregations=[{id:'c',name:'Gemeinde',district_id:'d'}] as never;useDistrictsStore().fetchCongregations=vi.fn().mockResolvedValue(undefined);useAuthStore().isSuperadmin=true;vi.mocked(api.listDutyCategories).mockResolvedValue({categories:[{id:'cat',congregation_id:null,label:'Organist',code:'organist',event_categories:['Gottesdienst'],capacity:1,enabled:true}],overrides:[]} as never)})
+it('loads congregations for a direct settings visit',async()=>{
+ const districts=useDistrictsStore();mount(DutySettingsView);await flushPromises()
+ expect(districts.fetchCongregations).toHaveBeenCalledWith('d')
+})
 it('labels inherited configuration and saves explicit congregation override',async()=>{
  const w=mount(DutySettingsView);await flushPromises();await w.get('[data-testid="scope"]').setValue('c');await flushPromises()
  expect(w.text()).toContain('Vom Bezirk geerbt');await w.get('[data-testid="capacity"]').setValue(2);await w.get('[data-testid="save-config"]').trigger('click');await flushPromises()
