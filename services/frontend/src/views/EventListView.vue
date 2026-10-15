@@ -730,13 +730,14 @@ import { errorMessage, useToast } from '../composables/useToast'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 import InlineEditableCell from '../components/InlineEditableCell.vue'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
+import { useInlineAssignmentSave } from '../composables/useInlineAssignmentSave'
 import EmptyState from '../components/EmptyState.vue'
 import ApplicabilitySelect from '../components/ApplicabilitySelect.vue'
 import AutocompleteInput, {
   type AutocompleteOption,
   type AutocompleteValue,
 } from '../components/AutocompleteInput.vue'
-import { changeAssignmentInline, createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
+import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
 import { parseConflictError } from '../api/errors'
 
 const eventsStore = useEventsStore()
@@ -752,6 +753,7 @@ const canManageEvents = computed(() => auth.isSuperadmin || auth.memberships.som
 ))
 
 const inlineCoordinator = useInlineCellCoordinator()
+const saveAssignment = useInlineAssignmentSave()
 onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditEvent(event: EventResponse): boolean {
@@ -781,21 +783,7 @@ function canInlineAssignEvent(event: EventResponse): boolean {
 }
 
 async function saveInlineResponsible(event: EventResponse, leaderId: string, revision: string): Promise<void> {
-  let saved
-  try {
-    saved = await changeAssignmentInline(event.id, leaderId, revision)
-  } catch (cause) {
-    const conflict = parseConflictError(cause)
-    if (!conflict || conflict.blocking.length || !conflict.warnings.length) throw cause
-    const confirmed = await confirm({
-      title: 'Konflikt bei der Zuordnung',
-      message: conflict.warnings.map((warning) => warning.message).join(' '),
-      confirmText: 'Trotzdem zuordnen',
-      variant: 'warning',
-    })
-    if (!confirmed) throw new Error('Zuordnung abgebrochen')
-    saved = await changeAssignmentInline(event.id, leaderId, revision, true)
-  }
+  const saved = await saveAssignment(event.id, leaderId, revision)
   const selected = inlineLeaderChoices.value.find((leader) => leader.value === saved.leader_id)
   eventsStore.updateCached({
     ...event,

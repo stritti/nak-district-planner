@@ -39,3 +39,11 @@ The endpoint deliberately cannot delete assignments or write the organisational 
 - `409`: a BLOCK conflict (unavailability, double-booking or travel-time conflict) is not overrideable; a WARN conflict is retried only after the user explicitly acknowledges it. Cancelled slots and multiple contradictory assignment rows also return 409 without mutation.
 - Single-active-cell coordination is shared with #576. Focus traversal is scoped to the visible matrix table; invalid drafts remain in place until corrected or cancelled with Escape. Existing explicit removal dialogs remain the sole destructive path.
 - A separate persistent version column can replace this opaque timestamp-based composite validator in a future schema migration; this slice reuses the current backend contract to avoid dual revision domains.
+
+## Review refinements (2026-10-15)
+
+- Invitation copies never expose inline assignment editing, even if an older or inconsistent read model reports them as editable. Host-owned assignments remain protected independently by the server.
+- Matrix and event overview use the same `useInlineAssignmentSave` composable and application confirmation host. Only explicit WARN-only conflicts may be acknowledged; BLOCK, unknown severities and malformed/non-warning responses never trigger a retry. A confirmed retry keeps the original revision and is attempted once.
+- Missing If-Match returns 428 before any repository access or lock. Valid requests always lock the slot before reading the instance.
+- The canonical `slot_revision` name is used directly. The `none` instance marker is opaque: inserting the first EventInstance invalidates a previous slot-only validator.
+- Regression tests cover inconsistent invitation editability, warning cancellation, blocking/mixed/unknown conflicts, retry failure and instance insertion. Final merge readiness requires CI evidence at the new branch head.

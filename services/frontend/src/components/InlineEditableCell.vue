@@ -123,7 +123,7 @@ async function activate(): Promise<void> {
   await nextTick()
   const editor = input.value ?? selectInput.value
   editor?.focus()
-  input.value?.select()
+  if (editor instanceof HTMLInputElement) editor.select()
 }
 
 function cancel(): void {

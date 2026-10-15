@@ -217,7 +217,9 @@ async def inline_change_assignment(
     Clearing or deleting an assignment must use the existing confirmed dialog,
     not this text-cell mutation.
     """
-    slot = await (slots.get_for_update(event_id) if if_match is not None else slots.get(event_id))
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    slot = await slots.get_for_update(event_id)
     if slot is None:
         raise HTTPException(status_code=404, detail="Planungseintrag nicht gefunden")
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
@@ -225,8 +227,6 @@ async def inline_change_assignment(
         raise HTTPException(status_code=403, detail="Eingeladene Gemeinde darf Gastgeber-Zuweisung nicht ändern.")
     if slot.status != PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Abgesagte Termine können nicht inline zugewiesen werden.")
-    if if_match is None:
-        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     instance = await instance_repo.get_by_planning_slot(event_id, for_update=True)
     if if_match != slot_revision(slot, instance):
         raise HTTPException(status_code=412, detail="Zuweisung wurde zwischenzeitlich geändert.")
