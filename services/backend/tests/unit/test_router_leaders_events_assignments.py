@@ -987,3 +987,34 @@ async def test_self_link_preserves_concurrent_contact_update() -> None:
     assert result.leader.email == "new@example.org"
     repo.get_for_update.assert_awaited_once_with(leader.id)
     repo.save.assert_awaited_once_with(latest)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["create", "update", "delete"])
+async def test_assignment_writer_locks_planning_slot_before_mutating(action: str) -> None:
+    """Legacy assignment writers must serialize with conditional event edits."""
+    slot = _planning_slot()
+    assignment = ServiceAssignment.create(event_id=slot.id, leader_name="Alt")
+    slots, assignments, db = AsyncMock(), AsyncMock(), AsyncMock()
+    slots.get.return_value = slot
+    slots.get_for_update.return_value = slot
+    assignments.get.return_value = assignment
+
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
+        if action == "create":
+            await sa_router.create_assignment(
+                slot.id, ServiceAssignmentCreate(leader_name="Neu"),
+                _auth_context(), db, slots, assignments,
+            )
+        elif action == "update":
+            await sa_router.update_assignment(
+                slot.id, assignment.id, ServiceAssignmentUpdate(leader_name="Neu"),
+                _auth_context(), db, slots, assignments,
+            )
+        else:
+            await sa_router.delete_assignment(
+                slot.id, assignment.id, _auth_context(), db, slots, assignments,
+            )
+
+    slots.get_for_update.assert_awaited_once_with(slot.id)
+    slots.save.assert_awaited_once_with(slot)
