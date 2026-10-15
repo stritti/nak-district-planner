@@ -562,6 +562,7 @@ async def test_service_assignment_crud_paths() -> None:
 
     slot_repo = AsyncMock()
     slot_repo.get.return_value = slot
+    slot_repo.get_for_update.return_value = slot
     sa_repo = AsyncMock()
     sa_repo.get.return_value = assignment
     sa_repo.list_by_planning_slot.return_value = [assignment]
@@ -615,6 +616,7 @@ async def test_service_assignment_writes_touch_planning_slot(action: str) -> Non
     assignment = ServiceAssignment.create(event_id=slot.id, leader_name="Pr. X")
     slot_repo = AsyncMock()
     slot_repo.get.return_value = slot
+    slot_repo.get_for_update.return_value = slot
     sa_repo = AsyncMock()
     sa_repo.get.return_value = assignment
     args = (_auth_context(), AsyncMock(), slot_repo, sa_repo)
@@ -642,6 +644,7 @@ async def test_service_assignment_create_blocks_conflict() -> None:
     leader_id = uuid.uuid4()
     slot_repo = AsyncMock()
     slot_repo.get = AsyncMock(return_value=slot)
+    slot_repo.get_for_update.return_value = slot
     sa_repo = AsyncMock()
     sa_repo.save = AsyncMock()
     with (
@@ -674,6 +677,7 @@ async def test_service_assignment_create_allows_confirmed_warning() -> None:
     leader_id = uuid.uuid4()
     slot_repo = AsyncMock()
     slot_repo.get = AsyncMock(return_value=slot)
+    slot_repo.get_for_update.return_value = slot
     sa_repo = AsyncMock()
     sa_repo.save = AsyncMock()
     with (
@@ -702,6 +706,7 @@ async def test_service_assignment_create_planning_slot_not_found() -> None:
     db = AsyncMock()
     slot_repo = AsyncMock()
     slot_repo.get.return_value = None
+    slot_repo.get_for_update.return_value = None
     with pytest.raises(HTTPException) as exc:
         await sa_router.create_assignment(
             uuid.uuid4(),
@@ -719,6 +724,7 @@ async def test_service_assignment_list_planning_slot_not_found() -> None:
     db = AsyncMock()
     slot_repo = AsyncMock()
     slot_repo.get.return_value = None
+    slot_repo.get_for_update.return_value = None
     with pytest.raises(HTTPException) as exc:
         await sa_router.list_assignments(
             uuid.uuid4(),
@@ -738,6 +744,7 @@ async def test_service_assignment_create_forbidden() -> None:
     auth = type("A", (), {"memberships": [], "user_sub": "u", "user": None})()
     slot_repo = AsyncMock()
     slot_repo.get.return_value = slot
+    slot_repo.get_for_update.return_value = slot
     with patch(
         "app.adapters.api.routers.service_assignments.require_role_in_district",
         side_effect=HTTPException(status_code=403, detail="forbidden"),
@@ -762,6 +769,7 @@ async def test_service_assignment_list_forbidden() -> None:
     auth = type("A", (), {"memberships": [], "user_sub": "u", "user": None})()
     slot_repo = AsyncMock()
     slot_repo.get.return_value = slot
+    slot_repo.get_for_update.return_value = slot
     with patch(
         "app.adapters.api.routers.service_assignments.require_role_in_district",
         side_effect=HTTPException(status_code=403, detail="forbidden"),
@@ -782,16 +790,18 @@ async def test_service_assignment_update_not_found() -> None:
     district_id = uuid.uuid4()
     slot = _planning_slot(district_id=district_id)
     db = AsyncMock()
+    slot_repo = AsyncMock()
+    slot_repo.get_for_update.return_value = slot
     sa_repo = AsyncMock()
     sa_repo.get.return_value = None
-    with pytest.raises(HTTPException) as exc:
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"), pytest.raises(HTTPException) as exc:
         await sa_router.update_assignment(
             slot.id,
             uuid.uuid4(),
             ServiceAssignmentUpdate(leader_name="X"),
             _auth_context(),
             db,
-            AsyncMock(),
+            slot_repo,
             sa_repo,
         )
 
@@ -804,16 +814,18 @@ async def test_service_assignment_update_event_id_mismatch() -> None:
     slot_b = _planning_slot(district_id=district_id)
     assignment = ServiceAssignment.create(event_id=slot_a.id, leader_name="Pr. X")
     db = AsyncMock()
+    slot_repo = AsyncMock()
+    slot_repo.get_for_update.return_value = slot_b
     sa_repo = AsyncMock()
     sa_repo.get.return_value = assignment  # event_id = slot_a.id
-    with pytest.raises(HTTPException) as exc:
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"), pytest.raises(HTTPException) as exc:
         await sa_router.update_assignment(
             slot_b.id,  # URL has slot_b.id
             assignment.id,
             ServiceAssignmentUpdate(leader_name="Pr. Y"),
             _auth_context(),
             db,
-            AsyncMock(),
+            slot_repo,
             sa_repo,
         )
 
@@ -828,6 +840,7 @@ async def test_service_assignment_update_planning_slot_not_found() -> None:
     db = AsyncMock()
     slot_repo = AsyncMock()
     slot_repo.get.return_value = None
+    slot_repo.get_for_update.return_value = None
     sa_repo = AsyncMock()
     sa_repo.get.return_value = assignment
     with pytest.raises(HTTPException) as exc:
@@ -848,15 +861,17 @@ async def test_service_assignment_delete_not_found() -> None:
     district_id = uuid.uuid4()
     slot = _planning_slot(district_id=district_id)
     db = AsyncMock()
+    slot_repo = AsyncMock()
+    slot_repo.get_for_update.return_value = slot
     sa_repo = AsyncMock()
     sa_repo.get.return_value = None
-    with pytest.raises(HTTPException) as exc:
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"), pytest.raises(HTTPException) as exc:
         await sa_router.delete_assignment(
             slot.id,
             uuid.uuid4(),
             _auth_context(),
             db,
-            AsyncMock(),
+            slot_repo,
             sa_repo,
         )
 
@@ -869,15 +884,17 @@ async def test_service_assignment_delete_event_id_mismatch() -> None:
     slot_b = _planning_slot(district_id=district_id)
     assignment = ServiceAssignment.create(event_id=slot_a.id, leader_name="Pr. X")
     db = AsyncMock()
+    slot_repo = AsyncMock()
+    slot_repo.get_for_update.return_value = slot_b
     sa_repo = AsyncMock()
     sa_repo.get.return_value = assignment
-    with pytest.raises(HTTPException) as exc:
+    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"), pytest.raises(HTTPException) as exc:
         await sa_router.delete_assignment(
             slot_b.id,
             assignment.id,
             _auth_context(),
             db,
-            AsyncMock(),
+            slot_repo,
             sa_repo,
         )
 
@@ -890,6 +907,7 @@ async def test_service_assignment_delete_planning_slot_not_found() -> None:
     db = AsyncMock()
     slot_repo = AsyncMock()
     slot_repo.get.return_value = None
+    slot_repo.get_for_update.return_value = None
     sa_repo = AsyncMock()
     sa_repo.get.return_value = assignment
     with pytest.raises(HTTPException) as exc:
@@ -911,6 +929,7 @@ async def test_service_assignment_list_empty() -> None:
     db = AsyncMock()
     slot_repo = AsyncMock()
     slot_repo.get.return_value = slot
+    slot_repo.get_for_update.return_value = slot
     sa_repo = AsyncMock()
     sa_repo.list_by_planning_slot.return_value = []
     with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
