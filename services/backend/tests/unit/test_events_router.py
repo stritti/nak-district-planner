@@ -77,7 +77,7 @@ async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
         slots.get_for_update.return_value = slot
         instances = kwargs.get("inst_repo")
         instance = instances.get_by_planning_slot.return_value if instances is not None else None
-        kwargs["if_match"] = events._slot_revision(
+        kwargs["if_match"] = events.slot_revision(
             slot, instance if isinstance(instance, EventInstance) else None
         )
     return await events.update_event(event_id, body, auth, session, **kwargs)
@@ -964,10 +964,10 @@ def test_event_revision_detects_instance_only_mutation() -> None:
     """The planning slot may be unchanged while an instance has been reconciled."""
     slot = _slot()
     instance = _instance(slot)
-    previous = events._slot_revision(slot, instance)
+    previous = events.slot_revision(slot, instance)
     instance.updated_at += timedelta(microseconds=1)
-    assert events._slot_revision(slot, instance) != previous
-    assert events._slot_revision(slot, None) != previous
+    assert events.slot_revision(slot, instance) != previous
+    assert events.slot_revision(slot, None) != previous
 
 
 @pytest.mark.asyncio
