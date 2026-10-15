@@ -192,7 +192,8 @@ describe('Inline matrix reconciliation', () => {
     leaders.districtId = 'd1'
     leaders.leaders = [{
       id: 'l1', district_id: 'd1', name: 'Max', rank: 'Pr.', is_active: true,
-      email: null, congregation_id: null, congregation_name: null, created_at: '', updated_at: '',
+      email: null, congregation_id: null, special_role: null, user_sub: null,
+      phone: null, notes: null, created_at: '', updated_at: '',
     }]
     store.applyInlineAssignment('e1', saved)
     expect(store.matrix!.rows[0].cells.day).toBe(cell)
@@ -216,8 +217,9 @@ describe('Inline matrix reconciliation', () => {
     const leaders = useLeadersStore()
     leaders.districtId = 'd2'
     leaders.leaders = [{
-      id: 'l1', district_id: 'd2', name: 'Fremder Name', is_active: true,
-      email: null, congregation_id: null, congregation_name: null, created_at: '', updated_at: '',
+      id: 'l1', district_id: 'd2', name: 'Fremder Name', rank: null, is_active: true,
+      email: null, congregation_id: null, special_role: null, user_sub: null,
+      phone: null, notes: null, created_at: '', updated_at: '',
     }]
     store.applyInlineAssignment('e1', saved)
     expect(cell.leader_name).toBeNull()

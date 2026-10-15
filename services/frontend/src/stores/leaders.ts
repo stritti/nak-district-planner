@@ -3,7 +3,7 @@
 
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { listLeaders, type LeaderResponse } from '../api/leaders'
+import { leaderDisplayName, listLeaders, type LeaderResponse } from '../api/leaders'
 
 export const useLeadersStore = defineStore('leaders', () => {
   const leaders = ref<LeaderResponse[]>([])
@@ -35,7 +35,7 @@ export const useLeadersStore = defineStore('leaders', () => {
 
   const choices = computed(() => activeLeaders().map((leader) => ({
     value: leader.id,
-    label: leader.rank ? `${leader.rank} ${leader.name}` : leader.name,
+    label: leaderDisplayName(leader),
   })))
 
   function labelFor(leaderId: string | null): string | null {
