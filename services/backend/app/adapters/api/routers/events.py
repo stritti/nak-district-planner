@@ -30,7 +30,7 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
-from app.adapters.api.revisions import slot_revision as _slot_revision
+from app.adapters.api.revisions import slot_revision
 from app.adapters.api.schemas.conflict import ConflictItem
 from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
@@ -231,7 +231,7 @@ def _slot_to_event(
         responsible=responsible,
         created_at=slot.created_at,
         updated_at=slot.updated_at,
-        revision=_slot_revision(slot, instance),
+        revision=slot_revision(slot, instance),
     )
 
 
@@ -536,7 +536,7 @@ async def update_event(
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
-    if if_match != _slot_revision(slot, instance):
+    if if_match != slot_revision(slot, instance):
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail="Ereignis wurde zwischenzeitlich geändert. Bitte Daten neu laden.",
@@ -652,7 +652,7 @@ async def preview_event_change(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
     instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
-    if if_match != _slot_revision(slot, instance):
+    if if_match != slot_revision(slot, instance):
         raise HTTPException(status_code=412, detail="Ereignis wurde zwischenzeitlich geändert.")
     proposed = _proposed_service(slot, instance, body)
     items: list[EventChangeImpactItem] = []

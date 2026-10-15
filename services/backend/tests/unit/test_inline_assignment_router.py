@@ -56,6 +56,12 @@ async def _call(slot: PlanningSlot, *, revision: str | None, existing=None, perm
                 instance_repo=instances,
             )
         except HTTPException:
+            if revision is None:
+                slots.get.assert_not_awaited()
+                slots.get_for_update.assert_not_awaited()
+                instances.get_by_planning_slot.assert_not_awaited()
+                assignments.list_by_planning_slot.assert_not_awaited()
+                authorize.assert_not_called()
             assignments.save.assert_not_awaited()
             slots.save.assert_not_awaited()
             raise
@@ -165,9 +171,9 @@ def _instance(slot: PlanningSlot) -> EventInstance:
 def test_assignment_revision_matches_complete_event_snapshot():
     slot = _slot()
     instance = _instance(slot)
-    from app.adapters.api.routers.events import _slot_revision
+    from app.adapters.api.routers.events import slot_revision
 
-    assert slot_revision(slot, instance) == _slot_revision(slot, instance)
+    assert slot_revision(slot, instance) == slot_revision(slot, instance)
     before = slot_revision(slot, instance)
     instance.updated_at = datetime(2026, 10, 15, tzinfo=UTC)
     assert slot_revision(slot, instance) != before
@@ -193,3 +199,9 @@ async def test_assignment_rejects_instance_only_stale_revision():
         )
     assert exc.value.status_code == 412
     assignments.save.assert_not_awaited()
+
+
+def test_inserting_instance_invalidates_slot_only_revision():
+    slot = _slot()
+    before = slot_revision(slot)
+    assert slot_revision(slot, _instance(slot)) != before

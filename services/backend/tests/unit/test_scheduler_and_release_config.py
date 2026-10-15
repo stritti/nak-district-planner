@@ -84,7 +84,22 @@ def test_branch_and_pr_builds_never_publish_images() -> None:
 def test_image_publication_requires_a_release_and_builds_its_tag() -> None:
     release = _yaml(".github/workflows/release.yml")
     publish = release["jobs"]["docker-build"]
-    assert publish["needs"] == "release-please"
+    # A release with operator requirements must publish instructions first.
+    assert publish["needs"] == ["release-please", "publish-upgrade-notes"]
+    upgrade_notes = release["jobs"]["publish-upgrade-notes"]
+    assert upgrade_notes["needs"] == "release-please"
+    assert upgrade_notes["if"] == "${{ needs.release-please.outputs.releases_created == 'true' }}"
+    assert upgrade_notes["permissions"]["contents"] == "write"
+    steps = upgrade_notes["steps"]
+    checkout_upgrade = next(
+        s for s in steps if s.get("uses", "").startswith("actions/checkout@")
+    )
+    assert checkout_upgrade["with"]["ref"] == "${{ needs.release-please.outputs.tag_name }}"
+    assert checkout_upgrade["with"]["fetch-depth"] == 0
+    assert any(
+        "scripts/publish_release_upgrade_notes.py" in step.get("run", "")
+        for step in steps
+    )
     assert publish["if"] == "${{ needs.release-please.outputs.releases_created == 'true' }}"
     matrix = publish["strategy"]["matrix"]
     assert set(matrix["service"]) == {"backend", "frontend"}

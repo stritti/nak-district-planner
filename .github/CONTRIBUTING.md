@@ -34,4 +34,6 @@ Integrationstests benötigen die in der [Entwicklerdokumentation](../README.md#e
 
 Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`) nutzen, Änderungen und Nachweise beschreiben, CI prüfen, Reviewkommentare bearbeiten. Sicherheitsprobleme nicht als öffentliche Bugberichte mit sensiblen Details melden; siehe [Sicherheitsrichtlinie](SECURITY.md).
 
+Bei Änderungen, die **manuelle Anpassungen einer bestehenden Produktivinstallation** erfordern (neue Pflichtvariablen, Ports, Dienste, Zugangsdaten, Restore-Verfahren), ist eine neue, konkrete Upgrade-Notiz in `docs/operations/release-notes/` Bestandteil des PRs. Format und automatische Veröffentlichung sind im [Release-Prozess](../docs/operations/release-process.md#verbindliche-release-hinweise-bei-produktiven-änderungen) dokumentiert. Änderungen ohne Handlungsbedarf brauchen keine solche Notiz.
+
 Die Quellen stehen unter [AGPL-3.0-only](../LICENSE). Lizenz-/Copyright-Hinweise gemäß [REUSE](../docs/licensing.md) erhalten.

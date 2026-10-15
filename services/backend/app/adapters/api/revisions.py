@@ -17,7 +17,12 @@ def _utc(value: datetime) -> datetime:
 def slot_revision(
     slot: PlanningSlot, instance: EventInstance | None = None
 ) -> str:
-    """A change to either event model invalidates conditional writes."""
+    """A change to either event model invalidates conditional writes.
+
+    A slot without an instance uses the opaque "none" marker. Inserting its
+    first instance invalidates that slot-only snapshot even if the slot did
+    not change.
+    """
     slot_updated = _utc(slot.updated_at).isoformat(timespec="microseconds")
     instance_updated = (
         _utc(instance.updated_at).isoformat(timespec="microseconds")

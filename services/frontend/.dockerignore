@@ -1,0 +1,13 @@
+.env
+.env.*
+**/.env
+**/.env.*
+.git
+**/.git
+node_modules
+**/node_modules
+coverage
+**/coverage
+dist
+.vite
+*.log

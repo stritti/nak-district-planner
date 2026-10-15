@@ -37,9 +37,29 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+  publish-upgrade-notes:
+    name: Publish production upgrade instructions
+    needs: release-please
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Prepend actionable production upgrade instructions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: python3 scripts/publish_release_upgrade_notes.py --tag "$RELEASE_TAG"
+
   docker-build:
     name: docker-build
-    needs: release-please
+    needs: [release-please, publish-upgrade-notes]
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
     runs-on: ubuntu-latest
     strategy:

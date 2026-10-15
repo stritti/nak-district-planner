@@ -123,7 +123,7 @@ async def test_blocking_conflict_rejects_change_before_save() -> None:
                 slot,
                 repos,
                 events.EventUpdate(start_at=NEW_START),
-                if_match=events._slot_revision(slot),
+                if_match=events.slot_revision(slot),
             )
     assert error.value.status_code == 409
     assert error.value.detail["conflicts"][0]["severity"] == "BLOCK"
@@ -140,7 +140,7 @@ async def test_warning_conflict_requires_explicit_confirmation() -> None:
                 slot,
                 repos,
                 events.EventUpdate(start_at=NEW_START),
-                if_match=events._slot_revision(slot),
+                if_match=events.slot_revision(slot),
             )
         assert error.value.status_code == 409
         repos[0].save.assert_not_awaited()
@@ -149,7 +149,7 @@ async def test_warning_conflict_requires_explicit_confirmation() -> None:
             slot,
             repos,
             events.EventUpdate(start_at=NEW_START, confirm_warnings=True),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
         )
     assert result.start_at == NEW_START
     repos[0].save.assert_awaited_once()
@@ -168,7 +168,7 @@ async def test_responsible_leader_outside_district_is_rejected() -> None:
                 slot,
                 repos,
                 events.EventUpdate(start_at=NEW_START),
-                if_match=events._slot_revision(slot),
+                if_match=events.slot_revision(slot),
             )
     assert error.value.status_code == 422
     repos[0].save.assert_not_awaited()
@@ -184,7 +184,7 @@ async def test_revalidation_locks_leaders_in_id_order() -> None:
             slot,
             repos,
             events.EventUpdate(start_at=NEW_START),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
         )
     locked = [call.args[1] for call in mocks["acquire_advisory_xact_lock"].await_args_list]
     assert locked == sorted(locked, key=str)
@@ -201,7 +201,7 @@ async def test_preview_reports_warning_impact_without_writing() -> None:
             events.EventChangeImpactRequest(start_at=NEW_START),
             object(),
             AsyncMock(),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
             slot_repo=slot_repo,
             inst_repo=inst_repo,
             assignments_repo=assignments_repo,
@@ -222,7 +222,7 @@ async def test_preview_reports_blocking_impact() -> None:
             events.EventChangeImpactRequest(start_at=NEW_START),
             object(),
             AsyncMock(),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
             slot_repo=slot_repo,
             inst_repo=inst_repo,
             assignments_repo=assignments_repo,
@@ -240,7 +240,7 @@ async def test_preview_without_assignments_has_no_impact() -> None:
             events.EventChangeImpactRequest(congregation_id=None),
             object(),
             AsyncMock(),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
             slot_repo=slot_repo,
             inst_repo=inst_repo,
             assignments_repo=assignments_repo,
@@ -262,7 +262,7 @@ async def test_preview_requires_planner_role() -> None:
                 events.EventChangeImpactRequest(start_at=NEW_START),
                 object(),
                 AsyncMock(),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
                 slot_repo=slot_repo,
                 inst_repo=inst_repo,
                 assignments_repo=assignments_repo,
@@ -282,7 +282,7 @@ async def test_preview_rejects_end_before_start() -> None:
             ),
             object(),
             AsyncMock(),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
             slot_repo=slot_repo,
             inst_repo=inst_repo,
             assignments_repo=assignments_repo,
@@ -325,7 +325,7 @@ async def test_blocking_impact_is_checked_before_any_instance_write() -> None:
     with _patches([_conflict(Severity.BLOCK)]), pytest.raises(HTTPException) as exc:
         await _update(
             slot, repos, events.EventUpdate(start_at=NEW_START, end_at=NEW_START.replace(hour=10)),
-            if_match=events._slot_revision(slot, instance),
+            if_match=events.slot_revision(slot, instance),
         )
     assert exc.value.status_code == 409
     repos[1].save.assert_not_awaited()

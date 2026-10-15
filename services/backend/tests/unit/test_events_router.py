@@ -77,7 +77,7 @@ async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
         slots.get_for_update.return_value = slot
         instances = kwargs.get("inst_repo")
         instance = instances.get_by_planning_slot.return_value if instances is not None else None
-        kwargs["if_match"] = events._slot_revision(
+        kwargs["if_match"] = events.slot_revision(
             slot, instance if isinstance(instance, EventInstance) else None
         )
     return await events.update_event(event_id, body, auth, session, **kwargs)
@@ -455,7 +455,7 @@ async def test_update_event_persists_instance_and_slot_changes() -> None:
             slot_repo=slot_repo,
             inst_repo=instance_repo,
             assignments_repo=AsyncMock(list_by_planning_slot=AsyncMock(return_value=[])),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
         )
 
     assert result.title == "Neuer Titel"
@@ -488,7 +488,7 @@ async def test_update_event_can_clear_congregation_and_description() -> None:
             slot_repo=slot_repo,
             inst_repo=instance_repo,
             assignments_repo=AsyncMock(list_by_planning_slot=AsyncMock(return_value=[])),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
         )
 
     assert slot.congregation_id is None
@@ -537,7 +537,7 @@ async def test_update_event_rejects_congregation_from_another_district() -> None
             cong_repo=congregation_repo,
             inst_repo=instance_repo,
             assignments_repo=AsyncMock(list_by_planning_slot=AsyncMock(return_value=[])),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
         )
 
     assert error.value.status_code == 400
@@ -563,7 +563,7 @@ async def test_update_event_moves_slot_without_instance_and_rejects_invalid_rang
             slot_repo=slot_repo,
             inst_repo=instance_repo,
             assignments_repo=AsyncMock(list_by_planning_slot=AsyncMock(return_value=[])),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
         )
         with pytest.raises(HTTPException) as range_error:
             await _update_event_with_revision(
@@ -577,7 +577,7 @@ async def test_update_event_moves_slot_without_instance_and_rejects_invalid_rang
                 slot_repo=slot_repo,
                 inst_repo=instance_repo,
                 assignments_repo=AsyncMock(list_by_planning_slot=AsyncMock(return_value=[])),
-                if_match=events._slot_revision(slot),
+                if_match=events.slot_revision(slot),
             )
 
     assert range_error.value.status_code == 400
@@ -698,7 +698,7 @@ async def test_update_event_moving_to_congregation_drops_distribution() -> None:
             cong_repo=congregation_repo,
             inst_repo=instance_repo,
             assignments_repo=AsyncMock(list_by_planning_slot=AsyncMock(return_value=[])),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
         )
 
     assert result.congregation_id == congregation.id
@@ -981,10 +981,10 @@ def test_event_revision_detects_instance_only_mutation() -> None:
     """The planning slot may be unchanged while an instance has been reconciled."""
     slot = _slot()
     instance = _instance(slot)
-    previous = events._slot_revision(slot, instance)
+    previous = events.slot_revision(slot, instance)
     instance.updated_at += timedelta(microseconds=1)
-    assert events._slot_revision(slot, instance) != previous
-    assert events._slot_revision(slot, None) != previous
+    assert events.slot_revision(slot, instance) != previous
+    assert events.slot_revision(slot, None) != previous
 
 
 @pytest.mark.asyncio

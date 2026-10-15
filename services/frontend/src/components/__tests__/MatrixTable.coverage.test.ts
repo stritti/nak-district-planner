@@ -12,7 +12,7 @@ import { useAuthStore } from '@/stores/auth'
 import * as assignmentsApi from '@/api/serviceAssignments'
 import type { MatrixResponse } from '@/api/matrix'
 import { ApiError } from '@/api/errors'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { useConfirmHost } from '@/composables/useConfirm'
 
 vi.mock('@/api/serviceAssignments', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/serviceAssignments')>()),
@@ -168,6 +168,24 @@ describe('MatrixTable coverage gaps', () => {
     wrapper.unmount()
   })
 
+  it.each([true, undefined])('hides invitation copies even when editability is %s', (editable) => {
+    const matrixStore = useMatrixStore()
+    matrixStore.districtId = 'd1'
+    matrixStore.matrix = structuredClone(richMatrix)
+    const cell = matrixStore.matrix.rows[0].cells['2026-10-06']
+    cell.revision = '"rev-1"'
+    cell.is_assignment_editable = editable
+    cell.assignment_event_id = 'host-event'
+    useAuthStore().memberships = [{ scope_type: 'DISTRICT', scope_id: 'd1', role: 'PLANNER' }]
+    const wrapper = mount(MatrixTable, {
+      props: { compactMode: false, matrixSortMode: 'default' },
+    })
+
+    expect(wrapper.find('[data-inline-cell-id="matrix-leader-c1-2026-10-06"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="host-congregation"]').text()).toBe('Gemeinde B')
+    wrapper.unmount()
+  })
+
   it('does not expose inline assignment editing to viewer-only access', () => {
     const matrixStore = useMatrixStore()
     matrixStore.districtId = 'd1'
@@ -243,9 +261,10 @@ describe('MatrixTable coverage gaps', () => {
       const { wrapper, matrixStore } = mountEditable()
       await submitLeader(wrapper)
 
-      const dialog = wrapper.findComponent(ConfirmDialog)
-      expect(dialog.props('open')).toBe(true)
-      dialog.vm.$emit('confirm')
+      const dialog = useConfirmHost()
+      expect(dialog.isRevealed.value).toBe(true)
+      expect(dialog.options.value?.message).toContain('Konflikt WARN')
+      dialog.confirm()
       await flushPromises()
 
       expect(assignmentsApi.changeAssignmentInline).toHaveBeenLastCalledWith('normal', 'l3', '"rev-1"', true)
@@ -258,7 +277,7 @@ describe('MatrixTable coverage gaps', () => {
       const { wrapper } = mountEditable()
       await submitLeader(wrapper)
 
-      wrapper.findComponent(ConfirmDialog).vm.$emit('cancel')
+      useConfirmHost().cancel()
       await flushPromises()
 
       expect(assignmentsApi.changeAssignmentInline).toHaveBeenCalledOnce()
@@ -272,7 +291,7 @@ describe('MatrixTable coverage gaps', () => {
       const { wrapper } = mountEditable()
       await submitLeader(wrapper)
 
-      expect(wrapper.findComponent(ConfirmDialog).props('open')).toBe(false)
+      expect(useConfirmHost().isRevealed.value).toBe(false)
       expect(wrapper.get('[role="alert"]').text()).toContain('Konflikt BLOCK')
       expect(assignmentsApi.changeAssignmentInline).toHaveBeenCalledOnce()
       wrapper.unmount()
