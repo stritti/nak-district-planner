@@ -36,6 +36,8 @@ class SlotDutyView:
     assignments: list[DutyAssignmentView]
 
 
+# Sentinel that distinguishes "caller did not pass expected_congregation_id"
+# from an explicit None, so slot-scope moves can be detected reliably.
 _UNSET = object()
 
 
