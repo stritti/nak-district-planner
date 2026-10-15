@@ -68,7 +68,7 @@ _FUNCTIONS = (
                 SELECT 1 FROM congregations c WHERE c.id=p_congregation AND c.district_id=p_district)))
       )))
     $$""",
-    f"""CREATE FUNCTION current_duty_export_subject() RETURNS text
+    """CREATE FUNCTION current_duty_export_subject() RETURNS text
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
       SELECT COALESCE(et.subject_sub,l.user_sub) FROM export_tokens et
       LEFT JOIN leaders l ON l.id=et.leader_id AND l.district_id=et.district_id
@@ -78,12 +78,12 @@ _FUNCTIONS = (
         OR EXISTS (SELECT 1 FROM congregations c WHERE c.district_id=et.district_id
           AND duty_subject_scope(COALESCE(et.subject_sub,l.user_sub),et.district_id,c.id)))
     $$""",
-    f"""CREATE FUNCTION duty_export_is_subject_bound() RETURNS boolean
+    """CREATE FUNCTION duty_export_is_subject_bound() RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
       SELECT EXISTS (SELECT 1 FROM export_tokens et
         WHERE et.token=current_setting('app.current_export_token',true) AND et.subject_sub IS NOT NULL)
     $$""",
-    f"""CREATE FUNCTION duty_export_slot_allowed(p_slot uuid) RETURNS boolean
+    """CREATE FUNCTION duty_export_slot_allowed(p_slot uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
       SELECT EXISTS (SELECT 1 FROM planning_slots ps JOIN export_tokens et ON et.district_id=ps.district_id
         WHERE ps.id=p_slot AND et.token=current_setting('app.current_export_token',true)
@@ -264,7 +264,7 @@ def _restore_select_policies(op) -> None:
 
 def install_duty_policies(op) -> None:
     """Install independently scoped duties policies and personal feed restrictions."""
-    op.execute("""CREATE FUNCTION duty_assignment_count(p_slot uuid,p_category uuid) RETURNS bigint
+    op.execute(f"""CREATE FUNCTION duty_assignment_count(p_slot uuid,p_category uuid) RETURNS bigint
       LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
       SELECT count(*) FROM event_duty_assignments da WHERE da.planning_slot_id=p_slot
         AND da.duty_category_id=p_category AND EXISTS (SELECT 1 FROM planning_slots ps
