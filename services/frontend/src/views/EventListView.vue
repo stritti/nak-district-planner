@@ -723,6 +723,7 @@ import {
   type EventApprovalStatus,
   type EventListParams,
   type EventResponse,
+  type EventUpdate,
   type PlanningSlotStatus,
 } from '../api/events'
 import { exportEventsToExcel } from '../composables/useExcelExport'
@@ -1387,20 +1388,33 @@ async function saveEdit() {
         acknowledgedWarnings = true
       }
     }
-    const updated = await updateEvent(
-      target.id,
-      {
-        congregation_id: congregationId,
-        status:          editForm.status,
-        approval_status: editForm.approval_status,
-        category:        editForm.category || null,
-        // Congregation-level events are never distributed; the backend clears it.
-        ...(isDistrictLevel && { applicability: editForm.applicability }),
-        ...(congregationChanged && { confirm_warnings: acknowledgedWarnings }),
-      },
-      // All full-editor writes are conditional, including status-only changes.
-      target.revision ?? '',
-    )
+    const payload: EventUpdate = {
+      congregation_id: congregationId,
+      status:          editForm.status,
+      approval_status: editForm.approval_status,
+      category:        editForm.category || null,
+      // Congregation-level events are never distributed; the backend clears it.
+      ...(isDistrictLevel && { applicability: [...editForm.applicability] }),
+      ...(congregationChanged && { confirm_warnings: acknowledgedWarnings }),
+    }
+    // Keep both the requested values and revision fixed across confirmation.
+    const revision = target.revision ?? ''
+    let updated: EventResponse
+    try {
+      updated = await updateEvent(target.id, payload, revision)
+    } catch (cause) {
+      const conflict = parseConflictError(cause)
+      if (!conflict || conflict.blocking.length || !conflict.warnings.length) throw cause
+      const confirmed = await confirm({
+        title: 'Konflikt durch Gemeindewechsel',
+        message: conflict.warnings.map((warning) => warning.message).join(' '),
+        confirmText: 'Trotzdem speichern',
+        variant: 'warning',
+      })
+      if (!confirmed) return
+      // The write independently revalidates. Retry once; BLOCK and 412 remain failures.
+      updated = await updateEvent(target.id, { ...payload, confirm_warnings: true }, revision)
+    }
     let assignmentError: unknown = null
     try {
       updated.responsible = await saveResponsible(target)
@@ -1437,7 +1451,10 @@ async function saveEdit() {
     editTarget.value = null
     toast.success('Termin gespeichert', updated.title)
   } catch (e) {
-    editError.value = errorMessage(e, 'Fehler beim Speichern')
+    const conflict = parseConflictError(e)
+    editError.value = conflict
+      ? conflict.conflicts.map((item) => item.message).join(' ')
+      : errorMessage(e, 'Fehler beim Speichern')
     toast.error('Termin konnte nicht gespeichert werden', e)
   } finally {
     editSaving.value = false

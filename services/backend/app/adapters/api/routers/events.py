@@ -147,7 +147,7 @@ class EventInlineUpdate(BaseModel):
 
 
 class EventUpdate(BaseModel):
-    """Patch fields for an event."""
+    """Strict full-editor request, including explicit workflow acknowledgement."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -162,7 +162,10 @@ class EventUpdate(BaseModel):
     applicability: list[Annotated[str, Field(min_length=1, max_length=64)]] | None = Field(
         None, max_length=500
     )
-    confirm_warnings: bool = False
+    confirm_warnings: bool = Field(
+        False,
+        description="Acknowledge WARN conflicts on dependent changes; not an event data field.",
+    )
 
 
 class EventChangeImpactRequest(BaseModel):
@@ -515,6 +518,28 @@ async def get_event(
     return _slot_to_event(slot, instance, responsible.get(slot.id))
 
 
+def _changes_service_dependencies(
+    slot: PlanningSlot, instance: EventInstance | None, body: EventUpdate
+) -> bool:
+    """Only effective schedule/location changes require assignment revalidation.
+
+    Category migration with existing assignments needs a separate explicit
+    workflow and is deliberately outside this dependency trigger.
+    """
+    fields = body.model_fields_set
+    if "congregation_id" in fields and body.congregation_id != slot.congregation_id:
+        return True
+    current_start = _to_utc(instance.actual_start_at) if instance else _slot_start_at(slot)
+    if "start_at" in fields and body.start_at is not None and _to_utc(body.start_at) != current_start:
+        return True
+    return (
+        "end_at" in fields
+        and body.end_at is not None
+        and instance is not None
+        and _to_utc(body.end_at) != _to_utc(instance.actual_end_at)
+    )
+
+
 @router.patch("/{event_id}", response_model=EventResponse)
 async def update_event(
     event_id: uuid.UUID,
@@ -528,13 +553,13 @@ async def update_event(
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> EventResponse:
-    slot = await (slot_repo.get_for_update(event_id) if if_match is not None else slot_repo.get(event_id))
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    slot = await slot_repo.get_for_update(event_id)
     if slot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
 
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
-    if if_match is None:
-        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
     if if_match != slot_revision(slot, instance):
         raise HTTPException(
@@ -546,7 +571,7 @@ async def update_event(
     if slot.was_released and slot.status == PlanningSlotStatus.CANCELLED and body.status == PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Eine veröffentlichte Absage kann nicht zurückgenommen werden.")
     proposed = _proposed_service(slot, instance, body)
-    dependent = proposed != _proposed_service(slot, instance, EventUpdate())
+    dependent = _changes_service_dependencies(slot, instance, body)
 
     if dependent:
         await _revalidate_dependent_change(
@@ -644,7 +669,11 @@ async def preview_event_change(
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> EventChangeImpact:
-    """Read-only impact of a date, time or congregation change on assigned ministers."""
+    """Read-only impact using row locks for a consistent multi-entity snapshot.
+
+    Locks serialize concurrent previews until this request transaction ends.
+    The later PATCH runs in a separate transaction and revalidates independently.
+    """
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     slot = await slot_repo.get_for_update(event_id)

@@ -73,6 +73,8 @@ async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
     """Exercise legacy PATCH using the revision captured by a client at load time."""
     slots = kwargs["slot_repo"]
     slot = slots.get.return_value
+    slots.get_for_update.return_value = slot
+    kwargs.setdefault("if_match", '"missing-slot-snapshot"')
     if isinstance(slot, PlanningSlot):
         slots.get_for_update.return_value = slot
         instances = kwargs.get("inst_repo")
