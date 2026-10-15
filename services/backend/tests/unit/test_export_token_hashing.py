@@ -12,12 +12,12 @@ from app.domain.models.export_token import (
 
 
 def _create(**overrides):
-    kwargs = dict(
-        label="Feed",
-        token_type=TokenType.INTERNAL,
-        district_id="d",
-        congregation_id=None,
-    )
+    kwargs: dict = {
+        "label": "Feed",
+        "token_type": TokenType.INTERNAL,
+        "district_id": "d",
+        "congregation_id": None,
+    }
     kwargs.update(overrides)
     return ExportToken.create(**kwargs)
 

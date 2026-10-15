@@ -6,7 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('./client')
 
 import * as client from './client'
-import { createExportToken, deleteExportToken, listExportTokens } from './exportTokens'
+import {
+  createExportToken,
+  deleteExportToken,
+  listExportTokens,
+  revealExportToken,
+} from './exportTokens'
 
 const apiFetch = vi.mocked(client.apiFetch)
 
@@ -40,6 +45,13 @@ describe('export token API', () => {
     await deleteExportToken('token-1')
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/export-tokens/token-1', {
       method: 'DELETE',
+    })
+  })
+
+  it('reveals a legacy token exactly once', async () => {
+    await revealExportToken('token-1')
+    expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/export-tokens/token-1/reveal', {
+      method: 'POST',
     })
   })
 })
