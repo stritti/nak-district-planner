@@ -85,13 +85,14 @@ def test_own_slot_is_not_a_distribution() -> None:
 
 
 def _token(token_type: TokenType, leader_id: uuid.UUID | None = None) -> ExportToken:
-    return ExportToken.create(
+    token, _ = ExportToken.create(
         label="t",
         token_type=token_type,
         district_id=DISTRICT,
         congregation_id=None,
         leader_id=leader_id,
     )
+    return token
 
 
 @pytest.mark.parametrize("requested", [None, "confirmed_only", "include_planned"])
