@@ -47,3 +47,14 @@ The endpoint deliberately cannot delete assignments or write the organisational 
 - Missing If-Match returns 428 before any repository access or lock. Valid requests always lock the slot before reading the instance.
 - The canonical `slot_revision` name is used directly. The `none` instance marker is opaque: inserting the first EventInstance invalidates a previous slot-only validator.
 - Regression tests cover inconsistent invitation editability, warning cancellation, blocking/mixed/unknown conflicts, retry failure and instance insertion. Final merge readiness requires CI evidence at the new branch head.
+
+## Second review decisions (2026-10-15)
+
+- The leader store publishes a district only after its choices load successfully. Pending, failed and out-of-order requests cannot relabel another district's choices. Matrix editing requires loaded choices for the displayed district.
+- District planning authorization and leader display labels are shared in the auth/leader stores. The inline APIs currently call the district guard without congregation scope expansion; congregation-only permissions are deliberately not advertised. A future congregation-scoped editor must extend and test the server contract first.
+- A matrix store action owns in-place assignment reconciliation, preserving mounted cells for keyboard navigation; the overview reconciles its authoritative event row before its existing background refresh. Both use the same leader labels and warning/save policy.
+- Mobile and desktop assignment controls share a wrapper. Text/select focus uses one editor accessor. A failed acknowledged retry (including 409/412) propagates without another prompt.
+- Strong validators are quoted opaque tokens with colon-separated UUID/timestamps and six fractional digits. Datetime colons are part of the token; neither server nor clients parse it. Shared timezone attachment preserves the existing timestamp representation.
+- Selecting the already assigned leader is an idempotent no-op with unchanged revision/status/timestamps.
+- Tenant visibility is enforced by database RLS before router authorization. Invisible foreign slots return 404; visible slots with insufficient planner permission return 403. Integration tests probe the inline endpoint as well as legacy event routes.
+- Legacy modal assignment POST/PUT/DELETE remain non-conditional compatibility endpoints. They advance event revision and are not used by the conditional inline editor. Mandatory If-Match for destructive/free-text legacy operations needs a coordinated client/API migration; #578 additionally serializes those writers through the same slot lock.

@@ -215,7 +215,8 @@ async def inline_change_assignment(
     """Change an assigned minister atomically against the event's strong revision.
 
     Clearing or deleting an assignment must use the existing confirmed dialog,
-    not this text-cell mutation.
+    not this text-cell mutation. Selecting the existing leader is an idempotent
+    no-op and returns the unchanged event revision.
     """
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")

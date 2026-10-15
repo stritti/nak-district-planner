@@ -32,6 +32,14 @@ export const useAuthStore = defineStore(
       return Date.now() / 1000 >= token.value.expiresAt
     })
 
+    /** Mirrors district PLANNER guards; congregation scopes need a separate API contract. */
+    function canPlanDistrict(districtId: string | null | undefined): boolean {
+      return isSuperadmin.value || (!!districtId && memberships.value.some((membership) =>
+        membership.scope_type === 'DISTRICT' && membership.scope_id === districtId &&
+        ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(membership.role),
+      ))
+    }
+
     function setToken(newToken: OIDCToken | null, newUser: OIDCUser | null = null) {
       if (user.value && user.value.sub !== newUser?.sub) clearSessionViewSettings()
       setSessionSettingsIdentity(newUser?.sub ?? null)
@@ -95,6 +103,7 @@ export const useAuthStore = defineStore(
       pendingRegistrationsCount,
       isAuthenticated,
       isTokenExpired,
+      canPlanDistrict,
       setToken,
       refreshCurrentUserFlags,
       getToken,

@@ -278,10 +278,7 @@ const auth = useAuthStore()
 const inlineCoordinator = useInlineCellCoordinator()
 const saveAssignment = useInlineAssignmentSave()
 
-const leaderChoices = computed(() => leadersStore.activeLeaders().map((leader) => ({
-  value: leader.id,
-  label: leader.rank ? `${leader.rank} ${leader.name}` : leader.name,
-})))
+const leaderChoices = computed(() => leadersStore.choices)
 
 function canInlineAssign(cell: MatrixCell): boolean {
   return !!cell.event_id &&
@@ -289,24 +286,17 @@ function canInlineAssign(cell: MatrixCell): boolean {
     // Invitation copies display host-owned duties and must never offer a write.
     !cell.invitation_source_congregation_name &&
     !!cell.revision &&
-    (auth.isSuperadmin || auth.memberships.some((membership) =>
-      membership.scope_type === 'DISTRICT' &&
-      membership.scope_id === matrixStore.districtId &&
-      ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(membership.role)
-    ))
+    leadersStore.districtId === matrixStore.districtId &&
+    !leadersStore.loading &&
+    leaderChoices.value.length > 0 &&
+    auth.canPlanDistrict(matrixStore.districtId)
 }
 
 async function saveInlineAssignment(cell: MatrixCell, leaderId: string, revision: string): Promise<void> {
   const eventId = cell.assignment_event_id ?? cell.event_id
   if (!eventId) throw new Error('Planungseintrag fehlt')
   const saved = await saveAssignment(eventId, leaderId, revision)
-  // Apply authoritative response without unmounting the table during focus navigation.
-  cell.assignment_id = saved.id
-  cell.assignment_status = saved.status
-  cell.leader_id = saved.leader_id
-  cell.leader_name = leaderChoices.value.find((item) => item.value === saved.leader_id)?.label ?? null
-  cell.revision = saved.event_revision
-  cell.is_gap = false
+  matrixStore.applyInlineAssignment(eventId, saved)
 }
 
 type OverflowTitleEl = HTMLElement & {

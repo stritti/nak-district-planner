@@ -57,6 +57,10 @@ class InlineAssignmentChange(BaseModel):
 
 
 class InlineAssignmentResult(ServiceAssignmentResponse):
-    """Saved assignment plus the new event revision for subsequent cell edits."""
+    """Saved assignment plus the current event revision for subsequent cell edits.
+
+    Assigning the same leader is a no-op: identity, status, timestamps and
+    revision stay unchanged. A successful changed assignment advances revision.
+    """
 
     event_revision: str
