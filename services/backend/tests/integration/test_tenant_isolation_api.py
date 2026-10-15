@@ -282,8 +282,13 @@ async def test_foreign_rows_are_invisible_even_via_own_district_path(api, owner,
 
     patched = await api.patch(own_path_foreign_leader, json={"name": "Gekapert"}, headers=headers)
     deleted = await api.delete(foreign_leader, headers=headers)
-    event_patch = await api.patch(
+    missing_revision = await api.patch(
         f"/api/v1/events/{world.b.slot_id}", json={"title": "Gekapert"}, headers=headers
+    )
+    assert missing_revision.status_code == 428
+    event_patch = await api.patch(
+        f"/api/v1/events/{world.b.slot_id}", json={"title": "Gekapert"},
+        headers={**headers, "If-Match": '"foreign-resource-snapshot"'},
     )
 
     # Foreign resources are hidden by RLS even when their identifiers are
