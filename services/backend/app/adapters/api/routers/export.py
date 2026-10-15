@@ -37,12 +37,20 @@ from app.adapters.api.tenant_references import (
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
-from app.adapters.db.repositories.export_token import SqlExportTokenRepository
+from app.adapters.db.repositories.export_token import (
+    SqlExportTokenRepository,
+    _orm_to_domain,
+)
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.event_instance import EventInstance, EventVisibility
-from app.domain.models.export_token import ExportToken, TokenType
+from app.domain.models.export_token import (
+    ExportToken,
+    TokenType,
+    hash_export_token,
+    is_hashed_export_token,
+)
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
     PlanningSlot,
@@ -75,7 +83,7 @@ async def create_export_token(
     await ensure_congregation_in_district(session, body.district_id, body.congregation_id)
     await ensure_leader_in_district(session, body.district_id, body.leader_id)
 
-    token = ExportToken.create(
+    token, raw_secret = ExportToken.create(
         label=body.label,
         token_type=body.token_type,
         district_id=body.district_id,
@@ -84,7 +92,7 @@ async def create_export_token(
         subject_sub=body.subject_sub,
     )
     await repo.save(token)
-    return _token_response(token)
+    return _token_response(token, raw_secret=raw_secret)
 
 
 @router.get(
@@ -141,10 +149,36 @@ async def delete_export_token(
     await repo.delete(token_id)
 
 
-def _token_response(token: ExportToken) -> ExportTokenResponse:
+@router.post(
+    "/export-tokens/{token_id}/reveal",
+    response_model=ExportTokenResponse,
+)
+async def reveal_export_token(
+    auth: RawCurrentUserWithMemberships,
+    token_id: uuid.UUID,
+    session: DbSession,
+    repo: SqlExportTokenRepository = Depends(get_export_token_repository),
+) -> ExportTokenResponse:
+    row = await repo.get_orm(token_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht gefunden")
+    if row.subject_sub != auth.user_sub:
+        require_role_in_district(auth, Role.DISTRICT_ADMIN, row.district_id)
+    if is_hashed_export_token(row.token):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht erneut anzeigbar"
+        )
+    raw_secret = row.token
+    await repo.hash_stored_token(row)
+    return _token_response(_orm_to_domain(row), raw_secret=raw_secret)
+
+
+def _token_response(
+    token: ExportToken, *, raw_secret: str | None = None
+) -> ExportTokenResponse:
     return ExportTokenResponse(
         id=token.id,
-        token=token.token,
+        token=raw_secret,
         label=token.label,
         token_type=token.token_type,
         district_id=token.district_id,
@@ -202,7 +236,7 @@ async def export_calendar_ics(
 
     await session.execute(
         text("SELECT set_config('app.current_export_token', :val, true)"),
-        {"val": token_str},
+        {"val": hash_export_token(token_str)},
     )
     export_token = await token_repo.get_by_token(token_str)
     if not export_token:

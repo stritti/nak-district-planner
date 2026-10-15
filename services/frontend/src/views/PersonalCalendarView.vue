@@ -148,11 +148,15 @@ async function revoke(id: string) {
       class="flex flex-wrap items-center gap-3"
     >
       <a
+        v-if="token.token"
         :href="`/api/v1/export/${encodeURIComponent(token.token)}/calendar.ics`"
         class="text-blue-600 underline"
       >
         {{ token.label }} (ICS)
       </a>
+      <span v-else class="text-sm text-gray-500 dark:text-gray-400">
+        {{ token.label }} — Secret nur direkt nach dem Erstellen sichtbar
+      </span>
       <button class="btn-secondary" :disabled="loading" @click="revoke(token.id)">
         Widerrufen
       </button>

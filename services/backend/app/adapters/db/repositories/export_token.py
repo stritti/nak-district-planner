@@ -11,7 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.export_token import ExportTokenORM
-from app.domain.models.export_token import ExportToken, TokenType
+from app.domain.models.export_token import (
+    ExportToken,
+    TokenType,
+    hash_export_token,
+    is_hashed_export_token,
+)
 
 
 def _orm_to_domain(row: ExportTokenORM) -> ExportToken:
@@ -50,10 +55,30 @@ class SqlExportTokenRepository:
 
     async def get_by_token(self, token: str) -> ExportToken | None:
         result = await self._session.execute(
-            select(ExportTokenORM).where(ExportTokenORM.token == token)
+            select(ExportTokenORM).where(ExportTokenORM.token == hash_export_token(token))
         )
         row = result.scalar_one_or_none()
+        if row is None:
+            result = await self._session.execute(
+                select(ExportTokenORM).where(ExportTokenORM.token == token)
+            )
+            row = result.scalar_one_or_none()
+            if row is not None and is_hashed_export_token(row.token):
+                row = None
+            elif row is not None:
+                await self.hash_stored_token(row)
         return _orm_to_domain(row) if row else None
+
+    async def get_orm(self, token_id: uuid.UUID) -> ExportTokenORM | None:
+        result = await self._session.execute(
+            select(ExportTokenORM).where(ExportTokenORM.id == token_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def hash_stored_token(self, row: ExportTokenORM) -> None:
+        """Replace a legacy plaintext token value with its hash in place."""
+        row.token = hash_export_token(row.token)
+        await self._session.flush()
 
     async def get(self, token_id: uuid.UUID) -> ExportToken | None:
         result = await self._session.execute(
