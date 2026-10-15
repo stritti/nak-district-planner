@@ -368,3 +368,46 @@ def test_dependency_trigger_compares_instance_schedule_and_explicit_congregation
     assert events._changes_service_dependencies(
         slot, instance, events.EventUpdate(congregation_id=None),
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("preview", [False, True])
+async def test_end_only_slot_change_rejects_end_before_effective_planned_start(preview):
+    slot = _slot()
+    repos = _repos(slot)
+    end = datetime(2026, 10, 14, 9, tzinfo=UTC)
+    with _patches(), pytest.raises(HTTPException) as exc:
+        if preview:
+            await events.preview_event_change(
+                slot.id, events.EventChangeImpactRequest(end_at=end),
+                object(), AsyncMock(), if_match=events.slot_revision(slot),
+                slot_repo=repos[0], inst_repo=repos[1], assignments_repo=repos[2],
+            )
+        else:
+            await _update(
+                slot, repos, events.EventUpdate(end_at=end),
+                if_match=events.slot_revision(slot),
+            )
+    assert exc.value.status_code == 400
+    assert "wirksamen Startzeit" in exc.value.detail
+    repos[0].save.assert_not_awaited()
+    repos[1].save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_scalar_update_does_not_revalidate_existing_leader_ownership():
+    slot = _slot()
+    repos = _repos(slot, [_assigned(slot)])
+    with _patches() as mocks:
+        mocks["ensure_leader_in_district"].side_effect = HTTPException(
+            status_code=422, detail="Invalid historic leader reference",
+        )
+        result = await _update(
+            slot, repos, events.EventUpdate(title="Neuer Titel"),
+            if_match=events.slot_revision(slot),
+        )
+    assert result.title == "Neuer Titel"
+    mocks["ensure_leader_in_district"].assert_not_awaited()
+    mocks["acquire_advisory_xact_lock"].assert_not_awaited()
+    mocks["check_service_assignment_conflicts"].assert_not_awaited()
+    repos[0].save.assert_awaited_once()

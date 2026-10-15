@@ -686,6 +686,22 @@ describe('Conflicts arriving after event impact preview', () => {
     await flushPromises()
   }
 
+  it('explains that the draft is retained when preview warnings are declined', async () => {
+    vi.mocked(eventsApi.previewEventChange).mockResolvedValueOnce({
+      blocked: false, requires_confirmation: true,
+      items: [{ assignment_id: 'a1', leader_id: 'l1', conflicts: [
+        { rule_id: 'WARN', severity: 'WARN', message: 'Warnung', details: {} },
+      ] }],
+    })
+    mocks.confirm.mockResolvedValueOnce(false)
+    const { wrapper, modal } = await editCongregation()
+    await submit(modal)
+    expect(eventsApi.updateEvent).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Speichern abgebrochen. Der Entwurf bleibt erhalten.')
+    expect(wrapper.get('.modal-panel').findAll('select')[0].element).toHaveProperty('value', 'c2')
+    wrapper.unmount()
+  })
+
   it('acknowledges a new warning after a clean preview with the original revision', async () => {
     vi.mocked(eventsApi.updateEvent)
       .mockRejectedValueOnce(conflict('WARN'))
@@ -715,6 +731,7 @@ describe('Conflicts arriving after event impact preview', () => {
     expect(eventsApi.updateEvent).toHaveBeenCalledOnce()
     expect(wrapper.get('.modal-panel').findAll('select')[0].element).toHaveProperty('value', 'c2')
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Speichern abgebrochen. Der Entwurf bleibt erhalten.')
     wrapper.unmount()
   })
 
