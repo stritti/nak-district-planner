@@ -77,7 +77,7 @@ async def test_event_snapshot_without_instance_is_internal_and_versioned():
             assignments_repo=AsyncMock(), leaders_repo=AsyncMock(),
         )
     assert response.source.value == "INTERNAL"
-    assert response.revision == events._slot_revision(slot)
+    assert response.revision == events.slot_revision(slot)
 
 
 @pytest.mark.asyncio
@@ -107,7 +107,7 @@ async def test_cancelled_event_cannot_be_changed_using_inline_path():
             events.EventInlineUpdate(title="Versteckte Änderung"),
             object(),
             AsyncMock(),
-            if_match=events._slot_revision(slot),
+            if_match=events.slot_revision(slot),
             slot_repo=slots,
         )
     assert error.value.status_code == 409
