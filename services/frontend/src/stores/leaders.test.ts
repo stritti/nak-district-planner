@@ -6,7 +6,10 @@ import { createPinia, setActivePinia } from 'pinia'
 import * as leadersApi from '../api/leaders'
 import { useLeadersStore } from './leaders'
 
-vi.mock('../api/leaders')
+vi.mock('../api/leaders', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/leaders')>()),
+  listLeaders: vi.fn(),
+}))
 
 const leader = (id: string, isActive: boolean): leadersApi.LeaderResponse => ({
   id,

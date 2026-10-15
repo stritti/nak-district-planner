@@ -24,7 +24,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../api/districts')
 vi.mock('../api/events')
 vi.mock('../api/serviceAssignments')
-vi.mock('../api/leaders')
+vi.mock('../api/leaders', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/leaders')>()),
+  listLeaders: vi.fn(),
+}))
 vi.mock('../composables/useConfirm', () => ({
   useConfirm: () => mocks.confirm,
 }))
