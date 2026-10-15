@@ -24,18 +24,23 @@ describe('events api', () => {
     vi.mocked(client.apiFetch).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 })
   })
 
-  it('sends If-Match only for schedule-changing updates', async () => {
+  it('requires If-Match for every event update, including status-only changes', async () => {
     await updateEvent('e1', { congregation_id: 'c2' }, '"rev-1"')
     expect(client.apiFetch).toHaveBeenLastCalledWith('/api/v1/events/e1', expect.objectContaining({
       method: 'PATCH',
       headers: { 'If-Match': '"rev-1"' },
     }))
 
-    await updateEvent('e1', { status: 'CANCELLED' })
+    await updateEvent('e1', { status: 'CANCELLED' }, '"rev-2"')
     expect(client.apiFetch).toHaveBeenLastCalledWith('/api/v1/events/e1', expect.objectContaining({
       method: 'PATCH',
-      headers: undefined,
+      headers: { 'If-Match': '"rev-2"' },
     }))
+
+    vi.mocked(client.apiFetch).mockClear()
+    await expect(updateEvent('e1', { status: 'CANCELLED' }, ''))
+      .rejects.toThrow('Versionsinformation fehlt')
+    expect(client.apiFetch).not.toHaveBeenCalled()
   })
 
   it('previews a change with a POST that persists nothing', async () => {
