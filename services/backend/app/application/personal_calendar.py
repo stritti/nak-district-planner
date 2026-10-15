@@ -63,7 +63,7 @@ def project_personal_events(
         end = instance.actual_end_at if instance else start + timedelta(hours=2)
         revisions = [
             slot.updated_at,
-            *[getattr(d, "updated_at", slot.updated_at) for d in own_duties],
+            *[d.updated_at for d in own_duties],
         ]
         if instance:
             revisions.append(instance.updated_at)
