@@ -12,6 +12,7 @@ import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
 import EventListView from './EventListView.vue'
 import { useAuthStore } from '../stores/auth'
+import { ApiError } from '../api/errors'
 
 const mocks = vi.hoisted(() => ({
   confirm: vi.fn(),
@@ -659,5 +660,121 @@ describe('Inline editing in the event overview', () => {
     await cell.trigger('click')
     expect(cell.find('input').exists()).toBe(false)
     expect(eventsApi.updateEventInline).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('Conflicts arriving after event impact preview', () => {
+  const conflict = (...severities: string[]) => new ApiError(409, 'Conflict', {
+    detail: { conflicts: severities.map((severity) => ({
+      rule_id: 'RACE', severity, message: `Neuer Konflikt ${severity}`, details: {},
+    })) },
+  })
+
+  async function editCongregation() {
+    const context = setup([event()])
+    await flushPromises()
+    await context.wrapper.get('button[title="Zuordnung bearbeiten"]').trigger('click')
+    await flushPromises()
+    const modal = context.wrapper.get('.modal-panel')
+    await modal.findAll('select')[0].setValue('c2')
+    return { ...context, modal }
+  }
+
+  async function submit(modal: Awaited<ReturnType<typeof editCongregation>>['modal']) {
+    await modal.findAll('button').find((button) => button.text() === 'Speichern')!.trigger('click')
+    await flushPromises()
+  }
+
+  it('acknowledges a new warning after a clean preview with the original revision', async () => {
+    vi.mocked(eventsApi.updateEvent)
+      .mockRejectedValueOnce(conflict('WARN'))
+      .mockResolvedValueOnce(event({ congregation_id: 'c2' }))
+    const { wrapper, modal } = await editCongregation()
+    await submit(modal)
+
+    expect(eventsApi.previewEventChange).toHaveBeenCalledOnce()
+    expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Neuer Konflikt WARN', confirmText: 'Trotzdem speichern',
+    }))
+    expect(eventsApi.updateEvent).toHaveBeenCalledTimes(2)
+    expect(eventsApi.updateEvent).toHaveBeenNthCalledWith(1, 'e1',
+      expect.objectContaining({ congregation_id: 'c2', confirm_warnings: false }), '"revision-1"')
+    expect(eventsApi.updateEvent).toHaveBeenLastCalledWith('e1',
+      expect.objectContaining({ congregation_id: 'c2', confirm_warnings: true }), '"revision-1"')
+    expect(wrapper.find('.modal-panel').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('retains the edited draft when the new warning is declined', async () => {
+    vi.mocked(eventsApi.updateEvent).mockRejectedValue(conflict('WARN'))
+    mocks.confirm.mockResolvedValueOnce(false)
+    const { wrapper, modal } = await editCongregation()
+    await submit(modal)
+
+    expect(eventsApi.updateEvent).toHaveBeenCalledOnce()
+    expect(wrapper.get('.modal-panel').findAll('select')[0].element).toHaveProperty('value', 'c2')
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each([['BLOCK'], ['WARN', 'BLOCK'], ['UNKNOWN']])(
+    'shows final non-overridable conflicts %j without a retry',
+    async (...severities: string[]) => {
+      vi.mocked(eventsApi.updateEvent).mockRejectedValue(conflict(...severities))
+      const { wrapper, modal } = await editCongregation()
+      await submit(modal)
+
+      expect(mocks.confirm).not.toHaveBeenCalled()
+      expect(eventsApi.updateEvent).toHaveBeenCalledOnce()
+      expect(wrapper.text()).toContain(`Neuer Konflikt ${severities[0]}`)
+      expect(wrapper.get('.modal-panel').findAll('select')[0].element).toHaveProperty('value', 'c2')
+      wrapper.unmount()
+    },
+  )
+
+  it('retains stale revisions for explicit reload instead of confirming them', async () => {
+    vi.mocked(eventsApi.updateEvent).mockRejectedValue(new ApiError(412, 'Stale', {}))
+    const { wrapper, modal } = await editCongregation()
+    await submit(modal)
+
+    expect(mocks.confirm).not.toHaveBeenCalled()
+    expect(eventsApi.updateEvent).toHaveBeenCalledOnce()
+    expect(wrapper.get('.modal-panel').exists()).toBe(true)
+    expect(wrapper.text()).toContain('412')
+    wrapper.unmount()
+  })
+
+  it('asks again for new final warnings even after preview warnings were accepted', async () => {
+    vi.mocked(eventsApi.previewEventChange).mockResolvedValueOnce({
+      blocked: false, requires_confirmation: true,
+      items: [{ assignment_id: 'a1', leader_id: 'l1', conflicts: [
+        { rule_id: 'OLD', severity: 'WARN', message: 'Vorschauwarnung', details: {} },
+      ] }],
+    })
+    vi.mocked(eventsApi.updateEvent)
+      .mockRejectedValueOnce(conflict('WARN'))
+      .mockResolvedValueOnce(event({ congregation_id: 'c2' }))
+    const { wrapper, modal } = await editCongregation()
+    await submit(modal)
+
+    expect(mocks.confirm).toHaveBeenCalledTimes(2)
+    expect(mocks.confirm).toHaveBeenNthCalledWith(2, expect.objectContaining({ message: 'Neuer Konflikt WARN' }))
+    expect(eventsApi.updateEvent).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('does not loop or lose the draft when the acknowledged retry is blocked', async () => {
+    vi.mocked(eventsApi.updateEvent)
+      .mockRejectedValueOnce(conflict('WARN'))
+      .mockRejectedValueOnce(conflict('BLOCK'))
+    const { wrapper, modal } = await editCongregation()
+    await submit(modal)
+
+    expect(mocks.confirm).toHaveBeenCalledOnce()
+    expect(eventsApi.updateEvent).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Neuer Konflikt BLOCK')
+    expect(wrapper.get('.modal-panel').exists()).toBe(true)
+    wrapper.unmount()
   })
 })

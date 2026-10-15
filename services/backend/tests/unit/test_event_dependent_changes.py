@@ -89,6 +89,9 @@ async def test_dependent_change_without_if_match_is_precondition_required() -> N
             await _update(slot, repos, events.EventUpdate(start_at=NEW_START))
     assert error.value.status_code == 428
     repos[0].save.assert_not_awaited()
+    repos[0].get.assert_not_awaited()
+    repos[0].get_for_update.assert_not_awaited()
+    repos[1].get_by_planning_slot.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -330,3 +333,38 @@ async def test_blocking_impact_is_checked_before_any_instance_write() -> None:
     assert exc.value.status_code == 409
     repos[1].save.assert_not_awaited()
     repos[0].save.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (events.EventUpdate(title="Neu"), False),
+        (events.EventUpdate(category="Vortrag"), False),
+        (events.EventUpdate(congregation_id=None), False),
+        (events.EventUpdate(start_at=datetime(2026, 10, 14, 10, tzinfo=UTC)), False),
+        (events.EventUpdate(start_at=NEW_START), True),
+        (events.EventUpdate(congregation_id=uuid.uuid4()), True),
+        (events.EventUpdate(end_at=NEW_START), False),
+    ],
+)
+def test_dependency_trigger_uses_explicit_effective_fields_without_instance(body, expected):
+    assert events._changes_service_dependencies(_slot(), None, body) is expected
+
+
+def test_dependency_trigger_compares_instance_schedule_and_explicit_congregation_clear():
+    slot = _slot()
+    slot.congregation_id = uuid.uuid4()
+    instance = EventInstance.create(
+        planning_slot_id=slot.id, title="Gottesdienst",
+        actual_start_at=NEW_START, actual_end_at=NEW_START.replace(hour=10),
+        source=EventSource.INTERNAL, visibility=EventVisibility.PUBLIC,
+    )
+    assert not events._changes_service_dependencies(
+        slot, instance, events.EventUpdate(start_at=NEW_START, end_at=NEW_START.replace(hour=10)),
+    )
+    assert events._changes_service_dependencies(
+        slot, instance, events.EventUpdate(end_at=NEW_START.replace(hour=11)),
+    )
+    assert events._changes_service_dependencies(
+        slot, instance, events.EventUpdate(congregation_id=None),
+    )
