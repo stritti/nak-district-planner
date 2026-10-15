@@ -58,7 +58,7 @@ async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
     slot = slots.get.return_value
     if isinstance(slot, PlanningSlot):
         slots.get_for_update.return_value = slot
-        kwargs["if_match"] = events._slot_revision(slot)
+        kwargs["if_match"] = events.slot_revision(slot)
 
     return await events.update_event(event_id, body, auth, session, **kwargs)
 

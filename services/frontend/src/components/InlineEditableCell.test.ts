@@ -238,6 +238,26 @@ describe('InlineEditableCell', () => {
     expect(wrapper.find('input').exists()).toBe(false)
   })
 
+  it('supports a reference select with the shared validation and revision contract', async () => {
+    const save = vi.fn(async () => undefined)
+    const { wrapper } = setup({
+      as: 'div', value: 'leader-a', displayValue: 'A. Beispiel',
+      choices: [
+        { value: 'leader-a', label: 'A. Beispiel' },
+        { value: 'leader-b', label: 'B. Beispiel' },
+      ],
+      save,
+    })
+    expect(wrapper.text()).toContain('A. Beispiel')
+    await open(wrapper)
+    expect(wrapper.find('input').exists()).toBe(false)
+    expect(wrapper.find('select').exists()).toBe(true)
+    await wrapper.get('select').setValue('leader-b')
+    await wrapper.get('select').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(save).toHaveBeenCalledWith('leader-b', '"rev-1"')
+  })
+
   it('supports a mobile div instead of table markup', async () => {
     const { wrapper } = setup({ as: 'div' })
     expect(wrapper.element.tagName).toBe('DIV')

@@ -15,7 +15,7 @@
       aria-label="Dienstplan-Matrix, horizontal und vertikal scrollbar"
       tabindex="0"
     >
-      <table :class="tableClass" :style="{ width: `max(100%, ${tableWidth}px)` }">
+      <table data-inline-edit-scope :class="tableClass" :style="{ width: `max(100%, ${tableWidth}px)` }">
         <colgroup>
           <col :style="{ width: `${congregationColumnWidth}px` }" />
           <col v-for="date in matrixStore.matrix.dates" :key="date" :style="{ width: `${dateColumnWidth}px` }" />
@@ -140,7 +140,7 @@
                     <template v-else>{{ row.cells[date].event_title }}</template>
                   </div>
                   <div
-                    v-if="row.cells[date].leader_name"
+                    v-if="row.cells[date].leader_name && !canInlineAssign(row.cells[date])"
                     v-overflow-title="row.cells[date].leader_name ?? ''"
                     :class="leaderNameClass"
                   >
@@ -177,6 +177,21 @@
                     Einladungen: {{ row.cells[date].invitation_count }}
                   </div>
                 </button>
+                <InlineEditableCell
+                  v-if="canInlineAssign(row.cells[date])"
+                  :id="'matrix-leader-' + row.congregation_id + '-' + date"
+                  as="div"
+                  class="mt-1"
+                  :value="row.cells[date].leader_id"
+                  :display-value="row.cells[date].leader_name ?? 'Dienstleiter zuweisen'"
+                  :label="'Dienstleiter: ' + row.congregation_name + ' ' + date"
+                  :editable="true"
+                  :choices="leaderChoices"
+                  :revision="row.cells[date].revision ?? ''"
+                  :coordinator="inlineCoordinator"
+                  :save="(leaderId, revision) => saveInlineAssignment(row.cells[date], leaderId, revision)"
+                  required
+                />
               </template>
               <template v-else>
                 <span class="text-gray-300 dark:text-gray-600">–</span>
@@ -235,6 +250,11 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
+import { useLeadersStore } from '../stores/leaders'
+import { useAuthStore } from '../stores/auth'
+import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
+import { useInlineAssignmentSave } from '../composables/useInlineAssignmentSave'
+import InlineEditableCell from './InlineEditableCell.vue'
 import type { MatrixCell, MatrixRow } from '../api/matrix'
 import { filterMatrixRows, sortMatrixRows } from '../utils/matrixRows'
 import { useScrollShadow } from '../composables/useScrollShadow'
@@ -259,6 +279,31 @@ const emit = defineEmits<{
 
 const matrixStore = useMatrixStore()
 const districtsStore = useDistrictsStore()
+const leadersStore = useLeadersStore()
+const auth = useAuthStore()
+const inlineCoordinator = useInlineCellCoordinator()
+const saveAssignment = useInlineAssignmentSave()
+
+const leaderChoices = computed(() => leadersStore.choices)
+
+function canInlineAssign(cell: MatrixCell): boolean {
+  return !!cell.event_id &&
+    cell.is_assignment_editable !== false &&
+    // Invitation copies display host-owned duties and must never offer a write.
+    !cell.invitation_source_congregation_name &&
+    !!cell.revision &&
+    leadersStore.districtId === matrixStore.districtId &&
+    !leadersStore.loading &&
+    leaderChoices.value.length > 0 &&
+    auth.canPlanDistrict(matrixStore.districtId)
+}
+
+async function saveInlineAssignment(cell: MatrixCell, leaderId: string, revision: string): Promise<void> {
+  const eventId = cell.assignment_event_id ?? cell.event_id
+  if (!eventId) throw new Error('Planungseintrag fehlt')
+  const saved = await saveAssignment(eventId, leaderId, revision)
+  matrixStore.applyInlineAssignment(eventId, saved)
+}
 
 type OverflowTitleEl = HTMLElement & {
   __overflowTitleHandler__?: () => void

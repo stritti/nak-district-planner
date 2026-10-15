@@ -2,22 +2,30 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { listLeaders, type LeaderResponse } from '../api/leaders'
+import { computed, ref } from 'vue'
+import { leaderDisplayName, listLeaders, type LeaderResponse } from '../api/leaders'
 
 export const useLeadersStore = defineStore('leaders', () => {
   const leaders = ref<LeaderResponse[]>([])
   const loading = ref(false)
   const districtId = ref<string>('')
 
+  let latestRequest = 0
+
   async function fetchLeaders(newDistrictId: string) {
+    const request = ++latestRequest
+    // Never label a previous district's choices as belonging to a pending request.
+    districtId.value = ''
+    leaders.value = []
+    loading.value = !!newDistrictId
     if (!newDistrictId) return
-    loading.value = true
     try {
+      const loaded = await listLeaders(newDistrictId)
+      if (request !== latestRequest) return
+      leaders.value = loaded
       districtId.value = newDistrictId
-      leaders.value = await listLeaders(newDistrictId)
     } finally {
-      loading.value = false
+      if (request === latestRequest) loading.value = false
     }
   }
 
@@ -26,5 +34,14 @@ export const useLeadersStore = defineStore('leaders', () => {
       (!localDate || !l.service_end_date || localDate <= l.service_end_date))
   }
 
-  return { leaders, loading, districtId, fetchLeaders, activeLeaders }
+  const choices = computed(() => activeLeaders().map((leader) => ({
+    value: leader.id,
+    label: leaderDisplayName(leader),
+  })))
+
+  function labelFor(leaderId: string | null): string | null {
+    return choices.value.find((choice) => choice.value === leaderId)?.label ?? null
+  }
+
+  return { leaders, loading, districtId, fetchLeaders, activeLeaders, choices, labelFor }
 })

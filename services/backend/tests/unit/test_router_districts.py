@@ -687,6 +687,7 @@ async def test_get_matrix_shows_slot_outside_regular_service_times() -> None:
 
     cell = result.rows[0].cells[saturday.date().isoformat()]
     assert cell.planning_slot_id == slot.id
+    assert cell.revision is not None and str(slot.id) in cell.revision
     assert cell.is_gap is True
     assert cell.is_assignment_editable is True
 

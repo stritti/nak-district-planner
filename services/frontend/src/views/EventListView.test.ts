@@ -25,7 +25,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../api/districts')
 vi.mock('../api/events')
 vi.mock('../api/serviceAssignments')
-vi.mock('../api/leaders')
+vi.mock('../api/leaders', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/leaders')>()),
+  listLeaders: vi.fn(),
+}))
 vi.mock('../composables/useConfirm', () => ({
   useConfirm: () => mocks.confirm,
 }))
@@ -583,6 +586,49 @@ describe('Inline editing in the event overview', () => {
       expect(cell.find('input').exists()).toBe(false)
     }
     expect(eventsApi.updateEventInline).not.toHaveBeenCalled()
+  })
+
+
+  it('assigns a minister inline using the captured revision and caches the new validator', async () => {
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([
+      { id: 'l1', name: 'Max', district_id: 'd1', rank: null, is_active: true } as leadersApi.LeaderResponse,
+    ])
+    vi.mocked(assignmentsApi.changeAssignmentInline).mockResolvedValue({
+      id: 'a1', event_id: 'e1', leader_id: 'l1', leader_name: null,
+      status: 'ASSIGNED', event_revision: '"revision-2"',
+    } as assignmentsApi.InlineAssignmentResult)
+    const { wrapper, eventsStore } = setup([event()])
+    await flushPromises()
+    vi.mocked(eventsApi.listEvents).mockResolvedValue(response([event({
+      revision: '"revision-2"',
+      responsible: { assignment_id: 'a1', leader_id: 'l1', name: 'Max', status: 'ASSIGNED' },
+    })]))
+    const cell = wrapper.get('[data-inline-cell-id="responsible-desktop-e1"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('select').setValue('l1')
+    await cell.get('select').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(assignmentsApi.changeAssignmentInline).toHaveBeenCalledWith('e1', 'l1', '"revision-1"')
+    expect(eventsStore.items[0]?.revision).toBe('"revision-2"')
+    expect(eventsStore.items[0]?.responsible?.leader_id).toBe('l1')
+  })
+
+  it('does not expose destructive or external inline assignment operations', async () => {
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([
+      { id: 'l1', name: 'Max', district_id: 'd1', rank: null, is_active: true } as leadersApi.LeaderResponse,
+    ])
+    const { wrapper } = setup([event(), event({ id: 'external', source: 'EXTERNAL' })])
+    await flushPromises()
+    expect(wrapper.find('[data-inline-cell-id="responsible-desktop-external"]').exists()).toBe(false)
+    const cell = wrapper.get('[data-inline-cell-id="responsible-desktop-e1"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('select').setValue('')
+    await cell.get('select').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(cell.text()).toContain('nicht leer')
+    expect(assignmentsApi.changeAssignmentInline).not.toHaveBeenCalled()
   })
 
   it('denies editing when district membership is absent', async () => {

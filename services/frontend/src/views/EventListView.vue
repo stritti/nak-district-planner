@@ -248,7 +248,15 @@
             </template>
             <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
           </p>
-          <p v-if="event.responsible" class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+          <InlineAssignmentCell
+                  v-if="canInlineAssignEvent(event)"
+                  layout="mobile"
+                  :event="event"
+                  :choices="inlineLeaderChoices"
+                  :coordinator="inlineCoordinator"
+                  :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
+                />
+          <p v-else-if="event.responsible" class="mt-1 text-xs text-gray-600 dark:text-gray-400">
             {{ responsibleLabel(event) }}: {{ event.responsible.name }}
             <span v-if="event.responsible.needs_review" class="ml-1 text-amber-700 dark:text-amber-300">
               Prüfung erforderlich
@@ -336,7 +344,15 @@
                 <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
               </td>
               <td class="table-td text-xs" data-testid="responsible-cell">
-                <template v-if="event.responsible">
+                <InlineAssignmentCell
+                  v-if="canInlineAssignEvent(event)"
+                  layout="desktop"
+                  :event="event"
+                  :choices="inlineLeaderChoices"
+                  :coordinator="inlineCoordinator"
+                  :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
+                />
+                <template v-else-if="event.responsible">
                   <span>{{ event.responsible.name }}</span>
                   <span
                     v-if="event.responsible.needs_review"
@@ -718,7 +734,9 @@ import { errorMessage, useToast } from '../composables/useToast'
 import EventDutiesPanel from '../components/EventDutiesPanel.vue'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 import InlineEditableCell from '../components/InlineEditableCell.vue'
+import InlineAssignmentCell from '../components/InlineAssignmentCell.vue'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
+import { useInlineAssignmentSave } from '../composables/useInlineAssignmentSave'
 import EmptyState from '../components/EmptyState.vue'
 import ApplicabilitySelect from '../components/ApplicabilitySelect.vue'
 import AutocompleteInput, {
@@ -735,10 +753,7 @@ const toast = useToast()
 const confirm = useConfirm()
 
 const auth = useAuthStore()
-const canManageEvents = computed(() => auth.isSuperadmin || auth.memberships.some((m) =>
-  m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId &&
-  ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role),
-))
+const canManageEvents = computed(() => auth.canPlanDistrict(districtsStore.selectedDistrictId))
 
 function canManageEventDuties(event: EventResponse): boolean {
   if (auth.isSuperadmin) return true
@@ -751,12 +766,11 @@ function canManageEventDuties(event: EventResponse): boolean {
 }
 
 const inlineCoordinator = useInlineCellCoordinator()
+const saveAssignment = useInlineAssignmentSave()
 onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditEvent(event: EventResponse): boolean {
-  return (auth.isSuperadmin || auth.memberships.some((m) =>
-    m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId && ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role)
-  )) &&
+  return auth.canPlanDistrict(districtsStore.selectedDistrictId) &&
     event.district_id === districtsStore.selectedDistrictId &&
     event.status === 'ACTIVE' &&
     event.source === 'INTERNAL' &&
@@ -767,6 +781,28 @@ async function reloadInlineTitle(event: EventResponse): Promise<{ value: string;
   const latest = await getEvent(event.id)
   eventsStore.updateCached(latest)
   return { value: latest.title, revision: latest.revision ?? '' }
+}
+
+const inlineLeaderChoices = computed(() => leadersStore.choices)
+
+function canInlineAssignEvent(event: EventResponse): boolean {
+  return canInlineEditEvent(event) && event.is_service && !event.invitation_source_event_id &&
+    leadersStore.districtId === event.district_id && inlineLeaderChoices.value.length > 0
+}
+
+async function saveInlineResponsible(event: EventResponse, leaderId: string, revision: string): Promise<void> {
+  const saved = await saveAssignment(event.id, leaderId, revision)
+  eventsStore.updateCached({
+    ...event,
+    revision: saved.event_revision,
+    responsible: {
+      assignment_id: saved.id,
+      leader_id: saved.leader_id,
+      name: saved.leader_name ?? leadersStore.labelFor(saved.leader_id) ?? event.responsible?.name ?? '',
+      status: saved.status,
+    },
+  })
+  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
 }
 
 async function saveInlineTitle(event: EventResponse, value: string, revision: string): Promise<void> {
@@ -1046,6 +1082,7 @@ async function onDistrictChange() {
   const districtId = districtsStore.selectedDistrictId
   districtsStore.clearCongregations()
   if (districtsStore.selectedDistrictId) {
+    void leadersStore.fetchLeaders(districtsStore.selectedDistrictId).catch(() => {})
     await Promise.all([
       districtsStore.fetchCongregations(districtsStore.selectedDistrictId),
       districtsStore.fetchGroups(districtsStore.selectedDistrictId),

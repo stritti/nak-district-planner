@@ -6,7 +6,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.models.service_assignment import AssignmentStatus
 
@@ -45,3 +45,22 @@ class ServiceAssignmentResponse(BaseModel):
     status: AssignmentStatus
     created_at: datetime
     updated_at: datetime
+
+
+class InlineAssignmentChange(BaseModel):
+    """A non-destructive, id-backed minister change; removal stays a confirmed action."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    leader_id: uuid.UUID
+    confirm_warnings: bool = False
+
+
+class InlineAssignmentResult(ServiceAssignmentResponse):
+    """Saved assignment plus the current event revision for subsequent cell edits.
+
+    Assigning the same leader is a no-op: identity, status, timestamps and
+    revision stay unchanged. A successful changed assignment advances revision.
+    """
+
+    event_revision: str

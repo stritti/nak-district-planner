@@ -29,6 +29,7 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
+from app.adapters.api.revisions import aware_timestamp, slot_revision
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
@@ -63,10 +64,6 @@ from app.domain.services.sync_policy import internal_state, resolve_conflict
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
 SERVICE_CATEGORY = "Gottesdienst"
-
-
-def _to_utc(dt: datetime) -> datetime:
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 class EventResponsible(BaseModel):
@@ -171,16 +168,6 @@ class BulkApprovalStatusResponse(BaseModel):
     updated_count: int
 
 
-def _slot_revision(slot: PlanningSlot, instance: EventInstance | None = None) -> str:
-    """Strong validator for both halves of the event's persisted snapshot."""
-    slot_updated = _to_utc(slot.updated_at).isoformat(timespec="microseconds")
-    instance_updated = (
-        _to_utc(instance.updated_at).isoformat(timespec="microseconds")
-        if instance is not None else "none"
-    )
-    return f'"{slot.id}:{slot_updated}:{instance_updated}"'
-
-
 def _slot_start_at(slot: PlanningSlot) -> datetime:
     return datetime.combine(slot.planning_date, slot.planning_time or time.min, tzinfo=UTC)
 
@@ -213,7 +200,7 @@ def _slot_to_event(
         responsible=responsible,
         created_at=slot.created_at,
         updated_at=slot.updated_at,
-        revision=_slot_revision(slot, instance),
+        revision=slot_revision(slot, instance),
     )
 
 
@@ -288,8 +275,8 @@ async def list_events(
         require_role_in_district(auth, Role.VIEWER, district_id)
 
     now = datetime.now(UTC).date()
-    from_date = _to_utc(from_dt).date() if from_dt is not None else now - timedelta(days=365)
-    to_date = _to_utc(to_dt).date() if to_dt is not None else now + timedelta(days=365 * 2)
+    from_date = aware_timestamp(from_dt).date() if from_dt is not None else now - timedelta(days=365)
+    to_date = aware_timestamp(to_dt).date() if to_dt is not None else now + timedelta(days=365 * 2)
 
     all_slots = await slot_repo.list_for_date_range(
         district_id=district_id or uuid.UUID(int=0),
@@ -346,8 +333,8 @@ async def create_event(
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
 ) -> EventResponse:
     require_role_in_district(auth, Role.PLANNER, body.district_id)
-    start_at = _to_utc(body.start_at).astimezone(UTC)
-    end_at = _to_utc(body.end_at).astimezone(UTC)
+    start_at = aware_timestamp(body.start_at).astimezone(UTC)
+    end_at = aware_timestamp(body.end_at).astimezone(UTC)
     if end_at <= start_at:
         raise HTTPException(status_code=400, detail="end_at muss nach start_at liegen.")
 
@@ -464,7 +451,7 @@ async def update_event(
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
-    if if_match != _slot_revision(slot, instance):
+    if if_match != slot_revision(slot, instance):
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail="Ereignis wurde zwischenzeitlich geändert. Bitte Daten neu laden.",
@@ -517,10 +504,10 @@ async def update_event(
         instance_changed = True
 
     if body.start_at is not None or body.end_at is not None:
-        new_start = _to_utc(
+        new_start = aware_timestamp(
             body.start_at or (instance.actual_start_at if instance else _slot_start_at(slot))
         )
-        new_end = _to_utc(body.end_at or (instance.actual_end_at if instance else new_start))
+        new_end = aware_timestamp(body.end_at or (instance.actual_end_at if instance else new_start))
         if new_end < new_start:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -540,7 +527,7 @@ async def update_event(
         await inst_repo.save(instance)
 
     # A new revision is required even for multiple writes inside the same clock tick.
-    slot.updated_at = max(datetime.now(UTC), _to_utc(slot.updated_at) + timedelta(microseconds=1))
+    slot.updated_at = max(datetime.now(UTC), aware_timestamp(slot.updated_at) + timedelta(microseconds=1))
     try:
         await slot_repo.save(slot, require_existing=True)
     except (ReleasedEventError, DeletedPlanningSlotError) as exc:

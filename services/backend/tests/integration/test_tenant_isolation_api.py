@@ -301,6 +301,13 @@ async def test_foreign_rows_are_invisible_even_via_own_district_path(api, owner,
         f"/api/v1/events/{world.b.slot_id}", json={"title": "Gekapert"}, headers=headers
     )
 
+    inline_assignment = await api.put(
+        f"/api/v1/events/{world.b.slot_id}/assignments/inline",
+        json={"leader_id": str(world.a.leader_id)},
+        headers={**headers, "If-Match": '"foreign-slot-snapshot"'},
+    )
+    assert inline_assignment.status_code == 404
+
     # Foreign resources are hidden by RLS even when their identifiers are
     # supplied under a route the caller can otherwise address. A foreign
     # district path is rejected by the role guard first (403, audited).
