@@ -7,6 +7,13 @@ from abc import ABC, abstractmethod
 
 
 class EventDutiesRepository(ABC):
+    """Duty persistence contract.
+
+    Write use-cases may pass an expected congregation to guard the slot scope
+    across authorization and row locking; ``None`` is a real district scope,
+    while an omitted expectation deliberately disables that TOCTOU check.
+    """
+
     @abstractmethod
     async def catalog(self, district_id, congregation_id=None):
         raise NotImplementedError
@@ -61,6 +68,10 @@ class EventDutiesRepository(ABC):
 
     @abstractmethod
     async def eligible_users(self, district_id, congregation_id):
+        raise NotImplementedError
+
+    @abstractmethod
+    async def eligible_user_display_name(self, district_id, congregation_id, user_sub):
         raise NotImplementedError
 
     @abstractmethod

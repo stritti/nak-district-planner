@@ -213,6 +213,29 @@ async def test_leader_crud_forbidden_without_permission() -> None:
 
 
 @pytest.mark.asyncio
+async def test_lifecycle_update_takes_assignment_advisory_lock() -> None:
+    district_id = uuid.uuid4()
+    leader = Leader.create(name="L", district_id=district_id)
+    repo = AsyncMock()
+    repo.get_for_update.return_value = leader
+    lock = AsyncMock()
+    with (
+        patch("app.adapters.api.routers.leaders.require_role_in_district"),
+        patch("app.adapters.api.routers.leaders.acquire_advisory_xact_lock", lock),
+    ):
+        await leaders_router.update_leader(
+            district_id,
+            leader.id,
+            LeaderUpdate(is_active=False),
+            _auth_context(district_id=district_id),
+            AsyncMock(),
+            leaders_repo=repo,
+            if_match=leaders_router._leader_revision(leader),
+        )
+    lock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_leader_list_forbidden_without_permission() -> None:
     """Listing leaders requires VIEWER role."""
     district_id = uuid.uuid4()
@@ -1113,9 +1136,14 @@ async def test_assignment_writer_locks_planning_slot_before_mutating(action: str
     slots.get_for_update.return_value = slot
     assignments.get.return_value = assignment
 
+    leader_repo = AsyncMock()
+    leader_repo.list_by_district.return_value = []
     with (
         patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
-        patch("app.adapters.api.routers.service_assignments._check_typed_name", new=AsyncMock()),
+        patch(
+            "app.adapters.api.routers.service_assignments.SqlLeaderRepository",
+            return_value=leader_repo,
+        ),
     ):
         if action == "create":
             await sa_router.create_assignment(

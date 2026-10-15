@@ -615,6 +615,26 @@ describe('Create event district selection', () => {
 })
 
 describe('Inline editing in the event overview', () => {
+  it('keeps the lifecycle review warning next to an inline assignment', async () => {
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([
+      { id: 'l1', name: 'Max', district_id: 'd1', rank: null, is_active: true } as leadersApi.LeaderResponse,
+    ])
+    const { wrapper } = setup([event({
+      responsible: {
+        assignment_id: 'a1',
+        leader_id: 'l1',
+        name: 'Ehemalig',
+        status: 'ASSIGNED',
+        needs_review: true,
+      },
+    })])
+
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="responsible-cell"]').text()).toContain('Prüfung erforderlich')
+    expect(wrapper.get('[data-inline-cell-id="responsible-desktop-e1"]').exists()).toBe(true)
+  })
+
   it('sends the title with its original revision and refreshes canonical data', async () => {
     vi.mocked(eventsApi.updateEventInline).mockResolvedValue(event({ title: 'Geändert' }))
     const { wrapper } = setup([event()])

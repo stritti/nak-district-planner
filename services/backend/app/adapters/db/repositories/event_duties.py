@@ -180,6 +180,19 @@ class SqlEventDutiesRepository(EventDutiesRepository):
         )
         return [dict(row) for row in rows.mappings().all()]
 
+    async def eligible_user_display_name(self, district_id, congregation_id, user_sub):
+        return await self.session.scalar(
+            text(
+                "SELECT display_name FROM eligible_duty_users(:district_id, :congregation_id) "
+                "WHERE sub = :user_sub"
+            ),
+            {
+                "district_id": district_id,
+                "congregation_id": congregation_id,
+                "user_sub": user_sub,
+            },
+        )
+
     async def save_assignment(self, assignment):
         row = await self.session.get(EventDutyAssignmentORM, assignment.id)
         values = {f.name: getattr(assignment, f.name) for f in fields(assignment)}

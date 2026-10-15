@@ -134,6 +134,36 @@ _FUNCTIONS = (
       )
       ORDER BY 1
     $$""",
+    """CREATE FUNCTION personal_calendar_scopes(p_subject text,p_district uuid)
+    RETURNS TABLE(role text,scope_type text,scope_id uuid)
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+      SELECT m.role::text,m.scope_type::text,m.scope_id
+      FROM memberships m
+      WHERE m.user_sub=p_subject
+      AND (
+        (m.scope_type='DISTRICT' AND m.scope_id=p_district)
+        OR (m.scope_type='CONGREGATION' AND EXISTS (
+          SELECT 1 FROM congregations c
+          WHERE c.id=m.scope_id AND c.district_id=p_district))
+      )
+      AND (
+        current_setting('app.is_system_worker',true)='true'
+        OR p_subject=current_setting('app.current_user_sub',true)
+        OR EXISTS (SELECT 1 FROM users actor
+          WHERE actor.sub=current_setting('app.current_user_sub',true) AND actor.is_superadmin)
+        OR EXISTS (SELECT 1 FROM memberships actor_membership
+          WHERE actor_membership.user_sub=current_setting('app.current_user_sub',true)
+          AND actor_membership.role='DISTRICT_ADMIN'
+          AND actor_membership.scope_type='DISTRICT'
+          AND actor_membership.scope_id=p_district)
+        OR EXISTS (SELECT 1 FROM export_tokens et
+          WHERE et.token=current_setting('app.current_export_token',true)
+          AND et.token_type='INTERNAL'
+          AND et.subject_sub=p_subject
+          AND et.district_id=p_district)
+      )
+      ORDER BY m.scope_type,m.scope_id,m.role
+    $$""",
 )
 
 
@@ -352,6 +382,7 @@ def remove_duty_policies(op) -> None:
     for fn in (
         "duty_assignment_count(uuid,uuid)",
         "eligible_duty_users(uuid,uuid)",
+        "personal_calendar_scopes(text,uuid)",
         "duty_export_slot_allowed(uuid)",
         "duty_export_is_subject_bound()",
         "current_duty_export_subject()",

@@ -248,14 +248,19 @@
             </template>
             <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
           </p>
-          <InlineAssignmentCell
-                  v-if="canInlineAssignEvent(event)"
-                  layout="mobile"
-                  :event="event"
-                  :choices="inlineLeaderChoices"
-                  :coordinator="inlineCoordinator"
-                  :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
-                />
+          <template v-if="canInlineAssignEvent(event)">
+            <InlineAssignmentCell
+              layout="mobile"
+              :event="event"
+              :choices="inlineLeaderChoices"
+              :coordinator="inlineCoordinator"
+              :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
+            />
+            <span
+              v-if="event.responsible?.needs_review"
+              class="mt-1 text-xs text-amber-700 dark:text-amber-300"
+            >Prüfung erforderlich</span>
+          </template>
           <p v-else-if="event.responsible" class="mt-1 text-xs text-gray-600 dark:text-gray-400">
             {{ responsibleLabel(event) }}: {{ event.responsible.name }}
             <span v-if="event.responsible.needs_review" class="ml-1 text-amber-700 dark:text-amber-300">
@@ -344,14 +349,19 @@
                 <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
               </td>
               <td class="table-td text-xs" data-testid="responsible-cell">
-                <InlineAssignmentCell
-                  v-if="canInlineAssignEvent(event)"
-                  layout="desktop"
-                  :event="event"
-                  :choices="inlineLeaderChoices"
-                  :coordinator="inlineCoordinator"
-                  :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
-                />
+                <template v-if="canInlineAssignEvent(event)">
+                  <InlineAssignmentCell
+                    layout="desktop"
+                    :event="event"
+                    :choices="inlineLeaderChoices"
+                    :coordinator="inlineCoordinator"
+                    :save="(leaderId, revision) => saveInlineResponsible(event, leaderId, revision)"
+                  />
+                  <span
+                    v-if="event.responsible?.needs_review"
+                    class="ml-1 text-amber-700 dark:text-amber-300"
+                  >Prüfung erforderlich</span>
+                </template>
                 <template v-else-if="event.responsible">
                   <span>{{ event.responsible.name }}</span>
                   <span

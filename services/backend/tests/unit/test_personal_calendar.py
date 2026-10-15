@@ -51,6 +51,7 @@ def test_projection_merges_only_subject_scoped_duties_with_leader():
         planning_time=None,
         title="Service",
         status=PlanningSlotStatus.CANCELLED,
+        approval_status="CONFIRMED",
         updated_at=now,
     )
     duty = {
@@ -264,6 +265,7 @@ async def test_loader_filters_current_congregation_membership(monkeypatch):
         planning_time=None,
         title="Mine",
         status="ACTIVE",
+        approval_status="CONFIRMED",
         updated_at=now,
     )
     other = Namespace(id=uuid.uuid4(), congregation_id=foreign)
@@ -434,14 +436,10 @@ async def test_existing_subject_revoked_membership_fails_closed(monkeypatch):
         execute=AsyncMock(
             side_effect=[
                 Mock(scalar_one_or_none=Mock(return_value=user)),
+                Mock(mappings=Mock(return_value=Mock(all=Mock(return_value=[])))),
                 Mock(scalars=Mock(return_value=[])),
             ]
         )
-    )
-    monkeypatch.setattr(
-        router,
-        "SqlMembershipRepository",
-        lambda session: Namespace(get_all_by_user=AsyncMock(return_value=[])),
     )
     with pytest.raises(HTTPException) as caught:
         await router.personal_subject_context(session, "alice", uuid.uuid4())

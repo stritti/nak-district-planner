@@ -73,6 +73,12 @@ class Repository:
     async def eligible_users(self, *args):
         return self.users
 
+    async def eligible_user_display_name(self, district, congregation, user_sub):
+        return next(
+            (user["display_name"] for user in self.users if user["sub"] == user_sub),
+            None,
+        )
+
     async def get_suggestion(self, suggestion_id):
         return next((s for s in self.suggestions if s.id == suggestion_id), None)
 

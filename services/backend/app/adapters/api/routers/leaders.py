@@ -153,6 +153,10 @@ async def update_leader(
     require_role_in_district(auth, Role.PLANNER, district_id)
     fields = body.model_fields_set
     repo = leaders_repo
+    if fields & {"is_active", "hidden_from_lists", "service_end_date"}:
+        # Assignment eligibility checks take this same lock before reading the
+        # leader. Taking it before the row lock keeps both write paths ordered.
+        await acquire_advisory_xact_lock(db, leader_id)
     leader = await (repo.get_for_update(leader_id) if if_match is not None else repo.get(leader_id))
     if not leader or leader.district_id != district_id:
         raise HTTPException(
