@@ -7,6 +7,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 
+from app.domain.models.event_duty import SERVICE_LEADER_LABEL
+
 
 @dataclass(frozen=True)
 class PersonalCalendarEvent:
@@ -51,7 +53,7 @@ def project_personal_events(
         ]
         labels = sorted({duty.duty_label for duty in own_duties})
         if slot.id in leader_slots:
-            labels.insert(0, "Dienstleiter")
+            labels.insert(0, SERVICE_LEADER_LABEL)
         if not labels:
             continue
         instance = instances_by_slot.get(slot.id)
