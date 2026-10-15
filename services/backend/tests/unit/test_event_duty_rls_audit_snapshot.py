@@ -25,8 +25,7 @@ _EXPECTED_FUNCTIONS = (
 
 
 def test_all_security_definer_functions_are_pinned():
-    created = [sql for sql in event_duty_rls._FUNCTIONS]
-    assert len(created) == len(_EXPECTED_FUNCTIONS)
+    assert len(event_duty_rls._FUNCTIONS) == len(_EXPECTED_FUNCTIONS)
     for name in _EXPECTED_FUNCTIONS:
         assert f"CREATE FUNCTION {name}" in _FUNCTIONS_SQL, f"missing function {name}"
 
