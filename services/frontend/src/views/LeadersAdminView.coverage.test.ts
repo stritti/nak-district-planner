@@ -44,6 +44,7 @@ vi.mock('../api/leaders', () => ({
   listLeaders: vi.fn(),
   unlinkSelfFromLeader: vi.fn(),
   updateLeader: vi.fn(),
+  updateLeaderInline: vi.fn(),
 }))
 vi.mock('../api/registrations', () => ({
   approveRegistration: vi.fn(),
@@ -76,6 +77,7 @@ function leader(
     is_active: true,
     created_at: now,
     updated_at: now,
+    revision: '"leader-revision"',
     ...overrides,
   }
 }
@@ -398,7 +400,7 @@ describe('LeadersAdminView coverage gaps', () => {
       phone: null,
       notes: 'Notiz',
       is_active: false,
-    }))
+    }), '"leader-revision"')
 
     vm.confirmDelete(vm.leaders[0])
     const deletedId = vm.pendingDeleteLeader?.id

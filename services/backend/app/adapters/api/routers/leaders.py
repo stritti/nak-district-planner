@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
@@ -35,6 +37,32 @@ from app.domain.models.role import Role
 router = APIRouter(prefix="/api/v1/districts/{district_id}/leaders", tags=["leaders"])
 
 
+class LeaderInlineUpdate(BaseModel):
+    """Explicit contact-only inline contract."""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(None, min_length=1, max_length=255)
+    email: str | None = Field(None, max_length=255)
+    phone: str | None = Field(None, max_length=100)
+
+
+def _to_utc(timestamp: datetime) -> datetime:
+    return timestamp if timestamp.tzinfo is not None else timestamp.replace(tzinfo=UTC)
+
+
+def _touch_leader(leader: Leader) -> None:
+    """Advance the revision after any leader write, even within a clock tick."""
+    leader.updated_at = max(
+        datetime.now(UTC), _to_utc(leader.updated_at) + timedelta(microseconds=1)
+    )
+
+
+def _leader_revision(leader: Leader) -> str:
+    """Opaque strong validator for a leader record."""
+    timestamp = _to_utc(leader.updated_at)
+    return '"' + str(leader.id) + ':' + timestamp.isoformat(timespec="microseconds") + '"'
+
+
 def _leader_response(leader: Leader) -> LeaderResponse:
     return LeaderResponse(
         id=leader.id,
@@ -50,6 +78,7 @@ def _leader_response(leader: Leader) -> LeaderResponse:
         is_active=leader.is_active,
         created_at=leader.created_at,
         updated_at=leader.updated_at,
+        revision=_leader_revision(leader),
     )
 
 
@@ -105,14 +134,19 @@ async def update_leader(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> LeaderResponse:
     require_role_in_district(auth, Role.PLANNER, district_id)
     repo = leaders_repo
-    leader = await repo.get(leader_id)
+    leader = await (repo.get_for_update(leader_id) if if_match is not None else repo.get(leader_id))
     if not leader or leader.district_id != district_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
         )
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    if if_match != _leader_revision(leader):
+        raise HTTPException(status_code=412, detail="Datensatz wurde zwischenzeitlich geändert.")
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
         leader.name = body.name
@@ -133,9 +167,32 @@ async def update_leader(
         leader.notes = body.notes
     if "is_active" in fields and body.is_active is not None:
         leader.is_active = body.is_active
-    leader.updated_at = datetime.now(UTC)
+    _touch_leader(leader)
     await repo.save(leader)
     return _leader_response(leader)
+
+
+@router.patch("/{leader_id}/inline", response_model=LeaderResponse)
+async def inline_update_leader(
+    district_id: uuid.UUID,
+    leader_id: uuid.UUID,
+    body: LeaderInlineUpdate,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+) -> LeaderResponse:
+    """Only non-workflow contact/name fields support inline updates."""
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    fields = body.model_fields_set
+    if not fields or (
+        "name" in fields and body.name is None
+    ):
+        raise HTTPException(status_code=422, detail="Dieses Feld ist nicht inline editierbar.")
+    return await update_leader(
+        district_id, leader_id, LeaderUpdate.model_validate(body.model_dump(exclude_unset=True)), auth, db, leaders_repo=leaders_repo, if_match=if_match,
+    )
 
 
 @router.post("/link-self", response_model=LeaderSelfLinkResponse)
@@ -147,30 +204,40 @@ async def link_self_to_leader(
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> LeaderSelfLinkResponse:
     repo = leaders_repo
-    target = await repo.get(body.leader_id)
-    if not target or target.district_id != district_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
-        )
-    congregation_ids = {target.congregation_id} if target.congregation_id else None
+    # Inspect the target's scope before acquiring the write locks.
+    candidate = await repo.get(body.leader_id)
+    if not candidate or candidate.district_id != district_id:
+        raise HTTPException(status_code=404, detail="Amtstragende:r nicht gefunden")
+    congregation_ids = {candidate.congregation_id} if candidate.congregation_id else None
     require_role_in_district(
         auth, Role.VIEWER, district_id, congregation_ids_in_district=congregation_ids
     )
 
-    existing_link = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
-    if existing_link and existing_link.id != target.id:
-        existing_link.user_sub = None
-        existing_link.updated_at = datetime.now(UTC)
-        await repo.save(existing_link)
-
+    previous = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
+    ids = {body.leader_id}
+    if previous is not None:
+        ids.add(previous.id)
+    # Stable lock order also prevents a deadlock if two users swap leader links.
+    locked = {leader_id: await repo.get_for_update(leader_id) for leader_id in sorted(ids)}
+    target = locked[body.leader_id]
+    if target is None or target.district_id != district_id:
+        raise HTTPException(status_code=404, detail="Amtstragende:r nicht gefunden")
+    if target.congregation_id != candidate.congregation_id:
+        raise HTTPException(status_code=409, detail="Zuordnung wurde zwischenzeitlich geändert.")
     if target.user_sub and target.user_sub != auth.user_sub:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Dieses Amt ist bereits mit einem anderen Benutzer verknuepft",
         )
+    if previous is not None and previous.id != target.id:
+        current = locked[previous.id]
+        if current is not None and current.user_sub == auth.user_sub:
+            current.user_sub = None
+            _touch_leader(current)
+            await repo.save(current)
 
     target.user_sub = auth.user_sub
-    target.updated_at = datetime.now(UTC)
+    _touch_leader(target)
     await repo.save(target)
     return LeaderSelfLinkResponse(linked=True, leader=_leader_response(target))
 
@@ -192,8 +259,11 @@ async def unlink_self_from_leader(
     if not linked:
         return LeaderSelfLinkResponse(linked=False, leader=None)
 
+    linked = await repo.get_for_update(linked.id)
+    if linked is None or linked.user_sub != auth.user_sub:
+        return LeaderSelfLinkResponse(linked=False, leader=None)
     linked.user_sub = None
-    linked.updated_at = datetime.now(UTC)
+    _touch_leader(linked)
     await repo.save(linked)
     return LeaderSelfLinkResponse(linked=False, leader=None)
 

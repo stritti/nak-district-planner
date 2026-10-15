@@ -38,6 +38,8 @@ export interface EventResponse {
   responsible?: EventResponsible | null
   created_at: string
   updated_at: string
+  /** Strong revision returned by the server; legacy fixtures may omit it. */
+  revision?: string
 }
 
 export interface EventListResponse {
@@ -97,9 +99,23 @@ export interface EventUpdate {
   applicability?: string[]
 }
 
-export function updateEvent(id: string, data: EventUpdate): Promise<EventResponse> {
+export function updateEvent(id: string, data: EventUpdate, revision: string): Promise<EventResponse> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
   return apiFetch(`/api/v1/events/${id}`, {
     method: 'PATCH',
+    headers: { 'If-Match': revision },
+    body: JSON.stringify(data),
+  })
+}
+
+/** The server checks this exact opaque revision while holding the event row lock. */
+export function updateEventInline(
+  id: string, data: Pick<EventUpdate, 'title' | 'description'>, revision: string,
+): Promise<EventResponse> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+  return apiFetch(`/api/v1/events/${id}/inline`, {
+    method: 'PATCH',
+    headers: { 'If-Match': revision },
     body: JSON.stringify(data),
   })
 }
@@ -108,6 +124,11 @@ export function resolveEventConflict(id: string): Promise<EventResponse> {
   return apiFetch(`/api/v1/events/${id}/resolve-conflict`, {
     method: 'POST',
   })
+}
+
+/** Reload a canonical revision before opening a long-lived modal editor. */
+export function getEvent(id: string): Promise<EventResponse> {
+  return apiFetch<EventResponse>(`/api/v1/events/${id}`)
 }
 
 export function listEvents(params: EventListParams = {}): Promise<EventListResponse> {

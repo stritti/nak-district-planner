@@ -73,6 +73,10 @@ function setup() {
   vi.mocked(invitationsApi.createInvitations).mockResolvedValue([])
   vi.mocked(invitationsApi.deleteInvitation).mockResolvedValue(undefined)
   vi.mocked(eventsApi.updateEvent).mockResolvedValue({} as never)
+  vi.mocked(eventsApi.getEvent).mockResolvedValue({
+    id: 'event-1', revision: '"revision-1"',
+    start_at: '2026-10-05T18:00:00Z', end_at: '2026-10-05T19:30:00Z',
+  } as never)
 
   const wrapper = mount(AssignmentModal, { global: { plugins: [pinia] } })
   const open = (cell: MatrixCell = baseCell()) => {
@@ -306,6 +310,7 @@ describe('AssignmentModal', () => {
     expect(eventsApi.updateEvent).toHaveBeenCalledWith(
       'event-1',
       expect.objectContaining({ start_at: expect.any(String), end_at: expect.any(String) }),
+      '"revision-1"',
     )
     expect(ctx.matrix.fetch).toHaveBeenCalled()
   })

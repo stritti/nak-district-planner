@@ -16,6 +16,7 @@ import {
   listLeaders,
   unlinkSelfFromLeader,
   updateLeader,
+  updateLeaderInline,
   type LeaderResponse,
 } from './leaders'
 
@@ -67,9 +68,10 @@ describe('leader API', () => {
     })
 
     const updateBody = { name: 'Max Neu', rank: null }
-    await updateLeader('district-1', 'leader-1', updateBody)
+    await updateLeader('district-1', 'leader-1', updateBody, '"leader-rev"')
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/districts/district-1/leaders/leader-1', {
       method: 'PATCH',
+      headers: { 'If-Match': '"leader-rev"' },
       body: JSON.stringify(updateBody),
     })
 
@@ -77,6 +79,23 @@ describe('leader API', () => {
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/districts/district-1/leaders/leader-1', {
       method: 'DELETE',
     })
+  })
+
+  it('rejects blind leader edits', async () => {
+    await expect(updateLeader('district-1', 'leader-1', { name: 'Bad' }, '')).rejects.toThrow('Versionsinformation')
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('requires the exact revision for inline leader contact edits', async () => {
+    await updateLeaderInline('district-1', 'leader-1', { email: 'new@example.org' }, '"rev"')
+    expect(apiFetch).toHaveBeenCalledWith('/api/v1/districts/district-1/leaders/leader-1/inline', {
+      method: 'PATCH',
+      headers: { 'If-Match': '"rev"' },
+      body: JSON.stringify({ email: 'new@example.org' }),
+    })
+    apiFetch.mockClear()
+    await expect(updateLeaderInline('district-1', 'leader-1', { email: null }, '')).rejects.toThrow('Versionsinformation')
+    expect(apiFetch).not.toHaveBeenCalled()
   })
 
   it('covers self-link lifecycle', async () => {

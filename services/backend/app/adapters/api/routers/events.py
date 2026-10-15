@@ -16,7 +16,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 
@@ -101,6 +101,7 @@ class EventResponse(BaseModel):
     responsible: EventResponsible | None = None
     created_at: datetime
     updated_at: datetime
+    revision: str
 
 
 class EventListResponse(BaseModel):
@@ -126,6 +127,14 @@ class EventCreate(BaseModel):
     applicability: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(
         default_factory=list, max_length=500
     )
+
+
+class EventInlineUpdate(BaseModel):
+    """Explicit scalar-only contract; reject future workflow fields by default."""
+
+    model_config = ConfigDict(extra="forbid")
+    title: str | None = Field(None, min_length=1, max_length=500)
+    description: str | None = None
 
 
 class EventUpdate(BaseModel):
@@ -159,6 +168,16 @@ class BulkApprovalStatusResponse(BaseModel):
     updated_count: int
 
 
+def _slot_revision(slot: PlanningSlot, instance: EventInstance | None = None) -> str:
+    """Strong validator for both halves of the event's persisted snapshot."""
+    slot_updated = _to_utc(slot.updated_at).isoformat(timespec="microseconds")
+    instance_updated = (
+        _to_utc(instance.updated_at).isoformat(timespec="microseconds")
+        if instance is not None else "none"
+    )
+    return f'"{slot.id}:{slot_updated}:{instance_updated}"'
+
+
 def _slot_start_at(slot: PlanningSlot) -> datetime:
     return datetime.combine(slot.planning_date, slot.planning_time or time.min, tzinfo=UTC)
 
@@ -190,6 +209,7 @@ def _slot_to_event(
         responsible=responsible,
         created_at=slot.created_at,
         updated_at=slot.updated_at,
+        revision=_slot_revision(slot, instance),
     )
 
 
@@ -391,6 +411,25 @@ async def delete_event(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.get("/{event_id}", response_model=EventResponse)
+async def get_event(
+    event_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+) -> EventResponse:
+    """Fetch an authoritative event snapshot for conditional writes in detail dialogs."""
+    slot = await slot_repo.get(event_id)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.VIEWER, slot.district_id)
+    instance = await inst_repo.get_by_planning_slot(event_id)
+    responsible = await _load_responsible(assignments_repo, leaders_repo, [slot])
+    return _slot_to_event(slot, instance, responsible.get(slot.id))
+
+
 @router.patch("/{event_id}", response_model=EventResponse)
 async def update_event(
     event_id: uuid.UUID,
@@ -402,18 +441,25 @@ async def update_event(
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> EventResponse:
-    slot = await slot_repo.get(event_id)
+    slot = await (slot_repo.get_for_update(event_id) if if_match is not None else slot_repo.get(event_id))
     if slot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ereignis nicht gefunden")
 
     require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    instance = await inst_repo.get_by_planning_slot(event_id, for_update=True)
+    if if_match != _slot_revision(slot, instance):
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail="Ereignis wurde zwischenzeitlich geändert. Bitte Daten neu laden.",
+        )
     if slot.was_released and "approval_status" in body.model_fields_set and body.approval_status != EventApprovalStatus.CONFIRMED:
         raise HTTPException(status_code=409, detail="Eine Freigabe kann nicht zurückgenommen werden.")
     if slot.was_released and slot.status == PlanningSlotStatus.CANCELLED and body.status == PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Eine veröffentlichte Absage kann nicht zurückgenommen werden.")
-    instance = await inst_repo.get_by_planning_slot(event_id)
-
     if "congregation_id" in body.model_fields_set:
         if body.congregation_id is None:
             slot.congregation_id = None
@@ -480,13 +526,51 @@ async def update_event(
         instance.sync_state = internal_state(instance.sync_state)
         await inst_repo.save(instance)
 
-    slot.updated_at = datetime.now(UTC)
+    # A new revision is required even for multiple writes inside the same clock tick.
+    slot.updated_at = max(datetime.now(UTC), _to_utc(slot.updated_at) + timedelta(microseconds=1))
     try:
         await slot_repo.save(slot, require_existing=True)
     except (ReleasedEventError, DeletedPlanningSlotError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     responsible = await _load_responsible(assignments_repo, leaders_repo, [slot])
     return _slot_to_event(slot, instance, responsible.get(slot.id))
+
+
+@router.patch("/{event_id}/inline", response_model=EventResponse)
+async def inline_update_event(
+    event_id: uuid.UUID,
+    body: EventInlineUpdate,
+    auth: CurrentUserWithMemberships,
+    session: DbSession,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
+    cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
+    inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+) -> EventResponse:
+    """Safe scalar-only editing. Workflow and duty changes need their own adapters."""
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    fields = body.model_fields_set
+    if not fields or (
+        "title" in fields and body.title is None
+    ):
+        raise HTTPException(status_code=422, detail="Dieses Feld kann nicht inline bearbeitet werden.")
+    slot = await slot_repo.get_for_update(event_id)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Ereignis nicht gefunden")
+    require_role_in_district(auth, Role.PLANNER, slot.district_id)
+    if slot.status != PlanningSlotStatus.ACTIVE:
+        raise HTTPException(status_code=409, detail="Abgesagte Termine können nicht inline bearbeitet werden.")
+    instance = await inst_repo.get_by_planning_slot(event_id)
+    if instance is not None and instance.source == EventSource.EXTERNAL:
+        raise HTTPException(status_code=403, detail="Extern verwaltete Ereignisse sind nicht inline bearbeitbar.")
+    return await update_event(
+        event_id, EventUpdate.model_validate(body.model_dump(exclude_unset=True)), auth, session, slot_repo=slot_repo, cong_repo=cong_repo,
+        inst_repo=inst_repo, assignments_repo=assignments_repo,
+        leaders_repo=leaders_repo, if_match=if_match,
+    )
 
 
 def _provider_write_error(exc: CalendarConnectorError, detail: str) -> HTTPException:

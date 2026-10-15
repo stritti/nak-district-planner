@@ -201,7 +201,7 @@ import {
   listEventInvitations,
   type InvitationResponse,
 } from '../api/invitations'
-import { updateEvent } from '../api/events'
+import { getEvent, updateEvent } from '../api/events'
 import type { MatrixCell } from '../api/matrix'
 import AutocompleteInput, { type AutocompleteOption, type AutocompleteValue } from './AutocompleteInput.vue'
 import ConflictBanner from './ConflictBanner.vue'
@@ -221,6 +221,8 @@ const toast = useToast()
 const modal = reactive({
   open: false,
   eventId: '',
+  initialStartAt: null as string | null,
+  initialEndAt: null as string | null,
   assignmentId: null as string | null,
   eventTitle: '',
   date: '',
@@ -292,6 +294,8 @@ function openModal(cell: MatrixCell, date: string, congregationName: string, con
   resetConflicts()
   modal.open = true
   modal.eventId = cell.assignment_event_id ?? cell.event_id!
+  modal.initialStartAt = cell.event_start_at ?? null
+  modal.initialEndAt = cell.event_end_at ?? null
   modal.assignmentId = cell.assignment_id
   modal.eventTitle = cell.event_title ?? ''
   modal.date = date
@@ -564,10 +568,17 @@ async function moveServiceDateTime() {
   try {
     const localStart = combineLocalDateTime(modal.moveDate, modal.moveTime)
     const localEnd = new Date(localStart.getTime() + modal.moveDurationMinutes * 60000)
+    const snapshot = await getEvent(modal.eventId)
+    if (modal.initialStartAt && Date.parse(snapshot.start_at) !== Date.parse(modal.initialStartAt)) {
+      throw new Error('Der Termin wurde zwischenzeitlich verschoben. Bitte neu laden.')
+    }
+    if (modal.initialEndAt && Date.parse(snapshot.end_at) !== Date.parse(modal.initialEndAt)) {
+      throw new Error('Die Termindauer wurde geändert. Bitte neu laden.')
+    }
     await updateEvent(modal.eventId, {
       start_at: localStart.toISOString(),
       end_at: localEnd.toISOString(),
-    })
+    }, snapshot.revision ?? '')
     await matrixStore.fetch()
     toast.success('Termin verschoben', modal.eventTitle)
     dismissModal()

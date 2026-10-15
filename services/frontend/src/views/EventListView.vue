@@ -180,7 +180,7 @@
               v-model="fromDate"
               type="date"
               class="form-select px-2"
-              @change="applyFilters"
+              @change="onFilterChange"
             />
           </div>
           <div class="w-full sm:w-auto">
@@ -189,7 +189,7 @@
               v-model="toDate"
               type="date"
               class="form-select px-2"
-              @change="applyFilters"
+              @change="onFilterChange"
             />
           </div>
         </template>
@@ -216,7 +216,20 @@
         >
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <p class="font-medium text-gray-900 dark:text-gray-100 break-words">{{ event.title }}</p>
+              <InlineEditableCell
+                :id="'event-title-mobile-' + event.id"
+                as="div"
+                class="font-medium text-gray-900 dark:text-gray-100 break-words"
+                :value="event.title"
+                :revision="event.revision ?? ''"
+                :label="'Titel: ' + event.title"
+                :editable="canInlineEditEvent(event)"
+                :coordinator="inlineCoordinator"
+                :save="(value, revision) => saveInlineTitle(event, value, revision)"
+                :reload="() => reloadInlineTitle(event)"
+                required
+                :max-length="500"
+              />
               <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDt(event.start_at) }} · {{ event.category ?? '—' }}</p>
             </div>
             <button
@@ -258,7 +271,7 @@
       <!-- Desktop: table -->
       <div class="table-container hidden md:block">
         <div class="table-scroll">
-        <table class="table-min-w w-full text-sm">
+        <table data-inline-edit-scope class="table-min-w w-full text-sm">
           <thead>
             <tr class="table-thead">
               <th class="table-th">Titel</th>
@@ -296,7 +309,19 @@
               :key="event.id"
               class="table-tr"
             >
-              <td class="table-td font-medium text-gray-900 dark:text-gray-100">{{ event.title }}</td>
+              <InlineEditableCell
+                :id="'event-title-desktop-' + event.id"
+                class="font-medium text-gray-900 dark:text-gray-100"
+                :value="event.title"
+                :revision="event.revision ?? ''"
+                :label="'Titel: ' + event.title"
+                :editable="canInlineEditEvent(event)"
+                :coordinator="inlineCoordinator"
+                :save="(value, revision) => saveInlineTitle(event, value, revision)"
+                :reload="() => reloadInlineTitle(event)"
+                required
+                :max-length="500"
+              />
               <td class="table-td whitespace-nowrap">{{ formatDt(event.start_at) }}</td>
               <td class="table-td">{{ event.category ?? '—' }}</td>
               <td class="table-td text-xs">
@@ -362,14 +387,14 @@
           <button
             class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage <= 1"
-            @click="eventsStore.goToPage(eventsStore.currentPage - 1); eventsStore.fetch()"
+            @click="navigatePage(eventsStore.currentPage - 1)"
           >
             ← Zurück
           </button>
           <button
             class="btn-secondary px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             :disabled="eventsStore.currentPage >= eventsStore.totalPages"
-            @click="eventsStore.goToPage(eventsStore.currentPage + 1); eventsStore.fetch()"
+            @click="navigatePage(eventsStore.currentPage + 1)"
           >
             Weiter →
           </button>
@@ -643,7 +668,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSessionViewSettings, sessionField, sessionText, sessionDate } from '../composables/useSessionViewSettings'
 import {
@@ -660,9 +686,11 @@ import { useLeadersStore } from '../stores/leaders'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import {
   listEvents,
+  getEvent,
   createEvent,
   deleteEvent,
   updateEvent,
+  updateEventInline,
   type EventApprovalStatus,
   type EventListParams,
   type EventResponse,
@@ -672,6 +700,8 @@ import { exportEventsToExcel } from '../composables/useExcelExport'
 import { useConfirm } from '../composables/useConfirm'
 import { errorMessage, useToast } from '../composables/useToast'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
+import InlineEditableCell from '../components/InlineEditableCell.vue'
+import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import EmptyState from '../components/EmptyState.vue'
 import ApplicabilitySelect from '../components/ApplicabilitySelect.vue'
 import AutocompleteInput, {
@@ -692,6 +722,32 @@ const canManageEvents = computed(() => auth.isSuperadmin || auth.memberships.som
   m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId &&
   ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role),
 ))
+
+const inlineCoordinator = useInlineCellCoordinator()
+onBeforeRouteLeave(() => inlineCoordinator.finish())
+
+function canInlineEditEvent(event: EventResponse): boolean {
+  return (auth.isSuperadmin || auth.memberships.some((m) =>
+    m.scope_type === 'DISTRICT' && m.scope_id === districtsStore.selectedDistrictId && ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role)
+  )) &&
+    event.district_id === districtsStore.selectedDistrictId &&
+    event.status === 'ACTIVE' &&
+    event.source === 'INTERNAL' &&
+    !!event.revision
+}
+
+async function reloadInlineTitle(event: EventResponse): Promise<{ value: string; revision: string }> {
+  const latest = await getEvent(event.id)
+  eventsStore.updateCached(latest)
+  return { value: latest.title, revision: latest.revision ?? '' }
+}
+
+async function saveInlineTitle(event: EventResponse, value: string, revision: string): Promise<void> {
+  const saved = await updateEventInline(event.id, { title: value }, revision)
+  eventsStore.updateCached(saved)
+  // Keep the edited row mounted while the shared editor completes Tab navigation.
+  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
+}
 
 // ── Ansichts-Modus ───────────────────────────────────────────────────────────
 
@@ -723,7 +779,8 @@ function startOfWeek(d: Date): Date {
   return r
 }
 
-function setViewMode(mode: ViewMode) {
+async function setViewMode(mode: ViewMode) {
+  if (!(await inlineCoordinator.finish())) return
   viewMode.value = mode
   if (mode === 'list') {
     applyFilters()
@@ -986,9 +1043,16 @@ function onGroupChange() {
   onFilterChange()
 }
 
-function onFilterChange() {
+async function onFilterChange() {
+  if (!(await inlineCoordinator.finish())) return
   if (viewMode.value === 'list') applyFilters()
   else fetchCalendar()
+}
+
+async function navigatePage(page: number) {
+  if (!(await inlineCoordinator.finish())) return
+  eventsStore.goToPage(page)
+  await eventsStore.fetch()
 }
 
 function applyFilters() {
@@ -1254,13 +1318,25 @@ async function saveEdit() {
       category:        editForm.category || null,
       // Congregation-level events are never distributed; the backend clears it.
       ...(isDistrictLevel && { applicability: editForm.applicability }),
-    })
+    }, target.revision ?? '')
     let assignmentError: unknown = null
     try {
       updated.responsible = await saveResponsible(target)
     } catch (e) {
       assignmentError = e
       updated.responsible = target.responsible ?? null
+    }
+    const responsibleChanged = (target.responsible?.leader_id ?? null) !== (updated.responsible?.leader_id ?? null)
+      || (target.responsible?.name ?? '') !== (updated.responsible?.name ?? '')
+    if (responsibleChanged) {
+      // Assignment endpoints advance the PlanningSlot revision after event PATCH.
+      try {
+        Object.assign(updated, await getEvent(target.id))
+      } catch (e) {
+        // The writes already succeeded; prevent stale edits until a new snapshot is available.
+        updated.revision = ''
+        toast.error('Termin gespeichert, Aktualisierung fehlgeschlagen. Bitte neu laden.', e)
+      }
     }
     // In-place update je nach aktiver Ansicht
     if (viewMode.value === 'list') {
@@ -1271,6 +1347,7 @@ async function saveEdit() {
       if (idx !== -1) calendarEvents.value[idx] = updated
     }
     if (assignmentError) {
+      editTarget.value = updated
       editError.value = errorMessage(assignmentError, 'Zuordnung fehlgeschlagen')
       toast.error('Termin gespeichert, Zuordnung fehlgeschlagen', assignmentError)
       return

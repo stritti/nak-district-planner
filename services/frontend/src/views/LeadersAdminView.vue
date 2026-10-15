@@ -9,9 +9,9 @@
     <div class="mb-6">
         <label class="filter-label">Bezirk</label>
         <select
-          v-model="selectedDistrictId"
+          :value="selectedDistrictId"
           class="form-select"
-          @change="onDistrictChange"
+          @change="requestDistrictChange"
         >
           <option value="">Bezirk wählen…</option>
           <option v-for="d in districtsStore.districts" :key="d.id" :value="d.id">{{ d.name }}</option>
@@ -29,7 +29,7 @@
           :class="activeTab === 'leaders'
             ? 'border-b-2 border-blue-600 text-blue-600'
             : 'text-gray-500 hover:text-gray-800'"
-          @click="activeTab = 'leaders'"
+          @click="returnToLeaders"
         >
           Amtstragende
         </button>
@@ -101,14 +101,50 @@
                   <span class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
                     {{ leader.rank ?? '—' }}
                   </span>
-                  <p class="font-medium text-gray-800 dark:text-gray-200 break-words min-w-0">{{ leader.name }}</p>
+                  <InlineEditableCell
+                    :id="'leader-name-mobile-' + leader.id"
+                    as="div"
+                    class="font-medium text-gray-800 dark:text-gray-200 break-words min-w-0"
+                    :value="leader.name"
+                    :revision="leader.revision ?? ''"
+                    :label="'Name: ' + leader.name"
+                    :editable="canInlineEditLeader(leader)"
+                    :coordinator="inlineCoordinator"
+                    :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'name')"
+                    required
+                    :max-length="255"
+                  />
                 </div>
                 <p v-if="section.congregationId === null" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   {{ congregationName(leader.congregation_id) || '—' }}
                 </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {{ leader.email || '—' }} · {{ leader.phone || '—' }}
-                </p>
+                <div class="mt-0.5 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <InlineEditableCell
+                    :id="'leader-email-mobile-' + leader.id"
+                    as="div"
+                    :value="leader.email"
+                    :revision="leader.revision ?? ''"
+                    :label="'E-Mail: ' + leader.name"
+                    :editable="canInlineEditLeader(leader)"
+                    :coordinator="inlineCoordinator"
+                    :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'email')"
+                    :max-length="255"
+                  />
+                  <InlineEditableCell
+                    :id="'leader-phone-mobile-' + leader.id"
+                    as="div"
+                    :value="leader.phone"
+                    :revision="leader.revision ?? ''"
+                    :label="'Telefon: ' + leader.name"
+                    :editable="canInlineEditLeader(leader)"
+                    :coordinator="inlineCoordinator"
+                    :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'phone')"
+                    :max-length="100"
+                  />
+                </div>
                 <p v-if="leader.special_role" class="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">Beauftragung: {{ leader.special_role }}</p>
               </div>
               <span
@@ -150,7 +186,7 @@
         <!-- Leaders: desktop table -->
         <div v-if="leadersForSection(section.congregationId).length > 0" class="card overflow-hidden hidden md:block">
           <div class="table-scroll">
-          <table class="table-min-w w-full text-sm">
+          <table data-inline-edit-scope class="table-min-w w-full text-sm">
             <thead class="table-thead">
               <tr>
                 <th class="table-th py-2">Grad</th>
@@ -175,7 +211,19 @@
                     {{ leader.rank ?? '—' }}
                   </span>
                 </td>
-                <td class="table-td py-2 font-medium text-gray-800 dark:text-gray-200">{{ leader.name }}</td>
+                <InlineEditableCell
+                  :id="'leader-name-desktop-' + leader.id"
+                  class="py-2 font-medium text-gray-800 dark:text-gray-200"
+                  :value="leader.name"
+                  :revision="leader.revision ?? ''"
+                  :label="'Name: ' + leader.name"
+                  :editable="canInlineEditLeader(leader)"
+                  :coordinator="inlineCoordinator"
+                  :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'name')"
+                  required
+                  :max-length="255"
+                />
                 <td class="px-4 py-2">
                   <span
                     v-if="leader.special_role"
@@ -188,8 +236,30 @@
                 <td v-if="section.congregationId === null" class="table-td py-2">
                   {{ congregationName(leader.congregation_id) || '—' }}
                 </td>
-                <td class="table-td py-2">{{ leader.email || '—' }}</td>
-                <td class="table-td py-2">{{ leader.phone || '—' }}</td>
+                <InlineEditableCell
+                  :id="'leader-email-desktop-' + leader.id"
+                  class="py-2"
+                  :value="leader.email"
+                  :revision="leader.revision ?? ''"
+                  :label="'E-Mail: ' + leader.name"
+                  :editable="canInlineEditLeader(leader)"
+                  :coordinator="inlineCoordinator"
+                  :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'email')"
+                    :max-length="255"
+                />
+                <InlineEditableCell
+                  :id="'leader-phone-desktop-' + leader.id"
+                  class="py-2"
+                  :value="leader.phone"
+                  :revision="leader.revision ?? ''"
+                  :label="'Telefon: ' + leader.name"
+                  :editable="canInlineEditLeader(leader)"
+                  :coordinator="inlineCoordinator"
+                  :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
+                    :reload="() => reloadInlineLeader(leader, 'phone')"
+                    :max-length="100"
+                />
                 <td class="table-td py-2 text-center">
                   <span
                     class="badge"
@@ -251,7 +321,7 @@
 
       <div v-else class="border border-gray-200 rounded-lg overflow-hidden">
         <div class="table-scroll">
-        <table class="table-min-w w-full text-sm">
+        <table data-inline-edit-scope class="table-min-w w-full text-sm">
           <thead class="bg-gray-50 text-xs text-gray-500 font-medium">
             <tr>
               <th class="px-4 py-2 text-left">Name</th>
@@ -789,6 +859,7 @@
 </template>
 
 <script setup lang="ts">
+import { onBeforeRouteLeave } from 'vue-router'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -796,6 +867,8 @@ import CopyButton from '../components/CopyButton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
 import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
+import InlineEditableCell from '../components/InlineEditableCell.vue'
+import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import {
   BuildingOffice2Icon,
   CalendarDaysIcon,
@@ -816,6 +889,7 @@ import {
   listLeaders,
   unlinkSelfFromLeader,
   updateLeader,
+  updateLeaderInline,
   LEADER_RANKS,
   SPECIAL_ROLES,
   leaderNameFromId,
@@ -853,6 +927,49 @@ const selectedDistrictId = computed({
 })
 const loading = ref(false)
 const saving = ref(false)
+const inlineCoordinator = useInlineCellCoordinator()
+onBeforeRouteLeave(() => inlineCoordinator.finish())
+
+function canInlineEditLeader(leader: LeaderResponse): boolean {
+  return (authStore.isSuperadmin || authStore.memberships.some((m) =>
+    m.scope_type === 'DISTRICT' && m.scope_id === selectedDistrictId.value && ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN'].includes(m.role)
+  )) &&
+    leader.district_id === selectedDistrictId.value &&
+    !!leader.revision
+}
+
+async function reloadInlineLeader(
+  leader: LeaderResponse,
+  field: 'name' | 'email' | 'phone',
+): Promise<{ value: string | null; revision: string }> {
+  const latest = (await listLeaders(leader.district_id)).find((entry) => entry.id === leader.id)
+  if (!latest) throw new Error('Amtstragende:r wurde zwischenzeitlich entfernt.')
+  if (selectedDistrictId.value === leader.district_id) {
+    leaders.value = leaders.value.map((entry) => entry.id === latest.id ? latest : entry)
+  }
+  return { value: latest[field], revision: latest.revision ?? '' }
+}
+
+async function saveInlineLeader(
+  leader: LeaderResponse,
+  field: 'name' | 'email' | 'phone',
+  value: string,
+  revision: string,
+): Promise<void> {
+  const districtId = leader.district_id
+  const saved = await updateLeaderInline(
+    districtId, leader.id, { [field]: value || null }, revision,
+  )
+  if (selectedDistrictId.value !== districtId) return
+  leaders.value = leaders.value.map((item) => item.id === saved.id ? saved : item)
+  // A failed canonical refresh must not turn an already persisted mutation into an error.
+  try {
+    const current = await listLeaders(districtId)
+    if (selectedDistrictId.value === districtId) leaders.value = current
+  } catch {
+    // The authoritative PATCH response already updated the visible record.
+  }
+}
 
 const selfLinkedLeader = ref<LeaderResponse | null>(null)
 const selfSelectedLeaderId = ref('')
@@ -882,7 +999,12 @@ async function loadRegistrations() {
   }
 }
 
+async function returnToLeaders() {
+  if (await inlineCoordinator.finish()) activeTab.value = 'leaders'
+}
+
 async function switchToRegistrations() {
+  if (!(await inlineCoordinator.finish())) return
   activeTab.value = 'registrations'
   await loadRegistrations()
 }
@@ -910,6 +1032,7 @@ const canManageUnavailabilities = computed(() => {
 })
 
 async function switchToUnavailabilities(leaderId?: string) {
+  if (!(await inlineCoordinator.finish())) return
   activeTab.value = 'unavailabilities'
   if (leaderId !== undefined) unavailabilityFilterLeaderId.value = leaderId
   try {
@@ -1146,6 +1269,18 @@ onMounted(async () => {
   }
 })
 
+async function requestDistrictChange(event: Event) {
+  const selector = event.target as HTMLSelectElement
+  const requestedDistrict = selector.value
+  if (!(await inlineCoordinator.finish())) {
+    selector.value = selectedDistrictId.value
+    return
+  }
+  if (requestedDistrict === selectedDistrictId.value) return
+  selectedDistrictId.value = requestedDistrict
+  await onDistrictChange()
+}
+
 async function onDistrictChange() {
   const loadGeneration = ++districtLoadGeneration
   const districtId = selectedDistrictId.value
@@ -1275,6 +1410,7 @@ async function saveAdd() {
 const editModal = reactive({
   open: false,
   leaderId: '',
+  revision: '',
   name: '',
   rank: '' as LeaderRank | '',
   congregation_id: null as string | null,
@@ -1289,6 +1425,7 @@ const editModal = reactive({
 function openEditModal(leader: LeaderResponse) {
   editModal.open = true
   editModal.leaderId = leader.id
+  editModal.revision = leader.revision ?? ''
   editModal.name = leader.name
   editModal.rank = leader.rank ?? ''
   editModal.congregation_id = leader.congregation_id
@@ -1314,7 +1451,7 @@ async function saveEdit() {
       phone: editModal.phone.trim() || null,
       notes: editModal.notes.trim() || null,
       is_active: editModal.is_active,
-    })
+    }, editModal.revision)
     const idx = leaders.value.findIndex((l) => l.id === editModal.leaderId)
     if (idx !== -1) leaders.value[idx] = updated
     editModal.open = false

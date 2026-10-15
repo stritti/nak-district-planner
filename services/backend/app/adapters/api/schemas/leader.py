@@ -57,6 +57,7 @@ class LeaderResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    revision: str
 
 
 class LeaderSelfLinkRequest(BaseModel):
