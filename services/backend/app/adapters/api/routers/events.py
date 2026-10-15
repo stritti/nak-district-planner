@@ -65,6 +65,7 @@ from app.domain.models.planning_slot import (
 )
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus
+from app.domain.planning.conflict_result import ConflictResult
 from app.domain.ports.calendar import CalendarConnectorError, OccurrenceWriteBackError
 from app.domain.services.sync_policy import internal_state, resolve_conflict
 
@@ -432,6 +433,15 @@ async def delete_event(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+def _validate_changed_event_window(start: datetime, end: datetime) -> None:
+    """Preview and PATCH share the same effective-start validation and message."""
+    if end < start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="end_at darf nicht vor der wirksamen Startzeit (start_at oder geplanter Beginn) liegen.",
+        )
+
+
 def _proposed_service(
     slot: PlanningSlot,
     instance: EventInstance | None,
@@ -449,11 +459,7 @@ def _proposed_service(
     default_start = datetime.combine(planning_date, planning_time or time.min, tzinfo=UTC)
     window_start = start if start is not None else default_start
     window_end = end if end is not None else window_start
-    if window_end < window_start:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="end_at muss nach start_at liegen.",
-        )
+    _validate_changed_event_window(window_start, window_end)
     congregation_id = slot.congregation_id
     if "congregation_id" in body.model_fields_set:
         congregation_id = body.congregation_id
@@ -474,7 +480,13 @@ async def _revalidate_dependent_change(
     proposed: ProposedService,
     confirm_warnings: bool,
 ) -> None:
-    """Re-check responsible ministers on the new schedule; leaders are locked in id order."""
+    """Re-check leaders only for effective schedule/location changes.
+
+    Existing IDs still require same-district ownership; inactivity is not
+    checked here. Invalid historic references are 422, never overridable WARN.
+    Leader advisory locks cover assignments across different events, which
+    row locks on this event's assignments cannot serialize.
+    """
     assignments = [
         a for a in await assignments_repo.list_by_planning_slot(slot.id) if a.leader_id is not None
     ]
@@ -483,7 +495,7 @@ async def _revalidate_dependent_change(
         await ensure_leader_in_district(session, slot.district_id, leader_id)
     for leader_id in leader_ids:
         await acquire_advisory_xact_lock(session, leader_id)
-    conflicts: list = []
+    conflicts: list[ConflictResult] = []
     for assignment in assignments:
         conflicts += await check_service_assignment_conflicts(
             session,
@@ -626,11 +638,7 @@ async def update_event(
             body.start_at or (instance.actual_start_at if instance else _slot_start_at(slot))
         )
         new_end = aware_timestamp(body.end_at or (instance.actual_end_at if instance else new_start))
-        if new_end < new_start:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="end_at muss nach start_at liegen.",
-            )
+        _validate_changed_event_window(new_start, new_end)
         slot.planning_date = new_start.date()
         slot.planning_time = new_start.timetz()
         if instance is not None:

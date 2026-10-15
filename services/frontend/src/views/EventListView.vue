@@ -729,7 +729,7 @@ import AutocompleteInput, {
   type AutocompleteValue,
 } from '../components/AutocompleteInput.vue'
 import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
-import { parseConflictError } from '../api/errors'
+import { ConflictError, parseConflictError } from '../api/errors'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
@@ -1353,10 +1353,13 @@ async function saveEdit() {
     const congregationId = editForm.congregation_id || null
     const congregationChanged = congregationId !== (target.congregation_id ?? null)
     let acknowledgedWarnings = false
+    // This editor exposes congregation/workflow fields, no start/end controls yet.
+    // Add schedule preview when those separate OpenSpec controls are introduced.
     if (congregationChanged) {
       const impact = await previewEventChange(target.id, { congregation_id: congregationId }, target.revision ?? '')
-      const messages = impact.items.flatMap((item) => item.conflicts.map((c) => c.message))
-      if (impact.blocked) throw new Error(messages.join(' '))
+      const conflicts = impact.items.flatMap((item) => item.conflicts)
+      const messages = conflicts.map((conflict) => conflict.message)
+      if (impact.blocked) throw new ConflictError(conflicts)
       if (impact.requires_confirmation) {
         const ok = await confirm({
           title: 'Konflikt durch Gemeindewechsel',
@@ -1364,7 +1367,10 @@ async function saveEdit() {
           confirmText: 'Trotzdem speichern',
           variant: 'warning',
         })
-        if (!ok) return
+        if (!ok) {
+          editError.value = 'Speichern abgebrochen. Der Entwurf bleibt erhalten.'
+          return
+        }
         acknowledgedWarnings = true
       }
     }
@@ -1391,7 +1397,10 @@ async function saveEdit() {
         confirmText: 'Trotzdem speichern',
         variant: 'warning',
       })
-      if (!confirmed) return
+      if (!confirmed) {
+        editError.value = 'Speichern abgebrochen. Der Entwurf bleibt erhalten.'
+        return
+      }
       // The write independently revalidates. Retry once; BLOCK and 412 remain failures.
       updated = await updateEvent(target.id, { ...payload, confirm_warnings: true }, revision)
     }
