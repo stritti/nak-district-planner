@@ -132,7 +132,7 @@ _FUNCTIONS = (
                 WHERE c.id=p_congregation AND c.district_id=p_district))
           ))
       )
-      ORDER BY u.sub
+      ORDER BY 1
     $$""",
 )
 
@@ -358,3 +358,4 @@ def remove_duty_policies(op) -> None:
         "duty_subject_scope(text,uuid,uuid)",
     ):
         op.execute(f"DROP FUNCTION {fn}")
+
