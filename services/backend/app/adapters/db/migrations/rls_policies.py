@@ -12,6 +12,8 @@ at the database level, even if application-level checks are bypassed.
 
 from __future__ import annotations
 
+from app.domain.models.role import Role, roles_at_least_sql
+
 # RLS Policies for each tenant-specific table
 # These policies assume that the current user's tenant context is set via:
 # - current_setting('app.current_user_sub', true) for user subject
@@ -72,7 +74,7 @@ EXISTS (
     WHERE m.user_sub = current_setting('app.current_user_sub', true)
       AND m.scope_type = 'DISTRICT'
       AND m.scope_id = {table_alias}.district_id
-      AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+      AND m.role IN ({roles_at_least_sql(Role.PLANNER)})
 )
 """
 
@@ -86,7 +88,7 @@ EXISTS (
     WHERE m.user_sub = current_setting('app.current_user_sub', true)
       AND m.scope_type = 'CONGREGATION'
       AND m.scope_id = {table_alias}.congregation_id
-      AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+      AND m.role IN ({roles_at_least_sql(Role.PLANNER)})
 )
 """
 
@@ -100,7 +102,7 @@ EXISTS (
     WHERE m.user_sub = current_setting('app.current_user_sub', true)
       AND m.scope_type = 'DISTRICT'
       AND m.scope_id = {table_alias}.district_id
-      AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+      AND m.role IN ({roles_at_least_sql(Role.CONGREGATION_ADMIN)})
 )
 """
 
@@ -114,7 +116,7 @@ EXISTS (
     WHERE m.user_sub = current_setting('app.current_user_sub', true)
       AND m.scope_type = 'CONGREGATION'
       AND m.scope_id = {table_alias}.congregation_id
-      AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+      AND m.role IN ({roles_at_least_sql(Role.CONGREGATION_ADMIN)})
 )
 """
 
@@ -373,14 +375,14 @@ def congregation_row_write_sql(alias: str = "congregations") -> str:
         WHERE m.user_sub = current_setting('app.current_user_sub', true)
           AND m.scope_type = 'DISTRICT'
           AND m.scope_id = {alias}.district_id
-          AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+          AND m.role IN ({roles_at_least_sql(Role.PLANNER)})
     )
     OR EXISTS (
         SELECT 1 FROM memberships m
         WHERE m.user_sub = current_setting('app.current_user_sub', true)
           AND m.scope_type = 'CONGREGATION'
           AND m.scope_id = {alias}.id
-          AND m.role IN ('PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+          AND m.role IN ({roles_at_least_sql(Role.PLANNER)})
     )
 )
 """
@@ -396,14 +398,14 @@ def congregation_row_admin_sql(alias: str = "congregations") -> str:
         WHERE m.user_sub = current_setting('app.current_user_sub', true)
           AND m.scope_type = 'DISTRICT'
           AND m.scope_id = {alias}.district_id
-          AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+          AND m.role IN ({roles_at_least_sql(Role.CONGREGATION_ADMIN)})
     )
     OR EXISTS (
         SELECT 1 FROM memberships m
         WHERE m.user_sub = current_setting('app.current_user_sub', true)
           AND m.scope_type = 'CONGREGATION'
           AND m.scope_id = {alias}.id
-          AND m.role IN ('CONGREGATION_ADMIN', 'DISTRICT_ADMIN')
+          AND m.role IN ({roles_at_least_sql(Role.CONGREGATION_ADMIN)})
     )
 )
 """
