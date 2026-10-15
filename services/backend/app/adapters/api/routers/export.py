@@ -234,13 +234,24 @@ async def export_calendar_ics(
 ) -> Response:
     from sqlalchemy import text
 
-    await session.execute(
-        text("SELECT set_config('app.current_export_token', :val, true)"),
-        {"val": hash_export_token(token_str)},
-    )
+    async def set_export_context(value: str) -> None:
+        await session.execute(
+            text("SELECT set_config('app.current_export_token', :val, true)"),
+            {"val": value},
+        )
+
+    # The RLS lookup policy matches the presented value against the stored
+    # column, so a legacy plaintext row is only visible with the plaintext as
+    # context and a hashed row only with its hash. After the lookup the stored
+    # form is authoritative for all downstream RLS checks.
+    await set_export_context(token_str)
     export_token = await token_repo.get_by_token(token_str)
+    if export_token is None:
+        await set_export_context(hash_export_token(token_str))
+        export_token = await token_repo.get_by_token(token_str)
     if not export_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
+    await set_export_context(export_token.token)
 
     if export_token.subject_sub is not None:
         events = await load_personal_events(

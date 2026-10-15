@@ -22,6 +22,23 @@ it('renders one event with several duties and cancellation', async () => {
  expect(wrapper.findAll('[data-testid="personal-event"]')).toHaveLength(1)
  expect(wrapper.text()).toContain('Organist, Dirigent'); expect(wrapper.text()).toContain('Abgesagt')
 })
+it('renders the ICS link for a stored token with a secret', async () => {
+  vi.mocked(api.listPersonalTokens).mockResolvedValue([
+    { id: 't', token: 'fresh-secret', label: 'Mein Kalender' },
+  ])
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+  expect(wrapper.get('a').attributes('href')).toContain('/api/v1/export/fresh-secret/calendar.ics')
+})
+
+it('hides the ICS link when the stored token has no reusable secret', async () => {
+  vi.mocked(api.listPersonalTokens).mockResolvedValue([{ id: 't', label: 'Mein Kalender' }])
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+  expect(wrapper.find('a').exists()).toBe(false)
+  expect(wrapper.text()).toContain('Secret nur direkt nach dem Erstellen sichtbar')
+})
+
 it('creates only an own subject-bound internal feed', async () => {
  vi.mocked(api.createPersonalToken).mockResolvedValue({ id: 't', token: 'secret', label: 'Mein Kalender' })
  const wrapper = mount(PersonalCalendarView); await flushPromises()
