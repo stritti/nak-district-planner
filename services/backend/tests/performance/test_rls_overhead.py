@@ -48,6 +48,14 @@ CONGREGATIONS_PER_DISTRICT = 50
 RANGE_FROM = date(2027, 1, 1)
 RANGE_TO = date(2027, 3, 31)
 RUNS = 30
+# PostgreSQL keeps custom plans for the first five executions of a prepared
+# statement before it may switch to a generic plan, and its first executions
+# pay one-time JIT compilation once a plan estimate crosses jit_above_cost
+# (the service-assignment RLS filter does). A single warm-up execution is
+# therefore still inside that transient and would fold planning/JIT cost into
+# the measurement. Warm up well past the transition so the guards measure the
+# steady-state latency a warm pooled connection serves.
+WARMUP_RUNS = 8
 # Regression guards against order-of-magnitude regressions such as per-row,
 # unhashed membership subqueries or a missing index (migration 0024: the
 # assignment lookup took ~240 ms as a full scan). Measured values are far lower
@@ -173,7 +181,8 @@ async def seeded(owner: AsyncEngine) -> AsyncIterator[Seeded]:
 
 
 async def _measure(conn: AsyncConnection, sql: str, params: dict) -> tuple[list[float], int]:
-    await conn.execute(text(sql), params)  # warm-up
+    for _ in range(WARMUP_RUNS):  # past the custom->generic plan switch and one-time JIT
+        await conn.execute(text(sql), params)
     durations, rows = [], 0
     for _ in range(RUNS):
         started = clock.perf_counter()
