@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0](https://github.com/stritti/nak-district-planner/compare/v1.0.0...v1.1.0) (2026-10-15)
+
+
+### Features
+
+* add configurable event duties ([#579](https://github.com/stritti/nak-district-planner/issues/579)) ([414bf0f](https://github.com/stritti/nak-district-planner/commit/414bf0fe641216880009aa9c8895fb22ec8eba90))
+* **events:** validate dependent schedule and congregation edits (stack 3/3) ([#578](https://github.com/stritti/nak-district-planner/issues/578)) ([843dd1b](https://github.com/stritti/nak-district-planner/commit/843dd1b5d2ac666f26fcc9e393c3e899bcec5f59))
+* guarded inline editing foundation for event tables ([#576](https://github.com/stritti/nak-district-planner/issues/576)) ([c6449d8](https://github.com/stritti/nak-district-planner/commit/c6449d81a789f448ab66c1e69011243324f15c45))
+* **matrix:** conditional inline duty assignments (stack 2/3) ([#577](https://github.com/stritti/nak-district-planner/issues/577)) ([f2f896c](https://github.com/stritti/nak-district-planner/commit/f2f896c1d9893b6863aa4afd808fc5ba623e5520))
+* **planning:** recurring event templates and deterministic month rules ([#557](https://github.com/stritti/nak-district-planner/issues/557)) ([#570](https://github.com/stritti/nak-district-planner/issues/570)) ([5180941](https://github.com/stritti/nak-district-planner/commit/518094118e801c864d2ab8a4c1bcc37f98f1f461))
+
+
+### Bug Fixes
+
+* **auth/planning:** lock down congregation role contract and moved series ([#503](https://github.com/stritti/nak-district-planner/issues/503)) ([#571](https://github.com/stritti/nak-district-planner/issues/571)) ([9e72a49](https://github.com/stritti/nak-district-planner/commit/9e72a49534207f36c0b2a5799d3bcfd604b84a2b))
+* ignore gaphify ([881ab04](https://github.com/stritti/nak-district-planner/commit/881ab040c93f6067c63c6b8da5a94ac3ad7788db))
+* **ops:** production hardening and migrated restore verification ([#472](https://github.com/stritti/nak-district-planner/issues/472)) ([#574](https://github.com/stritti/nak-district-planner/issues/574)) ([cbdf4b2](https://github.com/stritti/nak-district-planner/commit/cbdf4b2c596c7124d8c46e6b6fae19004b44cf9e))
+* **sync:** persist failures, avoid blocking locks and use Valkey ([#470](https://github.com/stritti/nak-district-planner/issues/470)) ([#568](https://github.com/stritti/nak-district-planner/issues/568)) ([8760e19](https://github.com/stritti/nak-district-planner/commit/8760e192e9ab28299d0aebcce3b298a41a953acd))
+
 ## [1.0.0](https://github.com/stritti/nak-district-planner/compare/v1.0.0-rc.9...v1.0.0) (2026-10-10)
 
 
