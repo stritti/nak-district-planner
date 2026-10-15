@@ -65,8 +65,6 @@ class SqlExportTokenRepository:
             row = result.scalar_one_or_none()
             if row is not None and is_hashed_export_token(row.token):
                 row = None
-            elif row is not None:
-                await self.hash_stored_token(row)
         return _orm_to_domain(row) if row else None
 
     async def get_orm(self, token_id: uuid.UUID) -> ExportTokenORM | None:
