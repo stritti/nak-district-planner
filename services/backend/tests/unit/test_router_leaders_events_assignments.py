@@ -1113,7 +1113,10 @@ async def test_assignment_writer_locks_planning_slot_before_mutating(action: str
     slots.get_for_update.return_value = slot
     assignments.get.return_value = assignment
 
-    with patch("app.adapters.api.routers.service_assignments.require_role_in_district"):
+    with (
+        patch("app.adapters.api.routers.service_assignments.require_role_in_district"),
+        patch("app.adapters.api.routers.service_assignments._check_typed_name", new=AsyncMock()),
+    ):
         if action == "create":
             await sa_router.create_assignment(
                 slot.id, ServiceAssignmentCreate(leader_name="Neu"),
