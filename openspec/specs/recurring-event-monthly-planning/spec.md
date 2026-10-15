@@ -1,7 +1,7 @@
 # recurring-event-monthly-planning Specification
 
 ## Purpose
-TBD - created by archiving change add-recurring-event-monthly-checklist. Update Purpose after archive.
+Beschreibt wiederkehrende Terminvorlagen auf Gemeinde- und Bezirksebene, deren Wiederholungsregeln sowie die monatsbezogene Planungscheckliste, über die Vorkommen explizit übernommen, ausgelassen oder nach Prüfung aufgelöst werden.
 
 ## Requirements
 

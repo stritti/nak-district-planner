@@ -1,7 +1,7 @@
 # planning-refactoring Specification
 
 ## Purpose
-TBD - created by archiving change refactor-issue-474. Update Purpose after archive.
+Consolidates the technical refactoring rules introduced by #474: a single planning-series generation implementation with UTC generation keys and deletion-ledger suppression, Celery entrypoints kept in inbound adapters, one external event fingerprint calculation, and non-destructive frontend error handling.
 
 ## Requirements
 
