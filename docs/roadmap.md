@@ -1,15 +1,14 @@
 # Roadmap und aktueller Stand
 
-> **Stand: 15. Oktober 2026 (GitHub-PR-Status abgeglichen).** [v1.0.0](https://github.com/stritti/nak-district-planner/releases/tag/v1.0.0) ist seit dem 10. Oktober 2026 stabil veröffentlicht. Release 1.1.0 ist vorbereitet: Der Release-PR [PR #572](https://github.com/stritti/nak-district-planner/pull/572) ist grün und mergefähig; das Veröffentlichen von Version und Tag erfolgt automatisch beim Merge. Für kommende Features sind weder Version noch Termin verbindlich festgelegt.
+> **Stand: 15. Oktober 2026 (GitHub-PR-Status abgeglichen).** [v1.1.0](https://github.com/stritti/nak-district-planner/releases/tag/v1.1.0) ist seit dem 15. Oktober 2026 veröffentlicht (nach [v1.0.0](https://github.com/stritti/nak-district-planner/releases/tag/v1.0.0) vom 10. Oktober 2026). Für kommende Features sind weder Version noch Termin verbindlich festgelegt.
 
 Diese Seite ist die **einzige aktive produktbezogene Roadmap**. Die verbindlichen Regeln für implementiertes Verhalten stehen in der [OpenSpec-Baseline](https://github.com/stritti/nak-district-planner/tree/main/openspec/specs). [Aktive OpenSpec-Changes](https://github.com/stritti/nak-district-planner/tree/main/openspec/changes) und GitHub-Issues beschreiben Änderungen, die noch nicht notwendigerweise umgesetzt sind.
 
 ## Release- und Integrationsstand
 
-- **Veröffentlicht:** v1.0.0 (10. Oktober 2026).
-- **Release 1.1.0 vorbereitet:** [PR #572](https://github.com/stritti/nak-district-planner/pull/572) (chore(main): release 1.1.0) ist geöffnet, grün und mergefähig. Ein Release-PR ist noch keine veröffentlichte Version; Tag und GitHub-Release entstehen automatisch beim Merge.
+- **Veröffentlicht:** v1.0.0 (10. Oktober 2026) und v1.1.0 (15. Oktober 2026, [PR #572](https://github.com/stritti/nak-district-planner/pull/572)).
 - **In `main` integriert und in 1.1.0 enthalten (Auswahl):** Kalendersynchronisation (PR #568, Valkey, persistierte Sync-Fehler), Rollenvertrag/verschobene Serien (PR #571), technische Konsolidierung (PR #573, Issue #474), wiederkehrende Gemeinde-/Bezirkstermine (PR #570, Issue #557), Produktionshärtung mit migrierter Restore-Verifikation (PR #574, Issue #472), Basis für Inline-Editing (PR #576, #577, #578) sowie konfigurierbare Aufgaben je Termin (PR #579).
-- **Nach dem Release geplant:** [PR #580](https://github.com/stritti/nak-district-planner/pull/580) (geteilte `SERVICE_LEADER_LABEL`-Konstante, Refactoring aus Review zu #579) wird bewusst erst nach dem Releasen gemergt.
+- **Nach dem Release:** [PR #580](https://github.com/stritti/nak-district-planner/pull/580) (geteilte `SERVICE_LEADER_LABEL`-Konstante, Refactoring aus Review zu #579) wurde nach dem Release in `feat/configurable-event-duties` gemergt; die Übernahme nach `main` erfolgt über PR #587.
 - **Offene Folgefragen:** GitGuardian-Incident 36714356 (PR #574) ist extern zu klassifizieren, ohne das Security-Gate abzuschwächen; Codecov-Upload benötigt weiterhin `CODECOV_TOKEN`.
 
 ## Fachlicher Backlog
