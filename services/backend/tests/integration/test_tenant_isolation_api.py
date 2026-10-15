@@ -282,9 +282,28 @@ async def test_foreign_rows_are_invisible_even_via_own_district_path(api, owner,
 
     patched = await api.patch(own_path_foreign_leader, json={"name": "Gekapert"}, headers=headers)
     deleted = await api.delete(foreign_leader, headers=headers)
-    event_patch = await api.patch(
+    missing_revision = await api.patch(
         f"/api/v1/events/{world.b.slot_id}", json={"title": "Gekapert"}, headers=headers
     )
+    assert missing_revision.status_code == 428
+    event_patch = await api.patch(
+        f"/api/v1/events/{world.b.slot_id}", json={"title": "Gekapert"},
+        headers={**headers, "If-Match": '"foreign-resource-snapshot"'},
+    )
+
+    inline_assignment = await api.put(
+        f"/api/v1/events/{world.b.slot_id}/assignments/inline",
+        json={"leader_id": str(world.a.leader_id)},
+        headers={**headers, "If-Match": '"foreign-slot-snapshot"'},
+    )
+    assert inline_assignment.status_code == 404
+
+    inline_assignment = await api.put(
+        f"/api/v1/events/{world.b.slot_id}/assignments/inline",
+        json={"leader_id": str(world.a.leader_id)},
+        headers={**headers, "If-Match": '"foreign-slot-snapshot"'},
+    )
+    assert inline_assignment.status_code == 404
 
     inline_assignment = await api.put(
         f"/api/v1/events/{world.b.slot_id}/assignments/inline",

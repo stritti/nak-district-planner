@@ -530,6 +530,7 @@ def test_events_and_related_routes_return_403(
 
     slot_repo = AsyncMock()
     slot_repo.get.return_value = _slot_obj(resource_district)
+    slot_repo.get_for_update.return_value = slot_repo.get.return_value
     slot_repo.list_for_date_range.return_value = []
 
     assignment_repo = AsyncMock()
@@ -561,6 +562,9 @@ def test_events_and_related_routes_return_403(
         if query is not None:
             kwargs["params"] = {k: str(resource_district) for k in query}
         kwargs["headers"] = auth_headers()
+        if method == "patch":
+            # Exercise the role guard after satisfying the mandatory header.
+            kwargs["headers"]["If-Match"] = '"role-test-snapshot"'
         response = getattr(client, method)(path, **kwargs)
         assert response.status_code == 403
 

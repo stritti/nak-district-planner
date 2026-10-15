@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.adapters.api.routers.service_assignments import _raise_blocking_conflicts
+from app.adapters.api.conflict_http import raise_for_conflicts as _raise_blocking_conflicts
 from app.adapters.api.schemas.conflict import ConflictResponse
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.config import Settings

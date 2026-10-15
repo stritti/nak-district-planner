@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,8 @@ from app.adapters.db.repositories.leader_unavailability import (
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.config import settings
+from app.domain.models.event_instance import EventInstance
+from app.domain.models.planning_slot import PlanningSlot
 from app.domain.planning.conflict_result import (
     ConflictContext,
     ExistingAssignment,
@@ -26,12 +29,34 @@ from app.domain.planning.conflict_result import (
 from app.domain.planning.conflict_service import ConflictService
 
 
+@dataclass(frozen=True)
+class ProposedService:
+    """Schedule of a planning slot as it would be after a pending change."""
+
+    congregation_id: uuid.UUID | None
+    planning_date: date
+    planning_time: time | None
+    actual_start_at: datetime | None = None
+    actual_end_at: datetime | None = None
+
+    @classmethod
+    def of(cls, slot: PlanningSlot, instance: EventInstance | None) -> ProposedService:
+        return cls(
+            congregation_id=slot.congregation_id,
+            planning_date=slot.planning_date,
+            planning_time=slot.planning_time,
+            actual_start_at=instance.actual_start_at if instance else None,
+            actual_end_at=instance.actual_end_at if instance else None,
+        )
+
+
 async def check_service_assignment_conflicts(
     session: AsyncSession,
     *,
     event_id: uuid.UUID,
     leader_id: uuid.UUID,
     exclude_assignment_id: uuid.UUID | None = None,
+    proposed: ProposedService | None = None,
 ) -> list:
     """Evaluate conflicts for assigning a leader to a planning slot.
 
@@ -41,19 +66,21 @@ async def check_service_assignment_conflicts(
     if not settings.conflict_check_enabled:
         return []
 
-    slot = await SqlPlanningSlotRepository(session).get(event_id)
-    if slot is None:
-        return []
-    instance = await SqlEventInstanceRepository(session).get_by_planning_slot(event_id)
+    if proposed is None:
+        slot = await SqlPlanningSlotRepository(session).get(event_id)
+        if slot is None:
+            return []
+        instance = await SqlEventInstanceRepository(session).get_by_planning_slot(event_id)
+        proposed = ProposedService.of(slot, instance)
     leader = await SqlLeaderRepository(session).get(leader_id)
 
     default_duration = timedelta(minutes=settings.sync_expected_duration_minutes)
     start, end = ScheduledService(
-        congregation_id=slot.congregation_id,
-        planning_date=slot.planning_date,
-        planning_time=slot.planning_time,
-        actual_start_at=instance.actual_start_at if instance else None,
-        actual_end_at=instance.actual_end_at if instance else None,
+        congregation_id=proposed.congregation_id,
+        planning_date=proposed.planning_date,
+        planning_time=proposed.planning_time,
+        actual_start_at=proposed.actual_start_at,
+        actual_end_at=proposed.actual_end_at,
     ).window(default_duration)
 
     # A service without EventInstance lasts default_duration, so one starting up to
@@ -76,7 +103,7 @@ async def check_service_assignment_conflicts(
         leader_id=leader_id,
         start_time=start,
         end_time=end,
-        congregation_id=slot.congregation_id,
+        congregation_id=proposed.congregation_id,
         existing_assignments=existing,
         leader_rank=leader.rank.value if leader and leader.rank else None,
         min_travel_minutes=settings.min_travel_minutes,

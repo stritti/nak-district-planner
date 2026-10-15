@@ -705,11 +705,13 @@ import {
   getEvent,
   createEvent,
   deleteEvent,
+  previewEventChange,
   updateEvent,
   updateEventInline,
   type EventApprovalStatus,
   type EventListParams,
   type EventResponse,
+  type EventUpdate,
   type PlanningSlotStatus,
 } from '../api/events'
 import { exportEventsToExcel } from '../composables/useExcelExport'
@@ -727,7 +729,7 @@ import AutocompleteInput, {
   type AutocompleteValue,
 } from '../components/AutocompleteInput.vue'
 import { createAssignment, deleteAssignment, updateAssignment } from '../api/serviceAssignments'
-import { parseConflictError } from '../api/errors'
+import { ConflictError, parseConflictError } from '../api/errors'
 
 const eventsStore = useEventsStore()
 const districtsStore = useDistrictsStore()
@@ -1348,14 +1350,60 @@ async function saveEdit() {
   editError.value  = ''
   try {
     const isDistrictLevel = !editForm.congregation_id
-    const updated = await updateEvent(target.id, {
-      congregation_id: editForm.congregation_id || null,
+    const congregationId = editForm.congregation_id || null
+    const congregationChanged = congregationId !== (target.congregation_id ?? null)
+    let acknowledgedWarnings = false
+    // This editor exposes congregation/workflow fields, no start/end controls yet.
+    // Add schedule preview when those separate OpenSpec controls are introduced.
+    if (congregationChanged) {
+      const impact = await previewEventChange(target.id, { congregation_id: congregationId }, target.revision ?? '')
+      const conflicts = impact.items.flatMap((item) => item.conflicts)
+      const messages = conflicts.map((conflict) => conflict.message)
+      if (impact.blocked) throw new ConflictError(conflicts)
+      if (impact.requires_confirmation) {
+        const ok = await confirm({
+          title: 'Konflikt durch Gemeindewechsel',
+          message: messages.join(' '),
+          confirmText: 'Trotzdem speichern',
+          variant: 'warning',
+        })
+        if (!ok) {
+          editError.value = 'Speichern abgebrochen. Der Entwurf bleibt erhalten.'
+          return
+        }
+        acknowledgedWarnings = true
+      }
+    }
+    const payload: EventUpdate = {
+      congregation_id: congregationId,
       status:          editForm.status,
       approval_status: editForm.approval_status,
       category:        editForm.category || null,
       // Congregation-level events are never distributed; the backend clears it.
-      ...(isDistrictLevel && { applicability: editForm.applicability }),
-    }, target.revision ?? '')
+      ...(isDistrictLevel && { applicability: [...editForm.applicability] }),
+      ...(congregationChanged && { confirm_warnings: acknowledgedWarnings }),
+    }
+    // Keep both the requested values and revision fixed across confirmation.
+    const revision = target.revision ?? ''
+    let updated: EventResponse
+    try {
+      updated = await updateEvent(target.id, payload, revision)
+    } catch (cause) {
+      const conflict = parseConflictError(cause)
+      if (!conflict || conflict.blocking.length || !conflict.warnings.length) throw cause
+      const confirmed = await confirm({
+        title: 'Konflikt durch Gemeindewechsel',
+        message: conflict.warnings.map((warning) => warning.message).join(' '),
+        confirmText: 'Trotzdem speichern',
+        variant: 'warning',
+      })
+      if (!confirmed) {
+        editError.value = 'Speichern abgebrochen. Der Entwurf bleibt erhalten.'
+        return
+      }
+      // The write independently revalidates. Retry once; BLOCK and 412 remain failures.
+      updated = await updateEvent(target.id, { ...payload, confirm_warnings: true }, revision)
+    }
     let assignmentError: unknown = null
     try {
       updated.responsible = await saveResponsible(target)
@@ -1392,7 +1440,10 @@ async function saveEdit() {
     editTarget.value = null
     toast.success('Termin gespeichert', updated.title)
   } catch (e) {
-    editError.value = errorMessage(e, 'Fehler beim Speichern')
+    const conflict = parseConflictError(e)
+    editError.value = conflict
+      ? conflict.conflicts.map((item) => item.message).join(' ')
+      : errorMessage(e, 'Fehler beim Speichern')
     toast.error('Termin konnte nicht gespeichert werden', e)
   } finally {
     editSaving.value = false

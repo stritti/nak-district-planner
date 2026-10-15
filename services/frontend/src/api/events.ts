@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { apiFetch } from './client'
+import type { ConflictItem } from './errors'
 
 export type PlanningSlotStatus = 'ACTIVE' | 'CANCELLED'
 export type EventApprovalStatus = 'PLANNED' | 'CONFIRMED'
@@ -97,12 +98,44 @@ export interface EventUpdate {
   category?: string | null
   /** UC-04 distribution of a district event: `['all']`, congregation IDs or `[]`. */
   applicability?: string[]
+  /** Acknowledges WARN conflicts on a schedule change; required server-side for those. */
+  confirm_warnings?: boolean
 }
 
 export function updateEvent(id: string, data: EventUpdate, revision: string): Promise<EventResponse> {
   if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
   return apiFetch(`/api/v1/events/${id}`, {
     method: 'PATCH',
+    headers: { 'If-Match': revision },
+    body: JSON.stringify(data),
+  })
+}
+
+export interface EventChangeImpactRequest {
+  start_at?: string
+  end_at?: string
+  congregation_id?: string | null
+}
+
+export interface EventChangeImpactItem {
+  assignment_id: string
+  leader_id: string
+  conflicts: ConflictItem[]
+}
+
+export interface EventChangeImpact {
+  blocked: boolean
+  requires_confirmation: boolean
+  items: EventChangeImpactItem[]
+}
+
+/** Read-only preview; nothing is persisted until the matching PATCH is sent. */
+export function previewEventChange(
+  id: string, data: EventChangeImpactRequest, revision: string,
+): Promise<EventChangeImpact> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+  return apiFetch(`/api/v1/events/${id}/change-impact`, {
+    method: 'POST',
     headers: { 'If-Match': revision },
     body: JSON.stringify(data),
   })
