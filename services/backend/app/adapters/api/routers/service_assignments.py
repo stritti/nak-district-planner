@@ -129,7 +129,7 @@ async def create_assignment(
     slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> ServiceAssignmentResponse:
-    planning_slot = await slots.get(event_id)
+    planning_slot = await slots.get_for_update(event_id)
     if not planning_slot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
@@ -256,19 +256,20 @@ async def update_assignment(
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
 ) -> ServiceAssignmentResponse:
+    # Lock the slot before reading its assignment: dependent event updates hold
+    # the same lock, so every writer observes a consistent schedule snapshot.
+    planning_slot = await slots.get_for_update(event_id)
+    if not planning_slot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
+    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
+
     assignment = await assignments_repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
-
-    planning_slot = await slots.get(event_id)
-    if not planning_slot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
-        )
-
-    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     fields = body.model_fields_set
     if "leader_id" in fields:
@@ -325,19 +326,20 @@ async def delete_assignment(
     slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
 ) -> None:
+    # Lock the slot before reading its assignment: dependent event updates hold
+    # the same lock, so every writer observes a consistent schedule snapshot.
+    planning_slot = await slots.get_for_update(event_id)
+    if not planning_slot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
+        )
+    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
+
     assignment = await assignments_repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zuweisung nicht gefunden"
         )
-
-    planning_slot = await slots.get(event_id)
-    if not planning_slot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
-        )
-
-    require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
 
     await assignments_repo.delete(assignment_id)
     await _touch_slot(slots, planning_slot)
