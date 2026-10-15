@@ -266,6 +266,7 @@ async def capacity_tenant():
     engine = create_async_engine(os.environ["TEST_DATABASE_URL"], pool_pre_ping=True)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     ids = {name: uuid.uuid4() for name in ("district", "congregation", "slot", "category")}
+    subject = f"duty-capacity-{uuid.uuid4().hex}"
     async with sessions() as db:
         await db.execute(
             text("INSERT INTO districts (id,name,created_at,updated_at) VALUES (:id,'D',now(),now())"),
@@ -296,17 +297,37 @@ async def capacity_tenant():
             ),
             {"id": ids["category"], "district": ids["district"]},
         )
+        await db.execute(
+            text(
+                "INSERT INTO users (id,sub,email,username,is_superadmin,created_at,updated_at) "
+                "VALUES (:id,:sub,:email,:sub,false,now(),now())"
+            ),
+            {"id": uuid.uuid4(), "sub": subject, "email": f"{subject}@example.org"},
+        )
+        await db.execute(
+            text(
+                "INSERT INTO memberships (id,user_sub,role,scope_type,scope_id,created_at,updated_at) "
+                "VALUES (:id,:sub,'PLANNER','DISTRICT',:district,now(),now())"
+            ),
+            {"id": uuid.uuid4(), "sub": subject, "district": ids["district"]},
+        )
         await db.commit()
-    yield sessions, ids
+    yield sessions, ids, subject
     async with sessions() as db:
         await db.execute(text("DELETE FROM districts WHERE id=:id"), {"id": ids["district"]})
+        await db.execute(text("DELETE FROM memberships WHERE user_sub=:sub"), {"sub": subject})
+        await db.execute(text("DELETE FROM users WHERE sub=:sub"), {"sub": subject})
         await db.commit()
     await engine.dispose()
 
 
-async def _assign(sessions, ids, name):
+async def _assign(sessions, ids, subject, name):
     db = sessions()
     try:
+        await db.execute(
+            text("SELECT set_config('app.current_user_sub', :sub, true)"),
+            {"sub": subject},
+        )
         assignment = await EventDutiesService(SqlEventDutiesRepository(db)).assign(
             ids["district"],
             ids["slot"],
@@ -322,15 +343,21 @@ async def _assign(sessions, ids, name):
 
 @pytest.mark.asyncio
 async def test_concurrent_final_capacity_is_serialized(capacity_tenant):
-    sessions, ids = capacity_tenant
-    first_db, first = await _assign(sessions, ids, "Erste Person")
-    competing = asyncio.create_task(_assign(sessions, ids, "Zweite Person"))
+    sessions, ids, subject = capacity_tenant
+    first_db, first = await _assign(sessions, ids, subject, "Erste Person")
+    competing = asyncio.create_task(_assign(sessions, ids, subject, "Zweite Person"))
     await asyncio.sleep(0.25)
     assert not competing.done(), "the competing writer must wait for the slot lock"
     await first_db.commit()
     await first_db.close()
-    with pytest.raises(DutyConflictError):
-        await competing
+    try:
+        with pytest.raises(DutyConflictError):
+            await competing
+    finally:
+        if competing.done() and not competing.cancelled() and competing.exception() is None:
+            unexpected_db, _ = competing.result()
+            await unexpected_db.rollback()
+            await unexpected_db.close()
 
     async with sessions() as db:
         count = await db.scalar(
