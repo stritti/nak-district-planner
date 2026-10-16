@@ -304,18 +304,20 @@ const errorMessages: Record<string, string> = {
   AMBIGUOUS_LOCAL_TIME: 'Die Uhrzeit ist doppeldeutig. Bitte einzeln prüfen.',
   NONEXISTENT_LOCAL_TIME: 'Die lokale Uhrzeit existiert an diesem Tag nicht.',
   INVALID_INPUT: 'Ungültige Eingabe. Bitte den Termin prüfen.',
+  INVALID_TEMPLATE: 'Die Vorlage ist ungültig. Bitte die Eingaben prüfen.',
 }
 function bulkErrorMessage(code: string | null | undefined): string {
   return (code && errorMessages[code]) || 'Übernahme fehlgeschlagen. Bitte die Monatsliste aktualisieren.'
 }
-/** Single-item actions answer with `{code, message}`; show our fixed text, never raw response JSON. */
+/**
+ * Occurrence and template endpoints answer with `{code, message}`. Only whitelisted codes and
+ * fixed status texts are shown; response text, exception text and unknown details never are.
+ */
 function actionErrorMessage(cause: unknown): string {
   if (cause instanceof ApiError) {
     const detail = (cause.body as { detail?: unknown } | null)?.detail
     const code = typeof detail === 'object' && detail !== null ? (detail as { code?: unknown }).code : undefined
     if (typeof code === 'string' && errorMessages[code]) return errorMessages[code]
-    // Curated validation texts of the template endpoints (e.g. "Vorlage wurde geändert.").
-    if ((cause.status === 409 || cause.status === 422) && typeof detail === 'string' && detail) return detail
     if (cause.status === 403) return 'Dafür fehlt die Berechtigung.'
     if (cause.status === 404) return 'Die Vorlage oder der Termin existiert nicht mehr. Bitte die Liste aktualisieren.'
   }

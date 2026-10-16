@@ -187,7 +187,7 @@ Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter
 - **AND** keine veraltete Uhrzeit wird angelegt
 
 ### Requirement: Stabiler Fehlervertrag der Übernahme
-Fehlgeschlagene Übernahmen, Auslassungen, Wiedereröffnungen und Auflösungen SHALL mit einem stabilen Fehlercode und einer festen deutschen Meldung beantwortet werden, nie mit dem Text einer Ausnahme. Einzelaktionen und Mehrfachübernahme SHALL dieselben Codes verwenden.
+Fehlgeschlagene Übernahmen, Auslassungen, Wiedereröffnungen und Auflösungen SHALL mit einem stabilen Fehlercode und einer festen deutschen Meldung beantwortet werden, nie mit dem Text einer Ausnahme. Einzelaktionen und Mehrfachübernahme SHALL dieselben Codes verwenden. Dasselbe gilt für das Anlegen und Ändern von Vorlagen: ungültige Eingaben SHALL mit INVALID_TEMPLATE, eine überholte Revision mit STALE_TEMPLATE beantwortet werden. Die Oberfläche SHALL ausschließlich Meldungen zu bekannten Codes bzw. feste Texte je Status anzeigen.
 
 #### Scenario: Bekannter Domänenfehler bei einer Einzelaktion
 - **WHEN** eine Einzelaktion an einer überholten Vorlage, einer Kollision, einem ungültigen Vorkommen oder einer doppeldeutigen bzw. nicht existierenden lokalen Zeit scheitert
@@ -197,9 +197,14 @@ Fehlgeschlagene Übernahmen, Auslassungen, Wiedereröffnungen und Auflösungen S
 - **WHEN** eine Einzelaktion mit einer unbekannten Ausnahme scheitert, deren Text interne Details enthält
 - **THEN** antwortet die API mit HTTP 422 und dem Code INVALID_INPUT, und die Antwort enthält den Ausnahmetext nicht
 
+#### Scenario: Ungültige oder überholte Vorlage
+- **WHEN** eine Vorlage mit ungültigen Werten angelegt oder geändert wird, oder die `expected_revision` überholt ist
+- **THEN** antwortet die API mit HTTP 422 und `detail.code` INVALID_TEMPLATE bzw. mit HTTP 409 und STALE_TEMPLATE, jeweils mit fester Meldung und ohne den Ausnahmetext
+
 #### Scenario: Fehleranzeige in der Oberfläche
 - **WHEN** die Oberfläche eine fehlgeschlagene Aktion anzeigt
 - **THEN** erscheint die Meldung zum Fehlercode bzw. ein fester Text zum Status, nie rohe Antwort-JSON oder Ausnahmetext
+- **AND** ein String-Detail oder ein unbekannter Code einer Antwort wird nie angezeigt, auch nicht bei HTTP 409 oder 422
 
 ### Requirement: Dauerhafte Zuordnung und bewusste Abweichungen
 

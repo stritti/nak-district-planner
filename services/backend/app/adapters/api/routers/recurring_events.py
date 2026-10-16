@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import replace
 from datetime import date
@@ -50,6 +51,8 @@ from app.domain.models.recurring_event_template import (
 )
 
 MAX_CHECKLIST_TEMPLATES = 500
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}", tags=["recurring-events"])
 
@@ -121,7 +124,15 @@ PUBLIC_ERROR_MESSAGES: dict[str, str] = {
     "AMBIGUOUS_LOCAL_TIME": "Die Uhrzeit ist doppeldeutig. Bitte einzeln prüfen.",
     "NONEXISTENT_LOCAL_TIME": "Die lokale Uhrzeit existiert an diesem Tag nicht.",
     "INVALID_INPUT": "Ungültige Eingabe. Bitte den Termin prüfen.",
+    "INVALID_TEMPLATE": "Die Vorlage ist ungültig. Bitte die Eingaben prüfen.",
 }
+
+
+def _public_error(status_code: int, code: str) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": PUBLIC_ERROR_MESSAGES[code]},
+    )
 
 
 def _bulk_error_code(exc: ValueError) -> str:
@@ -147,10 +158,7 @@ def _handle_occurrence_error(exc: ValueError) -> HTTPException:
     treated as invalid input (422).
     """
     code = _bulk_error_code(exc)
-    return HTTPException(
-        status_code=422 if code == "INVALID_INPUT" else 409,
-        detail={"code": code, "message": PUBLIC_ERROR_MESSAGES[code]},
-    )
+    return _public_error(422 if code == "INVALID_INPUT" else 409, code)
 
 
 async def _mutable_entry(
@@ -214,7 +222,8 @@ async def create_recurring_template(
             is_active=body.is_active,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        logger.info("Rejected recurring template: %s", exc)
+        raise _public_error(422, "INVALID_TEMPLATE") from exc
     await _validate_distribution(session, entry)
     await _repository(session).save_template(entry)
     return _response(entry)
@@ -236,7 +245,7 @@ async def update_recurring_template(
         raise HTTPException(status_code=404, detail="Vorlage nicht gefunden.")
     _require_write(auth, district_id, entry.congregation_id)
     if body.expected_revision != entry.revision:
-        raise HTTPException(status_code=409, detail="Vorlage wurde geändert.")
+        raise _public_error(409, "STALE_TEMPLATE")
     changes = {
         key: getattr(body, key)
         for key in body.model_fields_set
@@ -244,7 +253,8 @@ async def update_recurring_template(
     }
     for key, value in changes.items():
         if value is None and key not in ("description", "active_from", "active_until"):
-            raise HTTPException(status_code=422, detail=f"{key} darf nicht null sein.")
+            logger.info("Rejected recurring template patch: %s must not be null", key)
+            raise _public_error(422, "INVALID_TEMPLATE")
     if "recurrence" in changes:
         changes["recurrence"] = body.recurrence.to_domain()
     if "applicability" in changes:
@@ -254,7 +264,8 @@ async def update_recurring_template(
     try:
         updated = replace(entry, **changes, revision=entry.revision + 1)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        logger.info("Rejected recurring template patch: %s", exc)
+        raise _public_error(422, "INVALID_TEMPLATE") from exc
     await _validate_distribution(session, updated)
     await repo.save_template(updated)
     return _response(updated)

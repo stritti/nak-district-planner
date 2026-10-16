@@ -345,6 +345,11 @@ describe('recurring monthly checklist', () => {
     [new ApiError(422, 'Unprocessable', { detail: { code: 'INVALID_INPUT', message: 'x' } }), 'Ungültige Eingabe'],
     [new ApiError(403, 'Forbidden', { detail: 'secret detail' }), 'Dafür fehlt die Berechtigung.'],
     [new ApiError(404, 'Not Found', { detail: 'secret detail' }), 'existiert nicht mehr'],
+    [new ApiError(422, 'Unprocessable', { detail: { code: 'INVALID_TEMPLATE', message: 'x' } }), 'Die Vorlage ist ungültig'],
+    [new ApiError(422, 'Unprocessable', { detail: 'internal secret' }), 'Die Aktion ist fehlgeschlagen'],
+    [new ApiError(409, 'Conflict', { detail: 'internal secret' }), 'Die Aktion ist fehlgeschlagen'],
+    [new ApiError(422, 'Unprocessable', { detail: [{ loc: ['body', 'title'], msg: 'internal secret' }] }), 'Die Aktion ist fehlgeschlagen'],
+    [new ApiError(409, 'Conflict', { detail: { code: 'UNKNOWN_CODE', message: 'internal secret' } }), 'Die Aktion ist fehlgeschlagen'],
     [new ApiError(500, 'Server Error', { detail: 'stack trace with password' }), 'Die Aktion ist fehlgeschlagen'],
     [new Error('network down'), 'Die Aktion ist fehlgeschlagen'],
   ])('shows fixed messages for failed skip actions and never raw response text (%#)', async (failure, expected) => {
@@ -356,6 +361,19 @@ describe('recurring monthly checklist', () => {
     for (const leaked of ['secret', 'password', 'detail', '{', 'network down']) {
       expect(text).not.toContain(leaked)
     }
+  })
+
+  it('shows a fixed message when the whole bulk request fails, never response text', async () => {
+    const view = await render()
+    vi.mocked(api.bulkAcceptRecurringOccurrences).mockRejectedValueOnce(
+      new ApiError(422, 'Unprocessable', { detail: 'internal secret' }),
+    )
+    await view.get('input[type="checkbox"][aria-label="Chorprobe auswählen"]').setValue(true)
+    await view.get('[data-testid="bulk-accept"]').trigger('click')
+    await flushPromises()
+    const text = view.get('[role="alert"]').text()
+    expect(text).toContain('Die Aktion ist fehlgeschlagen')
+    expect(text).not.toContain('secret')
   })
 
   it('supports skip and explicit reopen actions', async () => {
@@ -544,13 +562,15 @@ describe('recurring template editor', () => {
   it('keeps editing open on a stale-revision API conflict', async () => {
     const view = await render()
     vi.mocked(api.updateRecurringTemplate).mockRejectedValueOnce(
-      new ApiError(409, 'Conflict', { detail: 'Vorlage wurde geändert.' }),
+      new ApiError(409, 'Conflict', { detail: { code: 'STALE_TEMPLATE', message: 'x' } }),
     )
     await templatesTab()
     await click('Bearbeiten')
     await view.get('[data-testid="recurring-template-form"]').trigger('submit')
     await flushPromises()
-    expect(view.get('[role="alert"]').text()).toBe('Vorlage wurde geändert.')
+    expect(view.get('[role="alert"]').text()).toBe(
+      'Vorlage wurde inzwischen geändert. Bitte die Monatsliste aktualisieren.',
+    )
     expect(view.find('[data-testid="recurring-template-form"]').exists()).toBe(true)
   })
 })
