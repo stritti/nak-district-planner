@@ -35,7 +35,7 @@ from app.domain.models.calendar_integration import (
     CalendarType,
 )
 from app.domain.models.event_instance import EventInstance, EventSource, EventVisibility
-from app.domain.models.export_token import ExportToken, TokenType
+from app.domain.models.export_token import ExportToken, TokenType, hash_export_token
 from app.domain.models.invitation import (
     CongregationInvitation,
     InvitationOverwriteRequest,
@@ -364,8 +364,9 @@ async def test_export_token_crud() -> None:
 
     assert created.label == "X"
     stored = token_repo.save.call_args.args[0]
-    assert created.token == stored.token
-    assert stored.token_hash is not None
+    assert created.token is not None
+    assert stored.token_hash == hash_export_token(created.token)
+    assert not hasattr(stored, "token")
     assert listed[0].token is None
     assert len(listed) == 1
     assert listed[0].id == token.id
@@ -407,8 +408,9 @@ async def test_export_token_management() -> None:
 
     assert created.label == "X"
     stored = token_repo.save.call_args.args[0]
-    assert created.token == stored.token
-    assert stored.token_hash is not None
+    assert created.token is not None
+    assert stored.token_hash == hash_export_token(created.token)
+    assert not hasattr(stored, "token")
     assert listed[0].token is None
     assert len(listed) == 1
     assert listed[0].id == token.id
@@ -421,7 +423,7 @@ async def test_export_calendar_ics_with_planning_slots() -> None:
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Export",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -431,7 +433,7 @@ async def test_export_calendar_ics_with_planning_slots() -> None:
     repos = _export_repos(token=token, slots=[slot], instances=[instance])
 
     response = await export_router.export_calendar_ics(
-        token.token, db, approval_status=None, **repos
+        raw_token, db, approval_status=None, **repos
     )
 
     assert b"BEGIN:VCALENDAR" in response.body
@@ -463,7 +465,7 @@ async def test_export_calendar_ics_filters_by_approval_status() -> None:
         instance_id=uuid.uuid4(),
     )
 
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Export",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -477,7 +479,7 @@ async def test_export_calendar_ics_filters_by_approval_status() -> None:
     )
 
     response = await export_router.export_calendar_ics(
-        token.token, db, approval_status="confirmed_only", **repos
+        raw_token, db, approval_status="confirmed_only", **repos
     )
 
     # Only the confirmed slot should appear
@@ -493,7 +495,7 @@ async def test_export_calendar_ics_leader_token_shows_assignments() -> None:
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Leader Export",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -511,7 +513,7 @@ async def test_export_calendar_ics_leader_token_shows_assignments() -> None:
     )
 
     response = await export_router.export_calendar_ics(
-        token.token, db, approval_status=None, **repos
+        raw_token, db, approval_status=None, **repos
     )
 
     assert b"Dienstleiter: Bezirksvorsteher M" in response.body
@@ -522,7 +524,7 @@ async def test_public_feed_anonymizes_leader_id_assignment_without_loading_leade
     """PUBLIC feeds never read leader rows (RLS denies them) yet still mark the slot as assigned."""
     district_id = uuid.uuid4()
     slot = _planning_slot(district_id=district_id)
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Public", token_type=TokenType.PUBLIC, district_id=district_id, congregation_id=None
     )
     repos = _export_repos(
@@ -530,7 +532,7 @@ async def test_public_feed_anonymizes_leader_id_assignment_without_loading_leade
     )
 
     response = await export_router.export_calendar_ics(
-        token.token, _export_session(AsyncMock()), approval_status=None, **repos
+        raw_token, _export_session(AsyncMock()), approval_status=None, **repos
     )
 
     assert b"Dienstleiter: [Name anonymisiert]" in response.body
@@ -551,7 +553,7 @@ async def test_internal_events_stay_out_of_public_feeds(token_type, personal, ex
     )
     instance = _event_instance(planning_slot_id=slot.id, visibility=EventVisibility.INTERNAL)
     leader_id = uuid.uuid4() if personal else None
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Feed",
         token_type=TokenType(token_type),
         district_id=district_id,
@@ -562,7 +564,7 @@ async def test_internal_events_stay_out_of_public_feeds(token_type, personal, ex
     repos = _export_repos(token=token, slots=[slot], instances=[instance], assignments=assignments)
 
     response = await export_router.export_calendar_ics(
-        token.token, _export_session(AsyncMock()), approval_status=None, **repos
+        raw_token, _export_session(AsyncMock()), approval_status=None, **repos
     )
 
     assert (f"UID:{slot.id}@nak-bezirksplaner".encode() in response.body) is exported
@@ -572,7 +574,7 @@ async def test_internal_events_stay_out_of_public_feeds(token_type, personal, ex
 async def test_export_calendar_ics_empty() -> None:
     """Export with no slots produces valid calendar with no VEVENT."""
     district_id = uuid.uuid4()
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Empty",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -582,7 +584,7 @@ async def test_export_calendar_ics_empty() -> None:
     repos = _export_repos(token=token)
 
     response = await export_router.export_calendar_ics(
-        token.token, db, approval_status=None, **repos
+        raw_token, db, approval_status=None, **repos
     )
 
     assert b"BEGIN:VCALENDAR" in response.body
@@ -999,7 +1001,7 @@ async def test_export_calendar_ics_uid_stable_across_exports() -> None:
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Export",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -1009,10 +1011,10 @@ async def test_export_calendar_ics_uid_stable_across_exports() -> None:
     repos = _export_repos(token=token, slots=[slot], instances=[instance])
 
     response1 = await export_router.export_calendar_ics(
-        token.token, db, approval_status=None, **repos
+        raw_token, db, approval_status=None, **repos
     )
     response2 = await export_router.export_calendar_ics(
-        token.token, db, approval_status=None, **repos
+        raw_token, db, approval_status=None, **repos
     )
 
     uid_line = f"UID:{slot.id}@nak-bezirksplaner".encode()
@@ -1050,7 +1052,7 @@ async def test_export_calendar_ics_public_token_anonymizes_leader() -> None:
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Public",
         token_type=TokenType.PUBLIC,
         district_id=district_id,
@@ -1065,7 +1067,7 @@ async def test_export_calendar_ics_public_token_anonymizes_leader() -> None:
     )
 
     response = await export_router.export_calendar_ics(
-        token.token, db, approval_status=None, **repos
+        raw_token, db, approval_status=None, **repos
     )
 
     assert b"Dienstleiter: [Name anonymisiert]" in response.body
@@ -1079,7 +1081,7 @@ async def test_export_calendar_ics_internal_token_shows_full_leader_name() -> No
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Internal",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -1094,7 +1096,7 @@ async def test_export_calendar_ics_internal_token_shows_full_leader_name() -> No
     )
 
     response = await export_router.export_calendar_ics(
-        token.token, db, approval_status=None, **repos
+        raw_token, db, approval_status=None, **repos
     )
 
     assert b"Dienstleiter: Bezirksvorsteher M" in response.body
@@ -1110,11 +1112,13 @@ def _vevents(body: bytes) -> list[str]:
     return body.decode().split("BEGIN:VEVENT")[1:]
 
 
-async def _export(token: ExportToken, slots: list, approval_status=None, **repo_kwargs):
+async def _export(
+    token: ExportToken, raw_token: str, slots: list, approval_status=None, **repo_kwargs
+):
     db = _export_session(AsyncMock())
     repos = _export_repos(token=token, slots=slots, **repo_kwargs)
     return await export_router.export_calendar_ics(
-        token.token, db, approval_status=approval_status, **repos
+        raw_token, db, approval_status=approval_status, **repos
     )
 
 
@@ -1129,7 +1133,7 @@ async def test_export_congregation_feed_includes_applicable_district_slots() -> 
     to_all = _planning_slot(district_id=district_id, congregation_id=None, applicability=["all"])
     not_distributed = _planning_slot(district_id=district_id, congregation_id=None)
     other_congregation = _planning_slot(district_id=district_id)
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Gemeinde",
         token_type=TokenType.PUBLIC,
         district_id=district_id,
@@ -1137,7 +1141,7 @@ async def test_export_congregation_feed_includes_applicable_district_slots() -> 
     )
 
     response = await _export(
-        token, [own, distributed, to_all, not_distributed, other_congregation]
+        token, raw_token, [own, distributed, to_all, not_distributed, other_congregation]
     )
 
     exported = {s.id for s in (own, distributed, to_all) if str(s.id).encode() in response.body}
@@ -1149,14 +1153,14 @@ async def test_export_congregation_feed_includes_applicable_district_slots() -> 
 async def test_export_public_token_cannot_include_planned_via_query() -> None:
     district_id = uuid.uuid4()
     planned = _planning_slot(district_id=district_id, approval_status=EventApprovalStatus.PLANNED)
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Public",
         token_type=TokenType.PUBLIC,
         district_id=district_id,
         congregation_id=None,
     )
 
-    response = await _export(token, [planned], approval_status="include_planned")
+    response = await _export(token, raw_token, [planned], approval_status="include_planned")
 
     assert b"BEGIN:VEVENT" not in response.body
 
@@ -1165,11 +1169,11 @@ async def test_export_public_token_cannot_include_planned_via_query() -> None:
 async def test_export_cancelled_slot_is_marked_cancelled() -> None:
     district_id = uuid.uuid4()
     cancelled = _planning_slot(district_id=district_id, status=PlanningSlotStatus.CANCELLED)
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Export", token_type=TokenType.PUBLIC, district_id=district_id, congregation_id=None
     )
 
-    response = await _export(token, [cancelled])
+    response = await _export(token, raw_token, [cancelled])
 
     [vevent] = _vevents(response.body)
     assert f"UID:{cancelled.id}@nak-bezirksplaner" in vevent
@@ -1182,13 +1186,13 @@ async def test_export_change_metadata_follows_updated_at() -> None:
     slot = _planning_slot(district_id=district_id)
     slot.created_at = datetime(2026, 1, 1, 8, 0, tzinfo=UTC)
     slot.updated_at = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
     )
 
-    first = _vevents((await _export(token, [slot])).body)[0]
+    first = _vevents((await _export(token, raw_token, [slot])).body)[0]
     slot.updated_at += timedelta(minutes=5)
-    second = _vevents((await _export(token, [slot])).body)[0]
+    second = _vevents((await _export(token, raw_token, [slot])).body)[0]
 
     assert "DTSTAMP:20260302T093000Z" in first
     assert "LAST-MODIFIED:20260302T093000Z" in first
@@ -1217,17 +1221,17 @@ async def test_export_leader_rename_advances_revision() -> None:
     leader = Leader.create(name="Alt", district_id=district_id)
     leader.updated_at = slot.updated_at
     assignment = _assignment_stub(slot.id, "", leader_id=leader.id)
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
     )
 
     first = _vevents(
-        (await _export(token, [slot], assignments=[assignment], leaders=[leader])).body
+        (await _export(token, raw_token, [slot], assignments=[assignment], leaders=[leader])).body
     )[0]
     leader.name = "Neu"
     leader.updated_at += timedelta(minutes=5)
     second = _vevents(
-        (await _export(token, [slot], assignments=[assignment], leaders=[leader])).body
+        (await _export(token, raw_token, [slot], assignments=[assignment], leaders=[leader])).body
     )[0]
 
     assert "Neu" in second
@@ -1241,7 +1245,7 @@ async def test_export_congregation_rename_advances_revision() -> None:
     congregation_id = uuid.uuid4()
     slot = _planning_slot(district_id=district_id, congregation_id=congregation_id)
     slot.updated_at = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
     )
 
@@ -1254,7 +1258,7 @@ async def test_export_congregation_rename_advances_revision() -> None:
         db.execute.return_value = result
         repos = _export_repos(token=token, slots=[slot])
         response = await export_router.export_calendar_ics(
-            token.token, db, approval_status=None, **repos
+            raw_token, db, approval_status=None, **repos
         )
         return _vevents(response.body)[0]
 
@@ -1275,7 +1279,7 @@ async def test_export_invitation_copy_uses_host_location_and_leader() -> None:
     copy_slot = _planning_slot(district_id=district_id, congregation_id=invited_id)
     copy_slot.invitation_source_congregation_id = host_id
     copy_slot.invitation_source_event_id = host_slot.id
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=invited_id
     )
     db = AsyncMock()
@@ -1293,7 +1297,7 @@ async def test_export_invitation_copy_uses_host_location_and_leader() -> None:
     repos = _export_repos(token=token, slots=[copy_slot], assignments=[assignment])
 
     response = await export_router.export_calendar_ics(
-        token.token, db, approval_status=None, **repos
+        raw_token, db, approval_status=None, **repos
     )
 
     event = _vevents(response.body)[0]
@@ -1313,7 +1317,7 @@ async def test_export_leader_feed_contains_only_that_leaders_slots() -> None:
     mine = _planning_slot(district_id=district_id)
     someone_elses = _planning_slot(district_id=district_id)
     unassigned = _planning_slot(district_id=district_id)
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Leader",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -1322,7 +1326,7 @@ async def test_export_leader_feed_contains_only_that_leaders_slots() -> None:
     )
 
     response = await _export(
-        token,
+        token, raw_token,
         [mine, someone_elses, unassigned],
         assignments=[
             _assignment_stub(mine.id, "Ev. Ich", leader_id=leader_id),
@@ -1342,7 +1346,7 @@ async def test_export_leader_feed_uses_canonical_planning_slot_key() -> None:
     slot = _planning_slot(district_id=district_id)
     legacy = _assignment_stub(slot.id, "Ev. Ich", leader_id=leader_id)
     legacy.event_id = uuid.uuid4()
-    token, _ = ExportToken.create(
+    token, raw_token = ExportToken.create(
         label="Leader",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -1350,7 +1354,7 @@ async def test_export_leader_feed_uses_canonical_planning_slot_key() -> None:
         leader_id=leader_id,
     )
 
-    response = await _export(token, [slot], assignments=[legacy])
+    response = await _export(token, raw_token, [slot], assignments=[legacy])
 
     [vevent] = _vevents(response.body)
     assert str(slot.id) in vevent
