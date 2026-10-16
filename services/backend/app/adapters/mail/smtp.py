@@ -28,6 +28,9 @@ class SmtpMailService(MailService):
             raise ValueError("SMTP host and sender address must be configured")
         if bool(username) != bool(password):
             raise ValueError("SMTP username and password must be configured together")
+        if username and not use_starttls:
+            # Fail closed: credentials and message bodies never travel in clear text.
+            raise ValueError("SMTP authentication requires STARTTLS (SMTP_STARTTLS=true)")
         self._host, self._port = host, port
         self._username, self._password = username, password
         self._from_address = from_address

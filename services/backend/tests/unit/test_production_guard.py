@@ -123,6 +123,17 @@ def test_production_guard_incomplete_smtp_credentials() -> None:
         production_guard(_valid_prod_settings(smtp_user="someone", smtp_password=None))
 
 
+def test_production_guard_rejects_smtp_credentials_without_starttls() -> None:
+    with pytest.raises(RuntimeError, match="SMTP_STARTTLS"):
+        production_guard(
+            _valid_prod_settings(smtp_user="someone", smtp_password="password", smtp_starttls=False)
+        )
+
+
+def test_production_guard_allows_unauthenticated_relay_without_starttls() -> None:
+    production_guard(_valid_prod_settings(smtp_starttls=False))
+
+
 def test_production_guard_accepts_authenticated_smtp() -> None:
     production_guard(_valid_prod_settings(smtp_user="someone", smtp_password="password"))
 

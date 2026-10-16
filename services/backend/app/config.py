@@ -285,6 +285,11 @@ def production_guard(settings: Settings) -> None:
         errors.append("EMAIL_FROM_ADDRESS must be configured in production")
     if bool(settings.smtp_user) != bool(settings.smtp_password):
         errors.append("SMTP_USER and SMTP_PASSWORD must both be supplied or both absent")
+    if settings.smtp_user and settings.smtp_password and not settings.smtp_starttls:
+        errors.append(
+            "SMTP_STARTTLS must be true when SMTP_USER/SMTP_PASSWORD are set "
+            "(credentials must not be sent without TLS)"
+        )
 
     # IDP provisioning secrets — validate only the fields relevant to the selected provider
     if settings.idp_provisioning_enabled:
