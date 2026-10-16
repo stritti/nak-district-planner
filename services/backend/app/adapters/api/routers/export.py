@@ -41,6 +41,7 @@ from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
+from app.domain.models.event_duty import SERVICE_LEADER_LABEL
 from app.domain.models.event_instance import EventInstance, EventVisibility
 from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.planning_slot import (
@@ -303,7 +304,9 @@ async def export_calendar_ics(
                 raise
         else:
             personal_duties = {
-                entry.planning_slot_id: [label for label in entry.duties if label != "Dienstleiter"]
+                entry.planning_slot_id: [
+                    label for label in entry.duties if label != SERVICE_LEADER_LABEL
+                ]
                 for entry in personal_entries
             }
 
