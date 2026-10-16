@@ -31,6 +31,10 @@ Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deploymen
 
 Der Production Guard verhindert den Start bei kritischen unsicheren Werten.
 
+### 1.1a Geheime ICS-URLs in Logs
+
+`/api/v1/export/<token>/calendar.ics` enthaelt ein Bearer-Secret im Pfad. Anwendung und Frontend-nginx maskieren den Token in Logs, Audit-Metadaten, Metrik-Labels und Traces. **Der externe TLS-Proxy (Traefik, Caddy, nginx, Load Balancer) ist nicht Teil dieses Repos** und muss selbst maskieren oder den Pfad `/api/v1/export/` nicht protokollieren (zum Beispiel Traefik `accessLog.filters`/Feld-Redaktion oder ein eigenes nginx-`log_format` mit maskiertem URI). Bereits protokollierte Feed-URLs gelten als offengelegt: Log-Retention pruefen und betroffene Tokens bei Bedarf widerrufen und neu ausgeben.
+
 ### 1.2 Reverse Proxy und Client-IP
 
 Rate Limiting und Audit-Log verwenden dieselbe Client-IP. Die Vertrauenskette ist:

@@ -18,6 +18,7 @@ from starlette.status import HTTP_403_FORBIDDEN
 
 from app.adapters.api.access_metrics import record_access_denied
 from app.adapters.api.client_ip import get_client_ip
+from app.adapters.api.log_redaction import redact_secret_path
 from app.application.audit_service import AuditAction, AuditContext, AuditStatus, audit_service
 
 logger = logging.getLogger(__name__)
@@ -251,7 +252,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
             elif response and response.status_code >= 400:
                 status = AuditStatus.FAILED
             error_message = (
-                str(error)
+                redact_secret_path(str(error))
                 if error
                 else (
                     f"HTTP {response.status_code}"
@@ -278,7 +279,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 error_message=error_message,
                 extra_metadata={
                     "http_method": request.method,
-                    "path": request.url.path,
+                    "path": redact_secret_path(request.url.path),
                     "status_code": response.status_code if response else None,
                     "duration_ms": round(duration * 1000, 2),
                     "user_agent": context.user_agent,

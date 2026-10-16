@@ -79,7 +79,11 @@ def setup_telemetry(
         metrics.set_meter_provider(meter_provider)
 
     if fastapi_app is not None:
-        FastAPIInstrumentor.instrument_app(fastapi_app)
+        # The ICS feed URL path is a bearer secret; spans would record it as
+        # http.target/url.path, so the feed route is not traced at all.
+        FastAPIInstrumentor.instrument_app(
+            fastapi_app, excluded_urls=r".*/api/v1/export/[^/?#]+(/.*)?"
+        )
         logger.info("OpenTelemetry: FastAPI instrumented.")
 
     if sqlalchemy_engine is not None:
