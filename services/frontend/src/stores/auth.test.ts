@@ -25,6 +25,15 @@ describe('useAuthStore', () => {
     expect(store.user).toBeNull()
   })
 
+  it('never falls back to the id token as bearer token', () => {
+    const store = useAuthStore()
+    store.setToken(
+      { accessToken: '', idToken: 'id_only', expiresAt: Math.floor(Date.now() / 1000) + 3600 },
+      { sub: 'user-123' },
+    )
+    expect(store.getToken()).toBeNull()
+  })
+
   it('should set token and user', () => {
     const store = useAuthStore()
 

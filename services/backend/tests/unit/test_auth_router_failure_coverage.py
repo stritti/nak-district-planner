@@ -122,6 +122,46 @@ async def test_exchange_propagates_safe_provider_http_failure(
 
     assert error.value.status_code == 502
     assert "Token exchange failed" in error.value.detail
+    assert "connection lost" not in error.value.detail
+
+
+@pytest.mark.asyncio
+async def test_provider_error_body_is_reduced_to_oauth_error_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = _adapter()
+    response = _provider_response(
+        code=400,
+        payload={
+            "error": "invalid_grant",
+            "error_description": "internal realm 'secret-realm' stack trace",
+            "debug": {"host": "keycloak.internal"},
+        },
+        text="internal body",
+    )
+    adapter.get_httpx_client.return_value = SimpleNamespace(
+        post=AsyncMock(return_value=response)
+    )
+    monkeypatch.setattr(router, "get_oidc_adapter", lambda: adapter)
+    with pytest.raises(HTTPException) as error:
+        await router.exchange_oidc_token(_token_request(), _asgi_request(), Response())
+    assert error.value.detail == {"error": "invalid_grant"}
+
+
+@pytest.mark.asyncio
+async def test_non_json_provider_error_body_is_not_forwarded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = _adapter()
+    response = _provider_response(code=500, payload=None, text="<html>internal trace</html>")
+    response.json.side_effect = ValueError("not json")
+    adapter.get_httpx_client.return_value = SimpleNamespace(
+        post=AsyncMock(return_value=response)
+    )
+    monkeypatch.setattr(router, "get_oidc_adapter", lambda: adapter)
+    with pytest.raises(HTTPException) as error:
+        await router.exchange_oidc_token(_token_request(), _asgi_request(), Response())
+    assert error.value.detail == {"error": "token_exchange_failed"}
 
 
 @pytest.mark.asyncio

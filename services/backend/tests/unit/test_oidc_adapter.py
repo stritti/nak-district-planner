@@ -137,6 +137,44 @@ class TestJWKSFetching:
         )
 
     @pytest.mark.asyncio
+    async def test_forced_jwks_refresh_is_throttled(
+        self,
+        oidc_adapter: OIDCAdapter,
+        mock_httpx_client: AsyncMock,
+    ) -> None:
+        """Unknown kids must not let callers trigger a JWKS fetch per request (#471)."""
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        mock_httpx_client.get.return_value = response(payload=MOCK_JWKS)
+
+        await oidc_adapter.fetch_jwks()
+        for _ in range(3):
+            assert await oidc_adapter.fetch_jwks(force_refresh=True) == MOCK_JWKS
+
+        assert mock_httpx_client.get.await_count == 1
+
+        oidc_adapter._jwks_last_attempt = datetime.now(UTC) - timedelta(seconds=120)
+        await oidc_adapter.fetch_jwks(force_refresh=True)
+        assert mock_httpx_client.get.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_forced_jwks_refresh_is_throttled_after_failed_fetch(
+        self,
+        oidc_adapter: OIDCAdapter,
+        mock_httpx_client: AsyncMock,
+    ) -> None:
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        oidc_adapter._jwks_cache = MOCK_JWKS
+        oidc_adapter._jwks_cache_time = datetime.now(UTC) - timedelta(hours=2)
+        mock_httpx_client.get.side_effect = httpx.ConnectError("offline")
+
+        await oidc_adapter.fetch_jwks(force_refresh=True)
+        await oidc_adapter.fetch_jwks(force_refresh=True)
+
+        assert mock_httpx_client.get.await_count == 1
+
+    @pytest.mark.asyncio
     async def test_fetch_jwks_uses_stale_cache_on_transport_error(
         self,
         oidc_adapter: OIDCAdapter,

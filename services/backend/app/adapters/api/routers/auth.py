@@ -18,6 +18,7 @@ RBAC Notes:
 """
 
 import logging
+import re
 from typing import Literal
 
 import httpx
@@ -131,10 +132,26 @@ async def get_oidc_discovery() -> dict:
             frontend_discovery["revocation_endpoint"] = "/api/v1/auth/oidc/revoke"
         return frontend_discovery
     except OIDCDiscoveryError as e:
+        logger.warning("OIDC discovery failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"OIDC discovery failed: {e}",
+            detail="OIDC discovery failed",
         ) from e
+
+
+def _safe_oauth_error_code(provider_response: httpx.Response) -> str:
+    """Return only the RFC 6749 ``error`` code from a failed token response.
+
+    Provider bodies (descriptions, stack traces, internal hosts) must not reach
+    the client; the code alone is enough for the frontend to react (#471).
+    """
+    try:
+        code = provider_response.json().get("error")
+    except (ValueError, AttributeError):
+        code = None
+    if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,64}", code):
+        return code
+    return "token_exchange_failed"
 
 
 @router.post("/oidc/token")
@@ -184,19 +201,16 @@ async def exchange_oidc_token(
     try:
         provider_response = await client.post(token_endpoint, data=data, timeout=15)
     except httpx.HTTPError as e:
+        logger.warning("Token exchange transport error: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Token exchange failed: {e}",
+            detail="Token exchange failed",
         ) from e
 
     if not provider_response.is_success:
-        try:
-            provider_detail: dict | str = provider_response.json()
-        except ValueError:
-            provider_detail = provider_response.text
         raise HTTPException(
             status_code=provider_response.status_code,
-            detail=provider_detail or {"error": "token_exchange_failed"},
+            detail={"error": _safe_oauth_error_code(provider_response)},
         )
 
     payload, rotated_refresh_token = _split_token_payload(_provider_json(provider_response))

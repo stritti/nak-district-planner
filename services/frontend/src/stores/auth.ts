@@ -81,7 +81,7 @@ export const useAuthStore = defineStore(
     function getToken(): string | null {
       if (!token.value) return null
       if (isTokenExpired.value) return null
-      return token.value.accessToken || token.value.idToken
+      return token.value.accessToken || null
     }
 
     function clearAuth() {

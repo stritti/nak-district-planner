@@ -110,7 +110,7 @@ async def get_current_user(
                 family_name=user_info["family_name"],
             )
             await user_repo.save(existing_user)
-            logger.info("Auto-created user: %s (%s)", existing_user.sub, existing_user.email)
+            logger.info("Auto-created user: %s", existing_user.sub)
 
         try:
             await session.execute(
@@ -182,8 +182,8 @@ async def get_current_user_with_memberships(
             memberships = await membership_repo.get_all_by_user(user.sub)
         elif candidate_count > 1:
             logger.warning(
-                "Multiple approved unlinked registrations for email=%s; skipping auto-link",
-                user.email,
+                "Multiple approved unlinked registrations for sub=%s; skipping auto-link",
+                user.sub,
             )
 
     from app.tenant import TenantContext
