@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Shared district-level guards for routers.
 
 Centralises the "authorise first, then 404 on unknown district" sequence that
