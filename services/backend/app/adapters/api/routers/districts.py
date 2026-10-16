@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from app.adapters.api.deps import (
     CurrentUser,
@@ -25,7 +26,12 @@ from app.adapters.api.deps import (
     get_planning_slot_repository,
     get_service_assignment_repository,
 )
-from app.adapters.api.revisions import slot_revision
+from app.adapters.api.revisions import (
+    entity_revision,
+    next_updated_at,
+    require_current_revision,
+    slot_revision,
+)
 from app.adapters.api.schemas.district import (
     CongregationCreate,
     CongregationGroupCreate,
@@ -162,17 +168,19 @@ async def update_district(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     repo: SqlDistrictRepository = Depends(get_district_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> DistrictResponse:
-    district = await repo.get(district_id)
+    district = await repo.get_for_update(district_id)
     if not district:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    require_current_revision(if_match, entity_revision(district.id, district.updated_at))
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
         district.name = body.name
     if "state_code" in fields:
         district.state_code = body.state_code
-    district.updated_at = datetime.now(UTC)
+    district.updated_at = next_updated_at(district.updated_at)
     await repo.save(district)
     return _district_response(district)
 
@@ -184,6 +192,7 @@ def _district_response(d: District) -> DistrictResponse:
         state_code=d.state_code,
         created_at=d.created_at,
         updated_at=d.updated_at,
+        revision=entity_revision(d.id, d.updated_at),
     )
 
 
@@ -393,14 +402,16 @@ async def update_group(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> CongregationGroupResponse:
-    group = await group_repo.get(group_id)
+    group = await group_repo.get_for_update(group_id)
     if not group or group.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gruppe nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    require_current_revision(if_match, entity_revision(group.id, group.updated_at))
     if body.name is not None:
         group.name = body.name
-    group.updated_at = datetime.now(UTC)
+    group.updated_at = next_updated_at(group.updated_at)
     await group_repo.save(group)
     return _group_response(group)
 
@@ -427,6 +438,7 @@ def _group_response(g: CongregationGroup) -> CongregationGroupResponse:
         district_id=g.district_id,
         created_at=g.created_at,
         updated_at=g.updated_at,
+        revision=entity_revision(g.id, g.updated_at),
     )
 
 

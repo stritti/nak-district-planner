@@ -78,14 +78,14 @@ describe('useMatrixStore', () => {
     const store = useMatrixStore()
     configureRange(store)
 
-    await store.assign('e1', null, { leaderName: 'Max' })
+    await store.assign('e1', null, { leaderName: 'Max' }, undefined, '"rev-1"')
     expect(assignmentsApi.createAssignment).toHaveBeenLastCalledWith(
-      'e1', { leaderName: 'Max' }, 'ASSIGNED',
+      'e1', { leaderName: 'Max' }, '"rev-1"', 'ASSIGNED',
     )
 
-    await store.assign('e1', null, { leaderId: 'l1' }, 'CONFIRMED')
+    await store.assign('e1', null, { leaderId: 'l1' }, 'CONFIRMED', '"rev-1"')
     expect(assignmentsApi.createAssignment).toHaveBeenLastCalledWith(
-      'e1', { leaderId: 'l1' }, 'CONFIRMED',
+      'e1', { leaderId: 'l1' }, '"rev-1"', 'CONFIRMED',
     )
     expect(matrixApi.fetchMatrix).toHaveBeenCalledTimes(2)
   })
@@ -94,14 +94,14 @@ describe('useMatrixStore', () => {
     const store = useMatrixStore()
     configureRange(store)
 
-    await store.assign('e1', 'a1', { leaderId: 'l1' })
+    await store.assign('e1', 'a1', { leaderId: 'l1' }, undefined, '"rev-1"')
     expect(assignmentsApi.updateAssignment).toHaveBeenLastCalledWith(
-      'e1', 'a1', { leaderId: 'l1' },
+      'e1', 'a1', { leaderId: 'l1' }, '"rev-1"', undefined,
     )
 
-    await store.assign('e1', 'a1', { leaderName: 'Max' }, 'CONFIRMED')
+    await store.assign('e1', 'a1', { leaderName: 'Max' }, 'CONFIRMED', '"rev-1"')
     expect(assignmentsApi.updateAssignment).toHaveBeenLastCalledWith(
-      'e1', 'a1', { leaderName: 'Max' }, 'CONFIRMED',
+      'e1', 'a1', { leaderName: 'Max' }, '"rev-1"', 'CONFIRMED',
     )
   })
 
@@ -113,27 +113,27 @@ describe('useMatrixStore', () => {
     const store = useMatrixStore()
     configureRange(store)
 
-    const conflict = await store.assign('e1', null, { leaderName: 'Max' }).catch((error) => error)
+    const conflict = await store.assign('e1', null, { leaderName: 'Max' }, undefined, '"rev-1"').catch((error) => error)
     expect(conflict).toBeInstanceOf(ConflictError)
     expect((conflict as ConflictError).conflicts).toEqual(conflicts)
     expect(matrixApi.fetchMatrix).not.toHaveBeenCalled()
 
     const rawError = new Error('network')
     vi.mocked(assignmentsApi.createAssignment).mockRejectedValueOnce(rawError)
-    await expect(store.assign('e1', null, { leaderName: 'Max' })).rejects.toBe(rawError)
+    await expect(store.assign('e1', null, { leaderName: 'Max' }, undefined, '"rev-1"')).rejects.toBe(rawError)
   })
 
   it('clears existing assignments and only refreshes when no assignment exists', async () => {
     const store = useMatrixStore()
     configureRange(store)
 
-    await store.clearAssignment('e1', 'a1')
-    expect(assignmentsApi.deleteAssignment).toHaveBeenCalledWith('e1', 'a1')
+    await store.clearAssignment('e1', 'a1', '"rev-1"')
+    expect(assignmentsApi.deleteAssignment).toHaveBeenCalledWith('e1', 'a1', '"rev-1"')
     expect(matrixApi.fetchMatrix).toHaveBeenCalledTimes(1)
 
     vi.clearAllMocks()
     vi.mocked(matrixApi.fetchMatrix).mockResolvedValue({ dates: [], rows: [], holidays: {} })
-    await store.clearAssignment('e1', null)
+    await store.clearAssignment('e1', null, '"rev-1"')
     expect(assignmentsApi.deleteAssignment).not.toHaveBeenCalled()
     expect(matrixApi.fetchMatrix).toHaveBeenCalledTimes(1)
   })

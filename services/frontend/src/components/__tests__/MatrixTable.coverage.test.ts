@@ -169,6 +169,88 @@ describe('MatrixTable coverage gaps', () => {
     wrapper.unmount()
   })
 
+  function plannerMatrix() {
+    const matrixStore = useMatrixStore()
+    const auth = useAuthStore()
+    const leaders = useLeadersStore()
+    leaders.districtId = 'd1'
+    matrixStore.districtId = 'd1'
+    matrixStore.matrix = structuredClone(richMatrix)
+    matrixStore.matrix.rows[0].cells['2026-10-05'].revision = '"rev-1"'
+    auth.memberships = [{
+      scope_type: 'DISTRICT', scope_id: 'd1', role: 'PLANNER',
+    }] as typeof auth.memberships
+    leaders.leaders = [
+      { id: 'l1', name: 'Max Muster', rank: 'Pr.', is_active: true },
+      { id: 'l3', name: 'Neu', rank: 'Di.', is_active: true },
+    ] as typeof leaders.leaders
+    return matrixStore
+  }
+
+  it('saves with Tab, keeps the row and date order, and moves on to the next editable cell', async () => {
+    const matrixStore = plannerMatrix()
+    const cells = matrixStore.matrix!.rows[0].cells
+    for (const date of Object.keys(cells)) cells[date].revision = `"rev-${date}"`
+    vi.mocked(assignmentsApi.changeAssignmentInline).mockResolvedValue({
+      id: 'a1', event_id: 'normal', leader_id: 'l3', leader_name: null,
+      status: 'ASSIGNED', event_revision: '"rev-2"', created_at: '', updated_at: '',
+    })
+    const rowsBefore = matrixStore.matrix!.rows.map((row) => row.congregation_id)
+    const datesBefore = [...matrixStore.matrix!.dates]
+    const wrapper = mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
+
+    const first = wrapper.get('[data-inline-cell-id="matrix-leader-c1-2026-10-05"]')
+    await first.trigger('click')
+    await flushPromises()
+    await first.get('select').setValue('l3')
+    await first.get('select').trigger('keydown', { key: 'Tab' })
+    await flushPromises()
+
+    expect(assignmentsApi.changeAssignmentInline).toHaveBeenCalledOnce()
+    expect(matrixStore.matrix!.rows.map((row) => row.congregation_id)).toEqual(rowsBefore)
+    expect(matrixStore.matrix!.dates).toEqual(datesBefore)
+    expect(first.find('select').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('retries after a transport failure with the same revision and keeps the draft', async () => {
+    const matrixStore = plannerMatrix()
+    vi.mocked(assignmentsApi.changeAssignmentInline)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({
+        id: 'a1', event_id: 'normal', leader_id: 'l3', leader_name: null,
+        status: 'ASSIGNED', event_revision: '"rev-2"', created_at: '', updated_at: '',
+      })
+    const wrapper = mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
+    const cell = wrapper.get('[data-inline-cell-id="matrix-leader-c1-2026-10-05"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('select').setValue('l3')
+    await cell.get('select').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(cell.get('[role="alert"]').text()).toContain('offline')
+    expect((cell.get('select').element as HTMLSelectElement).value).toBe('l3')
+    expect(matrixStore.matrix!.rows[0].cells['2026-10-05'].revision).toBe('"rev-1"')
+
+    await cell.get('select').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    const revisions = vi.mocked(assignmentsApi.changeAssignmentInline).mock.calls.map((call) => call[2])
+    expect(revisions).toEqual(['"rev-1"', '"rev-1"'])
+    expect(matrixStore.matrix!.rows[0].cells['2026-10-05'].revision).toBe('"rev-2"')
+    wrapper.unmount()
+  })
+
+  it('offers no inline editor to roles below planner', async () => {
+    const matrixStore = plannerMatrix()
+    useAuthStore().memberships = [{
+      scope_type: 'DISTRICT', scope_id: 'd1', role: 'VIEWER',
+    }] as never
+    const wrapper = mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
+    expect(wrapper.findAll('[data-inline-editable="true"]')).toHaveLength(0)
+    expect(matrixStore.matrix).not.toBeNull()
+    wrapper.unmount()
+  })
+
   it.each([true, undefined])('hides invitation copies even when editability is %s', (editable) => {
     const matrixStore = useMatrixStore()
     matrixStore.districtId = 'd1'

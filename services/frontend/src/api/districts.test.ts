@@ -46,9 +46,10 @@ describe('district API', () => {
       body: JSON.stringify({ name: 'Konstanz', state_code: 'BW' }),
     })
 
-    await updateDistrict('district-1', { name: 'Neu', state_code: null })
+    await updateDistrict('district-1', { name: 'Neu', state_code: null }, '"d:v1"')
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/districts/district-1', {
       method: 'PATCH',
+      headers: { 'If-Match': '"d:v1"' },
       body: JSON.stringify({ name: 'Neu', state_code: null }),
     })
   })
@@ -94,9 +95,10 @@ describe('district API', () => {
       body: JSON.stringify({ name: 'Nord' }),
     })
 
-    await updateGroup('district-1', 'group-1', 'Süd')
+    await updateGroup('district-1', 'group-1', 'Süd', '"g:v1"')
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/districts/district-1/groups/group-1', {
       method: 'PATCH',
+      headers: { 'If-Match': '"g:v1"' },
       body: JSON.stringify({ name: 'Süd' }),
     })
 
@@ -122,5 +124,12 @@ describe('district API', () => {
     expect(url).toContain('from_dt=2027-01-01')
     expect(url).toContain('to_dt=2027-01-31')
     expect(options).toEqual({ method: 'POST' })
+  })
+
+  it('never sends a rename without a revision (no blind PATCH)', async () => {
+    apiFetch.mockClear()
+    await expect(updateDistrict('district-1', { name: 'X' }, '')).rejects.toThrow('Versionsinformation')
+    await expect(updateGroup('district-1', 'group-1', 'X', '')).rejects.toThrow('Versionsinformation')
+    expect(apiFetch).not.toHaveBeenCalled()
   })
 })

@@ -23,6 +23,7 @@ from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.domain.models.leader import Leader, LeaderRank
 from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.service_assignment import ServiceAssignment
+from tests.unit.assignment_preconditions import precondition
 
 _ROUTER = "app.adapters.api.routers.service_assignments."
 
@@ -92,7 +93,7 @@ async def test_create_locks_leader_before_conflict_check() -> None:
     patches = _patches(order, slot)
     with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
         await sa_router.create_assignment(
-            slot.id, ServiceAssignmentCreate(leader_id=leader_id), object(), db, _repo(slot), _repo()
+            slot.id, ServiceAssignmentCreate(leader_id=leader_id), object(), db, _repo(slot), _repo(), **precondition(slot)
         )
 
     assert order.mock_calls[:2] == [
@@ -113,7 +114,7 @@ async def test_update_locks_new_leader_before_conflict_check() -> None:
     with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
         await sa_router.update_assignment(
             slot.id, assignment.id, ServiceAssignmentUpdate(leader_id=leader_id), object(), db,
-            _repo(slot), _repo(assignment), AsyncMock(),
+            _repo(slot), _repo(assignment), AsyncMock(), **precondition(slot)
         )
 
     assert order.mock_calls[0] == call.lock(db, leader_id)
@@ -135,7 +136,7 @@ async def test_create_without_leader_takes_no_lock() -> None:
     ):
         await sa_router.create_assignment(
             slot.id, ServiceAssignmentCreate(leader_name="Gast"), object(), AsyncMock(),
-            _repo(slot), _repo(),
+            _repo(slot), _repo(), **precondition(slot)
         )
 
     order.lock.assert_not_awaited()
@@ -154,7 +155,7 @@ async def test_second_assignment_for_slot_returns_409() -> None:
         with pytest.raises(HTTPException) as exc:
             await sa_router.create_assignment(
                 slot.id, ServiceAssignmentCreate(leader_name="Gast"), object(), AsyncMock(),
-                _repo(slot), sa_repo,
+                _repo(slot), sa_repo, **precondition(slot)
             )
 
     assert exc.value.status_code == 409
@@ -173,7 +174,7 @@ async def test_other_integrity_errors_are_not_reported_as_duplicate() -> None:
         with pytest.raises(IntegrityError):
             await sa_router.create_assignment(
                 slot.id, ServiceAssignmentCreate(leader_name="Gast"), object(), AsyncMock(),
-                _repo(slot), sa_repo,
+                _repo(slot), sa_repo, **precondition(slot)
             )
 
 

@@ -6,6 +6,8 @@ import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import * as districtsApi from '../api/districts'
+import { ApiError } from '../api/errors'
+import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
 import { useToastStore } from '../stores/toast'
 import DistrictsAdminView from './DistrictsAdminView.vue'
@@ -24,6 +26,7 @@ const district = (
   state_code: stateCode,
   created_at: now,
   updated_at: now,
+  revision: `"${id}:v1"`,
 })
 
 const group = (
@@ -36,6 +39,7 @@ const group = (
   district_id: districtId,
   created_at: now,
   updated_at: now,
+  revision: `"${id}:v1"`,
 })
 
 const congregation = (
@@ -80,9 +84,10 @@ function findModal(root: ReturnType<typeof mount>, title: string) {
   return modal
 }
 
-function setup() {
+function setup(admin = true) {
   const pinia = createPinia()
   setActivePinia(pinia)
+  useAuthStore().isSuperadmin = admin
   const districtsStore = useDistrictsStore()
   const toastStore = useToastStore()
   const wrapper = mount(DistrictsAdminView, {
@@ -169,25 +174,94 @@ describe('DistrictsAdminView', () => {
     expect(wrapper.text()).toContain('Fehler')
   })
 
-  it('renames a district and keeps empty edits from reaching the API', async () => {
-    vi.mocked(districtsApi.updateDistrict).mockResolvedValueOnce(district('d1', 'Neu', 'BW'))
+  async function editCell(wrapper: ReturnType<typeof mount>, id: string, value: string, key = 'Enter') {
+    const cell = wrapper.get(`[data-inline-cell-id="${id}"]`)
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('input').setValue(value)
+    await cell.get('input').trigger('keydown', { key })
+    await flushPromises()
+    return cell
+  }
+
+  it('renames a district inline with its revision and shows the new name', async () => {
+    vi.mocked(districtsApi.updateDistrict).mockResolvedValueOnce({ ...district('d1', 'Neu', 'BW'), revision: '"d1:v2"' })
     const { wrapper } = setup()
     await flushPromises()
 
-    await wrapper.get('button[title="Bezirk umbenennen"]').trigger('click')
-    const input = wrapper.get('input.form-input.w-56')
-    await input.setValue(' Neu ')
-    await wrapper.get('button[title="Speichern"]').trigger('click')
+    await editCell(wrapper, 'district-name-d1', ' Neu ')
+
+    expect(districtsApi.updateDistrict).toHaveBeenCalledWith('d1', { name: 'Neu' }, '"d1:v1"')
+    expect(wrapper.get('[data-inline-cell-id="district-name-d1"]').text()).toContain('Neu')
+  })
+
+  it('keeps empty district names and Escape from reaching the API', async () => {
+    const { wrapper } = setup()
     await flushPromises()
 
-    expect(districtsApi.updateDistrict).toHaveBeenCalledWith('d1', { name: 'Neu' })
-    expect(wrapper.text()).toContain('Neu')
+    const empty = await editCell(wrapper, 'district-name-d1', '   ')
+    expect(empty.get('[role="alert"]').text()).toContain('nicht leer')
+    await empty.get('input').trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    await editCell(wrapper, 'district-name-d1', 'Verworfen', 'Escape')
+    expect(districtsApi.updateDistrict).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-inline-cell-id="district-name-d1"]').text()).toContain('Bezirk Eins')
+  })
 
-    await wrapper.get('button[title="Bezirk umbenennen"]').trigger('click')
-    await wrapper.get('input.form-input.w-56').setValue('   ')
-    await wrapper.get('input.form-input.w-56').trigger('keyup.enter')
-    expect(districtsApi.updateDistrict).toHaveBeenCalledTimes(1)
-    await wrapper.get('input.form-input.w-56').trigger('keyup.escape')
+  it('offers no rename without the district admin role or a revision', async () => {
+    const readOnly = setup(false)
+    useAuthStore().memberships = [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'd1' }] as never
+    await flushPromises()
+    const planner = readOnly.wrapper.get('[data-inline-cell-id="district-name-d1"]')
+    await planner.trigger('click')
+    expect(planner.find('input').exists()).toBe(false)
+    expect(readOnly.wrapper.get('[data-inline-cell-id="group-name-g1"]').find('input').exists()).toBe(false)
+
+    vi.mocked(districtsApi.listDistricts).mockResolvedValue([{ ...district('d1', 'Bezirk Eins'), revision: undefined }])
+    const noRevision = setup()
+    await flushPromises()
+    const legacy = noRevision.wrapper.get('[data-inline-cell-id="district-name-d1"]')
+    await legacy.trigger('click')
+    expect(legacy.find('input').exists()).toBe(false)
+    expect(districtsApi.updateDistrict).not.toHaveBeenCalled()
+  })
+
+  it('keeps the draft on a stale district revision and reloads the current name on request', async () => {
+    vi.mocked(districtsApi.updateDistrict).mockRejectedValueOnce(
+      new ApiError(412, 'Precondition Failed', { detail: 'Datensatz wurde zwischenzeitlich geändert.' }),
+    )
+    const { wrapper } = setup()
+    await flushPromises()
+    const cell = await editCell(wrapper, 'district-name-d1', 'Mein Entwurf')
+    expect(cell.get('[role="alert"]').text()).toContain('zwischenzeitlich geändert')
+    expect((cell.get('input').element as HTMLInputElement).value).toBe('Mein Entwurf')
+
+    vi.mocked(districtsApi.listDistricts).mockResolvedValue([
+      { ...district('d1', 'Bezirk Remote'), revision: '"d1:v9"' }, district('d2', 'Bezirk Zwei'),
+    ])
+    await cell.get('button').trigger('click')
+    await flushPromises()
+    expect(cell.get('[role="alert"]').text()).toContain('Aktueller Stand geladen')
+    expect((cell.get('input').element as HTMLInputElement).value).toBe('Mein Entwurf')
+  })
+
+  it('does not select the district when its name is edited', async () => {
+    const { wrapper, districtsStore } = setup()
+    await flushPromises()
+    districtsStore.setSelectedDistrict('d2')
+    await wrapper.get('[data-inline-cell-id="district-name-d1"]').trigger('click')
+    expect(districtsStore.selectedDistrictId).toBe('d2')
+  })
+
+  it('still selects the district when a user without the admin role clicks its name', async () => {
+    const { wrapper, districtsStore } = setup(false)
+    useAuthStore().memberships = [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'd1' }] as never
+    await flushPromises()
+    districtsStore.setSelectedDistrict('d2')
+    const cell = wrapper.get('[data-inline-cell-id="district-name-d1"]')
+    await cell.trigger('click')
+    expect(cell.find('input').exists()).toBe(false)
+    expect(districtsStore.selectedDistrictId).toBe('d1')
   })
 
   it('creates a congregation with a service time and reports create errors', async () => {
@@ -258,25 +332,32 @@ describe('DistrictsAdminView', () => {
     expect(wrapper.text()).toContain('Fehler beim Speichern')
   })
 
-  it('renames a group and ignores empty names', async () => {
-    vi.mocked(districtsApi.updateGroup).mockResolvedValueOnce(group('g1', 'Gruppe Neu'))
+  it('renames a group inline with its revision and ignores empty names', async () => {
+    vi.mocked(districtsApi.updateGroup).mockResolvedValueOnce({ ...group('g1', 'Gruppe Neu'), revision: '"g1:v2"' })
     const { wrapper } = setup()
     await flushPromises()
 
-    const groupRow = wrapper.findAll('div').find((node) => node.text().trim() === 'Gruppe A' && node.findAll('button').length === 2)!
-    await groupRow.findAll('button')[0].trigger('click')
-    const editGroupInput = wrapper.get('input.form-input.w-40')
-    await editGroupInput.setValue(' Gruppe Neu ')
-    await editGroupInput.trigger('keyup.enter')
-    await flushPromises()
-    expect(districtsApi.updateGroup).toHaveBeenCalledWith('d1', 'g1', 'Gruppe Neu')
+    await editCell(wrapper, 'group-name-g1', ' Gruppe Neu ')
+    expect(districtsApi.updateGroup).toHaveBeenCalledWith('d1', 'g1', 'Gruppe Neu', '"g1:v1"')
+    expect(wrapper.get('[data-inline-cell-id="group-name-g1"]').text()).toContain('Gruppe Neu')
 
-    const renamedRow = wrapper.findAll('div').find((node) => node.text().trim() === 'Gruppe Neu' && node.findAll('button').length === 2)!
-    await renamedRow.findAll('button')[0].trigger('click')
-    await wrapper.get('input.form-input.w-40').setValue('   ')
-    await wrapper.get('input.form-input.w-40').trigger('keyup.enter')
+    const empty = await editCell(wrapper, 'group-name-g1', '   ')
+    expect(empty.get('[role="alert"]').text()).toContain('nicht leer')
     expect(districtsApi.updateGroup).toHaveBeenCalledTimes(1)
-    await wrapper.get('input.form-input.w-40').trigger('keyup.escape')
+  })
+
+  it('shows the server message and keeps the group name on a stale revision', async () => {
+    vi.mocked(districtsApi.updateGroup).mockRejectedValueOnce(
+      new ApiError(412, 'Precondition Failed', { detail: 'Datensatz wurde zwischenzeitlich geändert.' }),
+    )
+    const { wrapper } = setup()
+    await flushPromises()
+    const cell = await editCell(wrapper, 'group-name-g1', 'Entwurf')
+    expect(cell.get('[role="alert"]').text()).toContain('zwischenzeitlich geändert')
+    vi.mocked(districtsApi.listGroups).mockResolvedValue([{ ...group('g1', 'Remote'), revision: '"g1:v9"' }])
+    await cell.get('button').trigger('click')
+    await flushPromises()
+    expect(cell.get('[role="alert"]').text()).toContain('Aktueller Stand geladen')
   })
 
   it('deletes a group, clears local assignments and reports delete failures', async () => {
@@ -286,7 +367,7 @@ describe('DistrictsAdminView', () => {
     await flushPromises()
 
     const groupRow = wrapper.findAll('div').find((node) => node.text().trim() === 'Gruppe A' && node.find('button').exists())!
-    await groupRow.findAll('button')[1].trigger('click')
+    await groupRow.findAll('button')[0].trigger('click')
     expect(wrapper.find('[data-test="confirm-dialog"]').exists()).toBe(true)
     await wrapper.get('[data-test="confirm-delete"]').trigger('click')
     await flushPromises()
@@ -303,7 +384,7 @@ describe('DistrictsAdminView', () => {
     const second = secondSetup.wrapper
     await flushPromises()
     const secondRow = second.findAll('div').find((node) => node.text().trim() === 'Gruppe C' && node.find('button').exists())!
-    await secondRow.findAll('button')[1].trigger('click')
+    await secondRow.findAll('button')[0].trigger('click')
     await second.get('[data-test="confirm-delete"]').trigger('click')
     await flushPromises()
     expect(secondError).toHaveBeenCalledWith('Löschen fehlgeschlagen', 'Nicht erlaubt')

@@ -170,10 +170,11 @@ async def test_create_district_requires_superadmin() -> None:
 @pytest.mark.asyncio
 async def test_update_district_not_found() -> None:
     repo = AsyncMock()
-    repo.get.return_value = None
+    repo.get_for_update.return_value = None
     with pytest.raises(HTTPException) as exc:
         await r.update_district(
-            uuid.uuid4(), DistrictUpdate(name="X"), _superadmin_auth(), AsyncMock(), repo=repo
+            uuid.uuid4(), DistrictUpdate(name="X"), _superadmin_auth(), AsyncMock(),
+            repo=repo, if_match='"x"',
         )
     assert exc.value.status_code == 404
 
@@ -187,6 +188,7 @@ async def test_list_and_update_district_success() -> None:
     repo = AsyncMock()
     repo.list_all.return_value = [district]
     repo.get.return_value = district
+    repo.get_for_update.return_value = district
 
     listed = await r.list_districts(_superadmin_auth(), AsyncMock(), district_repo=repo)
     with (
@@ -199,6 +201,7 @@ async def test_list_and_update_district_success() -> None:
             _superadmin_auth(),
             AsyncMock(),
             repo=repo,
+            if_match=r._district_response(district).revision,
         )
 
     assert len(listed) == 1
@@ -456,6 +459,7 @@ async def test_group_crud_success_paths() -> None:
         listed = await r.list_groups(
             district_id, _superadmin_auth(), db, district_repo=district_repo, group_repo=group_repo
         )
+        group_repo.get_for_update.return_value = created_group
         updated = await r.update_group(
             district_id,
             created_group.id,
@@ -463,6 +467,7 @@ async def test_group_crud_success_paths() -> None:
             object(),
             db,
             group_repo=group_repo,
+            if_match=r._group_response(created_group).revision,
         )
         await r.delete_group(district_id, created_group.id, object(), db, group_repo=group_repo)
 
@@ -501,6 +506,7 @@ async def test_group_crud_not_found_paths() -> None:
     district_repo.get.return_value = District.create(name="D")
     group_repo = AsyncMock()
     group_repo.get.return_value = None
+    group_repo.get_for_update.return_value = None
     with pytest.raises(HTTPException):
         await r.update_group(
             district_id,
@@ -509,6 +515,7 @@ async def test_group_crud_not_found_paths() -> None:
             object(),
             db,
             group_repo=group_repo,
+            if_match='"x"',
         )
     with pytest.raises(HTTPException):
         await r.delete_group(district_id, group_id, object(), db, group_repo=group_repo)
@@ -1195,3 +1202,117 @@ async def test_import_feiertage_endpoint_not_found_and_http_error() -> None:
                 district_repo=district_repo,
             )
     assert api_exc.value.status_code == 502
+
+
+class TestConditionalRename:
+    """District and group renames use strong revisions: 428 missing, 412 stale."""
+
+    @staticmethod
+    def _district_repo():
+        district = District.create(name="Alt", state_code="BY")
+        repo = AsyncMock()
+        repo.get_for_update.return_value = district
+        return district, repo
+
+    @pytest.mark.asyncio
+    async def test_district_rename_returns_a_fresh_revision(self) -> None:
+        district, repo = self._district_repo()
+        previous = r._district_response(district).revision
+        with patch("app.adapters.api.routers.districts.require_role_in_district"):
+            result = await r.update_district(
+                district.id, DistrictUpdate(name="Neu"), object(), AsyncMock(),
+                repo=repo, if_match=previous,
+            )
+        assert result.name == "Neu"
+        assert result.revision != previous
+        repo.get_for_update.assert_awaited_once_with(district.id)
+
+    @pytest.mark.asyncio
+    async def test_district_rename_without_precondition_is_rejected(self) -> None:
+        district, repo = self._district_repo()
+        with (
+            patch("app.adapters.api.routers.districts.require_role_in_district"),
+            pytest.raises(HTTPException) as err,
+        ):
+            await r.update_district(
+                district.id, DistrictUpdate(name="Neu"), object(), AsyncMock(), repo=repo,
+            )
+        assert err.value.status_code == 428
+        assert district.name == "Alt"
+        repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_district_rename_with_stale_revision_keeps_the_name(self) -> None:
+        district, repo = self._district_repo()
+        with (
+            patch("app.adapters.api.routers.districts.require_role_in_district"),
+            pytest.raises(HTTPException) as err,
+        ):
+            await r.update_district(
+                district.id, DistrictUpdate(name="Neu"), object(), AsyncMock(),
+                repo=repo, if_match='"stale"',
+            )
+        assert err.value.status_code == 412
+        assert district.name == "Alt"
+        repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_district_rename_checks_permission_before_the_precondition(self) -> None:
+        district, repo = self._district_repo()
+        denied = HTTPException(status_code=403)
+        with (
+            patch("app.adapters.api.routers.districts.require_role_in_district", side_effect=denied),
+            pytest.raises(HTTPException) as err,
+        ):
+            await r.update_district(
+                district.id, DistrictUpdate(name="Neu"), object(), AsyncMock(), repo=repo,
+            )
+        assert err.value.status_code == 403
+        repo.save.assert_not_awaited()
+
+    @staticmethod
+    def _group_repo():
+        from app.domain.models.congregation_group import CongregationGroup
+
+        district_id = uuid.uuid4()
+        group = CongregationGroup.create(name="Nord", district_id=district_id)
+        repo = AsyncMock()
+        repo.get_for_update.return_value = group
+        return district_id, group, repo
+
+    @pytest.mark.asyncio
+    async def test_group_rename_returns_a_fresh_revision(self) -> None:
+        district_id, group, repo = self._group_repo()
+        previous = r._group_response(group).revision
+        with patch("app.adapters.api.routers.districts.require_role_in_district"):
+            result = await r.update_group(
+                district_id, group.id, r.CongregationGroupUpdate(name="Nord-West"),
+                object(), AsyncMock(), group_repo=repo, if_match=previous,
+            )
+        assert (result.name, result.revision != previous) == ("Nord-West", True)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("if_match", "status"), [(None, 428), ('"stale"', 412)])
+    async def test_group_rename_rejects_missing_and_stale_preconditions(self, if_match, status) -> None:
+        district_id, group, repo = self._group_repo()
+        with (
+            patch("app.adapters.api.routers.districts.require_role_in_district"),
+            pytest.raises(HTTPException) as err,
+        ):
+            await r.update_group(
+                district_id, group.id, r.CongregationGroupUpdate(name="X"),
+                object(), AsyncMock(), group_repo=repo, if_match=if_match,
+            )
+        assert err.value.status_code == status
+        assert group.name == "Nord"
+        repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_group_of_another_district_is_not_found(self) -> None:
+        _, group, repo = self._group_repo()
+        with pytest.raises(HTTPException) as err:
+            await r.update_group(
+                uuid.uuid4(), group.id, r.CongregationGroupUpdate(name="X"),
+                object(), AsyncMock(), group_repo=repo, if_match='"x"',
+            )
+        assert err.value.status_code == 404

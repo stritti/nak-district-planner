@@ -60,6 +60,7 @@ from fastapi import HTTPException
 from app.adapters.api.routers import leaders as leader_router
 from app.adapters.api.routers import service_assignments as assignment_router
 from app.adapters.api.schemas.leader import LeaderUpdate
+from tests.unit.assignment_preconditions import precondition
 from tests.unit.test_router_leaders_events_assignments import _auth_context, _planning_slot
 
 
@@ -186,8 +187,8 @@ async def test_stale_status_only_assignment_update_rejected():
                 ServiceAssignmentUpdate(status=AssignmentStatus.CONFIRMED),
                 _auth_context(),
                 AsyncMock(),
-                slots=AsyncMock(get=AsyncMock(return_value=slot)),
-                assignments_repo=repo,
+                slots=AsyncMock(get=AsyncMock(return_value=slot), get_for_update=AsyncMock(return_value=slot)),
+                assignments_repo=repo, **precondition(slot)
             )
     assert error.value.status_code == 409
     repo.save.assert_not_called()

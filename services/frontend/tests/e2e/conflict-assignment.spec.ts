@@ -2,8 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { expect, test } from '@playwright/test'
-import { FRONTEND_URL, matrixResponse, setupAuthAndMatrix } from './helpers'
+import { EVENT_REVISION, FRONTEND_URL, matrixResponse, setupAuthAndMatrix } from './helpers'
+
 test.describe('Mocked conflict UI contract in assignment flow', () => {
+  // Every dialog write must carry the revision of the cell it was opened with (If-Match).
+  const ifMatchHeaders: (string | undefined)[] = []
+  test.beforeEach(() => {
+    ifMatchHeaders.length = 0
+  })
+  test.afterEach(() => {
+    for (const header of ifMatchHeaders) expect(header).toBe(EVENT_REVISION)
+  })
+
   test('BLOCK conflict (double booking) shows banner and disables submit', async ({ page }) => {
     await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
     let submitAttempts = 0
@@ -12,6 +22,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
         await route.fallback()
         return
       }
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       submitAttempts++
       await route.fulfill({
         status: 409,
@@ -52,6 +63,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
       'Amtsträger ist im Zeitraum bereits anderweitig zugewiesen.',
     )
     expect(submitAttempts).toBe(1)
+    expect(ifMatchHeaders).toEqual([EVENT_REVISION])
   })
 
   test('WARN conflict (travel time) requires explicit confirmation', async ({ page }) => {
@@ -62,6 +74,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
         await route.fallback()
         return
       }
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       const body = route.request().postData() ?? ''
       bodies.push(body)
       if (body.includes('"confirm_warnings":true')) {
@@ -126,6 +139,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
         await route.fallback()
         return
       }
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       submitAttempts++
       await route.fulfill({
         status: 409,
@@ -163,6 +177,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     const bodies: Record<string, unknown>[] = []
     await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       const body = route.request().postDataJSON() as Record<string, unknown>
       bodies.push(body)
       await route.fulfill(bodies.length === 1 ? {
@@ -198,6 +213,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     const bodies: Record<string, unknown>[] = []
     await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       bodies.push(route.request().postDataJSON() as Record<string, unknown>)
       await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
         detail: { conflicts: [{ rule_id: 'travel_time_check', severity: 'WARN',
@@ -224,6 +240,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     const bodies: Record<string, unknown>[] = []
     await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       const body = route.request().postDataJSON() as Record<string, unknown>
       bodies.push(body)
       await route.fulfill(bodies.length === 1 ? {
@@ -254,6 +271,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     let attempts = 0
     await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       attempts++
       await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
         detail: { conflicts: [
@@ -277,6 +295,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     let attempts = 0
     await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       attempts++
       await route.fulfill(attempts === 1 ? {
         status: 409, contentType: 'application/json',
@@ -308,6 +327,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     const requests: Record<string, unknown>[] = []
     await page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback()
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       requests.push(route.request().postDataJSON() as Record<string, unknown>)
       await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
         detail: { conflicts: [{ rule_id: 'no_double_booking', severity: 'BLOCK',
@@ -330,6 +350,7 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     const overrideStarted = new Promise<void>((resolve) => {
       page.route(/\/api\/v1\/events\/event-1\/assignments(?:\?.*)?$/, async (route) => {
         if (route.request().method() !== 'POST') return route.fallback()
+      ifMatchHeaders.push(route.request().headers()['if-match'])
         const body = route.request().postDataJSON() as Record<string, unknown>
         if (body.confirm_warnings) {
           await new Promise<void>((release) => { releaseOverride = release; resolve() })

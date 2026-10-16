@@ -22,9 +22,9 @@
     <div v-else-if="filtered.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
       Keine Abwesenheiten erfasst.
     </div>
-    <div v-else class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+    <div v-else class="card overflow-hidden">
       <div class="table-scroll">
-        <table class="w-full text-sm" data-testid="unavailability-table">
+        <table class="table-min-w w-full text-sm" data-testid="unavailability-table">
           <thead class="table-thead">
             <tr>
               <th class="table-th py-2">Amtsträger:in</th>

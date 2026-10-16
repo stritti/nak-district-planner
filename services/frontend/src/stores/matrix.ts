@@ -71,17 +71,14 @@ export const useMatrixStore = defineStore('matrix', () => {
     eventId: string,
     assignmentId: string | null,
     options: AssignmentOptions,
-    assignmentStatus?: 'OPEN' | 'ASSIGNED' | 'CONFIRMED',
+    assignmentStatus: 'OPEN' | 'ASSIGNED' | 'CONFIRMED' | undefined,
+    revision: string,
   ) {
     try {
       if (assignmentId) {
-        if (assignmentStatus) {
-          await updateAssignment(eventId, assignmentId, options, assignmentStatus)
-        } else {
-          await updateAssignment(eventId, assignmentId, options)
-        }
+        await updateAssignment(eventId, assignmentId, options, revision, assignmentStatus)
       } else {
-        await createAssignment(eventId, options, assignmentStatus ?? 'ASSIGNED')
+        await createAssignment(eventId, options, revision, assignmentStatus ?? 'ASSIGNED')
       }
     } catch (e) {
       const conflictError = parseConflictError(e)
@@ -93,13 +90,13 @@ export const useMatrixStore = defineStore('matrix', () => {
     await fetch() // refresh matrix
   }
 
-  async function clearAssignment(eventId: string, assignmentId: string | null) {
+  async function clearAssignment(eventId: string, assignmentId: string | null, revision: string) {
     if (!assignmentId) {
       await fetch()
       return
     }
 
-    await deleteAssignment(eventId, assignmentId)
+    await deleteAssignment(eventId, assignmentId, revision)
     await fetch()
   }
 

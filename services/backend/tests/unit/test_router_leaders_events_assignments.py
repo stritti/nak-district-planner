@@ -31,6 +31,7 @@ from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
 from app.domain.planning.conflict_result import ConflictResult, Severity
+from tests.unit.assignment_preconditions import precondition
 
 # ---------------------------------------------------------------------------
 # Factory helpers
@@ -641,7 +642,7 @@ async def test_service_assignment_crud_paths() -> None:
             _auth_context(),
             db,
             slot_repo,
-            sa_repo,
+            sa_repo, **precondition(slot)
         )
         listed = await sa_router.list_assignments(
             slot.id,
@@ -657,7 +658,7 @@ async def test_service_assignment_crud_paths() -> None:
             _auth_context(),
             db,
             slot_repo,
-            sa_repo,
+            sa_repo, **precondition(slot)
         )
         deleted = await sa_router.delete_assignment(
             slot.id,
@@ -665,7 +666,7 @@ async def test_service_assignment_crud_paths() -> None:
             _auth_context(),
             db,
             slot_repo,
-            sa_repo,
+            sa_repo, **precondition(slot)
         )
     assert created.leader_name == "Pr. Y"
     assert len(listed) == 1
@@ -694,14 +695,14 @@ async def test_service_assignment_writes_touch_planning_slot(action: str) -> Non
     ):
         if action == "create":
             await sa_router.create_assignment(
-                slot.id, ServiceAssignmentCreate(leader_name="Pr. Y"), *args
+                slot.id, ServiceAssignmentCreate(leader_name="Pr. Y"), *args, **precondition(slot)
             )
         elif action == "update":
             await sa_router.update_assignment(
-                slot.id, assignment.id, ServiceAssignmentUpdate(leader_name="Pr. Z"), *args
+                slot.id, assignment.id, ServiceAssignmentUpdate(leader_name="Pr. Z"), *args, **precondition(slot)
             )
         else:
-            await sa_router.delete_assignment(slot.id, assignment.id, *args)
+            await sa_router.delete_assignment(slot.id, assignment.id, *args, **precondition(slot))
 
     assert slot.updated_at > before
     slot_repo.save.assert_awaited_once_with(slot)
@@ -742,7 +743,7 @@ async def test_service_assignment_create_blocks_conflict() -> None:
                 _auth_context(),
                 db,
                 slot_repo,
-                sa_repo,
+                sa_repo, **precondition(slot)
             )
 
     assert exc.value.status_code == 409
@@ -783,7 +784,7 @@ async def test_service_assignment_create_allows_confirmed_warning() -> None:
             _auth_context(),
             db,
             slot_repo,
-            sa_repo,
+            sa_repo, **precondition(slot)
         )
 
     assert result.leader_id == leader_id
@@ -850,7 +851,7 @@ async def test_service_assignment_create_forbidden() -> None:
                 auth,
                 db,
                 slot_repo,
-                AsyncMock(),
+                AsyncMock(), **precondition(slot)
             )
 
     assert exc.value.status_code == 403
@@ -900,7 +901,7 @@ async def test_service_assignment_update_not_found() -> None:
             _auth_context(),
             db,
             slot_repo,
-            sa_repo,
+            sa_repo, **precondition(slot)
         )
 
     assert exc.value.status_code == 404
@@ -926,7 +927,7 @@ async def test_service_assignment_update_event_id_mismatch() -> None:
             _auth_context(),
             db,
             slot_repo,
-            sa_repo,
+            sa_repo, **precondition(slot_b)
         )
 
     assert exc.value.status_code == 404
@@ -976,7 +977,7 @@ async def test_service_assignment_delete_not_found() -> None:
             _auth_context(),
             db,
             slot_repo,
-            sa_repo,
+            sa_repo, **precondition(slot)
         )
 
     assert exc.value.status_code == 404
@@ -1001,7 +1002,7 @@ async def test_service_assignment_delete_event_id_mismatch() -> None:
             _auth_context(),
             db,
             slot_repo,
-            sa_repo,
+            sa_repo, **precondition(slot_b)
         )
 
     assert exc.value.status_code == 404
@@ -1025,7 +1026,7 @@ async def test_service_assignment_delete_planning_slot_not_found() -> None:
             _auth_context(),
             db,
             slot_repo,
-            sa_repo,
+            sa_repo, **precondition(slot)
         )
 
     assert exc.value.status_code == 404
@@ -1148,16 +1149,16 @@ async def test_assignment_writer_locks_planning_slot_before_mutating(action: str
         if action == "create":
             await sa_router.create_assignment(
                 slot.id, ServiceAssignmentCreate(leader_name="Neu"),
-                _auth_context(), db, slots, assignments,
+                _auth_context(), db, slots, assignments, **precondition(slot)
             )
         elif action == "update":
             await sa_router.update_assignment(
                 slot.id, assignment.id, ServiceAssignmentUpdate(leader_name="Neu"),
-                _auth_context(), db, slots, assignments,
+                _auth_context(), db, slots, assignments, **precondition(slot)
             )
         else:
             await sa_router.delete_assignment(
-                slot.id, assignment.id, _auth_context(), db, slots, assignments,
+                slot.id, assignment.id, _auth_context(), db, slots, assignments, **precondition(slot)
             )
 
     slots.get_for_update.assert_awaited_once_with(slot.id)

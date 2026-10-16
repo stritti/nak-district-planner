@@ -360,43 +360,43 @@
         compact
       />
 
-      <div v-else class="border border-gray-200 rounded-lg overflow-hidden">
+      <div v-else class="card overflow-hidden">
         <div class="table-scroll">
-        <table data-inline-edit-scope class="table-min-w w-full text-sm">
-          <thead class="bg-gray-50 text-xs text-gray-500 font-medium">
+        <table class="table-min-w w-full text-sm" data-testid="registrations-table">
+          <thead class="table-thead">
             <tr>
-              <th class="px-4 py-2 text-left">Name</th>
-              <th class="px-4 py-2 text-left">E-Mail</th>
-              <th class="px-4 py-2 text-left">Grad</th>
-              <th class="px-4 py-2 text-left">Gemeinde (Wunsch)</th>
-              <th class="px-4 py-2 text-left">Status</th>
-              <th class="px-4 py-2 text-left">Eingereicht</th>
-              <th class="px-4 py-2 text-right">Aktionen</th>
+              <th class="table-th py-2">Name</th>
+              <th class="table-th py-2">E-Mail</th>
+              <th class="table-th py-2">Grad</th>
+              <th class="table-th py-2">Gemeinde (Wunsch)</th>
+              <th class="table-th py-2">Status</th>
+              <th class="table-th py-2">Eingereicht</th>
+              <th class="table-th py-2 text-right">Aktionen</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100">
+          <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
             <tr
               v-for="reg in registrations"
               :key="reg.id"
-              class="hover:bg-gray-50"
+              class="hover:bg-gray-50 dark:hover:bg-gray-800"
             >
-              <td class="px-4 py-2 font-medium text-gray-800">{{ reg.name }}</td>
-              <td class="px-4 py-2 text-gray-500">{{ reg.email }}</td>
-              <td class="px-4 py-2">
-                <span v-if="reg.rank" class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 text-blue-700 border border-blue-100">
+              <td class="table-td py-2 font-medium text-gray-800 dark:text-gray-200">{{ reg.name }}</td>
+              <td class="table-td py-2">{{ reg.email }}</td>
+              <td class="table-td py-2">
+                <span v-if="reg.rank" class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
                   {{ reg.rank }}
                 </span>
-                <span v-else class="text-gray-300">—</span>
+                <span v-else class="text-gray-300 dark:text-gray-600">—</span>
               </td>
-              <td class="px-4 py-2 text-gray-500">{{ congregationName(reg.congregation_id) || '—' }}</td>
-              <td class="px-4 py-2">
+              <td class="table-td py-2">{{ congregationName(reg.congregation_id) || '—' }}</td>
+              <td class="table-td py-2">
                 <div class="flex items-center gap-1.5">
                   <span
                     class="inline-block px-2 py-0.5 rounded text-xs font-medium"
                     :class="{
-                      'bg-amber-100 text-amber-700': reg.status === 'PENDING',
-                      'bg-green-100 text-green-700': reg.status === 'APPROVED',
-                      'bg-red-100 text-red-600': reg.status === 'REJECTED',
+                      'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300': reg.status === 'PENDING',
+                      'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300': reg.status === 'APPROVED',
+                      'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-300': reg.status === 'REJECTED',
                     }"
                   >
                     {{ { PENDING: 'Ausstehend', APPROVED: 'Genehmigt', REJECTED: 'Abgelehnt' }[reg.status] }}
@@ -416,10 +416,10 @@
                   {{ reg.idp_provision_error }}
                 </p>
               </td>
-              <td class="px-4 py-2 text-gray-400 text-xs">
+              <td class="table-td py-2 text-xs">
                 {{ new Date(reg.created_at).toLocaleDateString('de-DE') }}
               </td>
-              <td class="px-4 py-2">
+              <td class="table-td py-2">
                 <div class="flex items-center justify-end gap-1">
                   <template v-if="reg.status === 'PENDING'">
                     <button

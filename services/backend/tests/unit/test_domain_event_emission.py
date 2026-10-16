@@ -27,6 +27,7 @@ from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import AssignmentStatus, ServiceAssignment
+from tests.unit.assignment_preconditions import precondition
 
 DISTRICT = uuid.uuid4()
 
@@ -241,6 +242,7 @@ async def _update_assignment(assignment: ServiceAssignment, body, leader_name: s
             slot_repo,
             assignment_repo,
             leader_repo,
+            **precondition(slot),
         )
     return publish
 

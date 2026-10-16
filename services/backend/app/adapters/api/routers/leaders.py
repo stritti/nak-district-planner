@@ -18,6 +18,7 @@ from app.adapters.api.deps import (
     get_district_repository,
     get_leader_repository,
 )
+from app.adapters.api.revisions import entity_revision, next_updated_at
 from app.adapters.api.schemas.leader import (
     LeaderCreate,
     LeaderResponse,
@@ -60,21 +61,14 @@ class LeaderInlineUpdate(BaseModel):
     )
 
 
-def _to_utc(timestamp: datetime) -> datetime:
-    return timestamp if timestamp.tzinfo is not None else timestamp.replace(tzinfo=UTC)
-
-
 def _touch_leader(leader: Leader) -> None:
     """Advance the revision after any leader write, even within a clock tick."""
-    leader.updated_at = max(
-        datetime.now(UTC), _to_utc(leader.updated_at) + timedelta(microseconds=1)
-    )
+    leader.updated_at = next_updated_at(leader.updated_at)
 
 
 def _leader_revision(leader: Leader) -> str:
     """Opaque strong validator for a leader record."""
-    timestamp = _to_utc(leader.updated_at)
-    return '"' + str(leader.id) + ':' + timestamp.isoformat(timespec="microseconds") + '"'
+    return entity_revision(leader.id, leader.updated_at)
 
 
 def _leader_response(leader: Leader) -> LeaderResponse:

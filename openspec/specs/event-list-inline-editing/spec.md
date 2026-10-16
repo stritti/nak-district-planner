@@ -1,4 +1,9 @@
-## ADDED Requirements
+# event-list-inline-editing Specification
+
+## Purpose
+Defines the shared in-place editing of table cells across the SPA (event list, leader administration, planning matrix, district and group names): explicit activation, predictable commit and cancel, conditional writes with strong revisions (428/412), accessible error recovery, and the rule that read-only, derived and workflow columns never become editors. Consolidates `event-list-inline-cell-editing`.
+
+## Requirements
 
 ### Requirement: Compact read-only event table by default
 The event overview SHALL display event data as a compact, legible table with formatted text in cells, without always-visible input controls. The full value of truncated text SHALL remain accessible. Non-editable and read-only fields SHALL not present an edit affordance.
@@ -115,3 +120,18 @@ The frontend SHALL provide a reusable inline-cell editing component/composable w
 #### Scenario: No incomplete migration
 - **WHEN** the change is accepted
 - **THEN** the inventory shows that every eligible table is integrated and each intentionally excluded table/column has a documented reason
+
+### Requirement: Dialog writers honour the same revision contract
+Every writer of a field that is also editable inline SHALL be conditional on the same server revision, so a dialog or legacy writer cannot silently overwrite an inline change. This covers event updates, assignment create/update/delete (event revision), leader updates and renames of districts and groups.
+
+#### Scenario: Dialog save after an inline change
+- **WHEN** an assignment is changed inline and a dialog that was opened earlier then saves the same assignment
+- **THEN** the server rejects the dialog write with 412 and the dialog explains that the event changed meanwhile
+
+#### Scenario: Write without a precondition
+- **WHEN** a client sends an assignment write or a district or group rename without `If-Match`
+- **THEN** the server answers 428 and nothing is changed
+
+#### Scenario: Dialog retains the revision it was opened with
+- **WHEN** a matrix dialog or the event editor saves an assignment
+- **THEN** it sends the revision read with the cell or returned by the preceding event update, never a later or empty one

@@ -21,13 +21,27 @@ export interface AssignmentOptions {
 
 export type AssignmentStatus = 'OPEN' | 'ASSIGNED' | 'CONFIRMED'
 
+/** Saved assignment plus the event revision valid after the write. */
+export interface AssignmentWriteResult extends ServiceAssignmentResponse {
+  event_revision: string
+}
+
+const MISSING_REVISION = 'Versionsinformation fehlt. Bitte neu laden.'
+
+/**
+ * Dialog writers share the event's strong revision with inline cells (428 without, 412 if
+ * stale), so a dialog save can never silently overwrite an inline change.
+ */
 export function createAssignment(
   eventId: string,
   options: AssignmentOptions,
+  revision: string,
   assignmentStatus: AssignmentStatus = 'ASSIGNED',
-): Promise<ServiceAssignmentResponse> {
-  return apiFetch<ServiceAssignmentResponse>(`/api/v1/events/${eventId}/assignments`, {
+): Promise<AssignmentWriteResult> {
+  if (!revision) return Promise.reject(new Error(MISSING_REVISION))
+  return apiFetch<AssignmentWriteResult>(`/api/v1/events/${eventId}/assignments`, {
     method: 'POST',
+    headers: { 'If-Match': revision },
     body: JSON.stringify({
       leader_id: options.leaderId ?? null,
       leader_name: options.leaderName ?? null,
@@ -41,12 +55,15 @@ export function updateAssignment(
   eventId: string,
   assignmentId: string,
   options: AssignmentOptions,
+  revision: string,
   assignmentStatus?: AssignmentStatus,
-): Promise<ServiceAssignmentResponse> {
-  return apiFetch<ServiceAssignmentResponse>(
+): Promise<AssignmentWriteResult> {
+  if (!revision) return Promise.reject(new Error(MISSING_REVISION))
+  return apiFetch<AssignmentWriteResult>(
     `/api/v1/events/${eventId}/assignments/${assignmentId}`,
     {
       method: 'PUT',
+      headers: { 'If-Match': revision },
       body: JSON.stringify({
         leader_id: options.leaderId ?? null,
         leader_name: options.leaderName ?? null,
@@ -57,16 +74,20 @@ export function updateAssignment(
   )
 }
 
-export function deleteAssignment(eventId: string, assignmentId: string): Promise<void> {
+export function deleteAssignment(
+  eventId: string,
+  assignmentId: string,
+  revision: string,
+): Promise<void> {
+  if (!revision) return Promise.reject(new Error(MISSING_REVISION))
   return apiFetch<void>(`/api/v1/events/${eventId}/assignments/${assignmentId}`, {
     method: 'DELETE',
+    headers: { 'If-Match': revision },
   })
 }
 
 /** Optimistic, non-destructive minister assignment for inline UI adapters. */
-export interface InlineAssignmentResult extends ServiceAssignmentResponse {
-  event_revision: string
-}
+export type InlineAssignmentResult = AssignmentWriteResult
 
 export function changeAssignmentInline(
   eventId: string,
@@ -74,7 +95,7 @@ export function changeAssignmentInline(
   revision: string,
   confirmWarnings = false,
 ): Promise<InlineAssignmentResult> {
-  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+  if (!revision) return Promise.reject(new Error(MISSING_REVISION))
   if (!leaderId) return Promise.reject(new Error('Zum Zuweisen ist eine Person erforderlich.'))
   return apiFetch<InlineAssignmentResult>(`/api/v1/events/${eventId}/assignments/inline`, {
     method: 'PUT',

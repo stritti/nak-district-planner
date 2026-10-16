@@ -32,59 +32,44 @@
             : 'bg-gray-50 dark:bg-gray-800'"
           @click="selectDistrict(district.id)"
         >
-          <template v-if="editingDistrictId === district.id">
-            <input
-              v-model="editName"
-              class="form-input w-56 py-1 px-2"
-              @keyup.enter="saveDistrict(district)"
-              @keyup.escape="cancelEdit"
+          <div class="flex items-center gap-2">
+            <InlineEditableCell
+              :id="'district-name-' + district.id"
+              as="div"
+              class="font-medium text-gray-900 dark:text-gray-100"
+              :value="district.name"
+              :revision="district.revision ?? ''"
+              :label="'Bezirksname: ' + district.name"
+              :editable="canRenameDistrict(district)"
+              :coordinator="inlineCoordinator"
+              :save="(value, revision) => saveInlineDistrictName(district, value, revision)"
+              :reload="() => reloadInlineDistrict(district)"
+              required
+              :max-length="255"
+              @click="keepSelectionWhileEditing(district, $event)"
             />
-            <div class="flex gap-1.5 ml-2">
-              <button
-                class="p-1.5 rounded text-green-600 hover:bg-green-50 disabled:opacity-40"
-                :disabled="!editName.trim() || saving"
-                title="Speichern"
-                @click="saveDistrict(district)"
-              >
-                <CheckIcon class="h-4 w-4" />
-              </button>
-              <button class="p-1.5 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700" title="Abbrechen" @click="cancelEdit">
-                <XMarkIcon class="h-4 w-4" />
-              </button>
-            </div>
-          </template>
-          <template v-else>
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-gray-900 dark:text-gray-100">{{ district.name }}</span>
-              <span
-                v-if="district.state_code"
-                class="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
-              >{{ district.state_code }}</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <button
-                class="btn-icon hover:bg-gray-200 dark:hover:bg-gray-600"
-                title="Bezirk umbenennen"
-                @click="startEditDistrict(district)"
-              >
-                <PencilSquareIcon class="h-4 w-4" />
-              </button>
-              <button
-                class="flex items-center gap-1 text-xs text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50"
-                @click="openNewGroup(district.id)"
-              >
-                <PlusIcon class="h-3.5 w-3.5" />
-                Gruppe
-              </button>
-              <button
-                class="flex items-center gap-1 text-xs text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50"
-                @click="openNewCongregation(district.id)"
-              >
-                <PlusIcon class="h-3.5 w-3.5" />
-                Gemeinde
-              </button>
-            </div>
-          </template>
+            <span
+              v-if="district.state_code"
+              class="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+            >{{ district.state_code }}</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button
+              class="flex items-center gap-1 text-xs text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50"
+              @click="openNewGroup(district.id)"
+            >
+              <PlusIcon class="h-3.5 w-3.5" />
+              Gruppe
+            </button>
+            <button
+              class="flex items-center gap-1 text-xs text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50"
+              @click="openNewCongregation(district.id)"
+            >
+              <PlusIcon class="h-3.5 w-3.5" />
+              Gemeinde
+            </button>
+          </div>
+
         </div>
 
         <!-- New group inline form -->
@@ -116,33 +101,26 @@
         <!-- Groups list (inline editting) -->
         <div v-if="groupsByDistrict[district.id]?.length" class="bg-gray-50/50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 px-4 py-2 space-y-1">
           <div v-for="group in groupsByDistrict[district.id]" :key="group.id" class="flex items-center justify-between">
-            <template v-if="editingGroupId === group.id">
-              <input
-                v-model="editGroupName"
-                class="form-input w-40 py-0.5 px-2 text-xs"
-                @keyup.enter="saveEditGroup(district.id, group)"
-                @keyup.escape="editingGroupId = null"
-              />
-              <div class="flex gap-1">
-                <button class="p-1 rounded text-green-600 hover:bg-green-100" @click="saveEditGroup(district.id, group)">
-                  <CheckIcon class="h-3 w-3" />
-                </button>
-                <button class="p-1 rounded text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700" @click="editingGroupId = null">
-                  <XMarkIcon class="h-3 w-3" />
-                </button>
-              </div>
-            </template>
-            <template v-else>
-              <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{ group.name }}</span>
-              <div class="flex items-center gap-1">
-                <button class="p-1 rounded text-gray-300 dark:text-gray-600 hover:text-gray-600" @click="startEditGroup(group)">
-                  <PencilSquareIcon class="h-3 w-3" />
-                </button>
-                <button class="p-1 rounded text-gray-300 dark:text-gray-600 hover:text-red-600" @click="confirmDeleteGroup(district.id, group)">
-                  <TrashIcon class="h-3 w-3" />
-                </button>
-              </div>
-            </template>
+            <InlineEditableCell
+              :id="'group-name-' + group.id"
+              as="div"
+              class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+              :value="group.name"
+              :revision="group.revision ?? ''"
+              :label="'Gruppenname: ' + group.name"
+              :editable="canRenameGroup(district.id, group)"
+              :coordinator="inlineCoordinator"
+              :save="(value, revision) => saveInlineGroupName(district.id, group, value, revision)"
+              :reload="() => reloadInlineGroup(district.id, group)"
+              required
+              :max-length="255"
+            />
+            <div class="flex items-center gap-1">
+              <button class="p-1 rounded text-gray-300 dark:text-gray-600 hover:text-red-600" @click="confirmDeleteGroup(district.id, group)">
+                <TrashIcon class="h-3 w-3" />
+              </button>
+            </div>
+
           </div>
         </div>
 
@@ -436,8 +414,11 @@
 
 <script setup lang="ts">
 import { nextTick, onMounted, reactive, ref } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { CheckIcon, PencilSquareIcon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import InlineEditableCell from '../components/InlineEditableCell.vue'
+import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import {
   createCongregation,
   createDistrict,
@@ -455,6 +436,7 @@ import {
   type ServiceTime,
 } from '../api/districts'
 import { buildCongregationSections } from '../utils/congregationGrouping'
+import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
 import { useToastStore } from '../stores/toast'
 
@@ -498,8 +480,6 @@ const globalError = ref('')
 const saving = ref(false)
 const modalError = ref('')
 
-const editingDistrictId = ref<string | null>(null)
-const editName = ref('')
 
 const newCongModal = reactive({
   open: false,
@@ -616,23 +596,43 @@ onMounted(loadAll)
 
 // ── Districts ─────────────────────────────────────────────────────────────────
 
-function startEditDistrict(district: DistrictResponse) {
-  cancelEdit()
-  editingDistrictId.value = district.id
-  editName.value = district.name
+const auth = useAuthStore()
+const inlineCoordinator = useInlineCellCoordinator()
+onBeforeRouteLeave(() => inlineCoordinator.finish())
+
+/** Mirrors the server guard (DISTRICT_ADMIN); a missing revision never offers a blind write. */
+function canRenameDistrict(district: DistrictResponse): boolean {
+  return auth.canAdminDistrict(district.id) && !!district.revision
 }
 
-async function saveDistrict(district: DistrictResponse) {
-  if (!editName.value.trim()) return
-  saving.value = true
-  try {
-    const updated = await updateDistrict(district.id, { name: editName.value.trim() })
-    const idx = districts.value.findIndex((d) => d.id === district.id)
-    if (idx !== -1) districts.value[idx] = updated
-    cancelEdit()
-  } finally {
-    saving.value = false
-  }
+/** Only a cell that can enter edit mode keeps the click from selecting the district. */
+function keepSelectionWhileEditing(district: DistrictResponse, event: Event): void {
+  if (canRenameDistrict(district)) event.stopPropagation()
+}
+
+function canRenameGroup(districtId: string, group: CongregationGroupResponse): boolean {
+  return auth.canAdminDistrict(districtId) && !!group.revision
+}
+
+async function reloadInlineDistrict(
+  district: DistrictResponse,
+): Promise<{ value: string; revision: string }> {
+  const latest = (await listDistricts()).find((entry) => entry.id === district.id)
+  if (!latest) throw new Error('Der Bezirk wurde zwischenzeitlich entfernt.')
+  const idx = districts.value.findIndex((entry) => entry.id === latest.id)
+  if (idx !== -1) districts.value[idx] = latest
+  return { value: latest.name, revision: latest.revision ?? '' }
+}
+
+async function saveInlineDistrictName(
+  district: DistrictResponse,
+  value: string,
+  revision: string,
+): Promise<void> {
+  const updated = await updateDistrict(district.id, { name: value }, revision)
+  const idx = districts.value.findIndex((entry) => entry.id === district.id)
+  if (idx !== -1) districts.value[idx] = updated
+  districtsStore.districts = districts.value
 }
 
 function openNewDistrict() {
@@ -671,7 +671,7 @@ function selectDistrict(districtId: string) {
 
 function openNewCongregation(districtId: string) {
   selectDistrict(districtId)
-  cancelEdit()
+  cancelNewGroup()
   newCongModal.open = true
   newCongModal.districtId = districtId
   newCongModal.name = ''
@@ -722,12 +722,9 @@ const newGroupDistrictId = ref<string | null>(null)
 const newGroupName = ref('')
 const newGroupInput = ref<HTMLInputElement | null>(null)
 
-const editingGroupId = ref<string | null>(null)
-const editGroupName = ref('')
-
 function openNewGroup(districtId: string) {
   selectDistrict(districtId)
-  cancelEdit()
+  cancelNewGroup()
   newGroupName.value = ''
   newGroupDistrictId.value = districtId
   nextTick(() => newGroupInput.value?.focus())
@@ -753,23 +750,28 @@ function cancelNewGroup() {
   newGroupName.value = ''
 }
 
-function startEditGroup(group: CongregationGroupResponse) {
-  editingGroupId.value = group.id
-  editGroupName.value = group.name
+async function reloadInlineGroup(
+  districtId: string,
+  group: CongregationGroupResponse,
+): Promise<{ value: string; revision: string }> {
+  const latest = (await listGroups(districtId)).find((entry) => entry.id === group.id)
+  if (!latest) throw new Error('Die Gruppe wurde zwischenzeitlich entfernt.')
+  const list = groupsByDistrict[districtId]
+  const idx = list?.findIndex((entry) => entry.id === group.id) ?? -1
+  if (idx !== -1) list[idx] = latest
+  return { value: latest.name, revision: latest.revision ?? '' }
 }
 
-async function saveEditGroup(districtId: string, group: CongregationGroupResponse) {
-  if (!editGroupName.value.trim()) return
-  saving.value = true
-  try {
-    const updated = await updateGroup(districtId, group.id, editGroupName.value.trim())
-    const list = groupsByDistrict[districtId]
-    const idx = list?.findIndex((g) => g.id === group.id) ?? -1
-    if (idx !== -1) list[idx] = updated
-    editingGroupId.value = null
-  } finally {
-    saving.value = false
-  }
+async function saveInlineGroupName(
+  districtId: string,
+  group: CongregationGroupResponse,
+  value: string,
+  revision: string,
+): Promise<void> {
+  const updated = await updateGroup(districtId, group.id, value, revision)
+  const list = groupsByDistrict[districtId]
+  const idx = list?.findIndex((entry) => entry.id === group.id) ?? -1
+  if (idx !== -1) list[idx] = updated
 }
 
 const pendingDeleteGroup = ref<{ districtId: string; group: CongregationGroupResponse } | null>(
@@ -800,10 +802,4 @@ async function executeDeleteGroup() {
   }
 }
 
-function cancelEdit() {
-  editingDistrictId.value = null
-  editName.value = ''
-  newGroupDistrictId.value = null
-  editingGroupId.value = null
-}
 </script>

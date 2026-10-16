@@ -35,6 +35,13 @@ class SqlDistrictRepository(DistrictRepository):
         row = await self._session.get(DistrictORM, district_id)
         return _orm_to_domain(row) if row else None
 
+    async def get_for_update(self, district_id: uuid.UUID) -> District | None:
+        """Read the latest state while holding a row lock through the transaction."""
+        row = await self._session.get(
+            DistrictORM, district_id, with_for_update=True, populate_existing=True
+        )
+        return _orm_to_domain(row) if row else None
+
     async def list_all(self) -> list[District]:
         result = await self._session.execute(select(DistrictORM).order_by(DistrictORM.name))
         return [_orm_to_domain(r) for r in result.scalars().all()]

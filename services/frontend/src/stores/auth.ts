@@ -40,6 +40,14 @@ export const useAuthStore = defineStore(
       ))
     }
 
+    /** Mirrors district DISTRICT_ADMIN guards (rename, master data). */
+    function canAdminDistrict(districtId: string | null | undefined): boolean {
+      return isSuperadmin.value || (!!districtId && memberships.value.some((membership) =>
+        membership.scope_type === 'DISTRICT' && membership.scope_id === districtId &&
+        membership.role === 'DISTRICT_ADMIN',
+      ))
+    }
+
     function setToken(newToken: OIDCToken | null, newUser: OIDCUser | null = null) {
       if (user.value && user.value.sub !== newUser?.sub) clearSessionViewSettings()
       setSessionSettingsIdentity(newUser?.sub ?? null)
@@ -104,6 +112,7 @@ export const useAuthStore = defineStore(
       isAuthenticated,
       isTokenExpired,
       canPlanDistrict,
+      canAdminDistrict,
       setToken,
       refreshCurrentUserFlags,
       getToken,
