@@ -54,6 +54,8 @@ from app.application.rate_limiter import RateLimitConfig, rate_limiter
 from app.config import production_guard, settings
 from app.telemetry import setup_telemetry
 
+logger = logging.getLogger(__name__)
+
 
 def configure_logging() -> None:
     logging.basicConfig(
@@ -70,13 +72,13 @@ async def lifespan(app: FastAPI):
     try:
         production_guard(settings)
     except RuntimeError as e:
-        print("🚨", str(e))
+        logger.critical("Production guard failed: %s", e)
         sys.exit(1)
 
     try:
         await assert_database_schema_current(engine)
     except SchemaVersionError as e:
-        logging.getLogger(__name__).critical("Database schema check failed: %s", e)
+        logger.critical("Database schema check failed: %s", e)
         raise
 
     await audit_service.start()
@@ -94,18 +96,16 @@ async def lifespan(app: FastAPI):
 
     try:
         await oidc_adapter.discover()
-        print(f"✓ OIDC discovery successful: {oidc_adapter.issuer}")
-    except Exception as e:
-        print(f"⚠ OIDC discovery failed: {e}")
+        logger.info("OIDC discovery successful: %s", oidc_adapter.issuer)
+    except Exception:
+        logger.warning("OIDC discovery failed; authentication unavailable until retried", exc_info=True)
 
     deps.set_oidc_adapter(oidc_adapter)
 
     try:
         await rate_limiter.connect()
-        logger = logging.getLogger(__name__)
         logger.info("Rate limiter connected to Redis")
     except Exception:
-        logger = logging.getLogger(__name__)
         logger.warning(
             "Rate limiter could not connect to Redis — requests will not be rate limited "
             "until Redis becomes available"
@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):
     try:
         await rate_limiter.close()
     except Exception:
-        pass
+        logger.warning("Rate limiter shutdown failed", exc_info=True)
 
 
 app = FastAPI(

@@ -65,7 +65,7 @@ async def create_invitations(
             db, source_planning_slot_id=event_id, targets=body.targets
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
 
     return [
         InvitationResponse(
