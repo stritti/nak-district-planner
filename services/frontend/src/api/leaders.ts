@@ -116,7 +116,7 @@ export function updateLeader(
 export function updateLeaderInline(
   districtId: string,
   leaderId: string,
-  body: Pick<LeaderUpdate, 'name' | 'email' | 'phone'>,
+  body: Pick<LeaderUpdate, 'name' | 'email' | 'phone' | 'rank' | 'special_role' | 'congregation_id' | 'is_active'>,
   revision: string,
 ): Promise<LeaderResponse> {
   if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))

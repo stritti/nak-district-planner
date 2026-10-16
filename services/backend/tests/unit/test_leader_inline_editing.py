@@ -5,7 +5,7 @@
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -76,10 +76,10 @@ async def test_stale_revision_preserves_existing_contact():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [
-    {"rank": "Pr."}, {"is_active": False},
-    {"congregation_id": str(uuid.uuid4())}, {"notes": "x"},
+    {"notes": "x"}, {"user_sub": "sub"}, {"hidden_from_lists": True},
+    {"service_end_date": "2030-01-01"}, {"rank": "Kaiser"}, {"special_role": "Chef"},
 ])
-async def test_status_and_scope_changes_not_exposed_inline(payload):
+async def test_workflow_and_unknown_fields_not_exposed_inline(payload):
     ctx = _setup()
     with pytest.raises(ValidationError):
         leaders.LeaderInlineUpdate.model_validate(payload)
@@ -87,8 +87,97 @@ async def test_status_and_scope_changes_not_exposed_inline(payload):
 
 
 @pytest.mark.asyncio
+async def test_rank_and_special_role_can_be_changed_and_role_cleared():
+    ctx = _setup()
+    result = await _inline(
+        ctx,
+        leaders.LeaderInlineUpdate(rank="Pr.", special_role="Gemeindevorsteher"),
+        leaders._leader_revision(ctx[1]),
+    )
+    assert (result.rank, result.special_role) == ("Pr.", "Gemeindevorsteher")
+    cleared = await _inline(
+        ctx, leaders.LeaderInlineUpdate(special_role=None), result.revision
+    )
+    assert cleared.special_role is None
+    assert cleared.rank == "Pr."
+
+
+@pytest.mark.asyncio
+async def test_congregation_move_validates_tenant_and_allows_district_level():
+    ctx = _setup()
+    target = uuid.uuid4()
+    with patch.object(leaders, "ensure_congregation_in_district", new=AsyncMock()) as ensure:
+        moved = await _inline(
+            ctx, leaders.LeaderInlineUpdate(congregation_id=target), leaders._leader_revision(ctx[1])
+        )
+        ensure.assert_awaited_once_with(ANY, ctx[0], target)
+        back = await _inline(
+            ctx, leaders.LeaderInlineUpdate(congregation_id=None), moved.revision
+        )
+    assert moved.congregation_id == target
+    assert back.congregation_id is None
+
+
+@pytest.mark.asyncio
+async def test_foreign_district_congregation_is_rejected_without_saving():
+    ctx = _setup()
+    denied = HTTPException(422, "Gemeinde gehört nicht zum Bezirk")
+    with (
+        patch.object(leaders, "ensure_congregation_in_district", new=AsyncMock(side_effect=denied)),
+        pytest.raises(HTTPException) as err,
+    ):
+        await _inline(
+            ctx, leaders.LeaderInlineUpdate(congregation_id=uuid.uuid4()),
+            leaders._leader_revision(ctx[1]),
+        )
+    assert err.value.status_code == 422
+    ctx[2].save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_activity_change_requires_district_admin_and_keeps_lock_order():
+    ctx = _setup()
+    district_id, leader, repo, auth = ctx
+
+    def guard(_auth, role, _district):
+        if role is Role.DISTRICT_ADMIN:
+            raise HTTPException(403, "Keine Berechtigung")
+
+    with (
+        patch.object(leaders, "require_role_in_district", side_effect=guard),
+        patch.object(leaders, "acquire_advisory_xact_lock", new=AsyncMock()) as lock,
+        pytest.raises(HTTPException) as err,
+    ):
+        await leaders.inline_update_leader(
+            district_id, leader.id, leaders.LeaderInlineUpdate(is_active=False), auth, AsyncMock(),
+            if_match=leaders._leader_revision(leader), leaders_repo=repo,
+        )
+    assert err.value.status_code == 403
+    lock.assert_awaited_once()
+    assert leader.is_active is True
+    repo.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_district_admin_can_deactivate_inline():
+    ctx = _setup()
+    district_id, leader, repo, auth = ctx
+    with (
+        patch.object(leaders, "require_role_in_district"),
+        patch.object(leaders, "acquire_advisory_xact_lock", new=AsyncMock()),
+    ):
+        result = await leaders.inline_update_leader(
+            district_id, leader.id, leaders.LeaderInlineUpdate(is_active=False), auth, AsyncMock(),
+            if_match=leaders._leader_revision(leader), leaders_repo=repo,
+        )
+    assert result.is_active is False
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [
     leaders.LeaderInlineUpdate(name=None),
+    leaders.LeaderInlineUpdate(rank=None),
+    leaders.LeaderInlineUpdate(is_active=None),
     leaders.LeaderInlineUpdate(),
 ])
 async def test_invalid_inline_leader_payloads_are_never_mutated(payload):

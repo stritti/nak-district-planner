@@ -98,61 +98,86 @@
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <div class="flex items-center gap-1.5 flex-wrap">
-                  <span class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
-                    {{ leader.rank ?? '—' }}
-                  </span>
-                  <InlineEditableCell
-                    :id="'leader-name-mobile-' + leader.id"
-                    as="div"
+                  <LeaderInlineCell
+                    class="text-xs font-mono font-medium text-blue-700 dark:text-blue-300"
+                    :leader="leader"
+                    field="rank"
+                    layout="mobile"
+                    :editable="canEditLeaderField(leader, 'rank')"
+                    :congregations="congregations"
+                    :coordinator="inlineCoordinator"
+                    :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                    :reload="(field) => reloadInlineLeader(leader, field)"
+                  />
+                  <LeaderInlineCell
                     class="font-medium text-gray-800 dark:text-gray-200 break-words min-w-0"
-                    :value="leader.name"
-                    :revision="leader.revision ?? ''"
-                    :label="'Name: ' + leader.name"
-                    :editable="canInlineEditLeader(leader)"
+                    :leader="leader"
+                    field="name"
+                    layout="mobile"
+                    :editable="canEditLeaderField(leader, 'name')"
+                    :congregations="congregations"
                     :coordinator="inlineCoordinator"
-                    :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
-                    :reload="() => reloadInlineLeader(leader, 'name')"
-                    required
-                    :max-length="255"
+                    :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                    :reload="(field) => reloadInlineLeader(leader, field)"
                   />
                 </div>
-                <p v-if="section.congregationId === null" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {{ congregationName(leader.congregation_id) || '—' }}
-                </p>
+                <LeaderInlineCell
+                  v-if="section.congregationId === null"
+                  class="text-xs text-gray-500 dark:text-gray-400 mt-1"
+                  :leader="leader"
+                  field="congregation_id"
+                  layout="mobile"
+                  :editable="canEditLeaderField(leader, 'congregation_id')"
+                  :congregations="congregations"
+                  :coordinator="inlineCoordinator"
+                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                  :reload="(field) => reloadInlineLeader(leader, field)"
+                />
                 <div class="mt-0.5 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <InlineEditableCell
-                    :id="'leader-email-mobile-' + leader.id"
-                    as="div"
-                    :value="leader.email"
-                    :revision="leader.revision ?? ''"
-                    :label="'E-Mail: ' + leader.name"
-                    :editable="canInlineEditLeader(leader)"
+                  <LeaderInlineCell
+                    :leader="leader"
+                    field="email"
+                    layout="mobile"
+                    :editable="canEditLeaderField(leader, 'email')"
+                    :congregations="congregations"
                     :coordinator="inlineCoordinator"
-                    :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
-                    :reload="() => reloadInlineLeader(leader, 'email')"
-                    :max-length="255"
+                    :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                    :reload="(field) => reloadInlineLeader(leader, field)"
                   />
-                  <InlineEditableCell
-                    :id="'leader-phone-mobile-' + leader.id"
-                    as="div"
-                    :value="leader.phone"
-                    :revision="leader.revision ?? ''"
-                    :label="'Telefon: ' + leader.name"
-                    :editable="canInlineEditLeader(leader)"
+                  <LeaderInlineCell
+                    :leader="leader"
+                    field="phone"
+                    layout="mobile"
+                    :editable="canEditLeaderField(leader, 'phone')"
+                    :congregations="congregations"
                     :coordinator="inlineCoordinator"
-                    :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
-                    :reload="() => reloadInlineLeader(leader, 'phone')"
-                    :max-length="100"
+                    :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                    :reload="(field) => reloadInlineLeader(leader, field)"
                   />
                 </div>
-                <p v-if="leader.special_role" class="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">Beauftragung: {{ leader.special_role }}</p>
+                <LeaderInlineCell
+                  class="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5"
+                  :leader="leader"
+                  field="special_role"
+                  layout="mobile"
+                  :editable="canEditLeaderField(leader, 'special_role')"
+                  :congregations="congregations"
+                  :coordinator="inlineCoordinator"
+                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                  :reload="(field) => reloadInlineLeader(leader, field)"
+                />
               </div>
-              <span
-                class="badge shrink-0"
-                :class="leader.is_active ? 'bg-green-100 dark:bg-green-900/20 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'"
-              >
-                {{ leader.is_active ? 'Aktiv' : 'Inaktiv' }}
-              </span>
+              <LeaderInlineCell
+                class="shrink-0 text-xs"
+                :leader="leader"
+                field="is_active"
+                layout="mobile"
+                :editable="canEditLeaderField(leader, 'is_active')"
+                :congregations="congregations"
+                :coordinator="inlineCoordinator"
+                :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                :reload="(field) => reloadInlineLeader(leader, field)"
+              />
             </div>
             <div class="mt-2 flex items-center justify-end gap-1">
               <button class="btn-icon" title="Bearbeiten" @click="openEditModal(leader)">
@@ -206,68 +231,84 @@
                 class="hover:bg-gray-50 dark:hover:bg-gray-800"
                 :class="!leader.is_active ? 'opacity-50' : ''"
               >
-                <td class="px-4 py-2">
-                  <span class="inline-block px-2 py-0.5 rounded text-xs font-mono font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
-                    {{ leader.rank ?? '—' }}
-                  </span>
-                </td>
-                <InlineEditableCell
-                  :id="'leader-name-desktop-' + leader.id"
+                <LeaderInlineCell
+                  class="py-2 font-mono text-blue-700 dark:text-blue-300"
+                  :leader="leader"
+                  field="rank"
+                  layout="desktop"
+                  :editable="canEditLeaderField(leader, 'rank')"
+                  :congregations="congregations"
+                  :coordinator="inlineCoordinator"
+                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                  :reload="(field) => reloadInlineLeader(leader, field)"
+                />
+                <LeaderInlineCell
                   class="py-2 font-medium text-gray-800 dark:text-gray-200"
-                  :value="leader.name"
-                  :revision="leader.revision ?? ''"
-                  :label="'Name: ' + leader.name"
-                  :editable="canInlineEditLeader(leader)"
+                  :leader="leader"
+                  field="name"
+                  layout="desktop"
+                  :editable="canEditLeaderField(leader, 'name')"
+                  :congregations="congregations"
                   :coordinator="inlineCoordinator"
-                  :save="(value, revision) => saveInlineLeader(leader, 'name', value, revision)"
-                    :reload="() => reloadInlineLeader(leader, 'name')"
-                  required
-                  :max-length="255"
+                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                  :reload="(field) => reloadInlineLeader(leader, field)"
                 />
-                <td class="px-4 py-2">
-                  <span
-                    v-if="leader.special_role"
-                    class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-800"
-                  >
-                    {{ leader.special_role }}
-                  </span>
-                  <span v-else class="text-gray-300 dark:text-gray-600">—</span>
-                </td>
-                <td v-if="section.congregationId === null" class="table-td py-2">
-                  {{ congregationName(leader.congregation_id) || '—' }}
-                </td>
-                <InlineEditableCell
-                  :id="'leader-email-desktop-' + leader.id"
+                <LeaderInlineCell
+                  class="py-2 text-amber-700 dark:text-amber-300"
+                  :leader="leader"
+                  field="special_role"
+                  layout="desktop"
+                  :editable="canEditLeaderField(leader, 'special_role')"
+                  :congregations="congregations"
+                  :coordinator="inlineCoordinator"
+                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                  :reload="(field) => reloadInlineLeader(leader, field)"
+                />
+                <LeaderInlineCell
+                  v-if="section.congregationId === null"
                   class="py-2"
-                  :value="leader.email"
-                  :revision="leader.revision ?? ''"
-                  :label="'E-Mail: ' + leader.name"
-                  :editable="canInlineEditLeader(leader)"
+                  :leader="leader"
+                  field="congregation_id"
+                  layout="desktop"
+                  :editable="canEditLeaderField(leader, 'congregation_id')"
+                  :congregations="congregations"
                   :coordinator="inlineCoordinator"
-                  :save="(value, revision) => saveInlineLeader(leader, 'email', value, revision)"
-                    :reload="() => reloadInlineLeader(leader, 'email')"
-                    :max-length="255"
+                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                  :reload="(field) => reloadInlineLeader(leader, field)"
                 />
-                <InlineEditableCell
-                  :id="'leader-phone-desktop-' + leader.id"
+                <LeaderInlineCell
                   class="py-2"
-                  :value="leader.phone"
-                  :revision="leader.revision ?? ''"
-                  :label="'Telefon: ' + leader.name"
-                  :editable="canInlineEditLeader(leader)"
+                  :leader="leader"
+                  field="email"
+                  layout="desktop"
+                  :editable="canEditLeaderField(leader, 'email')"
+                  :congregations="congregations"
                   :coordinator="inlineCoordinator"
-                  :save="(value, revision) => saveInlineLeader(leader, 'phone', value, revision)"
-                    :reload="() => reloadInlineLeader(leader, 'phone')"
-                    :max-length="100"
+                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                  :reload="(field) => reloadInlineLeader(leader, field)"
                 />
-                <td class="table-td py-2 text-center">
-                  <span
-                    class="badge"
-                    :class="leader.is_active ? 'bg-green-100 dark:bg-green-900/20 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'"
-                  >
-                    {{ leader.is_active ? 'Aktiv' : 'Inaktiv' }}
-                  </span>
-                </td>
+                <LeaderInlineCell
+                  class="py-2"
+                  :leader="leader"
+                  field="phone"
+                  layout="desktop"
+                  :editable="canEditLeaderField(leader, 'phone')"
+                  :congregations="congregations"
+                  :coordinator="inlineCoordinator"
+                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                  :reload="(field) => reloadInlineLeader(leader, field)"
+                />
+                <LeaderInlineCell
+                  class="py-2 text-center"
+                  :leader="leader"
+                  field="is_active"
+                  layout="desktop"
+                  :editable="canEditLeaderField(leader, 'is_active')"
+                  :congregations="congregations"
+                  :coordinator="inlineCoordinator"
+                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
+                  :reload="(field) => reloadInlineLeader(leader, field)"
+                />
                 <td class="table-td py-2 text-right">
                   <div class="flex items-center justify-end gap-1">
                     <button
@@ -534,6 +575,14 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import LeaderInlineCell from '../components/leaders/LeaderInlineCell.vue'
+import {
+  inlineLeaderPayload,
+  inlineLeaderValue,
+  LIFECYCLE_FIELDS,
+  type InlineLeaderField,
+} from '../components/leaders/inlineLeaderFields'
+import { useConfirm } from '../composables/useConfirm'
 import ApproveRegistrationModal from '../components/leaders/ApproveRegistrationModal.vue'
 import LeaderAddModal from '../components/leaders/LeaderAddModal.vue'
 import LeaderEditModal from '../components/leaders/LeaderEditModal.vue'
@@ -549,7 +598,6 @@ import type {
 import EmptyState from '../components/EmptyState.vue'
 import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
 import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
-import InlineEditableCell from '../components/InlineEditableCell.vue'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import {
   BuildingOffice2Icon,
@@ -572,6 +620,7 @@ import {
   unlinkSelfFromLeader,
   updateLeader,
   updateLeaderInline,
+  leaderDisplayName,
   leaderNameFromId,
   type LeaderRank,
   type LeaderResponse,
@@ -608,6 +657,7 @@ const selectedDistrictId = computed({
 const loading = ref(false)
 const saving = ref(false)
 const inlineCoordinator = useInlineCellCoordinator()
+const confirm = useConfirm()
 onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditLeader(leader: LeaderResponse): boolean {
@@ -618,33 +668,50 @@ function canInlineEditLeader(leader: LeaderResponse): boolean {
     !!leader.revision
 }
 
+/** Lifecycle fields (activity) are DISTRICT_ADMIN only; the server enforces the same rule. */
+function canEditLeaderField(leader: LeaderResponse, field: InlineLeaderField): boolean {
+  if (!canInlineEditLeader(leader)) return false
+  if (!LIFECYCLE_FIELDS.includes(field)) return true
+  return authStore.isSuperadmin || authStore.memberships.some((m) =>
+    m.scope_type === 'DISTRICT' && m.scope_id === selectedDistrictId.value && m.role === 'DISTRICT_ADMIN',
+  )
+}
+
 async function reloadInlineLeader(
   leader: LeaderResponse,
-  field: 'name' | 'email' | 'phone',
+  field: InlineLeaderField,
 ): Promise<{ value: string | null; revision: string }> {
   const latest = (await listLeaders(leader.district_id)).find((entry) => entry.id === leader.id)
   if (!latest) throw new Error('Amtstragende:r wurde zwischenzeitlich entfernt.')
   if (selectedDistrictId.value === leader.district_id) {
     leaders.value = leaders.value.map((entry) => entry.id === latest.id ? latest : entry)
   }
-  return { value: latest[field], revision: latest.revision ?? '' }
+  return { value: inlineLeaderValue(latest, field), revision: latest.revision ?? '' }
 }
 
 async function saveInlineLeader(
   leader: LeaderResponse,
-  field: 'name' | 'email' | 'phone',
+  field: InlineLeaderField,
   value: string,
   revision: string,
 ): Promise<void> {
+  if (field === 'is_active' && value === 'false') {
+    // Existing deactivation policy: future assignments are kept but flagged for review.
+    const confirmed = await confirm({
+      title: 'Amtsträger:in deaktivieren?',
+      message: `„${leaderDisplayName(leader)}“ bleibt für historische Dienste erhalten; künftige Zuweisungen werden zur Prüfung markiert.`,
+      confirmText: 'Deaktivieren',
+      variant: 'danger',
+    })
+    if (!confirmed) throw new Error('Änderung abgebrochen')
+  }
   const districtId = leader.district_id
-  const saved = await updateLeaderInline(
-    districtId, leader.id, { [field]: value || null }, revision,
-  )
+  const saved = await updateLeaderInline(districtId, leader.id, inlineLeaderPayload(field, value), revision)
   if (selectedDistrictId.value !== districtId) return
   leaders.value = leaders.value.map((item) => item.id === saved.id ? saved : item)
   // A failed canonical refresh must not turn an already persisted mutation into an error.
   try {
-    const current = await listLeaders(districtId)
+    const current = await listLeaders(districtId, canIncludeInactiveLeaders(districtId))
     if (selectedDistrictId.value === districtId) leaders.value = current
   } catch {
     // The authoritative PATCH response already updated the visible record.

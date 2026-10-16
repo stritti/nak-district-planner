@@ -16,7 +16,9 @@ the domain's permission/confirmation rules can be preserved.
 | EventListView list | Status, approval | Cancellation/release workflow with existing confirmation and irreversible transitions | Action/workflow |
 | EventListView list | Edit action | Opens domain modal, including destructive confirmation | Action |
 | LeadersAdminView leaders table / cards | Name, email, phone | Scalar/contact via `PATCH /api/v1/districts/{district_id}/leaders/{leader_id}/inline` with `If-Match` and planner role | **Integrated** |
-| LeadersAdminView leaders table / cards | Grade, special role, home congregation, active state | Appointment, identity, scope and lifecycle semantics; not editable through the scalar inline contract | **Deferred** |
+| LeadersAdminView leaders table / cards | Grade, special role, home congregation | Plain appointment attributes; the leader's congregation does not enter any assignment conflict rule. `PATCH .../leaders/{id}/inline` with `If-Match` (428/412), tenant check for the congregation, PLANNER role. Grade cannot be cleared | **Integrated** |
+| LeadersAdminView leaders table / cards | Active state | Lifecycle: DISTRICT_ADMIN only (enforced server-side, edit hidden otherwise); advisory lock shared with assignment eligibility; deactivation needs an explicit confirmation, future assignments are kept and flagged for review | **Integrated** |
+| LeadersAdminView leaders | Notes, user link, list visibility, service end date | Workflow/identity fields; remain in the edit dialog | Action/workflow |
 | LeadersAdminView registrations table | Name, email, grade, requested congregation, status, submission date | Review/registration acceptance state, not independently mutable scalar cells | Read-only/workflow |
 | LeaderUnavailabilityList | Leader, dates, reason, note | Unavailability records use explicit add/remove; no safe conditional PATCH | Read-only/workflow |
 | MatrixTable | Congregation and date | Row header and chronological context | Read-only |

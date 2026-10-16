@@ -14,15 +14,24 @@ import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
 import { useLeaderUnavailabilitiesStore } from '../stores/leaderUnavailabilities'
 import LeadersAdminView from './LeadersAdminView.vue'
+import { ApiError } from '../api/errors'
+
+const confirmMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../api/districts', () => ({
   listDistricts: vi.fn(),
   listCongregations: vi.fn(),
   listGroups: vi.fn(),
 }))
+vi.mock('../composables/useConfirm', () => ({ useConfirm: () => confirmMock }))
 vi.mock('../api/leaders', () => ({
-  LEADER_RANKS: [{ value: 'Pr.', label: 'Pr. – Priester' }],
+  LEADER_RANKS: [
+    { value: 'Pr.', label: 'Pr. – Priester' },
+    { value: 'Ev.', label: 'Ev. – Evangelist' },
+    { value: 'Bi.', label: 'Bi. – Bischof' },
+  ],
   SPECIAL_ROLES: [{ value: 'Gemeindevorsteher', label: 'Gemeindevorsteher' }],
+  leaderDisplayName: (value: { rank: string | null; name: string }) => `${value.rank ?? ''} ${value.name}`.trim(),
   leaderNameFromId: (id: string, values: Array<{ id: string; name: string }>) =>
     values.find((value) => value.id === id)?.name ?? '—',
   createLeader: vi.fn(),
@@ -165,6 +174,7 @@ async function mountView() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  confirmMock.mockResolvedValue(true)
   vi.mocked(leadersApi.listLeaders).mockResolvedValue([leader])
   vi.mocked(districtsApi.listCongregations).mockResolvedValue([
     {
@@ -384,5 +394,103 @@ describe('LeadersAdminView inline contact editing', () => {
     const cell = wrapper.get('[data-inline-cell-id="leader-phone-desktop-l1"]')
     await cell.trigger('click')
     expect(cell.find('input').exists()).toBe(false)
+  })
+})
+
+
+async function narrowTo(role: 'PLANNER' | 'DISTRICT_ADMIN') {
+  const auth = useAuthStore()
+  auth.isSuperadmin = false
+  auth.memberships = [{ role, scope_type: 'DISTRICT', scope_id: 'd1' }] as typeof auth.memberships
+  await flushPromises()
+}
+
+async function edit(
+  wrapper: VueWrapper,
+  id: string,
+  control: 'input' | 'select',
+  value: string,
+) {
+  const cell = wrapper.get(`[data-inline-cell-id="${id}"]`)
+  await cell.trigger('click')
+  await flushPromises()
+  await cell.get(control).setValue(value)
+  await cell.get(control).trigger('keydown', { key: 'Enter' })
+  await flushPromises()
+  return cell
+}
+
+// District-level leader: the home-congregation column only exists in that section.
+const versionedLeader = { ...leader, congregation_id: null, revision: '"v1"' }
+
+describe.each(['desktop', 'mobile'] as const)('LeadersAdminView inline appointment fields (%s)', (layout) => {
+  beforeEach(() => {
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([versionedLeader])
+    vi.mocked(leadersApi.updateLeaderInline).mockResolvedValue({ ...versionedLeader, revision: '"v2"' })
+    vi.mocked(districtsApi.listCongregations).mockResolvedValue(['c1', 'c2'].map((id) => ({
+      id, district_id: 'd1', name: `Gemeinde ${id}`, group_id: null, group_name: null, service_times: [], created_at: now, updated_at: now,
+    })))
+  })
+
+  it.each([
+    ['rank', 'select', 'Bi.', { rank: 'Bi.' }],
+    ['special_role', 'select', '', { special_role: null }],
+    ['congregation_id', 'select', 'c2', { congregation_id: 'c2' }],
+  ] as const)('saves %s with the captured revision', async (field, control, value, payload) => {
+    const wrapper = (await mountView()).wrapper
+    await edit(wrapper, `leader-${field}-${layout}-l1`, control, value)
+    expect(leadersApi.updateLeaderInline).toHaveBeenCalledWith('d1', 'l1', payload, '"v1"')
+    expect(confirmMock).not.toHaveBeenCalled()
+  })
+
+  it('does not allow clearing the grade', async () => {
+    const wrapper = (await mountView()).wrapper
+    const cell = await edit(wrapper, `leader-rank-${layout}-l1`, 'select', '')
+    expect(cell.get('[role=alert]').text()).toContain('nicht leer')
+    expect(leadersApi.updateLeaderInline).not.toHaveBeenCalled()
+  })
+
+  it('asks before deactivating and keeps the draft when declined', async () => {
+    confirmMock.mockResolvedValue(false)
+    const wrapper = (await mountView()).wrapper
+    const cell = await edit(wrapper, `leader-is_active-${layout}-l1`, 'select', 'false')
+    expect(confirmMock).toHaveBeenCalledWith(expect.objectContaining({ variant: 'danger' }))
+    expect(leadersApi.updateLeaderInline).not.toHaveBeenCalled()
+    expect(cell.get('[role=alert]').text()).toContain('abgebrochen')
+  })
+
+  it('deactivates after confirmation and reactivates without a prompt', async () => {
+    const wrapper = (await mountView()).wrapper
+    await edit(wrapper, `leader-is_active-${layout}-l1`, 'select', 'false')
+    expect(leadersApi.updateLeaderInline).toHaveBeenLastCalledWith('d1', 'l1', { is_active: false }, '"v1"')
+    confirmMock.mockClear()
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([{ ...leader, is_active: false, revision: '"v2"' }])
+    const second = (await mountView()).wrapper
+    await edit(second, `leader-is_active-${layout}-l1`, 'select', 'true')
+    expect(leadersApi.updateLeaderInline).toHaveBeenLastCalledWith('d1', 'l1', { is_active: true }, '"v2"')
+    expect(confirmMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps activity read-only for planners but lets them edit the grade', async () => {
+    const { wrapper } = await mountView()
+    await narrowTo('PLANNER')
+    const activity = wrapper.get(`[data-inline-cell-id="leader-is_active-${layout}-l1"]`)
+    await activity.trigger('click')
+    expect(activity.find('select').exists()).toBe(false)
+    const rank = wrapper.get(`[data-inline-cell-id="leader-rank-${layout}-l1"]`)
+    await rank.trigger('click')
+    expect(rank.find('select').exists()).toBe(true)
+  })
+
+  it('shows the server message and offers a reload after a stale revision', async () => {
+    vi.mocked(leadersApi.updateLeaderInline).mockRejectedValue(
+      new ApiError(412, 'Precondition Failed', { detail: 'Datensatz wurde zwischenzeitlich geändert.' }),
+    )
+    const wrapper = (await mountView()).wrapper
+    const cell = await edit(wrapper, `leader-rank-${layout}-l1`, 'select', 'Bi.')
+    expect(cell.get('[role=alert]').text()).toContain('zwischenzeitlich geändert')
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([{ ...versionedLeader, rank: 'Ev.', revision: '"v9"' }])
+    await cell.get('button').trigger('click')
+    await vi.waitFor(() => expect(cell.get('[role=alert]').text()).toContain('Aktueller Stand geladen'))
   })
 })

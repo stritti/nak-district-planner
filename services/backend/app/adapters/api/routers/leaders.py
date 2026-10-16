@@ -32,19 +32,28 @@ from app.adapters.auth.permissions import (
 from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
-from app.domain.models.leader import Leader
+from app.domain.models.leader import Leader, LeaderRank, SpecialRole
 from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/leaders", tags=["leaders"])
 
 
 class LeaderInlineUpdate(BaseModel):
-    """Explicit contact-only inline contract."""
+    """Explicit inline contract: contact data, appointment attributes and activity.
+
+    Notes, user link, list visibility and service end date stay workflow fields
+    of the edit dialog. Authorisation, tenant checks and the DISTRICT_ADMIN
+    requirement for activity changes are enforced by ``update_leader``.
+    """
 
     model_config = ConfigDict(extra="forbid")
     name: str | None = Field(None, min_length=1, max_length=255)
     email: str | None = Field(None, max_length=255)
     phone: str | None = Field(None, max_length=100)
+    rank: LeaderRank | None = None
+    special_role: SpecialRole | None = None
+    congregation_id: uuid.UUID | None = None
+    is_active: bool | None = None
 
 
 def _to_utc(timestamp: datetime) -> datetime:
@@ -222,8 +231,8 @@ async def inline_update_leader(
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
     fields = body.model_fields_set
-    if not fields or (
-        "name" in fields and body.name is None
+    if not fields or any(
+        field in fields and getattr(body, field) is None for field in ("name", "rank", "is_active")
     ):
         raise HTTPException(status_code=422, detail="Dieses Feld ist nicht inline editierbar.")
     return await update_leader(
