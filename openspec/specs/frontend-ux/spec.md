@@ -131,3 +131,29 @@ Die Anwendung SHALL bei authentifizierten Benutzern auf jeder geschützten Ansic
 - **WHEN** der Benutzer den Bezirk global wechselt und anschließend zurückkehrt
 - **THEN** werden gültige Matrix- und Ereignisfilter jeweils für den zugehörigen Bezirk wiederhergestellt
 - **AND** ein Bezirkswechsel verändert die serverseitigen Rollen und Berechtigungsgrenzen nicht
+
+### Requirement: Accessible progressive editing in event tables
+All tabular overview screens SHALL keep input controls hidden in read mode and provide visible keyboard focus, accessible cell/editor labels and announced save/errors when a cell is edited. Edit controls SHALL work with touch, mouse and keyboard and SHALL not depend exclusively on hovering. Saving with a stale revision SHALL offer an accessible conflict explanation and a comparison/reload action; the draft MUST remain available until the user explicitly resolves or cancels it.
+
+#### Scenario: Keyboard-only edit
+- **WHEN** a keyboard user focuses an editable cell and activates it with Enter
+- **THEN** the editor becomes focused and announces its field label and current value
+
+#### Scenario: Stale-version feedback
+- **WHEN** the server rejects a save with HTTP 412 due to a newer row revision
+- **THEN** the editor announces the conflict and retains the draft for comparison or explicit cancellation
+
+#### Scenario: Save feedback
+- **WHEN** an inline cell change succeeds or fails
+- **THEN** the interface communicates the result accessibly and preserves focus where practical
+
+### Requirement: Application-wide table editing consistency
+The SPA SHALL apply a common compact presentation, inline editor activation, keyboard navigation, save/cancel and error-feedback pattern to all table overviews with editable data, regardless of their underlying resource. Editing SHALL only be offered for authorised mutable fields; navigation and explicit domain actions SHALL remain distinct.
+
+#### Scenario: Consistent cross-screen interaction
+- **WHEN** a user moves between two different overview tables with editable cells
+- **THEN** the same gestures, keyboard shortcuts, active-cell indicators and error states are used in both screens
+
+#### Scenario: Derived field
+- **WHEN** a cell displays a computed or protected value
+- **THEN** it remains compact and readable without suggesting that it can be edited
