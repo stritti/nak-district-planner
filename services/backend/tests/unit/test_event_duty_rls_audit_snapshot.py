@@ -76,6 +76,8 @@ def test_duty_export_slot_allowed_checks_both_assignment_sources():
     assert "event_duty_assignments" in sql
     assert "service_assignments" in sql
     assert "duty_subject_scope(current_duty_export_subject()" in sql
+    # The token must be the one presented in this session, not any token of the district.
+    assert "et.token=current_setting('app.current_export_token',true)" in sql
     assert "linked_user_sub=current_duty_export_subject()" in sql
     assert "l.user_sub=current_duty_export_subject()" in sql
 
@@ -92,7 +94,9 @@ def test_current_duty_export_subject_only_returns_bound_subjects():
 def test_eligible_duty_users_actor_check_is_planner_scoped():
     """The actor (not the candidate) must be planner-or-higher in the requested scope."""
     sql = next(s for s in event_duty_rls._FUNCTIONS if "eligible_duty_users" in s)
+    assert "actor.sub=current_setting('app.current_user_sub',true)" in sql
     assert "actor.is_superadmin" in sql
+    assert "actor_membership.user_sub=current_setting('app.current_user_sub',true)" in sql
     assert "actor_membership.role" in sql
     assert "actor_membership.scope_type='DISTRICT'" in sql
     assert "actor_membership.scope_type='CONGREGATION'" in sql
@@ -137,6 +141,8 @@ def test_export_token_owner_policies_are_subject_scoped_individually():
     subject_predicate = "subject_sub=current_setting('app.current_user_sub',true)"
     assert subject_predicate in read_policy
     assert subject_predicate in delete_policy
+    assert subject_predicate in insert_policy, "tokens may only be minted for oneself"
+    assert "token_type='INTERNAL'" in insert_policy
     assert "duty_subject_scope(subject_sub,district_id,NULL)" in insert_policy
 
 
@@ -148,3 +154,16 @@ def test_subject_slot_read_keeps_distributed_slot_membership_constraint():
     # ... and subject-bound export tokens are additionally limited to their own slots.
     assert "et.subject_sub IS NULL OR (" in rendered
     assert "duty_export_slot_allowed(ps.id)" in rendered
+
+
+def test_duty_subject_scope_binds_subject_role_and_scope():
+    """SELECT true / a dropped predicate would admit subjects outside their membership scope."""
+    sql = _function_body(_install_sql(), "duty_subject_scope")
+    assert "u.sub=p_sub" in sql, "scope is evaluated for exactly the requested subject"
+    assert "u.is_superadmin" in sql
+    assert "m.user_sub=u.sub" in sql
+    assert "m.role IN (" in sql, "a role floor is required"
+    assert "m.scope_type='DISTRICT' AND m.scope_id=p_district" in sql
+    assert "m.scope_type='CONGREGATION'" in sql
+    assert "m.scope_id=p_congregation" in sql
+    assert "c.district_id=p_district" in sql, "a congregation scope must belong to the district"
