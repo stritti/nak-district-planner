@@ -107,7 +107,7 @@ def upgrade() -> None:
     # migrations. A mismatch aborts the transaction rather than accepting
     # an altered hash or changing any existing subscriber's credentials.
     op.execute(
-        """DO $
+        """DO $hash_check$
         BEGIN
             IF EXISTS (
                 SELECT 1 FROM export_tokens
@@ -115,7 +115,7 @@ def upgrade() -> None:
             ) THEN
                 RAISE EXCEPTION 'Export token hash mismatch: aborting contract';
             END IF;
-        END $"""
+        END $hash_check$"""
     )
 
     # Overwrite only the three export functions and personal_calendar_scopes.
