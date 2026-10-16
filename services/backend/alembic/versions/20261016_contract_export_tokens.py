@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 
 import sqlalchemy as sa
+
 from alembic import op
 
 from app.adapters.db.migrations.event_duty_rls import (
@@ -23,6 +24,8 @@ from app.adapters.db.migrations.event_duty_rls import (
 )
 from app.adapters.db.migrations.rls_policies import (
     export_token_lookup_sql,
+    planning_slot_read_sql,
+    planning_slot_write_sql,
     related_planning_slot_sql,
 )
 
@@ -74,21 +77,47 @@ def _select_policies() -> tuple[tuple[str, str, str], ...]:
     )
 
 
+def _update_policies() -> tuple[tuple[str, str, str, str], ...]:
+    """Preserve the historically active read/write rules for UPDATE operations."""
+    return (
+        (
+            "planning_slots", "planning_slots_update_policy",
+            planning_slot_read_sql("planning_slots"),
+            planning_slot_write_sql("planning_slots"),
+        ),
+        (
+            "event_instances", "event_instances_update_policy",
+            related_planning_slot_sql("event_instances", planning_slot_read_sql),
+            related_planning_slot_sql("event_instances", planning_slot_write_sql),
+        ),
+        (
+            "service_assignments", "service_assignments_update_policy",
+            related_planning_slot_sql("service_assignments", planning_slot_read_sql),
+            related_planning_slot_sql("service_assignments", planning_slot_write_sql),
+        ),
+    )
+
+
 def upgrade() -> None:
     # Validate all old and mixed-version writes before cutting the plaintext away.
     op.execute(
         "UPDATE export_tokens SET token_hash=encode(sha256(token::bytea), 'hex') "
         "WHERE token_hash IS NULL"
     )
-    connection = op.get_bind()
-    mismatches = connection.execute(sa.text(
-        "SELECT count(*) FROM export_tokens "
-        "WHERE token_hash IS DISTINCT FROM encode(sha256(token::bytea), 'hex')"
-    )).scalar_one()
-    if mismatches:
-        raise RuntimeError(
-            f"Export token contract rejected {mismatches} mismatching hashes"
-        )
+    # A PostgreSQL DO block works both for offline SQL rendering and live
+    # migrations. A mismatch aborts the transaction rather than accepting
+    # an altered hash or changing any existing subscriber's credentials.
+    op.execute(
+        """DO $
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM export_tokens
+                WHERE token_hash IS DISTINCT FROM encode(sha256(token::bytea), 'hex')
+            ) THEN
+                RAISE EXCEPTION 'Export token hash mismatch: aborting contract';
+            END IF;
+        END $"""
+    )
 
     # Overwrite only the three export functions and personal_calendar_scopes.
     # CREATE OR REPLACE keeps their fixed SECURITY DEFINER search_path/grants.
@@ -106,6 +135,16 @@ def upgrade() -> None:
         op.execute(
             f"CREATE POLICY {policy} ON {table} "
             f"FOR SELECT USING {_convert_legacy_sql(using)}"
+        )
+
+    # The old write-policy USING predicates also read plaintext export
+    # credentials; converting only SELECT policies leaves DROP COLUMN blocked.
+    for table, policy, using, check in _update_policies():
+        op.execute(f"DROP POLICY IF EXISTS {policy} ON {table}")
+        op.execute(
+            f"CREATE POLICY {policy} ON {table} FOR UPDATE "
+            f"USING {_convert_legacy_sql(using)} "
+            f"WITH CHECK {_convert_legacy_sql(check)}"
         )
 
     op.alter_column(
