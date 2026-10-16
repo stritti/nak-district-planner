@@ -41,3 +41,22 @@ class NotificationORM(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class NotificationUserStateORM(Base):
+    """User-specific notification state, never shared across principals."""
+
+    __tablename__ = "notification_user_states"
+
+    notification_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notifications.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_sub: Mapped[str] = mapped_column(
+        String(512),
+        ForeignKey("users.sub", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
