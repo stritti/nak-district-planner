@@ -2,7 +2,7 @@
 
 **Betroffen**
 
-Bestehende Installationen mit öffentlichen, internen oder persönlichen Kalenderabonnements. Dieses Update ergänzt eine nullable `token_hash`-Spalte, bewahrt aber sämtliche bisherigen Klartext-Tokens. Der Schutz gegen einen Datenbank-Leak ist erst nach einer gesonderten Contract-Migration vollständig; die Folgearbeit wird in #582 nachverfolgt.
+Bestehende Installationen mit öffentlichen, internen oder persönlichen Kalenderabonnements. Dieses Update ergänzt eine nullable `token_hash`-Spalte, bewahrt aber sämtliche bisherigen Klartext-Tokens. Der Schutz gegen einen Datenbank-Leak ist erst nach einer gesonderten Contract-Migration vollständig; die Folgearbeit wird in [#610](https://github.com/stritti/nak-district-planner/issues/610) nachverfolgt.
 
 **Vor dem Update**
 
