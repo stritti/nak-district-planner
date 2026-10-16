@@ -235,4 +235,66 @@ describe('ExportTokensView', () => {
     expect(toast.error).toHaveBeenCalledWith('Löschen fehlgeschlagen', 'Provider nicht erreichbar')
     expect(wrapper.text()).toContain('Bezirk öffentlich')
   })
+  it('shows the created secret immediately while congregation names are still loading', async () => {
+    vi.mocked(districtApi.listCongregations).mockResolvedValue([])
+    const { wrapper, toast } = mountView()
+    await flushPromises()
+    await wrapper.get('button.btn-primary').trigger('click')
+    const fields = wrapper.findAll('.form-input')
+    await fields[0]!.setValue('Feed')
+    await fields[2]!.setValue('district-1')
+    await flushPromises()
+    let resolveNames!: (names: typeof congregation[]) => void
+    vi.mocked(districtApi.listCongregations).mockReturnValueOnce(new Promise((resolve) => {
+      resolveNames = resolve
+    }))
+
+    await wrapper.findAll('button').find((button) => button.text().includes('Token erstellen'))!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Neuer Export-Token')
+    expect(wrapper.html()).toContain('/export/secret-path-token/calendar.ics')
+    expect(toast.success).toHaveBeenCalledOnce()
+    resolveNames([])
+    await flushPromises()
+  })
+
+  it('preserves the created secret when the congregation name refresh fails', async () => {
+    vi.mocked(districtApi.listCongregations).mockResolvedValue([])
+    const { wrapper, toast } = mountView()
+    await flushPromises()
+    await wrapper.get('button.btn-primary').trigger('click')
+    const fields = wrapper.findAll('.form-input')
+    await fields[0]!.setValue('Feed')
+    await fields[2]!.setValue('district-1')
+    await flushPromises()
+    vi.mocked(districtApi.listCongregations).mockRejectedValueOnce(new Error('Offline'))
+
+    await wrapper.findAll('button').find((button) => button.text().includes('Token erstellen'))!.trigger('click')
+    await flushPromises()
+
+    expect(exportApi.createExportToken).toHaveBeenCalledOnce()
+    expect(wrapper.text()).not.toContain('Neuer Export-Token')
+    expect(wrapper.html()).toContain('/export/secret-path-token/calendar.ics')
+    expect(toast.success).toHaveBeenCalledOnce()
+    expect(toast.error).toHaveBeenCalledWith(
+      'Gemeindenamen konnten nicht geladen werden',
+      'Kalenderlinks bleiben verfügbar.',
+    )
+  })
+
+  it('reports initial congregation preload failures without hiding token metadata', async () => {
+    vi.mocked(districtApi.listCongregations).mockRejectedValueOnce(new Error('Offline'))
+    vi.mocked(exportApi.listExportTokens).mockResolvedValue([token({ token: null })])
+    const { wrapper, toast } = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Bezirk öffentlich')
+    expect(wrapper.find('code').exists()).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith(
+      'Gemeindenamen konnten nicht geladen werden',
+      'Kalenderlinks bleiben verfügbar.',
+    )
+  })
+
 })

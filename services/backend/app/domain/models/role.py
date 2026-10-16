@@ -3,7 +3,9 @@
 
 """app/domain/models/role.py: Module."""
 
-from enum import Enum, StrEnum
+from __future__ import annotations
+
+from enum import StrEnum
 
 
 class Role(StrEnum):
@@ -23,10 +25,8 @@ class Role(StrEnum):
 
         Returns True if self has LOWER privilege than other.
         """
-        # Define the hierarchy order from highest to lowest
-        hierarchy = [Role.DISTRICT_ADMIN, Role.CONGREGATION_ADMIN, Role.PLANNER, Role.VIEWER]
         # Lower index = higher privilege, so self < other means self has lower privilege
-        return hierarchy.index(self) > hierarchy.index(other)
+        return PRIVILEGE_ORDER.index(self) > PRIVILEGE_ORDER.index(other)
 
     def __le__(self, other: Role) -> bool:
         """Return True if self has at most the privilege of other."""
@@ -39,3 +39,25 @@ class Role(StrEnum):
     def __ge__(self, other: Role) -> bool:
         """Return True if self has at least the privilege of other."""
         return other <= self
+
+
+PRIVILEGE_ORDER: tuple[Role, ...] = (
+    Role.DISTRICT_ADMIN,
+    Role.CONGREGATION_ADMIN,
+    Role.PLANNER,
+    Role.VIEWER,
+)
+
+
+def roles_at_least(role: Role) -> tuple[Role, ...]:
+    """Return all roles whose privilege is at least the given role.
+
+    Single source of truth for role sets shared by Python permission guards
+    and generated SQL RLS role filters.
+    """
+    return PRIVILEGE_ORDER[: PRIVILEGE_ORDER.index(role) + 1]
+
+
+def roles_at_least_sql(role: Role) -> str:
+    """Render roles_at_least as a SQL literal list for IN (...) clauses."""
+    return ",".join(f"'{member.value}'" for member in roles_at_least(role))

@@ -363,6 +363,10 @@ async def test_export_token_crud() -> None:
         await export_router.delete_export_token(auth, token.id, db, repo=token_repo)
 
     assert created.label == "X"
+    stored = token_repo.save.call_args.args[0]
+    assert created.token == stored.token
+    assert stored.token_hash is not None
+    assert listed[0].token is None
     assert len(listed) == 1
     assert listed[0].id == token.id
 
@@ -402,6 +406,10 @@ async def test_export_token_management() -> None:
         await export_router.delete_export_token(auth, token.id, db, repo=token_repo)
 
     assert created.label == "X"
+    stored = token_repo.save.call_args.args[0]
+    assert created.token == stored.token
+    assert stored.token_hash is not None
+    assert listed[0].token is None
     assert len(listed) == 1
     assert listed[0].id == token.id
 

@@ -7,6 +7,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useDistrictsStore } from '../stores/districts'
 import { useAuthStore } from '../stores/auth'
 import PersonalCalendarView from './PersonalCalendarView.vue'
+import CopyButton from '../components/CopyButton.vue'
 import * as api from '../api/personalCalendar'
 vi.mock('../api/personalCalendar', () => ({ listPersonalEvents: vi.fn(), listPersonalTokens: vi.fn(), createPersonalToken: vi.fn(), revokePersonalToken: vi.fn() }))
 beforeEach(() => {
@@ -87,4 +88,85 @@ it('renders active appointments without a cancellation warning', async () => {
  vi.mocked(api.listPersonalEvents).mockResolvedValueOnce([{planning_slot_id:'s',uid:'active@nak',title:'Probe',start_at:'2026-10-14T18:00:00Z',end_at:'2026-10-14T19:00:00Z',status:'CONFIRMED',duties:['Dirigent'],congregation_id:null}])
  const wrapper=mount(PersonalCalendarView);await flushPromises()
  expect(wrapper.text()).toContain('Probe');expect(wrapper.text()).not.toContain('Abgesagt')
+})
+
+it('provides an absolute subscription URL to the copy action', async () => {
+  vi.mocked(api.createPersonalToken).mockResolvedValue({
+    id: 'fresh', token: 'secret', label: 'Mein Kalender',
+  })
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+  await wrapper.get('[data-testid="create-feed"]').trigger('click')
+  await flushPromises()
+
+  expect(wrapper.getComponent(CopyButton).props('value')).toBe(
+    `${window.location.origin}/api/v1/export/secret/calendar.ics`,
+  )
+})
+
+it('keeps the newly created secret when dates change and events fail to reload', async () => {
+  vi.mocked(api.createPersonalToken).mockResolvedValue({
+    id: 'fresh', token: 'secret', label: 'Mein Kalender',
+  })
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+  await wrapper.get('[data-testid="create-feed"]').trigger('click')
+  await flushPromises()
+  vi.mocked(api.listPersonalEvents).mockRejectedValueOnce(new Error('Zeitraum nicht geladen'))
+
+  await wrapper.findAll('input[type="date"]')[0]!.setValue('2026-11-01')
+  await flushPromises()
+
+  expect(wrapper.get('[role="alert"]').text()).toContain('Zeitraum nicht geladen')
+  expect(wrapper.getComponent(CopyButton).props('value')).toContain('/export/secret/')
+  expect(api.listPersonalTokens).toHaveBeenCalledOnce()
+})
+
+it('does not discard a creation response when only the dates change', async () => {
+  let resolveCreation!: (token: api.PersonalToken) => void
+  vi.mocked(api.createPersonalToken).mockReturnValueOnce(new Promise((resolve) => {
+    resolveCreation = resolve
+  }))
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+  await wrapper.get('[data-testid="create-feed"]').trigger('click')
+  await wrapper.findAll('input[type="date"]')[0]!.setValue('2026-11-01')
+  await flushPromises()
+  resolveCreation({ id: 'fresh', token: 'secret', label: 'Mein Kalender' })
+  await flushPromises()
+
+  expect(wrapper.getComponent(CopyButton).props('value')).toContain('/export/secret/')
+})
+
+it('clears secrets on an identity switch even when event loading fails', async () => {
+  vi.mocked(api.createPersonalToken).mockResolvedValue({
+    id: 'fresh', token: 'private-secret', label: 'Mein Kalender',
+  })
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+  await wrapper.get('[data-testid="create-feed"]').trigger('click')
+  await flushPromises()
+  vi.mocked(api.listPersonalEvents).mockRejectedValueOnce(new Error('Access denied'))
+  useAuthStore().user = { sub: 'other', email: 'other@example.org', name: 'Other' }
+  await flushPromises()
+
+  expect(wrapper.findComponent(CopyButton).exists()).toBe(false)
+  expect(wrapper.html()).not.toContain('private-secret')
+  expect(api.listPersonalTokens).toHaveBeenLastCalledWith('d', 'other')
+})
+
+it('ignores an old identity token response and remains usable after clearing the scope', async () => {
+  let resolveTokens!: (tokens: api.PersonalToken[]) => void
+  vi.mocked(api.listPersonalTokens).mockReturnValueOnce(new Promise((resolve) => {
+    resolveTokens = resolve
+  }))
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+  useDistrictsStore().selectedDistrictId = ''
+  await flushPromises()
+  resolveTokens([{ id: 'old', token: 'private-secret', label: 'Old' }])
+  await flushPromises()
+
+  expect(wrapper.find('[role="status"]').exists()).toBe(false)
+  expect(wrapper.html()).not.toContain('private-secret')
 })
