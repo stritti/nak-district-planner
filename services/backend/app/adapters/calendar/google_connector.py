@@ -11,14 +11,17 @@ Credentials format: {"access_token": "ya29.a0AfH6SMB..."}
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
 import httpx
 
+from app.adapters.calendar.bounded_http import make_bounded_client
 from app.adapters.calendar.deletion import delete_resource
 from app.adapters.calendar.http_policy import resilient_request
+from app.adapters.calendar.pagination_budget import PaginationBudget
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -26,8 +29,46 @@ from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 class GoogleCalendarConnector(CalendarConnector):
     """Adapter for Google Calendar API."""
 
-    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(timeout=30.0)
+    def __init__(
+        self,
+        client: httpx.AsyncClient | None = None,
+        budget_factory: Callable[[], PaginationBudget] = PaginationBudget.from_settings,
+    ) -> None:
+        self._client = client or make_bounded_client()
+        self._budget_factory = budget_factory
+
+    async def _fetch_pages(
+        self,
+        url: str,
+        params: dict[str, Any],
+        headers: dict[str, str],
+        budget: PaginationBudget,
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while True:
+            page_params = dict(params)
+            if page_token:
+                page_params["pageToken"] = page_token
+            response = await resilient_request(
+                lambda params=page_params: self._client.get(url, params=params, headers=headers),
+                provider="Google",
+            )
+            content_type = response.headers.get("content-type", "")
+            if "text/html" in content_type:
+                raise CalendarConnectorError(
+                    f"URL liefert HTML statt eines Kalenders (Content-Type: {content_type}). "
+                    "Bitte die direkte .ics-URL verwenden."
+                )
+            data = response.json()
+            page_items = data.get("items", [])
+            page_token = data.get("nextPageToken")
+            budget.charge(
+                items=len(page_items), size_bytes=len(response.content), next_token=page_token
+            )
+            items.extend(page_items)
+            if not page_token:
+                return items
 
     async def fetch_events(
         self,
@@ -53,27 +94,8 @@ class GoogleCalendarConnector(CalendarConnector):
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        items: list[dict[str, Any]] = []
-        page_token: str | None = None
-        while True:
-            page_params = dict(params)
-            if page_token:
-                page_params["pageToken"] = page_token
-            response = await resilient_request(
-                lambda params=page_params: self._client.get(url, params=params, headers=headers),
-                provider="Google",
-            )
-            content_type = response.headers.get("content-type", "")
-            if "text/html" in content_type:
-                raise CalendarConnectorError(
-                    f"URL liefert HTML statt eines Kalenders (Content-Type: {content_type}). "
-                    "Bitte die direkte .ics-URL verwenden."
-                )
-            data = response.json()
-            items.extend(data.get("items", []))
-            page_token = data.get("nextPageToken")
-            if not page_token:
-                break
+        budget = self._budget_factory()
+        items = await budget.run(self._fetch_pages(url, params, headers, budget))
 
         events: list[RawCalendarEvent] = []
         for item in items:

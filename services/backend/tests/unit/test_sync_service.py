@@ -1023,6 +1023,20 @@ class TestWindowBoundedProvider:
         mocks["connector"].resource_exists.assert_not_awaited()
 
 
+class TestFetchBudgetAbort:
+    async def test_aborted_fetch_changes_and_cancels_nothing(self, mocks):
+        """A budget abort (#605) must not look like success or an empty snapshot."""
+        slot = _make_slot()
+        mocks["integration_repo"].get.return_value = _integration()
+        mocks["connector"].fetch_events.side_effect = CalendarConnectorError("Limit")
+        with pytest.raises(CalendarConnectorError):
+            await run_sync(_INT_ID, mocks["session"], now=_NOW)
+        assert slot.status == PlanningSlotStatus.ACTIVE
+        mocks["connector"].resource_exists.assert_not_called()
+        mocks["slot_repo"].save.assert_not_called()
+        mocks["session"].commit.assert_not_awaited()
+
+
 class TestCodexReviewFindingsRound4:
     async def test_gap_cancellation_confirmed_by_planner_is_not_undone(self, mocks):
         slot = _make_slot()

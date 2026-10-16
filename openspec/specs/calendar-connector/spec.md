@@ -175,3 +175,24 @@ The calendar integration form SHALL offer ICS and CalDAV as selectable types and
 #### Scenario: Opening the create form
 - **WHEN** an admin opens the form for a new calendar integration
 - **THEN** only ICS and CalDAV SHALL be selectable and Google/Microsoft SHALL be shown disabled as "geplant"
+
+### Requirement: Paginated provider fetches run under a whole-fetch budget
+Adapters that follow provider pagination (Google, Microsoft) SHALL enforce one budget across all pages: maximum pages, collected entries, received bytes and elapsed time (`SYNC_MAX_PAGES`, `SYNC_MAX_EVENTS`, `SYNC_MAX_RESPONSE_BYTES`, `SYNC_MAX_FETCH_SECONDS`), and SHALL stop when a continuation token or link repeats. Exceeding a limit SHALL raise a sanitized `CalendarConnectorError` and return no partial result.
+
+#### Scenario: Provider repeats a continuation token
+- **WHEN** a provider returns the same `nextPageToken` or `nextLink` twice
+- **THEN** the fetch aborts after the repeated page with a connector error
+
+#### Scenario: Budget exceeded
+- **WHEN** pages, entries, bytes or time exceed their limit
+- **THEN** the sync fails without creating, changing or cancelling any event
+
+#### Scenario: Single oversized or compressed response
+- **WHEN** one provider response declares or streams more than `SYNC_MAX_RESPONSE_BYTES`, or arrives compressed
+- **THEN** the transfer is aborted while streaming, before the body is buffered or parsed
+- **AND** the fetch fails with a connector error
+
+#### Scenario: Hanging provider
+- **WHEN** the elapsed fetch time exceeds `SYNC_MAX_FETCH_SECONDS` while a request is still in flight
+- **THEN** the whole fetch is cancelled with a connector error
+

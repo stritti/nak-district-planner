@@ -120,6 +120,12 @@ class Settings(BaseSettings):
     # Upper bound of in-window occurrences per feed/resource; protects against
     # hostile or broken RRULEs in external calendars.
     sync_max_occurrences: int = Field(default=5000, ge=1)
+    # Whole-fetch budget for paginated provider APIs (#605): pages, collected
+    # events, received bytes and wall-clock seconds across all pages.
+    sync_max_pages: int = Field(default=100, ge=1)
+    sync_max_events: int = Field(default=20000, ge=1)
+    sync_max_response_bytes: int = Field(default=50_000_000, ge=1)
+    sync_max_fetch_seconds: float = Field(default=300.0, gt=0)
     min_travel_minutes: int = Field(default=30, ge=0)
     # Dev only: allow http:// and private/loopback calendar URLs (local test
     # servers). Rejected by production_guard — SSRF protection, see #463.
