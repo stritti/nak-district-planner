@@ -717,3 +717,136 @@ class TestClientLifecycle:
         client = await adapter.get_httpx_client()
         assert isinstance(client, httpx.AsyncClient)
         await adapter.close()
+
+
+HOST = "keycloak.internal.example"
+
+
+def _leaky_error() -> httpx.ConnectError:
+    return httpx.ConnectError(f"All connection attempts to https://{HOST}:8443/realms/secret failed")
+
+
+def _assert_no_provider_details(caplog: pytest.LogCaptureFixture, error: Exception) -> None:
+    for text in (caplog.text, str(error)):
+        assert HOST not in text
+        assert "secret" not in text
+        assert "8443" not in text
+
+
+class TestProviderDetailsStayOutOfMessagesAndLogs:
+    """Exception messages reach the logs (deps logs TokenValidationError); keep URLs out (#471)."""
+
+    @pytest.mark.asyncio
+    async def test_discovery_transport_error(
+        self, oidc_adapter: OIDCAdapter, mock_httpx_client: AsyncMock, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        mock_httpx_client.get.side_effect = _leaky_error()
+        with caplog.at_level("DEBUG"), pytest.raises(OIDCDiscoveryError, match="discovery failed") as error:
+            await oidc_adapter.discover()
+        _assert_no_provider_details(caplog, error.value)
+        assert "ConnectError" in str(error.value)
+
+    @pytest.mark.asyncio
+    async def test_discovery_invalid_response(
+        self, oidc_adapter: OIDCAdapter, mock_httpx_client: AsyncMock, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        invalid = response(payload={})
+        invalid.json.side_effect = json.JSONDecodeError(f"bad {HOST} secret", "", 0)
+        mock_httpx_client.get.return_value = invalid
+        with caplog.at_level("DEBUG"), pytest.raises(OIDCDiscoveryError, match="invalid response") as error:
+            await oidc_adapter.discover()
+        _assert_no_provider_details(caplog, error.value)
+
+    @pytest.mark.asyncio
+    async def test_jwks_transport_error_without_cache(
+        self, oidc_adapter: OIDCAdapter, mock_httpx_client: AsyncMock, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        mock_httpx_client.get.side_effect = _leaky_error()
+        with caplog.at_level("DEBUG"), pytest.raises(JWKSFetchError) as error:
+            await oidc_adapter.fetch_jwks()
+        _assert_no_provider_details(caplog, error.value)
+
+    @pytest.mark.asyncio
+    async def test_jwks_invalid_response(
+        self, oidc_adapter: OIDCAdapter, mock_httpx_client: AsyncMock, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        invalid = response(payload={})
+        invalid.json.side_effect = json.JSONDecodeError(f"bad {HOST} secret", "", 0)
+        mock_httpx_client.get.return_value = invalid
+        with caplog.at_level("DEBUG"), pytest.raises(JWKSFetchError) as error:
+            await oidc_adapter.fetch_jwks()
+        _assert_no_provider_details(caplog, error.value)
+
+    @pytest.mark.asyncio
+    async def test_userinfo_request_error(
+        self, oidc_adapter: OIDCAdapter, mock_httpx_client: AsyncMock, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        oidc_adapter._discovery_cache = {**MOCK_DISCOVERY, "userinfo_endpoint": f"https://{HOST}/userinfo"}
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        mock_httpx_client.get.side_effect = _leaky_error()
+        with caplog.at_level("DEBUG"), pytest.raises(TokenValidationError, match="userinfo request failed") as error:
+            await oidc_adapter._fetch_userinfo_claims("opaque")
+        _assert_no_provider_details(caplog, error.value)
+
+    @pytest.mark.asyncio
+    async def test_introspection_request_error(
+        self, oidc_adapter: OIDCAdapter, mock_httpx_client: AsyncMock, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        oidc_adapter._discovery_cache = {**MOCK_DISCOVERY, "introspection_endpoint": f"https://{HOST}/introspect"}
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        mock_httpx_client.post.side_effect = _leaky_error()
+        with caplog.at_level("DEBUG"), pytest.raises(TokenValidationError, match="introspection request failed") as error:
+            await oidc_adapter._introspect_token("opaque")
+        _assert_no_provider_details(caplog, error.value)
+
+
+class TestJWKSThrottleWithoutCache:
+    @pytest.mark.asyncio
+    async def test_failed_first_fetch_is_not_retried_within_the_interval(
+        self, oidc_adapter: OIDCAdapter, mock_httpx_client: AsyncMock,
+    ) -> None:
+        """No cache + failing IdP: neither forced nor plain calls may hammer the provider."""
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        mock_httpx_client.get.side_effect = httpx.ConnectError("offline")
+
+        with pytest.raises(JWKSFetchError):
+            await oidc_adapter.fetch_jwks()
+        for force in (True, False, True):
+            with pytest.raises(JWKSFetchError, match="throttled"):
+                await oidc_adapter.fetch_jwks(force_refresh=force)
+        assert mock_httpx_client.get.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_retry_is_allowed_once_the_interval_has_elapsed(
+        self, oidc_adapter: OIDCAdapter, mock_httpx_client: AsyncMock,
+    ) -> None:
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        mock_httpx_client.get.side_effect = httpx.ConnectError("offline")
+        with pytest.raises(JWKSFetchError):
+            await oidc_adapter.fetch_jwks()
+
+        oidc_adapter._jwks_last_attempt = datetime.now(UTC) - timedelta(seconds=120)
+        mock_httpx_client.get.side_effect = None
+        mock_httpx_client.get.return_value = response(payload=MOCK_JWKS)
+        assert await oidc_adapter.fetch_jwks() == MOCK_JWKS
+        assert mock_httpx_client.get.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_expired_cache_with_failing_idp_is_throttled_too(
+        self, oidc_adapter: OIDCAdapter, mock_httpx_client: AsyncMock,
+    ) -> None:
+        oidc_adapter._discovery_cache = MOCK_DISCOVERY
+        oidc_adapter._discovery_cache_time = datetime.now(UTC)
+        oidc_adapter._jwks_cache = MOCK_JWKS
+        oidc_adapter._jwks_cache_time = datetime.now(UTC) - timedelta(hours=2)
+        mock_httpx_client.get.side_effect = httpx.ConnectError("offline")
+
+        for _ in range(4):
+            assert await oidc_adapter.fetch_jwks() == MOCK_JWKS  # stale cache served
+        assert mock_httpx_client.get.await_count == 1
