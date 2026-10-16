@@ -27,6 +27,7 @@ export interface CongregationResponse {
   service_times: ServiceTime[]
   created_at: string
   updated_at: string
+  revision?: string
 }
 
 export interface CongregationGroupResponse {
@@ -98,9 +99,12 @@ export function updateCongregation(
     service_times?: ServiceTime[]
     group_id?: string | null
   },
+  revision: string,
 ): Promise<CongregationResponse> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
   return apiFetch(`/api/v1/districts/${districtId}/congregations/${congregationId}`, {
     method: 'PATCH',
+    headers: { 'If-Match': revision },
     body: JSON.stringify(payload),
   })
 }

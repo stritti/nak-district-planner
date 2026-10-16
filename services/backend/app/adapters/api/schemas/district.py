@@ -150,6 +150,7 @@ class CongregationResponse(BaseModel):
     service_times: list[ServiceTime]
     created_at: datetime
     updated_at: datetime
+    revision: str
 
 
 class CongregationGroupCreate(BaseModel):

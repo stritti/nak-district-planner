@@ -324,6 +324,7 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
 
     cong_repo = AsyncMock()
     cong_repo.get.return_value = congregation
+    cong_repo.get_for_update.return_value = congregation
 
     group = CongregationGroup.create(name="Sued", district_id=district_id)
     group.id = group_id
@@ -348,6 +349,7 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
             AsyncMock(scalar=AsyncMock(return_value=district_id)),  # target in same district
             cong_repo=cong_repo,
             group_repo=group_repo,
+            if_match=r._cong_response(congregation).revision,
         )
         await r.update_congregation(
             district_id,
@@ -360,6 +362,7 @@ async def test_update_congregation_updates_optional_fields_and_group_name() -> N
             AsyncMock(scalar=AsyncMock(return_value=district_id)),  # target in same district
             cong_repo=cong_repo,
             group_repo=group_repo,
+            if_match=updated.revision,
         )
 
     assert updated.name == "Neu"
@@ -384,6 +387,7 @@ async def test_validate_group_assignment_raises_on_cross_district() -> None:
 async def test_update_congregation_not_found() -> None:
     cong_repo = AsyncMock()
     cong_repo.get.return_value = None
+    cong_repo.get_for_update.return_value = None
     with pytest.raises(HTTPException) as exc:
         await r.update_congregation(
             uuid.uuid4(),
@@ -1316,3 +1320,80 @@ class TestConditionalRename:
                 object(), AsyncMock(), group_repo=repo, if_match='"x"',
             )
         assert err.value.status_code == 404
+
+
+class TestConditionalCongregationUpdate:
+    """Congregation dialog edits are conditional writes: 428 missing, 412 stale."""
+
+    @staticmethod
+    def _setup():
+        district_id = uuid.uuid4()
+        congregation = Congregation.create(name="Alt", district_id=district_id)
+        repo = AsyncMock()
+        repo.get_for_update.return_value = congregation
+        return district_id, congregation, repo
+
+    @staticmethod
+    async def _update(district_id, congregation, repo, **kwargs):
+        with (
+            patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+            patch("app.adapters.api.routers.districts.require_role_in_district"),
+        ):
+            return await r.update_congregation(
+                district_id, congregation.id, CongregationUpdate(name="Neu"), object(),
+                AsyncMock(), cong_repo=repo, group_repo=AsyncMock(), **kwargs,
+            )
+
+    @pytest.mark.asyncio
+    async def test_current_revision_updates_and_returns_a_new_revision(self) -> None:
+        district_id, congregation, repo = self._setup()
+        previous = r._cong_response(congregation).revision
+        result = await self._update(district_id, congregation, repo, if_match=previous)
+        assert result.name == "Neu"
+        assert result.revision != previous
+        repo.get_for_update.assert_awaited_once_with(congregation.id)
+
+    @pytest.mark.asyncio
+    async def test_missing_precondition_is_rejected_without_changes(self) -> None:
+        district_id, congregation, repo = self._setup()
+        with pytest.raises(HTTPException) as err:
+            await self._update(district_id, congregation, repo)
+        assert err.value.status_code == 428
+        assert congregation.name == "Alt"
+        repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_stale_revision_is_rejected_without_changes(self) -> None:
+        district_id, congregation, repo = self._setup()
+        with pytest.raises(HTTPException) as err:
+            await self._update(district_id, congregation, repo, if_match='"stale"')
+        assert err.value.status_code == 412
+        assert congregation.name == "Alt"
+        repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_back_to_back_writes_get_distinct_revisions(self) -> None:
+        district_id, congregation, repo = self._setup()
+        first = await self._update(
+            district_id, congregation, repo, if_match=r._cong_response(congregation).revision
+        )
+        second = await self._update(district_id, congregation, repo, if_match=first.revision)
+        assert second.revision != first.revision
+
+    @pytest.mark.asyncio
+    async def test_permission_is_checked_before_the_precondition(self) -> None:
+        district_id, congregation, repo = self._setup()
+        denied = r.PermissionError("nope")
+        with (
+            patch("app.adapters.api.routers.districts.assert_has_role_in_district", side_effect=denied),
+            patch(
+                "app.adapters.api.routers.districts.assert_has_role_in_congregation",
+                side_effect=denied,
+            ),
+            pytest.raises(HTTPException) as err,
+        ):
+            await r.update_congregation(
+                district_id, congregation.id, CongregationUpdate(name="Neu"), object(),
+                AsyncMock(), cong_repo=repo, group_repo=AsyncMock(),
+            )
+        assert err.value.status_code == 403

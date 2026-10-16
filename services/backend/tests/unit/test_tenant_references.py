@@ -321,6 +321,7 @@ async def test_congregation_update_rejects_foreign_invitation_target() -> None:
             await districts_router.update_congregation(
                 DISTRICT, congregation.id, body, object(), _db(), cong_repo=cong_repo,
                 group_repo=AsyncMock(),
+                if_match=districts_router._cong_response(congregation).revision,
             )
 
     _assert_rejected(exc, "invitation_target_congregation_id")
