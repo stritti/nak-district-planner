@@ -18,6 +18,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
+from app.adapters.calendar.bounded_http import make_bounded_client
 from app.adapters.calendar.deletion import delete_resource
 from app.adapters.calendar.http_policy import resilient_request
 from app.adapters.calendar.pagination_budget import PaginationBudget
@@ -44,8 +45,36 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
         client: httpx.AsyncClient | None = None,
         budget_factory: Callable[[], PaginationBudget] = PaginationBudget.from_settings,
     ) -> None:
-        self._client = client or httpx.AsyncClient(timeout=30.0)
+        self._client = client or make_bounded_client()
         self._budget_factory = budget_factory
+
+    async def _fetch_pages(
+        self,
+        url: str,
+        params: dict[str, Any],
+        headers: dict[str, str],
+        budget: PaginationBudget,
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        next_url: str | None = url
+        next_params: dict[str, Any] | None = params
+        while next_url:
+            response = await resilient_request(
+                lambda next_url=next_url, next_params=next_params: self._client.get(
+                    next_url, params=next_params, headers=headers
+                ),
+                provider="Microsoft",
+            )
+            data = response.json()
+            page_items = data.get("value", [])
+            raw_next_url = data.get("@odata.nextLink")
+            next_url = _validate_next_link(raw_next_url) if raw_next_url else None
+            budget.charge(
+                items=len(page_items), size_bytes=len(response.content), next_token=next_url
+            )
+            items.extend(page_items)
+            next_params = None
+        return items
 
     async def fetch_events(
         self,
@@ -68,26 +97,8 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
 
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        items: list[dict[str, Any]] = []
-        next_url: str | None = url
-        next_params: dict[str, Any] | None = params
         budget = self._budget_factory()
-        while next_url:
-            response = await resilient_request(
-                lambda next_url=next_url, next_params=next_params: self._client.get(
-                    next_url, params=next_params, headers=headers
-                ),
-                provider="Microsoft",
-            )
-            data = response.json()
-            page_items = data.get("value", [])
-            raw_next_url = data.get("@odata.nextLink")
-            next_url = _validate_next_link(raw_next_url) if raw_next_url else None
-            budget.charge(
-                items=len(page_items), size_bytes=len(response.content), next_token=next_url
-            )
-            items.extend(page_items)
-            next_params = None
+        items = await budget.run(self._fetch_pages(url, params, headers, budget))
 
         events: list[RawCalendarEvent] = []
         for item in items:

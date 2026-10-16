@@ -187,3 +187,12 @@ Adapters that follow provider pagination (Google, Microsoft) SHALL enforce one b
 - **WHEN** pages, entries, bytes or time exceed their limit
 - **THEN** the sync fails without creating, changing or cancelling any event
 
+#### Scenario: Single oversized or compressed response
+- **WHEN** one provider response declares or streams more than `SYNC_MAX_RESPONSE_BYTES`, or arrives compressed
+- **THEN** the transfer is aborted while streaming, before the body is buffered or parsed
+- **AND** the fetch fails with a connector error
+
+#### Scenario: Hanging provider
+- **WHEN** the elapsed fetch time exceeds `SYNC_MAX_FETCH_SECONDS` while a request is still in flight
+- **THEN** the whole fetch is cancelled with a connector error
+

@@ -130,3 +130,92 @@ async def test_microsoft_item_and_byte_budget() -> None:
     )
     with pytest.raises(CalendarConnectorError, match="Datenmenge"):
         await connector.fetch_events(CREDS)
+
+
+# ── response size is limited while streaming, not after parsing ─────────────────
+
+
+from app.adapters.calendar.bounded_http import BoundedTransport, make_bounded_client  # noqa: E402
+
+
+def _bounded(handler, max_bytes: int = 1000) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=BoundedTransport(httpx.MockTransport(handler), max_bytes=max_bytes)
+    )
+
+
+async def test_single_oversized_page_is_aborted_before_it_is_fully_read() -> None:
+    delivered = 0
+
+    async def chunks():
+        nonlocal delivered
+        for _ in range(1000):
+            delivered += 100
+            yield b"x" * 100
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=chunks(), headers={"content-type": "application/json"})
+
+    async with _bounded(handler, max_bytes=1000) as client:
+        with pytest.raises(CalendarConnectorError, match="Datenmenge"):
+            await client.get("https://example.test/events")
+    assert delivered <= 1200  # stopped near the limit instead of reading 100 kB
+
+
+async def test_declared_content_length_over_the_limit_is_rejected_up_front() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"x" * 10, headers={"content-length": "999999"})
+
+    async with _bounded(handler) as client:
+        with pytest.raises(CalendarConnectorError, match="Datenmenge"):
+            await client.get("https://example.test/events")
+
+
+async def test_compressed_responses_are_rejected_to_stop_decompression_bombs() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"x", headers={"content-encoding": "gzip"})
+
+    async with _bounded(handler) as client:
+        with pytest.raises(CalendarConnectorError, match="Komprimierung"):
+            await client.get("https://example.test/events")
+
+
+async def test_identity_encoding_is_requested_and_small_pages_pass() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["accept-encoding"] = request.headers.get("accept-encoding", "")
+        return httpx.Response(200, json={"items": []})
+
+    async with _bounded(handler) as client:
+        response = await client.get("https://example.test/events")
+    assert response.json() == {"items": []}
+    assert seen["accept-encoding"] == "identity"
+
+
+def test_default_client_is_bounded_by_the_configured_limit() -> None:
+    client = make_bounded_client()
+    assert isinstance(client._transport, BoundedTransport)
+
+
+async def test_total_deadline_cancels_a_slow_fetch_actively() -> None:
+    import asyncio
+
+    async def never_finishes():
+        await asyncio.sleep(30)
+
+    with pytest.raises(CalendarConnectorError, match="Zeitbudget"):
+        await _budget(max_seconds=0.05).run(never_finishes())
+
+
+async def test_google_fetch_is_cancelled_when_a_request_hangs() -> None:
+    import asyncio
+
+    async def hang(*_, **__):
+        await asyncio.sleep(30)
+
+    client = MagicMock(spec=httpx.AsyncClient)
+    client.get = AsyncMock(side_effect=hang)
+    connector = GoogleCalendarConnector(client=client, budget_factory=lambda: _budget(max_seconds=0.05))
+    with pytest.raises(CalendarConnectorError, match="Zeitbudget"):
+        await connector.fetch_events(CREDS)

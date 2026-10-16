@@ -12,10 +12,15 @@ pin a worker nor exhaust memory, and the sync never commits a partial result.
 
 from __future__ import annotations
 
+import asyncio
 import time
+from collections.abc import Awaitable
+from typing import TypeVar
 
 from app.config import settings
 from app.domain.ports.calendar import CalendarConnectorError
+
+T = TypeVar("T")
 
 
 class PaginationBudget:
@@ -39,6 +44,14 @@ class PaginationBudget:
             max_bytes=settings.sync_max_response_bytes,
             max_seconds=settings.sync_max_fetch_seconds,
         )
+
+    async def run(self, work: Awaitable[T]) -> T:
+        """Run the whole fetch, cancelling it when the time budget is used up."""
+        try:
+            async with asyncio.timeout(max(self._deadline - time.monotonic(), 0)):
+                return await work
+        except TimeoutError as exc:
+            raise CalendarConnectorError("Kalender-Abruf überschreitet das Zeitbudget") from exc
 
     def charge(self, *, items: int, size_bytes: int, next_token: str | None) -> None:
         """Account for one fetched page; raise when any limit is exceeded."""
