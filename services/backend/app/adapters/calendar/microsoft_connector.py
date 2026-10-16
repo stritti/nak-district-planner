@@ -11,6 +11,7 @@ Credentials format: {"access_token": "EwBgA8l6BAAUE..."}
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -19,10 +20,9 @@ import httpx
 
 from app.adapters.calendar.deletion import delete_resource
 from app.adapters.calendar.http_policy import resilient_request
+from app.adapters.calendar.pagination_budget import PaginationBudget
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
-
-_MAX_PAGES = 100
 
 
 def _validate_next_link(url: str) -> str:
@@ -39,8 +39,13 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
     # presence check here, so missing events are never reconciled as deleted.
     authoritative_snapshot = False
 
-    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient | None = None,
+        budget_factory: Callable[[], PaginationBudget] = PaginationBudget.from_settings,
+    ) -> None:
         self._client = client or httpx.AsyncClient(timeout=30.0)
+        self._budget_factory = budget_factory
 
     async def fetch_events(
         self,
@@ -66,11 +71,8 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
         items: list[dict[str, Any]] = []
         next_url: str | None = url
         next_params: dict[str, Any] | None = params
-        page_count = 0
+        budget = self._budget_factory()
         while next_url:
-            page_count += 1
-            if page_count > _MAX_PAGES:
-                raise CalendarConnectorError("Microsoft Pagination-Limit überschritten")
             response = await resilient_request(
                 lambda next_url=next_url, next_params=next_params: self._client.get(
                     next_url, params=next_params, headers=headers
@@ -78,9 +80,13 @@ class MicrosoftGraphCalendarConnector(CalendarConnector):
                 provider="Microsoft",
             )
             data = response.json()
-            items.extend(data.get("value", []))
+            page_items = data.get("value", [])
             raw_next_url = data.get("@odata.nextLink")
             next_url = _validate_next_link(raw_next_url) if raw_next_url else None
+            budget.charge(
+                items=len(page_items), size_bytes=len(response.content), next_token=next_url
+            )
+            items.extend(page_items)
             next_params = None
 
         events: list[RawCalendarEvent] = []

@@ -11,6 +11,7 @@ Credentials format: {"access_token": "ya29.a0AfH6SMB..."}
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
@@ -19,6 +20,7 @@ import httpx
 
 from app.adapters.calendar.deletion import delete_resource
 from app.adapters.calendar.http_policy import resilient_request
+from app.adapters.calendar.pagination_budget import PaginationBudget
 from app.domain.models.raw_calendar_event import RawCalendarEvent
 from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 
@@ -26,8 +28,13 @@ from app.domain.ports.calendar import CalendarConnector, CalendarConnectorError
 class GoogleCalendarConnector(CalendarConnector):
     """Adapter for Google Calendar API."""
 
-    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient | None = None,
+        budget_factory: Callable[[], PaginationBudget] = PaginationBudget.from_settings,
+    ) -> None:
         self._client = client or httpx.AsyncClient(timeout=30.0)
+        self._budget_factory = budget_factory
 
     async def fetch_events(
         self,
@@ -55,6 +62,7 @@ class GoogleCalendarConnector(CalendarConnector):
 
         items: list[dict[str, Any]] = []
         page_token: str | None = None
+        budget = self._budget_factory()
         while True:
             page_params = dict(params)
             if page_token:
@@ -70,8 +78,12 @@ class GoogleCalendarConnector(CalendarConnector):
                     "Bitte die direkte .ics-URL verwenden."
                 )
             data = response.json()
-            items.extend(data.get("items", []))
+            page_items = data.get("items", [])
             page_token = data.get("nextPageToken")
+            budget.charge(
+                items=len(page_items), size_bytes=len(response.content), next_token=page_token
+            )
+            items.extend(page_items)
             if not page_token:
                 break
 
