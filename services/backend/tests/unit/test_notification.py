@@ -121,19 +121,19 @@ class TestNotificationService:
         district_id = uuid.uuid4()
         repo.list_by_district = AsyncMock(return_value=([], 0))
 
-        result = await service.list(district_id)
+        result = await service.list(district_id, "test-sub")
         assert result == {"items": [], "total": 0, "limit": 50, "offset": 0}
         repo.list_by_district.assert_awaited_once_with(
-            district_id, unread_only=False, limit=50, offset=0
+            district_id, "test-sub", unread_only=False, limit=50, offset=0
         )
 
     async def test_list_unread_only(self, service: NotificationService, repo: MagicMock):
         district_id = uuid.uuid4()
         repo.list_by_district = AsyncMock(return_value=([], 0))
 
-        await service.list(district_id, unread_only=True, limit=10, offset=5)
+        await service.list(district_id, "test-sub", unread_only=True, limit=10, offset=5)
         repo.list_by_district.assert_awaited_once_with(
-            district_id, unread_only=True, limit=10, offset=5
+            district_id, "test-sub", unread_only=True, limit=10, offset=5
         )
 
     async def test_mark_read_existing(self, service: NotificationService, repo: MagicMock):
@@ -150,14 +150,14 @@ class TestNotificationService:
         )
         repo.mark_read = AsyncMock()
 
-        result = await service.mark_read(notification_id)
+        result = await service.mark_read(notification_id, "test-sub")
         assert result is True
-        repo.mark_read.assert_awaited_once_with(notification_id)
+        repo.mark_read.assert_awaited_once_with(notification_id, "test-sub")
 
     async def test_mark_read_not_found(self, service: NotificationService, repo: MagicMock):
         repo.get = AsyncMock(return_value=None)
 
-        result = await service.mark_read(uuid.uuid4())
+        result = await service.mark_read(uuid.uuid4(), "test-sub")
         assert result is False
         repo.mark_read.assert_not_called()
 
@@ -200,9 +200,9 @@ class TestNotificationService:
             )
         )
 
-        count = await service.get_unread_count(district_id)
+        count = await service.get_unread_count(district_id, "test-sub")
         assert count == 2
-        repo.list_by_district.assert_awaited_once_with(district_id, unread_only=True, limit=1)
+        repo.list_by_district.assert_awaited_once_with(district_id, "test-sub", unread_only=True, limit=1)
 
 
 # ── Repository tests (mocked session) ──────────────────────────────────────────
@@ -261,7 +261,7 @@ class TestSqlNotificationRepository:
         notification_id = uuid.uuid4()
         session.execute = AsyncMock()
 
-        await repo.mark_read(notification_id)
+        await repo.mark_read(notification_id, "test-sub")
         session.execute.assert_awaited_once()
 
     async def test_mark_all_read(self, repo, session):
@@ -283,13 +283,13 @@ class TestSqlNotificationRepository:
         count_result.scalar.return_value = 5
         # Mock list result
         list_result = MagicMock()
-        list_result.scalars.return_value.all.return_value = []
+        list_result.all.return_value = []
 
         session.execute = AsyncMock()
         session.execute.side_effect = [count_result, list_result]
 
         items, total = await repo.list_by_district(
-            district_id, unread_only=unread_only, limit=10, offset=0
+            district_id, "test-sub", unread_only=unread_only, limit=10, offset=0
         )
         assert total == 5
         assert items == []

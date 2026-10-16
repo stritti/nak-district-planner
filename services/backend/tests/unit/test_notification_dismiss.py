@@ -48,8 +48,8 @@ async def test_service_dismisses_existing_notification() -> None:
     repo.get = AsyncMock(return_value=item)
     repo.mark_dismissed = AsyncMock()
 
-    assert await NotificationService(repo).dismiss(item.id)
-    repo.mark_dismissed.assert_awaited_once_with(item.id)
+    assert await NotificationService(repo).dismiss(item.id, "test-sub")
+    repo.mark_dismissed.assert_awaited_once_with(item.id, "test-sub")
 
 
 @pytest.mark.asyncio
@@ -60,8 +60,9 @@ async def test_service_repeated_dismiss_preserves_timestamp() -> None:
     repo.get = AsyncMock(return_value=item)
     repo.mark_dismissed = AsyncMock()
 
-    assert await NotificationService(repo).dismiss(item.id)
-    repo.mark_dismissed.assert_not_awaited()
+    assert await NotificationService(repo).dismiss(item.id, "test-sub")
+    # The repository owns idempotency of this subject-specific operation.
+    repo.mark_dismissed.assert_awaited_once_with(item.id, "test-sub")
 
 
 @pytest.mark.asyncio
@@ -70,7 +71,7 @@ async def test_service_unknown_notification_does_not_mutate() -> None:
     repo.get = AsyncMock(return_value=None)
     repo.mark_dismissed = AsyncMock()
 
-    assert not await NotificationService(repo).dismiss(uuid.uuid4())
+    assert not await NotificationService(repo).dismiss(uuid.uuid4(), "test-sub")
     repo.mark_dismissed.assert_not_awaited()
 
 
@@ -80,11 +81,12 @@ async def test_repository_uses_idempotent_dismissal_condition() -> None:
     session.execute = AsyncMock()
     repo = SqlNotificationRepository(session)
 
-    await repo.mark_dismissed(uuid.uuid4())
+    await repo.mark_dismissed(uuid.uuid4(), "test-sub")
     statement = session.execute.await_args.args[0]
     compiled = str(statement)
+    assert "ON CONFLICT" in compiled
     assert "dismissed_at IS NULL" in compiled
-    assert "dismissed_at" in str(statement.compile().params)
+    assert "user_sub" in str(statement.compile().params)
 
 
 @pytest.mark.asyncio
@@ -93,11 +95,11 @@ async def test_repository_lists_only_visible_notifications_even_without_unread_f
     count_result = MagicMock()
     count_result.scalar.return_value = 0
     list_result = MagicMock()
-    list_result.scalars.return_value.all.return_value = []
+    list_result.all.return_value = []
     session.execute = AsyncMock(side_effect=[count_result, list_result])
     repo = SqlNotificationRepository(session)
 
-    assert await repo.list_by_district(uuid.uuid4(), unread_only=False) == ([], 0)
+    assert await repo.list_by_district(uuid.uuid4(), "test-sub", unread_only=False) == ([], 0)
     count_sql = str(session.execute.await_args_list[0].args[0])
     list_sql = str(session.execute.await_args_list[1].args[0])
     assert "dismissed_at IS NULL" in count_sql
@@ -150,8 +152,10 @@ async def test_dismiss_endpoint_authorizes_before_mutation() -> None:
     service.get = AsyncMock(return_value=item)
     service.dismiss = AsyncMock(return_value=True)
 
+    auth = MagicMock()
+    auth.user_sub = "test-sub"
     with patch("app.adapters.api.routers.notifications.require_role_in_district") as authorize:
-        await dismiss_notification(item.id, MagicMock(), service)
+        await dismiss_notification(item.id, auth, service)
     authorize.assert_called_once()
     assert authorize.call_args.args[2] == item.district_id
-    service.dismiss.assert_awaited_once_with(item.id)
+    service.dismiss.assert_awaited_once_with(item.id, "test-sub")
