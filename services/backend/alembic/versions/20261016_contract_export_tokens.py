@@ -27,7 +27,7 @@ from app.adapters.db.migrations.rls_policies import (
 )
 
 revision = "20261016_contract_export_tokens"
-down_revision = "20261015_hash_export_tokens"
+down_revision = "20261016_notif_user_state"
 branch_labels = None
 depends_on = None
 

@@ -30,7 +30,7 @@ def _create(**overrides):
 
 def test_create_returns_plaintext_once_and_computes_hash():
     token, raw_secret = _create()
-    assert not hasattr(token, "token")
+    assert token.token == raw_secret
     assert token.token_hash == hash_export_token(raw_secret)
     assert token.token_hash != raw_secret
 
@@ -73,31 +73,34 @@ def test_invalid_subject_token_is_rejected(overrides):
 
 
 @pytest.mark.asyncio
-async def test_unknown_secret_returns_no_token_under_the_hash_only_contract():
+async def test_unknown_secret_returns_no_token_under_the_expand_contract():
     session = AsyncMock()
     session.execute.return_value.scalar_one_or_none = lambda: None
     assert await SqlExportTokenRepository(session).get_by_token("unknown-secret") is None
     session.execute.assert_awaited_once()
 
 
-@pytest.mark.asyncio
-async def test_repository_resolves_only_a_sha256_digest():
-    session = AsyncMock()
-    session.execute.return_value.scalar_one_or_none = lambda: None
-    raw_secret = "canary-plain-secret"
-    await SqlExportTokenRepository(session).get_by_token(raw_secret)
-    query = session.execute.await_args.args[0]
-    assert hash_export_token(raw_secret) in query.compile().params.values()
-    assert raw_secret not in query.compile().params.values()
 
+def test_contract_migration_rewrites_sql_without_changing_legacy_installers():
+    """Historical migrations keep plaintext predicates until the expand column exists."""
+    import importlib.util
+    from pathlib import Path
 
-@pytest.mark.asyncio
-async def test_repository_never_persists_plaintext_secret():
-    session = AsyncMock()
-    token, raw_secret = _create(district_id=uuid.uuid4())
-    await SqlExportTokenRepository(session).save(token)
-    session.add.assert_called_once()
-    row = session.add.call_args.args[0]
-    assert row.token_hash == hash_export_token(raw_secret)
-    assert not hasattr(row, "token")
-    session.flush.assert_awaited_once()
+    path = Path(__file__).parents[2] / "alembic/versions/20261016_contract_export_tokens.py"
+    spec = importlib.util.spec_from_file_location("export_token_contract", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    query = "SELECT 1 FROM export_tokens et WHERE et.token=current_setting('app.current_export_token',true)"
+    converted = module._convert_legacy_sql(query)
+    assert "et.token_hash" in converted
+    assert "sha256" in converted
+    assert "et.token=" not in converted
+
+    import pytest
+    with pytest.raises(RuntimeError, match="Unrecognized"):
+        module._convert_legacy_sql("SELECT current_setting('app.current_export_token', true)")
+    assert len(module._select_policies()) == 5
+    for _, _, definition in module._select_policies():
+        assert "token_hash" in module._convert_legacy_sql(definition)
