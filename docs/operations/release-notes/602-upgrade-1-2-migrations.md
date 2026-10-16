@@ -1,14 +1,17 @@
-### Kalender-Export: Datenbankmigration und einmalig sichtbare Kalenderlinks
+### Upgrade von 1.1.x auf 1.2: zwei Datenbankmigrationen (Export-Token-Hashes, Benachrichtigungsstatus)
 
 **Betroffen:**
 
-Bestehende Installationen mit öffentlichen, internen oder persönlichen Kalenderabonnements. Dieses Update ergänzt eine nullable `token_hash`-Spalte, bewahrt aber sämtliche bisherigen Klartext-Tokens. Der Schutz gegen einen Datenbank-Leak ist erst nach einer gesonderten Contract-Migration vollständig; die Folgearbeit wird in [#602](https://github.com/stritti/nak-district-planner/issues/602) nachverfolgt.
+Alle bestehenden Installationen. Das Release 1.2.0 wurde ohne diese Hinweise und ohne Container-Images veröffentlicht; sie gelten unverändert für die erste ausgelieferte 1.2.x-Version. Das Update enthält zwei Alembic-Revisionen:
+
+- `20261015_hash_export_tokens`: Ergänzt für Installationen mit öffentlichen, internen oder persönlichen Kalenderabonnements eine nullable `token_hash`-Spalte, bewahrt aber sämtliche bisherigen Klartext-Tokens. Der Schutz gegen einen Datenbank-Leak ist erst nach einer gesonderten Contract-Migration vollständig; die Folgearbeit wird in [#602](https://github.com/stritti/nak-district-planner/issues/602) nachverfolgt.
+- `20261016_notif_user_state`: legt `notification_user_states` an (Quittierungsstatus je Benutzer) und vergibt Rechte an die Anwendungsrolle `APP_DB_USER` (Standard `nak_app`). Bisher gelesene oder verworfene Benachrichtigungen bleiben gelesen beziehungsweise verworfen. `APP_DB_USER` muss dem tatsächlichen Rollennamen entsprechen, sonst erhält die falsche Rolle die Rechte.
 
 **Vor dem Update:**
 
 - Noch benötigte Kalenderlinks aus der bisherigen Anwendung kopieren und sicher verwahren. Nach dem Update liefern Listen nur Metadaten; bestehende Links lassen sich dort nicht erneut anzeigen.
 - Ein aktuelles Backup nach dem Produktions-Runbook erstellen.
-- Die neue Version bereitstellen und ihre Migration **vor dem Start des neuen Backends/Workers** ausführen, beispielsweise mit `docker compose -f docker-compose.yml run --no-deps --rm --build migrate`. Die Revision `20261015_hash_export_tokens` ergänzt Hashes, ohne bisherige Secrets zu verändern.
+- Die neue Version bereitstellen und ihre Migrationen **vor dem Start des neuen Backends/Workers** ausführen, beispielsweise mit `docker compose -f docker-compose.yml run --no-deps --rm --build migrate`. Die Revision `20261015_hash_export_tokens` ergänzt Hashes, ohne bisherige Secrets zu verändern.
 - Keine Klartextspalte löschen oder manuell durch Hashes ersetzen. Die aktuelle Anwendung und ihre RLS-Regeln benötigen weiterhin den ursprünglichen Wert.
 
 **Nach dem Update:**
