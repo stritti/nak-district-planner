@@ -44,6 +44,7 @@ class DistrictResponse(BaseModel):
     state_code: str | None
     created_at: datetime
     updated_at: datetime
+    revision: str = Field(description="Strong ETag for conditional writes (If-Match).")
 
 
 class CongregationCreate(BaseModel):
@@ -173,6 +174,7 @@ class CongregationGroupResponse(BaseModel):
     district_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+    revision: str = Field(description="Strong ETag for conditional writes (If-Match).")
 
 
 class FeiertageImportRequest(BaseModel):

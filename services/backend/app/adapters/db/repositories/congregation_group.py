@@ -35,6 +35,13 @@ class SqlCongregationGroupRepository(CongregationGroupRepository):
         row = await self._session.get(CongregationGroupORM, group_id)
         return _orm_to_domain(row) if row else None
 
+    async def get_for_update(self, group_id: uuid.UUID) -> CongregationGroup | None:
+        """Read the latest state while holding a row lock through the transaction."""
+        row = await self._session.get(
+            CongregationGroupORM, group_id, with_for_update=True, populate_existing=True
+        )
+        return _orm_to_domain(row) if row else None
+
     async def list_by_district(self, district_id: uuid.UUID) -> list[CongregationGroup]:
         result = await self._session.execute(
             select(CongregationGroupORM)

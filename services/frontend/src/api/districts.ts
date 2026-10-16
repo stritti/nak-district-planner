@@ -14,6 +14,8 @@ export interface DistrictResponse {
   state_code: string | null
   created_at: string
   updated_at: string
+  /** Strong ETag for conditional writes. */
+  revision?: string
 }
 
 export interface CongregationResponse {
@@ -33,6 +35,8 @@ export interface CongregationGroupResponse {
   district_id: string
   created_at: string
   updated_at: string
+  /** Strong ETag for conditional writes. */
+  revision?: string
 }
 
 export function listDistricts(): Promise<DistrictResponse[]> {
@@ -46,12 +50,16 @@ export function createDistrict(name: string, stateCode?: string | null): Promise
   })
 }
 
+/** Renames require the original server-issued revision (428 without, 412 if stale). */
 export function updateDistrict(
   id: string,
   payload: { name?: string; state_code?: string | null },
+  revision: string,
 ): Promise<DistrictResponse> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
   return apiFetch(`/api/v1/districts/${id}`, {
     method: 'PATCH',
+    headers: { 'If-Match': revision },
     body: JSON.stringify(payload),
   })
 }
@@ -114,9 +122,12 @@ export function updateGroup(
   districtId: string,
   groupId: string,
   name: string,
+  revision: string,
 ): Promise<CongregationGroupResponse> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
   return apiFetch(`/api/v1/districts/${districtId}/groups/${groupId}`, {
     method: 'PATCH',
+    headers: { 'If-Match': revision },
     body: JSON.stringify({ name }),
   })
 }
