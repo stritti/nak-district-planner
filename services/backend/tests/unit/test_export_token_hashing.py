@@ -103,5 +103,12 @@ def test_contract_migration_rewrites_sql_without_changing_legacy_installers():
         module._convert_legacy_sql("SELECT current_setting('app.current_export_token', true)")
     assert len(module._select_policies()) == 5
     assert len(module._update_policies()) == 3
+    inherited = module._remaining_legacy_policies()
+    assert len(inherited) >= 10
+    assert any(name == "notifications_select_policy" for _, name, _ in inherited)
+    assert any(name == "leaders_update_policy" for _, name, _ in inherited)
+    for _, _, sql in inherited:
+        assert ".token =" not in sql
+        assert ".token_hash =" in sql
     for _, _, definition in module._select_policies():
         assert "token_hash" in module._convert_legacy_sql(definition)
