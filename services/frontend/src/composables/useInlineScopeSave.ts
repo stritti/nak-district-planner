@@ -31,7 +31,9 @@ export function useInlineScopeSave() {
     const impact = await previewEventChange(event.id, change, revision)
     if (impact.blocked) throw new Error(conflictMessages(impact, 'BLOCK') || 'Änderung nicht möglich.')
 
-    const needsConfirmation = impact.requires_confirmation || impact.duties_newly_flagged > 0
+    const needsConfirmation = impact.requires_confirmation
+      || impact.duties_newly_flagged > 0
+      || impact.duties_newly_quarantined > 0
     if (needsConfirmation) {
       const confirmed = await confirm({
         title: 'Auswirkungen der Änderung',
@@ -41,9 +43,17 @@ export function useInlineScopeSave() {
       })
       if (!confirmed) throw new Error('Änderung abgebrochen')
     }
+    // The server recomputes the duty impact under the slot lock; it only accepts what was shown here.
     return updateEvent(
       event.id,
-      impact.requires_confirmation ? { ...change, confirm_warnings: true } : change,
+      {
+        ...change,
+        ...(impact.requires_confirmation ? { confirm_warnings: true } : {}),
+        acknowledged_duty_impact: {
+          newly_flagged: impact.duties_newly_flagged,
+          newly_quarantined: impact.duties_newly_quarantined,
+        },
+      },
       revision,
     )
   }
@@ -78,9 +88,9 @@ function confirmationMessage(impact: EventChangeImpact): string {
       `${impact.duties_newly_flagged} Dienst(e) werden zur Prüfung markiert und bleiben gespeichert.`,
     )
   }
-  if (impact.duties_quarantined_after > 0) {
+  if (impact.duties_newly_quarantined > 0) {
     parts.push(
-      `${impact.duties_quarantined_after} Dienst(e) werden in der neuen Gemeinde ausgeblendet, bis sie neu bestätigt werden.`,
+      `${impact.duties_newly_quarantined} Dienst(e) werden in der neuen Gemeinde ausgeblendet, bis sie neu bestätigt werden.`,
     )
   }
   return parts.join(' ')

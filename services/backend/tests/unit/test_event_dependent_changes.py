@@ -66,7 +66,7 @@ def _patches(conflicts: list[ConflictResult] | None = None):
         yield mocks
 
 
-async def _update(slot, repos, body, if_match=None):
+async def _update(slot, repos, body, if_match=None, duties_repo=None):
     slot_repo, inst_repo, assignments_repo = repos
     return await events.update_event(
         slot.id,
@@ -76,6 +76,7 @@ async def _update(slot, repos, body, if_match=None):
         slot_repo=slot_repo,
         inst_repo=inst_repo,
         assignments_repo=assignments_repo,
+        duties_repo=duties_repo if duties_repo is not None else _duties_repo(slot),
         if_match=if_match,
     )
 
@@ -474,3 +475,120 @@ async def test_scalar_update_does_not_revalidate_existing_leader_ownership():
     mocks["acquire_advisory_xact_lock"].assert_not_awaited()
     mocks["check_service_assignment_conflicts"].assert_not_awaited()
     repos[0].save.assert_awaited_once()
+
+
+def _slot_with_organist(*, category: str = "Gottesdienst"):
+    """A slot with one organist duty that a category change would flag for review."""
+    from app.domain.models.event_duty import EventDutyAssignment
+
+    slot = _slot()
+    slot.category = category
+    slot.congregation_id = uuid.uuid4()
+    duties = _duties_repo(slot)
+    organist = next(c for c in duties.categories if c.code == "organist")
+    duties.list_assignments.return_value = [
+        EventDutyAssignment.create(slot.id, organist, slot.congregation_id, name="Anna")
+    ]
+    return slot, duties
+
+
+@pytest.mark.asyncio
+async def test_direct_patch_without_preview_cannot_flag_duties_silently() -> None:
+    slot, duties = _slot_with_organist()
+    repos = _repos(slot)
+    with _patches():
+        with pytest.raises(HTTPException) as error:
+            await _update(
+                slot, repos, events.EventUpdate(category="Feiertag"),
+                if_match=events.slot_revision(slot), duties_repo=duties,
+            )
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "duty_impact_unacknowledged"
+    assert error.value.detail["duties_newly_flagged"] == 1
+    assert slot.category == "Gottesdienst"
+    repos[0].save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_patch_with_matching_acknowledgement_is_applied() -> None:
+    slot, duties = _slot_with_organist()
+    repos = _repos(slot)
+    body = events.EventUpdate(
+        category="Feiertag",
+        acknowledged_duty_impact=events.DutyImpactAcknowledgement(newly_flagged=1, newly_quarantined=0),
+    )
+    with _patches():
+        await _update(slot, repos, body, if_match=events.slot_revision(slot), duties_repo=duties)
+    assert slot.category == "Feiertag"
+    repos[0].save.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_duty_added_after_preview_invalidates_the_acknowledgement() -> None:
+    """Duty writes do not change the event revision; the PATCH must recompute the impact."""
+    from app.domain.models.event_duty import EventDutyAssignment
+
+    slot, duties = _slot_with_organist()
+    conductor = next(c for c in duties.categories if c.code == "conductor")
+    duties.list_assignments.return_value.append(
+        EventDutyAssignment.create(slot.id, conductor, slot.congregation_id, name="Berta")
+    )
+    repos = _repos(slot)
+    previewed = events.DutyImpactAcknowledgement(newly_flagged=1, newly_quarantined=0)
+    with _patches():
+        with pytest.raises(HTTPException) as error:
+            await _update(
+                slot, repos,
+                events.EventUpdate(category="Feiertag", acknowledged_duty_impact=previewed),
+                if_match=events.slot_revision(slot), duties_repo=duties,
+            )
+    assert error.value.status_code == 409
+    assert error.value.detail["duties_newly_flagged"] == 2
+    repos[0].save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_congregation_move_quarantine_requires_acknowledgement() -> None:
+    slot, duties = _slot_with_organist()
+    repos = _repos(slot)
+    with _patches():
+        with pytest.raises(HTTPException) as error:
+            await _update(
+                slot, repos, events.EventUpdate(congregation_id=uuid.uuid4()),
+                if_match=events.slot_revision(slot), duties_repo=duties,
+            )
+    assert error.value.status_code == 409
+    assert error.value.detail["duties_newly_quarantined"] == 1
+
+
+@pytest.mark.asyncio
+async def test_changes_without_scope_impact_never_touch_duties() -> None:
+    slot, duties = _slot_with_organist()
+    repos = _repos(slot)
+    with _patches():
+        await _update(
+            slot, repos, events.EventUpdate(title="Neu", category="Gottesdienst"),
+            if_match=events.slot_revision(slot), duties_repo=duties,
+        )
+    duties.list_assignments.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_category_only_preview_ignores_historic_leader_blocks() -> None:
+    slot = _slot()
+    slot_repo, inst_repo, assignments_repo = _repos(slot, [_assigned(slot)])
+    with _patches([_conflict(Severity.BLOCK)]) as mocks:
+        result = await events.preview_event_change(
+            slot.id,
+            events.EventChangeImpactRequest(category="Jugendstunde"),
+            object(),
+            AsyncMock(),
+            if_match=events.slot_revision(slot),
+            slot_repo=slot_repo,
+            inst_repo=inst_repo,
+            assignments_repo=assignments_repo,
+            duties_repo=_duties_repo(slot),
+        )
+    assert result.blocked is False
+    assert result.items == []
+    mocks["check_service_assignment_conflicts"].assert_not_awaited()
