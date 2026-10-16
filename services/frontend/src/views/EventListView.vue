@@ -230,7 +230,36 @@
                 required
                 :max-length="500"
               />
-              <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDt(event.start_at) }} · {{ event.category ?? '—' }}</p>
+              <div class="flex flex-wrap items-center gap-x-2 text-xs text-gray-500 dark:text-gray-400">
+                <InlineEditableCell
+                  :id="'event-start-mobile-' + event.id"
+                  as="div"
+                  :value="toLocalInputValue(event.start_at)"
+                  :display-value="formatDt(event.start_at)"
+                  input-type="datetime-local"
+                  :revision="event.revision ?? ''"
+                  :label="'Start: ' + event.title"
+                  :editable="canInlineEditSchedule(event)"
+                  :coordinator="inlineCoordinator"
+                  :save="(value, revision) => saveInlineStart(event, value, revision)"
+                  :reload="() => reloadInlineStart(event)"
+                  required
+                />
+                <span aria-hidden="true">·</span>
+                <InlineEditableCell
+                  :id="'event-category-mobile-' + event.id"
+                  as="div"
+                  :value="event.category ?? ''"
+                  :display-value="event.category ?? '—'"
+                  :revision="event.revision ?? ''"
+                  :label="'Kategorie: ' + event.title"
+                  :editable="canInlineEditCategory(event)"
+                  :coordinator="inlineCoordinator"
+                  :save="(value, revision) => saveInlineCategory(event, value, revision)"
+                  :reload="() => reloadInlineScope(event, 'category')"
+                  :max-length="255"
+                />
+              </div>
             </div>
             <button
               class="btn-icon border border-gray-300 dark:border-gray-600 shrink-0"
@@ -240,14 +269,21 @@
               <BuildingOffice2Icon class="h-4 w-4" />
             </button>
           </div>
-          <p class="mt-2 text-xs text-gray-600 dark:text-gray-400">
-            <span>{{ districtName(event.district_id) }}</span>
-            <template v-if="event.congregation_id">
-              <span class="text-gray-400 dark:text-gray-500"> › </span>
-              <span>{{ congregationName(event.congregation_id) }}</span>
-            </template>
-            <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
-          </p>
+          <InlineEditableCell
+            :id="'event-congregation-mobile-' + event.id"
+            as="div"
+            class="mt-2 text-xs text-gray-600 dark:text-gray-400"
+            :value="event.congregation_id ?? ''"
+            :display-value="scopeLabel(event)"
+            :choices="inlineCongregationChoices"
+            empty-label="Bezirksebene"
+            :revision="event.revision ?? ''"
+            :label="'Zuordnung: ' + event.title"
+            :editable="canInlineEditCongregation(event)"
+            :coordinator="inlineCoordinator"
+            :save="(value, revision) => saveInlineCongregation(event, value, revision)"
+            :reload="() => reloadInlineScope(event, 'congregation')"
+          />
           <template v-if="canInlineAssignEvent(event)">
             <InlineAssignmentCell
               layout="mobile"

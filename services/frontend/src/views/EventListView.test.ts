@@ -742,6 +742,77 @@ describe('Inline editing in the event overview', () => {
     expect(eventsApi.previewEventChange).not.toHaveBeenCalled()
   })
 
+  it('offers the same inline start, category and congregation edits on mobile cards', async () => {
+    vi.mocked(eventsApi.updateEvent).mockResolvedValue(event({ revision: '"revision-2"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await flushPromises()
+    const start = wrapper.get('[data-inline-cell-id="event-start-mobile-e1"]')
+    await start.trigger('click')
+    await flushPromises()
+    expect(start.get('input').attributes('type')).toBe('datetime-local')
+    await start.get('input').setValue('2030-01-02T10:00')
+    await start.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(eventsApi.updateEvent).toHaveBeenCalledWith(
+      'e1', expect.objectContaining({ start_at: new Date('2030-01-02T10:00').toISOString() }), '"revision-1"',
+    )
+    const category = wrapper.get('[data-inline-cell-id="event-category-mobile-e1"]')
+    await category.trigger('click')
+    await flushPromises()
+    await category.get('input').setValue('Jugendstunde')
+    await category.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(eventsApi.previewEventChange).toHaveBeenCalledWith('e1', { category: 'Jugendstunde' }, expect.any(String))
+    const scope = wrapper.get('[data-inline-cell-id="event-congregation-mobile-e1"]')
+    await scope.trigger('click')
+    await flushPromises()
+    expect(scope.get('select').text()).toContain('Bezirksebene')
+  })
+
+  it.each([
+    ['desktop', 'start', 'input', '2030-01-02T10:00'],
+    ['mobile', 'start', 'input', '2030-01-02T10:00'],
+    ['desktop', 'category', 'input', 'Jugendstunde'],
+    ['mobile', 'category', 'input', 'Jugendstunde'],
+    ['desktop', 'congregation', 'select', 'c2'],
+    ['mobile', 'congregation', 'select', 'c2'],
+  ])('offers a reload after a stale revision on the %s %s cell', async (layout, field, control, value) => {
+    const stale = new ApiError(412, 'Precondition Failed', { detail: 'Ereignis wurde zwischenzeitlich geändert.' })
+    vi.mocked(eventsApi.updateEvent).mockRejectedValue(stale)
+    vi.mocked(eventsApi.previewEventChange).mockRejectedValue(stale)
+    vi.mocked(eventsApi.getEvent).mockResolvedValue(event({ revision: '"revision-9"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await flushPromises()
+    const cell = wrapper.get(`[data-inline-cell-id="event-${field}-${layout}-e1"]`)
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get(control).setValue(value)
+    await cell.get(control).trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    await cell.get('button').trigger('click')
+    await flushPromises()
+    expect(eventsApi.getEvent).toHaveBeenCalledWith('e1')
+    expect(cell.get('[role=alert]').text()).toContain('Aktueller Stand geladen')
+  })
+
+  it('keeps mobile cards read-only for external events and invitation copies', async () => {
+    const { wrapper } = setup([
+      event({ id: 'external', source: 'EXTERNAL' }),
+      event({ id: 'invited', invitation_source_event_id: 'src' }),
+    ])
+    await flushPromises()
+    for (const id of ['external', 'invited']) {
+      for (const field of ['start', 'category', 'congregation']) {
+        const cell = wrapper.get(`[data-inline-cell-id="event-${field}-mobile-${id}"]`)
+        await cell.trigger('click')
+        expect(cell.find('input, select').exists()).toBe(false)
+      }
+    }
+    expect(eventsApi.previewEventChange).not.toHaveBeenCalled()
+  })
+
   it('does not offer inline rescheduling for linked invitation copies or read-only rows', async () => {
     const { wrapper } = setup([
       event({ id: 'external', source: 'EXTERNAL' }),
