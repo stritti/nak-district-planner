@@ -17,13 +17,19 @@ configured:
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import os
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy import create_engine, text
 
 psycopg2 = pytest.importorskip("psycopg2")
 from psycopg2 import errors  # noqa: E402
@@ -371,3 +377,87 @@ def test_unavailability_write_without_permission_is_rejected(data, user, leader)
 def test_owner_dsn_is_parseable() -> None:
     """Guard against misconfiguration producing confusing connection errors."""
     assert parse_dsn(OWNER_DSN)["dbname"]
+
+
+# ── Export-token expand phase: real schema and runtime-role behavior ──────────
+
+
+def test_export_token_expand_backfill_and_downgrade_preserve_secrets() -> None:
+    """Exercise the migration on an isolated temporary table, including hex secrets."""
+    path = Path(__file__).parents[2] / "alembic/versions/20261015_hash_export_tokens.py"
+    spec = importlib.util.spec_from_file_location("export_token_expand_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    engine = create_engine("postgresql+psycopg2://", creator=lambda: psycopg2.connect(OWNER_DSN))
+    secrets = ["legacy-feed-secret", "a" * 64]
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "CREATE TEMP TABLE export_tokens "
+                "(id uuid PRIMARY KEY, token varchar(64) NOT NULL UNIQUE) ON COMMIT DROP"
+            ))
+            for secret in secrets:
+                connection.execute(
+                    text("INSERT INTO pg_temp.export_tokens (id, token) VALUES (:id, :token)"),
+                    {"id": uuid.uuid4(), "token": secret},
+                )
+            with Operations.context(MigrationContext.configure(connection)):
+                module.upgrade()
+                rows = connection.execute(
+                    text("SELECT token, token_hash FROM pg_temp.export_tokens")
+                ).all()
+                assert dict(rows) == {
+                    secret: hashlib.sha256(secret.encode()).hexdigest() for secret in secrets
+                }
+                module.downgrade()
+                assert set(connection.execute(
+                    text("SELECT token FROM pg_temp.export_tokens")
+                ).scalars()) == set(secrets)
+                assert not connection.execute(text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_attribute "
+                    "WHERE attrelid='pg_temp.export_tokens'::regclass "
+                    "AND attname='token_hash' AND NOT attisdropped)"
+                )).scalar()
+                module.upgrade()
+                assert dict(connection.execute(
+                    text("SELECT token, token_hash FROM pg_temp.export_tokens")
+                ).all()) == dict(rows)
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("with_hash", [False, True], ids=["legacy-writer", "dual-writer"])
+def test_export_expand_keeps_anonymous_feeds_scoped_and_rejects_digest(owner, data, with_hash):
+    """Old and new writers work; a stored digest is never a bearer credential."""
+    token_id = str(uuid.uuid4())
+    secret = f"expand-{uuid.uuid4().hex}"
+    digest = hashlib.sha256(secret.encode()).hexdigest()
+    with owner.cursor() as cur:
+        cur.execute(
+            "INSERT INTO export_tokens "
+            "(id, token, token_hash, label, token_type, district_id, created_at) "
+            "VALUES (%s, %s, %s, 'Expand test', 'INTERNAL', %s, now())",
+            (token_id, secret, digest if with_hash else None, str(data.a.district_id)),
+        )
+    try:
+        with app_session() as cur:
+            cur.execute("SELECT set_config('app.current_export_token', %s, true)", (secret,))
+            cur.execute("SELECT id FROM export_tokens WHERE token=%s", (secret,))
+            assert str(cur.fetchone()[0]) == token_id
+            assert _visible_ids(cur, "planning_slots", [data.a.slot_id, data.b.slot_id]) == {
+                data.a.slot_id
+            }
+        for presented in (digest, "unknown-secret"):
+            with app_session() as cur:
+                cur.execute("SELECT set_config('app.current_export_token', %s, true)", (presented,))
+                cur.execute("SELECT id FROM export_tokens WHERE id=%s", (token_id,))
+                assert cur.fetchall() == []
+                assert _visible_ids(cur, "planning_slots", [data.a.slot_id, data.b.slot_id]) == set()
+    finally:
+        with owner.cursor() as cur:
+            cur.execute("DELETE FROM export_tokens WHERE id=%s", (token_id,))
+    with app_session() as cur:
+        cur.execute("SELECT set_config('app.current_export_token', %s, true)", (secret,))
+        cur.execute("SELECT id FROM export_tokens WHERE token=%s", (secret,))
+        assert cur.fetchall() == []
+        assert _visible_ids(cur, "planning_slots", [data.a.slot_id, data.b.slot_id]) == set()

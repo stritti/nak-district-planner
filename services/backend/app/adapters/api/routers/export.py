@@ -76,7 +76,7 @@ async def create_export_token(
     await ensure_congregation_in_district(session, body.district_id, body.congregation_id)
     await ensure_leader_in_district(session, body.district_id, body.leader_id)
 
-    token = ExportToken.create(
+    token, raw_secret = ExportToken.create(
         label=body.label,
         token_type=body.token_type,
         district_id=body.district_id,
@@ -85,7 +85,7 @@ async def create_export_token(
         subject_sub=body.subject_sub,
     )
     await repo.save(token)
-    return _token_response(token)
+    return _token_response(token, raw_secret=raw_secret)
 
 
 @router.get(
@@ -142,10 +142,12 @@ async def delete_export_token(
     await repo.delete(token_id)
 
 
-def _token_response(token: ExportToken) -> ExportTokenResponse:
+def _token_response(
+    token: ExportToken, *, raw_secret: str | None = None
+) -> ExportTokenResponse:
     return ExportTokenResponse(
         id=token.id,
-        token=token.token,
+        token=raw_secret,
         label=token.label,
         token_type=token.token_type,
         district_id=token.district_id,

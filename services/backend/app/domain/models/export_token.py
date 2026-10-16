@@ -5,11 +5,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
+
+
+def hash_export_token(token: str) -> str:
+    """Return the storage form of an export token (SHA-256 hex digest)."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class TokenType(StrEnum):
@@ -31,6 +37,7 @@ class ExportToken:
     created_at: datetime
 
     subject_sub: str | None = None
+    token_hash: str | None = None
 
     def confirmed_only(self, requested: str | None) -> bool:
         """Whether the ICS feed may contain only CONFIRMED slots (UC-05).
@@ -50,19 +57,24 @@ class ExportToken:
         congregation_id: uuid.UUID | None,
         leader_id: uuid.UUID | None = None,
         subject_sub: str | None = None,
-    ) -> ExportToken:
+    ) -> tuple[ExportToken, str]:
         if subject_sub is not None and (
             token_type != TokenType.INTERNAL or leader_id or congregation_id
         ):
             raise ValueError("Subject tokens require INTERNAL visibility and district scope")
-        return ExportToken(
-            id=uuid.uuid4(),
-            token=secrets.token_urlsafe(32),
-            label=label,
-            token_type=token_type,
-            district_id=district_id,
-            congregation_id=congregation_id,
-            leader_id=leader_id,
-            created_at=datetime.now(tz=UTC),
-            subject_sub=subject_sub,
+        raw = secrets.token_urlsafe(32)
+        return (
+            ExportToken(
+                id=uuid.uuid4(),
+                token=raw,
+                token_hash=hash_export_token(raw),
+                label=label,
+                token_type=token_type,
+                district_id=district_id,
+                congregation_id=congregation_id,
+                leader_id=leader_id,
+                created_at=datetime.now(tz=UTC),
+                subject_sub=subject_sub,
+            ),
+            raw,
         )

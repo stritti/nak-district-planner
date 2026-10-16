@@ -25,6 +25,7 @@ def _orm_to_domain(row: ExportTokenORM) -> ExportToken:
         leader_id=row.leader_id,
         created_at=row.created_at,
         subject_sub=row.subject_sub,
+        token_hash=row.token_hash,
     )
 
 
@@ -36,6 +37,7 @@ class SqlExportTokenRepository:
         row = ExportTokenORM(
             id=token.id,
             token=token.token,
+            token_hash=token.token_hash,
             label=token.label,
             token_type=token.token_type,
             district_id=token.district_id,
@@ -49,6 +51,11 @@ class SqlExportTokenRepository:
         return token
 
     async def get_by_token(self, token: str) -> ExportToken | None:
+        """Resolve the presented secret using the expand-phase RLS contract.
+
+        Plaintext stays authoritative until a separate migration upgrades every
+        export policy, SECURITY DEFINER helper and ORM reader to hash-only storage.
+        """
         result = await self._session.execute(
             select(ExportTokenORM).where(ExportTokenORM.token == token)
         )

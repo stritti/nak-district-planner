@@ -6,7 +6,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('./client')
 
 import * as client from './client'
-import { createExportToken, deleteExportToken, listExportTokens } from './exportTokens'
+import {
+  createExportToken,
+  deleteExportToken,
+  listExportTokens,
+} from './exportTokens'
 
 const apiFetch = vi.mocked(client.apiFetch)
 
