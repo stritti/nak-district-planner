@@ -233,6 +233,68 @@ async def test_preview_reports_blocking_impact() -> None:
     assert result.blocked is True
 
 
+def _duties_repo(slot: PlanningSlot, assignments=()) -> MagicMock:
+    from app.domain.models.event_duty import EventDutyCategory
+
+    categories = EventDutyCategory.defaults(slot.district_id)
+    repo = MagicMock()
+    repo.catalog = AsyncMock(return_value=(categories, []))
+    repo.list_assignments = AsyncMock(return_value=list(assignments))
+    repo.categories = categories
+    return repo
+
+
+@pytest.mark.asyncio
+async def test_preview_reports_duties_flagged_by_category_change() -> None:
+    from app.domain.models.event_duty import EventDutyAssignment
+
+    slot = _slot()
+    slot.category = "Gottesdienst"
+    slot_repo, inst_repo, assignments_repo = _repos(slot)
+    duties = _duties_repo(slot)
+    organist = next(c for c in duties.categories if c.code == "organist")
+    duties.list_assignments.return_value = [
+        EventDutyAssignment.create(slot.id, organist, slot.congregation_id, name="Anna")
+    ]
+    with _patches():
+        result = await events.preview_event_change(
+            slot.id,
+            events.EventChangeImpactRequest(category="Feiertag"),
+            object(),
+            AsyncMock(),
+            if_match=events.slot_revision(slot),
+            slot_repo=slot_repo,
+            inst_repo=inst_repo,
+            assignments_repo=assignments_repo,
+            duties_repo=duties,
+        )
+    assert result.duties_newly_flagged == 1
+    assert result.duties_quarantined_after == 0
+    assert result.blocked is False
+    slot_repo.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_preview_skips_duty_lookup_for_pure_schedule_changes() -> None:
+    slot = _slot()
+    slot_repo, inst_repo, assignments_repo = _repos(slot)
+    duties = _duties_repo(slot)
+    with _patches():
+        result = await events.preview_event_change(
+            slot.id,
+            events.EventChangeImpactRequest(start_at=NEW_START),
+            object(),
+            AsyncMock(),
+            if_match=events.slot_revision(slot),
+            slot_repo=slot_repo,
+            inst_repo=inst_repo,
+            assignments_repo=assignments_repo,
+            duties_repo=duties,
+        )
+    assert result.duties_newly_flagged == 0
+    duties.list_assignments.assert_not_awaited()
+
+
 @pytest.mark.asyncio
 async def test_preview_without_assignments_has_no_impact() -> None:
     slot = _slot()
@@ -247,6 +309,7 @@ async def test_preview_without_assignments_has_no_impact() -> None:
             slot_repo=slot_repo,
             inst_repo=inst_repo,
             assignments_repo=assignments_repo,
+            duties_repo=_duties_repo(slot),
         )
     assert result.blocked is False
     assert result.requires_confirmation is False

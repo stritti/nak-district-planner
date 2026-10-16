@@ -117,6 +117,7 @@ export interface EventChangeImpactRequest {
   start_at?: string
   end_at?: string
   congregation_id?: string | null
+  category?: string | null
 }
 
 export interface EventChangeImpactItem {
@@ -129,6 +130,11 @@ export interface EventChangeImpact {
   blocked: boolean
   requires_confirmation: boolean
   items: EventChangeImpactItem[]
+  /** Duties that would newly need review after a category/congregation change. */
+  duties_newly_flagged: number
+  duties_flagged_after: number
+  /** Duties hidden from the new scope until an authorised planner revalidates them. */
+  duties_quarantined_after: number
 }
 
 /** Read-only preview; nothing is persisted until the matching PATCH is sent. */

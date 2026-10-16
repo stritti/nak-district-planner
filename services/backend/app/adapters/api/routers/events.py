@@ -25,6 +25,7 @@ from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
     get_congregation_repository,
+    get_event_duties_repository,
     get_event_instance_repository,
     get_leader_repository,
     get_planning_slot_repository,
@@ -36,12 +37,14 @@ from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
+from app.adapters.db.repositories.event_duties import SqlEventDutiesRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
+from app.application.event_duties import DutyScopeImpact, EventDutiesService
 from app.application.service_assignment_conflict import (
     ProposedService,
     check_service_assignment_conflicts,
@@ -176,6 +179,7 @@ class EventChangeImpactRequest(BaseModel):
     start_at: datetime | None = None
     end_at: datetime | None = None
     congregation_id: uuid.UUID | None = None
+    category: str | None = Field(default=None, max_length=255)
 
 
 class EventChangeImpactItem(BaseModel):
@@ -188,6 +192,13 @@ class EventChangeImpact(BaseModel):
     blocked: bool
     requires_confirmation: bool
     items: list[EventChangeImpactItem]
+    duties_newly_flagged: int = Field(
+        0, description="Duty assignments that would newly need review (category/congregation change)."
+    )
+    duties_flagged_after: int = 0
+    duties_quarantined_after: int = Field(
+        0, description="Duty assignments hidden from the new scope until revalidated."
+    )
 
 
 class BulkApprovalStatusRequest(BaseModel):
@@ -685,6 +696,7 @@ async def preview_event_change(
     slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    duties_repo: SqlEventDutiesRepository = Depends(get_event_duties_repository),
 ) -> EventChangeImpact:
     """Read-only impact using row locks for a consistent multi-entity snapshot.
 
@@ -721,10 +733,21 @@ async def preview_event_change(
                 )
             )
     severities = {conflict.severity.value for item in items for conflict in item.conflicts}
+    duty_impact = DutyScopeImpact(0, 0, 0)
+    if {"category", "congregation_id"} & body.model_fields_set:
+        duty_impact = await EventDutiesService(duties_repo).preview_scope_change(
+            slot.district_id,
+            slot,
+            category=body.category if "category" in body.model_fields_set else slot.category,
+            congregation_id=proposed.congregation_id,
+        )
     return EventChangeImpact(
         blocked="BLOCK" in severities,
         requires_confirmation="WARN" in severities,
         items=items,
+        duties_newly_flagged=duty_impact.newly_flagged,
+        duties_flagged_after=duty_impact.flagged_after,
+        duties_quarantined_after=duty_impact.quarantined_after,
     )
 
 

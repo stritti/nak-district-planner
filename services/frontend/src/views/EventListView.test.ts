@@ -143,7 +143,10 @@ beforeEach(() => {
       : [congregation('c3', 'Gemeinde Drei', 'd2')]
   ))
   vi.mocked(leadersApi.listLeaders).mockResolvedValue([])
-  vi.mocked(eventsApi.previewEventChange).mockResolvedValue({ blocked: false, requires_confirmation: false, items: [] })
+  vi.mocked(eventsApi.previewEventChange).mockResolvedValue({
+    blocked: false, requires_confirmation: false, items: [],
+    duties_newly_flagged: 0, duties_flagged_after: 0, duties_quarantined_after: 0,
+  })
   vi.mocked(districtsApi.listGroups).mockResolvedValue([
     { id: 'g1', name: 'Gruppe Eins', district_id: 'd1', created_at: now, updated_at: now },
   ])
@@ -683,6 +686,60 @@ describe('Inline editing in the event overview', () => {
     await flushPromises()
     expect(cell.get('[role=alert]').text()).toContain('zwischenzeitlich geändert')
     expect((cell.get('input').element as HTMLInputElement).value).toBe('2030-01-02T10:00')
+  })
+
+  it('changes the category inline after a clean impact preview', async () => {
+    vi.mocked(eventsApi.updateEvent).mockResolvedValue(event({ category: 'Jugendstunde', revision: '"revision-2"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-category-desktop-e1"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('input').setValue('Jugendstunde')
+    await cell.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(eventsApi.previewEventChange).toHaveBeenCalledWith('e1', { category: 'Jugendstunde' }, '"revision-1"')
+    expect(eventsApi.updateEvent).toHaveBeenCalledWith('e1', { category: 'Jugendstunde' }, '"revision-1"')
+    expect(mocks.confirm).not.toHaveBeenCalled()
+  })
+
+  it('asks before a congregation move flags duties and keeps the draft when declined', async () => {
+    vi.mocked(eventsApi.previewEventChange).mockResolvedValue({
+      blocked: false, requires_confirmation: false, items: [],
+      duties_newly_flagged: 2, duties_flagged_after: 2, duties_quarantined_after: 2,
+    })
+    mocks.confirm.mockResolvedValue(false)
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-congregation-desktop-e1"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('select').setValue('c2')
+    await cell.get('select').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('ausgeblendet'),
+    }))
+    expect(eventsApi.updateEvent).not.toHaveBeenCalled()
+    expect(cell.get('[role=alert]').text()).toContain('abgebrochen')
+  })
+
+  it('does not offer category or congregation edits for holidays or invitation copies', async () => {
+    const { wrapper } = setup([
+      event({ id: 'holiday', category: 'Feiertag' }),
+      event({ id: 'invited', invitation_source_event_id: 'src' }),
+    ])
+    await flushPromises()
+    for (const id of ['holiday', 'invited']) {
+      const cell = wrapper.get('[data-inline-cell-id="event-category-desktop-' + id + '"]')
+      await cell.trigger('click')
+      expect(cell.find('input').exists()).toBe(false)
+    }
+    const invitedScope = wrapper.get('[data-inline-cell-id="event-congregation-desktop-invited"]')
+    await invitedScope.trigger('click')
+    expect(invitedScope.find('select').exists()).toBe(false)
+    expect(eventsApi.previewEventChange).not.toHaveBeenCalled()
   })
 
   it('does not offer inline rescheduling for linked invitation copies or read-only rows', async () => {

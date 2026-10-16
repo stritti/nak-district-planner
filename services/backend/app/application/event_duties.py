@@ -31,6 +31,15 @@ class DutyAssignmentView:
 
 
 @dataclass(frozen=True)
+class DutyScopeImpact:
+    """Dry-run result of changing a slot's category and/or congregation."""
+
+    newly_flagged: int
+    flagged_after: int
+    quarantined_after: int
+
+
+@dataclass(frozen=True)
 class SlotDutyView:
     categories: list[EventDutyCategory]
     assignments: list[DutyAssignmentView]
@@ -83,6 +92,44 @@ class EventDutiesService:
                 )
             )
         return SlotDutyView(categories=effective, assignments=assignments)
+
+    async def preview_scope_change(
+        self,
+        district_id,
+        slot,
+        *,
+        category,
+        congregation_id,
+    ) -> DutyScopeImpact:
+        """Count duties that would need review after a category/congregation change.
+
+        Nothing is persisted: assignments always stay stored and are only flagged
+        on read (see ``list_slot_duties``), so this mirrors that projection for
+        the proposed scope and subtracts what is already flagged today.
+        """
+        assignments = await self.repository.list_assignments([slot.id])
+
+        async def flagged(event_category, scope_id):
+            categories, overrides = await self.repository.catalog(district_id, scope_id)
+            effective_ids = {
+                c.id for c in effective_categories(categories, overrides, event_category, scope_id)
+            }
+            result = {}
+            for assignment in assignments:
+                visible = assignment.visible_in(district_id, scope_id)
+                result[assignment.id] = (
+                    not visible or assignment.duty_category_id not in effective_ids,
+                    not visible,
+                )
+            return result
+
+        before = await flagged(slot.category, slot.congregation_id)
+        after = await flagged(category, congregation_id)
+        return DutyScopeImpact(
+            newly_flagged=sum(1 for key, (flag, _) in after.items() if flag and not before[key][0]),
+            flagged_after=sum(1 for flag, _ in after.values() if flag),
+            quarantined_after=sum(1 for _, quarantined in after.values() if quarantined),
+        )
 
     async def assign(
         self,

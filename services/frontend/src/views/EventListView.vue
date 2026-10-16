@@ -352,15 +352,32 @@
                 :reload="() => reloadInlineStart(event)"
                 required
               />
-              <td class="table-td">{{ event.category ?? '—' }}</td>
-              <td class="table-td text-xs">
-                <span>{{ districtName(event.district_id) }}</span>
-                <template v-if="event.congregation_id">
-                  <span class="text-gray-400 dark:text-gray-500"> › </span>
-                  <span>{{ congregationName(event.congregation_id) }}</span>
-                </template>
-                <span v-else class="ml-1 text-gray-400 dark:text-gray-500">(Bezirk)</span>
-              </td>
+              <InlineEditableCell
+                :id="'event-category-desktop-' + event.id"
+                :value="event.category ?? ''"
+                :display-value="event.category ?? '—'"
+                :revision="event.revision ?? ''"
+                :label="'Kategorie: ' + event.title"
+                :editable="canInlineEditCategory(event)"
+                :coordinator="inlineCoordinator"
+                :save="(value, revision) => saveInlineCategory(event, value, revision)"
+                :reload="() => reloadInlineScope(event, 'category')"
+                :max-length="255"
+              />
+              <InlineEditableCell
+                :id="'event-congregation-desktop-' + event.id"
+                class="text-xs"
+                :value="event.congregation_id ?? ''"
+                :display-value="scopeLabel(event)"
+                :choices="inlineCongregationChoices"
+                empty-label="Bezirksebene"
+                :revision="event.revision ?? ''"
+                :label="'Zuordnung: ' + event.title"
+                :editable="canInlineEditCongregation(event)"
+                :coordinator="inlineCoordinator"
+                :save="(value, revision) => saveInlineCongregation(event, value, revision)"
+                :reload="() => reloadInlineScope(event, 'congregation')"
+              />
               <td class="table-td text-xs" data-testid="responsible-cell">
                 <template v-if="canInlineAssignEvent(event)">
                   <InlineAssignmentCell
@@ -646,6 +663,7 @@ import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue
 import InlineEditableCell from '../components/InlineEditableCell.vue'
 import InlineAssignmentCell from '../components/InlineAssignmentCell.vue'
 import { toLocalInputValue, useInlineScheduleSave } from '../composables/useInlineScheduleSave'
+import { useInlineScopeSave } from '../composables/useInlineScopeSave'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import { useInlineAssignmentSave } from '../composables/useInlineAssignmentSave'
 import EmptyState from '../components/EmptyState.vue'
@@ -679,6 +697,7 @@ function canManageEventDuties(event: EventResponse): boolean {
 const inlineCoordinator = useInlineCellCoordinator()
 const saveAssignment = useInlineAssignmentSave()
 const saveSchedule = useInlineScheduleSave()
+const scopeSave = useInlineScopeSave()
 onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditEvent(event: EventResponse): boolean {
@@ -732,6 +751,46 @@ async function saveInlineStart(event: EventResponse, value: string, revision: st
   const saved = await saveSchedule(event, value, revision)
   eventsStore.updateCached(saved)
   // Re-fetch so filters and sorting reflect the new date without remounting the edited row.
+  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
+}
+
+/** Holiday slots are generated; their category is not a planner decision. */
+function canInlineEditCategory(event: EventResponse): boolean {
+  return canInlineEditSchedule(event) && event.category !== 'Feiertag'
+}
+
+const inlineCongregationChoices = computed(() =>
+  districtsStore.congregations.map((c) => ({ value: c.id, label: c.name })),
+)
+
+function canInlineEditCongregation(event: EventResponse): boolean {
+  return canInlineEditSchedule(event) && inlineCongregationChoices.value.length > 0
+}
+
+function scopeLabel(event: EventResponse): string {
+  const district = districtName(event.district_id)
+  return event.congregation_id
+    ? `${district} › ${congregationName(event.congregation_id)}`
+    : `${district} (Bezirk)`
+}
+
+async function reloadInlineScope(
+  event: EventResponse,
+  field: 'category' | 'congregation',
+): Promise<{ value: string; revision: string }> {
+  const latest = await getEvent(event.id)
+  eventsStore.updateCached(latest)
+  const value = field === 'category' ? latest.category : latest.congregation_id
+  return { value: value ?? '', revision: latest.revision ?? '' }
+}
+
+async function saveInlineCategory(event: EventResponse, value: string, revision: string): Promise<void> {
+  eventsStore.updateCached(await scopeSave.saveCategory(event, value, revision))
+  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
+}
+
+async function saveInlineCongregation(event: EventResponse, value: string, revision: string): Promise<void> {
+  eventsStore.updateCached(await scopeSave.saveCongregation(event, value, revision))
   void nextTick(() => eventsStore.fetch({ preserveRows: true }))
 }
 

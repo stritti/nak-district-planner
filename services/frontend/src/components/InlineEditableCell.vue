@@ -30,7 +30,7 @@
         :disabled="saving"
         @keydown="onEditorKeydown"
       >
-        <option value="">Auswählen…</option>
+        <option value="">{{ emptyLabel }}</option>
         <option v-for="choice in choices" :key="choice.value" :value="choice.value">
           {{ choice.label }}
         </option>
@@ -86,9 +86,10 @@ const props = withDefaults(defineProps<{
   revision: string
   as?: 'td' | 'div'
   inputType?: 'text' | 'datetime-local'
+  emptyLabel?: string
   required?: boolean
   maxLength?: number
-}>(), { as: 'td', required: false, inputType: 'text' })
+}>(), { as: 'td', required: false, inputType: 'text', emptyLabel: 'Auswählen…' })
 
 const root = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)
