@@ -54,6 +54,10 @@ class LeaderInlineUpdate(BaseModel):
     special_role: SpecialRole | None = None
     congregation_id: uuid.UUID | None = None
     is_active: bool | None = None
+    confirm_deactivation: bool = Field(
+        False,
+        description="Must be true to deactivate; an explicit acknowledgement, not a leader field.",
+    )
 
 
 def _to_utc(timestamp: datetime) -> datetime:
@@ -230,13 +234,24 @@ async def inline_update_leader(
     """Only non-workflow contact/name fields support inline updates."""
     if if_match is None:
         raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
-    fields = body.model_fields_set
+    fields = body.model_fields_set - {"confirm_deactivation"}
     if not fields or any(
         field in fields and getattr(body, field) is None for field in ("name", "rank", "is_active")
     ):
         raise HTTPException(status_code=422, detail="Dieses Feld ist nicht inline editierbar.")
+    if body.is_active is False and not body.confirm_deactivation:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "deactivation_unconfirmed",
+                "message": "Das Deaktivieren muss ausdrücklich bestätigt werden.",
+            },
+        )
+    update = LeaderUpdate.model_validate(
+        body.model_dump(exclude_unset=True, exclude={"confirm_deactivation"})
+    )
     return await update_leader(
-        district_id, leader_id, LeaderUpdate.model_validate(body.model_dump(exclude_unset=True)), auth, db, leaders_repo=leaders_repo, if_match=if_match,
+        district_id, leader_id, update, auth, db, leaders_repo=leaders_repo, if_match=if_match,
     )
 
 

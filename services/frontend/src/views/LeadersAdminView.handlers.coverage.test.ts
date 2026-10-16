@@ -462,13 +462,40 @@ describe.each(['desktop', 'mobile'] as const)('LeadersAdminView inline appointme
   it('deactivates after confirmation and reactivates without a prompt', async () => {
     const wrapper = (await mountView()).wrapper
     await edit(wrapper, `leader-is_active-${layout}-l1`, 'select', 'false')
-    expect(leadersApi.updateLeaderInline).toHaveBeenLastCalledWith('d1', 'l1', { is_active: false }, '"v1"')
+    expect(leadersApi.updateLeaderInline).toHaveBeenLastCalledWith(
+      'd1', 'l1', { is_active: false, confirm_deactivation: true }, '"v1"',
+    )
     confirmMock.mockClear()
     vi.mocked(leadersApi.listLeaders).mockResolvedValue([{ ...leader, is_active: false, revision: '"v2"' }])
     const second = (await mountView()).wrapper
     await edit(second, `leader-is_active-${layout}-l1`, 'select', 'true')
     expect(leadersApi.updateLeaderInline).toHaveBeenLastCalledWith('d1', 'l1', { is_active: true }, '"v2"')
     expect(confirmMock).not.toHaveBeenCalled()
+  })
+
+  it('does not send the deactivation flag for reactivation or other fields', async () => {
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([{ ...versionedLeader, is_active: false }])
+    const { wrapper } = await mountView()
+    await edit(wrapper, `leader-is_active-${layout}-l1`, 'select', 'true')
+    expect(leadersApi.updateLeaderInline).toHaveBeenLastCalledWith('d1', 'l1', { is_active: true }, '"v1"')
+  })
+
+  it('recovers from a stale revision of an inactive leader instead of reporting it as removed', async () => {
+    const inactive = { ...versionedLeader, is_active: false }
+    // Mirrors the API: inactive leaders are only returned when include_inactive is requested.
+    vi.mocked(leadersApi.listLeaders).mockImplementation(async (_district, includeInactive) =>
+      includeInactive ? [inactive] : [])
+    vi.mocked(leadersApi.updateLeaderInline).mockRejectedValue(
+      new ApiError(412, 'Precondition Failed', { detail: 'Datensatz wurde zwischenzeitlich geändert.' }),
+    )
+    const { wrapper } = await mountView()
+    const cell = await edit(wrapper, `leader-rank-${layout}-l1`, 'select', 'Bi.')
+    vi.mocked(leadersApi.listLeaders).mockImplementation(async (_district, includeInactive) =>
+      includeInactive ? [{ ...inactive, rank: 'Ev.', revision: '"v9"' }] : [])
+    await cell.get('button').trigger('click')
+    await vi.waitFor(() => expect(cell.get('[role=alert]').text()).toContain('Aktueller Stand geladen'))
+    expect(cell.text()).not.toContain('entfernt')
+    expect(leadersApi.listLeaders).toHaveBeenLastCalledWith('d1', true)
   })
 
   it('keeps activity read-only for planners but lets them edit the grade', async () => {

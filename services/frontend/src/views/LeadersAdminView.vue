@@ -681,7 +681,9 @@ async function reloadInlineLeader(
   leader: LeaderResponse,
   field: InlineLeaderField,
 ): Promise<{ value: string | null; revision: string }> {
-  const latest = (await listLeaders(leader.district_id)).find((entry) => entry.id === leader.id)
+  // Same visibility as the admin list: inactive/hidden leaders must stay reloadable after a 412.
+  const latest = (await listLeaders(leader.district_id, canIncludeInactiveLeaders(leader.district_id)))
+    .find((entry) => entry.id === leader.id)
   if (!latest) throw new Error('Amtstragende:r wurde zwischenzeitlich entfernt.')
   if (selectedDistrictId.value === leader.district_id) {
     leaders.value = leaders.value.map((entry) => entry.id === latest.id ? latest : entry)
@@ -706,7 +708,8 @@ async function saveInlineLeader(
     if (!confirmed) throw new Error('Änderung abgebrochen')
   }
   const districtId = leader.district_id
-  const saved = await updateLeaderInline(districtId, leader.id, inlineLeaderPayload(field, value), revision)
+  const body = { ...inlineLeaderPayload(field, value), ...(field === 'is_active' && value === 'false' ? { confirm_deactivation: true } : {}) }
+  const saved = await updateLeaderInline(districtId, leader.id, body, revision)
   if (selectedDistrictId.value !== districtId) return
   leaders.value = leaders.value.map((item) => item.id === saved.id ? saved : item)
   // A failed canonical refresh must not turn an already persisted mutation into an error.

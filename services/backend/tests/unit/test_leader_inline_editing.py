@@ -149,7 +149,9 @@ async def test_activity_change_requires_district_admin_and_keeps_lock_order():
         pytest.raises(HTTPException) as err,
     ):
         await leaders.inline_update_leader(
-            district_id, leader.id, leaders.LeaderInlineUpdate(is_active=False), auth, AsyncMock(),
+            district_id, leader.id,
+            leaders.LeaderInlineUpdate(is_active=False, confirm_deactivation=True),
+            auth, AsyncMock(),
             if_match=leaders._leader_revision(leader), leaders_repo=repo,
         )
     assert err.value.status_code == 403
@@ -167,7 +169,9 @@ async def test_district_admin_can_deactivate_inline():
         patch.object(leaders, "acquire_advisory_xact_lock", new=AsyncMock()),
     ):
         result = await leaders.inline_update_leader(
-            district_id, leader.id, leaders.LeaderInlineUpdate(is_active=False), auth, AsyncMock(),
+            district_id, leader.id,
+            leaders.LeaderInlineUpdate(is_active=False, confirm_deactivation=True),
+            auth, AsyncMock(),
             if_match=leaders._leader_revision(leader), leaders_repo=repo,
         )
     assert result.is_active is False
@@ -230,3 +234,47 @@ def test_inline_contact_length_rejected_before_database_write(payload):
 ])
 def test_inline_contact_length_boundary_is_accepted(payload):
     assert leaders.LeaderInlineUpdate.model_validate(payload).model_fields_set == set(payload)
+
+
+@pytest.mark.asyncio
+async def test_direct_deactivation_without_confirmation_is_rejected_before_any_write():
+    ctx = _setup()
+    district_id, leader, repo, auth = ctx
+    with (
+        patch.object(leaders, "require_role_in_district"),
+        patch.object(leaders, "acquire_advisory_xact_lock", new=AsyncMock()) as lock,
+        pytest.raises(HTTPException) as err,
+    ):
+        await leaders.inline_update_leader(
+            district_id, leader.id, leaders.LeaderInlineUpdate(is_active=False), auth, AsyncMock(),
+            if_match=leaders._leader_revision(leader), leaders_repo=repo,
+        )
+    assert err.value.status_code == 409
+    assert err.value.detail["code"] == "deactivation_unconfirmed"
+    assert leader.is_active is True
+    repo.get_for_update.assert_not_awaited()
+    repo.save.assert_not_awaited()
+    lock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reactivation_and_other_fields_need_no_confirmation():
+    ctx = _setup()
+    district_id, leader, repo, auth = ctx
+    leader.is_active = False
+    with (
+        patch.object(leaders, "require_role_in_district"),
+        patch.object(leaders, "acquire_advisory_xact_lock", new=AsyncMock()),
+    ):
+        result = await leaders.inline_update_leader(
+            district_id, leader.id, leaders.LeaderInlineUpdate(is_active=True), auth, AsyncMock(),
+            if_match=leaders._leader_revision(leader), leaders_repo=repo,
+        )
+    assert result.is_active is True
+
+
+def test_confirmation_flag_is_not_a_persisted_leader_field():
+    body = leaders.LeaderInlineUpdate(is_active=False, confirm_deactivation=True)
+    assert "confirm_deactivation" not in leaders.LeaderUpdate.model_validate(
+        body.model_dump(exclude_unset=True, exclude={"confirm_deactivation"})
+    ).model_fields_set
