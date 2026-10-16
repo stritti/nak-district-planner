@@ -131,22 +131,45 @@ class RateLimiter:
         """Async context manager exit."""
         await self.close()
 
-    def _get_key(self, identifier: str, endpoint: str, window: int) -> str:
+    def _limit_scope(self, endpoint: str, config: RateLimitConfig | None = None) -> str:
+        """Bucket scope for an endpoint, bounded by the configured limits.
+
+        Route matching happens *after* this middleware, so raw path segments
+        (ICS secrets, arbitrary 404 URLs) must never become part of a key. Only
+        a configured ``endpoint_limits`` pattern or the shared ``global`` /
+        ``burst`` scope can be returned.
+        """
+        if endpoint.endswith("__burst__"):
+            return "burst"
+        cfg = config or self.config
+        clean_endpoint = endpoint.split("?")[0].split("#")[0]
+        limits = cfg.endpoint_limits
+        if clean_endpoint in limits:
+            return clean_endpoint
+        for pattern in limits:
+            if pattern.endswith("*") and clean_endpoint.startswith(pattern[:-1]):
+                return pattern
+        return "global"
+
+    def _get_key(
+        self,
+        identifier: str,
+        endpoint: str,
+        window: int,
+        config: RateLimitConfig | None = None,
+    ) -> str:
         """Generate Redis key for rate limiting.
 
         Args:
             identifier: User identifier or IP address.
             endpoint: API endpoint path.
             window: Window size in seconds.
+            config: Optional override config used to resolve the route scope.
 
         Returns:
             Redis key string.
         """
-        # Route matching happens *after* this middleware. Never use untrusted
-        # path segments (including ICS secrets and arbitrary 404 URLs) as keys.
-        # A client shares one global normal bucket and one global burst bucket;
-        # route-specific thresholds may only make those limits stricter.
-        scope = "burst" if endpoint.endswith("__burst__") else "global"
+        scope = self._limit_scope(endpoint, config)
         key_data = f"rate_limit:{window}:{identifier}:{scope}"
         return hashlib.sha256(key_data.encode()).hexdigest()
 
@@ -174,7 +197,7 @@ class RateLimiter:
         limit, window = self._get_endpoint_config(endpoint, is_authenticated, config)
 
         # Generate Redis key
-        key = self._get_key(identifier, endpoint, window)
+        key = self._get_key(identifier, endpoint, window, config)
 
         # Get current timestamp
         now = datetime.now(UTC)

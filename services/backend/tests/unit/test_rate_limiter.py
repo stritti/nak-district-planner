@@ -420,6 +420,25 @@ class TestRateLimiterKeyGeneration:
         assert key1 == key2 == invalid_ics
         assert limiter._get_key("ip:203.0.113.11", "/api/test1", 60) != key1
 
+    def test_configured_routes_get_their_own_bounded_bucket(self):
+        """A stricter route limit must not be charged for unrelated traffic."""
+        config = RateLimitConfig(
+            endpoint_limits={
+                "/api/v1/export/*": {"limit": 60, "window": 60},
+                "/health": {"limit": 60, "window": 60},
+            }
+        )
+        limiter = RateLimiter(config=config)
+        ip = "ip:203.0.113.10"
+        glob = limiter._get_key(ip, "/api/test", 60)
+        export_a = limiter._get_key(ip, "/api/v1/export/secret-a/calendar.ics", 60)
+        export_b = limiter._get_key(ip, "/api/v1/export/secret-b/calendar.ics", 60)
+
+        assert export_a == export_b  # secrets never create keys
+        assert export_a != glob
+        assert limiter._get_key(ip, "/health", 60) not in {glob, export_a}
+        assert limiter._get_key(ip, "/api/v1/export/x__burst__", 60) != export_a
+
     def test_normal_and_burst_buckets_remain_separate(self):
         limiter = RateLimiter()
         normal = limiter._get_key("ip:203.0.113.10", "/api/test", 60)
