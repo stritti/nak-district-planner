@@ -97,8 +97,12 @@ async def lifespan(app: FastAPI):
     try:
         await oidc_adapter.discover()
         logger.info("OIDC discovery successful: %s", oidc_adapter.issuer)
-    except Exception:
-        logger.warning("OIDC discovery failed; authentication unavailable until retried", exc_info=True)
+    except Exception as exc:
+        # Type only: provider URLs/hosts in the message or traceback must not reach the logs.
+        logger.warning(
+            "OIDC discovery failed (%s); authentication unavailable until retried",
+            type(exc).__name__,
+        )
 
     deps.set_oidc_adapter(oidc_adapter)
 

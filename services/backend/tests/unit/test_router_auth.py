@@ -243,6 +243,7 @@ def test_revoke_logs_provider_failure_but_still_deletes_cookie(
         )
 
     assert "revocation failed" in caplog.text
+    assert "provider offline" not in caplog.text
     assert result.status_code == 204
     assert "Max-Age=0" in result.headers["set-cookie"]
 

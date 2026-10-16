@@ -91,6 +91,23 @@ async def test_discovery_error_returns_bad_gateway(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.asyncio
+async def test_discovery_failure_logs_neither_provider_url_nor_message(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    adapter = _adapter()
+    adapter.discover.side_effect = OIDCDiscoveryError(
+        "GET https://keycloak.internal.example:8443/realms/secret-realm failed"
+    )
+    monkeypatch.setattr(router, "get_oidc_adapter", lambda: adapter)
+    with caplog.at_level("DEBUG"), pytest.raises(HTTPException) as error:
+        await router.get_oidc_discovery()
+    assert "keycloak.internal" not in str(error.value.detail)
+    assert "keycloak.internal" not in caplog.text
+    assert "secret-realm" not in caplog.text
+    assert "OIDC discovery failed" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_exchange_without_adapter_or_token_endpoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

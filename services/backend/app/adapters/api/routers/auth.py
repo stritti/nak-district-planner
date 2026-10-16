@@ -132,7 +132,7 @@ async def get_oidc_discovery() -> dict:
             frontend_discovery["revocation_endpoint"] = "/api/v1/auth/oidc/revoke"
         return frontend_discovery
     except OIDCDiscoveryError as e:
-        logger.warning("OIDC discovery failed: %s", e)
+        logger.warning("OIDC discovery failed (%s)", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="OIDC discovery failed",
@@ -250,7 +250,7 @@ async def revoke_oidc_refresh_token(request: Request) -> Response:
     except (httpx.HTTPError, OIDCDiscoveryError) as exc:
         # Local logout must remain available when the provider is unavailable,
         # but failed provider revocation must stay operationally visible.
-        logger.warning("OIDC provider refresh-token revocation failed: %s", exc)
+        logger.warning("OIDC provider refresh-token revocation failed (%s)", type(exc).__name__)
 
     # Return a real response. FastAPI's injected ``Response`` parameter is only
     # a header carrier whose status code is unset (``None``); sending it as the

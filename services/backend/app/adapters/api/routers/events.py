@@ -149,6 +149,15 @@ class EventInlineUpdate(BaseModel):
     description: str | None = None
 
 
+class DutyImpactAcknowledgement(BaseModel):
+    """What the client saw in the change-impact preview and explicitly accepted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    newly_flagged: int = Field(0, ge=0)
+    newly_quarantined: int = Field(0, ge=0)
+
+
 class EventUpdate(BaseModel):
     """Strict full-editor request, including explicit workflow acknowledgement."""
 
@@ -168,6 +177,13 @@ class EventUpdate(BaseModel):
     confirm_warnings: bool = Field(
         False,
         description="Acknowledge WARN conflicts on dependent changes; not an event data field.",
+    )
+    acknowledged_duty_impact: DutyImpactAcknowledgement | None = Field(
+        None,
+        description=(
+            "Duty reviews/quarantines the client accepted. The server recomputes the impact "
+            "under the slot lock and rejects the write (409) if more would be affected."
+        ),
     )
 
 
@@ -194,6 +210,9 @@ class EventChangeImpact(BaseModel):
     items: list[EventChangeImpactItem]
     duties_newly_flagged: int = Field(
         0, description="Duty assignments that would newly need review (category/congregation change)."
+    )
+    duties_newly_quarantined: int = Field(
+        0, description="Duty assignments that would newly be hidden from the new scope."
     )
     duties_flagged_after: int = 0
     duties_quarantined_after: int = Field(
@@ -550,8 +569,28 @@ async def get_event(
     return _slot_to_event(slot, instance, responsible.get(slot.id))
 
 
+async def _duty_scope_impact(
+    duties_repo: SqlEventDutiesRepository,
+    slot: PlanningSlot,
+    body: EventUpdate | EventChangeImpactRequest,
+) -> DutyScopeImpact | None:
+    """Duty impact of an effective category/congregation change, else None.
+
+    Duty writes lock the same planning-slot row and never bump the event revision,
+    so callers must compute this *after* locking the slot to be race-free.
+    """
+    fields = body.model_fields_set
+    category = body.category if "category" in fields else slot.category
+    congregation_id = body.congregation_id if "congregation_id" in fields else slot.congregation_id
+    if category == slot.category and congregation_id == slot.congregation_id:
+        return None
+    return await EventDutiesService(duties_repo).preview_scope_change(
+        slot.district_id, slot, category=category, congregation_id=congregation_id
+    )
+
+
 def _changes_service_dependencies(
-    slot: PlanningSlot, instance: EventInstance | None, body: EventUpdate
+    slot: PlanningSlot, instance: EventInstance | None, body: EventUpdate | EventChangeImpactRequest
 ) -> bool:
     """Only effective schedule/location changes require assignment revalidation.
 
@@ -583,6 +622,7 @@ async def update_event(
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    duties_repo: SqlEventDutiesRepository = Depends(get_event_duties_repository),
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> EventResponse:
     if if_match is None:
@@ -602,6 +642,22 @@ async def update_event(
         raise HTTPException(status_code=409, detail="Eine Freigabe kann nicht zurückgenommen werden.")
     if slot.was_released and slot.status == PlanningSlotStatus.CANCELLED and body.status == PlanningSlotStatus.ACTIVE:
         raise HTTPException(status_code=409, detail="Eine veröffentlichte Absage kann nicht zurückgenommen werden.")
+    duty_impact = await _duty_scope_impact(duties_repo, slot, body)
+    if duty_impact is not None and duty_impact.needs_acknowledgement:
+        ack = body.acknowledged_duty_impact
+        if ack is None or not duty_impact.is_covered_by(ack.newly_flagged, ack.newly_quarantined):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "duty_impact_unacknowledged",
+                    "message": (
+                        "Die Änderung betrifft Dienste (Prüfung bzw. Ausblendung). "
+                        "Bitte die Auswirkungen erneut prüfen und bestätigen."
+                    ),
+                    "duties_newly_flagged": duty_impact.newly_flagged,
+                    "duties_newly_quarantined": duty_impact.newly_quarantined,
+                },
+            )
     proposed = _proposed_service(slot, instance, body)
     dependent = _changes_service_dependencies(slot, instance, body)
 
@@ -714,7 +770,13 @@ async def preview_event_change(
         raise HTTPException(status_code=412, detail="Ereignis wurde zwischenzeitlich geändert.")
     proposed = _proposed_service(slot, instance, body)
     items: list[EventChangeImpactItem] = []
-    for assignment in await assignments_repo.list_by_planning_slot(event_id):
+    # Leader conflicts only matter for schedule/location changes, exactly like the PATCH.
+    leader_assignments = (
+        await assignments_repo.list_by_planning_slot(event_id)
+        if _changes_service_dependencies(slot, instance, body)
+        else []
+    )
+    for assignment in leader_assignments:
         if assignment.leader_id is None:
             continue
         conflicts = await check_service_assignment_conflicts(
@@ -733,19 +795,13 @@ async def preview_event_change(
                 )
             )
     severities = {conflict.severity.value for item in items for conflict in item.conflicts}
-    duty_impact = DutyScopeImpact(0, 0, 0)
-    if {"category", "congregation_id"} & body.model_fields_set:
-        duty_impact = await EventDutiesService(duties_repo).preview_scope_change(
-            slot.district_id,
-            slot,
-            category=body.category if "category" in body.model_fields_set else slot.category,
-            congregation_id=proposed.congregation_id,
-        )
+    duty_impact = await _duty_scope_impact(duties_repo, slot, body) or DutyScopeImpact(0, 0, 0)
     return EventChangeImpact(
         blocked="BLOCK" in severities,
         requires_confirmation="WARN" in severities,
         items=items,
         duties_newly_flagged=duty_impact.newly_flagged,
+        duties_newly_quarantined=duty_impact.newly_quarantined,
         duties_flagged_after=duty_impact.flagged_after,
         duties_quarantined_after=duty_impact.quarantined_after,
     )

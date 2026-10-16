@@ -17,7 +17,7 @@ const revision = '"rev-1"'
 function impact(overrides: Partial<EventChangeImpact> = {}): EventChangeImpact {
   return {
     blocked: false, requires_confirmation: false, items: [],
-    duties_newly_flagged: 0, duties_flagged_after: 0, duties_quarantined_after: 0,
+    duties_newly_flagged: 0, duties_newly_quarantined: 0, duties_flagged_after: 0, duties_quarantined_after: 0,
     ...overrides,
   }
 }
@@ -30,7 +30,9 @@ describe('useInlineScopeSave category', () => {
     vi.mocked(updateEvent).mockResolvedValue(saved)
     await expect(useInlineScopeSave().saveCategory(event, 'Feiertag', revision)).resolves.toEqual(saved)
     expect(previewEventChange).toHaveBeenCalledWith('e1', { category: 'Feiertag' }, revision)
-    expect(updateEvent).toHaveBeenCalledWith('e1', { category: 'Feiertag' }, revision)
+    expect(updateEvent).toHaveBeenCalledWith('e1', {
+      category: 'Feiertag', acknowledged_duty_impact: { newly_flagged: 0, newly_quarantined: 0 },
+    }, revision)
     expect(mocks.confirm).not.toHaveBeenCalled()
   })
 
@@ -38,7 +40,7 @@ describe('useInlineScopeSave category', () => {
     vi.mocked(previewEventChange).mockResolvedValue(impact())
     vi.mocked(updateEvent).mockResolvedValue(saved)
     await useInlineScopeSave().saveCategory(event, '', revision)
-    expect(updateEvent).toHaveBeenCalledWith('e1', { category: null }, revision)
+    expect(updateEvent).toHaveBeenCalledWith('e1', expect.objectContaining({ category: null }), revision)
   })
 
   it('asks for confirmation when duties would need review and aborts on cancel', async () => {
@@ -71,12 +73,12 @@ describe('useInlineScopeSave congregation', () => {
     vi.mocked(updateEvent).mockResolvedValue(saved)
     await useInlineScopeSave().saveCongregation(event, '', revision)
     expect(previewEventChange).toHaveBeenCalledWith('e1', { congregation_id: null }, revision)
-    expect(updateEvent).toHaveBeenCalledWith('e1', { congregation_id: null }, revision)
+    expect(updateEvent).toHaveBeenCalledWith('e1', expect.objectContaining({ congregation_id: null }), revision)
   })
 
   it('mentions quarantine in the confirmation and acknowledges warnings', async () => {
     vi.mocked(previewEventChange).mockResolvedValue(impact({
-      duties_newly_flagged: 1, duties_quarantined_after: 1, requires_confirmation: true,
+      duties_newly_flagged: 1, duties_newly_quarantined: 1, duties_quarantined_after: 1, requires_confirmation: true,
       items: [{ assignment_id: 'a', leader_id: 'l', conflicts: [{ rule_id: 'R', severity: 'WARN', message: 'Dienstende', details: {} }] }],
     }))
     mocks.confirm.mockResolvedValue(true)
@@ -84,7 +86,10 @@ describe('useInlineScopeSave congregation', () => {
     await useInlineScopeSave().saveCongregation(event, 'c2', revision)
     expect(mocks.confirm.mock.calls[0][0].message).toMatch(/Dienstende/)
     expect(mocks.confirm.mock.calls[0][0].message).toMatch(/ausgeblendet/)
-    expect(updateEvent).toHaveBeenCalledWith('e1', { congregation_id: 'c2', confirm_warnings: true }, revision)
+    expect(updateEvent).toHaveBeenCalledWith('e1', {
+      congregation_id: 'c2', confirm_warnings: true,
+      acknowledged_duty_impact: { newly_flagged: 1, newly_quarantined: 1 },
+    }, revision)
   })
 
   it('refuses blocked moves without patching or prompting', async () => {
@@ -102,5 +107,27 @@ describe('useInlineScopeSave congregation', () => {
     vi.mocked(previewEventChange).mockRejectedValue(stale)
     await expect(useInlineScopeSave().saveCongregation(event, 'c2', revision)).rejects.toBe(stale)
     expect(updateEvent).not.toHaveBeenCalled()
+  })
+  it('asks for confirmation when only a quarantine is new (duty was already in review)', async () => {
+    vi.mocked(previewEventChange).mockResolvedValue(impact({
+      duties_newly_flagged: 0, duties_newly_quarantined: 1, duties_flagged_after: 1, duties_quarantined_after: 1,
+    }))
+    mocks.confirm.mockResolvedValue(true)
+    vi.mocked(updateEvent).mockResolvedValue(saved)
+    await useInlineScopeSave().saveCongregation(event, 'c2', revision)
+    expect(mocks.confirm.mock.calls[0][0].message).toMatch(/1 Dienst\(e\) werden in der neuen Gemeinde ausgeblendet/)
+    expect(updateEvent).toHaveBeenCalledWith('e1', expect.objectContaining({
+      acknowledged_duty_impact: { newly_flagged: 0, newly_quarantined: 1 },
+    }), revision)
+  })
+
+  it('surfaces a server-side duty impact rejection instead of retrying silently', async () => {
+    vi.mocked(previewEventChange).mockResolvedValue(impact())
+    const rejected = new ApiError(409, 'Conflict', {
+      detail: { code: 'duty_impact_unacknowledged', message: 'Bitte die Auswirkungen erneut prüfen und bestätigen.' },
+    })
+    vi.mocked(updateEvent).mockRejectedValue(rejected)
+    await expect(useInlineScopeSave().saveCategory(event, 'Feiertag', revision)).rejects.toBe(rejected)
+    expect(updateEvent).toHaveBeenCalledOnce()
   })
 })
