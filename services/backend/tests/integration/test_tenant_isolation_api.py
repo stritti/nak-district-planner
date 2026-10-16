@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import uuid
@@ -403,10 +404,10 @@ async def test_congregation_export_feed_contains_distributed_district_slots(
         )
         await conn.execute(
             text(
-                "INSERT INTO export_tokens (id, token, label, token_type, district_id, "
+                "INSERT INTO export_tokens (id, token_hash, label, token_type, district_id, "
                 "congregation_id) VALUES (:id, :t, 'Gemeinde A', 'PUBLIC', :d, :c)"
             ),
-            {"id": uuid.uuid4(), "t": token, "d": world.a.district_id, "c": congregation_id},
+            {"id": uuid.uuid4(), "t": hashlib.sha256(token.encode()).hexdigest(), "d": world.a.district_id, "c": congregation_id},
         )
         for slot_id, district_id, applicability in slots:
             await conn.execute(
@@ -422,7 +423,7 @@ async def test_congregation_export_feed_contains_distributed_district_slots(
         response = await api.get(f"/api/v1/export/{token}/calendar.ics")
     finally:
         async with owner.begin() as conn:
-            await conn.execute(text("DELETE FROM export_tokens WHERE token = :t"), {"t": token})
+            await conn.execute(text("DELETE FROM export_tokens WHERE token_hash = :t"), {"t": hashlib.sha256(token.encode()).hexdigest()})
             await conn.execute(
                 text("DELETE FROM planning_slots WHERE id = ANY(:ids)"),
                 {"ids": [slot_id for slot_id, _, _ in slots]},
@@ -479,12 +480,12 @@ async def test_export_feed_resolves_leader_names_under_rls(
         )
         await conn.execute(
             text(
-                "INSERT INTO export_tokens (id, token, label, token_type, district_id, leader_id) "
+                "INSERT INTO export_tokens (id, token_hash, label, token_type, district_id, leader_id) "
                 "VALUES (:id, :t, 'Feed', :tt, :d, :l)"
             ),
             {
                 "id": uuid.uuid4(),
-                "t": token,
+                "t": hashlib.sha256(token.encode()).hexdigest(),
                 "tt": token_type,
                 "d": world.a.district_id,
                 "l": leader_id if personal else None,
@@ -494,7 +495,7 @@ async def test_export_feed_resolves_leader_names_under_rls(
         response = await api.get(f"/api/v1/export/{token}/calendar.ics")
     finally:
         async with owner.begin() as conn:
-            await conn.execute(text("DELETE FROM export_tokens WHERE token = :t"), {"t": token})
+            await conn.execute(text("DELETE FROM export_tokens WHERE token_hash = :t"), {"t": hashlib.sha256(token.encode()).hexdigest()})
             await conn.execute(text("DELETE FROM planning_slots WHERE id = :id"), {"id": slot_id})
             await conn.execute(text("DELETE FROM leaders WHERE id = :id"), {"id": leader_id})
 
