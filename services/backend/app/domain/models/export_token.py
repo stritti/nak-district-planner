@@ -28,7 +28,7 @@ class TokenType(StrEnum):
 @dataclass
 class ExportToken:
     id: uuid.UUID
-    token: str
+    token_hash: str
     label: str
     token_type: TokenType
     district_id: uuid.UUID
@@ -37,7 +37,7 @@ class ExportToken:
     created_at: datetime
 
     subject_sub: str | None = None
-    token_hash: str | None = None
+
 
     def confirmed_only(self, requested: str | None) -> bool:
         """Whether the ICS feed may contain only CONFIRMED slots (UC-05).
@@ -66,7 +66,6 @@ class ExportToken:
         return (
             ExportToken(
                 id=uuid.uuid4(),
-                token=raw,
                 token_hash=hash_export_token(raw),
                 label=label,
                 token_type=token_type,

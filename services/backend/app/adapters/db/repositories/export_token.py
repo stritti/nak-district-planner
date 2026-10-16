@@ -11,13 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.export_token import ExportTokenORM
-from app.domain.models.export_token import ExportToken, TokenType
+from app.domain.models.export_token import ExportToken, TokenType, hash_export_token
 
 
 def _orm_to_domain(row: ExportTokenORM) -> ExportToken:
     return ExportToken(
         id=row.id,
-        token=row.token,
         label=row.label,
         token_type=TokenType(row.token_type),
         district_id=row.district_id,
@@ -36,7 +35,6 @@ class SqlExportTokenRepository:
     async def save(self, token: ExportToken) -> ExportToken:
         row = ExportTokenORM(
             id=token.id,
-            token=token.token,
             token_hash=token.token_hash,
             label=token.label,
             token_type=token.token_type,
@@ -51,13 +49,11 @@ class SqlExportTokenRepository:
         return token
 
     async def get_by_token(self, token: str) -> ExportToken | None:
-        """Resolve the presented secret using the expand-phase RLS contract.
-
-        Plaintext stays authoritative until a separate migration upgrades every
-        export policy, SECURITY DEFINER helper and ORM reader to hash-only storage.
-        """
+        """Resolve a bearer credential only by its SHA-256 digest."""
         result = await self._session.execute(
-            select(ExportTokenORM).where(ExportTokenORM.token == token)
+            select(ExportTokenORM).where(
+                ExportTokenORM.token_hash == hash_export_token(token)
+            )
         )
         row = result.scalar_one_or_none()
         return _orm_to_domain(row) if row else None

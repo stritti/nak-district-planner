@@ -30,7 +30,7 @@ def _create(**overrides):
 
 def test_create_returns_plaintext_once_and_computes_hash():
     token, raw_secret = _create()
-    assert token.token == raw_secret
+    assert not hasattr(token, "token")
     assert token.token_hash == hash_export_token(raw_secret)
     assert token.token_hash != raw_secret
 
@@ -73,8 +73,31 @@ def test_invalid_subject_token_is_rejected(overrides):
 
 
 @pytest.mark.asyncio
-async def test_unknown_secret_returns_no_token_under_the_expand_contract():
+async def test_unknown_secret_returns_no_token_under_the_hash_only_contract():
     session = AsyncMock()
     session.execute.return_value.scalar_one_or_none = lambda: None
     assert await SqlExportTokenRepository(session).get_by_token("unknown-secret") is None
     session.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_repository_resolves_only_a_sha256_digest():
+    session = AsyncMock()
+    session.execute.return_value.scalar_one_or_none = lambda: None
+    raw_secret = "canary-plain-secret"
+    await SqlExportTokenRepository(session).get_by_token(raw_secret)
+    query = session.execute.await_args.args[0]
+    assert hash_export_token(raw_secret) in query.compile().params.values()
+    assert raw_secret not in query.compile().params.values()
+
+
+@pytest.mark.asyncio
+async def test_repository_never_persists_plaintext_secret():
+    session = AsyncMock()
+    token, raw_secret = _create(district_id=uuid.uuid4())
+    await SqlExportTokenRepository(session).save(token)
+    session.add.assert_called_once()
+    row = session.add.call_args.args[0]
+    assert row.token_hash == hash_export_token(raw_secret)
+    assert not hasattr(row, "token")
+    session.flush.assert_awaited_once()
