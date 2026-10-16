@@ -187,7 +187,7 @@ Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter
 - **AND** keine veraltete Uhrzeit wird angelegt
 
 ### Requirement: Stabiler Fehlervertrag der Übernahme
-Fehlgeschlagene Übernahmen, Auslassungen, Wiedereröffnungen und Auflösungen SHALL mit einem stabilen Fehlercode und einer festen deutschen Meldung beantwortet werden, nie mit dem Text einer Ausnahme. Einzelaktionen und Mehrfachübernahme SHALL dieselben Codes verwenden. Dasselbe gilt für das Anlegen und Ändern von Vorlagen: ungültige Eingaben SHALL mit INVALID_TEMPLATE, eine überholte Revision mit STALE_TEMPLATE beantwortet werden. Die Oberfläche SHALL ausschließlich Meldungen zu bekannten Codes bzw. feste Texte je Status anzeigen.
+Fehlgeschlagene Übernahmen, Auslassungen, Wiedereröffnungen und Auflösungen SHALL mit einem stabilen Fehlercode und einer festen deutschen Meldung beantwortet werden, nie mit dem Text einer Ausnahme. Einzelaktionen und Mehrfachübernahme SHALL dieselben Codes verwenden.
 
 #### Scenario: Bekannter Domänenfehler bei einer Einzelaktion
 - **WHEN** eine Einzelaktion an einer überholten Vorlage, einer Kollision, einem ungültigen Vorkommen oder einer doppeldeutigen bzw. nicht existierenden lokalen Zeit scheitert
@@ -196,6 +196,9 @@ Fehlgeschlagene Übernahmen, Auslassungen, Wiedereröffnungen und Auflösungen S
 #### Scenario: Unbekannter Fehler enthält interne Details
 - **WHEN** eine Einzelaktion mit einer unbekannten Ausnahme scheitert, deren Text interne Details enthält
 - **THEN** antwortet die API mit HTTP 422 und dem Code INVALID_INPUT, und die Antwort enthält den Ausnahmetext nicht
+
+### Requirement: Vorlagenfehler und Fehleranzeige
+Das Anlegen und Ändern von Vorlagen SHALL ungültige Eingaben mit INVALID_TEMPLATE und eine überholte Revision mit STALE_TEMPLATE beantworten. Die Oberfläche SHALL ausschließlich Meldungen zu bekannten Codes bzw. feste Texte je Status anzeigen.
 
 #### Scenario: Ungültige oder überholte Vorlage
 - **WHEN** eine Vorlage mit ungültigen Werten angelegt oder geändert wird, oder die `expected_revision` überholt ist
