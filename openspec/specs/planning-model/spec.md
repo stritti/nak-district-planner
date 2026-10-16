@@ -34,6 +34,17 @@ Every event response SHALL contain `is_service`, true exactly when the category 
 - **WHEN** `GET /api/v1/events?is_service=true` is called
 - **THEN** only events with category `Gottesdienst` are returned
 
+### Requirement: Event listing is bounded in the database
+`GET /api/v1/events` SHALL reject a range whose `to_dt` precedes `from_dt` or that spans more than 1100 days with HTTP 422, and SHALL apply all filters, the total count and pagination in SQL so that at most one page of slots is materialised. Visibility rules SHALL be unchanged: a congregation sees its own slots in every state and district slots only while ACTIVE, CONFIRMED and applicable to it.
+
+#### Scenario: Oversized or reversed range
+- **WHEN** the requested range exceeds 1100 days or ends before it starts
+- **THEN** the response is HTTP 422 and no slots are queried
+
+#### Scenario: Pagination with filters
+- **WHEN** a filtered list is requested with `limit` and `offset`
+- **THEN** `total` counts all matching slots and the items are the requested page in stable order
+
 ### Requirement: Monthly approval workflow
 
 `POST /api/v1/events/bulk-approval-status` SHALL change the approval status only for eligible slots of the requested district and month. A district-scoped `PLANNER` (or higher role) SHALL retain the existing district-wide approval permission; a request without `congregation_id` SHALL require this district-level permission. A congregation-scoped actor SHALL NOT approve district-level slots or another congregation's slots.

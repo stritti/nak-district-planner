@@ -267,7 +267,7 @@ def test_viewer_state_change_in_own_district_returns_200(auth_client):
 def test_viewer_get_events_in_own_district_returns_200(auth_client):
     client, auth_headers, district1 = auth_client
     slot_repo = AsyncMock()
-    slot_repo.list_for_date_range.return_value = []
+    slot_repo.list_page.return_value = ([], 0)
     inst_repo = AsyncMock()
     inst_repo.list_by_planning_slots.return_value = []
     with _repository_overrides(
