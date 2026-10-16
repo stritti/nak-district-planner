@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.2](https://github.com/stritti/nak-district-planner/compare/v1.2.1...v1.2.2) (2026-10-16)
+
+
+### Bug Fixes
+
+* **security:** Event-Liste mit begrenztem Zeitraum und SQL-Pagination ([#604](https://github.com/stritti/nak-district-planner/issues/604)) ([#618](https://github.com/stritti/nak-district-planner/issues/618)) ([f32bc4c](https://github.com/stritti/nak-district-planner/commit/f32bc4c79e8a6e7b54c0dc1f4ce544edcc7a5442))
+* **security:** geheime ICS-Export-URLs aus Logs, Audit und Traces entfernen ([#603](https://github.com/stritti/nak-district-planner/issues/603)) ([#616](https://github.com/stritti/nak-district-planner/issues/616)) ([d1de8db](https://github.com/stritti/nak-district-planner/commit/d1de8dbacf71eeb0018307ceb257ce9c92e6aeed))
+* **security:** require STARTTLS before SMTP authentication ([#606](https://github.com/stritti/nak-district-planner/issues/606)) ([#615](https://github.com/stritti/nak-district-planner/issues/615)) ([e2060c6](https://github.com/stritti/nak-district-planner/commit/e2060c62eac48dcda2a8c29c7bbea7f2928e41ab))
+* **security:** Ressourcenbudget für paginierte Kalender-Abrufe ([#605](https://github.com/stritti/nak-district-planner/issues/605)) ([#617](https://github.com/stritti/nak-district-planner/issues/617)) ([71c172c](https://github.com/stritti/nak-district-planner/commit/71c172c3432645f2c30e02e7d447c56369440999))
+
 ## [1.2.1](https://github.com/stritti/nak-district-planner/compare/v1.2.0...v1.2.1) (2026-10-16)
 
 
