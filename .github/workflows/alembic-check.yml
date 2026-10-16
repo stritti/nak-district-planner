@@ -100,12 +100,25 @@ jobs:
           echo "Current revision: $CURRENT"
           echo "✅ Migration chain is consistent"
 
-      - name: Downgrade/upgrade roundtrip (last migration is reversible)
+      - name: Downgrade/upgrade roundtrip or explicit irreversible-contract guard
         run: |
           set -o pipefail
-          uv run alembic downgrade -1 2>&1
-          uv run alembic upgrade head 2>&1
-          echo "✅ Downgrade -1 / upgrade head roundtrip successful"
+          if uv run alembic current | grep -q '20261016_contract_export_tokens'; then
+            # A SHA-256 digest has no reversible plaintext preimage. This
+            # contract migration must reject database-only downgrades; restore
+            # the matching encrypted backup and old binary instead.
+            if uv run alembic downgrade -1 > downgrade-contract.log 2>&1; then
+              echo "❌ Hash-only contract unexpectedly downgraded"
+              exit 1
+            fi
+            grep -q 'Irreversible hash-only contract' downgrade-contract.log
+            uv run alembic current | grep -q '20261016_contract_export_tokens'
+            echo "✅ Verified irreversible export-token contract rejects downgrades"
+          else
+            uv run alembic downgrade -1 2>&1
+            uv run alembic upgrade head 2>&1
+            echo "✅ Downgrade -1 / upgrade head roundtrip successful"
+          fi
 
       - name: Seed dry-run against migrated schema
         run: |

@@ -426,23 +426,22 @@ def test_export_token_expand_backfill_and_downgrade_preserve_secrets() -> None:
         engine.dispose()
 
 
-@pytest.mark.parametrize("with_hash", [False, True], ids=["legacy-writer", "dual-writer"])
-def test_export_expand_keeps_anonymous_feeds_scoped_and_rejects_digest(owner, data, with_hash):
-    """Old and new writers work; a stored digest is never a bearer credential."""
+def test_export_contract_scopes_anonymous_feeds_and_rejects_digest(owner, data):
+    """Hash-only runtime lookup must not treat a digest as a bearer token."""
     token_id = str(uuid.uuid4())
-    secret = f"expand-{uuid.uuid4().hex}"
+    secret = f"contract-{uuid.uuid4().hex}"
     digest = hashlib.sha256(secret.encode()).hexdigest()
     with owner.cursor() as cur:
         cur.execute(
             "INSERT INTO export_tokens "
-            "(id, token, token_hash, label, token_type, district_id, created_at) "
-            "VALUES (%s, %s, %s, 'Expand test', 'INTERNAL', %s, now())",
-            (token_id, secret, digest if with_hash else None, str(data.a.district_id)),
+            "(id, token_hash, label, token_type, district_id, created_at) "
+            "VALUES (%s, %s, 'Hash-only contract', 'INTERNAL', %s, now())",
+            (token_id, digest, str(data.a.district_id)),
         )
     try:
         with app_session() as cur:
             cur.execute("SELECT set_config('app.current_export_token', %s, true)", (secret,))
-            cur.execute("SELECT id FROM export_tokens WHERE token=%s", (secret,))
+            cur.execute("SELECT id FROM export_tokens WHERE token_hash=%s", (digest,))
             assert str(cur.fetchone()[0]) == token_id
             assert _visible_ids(cur, "planning_slots", [data.a.slot_id, data.b.slot_id]) == {
                 data.a.slot_id
@@ -452,13 +451,15 @@ def test_export_expand_keeps_anonymous_feeds_scoped_and_rejects_digest(owner, da
                 cur.execute("SELECT set_config('app.current_export_token', %s, true)", (presented,))
                 cur.execute("SELECT id FROM export_tokens WHERE id=%s", (token_id,))
                 assert cur.fetchall() == []
-                assert _visible_ids(cur, "planning_slots", [data.a.slot_id, data.b.slot_id]) == set()
+                assert _visible_ids(
+                    cur, "planning_slots", [data.a.slot_id, data.b.slot_id]
+                ) == set()
     finally:
         with owner.cursor() as cur:
             cur.execute("DELETE FROM export_tokens WHERE id=%s", (token_id,))
     with app_session() as cur:
         cur.execute("SELECT set_config('app.current_export_token', %s, true)", (secret,))
-        cur.execute("SELECT id FROM export_tokens WHERE token=%s", (secret,))
+        cur.execute("SELECT id FROM export_tokens WHERE token_hash=%s", (digest,))
         assert cur.fetchall() == []
         assert _visible_ids(cur, "planning_slots", [data.a.slot_id, data.b.slot_id]) == set()
 
@@ -533,3 +534,14 @@ def test_notification_state_rls_is_subject_and_tenant_scoped(owner, data) -> Non
                 "DELETE FROM notifications WHERE id IN (%s, %s)",
                 (first, foreign),
             )
+
+
+def test_export_contract_schema_has_no_plaintext_column(owner):
+    with owner.cursor() as cur:
+        cur.execute(
+            "SELECT attname, attnotnull FROM pg_attribute "
+            "WHERE attrelid='public.export_tokens'::regclass "
+            "AND attname IN ('token', 'token_hash') AND NOT attisdropped"
+        )
+        columns = dict(cur.fetchall())
+    assert columns == {"token_hash": True}

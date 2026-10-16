@@ -143,11 +143,12 @@ class TestEntryFor:
 
     def test_export_token_value_is_never_snapshotted(self) -> None:
         token = ExportTokenORM(
-            id=uuid.uuid4(), token="secret-token", label="Gemeinde", district_id=DISTRICT
+            id=uuid.uuid4(), token_hash="a" * 64, label="Gemeinde", district_id=DISTRICT
         )
         entry = entry_for(AuditAction.CREATE, token)
         assert "token" not in entry.new_values
-        assert "secret-token" not in repr(entry.new_values)
+        assert "token_hash" not in entry.new_values
+        assert "a" * 64 not in repr(entry.new_values)
 
     def test_recurring_template_creation_records_rules_and_scope(self) -> None:
         template = RecurringEventTemplateORM(

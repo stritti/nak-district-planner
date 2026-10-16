@@ -161,7 +161,7 @@ AUDITED_RESOURCES: dict[type, AuditedResource] = {
         "export_token",
         ("label", "token_type", "congregation_id", "leader_id"),
         _own_tenant,
-        redacted=("token",),
+        redacted=("token_hash",),
     ),
     RecurringEventTemplateORM: AuditedResource(
         "recurring_event_template",

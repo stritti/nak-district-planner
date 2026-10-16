@@ -30,9 +30,8 @@ class ExportTokenORM(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    token: Mapped[str] = mapped_column(sa.String(64), unique=True, nullable=False, index=True)
-    token_hash: Mapped[str | None] = mapped_column(
-        sa.String(64), unique=True, nullable=True, index=True
+    token_hash: Mapped[str] = mapped_column(
+        sa.String(64), unique=True, nullable=False, index=True
     )
     label: Mapped[str] = mapped_column(sa.String(200), nullable=False)
     token_type: Mapped[TokenType] = mapped_column(_TokenTypeEnum, nullable=False)

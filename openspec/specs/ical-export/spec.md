@@ -82,3 +82,20 @@ Personal calendar feeds for an authenticated, securely linked participant or a s
 #### Scenario: Public token
 - **WHEN** a PUBLIC export token is used
 - **THEN** no personal organisational duty names, assignments or task labels are disclosed
+
+
+### Requirement: Export credentials are hash-only at rest
+Each ICS bearer credential SHALL be generated using at least 32 random bytes and returned only in the creation response. Only its SHA-256 digest SHALL persist in the database. Anonymous feed RLS and SECURITY DEFINER authorization SHALL compare digests of the presented credentials. A stored hash string SHALL NOT itself authorize a feed.
+
+#### Scenario: Legacy subscription survives contract migration
+- **WHEN** a previously issued valid ICS URL is fetched after the hash-only migration
+- **THEN** its original token still authorizes the same district and visibility scope
+- **AND** the raw secret is no longer present in database storage
+
+#### Scenario: Hash impersonation fails
+- **WHEN** a client presents a database-stored digest as the bearer token
+- **THEN** the lookup and every RLS-protected read fail as for an invalid token
+
+#### Scenario: Credential revocation
+- **WHEN** an export token record is revoked
+- **THEN** existing URLs immediately stop working with HTTP 404
