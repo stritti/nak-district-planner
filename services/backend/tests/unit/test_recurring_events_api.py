@@ -516,3 +516,91 @@ async def test_congregation_and_distribution_reject_cross_district_ids() -> None
                 AsyncMock(), replace(entry, applicability=(str(congregation_id),)),
             )
         assert error.value.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("failure", "status_code", "expected_code"),
+    [
+        (StaleTemplateError("sensitive revision details"), 409, "STALE_TEMPLATE"),
+        (OccurrenceConflictError("sensitive slot details"), 409, "OCCURRENCE_CONFLICT"),
+        (InvalidOccurrenceError("sensitive template details"), 409, "INVALID_OCCURRENCE"),
+        (AmbiguousLocalTimeError("sensitive timing details"), 409, "AMBIGUOUS_LOCAL_TIME"),
+        (NonexistentLocalTimeError("sensitive timing details"), 409, "NONEXISTENT_LOCAL_TIME"),
+        (ValueError("internal sensitive details"), 422, "INVALID_INPUT"),
+    ],
+)
+def test_single_item_errors_use_the_stable_contract_without_exception_text(
+    failure: ValueError, status_code: int, expected_code: str,
+) -> None:
+    """Accept/skip/reopen/resolve answer like the bulk endpoint: code + fixed German message."""
+    error = r._handle_occurrence_error(failure)
+    assert error.status_code == status_code
+    assert error.detail["code"] == expected_code
+    assert error.detail["message"]
+    assert "sensitive" not in str(error.detail)
+    assert "internal" not in str(error.detail)
+
+
+def test_every_public_error_code_has_a_message() -> None:
+    codes = {"STALE_TEMPLATE", "OCCURRENCE_CONFLICT", "INVALID_OCCURRENCE",
+             "AMBIGUOUS_LOCAL_TIME", "NONEXISTENT_LOCAL_TIME", "INVALID_INPUT", "INVALID_TEMPLATE"}
+    assert set(r.PUBLIC_ERROR_MESSAGES) == codes
+
+
+def _create_payload(entry) -> RecurringTemplateCreate:
+    return RecurringTemplateCreate(
+        title="Chorprobe", category="Probe", congregation_id=entry.congregation_id,
+        start_time=entry.start_time, duration_minutes=90,
+        recurrence=RecurrenceRulePayload(
+            kind=RecurrenceKind.WEEKLY, anchor_date=date(2026, 11, 3), weekdays=(2,),
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_template_create_validation_errors_use_a_code_not_the_exception_text() -> None:
+    entry = _template()
+    user = _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id)
+    with (
+        patch.object(r, "_validate_congregation", AsyncMock()),
+        patch.object(r, "RecurringEventTemplate", side_effect=ValueError("internal secret detail")),
+        pytest.raises(HTTPException) as error,
+    ):
+        await r.create_recurring_template(entry.district_id, _create_payload(entry), user, AsyncMock())
+    assert error.value.status_code == 422
+    assert error.value.detail == {
+        "code": "INVALID_TEMPLATE", "message": r.PUBLIC_ERROR_MESSAGES["INVALID_TEMPLATE"],
+    }
+    assert "secret" not in str(error.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_template_patch_errors_use_stable_codes() -> None:
+    entry = _template()
+    user = _auth(Role.DISTRICT_ADMIN, ScopeType.DISTRICT, entry.district_id)
+    repo = AsyncMock()
+    repo.get_template.return_value = entry
+
+    async def patch_template(body: r.RecurringTemplatePatch):
+        with patch.object(r, "_repository", return_value=repo):
+            return await r.update_recurring_template(
+                entry.district_id, entry.id, body, user, AsyncMock(),
+            )
+
+    with pytest.raises(HTTPException) as stale:
+        await patch_template(r.RecurringTemplatePatch(expected_revision=entry.revision + 1))
+    assert (stale.value.status_code, stale.value.detail["code"]) == (409, "STALE_TEMPLATE")
+
+    with pytest.raises(HTTPException) as null_field:
+        await patch_template(r.RecurringTemplatePatch(expected_revision=entry.revision, title=None))
+    assert (null_field.value.status_code, null_field.value.detail["code"]) == (422, "INVALID_TEMPLATE")
+    assert "title" not in str(null_field.value.detail)
+
+    with (
+        patch.object(r, "replace", side_effect=ValueError("internal secret detail")),
+        pytest.raises(HTTPException) as invalid,
+    ):
+        await patch_template(r.RecurringTemplatePatch(expected_revision=entry.revision, title="X"))
+    assert (invalid.value.status_code, invalid.value.detail["code"]) == (422, "INVALID_TEMPLATE")
+    assert "secret" not in str(invalid.value.detail)
+    repo.save_template.assert_not_awaited()

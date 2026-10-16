@@ -297,16 +297,31 @@ function statusLabel(state: ChecklistStatus): string {
     CONFLICT: 'Konflikt', NEEDS_REVIEW: 'Prüfung nötig',
   }[state]
 }
-const bulkErrorMessages: Record<string, string> = {
+const errorMessages: Record<string, string> = {
   STALE_TEMPLATE: 'Vorlage wurde inzwischen geändert. Bitte die Monatsliste aktualisieren.',
   OCCURRENCE_CONFLICT: 'Der Termin ist bereits belegt oder wurde verändert.',
   INVALID_OCCURRENCE: 'Der Termin entspricht nicht mehr der aktuellen Vorlage.',
   AMBIGUOUS_LOCAL_TIME: 'Die Uhrzeit ist doppeldeutig. Bitte einzeln prüfen.',
   NONEXISTENT_LOCAL_TIME: 'Die lokale Uhrzeit existiert an diesem Tag nicht.',
   INVALID_INPUT: 'Ungültige Eingabe. Bitte den Termin prüfen.',
+  INVALID_TEMPLATE: 'Die Vorlage ist ungültig. Bitte die Eingaben prüfen.',
 }
 function bulkErrorMessage(code: string | null | undefined): string {
-  return (code && bulkErrorMessages[code]) || 'Übernahme fehlgeschlagen. Bitte die Monatsliste aktualisieren.'
+  return (code && errorMessages[code]) || 'Übernahme fehlgeschlagen. Bitte die Monatsliste aktualisieren.'
+}
+/**
+ * Occurrence and template endpoints answer with `{code, message}`. Only whitelisted codes and
+ * fixed status texts are shown; response text, exception text and unknown details never are.
+ */
+function actionErrorMessage(cause: unknown): string {
+  if (cause instanceof ApiError) {
+    const detail = (cause.body as { detail?: unknown } | null)?.detail
+    const code = typeof detail === 'object' && detail !== null ? (detail as { code?: unknown }).code : undefined
+    if (typeof code === 'string' && errorMessages[code]) return errorMessages[code]
+    if (cause.status === 403) return 'Dafür fehlt die Berechtigung.'
+    if (cause.status === 404) return 'Die Vorlage oder der Termin existiert nicht mehr. Bitte die Liste aktualisieren.'
+  }
+  return 'Die Aktion ist fehlgeschlagen. Bitte die Monatsliste aktualisieren und erneut versuchen.'
 }
 function itemKey(item: ChecklistItem): string {
   return `${item.template_id}:${item.occurrence_local_date}`
@@ -398,7 +413,7 @@ async function perform(task: () => Promise<unknown>): Promise<boolean> {
     await load()
     return true
   } catch (cause) {
-    error.value = String(cause)
+    error.value = actionErrorMessage(cause)
     return false
   } finally {
     busy.value = false
@@ -442,7 +457,7 @@ async function bulkAccept(): Promise<void> {
       ).join('; ')
     }
   } catch (cause) {
-    error.value = String(cause)
+    error.value = actionErrorMessage(cause)
   } finally {
     busy.value = false
   }
