@@ -33,6 +33,7 @@ from app.domain.models.planning_slot import (
 )
 from app.domain.models.role import Role
 from app.main import app
+from tests.unit.event_list_fake import fake_list_page
 
 
 @contextmanager
@@ -137,7 +138,7 @@ def _repository_overrides(*, slot_repo, instance_repo):
 
 def _mock_repos(slots: list[PlanningSlot]):
     slot_repo = AsyncMock()
-    slot_repo.list_for_date_range.return_value = slots
+    slot_repo.list_page = fake_list_page(slots)
     inst_repo = AsyncMock()
     inst_repo.list_by_planning_slots.return_value = []
     return slot_repo, inst_repo

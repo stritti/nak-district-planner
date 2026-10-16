@@ -7,7 +7,7 @@ import uuid
 from collections.abc import Collection
 from datetime import UTC, date, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, any_, func, literal, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ from app.adapters.db.orm_models.deleted_generation_key import DeletedGenerationK
 from app.adapters.db.orm_models.invitation import CongregationInvitationORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.domain.models.planning_slot import (
+    APPLICABILITY_ALL,
     DeletedPlanningSlotError,
     EventApprovalStatus,
     PlanningSlot,
@@ -126,6 +127,79 @@ class SqlPlanningSlotRepository(PlanningSlotRepository):
             .order_by(PlanningSlotORM.planning_date, PlanningSlotORM.planning_time)
         )
         return [_orm_to_domain(row) for row in result.scalars().all()]
+
+    async def list_page(
+        self,
+        *,
+        district_id: uuid.UUID,
+        from_date: date,
+        to_date: date,
+        limit: int,
+        offset: int,
+        congregation_id: uuid.UUID | None = None,
+        group_congregation_ids: Collection[uuid.UUID] | None = None,
+        only_district_level: bool = False,
+        status: PlanningSlotStatus | None = None,
+        approval_status: EventApprovalStatus | None = None,
+        is_service: bool | None = None,
+        service_category: str = "",
+    ) -> tuple[list[PlanningSlot], int]:
+        """One page of slots plus the total, filtered and paginated in SQL (#604).
+
+        Mirrors the in-memory semantics of ``PlanningSlot.is_distributed_to``:
+        a congregation sees its own slots in every state, and district slots
+        only while they are ACTIVE, CONFIRMED and applicable to it.
+        """
+        slot = PlanningSlotORM
+        conditions = [
+            slot.district_id == district_id,
+            slot.planning_date >= from_date,
+            slot.planning_date <= to_date,
+        ]
+        if group_congregation_ids is not None:
+            conditions.append(
+                or_(
+                    slot.congregation_id.is_(None),
+                    slot.congregation_id.in_(list(group_congregation_ids)),
+                )
+            )
+        if only_district_level:
+            conditions.append(slot.congregation_id.is_(None))
+        elif congregation_id is not None:
+            conditions.append(
+                or_(
+                    slot.congregation_id == congregation_id,
+                    and_(
+                        slot.status == PlanningSlotStatus.ACTIVE,
+                        slot.congregation_id.is_(None),
+                        slot.approval_status == EventApprovalStatus.CONFIRMED,
+                        or_(
+                            literal(APPLICABILITY_ALL) == any_(slot.applicability),
+                            literal(str(congregation_id)) == any_(slot.applicability),
+                        ),
+                    ),
+                )
+            )
+        if status is not None:
+            conditions.append(slot.status == status)
+        if approval_status is not None:
+            conditions.append(slot.approval_status == approval_status)
+        if is_service is True:
+            conditions.append(slot.category == service_category)
+        elif is_service is False:
+            conditions.append(or_(slot.category.is_(None), slot.category != service_category))
+
+        total = (
+            await self._session.execute(select(func.count()).select_from(slot).where(*conditions))
+        ).scalar_one()
+        result = await self._session.execute(
+            select(slot)
+            .where(*conditions)
+            .order_by(slot.planning_date, slot.planning_time, slot.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_orm_to_domain(row) for row in result.scalars().all()], total
 
     async def list_by_generation_keys(
         self, *, district_id: uuid.UUID, generation_keys: Collection[str]

@@ -76,6 +76,10 @@ from app.domain.services.sync_policy import internal_state, resolve_conflict
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
 SERVICE_CATEGORY = "Gottesdienst"
+# Longest accepted from/to span for listings (default window is 3 years).
+MAX_LIST_WINDOW_DAYS = 1100
+# Deep OFFSET pages make PostgreSQL skip every earlier row; refine filters instead.
+MAX_LIST_OFFSET = 10_000
 
 
 class EventResponsible(BaseModel):
@@ -324,7 +328,7 @@ async def list_events(
     from_dt: datetime | None = Query(None),
     to_dt: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=MAX_LIST_OFFSET),
     slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
@@ -342,42 +346,36 @@ async def list_events(
     now = datetime.now(UTC).date()
     from_date = aware_timestamp(from_dt).date() if from_dt is not None else now - timedelta(days=365)
     to_date = aware_timestamp(to_dt).date() if to_dt is not None else now + timedelta(days=365 * 2)
+    if to_date < from_date:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="to_dt darf nicht vor from_dt liegen.",
+        )
+    if (to_date - from_date).days > MAX_LIST_WINDOW_DAYS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Der Zeitraum darf höchstens {MAX_LIST_WINDOW_DAYS} Tage umfassen.",
+        )
 
-    all_slots = await slot_repo.list_for_date_range(
-        district_id=district_id or uuid.UUID(int=0),
-        from_date=from_date,
-        to_date=to_date,
-    )
-
+    group_congregation_ids: set[uuid.UUID] | None = None
     if group_id is not None:
         congregations = await cong_repo.list_by_district(district_id or uuid.UUID(int=0))
         group_congregation_ids = {c.id for c in congregations if c.group_id == group_id}
-        all_slots = [
-            s
-            for s in all_slots
-            if s.congregation_id is None or s.congregation_id in group_congregation_ids
-        ]
 
-    if only_district_level:
-        all_slots = [s for s in all_slots if s.congregation_id is None]
-    elif congregation_id is not None:
-        # Own slots in every state; district slots only once released (UC-04).
-        all_slots = [
-            s
-            for s in all_slots
-            if s.congregation_id == congregation_id
-            or (s.status == PlanningSlotStatus.ACTIVE and s.is_distributed_to(congregation_id))
-        ]
-
-    if status_filter is not None:
-        all_slots = [s for s in all_slots if s.status == status_filter]
-    if approval_status is not None:
-        all_slots = [s for s in all_slots if s.approval_status == approval_status]
-    if is_service is not None:
-        all_slots = [s for s in all_slots if (s.category == SERVICE_CATEGORY) == is_service]
-
-    total = len(all_slots)
-    page = all_slots[offset : offset + limit]
+    page, total = await slot_repo.list_page(
+        district_id=district_id or uuid.UUID(int=0),
+        from_date=from_date,
+        to_date=to_date,
+        limit=limit,
+        offset=offset,
+        congregation_id=congregation_id,
+        group_congregation_ids=group_congregation_ids,
+        only_district_level=only_district_level,
+        status=status_filter,
+        approval_status=approval_status,
+        is_service=is_service,
+        service_category=SERVICE_CATEGORY,
+    )
     instances = await _load_instances(inst_repo, [s.id for s in page])
     responsible = await _load_responsible(assignments_repo, leaders_repo, page)
     return EventListResponse(

@@ -21,6 +21,7 @@ from app.domain.models.planning_slot import (
 )
 from app.domain.models.role import Role
 from app.domain.ports.calendar import CalendarConnectorError
+from tests.unit.event_list_fake import fake_list_page
 
 
 @pytest.fixture(autouse=True)
@@ -234,7 +235,7 @@ async def test_list_events_applies_filters_and_paginates() -> None:
     matching = _slot(district_id=district_id, congregation_id=congregation_id)
     wrong_group = _slot(district_id=district_id, congregation_id=uuid.uuid4())
     slot_repo = AsyncMock()
-    slot_repo.list_for_date_range.return_value = [matching, wrong_group]
+    slot_repo.list_page = fake_list_page([matching, wrong_group])
     instance_repo = AsyncMock()
     instance_repo.list_by_planning_slots.return_value = []
     congregation_repo = AsyncMock()
@@ -285,7 +286,7 @@ async def test_list_events_filters_district_slots_by_applicability() -> None:
         district_id=district_id, applicability=[], approval_status=EventApprovalStatus.CONFIRMED
     )
     slot_repo = AsyncMock()
-    slot_repo.list_for_date_range.return_value = [visible, invisible]
+    slot_repo.list_page = fake_list_page([visible, invisible])
     instance_repo = AsyncMock()
     instance_repo.list_by_planning_slots.return_value = []
 
@@ -330,7 +331,7 @@ async def test_list_events_marks_and_filters_service_events() -> None:
         category=None,
     )
     slot_repo = AsyncMock()
-    slot_repo.list_for_date_range.return_value = [service, other, uncategorised]
+    slot_repo.list_page = fake_list_page([service, other, uncategorised])
     instance_repo = AsyncMock()
     instance_repo.list_by_planning_slots.return_value = []
 
@@ -371,7 +372,7 @@ async def test_list_events_marks_and_filters_service_events() -> None:
 async def test_list_events_accepts_datetime_range_filters() -> None:
     district_id = uuid.uuid4()
     slot_repo = AsyncMock()
-    slot_repo.list_for_date_range.return_value = []
+    slot_repo.list_page = fake_list_page([])
     instance_repo = AsyncMock()
     instance_repo.list_by_planning_slots.return_value = []
     with patch("app.adapters.api.routers.events.require_role_in_district"):
@@ -393,9 +394,92 @@ async def test_list_events_accepts_datetime_range_filters() -> None:
             inst_repo=instance_repo,
         )
 
-    kwargs = slot_repo.list_for_date_range.await_args.kwargs
+    kwargs = slot_repo.list_page.await_args.kwargs
     assert kwargs["from_date"] == date(2026, 9, 26)
     assert kwargs["to_date"] == date(2026, 10, 3)
+
+
+async def _list_with_window(from_dt, to_dt, slot_repo=None):
+    slot_repo = slot_repo or AsyncMock()
+    slot_repo.list_page = slot_repo.list_page if isinstance(slot_repo.list_page, AsyncMock) else AsyncMock()
+    slot_repo.list_page.return_value = ([], 0)
+    instance_repo = AsyncMock()
+    instance_repo.list_by_planning_slots.return_value = []
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
+        return await events.list_events(
+            _auth(),
+            AsyncMock(),
+            district_id=uuid.uuid4(),
+            congregation_id=None,
+            group_id=None,
+            only_district_level=False,
+            status_filter=None,
+            approval_status=None,
+            is_service=None,
+            from_dt=from_dt,
+            to_dt=to_dt,
+            limit=50,
+            offset=0,
+            slot_repo=slot_repo,
+            inst_repo=instance_repo,
+        )
+
+
+@pytest.mark.asyncio
+async def test_list_events_rejects_reversed_window_before_touching_the_database() -> None:
+    slot_repo = AsyncMock()
+    with pytest.raises(HTTPException) as error:
+        await _list_with_window(
+            datetime(2026, 10, 10, tzinfo=UTC), datetime(2026, 10, 9, tzinfo=UTC), slot_repo
+        )
+    assert error.value.status_code == 422
+    slot_repo.list_page.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_list_events_rejects_oversized_window_before_touching_the_database() -> None:
+    slot_repo = AsyncMock()
+    start = datetime(2020, 1, 1, tzinfo=UTC)
+    with pytest.raises(HTTPException) as error:
+        await _list_with_window(
+            start, start + timedelta(days=events.MAX_LIST_WINDOW_DAYS + 1), slot_repo
+        )
+    assert error.value.status_code == 422
+    slot_repo.list_page.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_list_events_accepts_the_default_and_the_maximum_window() -> None:
+    await _list_with_window(None, None)  # default window (3 years) stays valid
+    start = datetime(2020, 1, 1, tzinfo=UTC)
+    await _list_with_window(start, start + timedelta(days=events.MAX_LIST_WINDOW_DAYS))
+
+
+@pytest.mark.asyncio
+async def test_list_events_passes_filters_and_pagination_to_sql() -> None:
+    district_id, congregation_id, group_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    slot_repo = AsyncMock()
+    slot_repo.list_page.return_value = ([], 0)
+    instance_repo = AsyncMock()
+    instance_repo.list_by_planning_slots.return_value = []
+    cong_repo = AsyncMock()
+    cong_repo.list_by_district.return_value = [SimpleNamespace(id=congregation_id, group_id=group_id)]
+    with patch("app.adapters.api.routers.events.require_role_in_district"):
+        await events.list_events(
+            _auth(), AsyncMock(), district_id=district_id, congregation_id=congregation_id,
+            group_id=group_id, only_district_level=False, status_filter=PlanningSlotStatus.ACTIVE,
+            approval_status=EventApprovalStatus.CONFIRMED, is_service=True, from_dt=None,
+            to_dt=None, limit=7, offset=14, slot_repo=slot_repo, cong_repo=cong_repo,
+            inst_repo=instance_repo,
+        )
+    kwargs = slot_repo.list_page.await_args.kwargs
+    assert (kwargs["limit"], kwargs["offset"]) == (7, 14)
+    assert kwargs["group_congregation_ids"] == {congregation_id}
+    assert kwargs["status"] == PlanningSlotStatus.ACTIVE
+    assert kwargs["approval_status"] == EventApprovalStatus.CONFIRMED
+    assert kwargs["is_service"] is True
+    assert kwargs["service_category"] == events.SERVICE_CATEGORY
+    assert kwargs["district_id"] == district_id
 
 
 @pytest.mark.asyncio
@@ -409,7 +493,7 @@ async def test_list_events_requires_district_for_non_superadmin() -> None:
 @pytest.mark.asyncio
 async def test_list_events_allows_superadmin_without_district() -> None:
     slot_repo = AsyncMock()
-    slot_repo.list_for_date_range.return_value = []
+    slot_repo.list_page = fake_list_page([])
     instance_repo = AsyncMock()
     instance_repo.list_by_planning_slots.return_value = []
     result = await events.list_events(
@@ -431,7 +515,7 @@ async def test_list_events_allows_superadmin_without_district() -> None:
     )
 
     assert result.items == []
-    assert slot_repo.list_for_date_range.await_args.kwargs["district_id"] == uuid.UUID(int=0)
+    assert slot_repo.list_page.await_args.kwargs["district_id"] == uuid.UUID(int=0)
 
 
 @pytest.mark.asyncio
@@ -896,7 +980,7 @@ async def test_imported_holiday_distributed_to_congregation_appears_in_its_view(
         await reference_feiertage_for_congregation(district_id, congregation_id, AsyncMock())
 
     slot_repo = AsyncMock()
-    slot_repo.list_for_date_range.return_value = saved
+    slot_repo.list_page = fake_list_page(saved)
     instance_repo = AsyncMock()
     instance_repo.list_by_planning_slots.return_value = []
     with patch("app.adapters.api.routers.events.require_role_in_district"):
@@ -1017,3 +1101,17 @@ async def test_external_event_full_editor_allowed_but_inline_forbidden() -> None
             )
     assert exc.value.status_code == 403
     instance_repo.save.assert_not_awaited()
+
+
+def test_list_events_offset_has_an_upper_bound() -> None:
+    """Deep OFFSET scans stay bounded (#604); the API rejects absurd values."""
+    from fastapi.routing import APIRoute
+
+    route = next(
+        r for r in events.router.routes if isinstance(r, APIRoute) and r.path == "/api/v1/events"
+        and "GET" in r.methods
+    )
+    offset = next(p for p in route.dependant.query_params if p.name == "offset")
+    constraints = {type(m).__name__: m for m in offset.field_info.metadata}
+    assert constraints["Le"].le == events.MAX_LIST_OFFSET
+    assert constraints["Ge"].ge == 0
