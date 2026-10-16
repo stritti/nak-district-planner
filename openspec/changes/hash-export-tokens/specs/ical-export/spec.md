@@ -2,24 +2,18 @@
 
 ### Requirement: Export token management
 
-`POST`, `GET` and `DELETE /api/v1/export-tokens` SHALL require `DISTRICT_ADMIN` of the token's district (listing without `district_id` only for superadmins). Tokens SHALL be generated with `secrets.token_urlsafe(32)`, typed `PUBLIC` or `INTERNAL`, and MAY be scoped to a congregation or a leader. Only a SHA-256 hash of the token SHALL be persisted; the plaintext secret SHALL be returned exactly once in the creation response. Listing SHALL return token metadata without a reusable secret. A `POST /api/v1/export-tokens/{id}/reveal` endpoint SHALL return the plaintext secret of a not-yet-hashed legacy token exactly once and hash it thereafter; it SHALL require the same role as deletion and respond 404 for already-hashed tokens.
+`POST`, `GET` and `DELETE /api/v1/export-tokens` SHALL require `DISTRICT_ADMIN` of the token's district (listing without `district_id` only for superadmins). Tokens SHALL be generated with `secrets.token_urlsafe(32)`, typed `PUBLIC` or `INTERNAL`, and MAY be scoped to a congregation or a leader. Each token row SHALL additionally store a SHA-256 hash of the secret in `token_hash`; the plaintext secret SHALL be returned exactly once in the creation response and SHALL NOT be included in listings.
 
 #### Scenario: Token created
 
 - **WHEN** a district admin creates an export token
 - **THEN** the response contains the plaintext secret exactly once
-- **AND** only its SHA-256 hash is stored
+- **AND** the stored row carries the secret's SHA-256 hash in `token_hash`
 
 #### Scenario: Token listed
 
 - **WHEN** export tokens are listed
 - **THEN** the response contains metadata only and no reusable secret
-
-#### Scenario: Legacy token revealed once
-
-- **WHEN** a district admin reveals a legacy plaintext token
-- **THEN** the plaintext secret is returned exactly once and the stored value is replaced by its hash
-- **AND** a second reveal responds with 404
 
 #### Scenario: Token deleted
 
@@ -28,7 +22,7 @@
 
 ### Requirement: ICS feed endpoint
 
-`GET /api/v1/export/{token}/calendar.ics` SHALL be unauthenticated, respond with 404 for unknown tokens, hash the presented token for lookup and RLS context, and return `text/calendar` covering planning slots from one year back to two years ahead (narrowed to the congregation for congregation tokens). The `approval_status` query parameter SHALL accept `confirmed_only` or `include_planned`.
+`GET /api/v1/export/{token}/calendar.ics` SHALL be unauthenticated, respond with 404 for unknown tokens, set the presented token as RLS context, look the row up by the presented value with a fallback to the hashed column, and return `text/calendar` covering planning slots from one year back to two years ahead (narrowed to the congregation for congregation tokens). The `approval_status` query parameter SHALL accept `confirmed_only` or `include_planned`.
 
 #### Scenario: Unknown token
 

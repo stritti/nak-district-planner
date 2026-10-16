@@ -9,9 +9,7 @@ import * as client from './client'
 import {
   createExportToken,
   deleteExportToken,
-  listExportTokens,
-  revealExportToken,
-} from './exportTokens'
+  listExportTokens,} from './exportTokens'
 
 const apiFetch = vi.mocked(client.apiFetch)
 
@@ -45,13 +43,6 @@ describe('export token API', () => {
     await deleteExportToken('token-1')
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/export-tokens/token-1', {
       method: 'DELETE',
-    })
-  })
-
-  it('reveals a legacy token exactly once', async () => {
-    await revealExportToken('token-1')
-    expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/export-tokens/token-1/reveal', {
-      method: 'POST',
     })
   })
 })

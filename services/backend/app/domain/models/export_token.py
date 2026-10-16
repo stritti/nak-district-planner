@@ -12,23 +12,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
 
-TOKEN_HASH_LENGTH = 64
-
 
 def hash_export_token(token: str) -> str:
     """Return the storage form of an export token (SHA-256 hex digest)."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-def is_hashed_export_token(stored: str) -> bool:
-    """Whether a stored token value is already in hashed form.
-
-    Legacy plaintext tokens are 43 chars from ``secrets.token_urlsafe(32)``;
-    a 64-char lowercase hex value is unambiguously a hash.
-    """
-    return len(stored) == TOKEN_HASH_LENGTH and all(
-        character in "0123456789abcdef" for character in stored
-    )
 
 
 class TokenType(StrEnum):
@@ -50,6 +37,7 @@ class ExportToken:
     created_at: datetime
 
     subject_sub: str | None = None
+    token_hash: str | None = None
 
     def confirmed_only(self, requested: str | None) -> bool:
         """Whether the ICS feed may contain only CONFIRMED slots (UC-05).
@@ -78,7 +66,8 @@ class ExportToken:
         return (
             ExportToken(
                 id=uuid.uuid4(),
-                token=hash_export_token(raw),
+                token=raw,
+                token_hash=hash_export_token(raw),
                 label=label,
                 token_type=token_type,
                 district_id=district_id,

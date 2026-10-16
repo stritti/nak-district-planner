@@ -37,20 +37,12 @@ from app.adapters.api.tenant_references import (
 from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.congregation import CongregationORM
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
-from app.adapters.db.repositories.export_token import (
-    SqlExportTokenRepository,
-    _orm_to_domain,
-)
+from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.domain.models.event_instance import EventInstance, EventVisibility
-from app.domain.models.export_token import (
-    ExportToken,
-    TokenType,
-    hash_export_token,
-    is_hashed_export_token,
-)
+from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.planning_slot import (
     EventApprovalStatus,
     PlanningSlot,
@@ -149,30 +141,6 @@ async def delete_export_token(
     await repo.delete(token_id)
 
 
-@router.post(
-    "/export-tokens/{token_id}/reveal",
-    response_model=ExportTokenResponse,
-)
-async def reveal_export_token(
-    auth: RawCurrentUserWithMemberships,
-    token_id: uuid.UUID,
-    session: DbSession,
-    repo: SqlExportTokenRepository = Depends(get_export_token_repository),
-) -> ExportTokenResponse:
-    row = await repo.get_orm(token_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht gefunden")
-    if row.subject_sub != auth.user_sub:
-        require_role_in_district(auth, Role.DISTRICT_ADMIN, row.district_id)
-    if is_hashed_export_token(row.token):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht erneut anzeigbar"
-        )
-    raw_secret = row.token
-    await repo.hash_stored_token(row)
-    return _token_response(_orm_to_domain(row), raw_secret=raw_secret)
-
-
 def _token_response(
     token: ExportToken, *, raw_secret: str | None = None
 ) -> ExportTokenResponse:
@@ -234,24 +202,13 @@ async def export_calendar_ics(
 ) -> Response:
     from sqlalchemy import text
 
-    async def set_export_context(value: str) -> None:
-        await session.execute(
-            text("SELECT set_config('app.current_export_token', :val, true)"),
-            {"val": value},
-        )
-
-    # The RLS lookup policy matches the presented value against the stored
-    # column, so a legacy plaintext row is only visible with the plaintext as
-    # context and a hashed row only with its hash. After the lookup the stored
-    # form is authoritative for all downstream RLS checks.
-    await set_export_context(token_str)
+    await session.execute(
+        text("SELECT set_config('app.current_export_token', :val, true)"),
+        {"val": token_str},
+    )
     export_token = await token_repo.get_by_token(token_str)
-    if export_token is None:
-        await set_export_context(hash_export_token(token_str))
-        export_token = await token_repo.get_by_token(token_str)
     if not export_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token ungültig")
-    await set_export_context(export_token.token)
 
     if export_token.subject_sub is not None:
         events = await load_personal_events(

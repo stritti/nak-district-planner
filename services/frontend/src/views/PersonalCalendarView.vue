@@ -11,6 +11,7 @@ import {
   type PersonalEvent,
   type PersonalToken,
 } from '../api/personalCalendar'
+import CopyButton from '../components/CopyButton.vue'
 import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
 
@@ -154,6 +155,15 @@ async function revoke(id: string) {
       >
         {{ token.label }} (ICS)
       </a>
+      <span v-if="token.token" class="text-xs text-amber-700 dark:text-amber-300">
+        Secret nur jetzt sichtbar — bitte kopieren
+      </span>
+      <CopyButton
+        v-if="token.token"
+        :value="`/api/v1/export/${encodeURIComponent(token.token)}/calendar.ics`"
+        label="URL kopieren"
+        variant="icon"
+      />
       <span v-else class="text-sm text-gray-500 dark:text-gray-400">
         {{ token.label }} — Secret nur direkt nach dem Erstellen sichtbar
       </span>

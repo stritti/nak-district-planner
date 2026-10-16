@@ -1,11 +1,10 @@
 # Tasks
 
-- [x] Add SHA-256 hashing helper for export tokens
-- [x] Hash token on create; return plaintext once in creation response
+- [x] Add `token_hash` column and unique index (expand phase)
+- [x] Backfill hash for existing plaintext rows
+- [x] Compute hash on create; return plaintext once in creation response
 - [x] Stop returning plaintext in token listing
-- [x] Add reveal-once endpoint for legacy plaintext tokens
-- [x] Hash presented token in feed lookup and RLS context
-- [x] Alembic migration: hash existing plaintext rows
-- [x] Update SQL RLS policies to compare against hashed token
-- [ ] Frontend: show secret once after creation with copy affordance
-- [ ] Verify integration tests and CI
+- [x] Feed lookup with plaintext column and hash fallback
+- [x] Frontend: show secret only after creation, copy affordance in personal view
+- [ ] Contract phase (follow-up): drop plaintext `token` column after rollback window closes
+- [ ] Verify GitHub Actions checks and review CI results

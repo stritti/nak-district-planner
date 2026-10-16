@@ -11,12 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.export_token import ExportTokenORM
-from app.domain.models.export_token import (
-    ExportToken,
-    TokenType,
-    hash_export_token,
-    is_hashed_export_token,
-)
+from app.domain.models.export_token import ExportToken, TokenType, hash_export_token
 
 
 def _orm_to_domain(row: ExportTokenORM) -> ExportToken:
@@ -30,6 +25,7 @@ def _orm_to_domain(row: ExportTokenORM) -> ExportToken:
         leader_id=row.leader_id,
         created_at=row.created_at,
         subject_sub=row.subject_sub,
+        token_hash=row.token_hash,
     )
 
 
@@ -41,6 +37,7 @@ class SqlExportTokenRepository:
         row = ExportTokenORM(
             id=token.id,
             token=token.token,
+            token_hash=token.token_hash,
             label=token.label,
             token_type=token.token_type,
             district_id=token.district_id,
@@ -54,29 +51,24 @@ class SqlExportTokenRepository:
         return token
 
     async def get_by_token(self, token: str) -> ExportToken | None:
+        """Find a token row by its presented plaintext.
+
+        The RLS context carries the presented plaintext, so the lookup
+        matches either the plaintext column (legacy and rollback-compatible
+        rows) or the hash column (rows whose plaintext was contracted away).
+        """
         result = await self._session.execute(
-            select(ExportTokenORM).where(ExportTokenORM.token == hash_export_token(token))
+            select(ExportTokenORM).where(ExportTokenORM.token == token)
         )
         row = result.scalar_one_or_none()
         if row is None:
             result = await self._session.execute(
-                select(ExportTokenORM).where(ExportTokenORM.token == token)
+                select(ExportTokenORM).where(
+                    ExportTokenORM.token_hash == hash_export_token(token)
+                )
             )
             row = result.scalar_one_or_none()
-            if row is not None and is_hashed_export_token(row.token):
-                row = None
         return _orm_to_domain(row) if row else None
-
-    async def get_orm(self, token_id: uuid.UUID) -> ExportTokenORM | None:
-        result = await self._session.execute(
-            select(ExportTokenORM).where(ExportTokenORM.id == token_id)
-        )
-        return result.scalar_one_or_none()
-
-    async def hash_stored_token(self, row: ExportTokenORM) -> None:
-        """Replace a legacy plaintext token value with its hash in place."""
-        row.token = hash_export_token(row.token)
-        await self._session.flush()
 
     async def get(self, token_id: uuid.UUID) -> ExportToken | None:
         result = await self._session.execute(
