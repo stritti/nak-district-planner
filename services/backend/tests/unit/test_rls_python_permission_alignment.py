@@ -3,6 +3,8 @@
 
 """Drift detection between SQL RLS authorization and Python permission guards."""
 
+import pytest
+
 from app.adapters.auth.permissions import has_role_in_district
 from app.adapters.db.migrations import event_duty_rls, rls_policies
 from app.domain.models.membership import Membership, ScopeType
@@ -73,27 +75,28 @@ def test_generated_rls_sql_uses_derived_role_sets():
     assert roles_at_least_sql(Role.PLANNER) in scope_write
 
 
-def test_sql_and_python_accept_same_role_sets():
-    """Every role accepted by the RLS read scope passes the Python VIEWER guard."""
+@pytest.mark.parametrize("threshold", list(Role))
+def test_sql_and_python_accept_same_role_sets(threshold):
+    """Every role accepted by a generated RLS set passes the matching guard."""
     district_id = "11111111-1111-1111-1111-111111111111"
     congregation_id = "22222222-2222-2222-2222-222222222222"
     for role in Role:
-        sql_roles = roles_at_least(Role.VIEWER)
+        sql_roles = roles_at_least(threshold)
 
         district_membership = _membership(role, ScopeType.DISTRICT, district_id)
         assert (district_membership.role in sql_roles) == has_role_in_district(
-            _auth([district_membership]), Role.VIEWER, district_id
-        ), f"drift for {role.value} / DISTRICT"
+            _auth([district_membership]), threshold, district_id
+        ), f"drift for {role.value} / DISTRICT at {threshold.value}"
 
         congregation_membership = _membership(
             role, ScopeType.CONGREGATION, congregation_id
         )
         assert (congregation_membership.role in sql_roles) == has_role_in_district(
             _auth([congregation_membership]),
-            Role.VIEWER,
+            threshold,
             district_id,
             {congregation_id},
-        ), f"drift for {role.value} / CONGREGATION"
+        ), f"drift for {role.value} / CONGREGATION at {threshold.value}"
 
 
 def test_admin_policies_require_congregation_admin_or_higher():
