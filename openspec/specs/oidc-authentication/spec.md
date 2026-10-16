@@ -20,6 +20,13 @@ JWT access tokens SHALL be validated against the provider JWKS (RS256 by default
 - **WHEN** a token references a `kid` not present in the cached JWKS
 - **THEN** the adapter refreshes the JWKS once and validates against the new key
 
+### Requirement: Forced JWKS refreshes are throttled
+Forced JWKS refreshes SHALL be limited to one upstream attempt per `jwks_min_refresh_interval` (default 30 s), counting failed attempts as well.
+
+#### Scenario: Unknown key ids are throttled
+- **WHEN** repeated tokens reference an unknown `kid` within the minimum refresh interval
+- **THEN** the cached JWKS is used and no further upstream request is made until the interval has elapsed
+
 ### Requirement: JWT validation fails closed
 The backend SHALL classify compact three-segment tokens as JWT-like and SHALL validate them exclusively through cryptographic JWT validation. A JWT validation error MUST NOT trigger UserInfo or Introspection fallback.
 
@@ -158,3 +165,25 @@ The SPA SHALL start login with an authorization request containing `state` and a
 #### Scenario: State mismatch on callback
 - **WHEN** the callback `state` differs from the stored value
 - **THEN** the code is not exchanged and no session is installed
+
+### Requirement: Provider details and personal data stay out of client responses and logs
+Responses to the SPA SHALL NOT contain provider response bodies or exception messages, and logs SHALL identify users by `sub` instead of e-mail address.
+
+#### Scenario: Token exchange rejected by the provider
+- **WHEN** the provider answers a token request with `{"error": "invalid_grant", "error_description": "internal realm detail"}` or a non-JSON body
+- **THEN** the client receives only `{"error": "invalid_grant"}` or `{"error": "token_exchange_failed"}` with the provider's status code
+
+#### Scenario: Provisioning failure towards the identity provider
+- **WHEN** creating or looking up a user at the identity provider fails
+- **THEN** only the HTTP status is stored and exposed, never the provider's response body
+
+#### Scenario: Discovery fails with a confidential URL in the error
+- **WHEN** discovery fails with an error text containing an internal host
+- **THEN** the client receives a constant message and neither the response nor the log contains the host, only the exception type is logged
+
+### Requirement: The ID token is never used as API credential
+The SPA SHALL send only the access token as bearer credential. If no access token is available the request SHALL be unauthenticated; it SHALL NOT fall back to the ID token.
+
+#### Scenario: Session without access token
+- **WHEN** the stored session holds an ID token but an empty access token
+- **THEN** no bearer token is provided to API calls
