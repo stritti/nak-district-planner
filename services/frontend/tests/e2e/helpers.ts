@@ -22,6 +22,8 @@ export interface MatrixResponseOptions {
   leaderName?: string
   assignmentId?: string | null
   assignmentStatus?: string | null
+  /** Event revision of the cell; defaults to {@link EVENT_REVISION}. */
+  revision?: string
 }
 
 export interface MockOIDCIdentity {
@@ -84,6 +86,13 @@ export async function mockAuthenticatedSession(
 }
 
 /**
+ * Strong event ETags in the server's wire format (`"<slot id>:<updated_at>:<instance>"`).
+ * Dialog writes must send the first one as `If-Match`; a successful write returns the second.
+ */
+export const EVENT_REVISION = '"event-1:2026-04-01T00:00:00.000000+00:00:none"'
+export const UPDATED_EVENT_REVISION = '"event-1:2026-04-01T00:00:05.000000+00:00:none"'
+
+/**
  * Minimal matrix payload with a single congregation and a single cell
  * for the fixed date 2026-04-08.
  */
@@ -102,7 +111,7 @@ export function matrixResponse(options: MatrixResponseOptions) {
             event_id: 'event-1',
             assignment_event_id: 'event-1',
             // The real matrix always carries the event's strong revision (sent as If-Match).
-            revision: '"rev-1"',
+            revision: options.revision ?? EVENT_REVISION,
             invitation_count: 0,
             event_title: 'Gottesdienst',
             category: 'Gottesdienst',

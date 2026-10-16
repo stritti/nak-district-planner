@@ -2,11 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { expect, test } from '@playwright/test'
-import { FRONTEND_URL, matrixResponse, setupAuthAndMatrix } from './helpers'
+import {
+  EVENT_REVISION,
+  FRONTEND_URL,
+  UPDATED_EVENT_REVISION,
+  matrixResponse,
+  setupAuthAndMatrix,
+} from './helpers'
 
 test.describe('Matrix assignment flow', () => {
   test('gap can be assigned and turns into assigned cell', async ({ page }) => {
     let assignmentCreated = false
+    const ifMatchHeaders: (string | undefined)[] = []
 
     await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
 
@@ -16,6 +23,7 @@ test.describe('Matrix assignment flow', () => {
         return
       }
       assignmentCreated = true
+      ifMatchHeaders.push(route.request().headers()['if-match'])
       await route.fulfill({
         status: 201,
         contentType: 'application/json',
@@ -27,6 +35,8 @@ test.describe('Matrix assignment flow', () => {
           status: 'ASSIGNED',
           created_at: '2026-04-01T00:00:00Z',
           updated_at: '2026-04-01T00:00:00Z',
+          // The write advances the event revision; the matrix refresh carries it too.
+          event_revision: UPDATED_EVENT_REVISION,
         }),
       })
     })
@@ -41,6 +51,7 @@ test.describe('Matrix assignment flow', () => {
                 leaderName: 'Pr. Tester',
                 assignmentId: 'assignment-1',
                 assignmentStatus: 'ASSIGNED',
+                revision: UPDATED_EVENT_REVISION,
               })
             : matrixResponse({ isGap: true }),
         ),
@@ -63,5 +74,8 @@ test.describe('Matrix assignment flow', () => {
     // Verify the gap is gone and the assigned leader is visible
     await expect(page.getByRole('button', { name: /LÜCKE/i })).toBeHidden({ timeout: 10000 })
     await expect(page.getByRole('button', { name: /Pr\. Tester/ })).toBeVisible({ timeout: 10000 })
+
+    // The create was conditional on the revision the matrix showed, exactly once.
+    expect(ifMatchHeaders).toEqual([EVENT_REVISION])
   })
 })

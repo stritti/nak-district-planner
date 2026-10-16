@@ -382,4 +382,37 @@ describe('AssignmentModal', () => {
     expect(ctx.matrix.clearAssignment).toHaveBeenCalledWith('event-1', 'assignment-1', '"rev-1"')
     expect(ctx.wrapper.find('.modal-backdrop').exists()).toBe(false)
   })
+
+  it.each([[412, 'Precondition Failed'], [428, 'Precondition Required']])(
+    'refreshes the matrix and explains a stale event (%i) when removing',
+    async (status, statusText) => {
+      const ctx = setup()
+      vi.mocked(ctx.matrix.clearAssignment).mockRejectedValueOnce(
+        new ApiError(status, statusText, { detail: 'intern' }),
+      )
+      await openAndFlush(ctx, baseCell({ is_gap: false, assignment_id: 'assignment-1' }))
+      const remove = ctx.wrapper.findAll('button').find((button) => button.text() === 'Entfernen')!
+      vi.mocked(ctx.matrix.fetch).mockClear()
+
+      await remove.trigger('click')
+      await flushPromises()
+
+      expect(ctx.wrapper.find('.modal-backdrop').exists()).toBe(true)
+      expect(ctx.wrapper.text()).toContain('zwischenzeitlich geändert')
+      expect(ctx.wrapper.text()).not.toContain('intern')
+      expect(ctx.matrix.fetch).toHaveBeenCalledOnce()
+    },
+  )
+
+  it('shows other removal errors unchanged and does not refresh the matrix', async () => {
+    const ctx = setup()
+    vi.mocked(ctx.matrix.clearAssignment).mockRejectedValueOnce(new Error('Entfernen kaputt'))
+    await openAndFlush(ctx, baseCell({ is_gap: false, assignment_id: 'assignment-1' }))
+    const remove = ctx.wrapper.findAll('button').find((button) => button.text() === 'Entfernen')!
+    vi.mocked(ctx.matrix.fetch).mockClear()
+    await remove.trigger('click')
+    await flushPromises()
+    expect(ctx.wrapper.text()).toContain('Entfernen kaputt')
+    expect(ctx.matrix.fetch).not.toHaveBeenCalled()
+  })
 })

@@ -253,6 +253,17 @@ describe('DistrictsAdminView', () => {
     expect(districtsStore.selectedDistrictId).toBe('d2')
   })
 
+  it('still selects the district when a user without the admin role clicks its name', async () => {
+    const { wrapper, districtsStore } = setup(false)
+    useAuthStore().memberships = [{ role: 'PLANNER', scope_type: 'DISTRICT', scope_id: 'd1' }] as never
+    await flushPromises()
+    districtsStore.setSelectedDistrict('d2')
+    const cell = wrapper.get('[data-inline-cell-id="district-name-d1"]')
+    await cell.trigger('click')
+    expect(cell.find('input').exists()).toBe(false)
+    expect(districtsStore.selectedDistrictId).toBe('d1')
+  })
+
   it('creates a congregation with a service time and reports create errors', async () => {
     vi.mocked(districtsApi.createCongregation).mockResolvedValueOnce(
       congregation('c3', 'Gemeinde C', 'g1', [{ weekday: 6, time: '10:00' }]),

@@ -484,6 +484,16 @@ async function confirmAssignment() {
   await persistAssignment('confirm')
 }
 
+function isStaleRevision(e: unknown): boolean {
+  return e instanceof ApiError && (e.status === 412 || e.status === 428)
+}
+
+/** The event changed since the matrix was loaded (e.g. an inline edit by someone else). */
+function handleStaleRevision() {
+  modal.error = 'Der Termin wurde zwischenzeitlich geändert. Die Ansicht wurde aktualisiert – bitte schließen und erneut öffnen.'
+  void matrixStore.fetch().catch(() => undefined)
+}
+
 async function persistAssignment(action: AssignmentAction, confirmWarnings = false) {
   if (modal.saving) return
   modal.saving = true
@@ -519,11 +529,9 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
       } else {
         dismissWarnConfirmation()
       }
-    } else if (e instanceof ApiError && (e.status === 412 || e.status === 428)) {
-      // The event changed since the matrix was loaded (e.g. an inline edit by someone else).
+    } else if (isStaleRevision(e)) {
       dismissWarnConfirmation()
-      modal.error = 'Der Termin wurde zwischenzeitlich geändert. Die Ansicht wurde aktualisiert – bitte schließen und erneut öffnen.'
-      void matrixStore.fetch().catch(() => undefined)
+      handleStaleRevision()
     } else {
       // The error belongs to the underlying assignment modal, not the teleported dialog.
       // Close the overlay so the user can actually see it and decide how to proceed.
@@ -551,7 +559,8 @@ async function removeAssignmentFromModal() {
     toast.success('Zuweisung entfernt', modal.eventTitle)
     dismissModal()
   } catch (e) {
-    modal.error = e instanceof Error ? e.message : 'Fehler beim Entfernen'
+    if (isStaleRevision(e)) handleStaleRevision()
+    else modal.error = e instanceof Error ? e.message : 'Fehler beim Entfernen'
   } finally {
     modal.saving = false
   }

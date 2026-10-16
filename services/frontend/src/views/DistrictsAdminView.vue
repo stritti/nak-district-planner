@@ -46,7 +46,7 @@
               :reload="() => reloadInlineDistrict(district)"
               required
               :max-length="255"
-              @click.stop
+              @click="keepSelectionWhileEditing(district, $event)"
             />
             <span
               v-if="district.state_code"
@@ -603,6 +603,11 @@ onBeforeRouteLeave(() => inlineCoordinator.finish())
 /** Mirrors the server guard (DISTRICT_ADMIN); a missing revision never offers a blind write. */
 function canRenameDistrict(district: DistrictResponse): boolean {
   return auth.canAdminDistrict(district.id) && !!district.revision
+}
+
+/** Only a cell that can enter edit mode keeps the click from selecting the district. */
+function keepSelectionWhileEditing(district: DistrictResponse, event: Event): void {
+  if (canRenameDistrict(district)) event.stopPropagation()
 }
 
 function canRenameGroup(districtId: string, group: CongregationGroupResponse): boolean {
