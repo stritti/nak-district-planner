@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import uuid
 from contextlib import contextmanager
@@ -143,9 +144,9 @@ def duty_rows(owner, data):
         )
         cur.execute(
             "INSERT INTO export_tokens "
-            "(id,token,label,token_type,district_id,congregation_id,leader_id,subject_sub,created_at) "
+            "(id,token_hash,label,token_type,district_id,congregation_id,leader_id,subject_sub,created_at) "
             "VALUES (%s,%s,'Persönlicher Kalender','INTERNAL',%s,NULL,NULL,%s,now())",
-            (str(ids["token"]), token, str(data.a.district_id), subject),
+            (str(ids["token"]), hashlib.sha256(token.encode()).hexdigest(), str(data.a.district_id), subject),
         )
     yield ids, subject, token
     with owner.cursor() as cur:
