@@ -299,7 +299,8 @@ function openModal(cell: MatrixCell, date: string, congregationName: string, con
   modal.initialStartAt = cell.event_start_at ?? null
   modal.initialEndAt = cell.event_end_at ?? null
   modal.assignmentId = cell.assignment_id
-  modal.revision = cell.revision ?? ''
+  // The cell revision belongs to the cell's own event; never send it for another (host) event.
+  modal.revision = modal.eventId === cell.event_id ? (cell.revision ?? '') : ''
   modal.eventTitle = cell.event_title ?? ''
   modal.date = date
   modal.congregationName = congregationName

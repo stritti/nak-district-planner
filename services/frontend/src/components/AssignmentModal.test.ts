@@ -151,6 +151,16 @@ describe('AssignmentModal', () => {
     expect(vi.mocked(ctx.matrix.assign).mock.calls[0][4]).toBe('"rev-7"')
   })
 
+  it('never sends the cell revision for a different (host) event', async () => {
+    const ctx = setup()
+    await openAndFlush(ctx, baseCell({ assignment_event_id: 'host-event', revision: '"own-slot-rev"' }))
+    await ctx.wrapper.get('input[role="combobox"]').setValue('Freier Name')
+    await ctx.wrapper.get('[data-testid="submit-assignment"]').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(ctx.matrix.assign).mock.calls[0][0]).toBe('host-event')
+    expect(vi.mocked(ctx.matrix.assign).mock.calls[0][4]).toBe('')
+  })
+
   it('keeps the dialog open with the server message when the event changed meanwhile (412)', async () => {
     const ctx = setup()
     vi.mocked(ctx.matrix.assign).mockRejectedValueOnce(

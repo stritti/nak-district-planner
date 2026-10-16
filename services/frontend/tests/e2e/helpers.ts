@@ -101,6 +101,8 @@ export function matrixResponse(options: MatrixResponseOptions) {
           '2026-04-08': {
             event_id: 'event-1',
             assignment_event_id: 'event-1',
+            // The real matrix always carries the event's strong revision (sent as If-Match).
+            revision: '"rev-1"',
             invitation_count: 0,
             event_title: 'Gottesdienst',
             category: 'Gottesdienst',
