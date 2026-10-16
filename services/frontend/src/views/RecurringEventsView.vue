@@ -297,7 +297,7 @@ function statusLabel(state: ChecklistStatus): string {
     CONFLICT: 'Konflikt', NEEDS_REVIEW: 'Prüfung nötig',
   }[state]
 }
-const bulkErrorMessages: Record<string, string> = {
+const errorMessages: Record<string, string> = {
   STALE_TEMPLATE: 'Vorlage wurde inzwischen geändert. Bitte die Monatsliste aktualisieren.',
   OCCURRENCE_CONFLICT: 'Der Termin ist bereits belegt oder wurde verändert.',
   INVALID_OCCURRENCE: 'Der Termin entspricht nicht mehr der aktuellen Vorlage.',
@@ -306,7 +306,20 @@ const bulkErrorMessages: Record<string, string> = {
   INVALID_INPUT: 'Ungültige Eingabe. Bitte den Termin prüfen.',
 }
 function bulkErrorMessage(code: string | null | undefined): string {
-  return (code && bulkErrorMessages[code]) || 'Übernahme fehlgeschlagen. Bitte die Monatsliste aktualisieren.'
+  return (code && errorMessages[code]) || 'Übernahme fehlgeschlagen. Bitte die Monatsliste aktualisieren.'
+}
+/** Single-item actions answer with `{code, message}`; show our fixed text, never raw response JSON. */
+function actionErrorMessage(cause: unknown): string {
+  if (cause instanceof ApiError) {
+    const detail = (cause.body as { detail?: unknown } | null)?.detail
+    const code = typeof detail === 'object' && detail !== null ? (detail as { code?: unknown }).code : undefined
+    if (typeof code === 'string' && errorMessages[code]) return errorMessages[code]
+    // Curated validation texts of the template endpoints (e.g. "Vorlage wurde geändert.").
+    if ((cause.status === 409 || cause.status === 422) && typeof detail === 'string' && detail) return detail
+    if (cause.status === 403) return 'Dafür fehlt die Berechtigung.'
+    if (cause.status === 404) return 'Die Vorlage oder der Termin existiert nicht mehr. Bitte die Liste aktualisieren.'
+  }
+  return 'Die Aktion ist fehlgeschlagen. Bitte die Monatsliste aktualisieren und erneut versuchen.'
 }
 function itemKey(item: ChecklistItem): string {
   return `${item.template_id}:${item.occurrence_local_date}`
@@ -398,7 +411,7 @@ async function perform(task: () => Promise<unknown>): Promise<boolean> {
     await load()
     return true
   } catch (cause) {
-    error.value = String(cause)
+    error.value = actionErrorMessage(cause)
     return false
   } finally {
     busy.value = false
@@ -442,7 +455,7 @@ async function bulkAccept(): Promise<void> {
       ).join('; ')
     }
   } catch (cause) {
-    error.value = String(cause)
+    error.value = actionErrorMessage(cause)
   } finally {
     busy.value = false
   }

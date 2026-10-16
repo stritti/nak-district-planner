@@ -516,3 +516,32 @@ async def test_congregation_and_distribution_reject_cross_district_ids() -> None
                 AsyncMock(), replace(entry, applicability=(str(congregation_id),)),
             )
         assert error.value.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("failure", "status_code", "expected_code"),
+    [
+        (StaleTemplateError("sensitive revision details"), 409, "STALE_TEMPLATE"),
+        (OccurrenceConflictError("sensitive slot details"), 409, "OCCURRENCE_CONFLICT"),
+        (InvalidOccurrenceError("sensitive template details"), 409, "INVALID_OCCURRENCE"),
+        (AmbiguousLocalTimeError("sensitive timing details"), 409, "AMBIGUOUS_LOCAL_TIME"),
+        (NonexistentLocalTimeError("sensitive timing details"), 409, "NONEXISTENT_LOCAL_TIME"),
+        (ValueError("internal sensitive details"), 422, "INVALID_INPUT"),
+    ],
+)
+def test_single_item_errors_use_the_stable_contract_without_exception_text(
+    failure: ValueError, status_code: int, expected_code: str,
+) -> None:
+    """Accept/skip/reopen/resolve answer like the bulk endpoint: code + fixed German message."""
+    error = r._handle_occurrence_error(failure)
+    assert error.status_code == status_code
+    assert error.detail["code"] == expected_code
+    assert error.detail["message"]
+    assert "sensitive" not in str(error.detail)
+    assert "internal" not in str(error.detail)
+
+
+def test_every_public_error_code_has_a_message() -> None:
+    codes = {"STALE_TEMPLATE", "OCCURRENCE_CONFLICT", "INVALID_OCCURRENCE",
+             "AMBIGUOUS_LOCAL_TIME", "NONEXISTENT_LOCAL_TIME", "INVALID_INPUT"}
+    assert set(r.PUBLIC_ERROR_MESSAGES) == codes

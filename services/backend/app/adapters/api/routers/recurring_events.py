@@ -114,18 +114,14 @@ def _occurrence_response(
     )
 
 
-def _handle_occurrence_error(exc: ValueError) -> HTTPException:
-    if isinstance(
-        exc, (
-            OccurrenceConflictError,
-            StaleTemplateError,
-            InvalidOccurrenceError,
-            AmbiguousLocalTimeError,
-            NonexistentLocalTimeError,
-        ),
-    ):
-        return HTTPException(status_code=409, detail=str(exc))
-    return HTTPException(status_code=422, detail=str(exc))
+PUBLIC_ERROR_MESSAGES: dict[str, str] = {
+    "STALE_TEMPLATE": "Vorlage wurde inzwischen geändert. Bitte die Monatsliste aktualisieren.",
+    "OCCURRENCE_CONFLICT": "Der Termin ist bereits belegt oder wurde verändert.",
+    "INVALID_OCCURRENCE": "Der Termin entspricht nicht mehr der aktuellen Vorlage.",
+    "AMBIGUOUS_LOCAL_TIME": "Die Uhrzeit ist doppeldeutig. Bitte einzeln prüfen.",
+    "NONEXISTENT_LOCAL_TIME": "Die lokale Uhrzeit existiert an diesem Tag nicht.",
+    "INVALID_INPUT": "Ungültige Eingabe. Bitte den Termin prüfen.",
+}
 
 
 def _bulk_error_code(exc: ValueError) -> str:
@@ -141,6 +137,20 @@ def _bulk_error_code(exc: ValueError) -> str:
     if isinstance(exc, NonexistentLocalTimeError):
         return "NONEXISTENT_LOCAL_TIME"
     return "INVALID_INPUT"
+
+
+def _handle_occurrence_error(exc: ValueError) -> HTTPException:
+    """Single-item error contract, identical in codes to the bulk endpoint.
+
+    The exception text is never forwarded: it may contain slot, template or
+    timing details. Known domain errors are conflicts (409), anything else is
+    treated as invalid input (422).
+    """
+    code = _bulk_error_code(exc)
+    return HTTPException(
+        status_code=422 if code == "INVALID_INPUT" else 409,
+        detail={"code": code, "message": PUBLIC_ERROR_MESSAGES[code]},
+    )
 
 
 async def _mutable_entry(

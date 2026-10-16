@@ -186,6 +186,21 @@ Das System SHALL einen ausgewählten Vorschlag nur nach expliziter, berechtigter
 - **THEN** wird die Bestätigung mit HTTP 409 abgelehnt
 - **AND** keine veraltete Uhrzeit wird angelegt
 
+### Requirement: Stabiler Fehlervertrag der Übernahme
+Fehlgeschlagene Übernahmen, Auslassungen, Wiedereröffnungen und Auflösungen SHALL mit einem stabilen Fehlercode und einer festen deutschen Meldung beantwortet werden, nie mit dem Text einer Ausnahme. Einzelaktionen und Mehrfachübernahme SHALL dieselben Codes verwenden.
+
+#### Scenario: Bekannter Domänenfehler bei einer Einzelaktion
+- **WHEN** eine Einzelaktion an einer überholten Vorlage, einer Kollision, einem ungültigen Vorkommen oder einer doppeldeutigen bzw. nicht existierenden lokalen Zeit scheitert
+- **THEN** antwortet die API mit HTTP 409 und `detail.code` aus STALE_TEMPLATE, OCCURRENCE_CONFLICT, INVALID_OCCURRENCE, AMBIGUOUS_LOCAL_TIME oder NONEXISTENT_LOCAL_TIME samt fester Meldung
+
+#### Scenario: Unbekannter Fehler enthält interne Details
+- **WHEN** eine Einzelaktion mit einer unbekannten Ausnahme scheitert, deren Text interne Details enthält
+- **THEN** antwortet die API mit HTTP 422 und dem Code INVALID_INPUT, und die Antwort enthält den Ausnahmetext nicht
+
+#### Scenario: Fehleranzeige in der Oberfläche
+- **WHEN** die Oberfläche eine fehlgeschlagene Aktion anzeigt
+- **THEN** erscheint die Meldung zum Fehlercode bzw. ein fester Text zum Status, nie rohe Antwort-JSON oder Ausnahmetext
+
 ### Requirement: Dauerhafte Zuordnung und bewusste Abweichungen
 
 Das System SHALL die Identität eines vorgeschlagenen Vorkommens durch Vorlagen-ID und ursprünglich lokal berechnetes Datum erhalten, unabhängig von späteren Verschiebungen eines übernommenen Termins. Ein gelöschter referenzierter Termin SHALL nicht automatisch neu erzeugt werden. Erneutes Öffnen SHALL nur zulässig sein, wenn das Vorkommen weiterhin zur aktiven Vorlage passt.
