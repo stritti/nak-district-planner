@@ -47,7 +47,7 @@
               </template>
             </div>
             <!-- ICS URL -->
-            <div class="flex items-center gap-2">
+            <div v-if="t.token" class="flex items-center gap-2">
               <code class="text-xs bg-gray-100 dark:bg-gray-700 rounded px-2 py-1 text-gray-700 dark:text-gray-300 truncate max-w-sm block">
                 {{ icsUrl(t.token, tokenFilter[t.id]) }}
               </code>
@@ -64,6 +64,9 @@
               >
                 <ArrowTopRightOnSquareIcon class="h-4 w-4" />
               </a>
+            </div>
+            <div v-else class="text-[11px] text-gray-400 dark:text-gray-500">
+              Token aus Sicherheitsgründen nur einmal beim Erstellen sichtbar.
             </div>
             <!-- approval_status filter (PUBLIC tokens are always confirmed-only) -->
             <div v-if="t.token_type === 'INTERNAL'" class="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -324,9 +327,16 @@ async function saveToken() {
       congregation_id: form.congregation_id || null,
     })
     tokens.value.unshift(created)
-    await ensureAllCongregations()
     form.open = false
-    toastStore.success('Export-Token erstellt', created.label)
+    if (created.token) {
+      toastStore.success(
+        'Export-Token erstellt — Secret nur jetzt sichtbar',
+        `${created.label}: ${icsUrl(created.token)}`,
+      )
+    } else {
+      toastStore.success('Export-Token erstellt', created.label)
+    }
+    void loadCongregationNames()
   } catch (e) {
     form.error = e instanceof Error ? e.message : 'Fehler'
   } finally {
@@ -356,6 +366,17 @@ async function doDelete() {
   }
 }
 
-// Preload congregation names for display
-onMounted(ensureAllCongregations)
+async function loadCongregationNames() {
+  try {
+    await ensureAllCongregations()
+  } catch {
+    toastStore.error(
+      'Gemeindenamen konnten nicht geladen werden',
+      'Kalenderlinks bleiben verfügbar.',
+    )
+  }
+}
+
+// Name loading must never turn an already created credential into an apparent failure.
+onMounted(loadCongregationNames)
 </script>

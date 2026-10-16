@@ -7,7 +7,7 @@ export type TokenType = 'PUBLIC' | 'INTERNAL'
 
 export interface ExportTokenResponse {
   id: string
-  token: string
+  token?: string | null
   label: string
   token_type: TokenType
   district_id: string
@@ -36,3 +36,4 @@ export function createExportToken(data: ExportTokenCreate): Promise<ExportTokenR
 export function deleteExportToken(id: string): Promise<void> {
   return apiFetch(`/api/v1/export-tokens/${id}`, { method: 'DELETE' })
 }
+

@@ -41,6 +41,7 @@ from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
+from app.domain.models.event_duty import SERVICE_LEADER_LABEL
 from app.domain.models.event_instance import EventInstance, EventVisibility
 from app.domain.models.export_token import ExportToken, TokenType
 from app.domain.models.planning_slot import (
@@ -75,7 +76,7 @@ async def create_export_token(
     await ensure_congregation_in_district(session, body.district_id, body.congregation_id)
     await ensure_leader_in_district(session, body.district_id, body.leader_id)
 
-    token = ExportToken.create(
+    token, raw_secret = ExportToken.create(
         label=body.label,
         token_type=body.token_type,
         district_id=body.district_id,
@@ -84,7 +85,7 @@ async def create_export_token(
         subject_sub=body.subject_sub,
     )
     await repo.save(token)
-    return _token_response(token)
+    return _token_response(token, raw_secret=raw_secret)
 
 
 @router.get(
@@ -141,10 +142,12 @@ async def delete_export_token(
     await repo.delete(token_id)
 
 
-def _token_response(token: ExportToken) -> ExportTokenResponse:
+def _token_response(
+    token: ExportToken, *, raw_secret: str | None = None
+) -> ExportTokenResponse:
     return ExportTokenResponse(
         id=token.id,
-        token=token.token,
+        token=raw_secret,
         label=token.label,
         token_type=token.token_type,
         district_id=token.district_id,
@@ -303,7 +306,9 @@ async def export_calendar_ics(
                 raise
         else:
             personal_duties = {
-                entry.planning_slot_id: [label for label in entry.duties if label != "Dienstleiter"]
+                entry.planning_slot_id: [
+                    label for label in entry.duties if label != SERVICE_LEADER_LABEL
+                ]
                 for entry in personal_entries
             }
 

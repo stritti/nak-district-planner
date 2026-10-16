@@ -20,6 +20,7 @@ from app.adapters.db.migrations.rls_policies import (
     related_planning_slot_sql,
 )
 from app.domain.models.event_duty import DEFAULT_DUTY_CATEGORIES
+from app.domain.models.role import Role, roles_at_least_sql
 
 _TABLES = (
     "event_duty_categories",
@@ -32,9 +33,7 @@ _ADMIN_TABLES = {"event_duty_categories", "event_type_duty_configurations"}
 
 def _scope(alias: str, *, roles: str | None = None, inherited: bool = False) -> str:
     role_filter = (
-        f"AND m.role IN ({roles})"
-        if roles
-        else "AND m.role IN ('VIEWER','PLANNER','CONGREGATION_ADMIN','DISTRICT_ADMIN')"
+        f"AND m.role IN ({roles})" if roles else f"AND m.role IN ({roles_at_least_sql(Role.VIEWER)})"
     )
     inherited_sql = (
         f"OR ({alias}.congregation_id IS NULL AND EXISTS (SELECT 1 FROM congregations c WHERE c.id=m.scope_id AND c.district_id={alias}.district_id))"
@@ -52,17 +51,17 @@ def _scope(alias: str, *, roles: str | None = None, inherited: bool = False) -> 
 def _admin(alias: str) -> str:
     return f"""({SUPERADMIN_SQL} OR EXISTS (
       SELECT 1 FROM memberships m WHERE m.user_sub=current_setting('app.current_user_sub',true)
-      AND ((m.scope_type='DISTRICT' AND m.scope_id={alias}.district_id AND m.role='DISTRICT_ADMIN')
+      AND ((m.scope_type='DISTRICT' AND m.scope_id={alias}.district_id AND m.role IN ({roles_at_least_sql(Role.DISTRICT_ADMIN)}))
         OR (m.scope_type='CONGREGATION' AND m.scope_id={alias}.congregation_id
-            AND m.role IN ('CONGREGATION_ADMIN','DISTRICT_ADMIN')))))"""
+            AND m.role IN ({roles_at_least_sql(Role.CONGREGATION_ADMIN)})))))"""
 
 
 _FUNCTIONS = (
-    """CREATE FUNCTION duty_subject_scope(p_sub text, p_district uuid, p_congregation uuid)
+    f"""CREATE FUNCTION duty_subject_scope(p_sub text, p_district uuid, p_congregation uuid)
     RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
       SELECT EXISTS (SELECT 1 FROM users u WHERE u.sub=p_sub AND (u.is_superadmin OR EXISTS (
         SELECT 1 FROM memberships m WHERE m.user_sub=u.sub
-        AND m.role IN ('VIEWER','PLANNER','CONGREGATION_ADMIN','DISTRICT_ADMIN')
+        AND m.role IN ({roles_at_least_sql(Role.VIEWER)})
         AND ((m.scope_type='DISTRICT' AND m.scope_id=p_district)
           OR (p_congregation IS NOT NULL AND m.scope_type='CONGREGATION'
               AND m.scope_id=p_congregation AND EXISTS (
@@ -104,7 +103,7 @@ _FUNCTIONS = (
           WHERE sa.planning_slot_id=ps.id AND l.district_id=ps.district_id
           AND l.user_sub=current_duty_export_subject())))
     $$""",
-    """CREATE FUNCTION eligible_duty_users(p_district uuid,p_congregation uuid)
+    f"""CREATE FUNCTION eligible_duty_users(p_district uuid,p_congregation uuid)
     RETURNS TABLE(sub text,display_name text)
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
       SELECT DISTINCT u.sub::text,COALESCE(NULLIF(u.name,''),u.username)::text
@@ -122,7 +121,7 @@ _FUNCTIONS = (
           WHERE actor.sub=current_setting('app.current_user_sub',true) AND actor.is_superadmin)
         OR EXISTS (SELECT 1 FROM memberships actor_membership
           WHERE actor_membership.user_sub=current_setting('app.current_user_sub',true)
-          AND actor_membership.role IN ('PLANNER','CONGREGATION_ADMIN','DISTRICT_ADMIN')
+          AND actor_membership.role IN ({roles_at_least_sql(Role.PLANNER)})
           AND (
             (actor_membership.scope_type='DISTRICT' AND actor_membership.scope_id=p_district)
             OR (p_congregation IS NOT NULL
@@ -134,7 +133,7 @@ _FUNCTIONS = (
       )
       ORDER BY 1
     $$""",
-    """CREATE FUNCTION personal_calendar_scopes(p_subject text,p_district uuid)
+    f"""CREATE FUNCTION personal_calendar_scopes(p_subject text,p_district uuid)
     RETURNS TABLE(role text,scope_type text,scope_id uuid)
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
       SELECT m.role::text,m.scope_type::text,m.scope_id
@@ -153,7 +152,7 @@ _FUNCTIONS = (
           WHERE actor.sub=current_setting('app.current_user_sub',true) AND actor.is_superadmin)
         OR EXISTS (SELECT 1 FROM memberships actor_membership
           WHERE actor_membership.user_sub=current_setting('app.current_user_sub',true)
-          AND actor_membership.role='DISTRICT_ADMIN'
+          AND actor_membership.role IN ({roles_at_least_sql(Role.DISTRICT_ADMIN)})
           AND actor_membership.scope_type='DISTRICT'
           AND actor_membership.scope_id=p_district)
         OR EXISTS (SELECT 1 FROM export_tokens et
@@ -265,7 +264,7 @@ def _restore_select_policies(op) -> None:
 
 def install_duty_policies(op) -> None:
     """Install independently scoped duties policies and personal feed restrictions."""
-    op.execute("""CREATE FUNCTION duty_assignment_count(p_slot uuid,p_category uuid) RETURNS bigint
+    op.execute(f"""CREATE FUNCTION duty_assignment_count(p_slot uuid,p_category uuid) RETURNS bigint
       LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
       SELECT count(*) FROM event_duty_assignments da WHERE da.planning_slot_id=p_slot
         AND da.duty_category_id=p_category AND EXISTS (SELECT 1 FROM planning_slots ps
@@ -273,7 +272,7 @@ def install_duty_policies(op) -> None:
             current_setting('app.is_system_worker',true)='true'
             OR EXISTS (SELECT 1 FROM users u WHERE u.sub=current_setting('app.current_user_sub',true) AND u.is_superadmin)
             OR EXISTS (SELECT 1 FROM memberships m WHERE m.user_sub=current_setting('app.current_user_sub',true)
-              AND m.role IN ('VIEWER','PLANNER','CONGREGATION_ADMIN','DISTRICT_ADMIN')
+              AND m.role IN ({roles_at_least_sql(Role.VIEWER)})
               AND ((m.scope_type='DISTRICT' AND m.scope_id=ps.district_id)
                 OR (m.scope_type='CONGREGATION' AND m.scope_id=ps.congregation_id)))))
       $$""")
@@ -284,7 +283,7 @@ def install_duty_policies(op) -> None:
         write = (
             _admin(table)
             if table in _ADMIN_TABLES
-            else _scope(table, roles="'PLANNER','CONGREGATION_ADMIN','DISTRICT_ADMIN'")
+            else _scope(table, roles=roles_at_least_sql(Role.PLANNER))
         )
         if table == "event_duty_assignments":
             read = f"""({read}

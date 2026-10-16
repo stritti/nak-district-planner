@@ -10,10 +10,10 @@ invariant the personal duty feed relies on; update this file deliberately
 alongside the migration.
 """
 
-from inspect import getsource
 from unittest.mock import Mock
 
 from app.adapters.db.migrations import event_duty_rls
+from app.adapters.db.migrations.rls_policies import distributed_slot_membership_sql
 
 _FUNCTIONS_SQL = "\n".join(event_duty_rls._FUNCTIONS)
 
@@ -142,9 +142,9 @@ def test_export_token_owner_policies_are_subject_scoped_individually():
 
 def test_subject_slot_read_keeps_distributed_slot_membership_constraint():
     """Personal feeds must not leak slots distributed to congregations the subject left."""
-    source = getsource(event_duty_rls._subject_slot_read)
-    assert "duty_export_slot_allowed" in source
-    assert "et.subject_sub IS NULL OR" in source
-    assert "distributed_slot_membership_sql" in getsource(
-        event_duty_rls.install_duty_policies
-    ) or "distributed_slot_membership_sql" in source
+    rendered = event_duty_rls._subject_slot_read("ps")
+    # Membership-based reads keep the distributed-slot check ...
+    assert distributed_slot_membership_sql("ps") in rendered
+    # ... and subject-bound export tokens are additionally limited to their own slots.
+    assert "et.subject_sub IS NULL OR (" in rendered
+    assert "duty_export_slot_allowed(ps.id)" in rendered

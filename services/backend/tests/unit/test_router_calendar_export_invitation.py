@@ -333,7 +333,7 @@ async def test_export_token_crud() -> None:
     """Create, list, and delete export tokens."""
     district_id = uuid.uuid4()
     auth = _auth_context(is_superadmin=False)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="L",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -363,6 +363,10 @@ async def test_export_token_crud() -> None:
         await export_router.delete_export_token(auth, token.id, db, repo=token_repo)
 
     assert created.label == "X"
+    stored = token_repo.save.call_args.args[0]
+    assert created.token == stored.token
+    assert stored.token_hash is not None
+    assert listed[0].token is None
     assert len(listed) == 1
     assert listed[0].id == token.id
 
@@ -372,7 +376,7 @@ async def test_export_token_management() -> None:
     """Create, list, and delete export tokens (management route)."""
     district_id = uuid.uuid4()
     auth = _auth_context(is_superadmin=False)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="L",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -402,6 +406,10 @@ async def test_export_token_management() -> None:
         await export_router.delete_export_token(auth, token.id, db, repo=token_repo)
 
     assert created.label == "X"
+    stored = token_repo.save.call_args.args[0]
+    assert created.token == stored.token
+    assert stored.token_hash is not None
+    assert listed[0].token is None
     assert len(listed) == 1
     assert listed[0].id == token.id
 
@@ -413,7 +421,7 @@ async def test_export_calendar_ics_with_planning_slots() -> None:
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Export",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -455,7 +463,7 @@ async def test_export_calendar_ics_filters_by_approval_status() -> None:
         instance_id=uuid.uuid4(),
     )
 
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Export",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -485,7 +493,7 @@ async def test_export_calendar_ics_leader_token_shows_assignments() -> None:
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Leader Export",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -514,7 +522,7 @@ async def test_public_feed_anonymizes_leader_id_assignment_without_loading_leade
     """PUBLIC feeds never read leader rows (RLS denies them) yet still mark the slot as assigned."""
     district_id = uuid.uuid4()
     slot = _planning_slot(district_id=district_id)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Public", token_type=TokenType.PUBLIC, district_id=district_id, congregation_id=None
     )
     repos = _export_repos(
@@ -543,7 +551,7 @@ async def test_internal_events_stay_out_of_public_feeds(token_type, personal, ex
     )
     instance = _event_instance(planning_slot_id=slot.id, visibility=EventVisibility.INTERNAL)
     leader_id = uuid.uuid4() if personal else None
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Feed",
         token_type=TokenType(token_type),
         district_id=district_id,
@@ -564,7 +572,7 @@ async def test_internal_events_stay_out_of_public_feeds(token_type, personal, ex
 async def test_export_calendar_ics_empty() -> None:
     """Export with no slots produces valid calendar with no VEVENT."""
     district_id = uuid.uuid4()
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Empty",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -607,7 +615,7 @@ async def test_export_token_not_found_paths() -> None:
 async def test_export_token_write_routes_forbidden_without_permission() -> None:
     """Token write routes require DISTRICT_ADMIN."""
     district_id = uuid.uuid4()
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="L",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -991,7 +999,7 @@ async def test_export_calendar_ics_uid_stable_across_exports() -> None:
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Export",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -1042,7 +1050,7 @@ async def test_export_calendar_ics_public_token_anonymizes_leader() -> None:
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Public",
         token_type=TokenType.PUBLIC,
         district_id=district_id,
@@ -1071,7 +1079,7 @@ async def test_export_calendar_ics_internal_token_shows_full_leader_name() -> No
     slot = _planning_slot(district_id=district_id)
     instance = _event_instance(planning_slot_id=slot.id)
 
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Internal",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -1121,7 +1129,7 @@ async def test_export_congregation_feed_includes_applicable_district_slots() -> 
     to_all = _planning_slot(district_id=district_id, congregation_id=None, applicability=["all"])
     not_distributed = _planning_slot(district_id=district_id, congregation_id=None)
     other_congregation = _planning_slot(district_id=district_id)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Gemeinde",
         token_type=TokenType.PUBLIC,
         district_id=district_id,
@@ -1141,7 +1149,7 @@ async def test_export_congregation_feed_includes_applicable_district_slots() -> 
 async def test_export_public_token_cannot_include_planned_via_query() -> None:
     district_id = uuid.uuid4()
     planned = _planning_slot(district_id=district_id, approval_status=EventApprovalStatus.PLANNED)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Public",
         token_type=TokenType.PUBLIC,
         district_id=district_id,
@@ -1157,7 +1165,7 @@ async def test_export_public_token_cannot_include_planned_via_query() -> None:
 async def test_export_cancelled_slot_is_marked_cancelled() -> None:
     district_id = uuid.uuid4()
     cancelled = _planning_slot(district_id=district_id, status=PlanningSlotStatus.CANCELLED)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Export", token_type=TokenType.PUBLIC, district_id=district_id, congregation_id=None
     )
 
@@ -1174,7 +1182,7 @@ async def test_export_change_metadata_follows_updated_at() -> None:
     slot = _planning_slot(district_id=district_id)
     slot.created_at = datetime(2026, 1, 1, 8, 0, tzinfo=UTC)
     slot.updated_at = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
     )
 
@@ -1209,7 +1217,7 @@ async def test_export_leader_rename_advances_revision() -> None:
     leader = Leader.create(name="Alt", district_id=district_id)
     leader.updated_at = slot.updated_at
     assignment = _assignment_stub(slot.id, "", leader_id=leader.id)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
     )
 
@@ -1233,7 +1241,7 @@ async def test_export_congregation_rename_advances_revision() -> None:
     congregation_id = uuid.uuid4()
     slot = _planning_slot(district_id=district_id, congregation_id=congregation_id)
     slot.updated_at = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=None
     )
 
@@ -1267,7 +1275,7 @@ async def test_export_invitation_copy_uses_host_location_and_leader() -> None:
     copy_slot = _planning_slot(district_id=district_id, congregation_id=invited_id)
     copy_slot.invitation_source_congregation_id = host_id
     copy_slot.invitation_source_event_id = host_slot.id
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Export", token_type=TokenType.INTERNAL, district_id=district_id, congregation_id=invited_id
     )
     db = AsyncMock()
@@ -1305,7 +1313,7 @@ async def test_export_leader_feed_contains_only_that_leaders_slots() -> None:
     mine = _planning_slot(district_id=district_id)
     someone_elses = _planning_slot(district_id=district_id)
     unassigned = _planning_slot(district_id=district_id)
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Leader",
         token_type=TokenType.INTERNAL,
         district_id=district_id,
@@ -1334,7 +1342,7 @@ async def test_export_leader_feed_uses_canonical_planning_slot_key() -> None:
     slot = _planning_slot(district_id=district_id)
     legacy = _assignment_stub(slot.id, "Ev. Ich", leader_id=leader_id)
     legacy.event_id = uuid.uuid4()
-    token = ExportToken.create(
+    token, _ = ExportToken.create(
         label="Leader",
         token_type=TokenType.INTERNAL,
         district_id=district_id,

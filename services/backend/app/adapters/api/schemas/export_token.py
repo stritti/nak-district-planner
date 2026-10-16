@@ -36,7 +36,7 @@ class ExportTokenResponse(BaseModel):
     """ExportTokenResponse."""
 
     id: uuid.UUID
-    token: str
+    token: str | None = None
     label: str
     token_type: TokenType
     district_id: uuid.UUID

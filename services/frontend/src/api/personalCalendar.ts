@@ -17,7 +17,7 @@ export interface PersonalEvent {
 
 export interface PersonalToken {
   id: string
-  token: string
+  token?: string | null
   label: string
 }
 

@@ -15,7 +15,7 @@ import uuid
 from typing import Protocol
 
 from app.domain.models.membership import Membership, ScopeType
-from app.domain.models.role import Role
+from app.domain.models.role import PRIVILEGE_ORDER, Role
 
 
 class PermissionError(Exception):
@@ -192,13 +192,14 @@ def get_congregations_where_user_has_role(
 
 
 def _role_hierarchy(role: Role) -> int:
-    """Return numeric rank for role hierarchy.
-    Higher number = higher privilege level.
+    """Return numeric rank derived from the canonical PRIVILEGE_ORDER.
+
+    Higher number = higher privilege level. Deriving the rank from
+    PRIVILEGE_ORDER keeps Python guards and generated RLS role sets on
+    one shared hierarchy.
     """
-    hierarchy = {
-        Role.VIEWER: 1,
-        Role.PLANNER: 2,
-        Role.CONGREGATION_ADMIN: 3,
-        Role.DISTRICT_ADMIN: 4,
+    inverted = {
+        member: len(PRIVILEGE_ORDER) - index
+        for index, member in enumerate(PRIVILEGE_ORDER)
     }
-    return hierarchy.get(role, 0)
+    return inverted.get(role, 0)
