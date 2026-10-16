@@ -27,10 +27,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, text
-
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from sqlalchemy import create_engine, text
 
 psycopg2 = pytest.importorskip("psycopg2")
 from psycopg2 import errors  # noqa: E402
