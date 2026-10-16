@@ -167,3 +167,15 @@ class ReleaseUpgradeNotesTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CommittedUpgradeNotesTests(unittest.TestCase):
+    """A malformed note fails the release job after the tag exists, so catch it in CI."""
+
+    def test_every_committed_note_is_publishable(self) -> None:
+        repo = Path(__file__).resolve().parent.parent
+        paths = sorted((repo / NOTES_DIR).glob("*.md"))
+        self.assertTrue(paths)
+        for path in paths:
+            with self.subTest(note=path.name):
+                validate_upgrade_note(path.read_text(encoding="utf-8").strip(), path)

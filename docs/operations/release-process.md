@@ -130,7 +130,7 @@ und geänderte Backup- oder Restore-Abläufe.
    und keine vorweggenommene Versionsnummer im Dateinamen. Bereits veröffentlichte
    Notizen nicht für spätere Releases erneut verwenden.
 2. Der Hinweis beginnt mit einer präzisen `###`-Überschrift und enthält
-   **Betroffen**, **Vor dem Update** und **Nach dem Update** als fett markierte
+   `**Betroffen:**`, `**Vor dem Update:**` und `**Nach dem Update:**` (fett, mit Doppelpunkt, in dieser Reihenfolge am Zeilenanfang)
    Abschnitte. Er nennt alle neuen Pflichtwerte, Vorbedingungen,
    manuelle Schritte und Verifikationen; optionale Änderungen sind als solche
    zu kennzeichnen. Secrets dürfen nur als Variablennamen vorkommen.
