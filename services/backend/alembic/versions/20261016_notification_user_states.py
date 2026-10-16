@@ -11,9 +11,10 @@ who can independently mark them read/dismissed after deployment.
 import os
 
 import sqlalchemy as sa
+
 from alembic import op
 
-revision = "20261016_notification_user_states"
+revision = "20261016_notif_user_state"
 down_revision = "20261015_hash_export_tokens"
 branch_labels = None
 depends_on = None
