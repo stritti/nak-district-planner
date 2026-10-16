@@ -241,10 +241,11 @@ describe('EventListView', () => {
   })
 
   it('assigns, changes and clears the responsible person from the edit dialog', async () => {
-    vi.mocked(eventsApi.updateEvent).mockImplementation(async () => event())
+    // The assignment write must use the revision returned by the event PATCH before it.
+    vi.mocked(eventsApi.updateEvent).mockImplementation(async () => event({ revision: '"after-patch"' }))
     vi.mocked(assignmentsApi.createAssignment).mockResolvedValue({
       id: 'a1', event_id: 'e1', leader_id: null, leader_name: 'Pr. Frei', status: 'ASSIGNED',
-      created_at: now, updated_at: now,
+      created_at: now, updated_at: now, event_revision: '"after-assignment"',
     })
     const { wrapper, eventsStore } = setup([event()])
     await flushPromises()
@@ -258,7 +259,7 @@ describe('EventListView', () => {
     await wrapper.get('input[placeholder="Name eingeben oder auswählen…"]').setValue('Pr. Frei')
     await save()
     expect(assignmentsApi.createAssignment).toHaveBeenCalledWith(
-      'e1', { leaderId: null, leaderName: 'Pr. Frei', confirmWarnings: undefined },
+      'e1', { leaderId: null, leaderName: 'Pr. Frei', confirmWarnings: undefined }, '"after-patch"',
     )
     expect(eventsStore.items[0].responsible?.name).toBe('Pr. Frei')
 
@@ -267,7 +268,7 @@ describe('EventListView', () => {
     await flushPromises()
     await wrapper.get('input[placeholder="Name eingeben oder auswählen…"]').setValue('')
     await save()
-    expect(assignmentsApi.deleteAssignment).toHaveBeenCalledWith('e1', 'a1')
+    expect(assignmentsApi.deleteAssignment).toHaveBeenCalledWith('e1', 'a1', '"after-patch"')
     expect(eventsStore.items[0].responsible).toBeNull()
   })
 

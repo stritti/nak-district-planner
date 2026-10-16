@@ -1292,12 +1292,15 @@ function responsibleLabel(event: EventResponse): string {
 }
 
 /** Applies the edited responsible person via the assignments API; returns the new value. */
-async function saveResponsible(target: EventResponse): Promise<EventResponse['responsible']> {
+async function saveResponsible(
+  target: EventResponse,
+  revision: string,
+): Promise<EventResponse['responsible']> {
   const current = target.responsible ?? null
   const text = editLeader.value.text.trim()
   const id = editLeader.value.id
   if (!text) {
-    if (current) await deleteAssignment(target.id, current.assignment_id)
+    if (current) await deleteAssignment(target.id, current.assignment_id, revision)
     return null
   }
   if (current && current.leader_id === id && current.name === text) return current
@@ -1306,8 +1309,8 @@ async function saveResponsible(target: EventResponse): Promise<EventResponse['re
   const send = (confirmWarnings?: boolean) => {
     const opts = { ...options, confirmWarnings }
     return current
-      ? updateAssignment(target.id, current.assignment_id, opts)
-      : createAssignment(target.id, opts)
+      ? updateAssignment(target.id, current.assignment_id, opts, revision)
+      : createAssignment(target.id, opts, revision)
   }
   let saved
   try {
@@ -1460,7 +1463,8 @@ async function saveEdit() {
     }
     let assignmentError: unknown = null
     try {
-      updated.responsible = await saveResponsible(target)
+      // The event PATCH above advanced the revision; the assignment write is conditional on it.
+      updated.responsible = await saveResponsible(target, updated.revision ?? '')
     } catch (e) {
       assignmentError = e
       updated.responsible = target.responsible ?? null

@@ -190,7 +190,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
-import { ConflictError } from '../api/errors'
+import { ApiError, ConflictError } from '../api/errors'
 import { useConflictStore, type PendingConflictAction } from '../stores/conflict'
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
@@ -224,6 +224,8 @@ const modal = reactive({
   initialStartAt: null as string | null,
   initialEndAt: null as string | null,
   assignmentId: null as string | null,
+  /** Strong event revision read with the matrix cell; sent as If-Match with every write. */
+  revision: '',
   eventTitle: '',
   date: '',
   congregationName: '',
@@ -297,6 +299,7 @@ function openModal(cell: MatrixCell, date: string, congregationName: string, con
   modal.initialStartAt = cell.event_start_at ?? null
   modal.initialEndAt = cell.event_end_at ?? null
   modal.assignmentId = cell.assignment_id
+  modal.revision = cell.revision ?? ''
   modal.eventTitle = cell.event_title ?? ''
   modal.date = date
   modal.congregationName = congregationName
@@ -493,7 +496,7 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
       ...(confirmWarnings ? { confirmWarnings: true } : {}),
     }
     if (!hasLeader && action === 'save') {
-      await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
+      await matrixStore.clearAssignment(modal.eventId, modal.assignmentId, modal.revision)
       toast.success('Zuweisung entfernt', modal.eventTitle)
     } else {
       await matrixStore.assign(
@@ -501,6 +504,7 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
         modal.assignmentId,
         options,
         action === 'confirm' ? 'CONFIRMED' : undefined,
+        modal.revision,
       )
       toast.success(action === 'confirm' ? 'Zuweisung bestätigt' : 'Zuweisung gespeichert', leaderText || undefined)
     }
@@ -514,6 +518,11 @@ async function persistAssignment(action: AssignmentAction, confirmWarnings = fal
       } else {
         dismissWarnConfirmation()
       }
+    } else if (e instanceof ApiError && (e.status === 412 || e.status === 428)) {
+      // The event changed since the matrix was loaded (e.g. an inline edit by someone else).
+      dismissWarnConfirmation()
+      modal.error = 'Der Termin wurde zwischenzeitlich geändert. Die Ansicht wurde aktualisiert – bitte schließen und erneut öffnen.'
+      void matrixStore.fetch().catch(() => undefined)
     } else {
       // The error belongs to the underlying assignment modal, not the teleported dialog.
       // Close the overlay so the user can actually see it and decide how to proceed.
@@ -537,7 +546,7 @@ async function removeAssignmentFromModal() {
   modal.saving = true
   modal.error = ''
   try {
-    await matrixStore.clearAssignment(modal.eventId, modal.assignmentId)
+    await matrixStore.clearAssignment(modal.eventId, modal.assignmentId, modal.revision)
     toast.success('Zuweisung entfernt', modal.eventTitle)
     dismissModal()
   } catch (e) {

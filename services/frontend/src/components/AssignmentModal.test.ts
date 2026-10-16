@@ -14,6 +14,8 @@ import { useLeadersStore } from '../stores/leaders'
 import { useMatrixStore } from '../stores/matrix'
 import AssignmentModal from './AssignmentModal.vue'
 
+import { ApiError } from '../api/errors'
+
 vi.mock('../api/invitations')
 vi.mock('../api/events')
 
@@ -29,6 +31,7 @@ const baseCell = (overrides: Partial<MatrixCell> = {}): MatrixCell => ({
   category: 'Gottesdienst',
   event_start_at: null,
   event_end_at: null,
+  revision: '"rev-1"',
   ...overrides,
 } as MatrixCell)
 
@@ -111,6 +114,7 @@ describe('AssignmentModal', () => {
       null,
       { leaderId: null, leaderName: 'Freier Name' },
       undefined,
+      '"rev-1"',
     )
     expect(ctx.wrapper.find('.modal-backdrop').exists()).toBe(false)
   })
@@ -134,8 +138,49 @@ describe('AssignmentModal', () => {
       'assignment-1',
       { leaderId: 'leader-1', leaderName: null },
       'CONFIRMED',
+      '"rev-1"',
     )
   })
+
+  it('sends the revision of the cell it was opened with, not a later one', async () => {
+    const ctx = setup()
+    await openAndFlush(ctx, baseCell({ revision: '"rev-7"' }))
+    await ctx.wrapper.get('input[role="combobox"]').setValue('Freier Name')
+    await ctx.wrapper.get('[data-testid="submit-assignment"]').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(ctx.matrix.assign).mock.calls[0][4]).toBe('"rev-7"')
+  })
+
+  it('keeps the dialog open with the server message when the event changed meanwhile (412)', async () => {
+    const ctx = setup()
+    vi.mocked(ctx.matrix.assign).mockRejectedValueOnce(
+      new ApiError(412, 'Precondition Failed', { detail: 'Zuweisung wurde zwischenzeitlich geändert.' }),
+    )
+    await openAndFlush(ctx, baseCell())
+    await ctx.wrapper.get('input[role="combobox"]').setValue('Freier Name')
+    await ctx.wrapper.get('[data-testid="submit-assignment"]').trigger('click')
+    await flushPromises()
+    expect(ctx.wrapper.find('.modal-backdrop').exists()).toBe(true)
+    expect(ctx.wrapper.text()).toContain('zwischenzeitlich geändert')
+    expect(ctx.wrapper.text()).not.toContain('412')
+    expect(ctx.matrix.fetch).toHaveBeenCalled()
+    expect((ctx.wrapper.get('input[role="combobox"]').element as HTMLInputElement).value).toBe('Freier Name')
+  })
+
+  it.each([[428, 'Precondition Required'], [412, 'Precondition Failed']])(
+    'shows one fixed message for %i and survives a failing background refresh',
+    async (status, statusText) => {
+      const ctx = setup()
+      vi.mocked(ctx.matrix.assign).mockRejectedValueOnce(new ApiError(status, statusText, { detail: 'intern' }))
+      vi.mocked(ctx.matrix.fetch).mockRejectedValueOnce(new Error('offline'))
+      await openAndFlush(ctx, baseCell())
+      await ctx.wrapper.get('input[role="combobox"]').setValue('Freier Name')
+      await ctx.wrapper.get('[data-testid="submit-assignment"]').trigger('click')
+      await flushPromises()
+      expect(ctx.wrapper.text()).toContain('zwischenzeitlich geändert')
+      expect(ctx.wrapper.text()).not.toContain('intern')
+    },
+  )
 
   it('clears an existing assignment when saving an empty edit', async () => {
     const ctx = setup()
@@ -144,7 +189,7 @@ describe('AssignmentModal', () => {
     await ctx.wrapper.get('[data-testid="submit-assignment"]').trigger('click')
     await flushPromises()
 
-    expect(ctx.matrix.clearAssignment).toHaveBeenCalledWith('event-1', 'assignment-1')
+    expect(ctx.matrix.clearAssignment).toHaveBeenCalledWith('event-1', 'assignment-1', '"rev-1"')
   })
 
   it('requires a leader before confirming an edit', async () => {
@@ -182,6 +227,7 @@ describe('AssignmentModal', () => {
       null,
       { leaderId: null, leaderName: 'Anna Beispiel', confirmWarnings: true },
       undefined,
+      '"rev-1"',
     )
   })
 
@@ -323,7 +369,7 @@ describe('AssignmentModal', () => {
     await remove.trigger('click')
     await flushPromises()
 
-    expect(ctx.matrix.clearAssignment).toHaveBeenCalledWith('event-1', 'assignment-1')
+    expect(ctx.matrix.clearAssignment).toHaveBeenCalledWith('event-1', 'assignment-1', '"rev-1"')
     expect(ctx.wrapper.find('.modal-backdrop').exists()).toBe(false)
   })
 })

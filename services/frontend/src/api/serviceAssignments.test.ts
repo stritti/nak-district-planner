@@ -17,9 +17,10 @@ describe('service assignment API', () => {
   })
 
   it('normalizes optional leader values and uses ASSIGNED by default', async () => {
-    await createAssignment('event-1', {})
+    await createAssignment('event-1', {}, '"rev-1"')
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/events/event-1/assignments', {
       method: 'POST',
+      headers: { 'If-Match': '"rev-1"' },
       body: JSON.stringify({ leader_id: null, leader_name: null, status: 'ASSIGNED' }),
     })
   })
@@ -28,10 +29,12 @@ describe('service assignment API', () => {
     await createAssignment(
       'event-1',
       { leaderId: 'leader-1', leaderName: 'Pr. Beispiel', confirmWarnings: false },
+      '"rev-1"',
       'CONFIRMED',
     )
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/events/event-1/assignments', {
       method: 'POST',
+      headers: { 'If-Match': '"rev-1"' },
       body: JSON.stringify({
         leader_id: 'leader-1',
         leader_name: 'Pr. Beispiel',
@@ -42,9 +45,10 @@ describe('service assignment API', () => {
   })
 
   it('updates only explicitly supplied optional fields', async () => {
-    await updateAssignment('event-1', 'assignment-1', { leaderName: 'Gast' })
+    await updateAssignment('event-1', 'assignment-1', { leaderName: 'Gast' }, '"rev-1"')
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/events/event-1/assignments/assignment-1', {
       method: 'PUT',
+      headers: { 'If-Match': '"rev-1"' },
       body: JSON.stringify({ leader_id: null, leader_name: 'Gast' }),
     })
 
@@ -52,10 +56,12 @@ describe('service assignment API', () => {
       'event-1',
       'assignment-1',
       { leaderId: 'leader-1', confirmWarnings: true },
+      '"rev-2"',
       'OPEN',
     )
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/events/event-1/assignments/assignment-1', {
       method: 'PUT',
+      headers: { 'If-Match': '"rev-2"' },
       body: JSON.stringify({
         leader_id: 'leader-1',
         leader_name: null,
@@ -81,9 +87,17 @@ describe('service assignment API', () => {
   })
 
   it('deletes an assignment', async () => {
-    await deleteAssignment('event-1', 'assignment-1')
+    await deleteAssignment('event-1', 'assignment-1', '"rev-1"')
     expect(apiFetch).toHaveBeenLastCalledWith('/api/v1/events/event-1/assignments/assignment-1', {
       method: 'DELETE',
+      headers: { 'If-Match': '"rev-1"' },
     })
+  })
+
+  it('never sends a dialog write without a revision (no blind create, update or delete)', async () => {
+    await expect(createAssignment('e', {}, '')).rejects.toThrow('Versionsinformation')
+    await expect(updateAssignment('e', 'a', {}, '')).rejects.toThrow('Versionsinformation')
+    await expect(deleteAssignment('e', 'a', '')).rejects.toThrow('Versionsinformation')
+    expect(apiFetch).not.toHaveBeenCalled()
   })
 })

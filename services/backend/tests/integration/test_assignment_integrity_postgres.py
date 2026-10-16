@@ -21,8 +21,10 @@ from fastapi import HTTPException
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.adapters.api.revisions import slot_revision
 from app.adapters.api.routers import service_assignments as sa_router
 from app.adapters.api.schemas.service_assignment import ServiceAssignmentCreate
+from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.adapters.db.session import _set_tenant_gucs
@@ -87,13 +89,19 @@ async def tenant(sessions):
 
 
 async def _assign(db, slot_id: uuid.UUID, body: ServiceAssignmentCreate):
+    """Create an assignment the way a client does: with the revision it read before writing."""
+    slots = SqlPlanningSlotRepository(db)
+    instances = SqlEventInstanceRepository(db)
+    revision = slot_revision(await slots.get(slot_id), await instances.get_by_planning_slot(slot_id))
     return await sa_router.create_assignment(
         slot_id,
         body,
         object(),
         db,
-        SqlPlanningSlotRepository(db),
+        slots,
         SqlServiceAssignmentRepository(db),
+        instance_repo=instances,
+        if_match=revision,
     )
 
 
@@ -128,12 +136,14 @@ async def test_concurrent_assignments_to_one_slot_keep_one(sessions, tenant) -> 
                 _assign(second, tenant["s1"], ServiceAssignmentCreate(leader_name="Pr. B"))
             )
 
-            assert await _still_blocked(competing), "unique index must hold the second insert"
+            assert await _still_blocked(competing), "the slot row lock must hold the second writer"
             await first.commit()
             with pytest.raises(HTTPException) as exc:
                 await competing
 
-    assert exc.value.status_code == 409
+    # The second writer read the event before the first commit: its snapshot is stale (412).
+    # The unique index remains the last line of defence behind this check.
+    assert exc.value.status_code == 412
     async with sessions() as db:
         count = await db.scalar(
             text("SELECT count(*) FROM service_assignments WHERE planning_slot_id = :s"),

@@ -363,6 +363,7 @@ def test_district_routes_return_403(auth_client, method, path_template, role, me
 
     district_repo = AsyncMock()
     district_repo.get.return_value = _district_obj(district_id)
+    district_repo.get_for_update.return_value = district_repo.get.return_value
 
     cong_repo = AsyncMock()
     cong_repo.get.return_value = SimpleNamespace(
@@ -373,6 +374,7 @@ def test_district_routes_return_403(auth_client, method, path_template, role, me
     group_repo.get.return_value = SimpleNamespace(
         id=group_id, district_id=district_id, name="G"
     )
+    group_repo.get_for_update.return_value = group_repo.get.return_value
 
     with _repository_overrides(
         {

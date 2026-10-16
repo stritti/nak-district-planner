@@ -48,6 +48,7 @@ from app.domain.models.planning_series import PlanningSeries
 from app.domain.models.planning_slot import PlanningSlot
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
+from tests.unit.assignment_preconditions import precondition
 
 DISTRICT = uuid.uuid4()
 OTHER_DISTRICT = uuid.uuid4()
@@ -64,6 +65,7 @@ def _db(owner_district: uuid.UUID | None = OTHER_DISTRICT) -> AsyncMock:
 def _found(repo_attr_value: object) -> AsyncMock:
     repo = AsyncMock()
     repo.get.return_value = repo_attr_value
+    repo.get_for_update.return_value = repo_attr_value
     return repo
 
 
@@ -342,7 +344,7 @@ async def test_assignment_create_rejects_foreign_leader() -> None:
         with pytest.raises(HTTPException) as exc:
             await sa_router.create_assignment(
                 slot.id, ServiceAssignmentCreate(leader_id=FOREIGN_ID), object(), _db(),
-                _found(slot), sa_repo,
+                _found(slot), sa_repo, **precondition(slot)
             )
 
     _assert_rejected(exc, "leader_id")
@@ -358,7 +360,7 @@ async def test_assignment_update_rejects_foreign_leader() -> None:
         with pytest.raises(HTTPException) as exc:
             await sa_router.update_assignment(
                 slot.id, assignment.id, ServiceAssignmentUpdate(leader_id=FOREIGN_ID), object(),
-                _db(), _found(slot), sa_repo, AsyncMock(),
+                _db(), _found(slot), sa_repo, AsyncMock(), **precondition(slot)
             )
 
     _assert_rejected(exc, "leader_id")

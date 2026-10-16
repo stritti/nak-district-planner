@@ -39,6 +39,7 @@ from app.adapters.db.repositories.service_assignment import SqlServiceAssignment
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.domain.event_payloads import assignment_confirmed
+from app.domain.models.event_instance import EventInstance
 from app.domain.models.leader import normalize_leader_name
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
@@ -146,7 +147,36 @@ def _assignment_response(assignment: ServiceAssignment) -> ServiceAssignmentResp
     )
 
 
-@router.post("", response_model=ServiceAssignmentResponse, status_code=status.HTTP_201_CREATED)
+def _assignment_result(
+    assignment: ServiceAssignment, planning_slot: PlanningSlot, instance: EventInstance | None
+) -> InlineAssignmentResult:
+    """The saved assignment plus the event revision valid after this write."""
+    return InlineAssignmentResult(
+        **_assignment_response(assignment).model_dump(),
+        event_revision=slot_revision(planning_slot, instance),
+    )
+
+
+async def _require_event_revision(
+    instance_repo: SqlEventInstanceRepository,
+    planning_slot: PlanningSlot,
+    if_match: str | None,
+) -> EventInstance | None:
+    """428 without a precondition, 412 when the event changed since the client read it.
+
+    Assignments are part of the exported event, so every assignment writer shares the
+    event's strong revision with inline cells and the event editor. The slot is already
+    locked by the caller, which makes the comparison race-free.
+    """
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    instance = await instance_repo.get_by_planning_slot(planning_slot.id, for_update=True)
+    if if_match != slot_revision(planning_slot, instance):
+        raise HTTPException(status_code=412, detail="Zuweisung wurde zwischenzeitlich geändert.")
+    return instance
+
+
+@router.post("", response_model=InlineAssignmentResult, status_code=status.HTTP_201_CREATED)
 async def create_assignment(
     event_id: uuid.UUID,
     body: ServiceAssignmentCreate,
@@ -154,7 +184,9 @@ async def create_assignment(
     db: DbSession,
     slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
-) -> ServiceAssignmentResponse:
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+) -> InlineAssignmentResult:
     planning_slot = await slots.get_for_update(event_id)
     if not planning_slot:
         raise HTTPException(
@@ -162,6 +194,7 @@ async def create_assignment(
         )
 
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
+    instance = await _require_event_revision(instance_repo, planning_slot, if_match)
 
     if body.leader_id is not None:
         await _check_leader(
@@ -183,7 +216,7 @@ async def create_assignment(
     )
     await _save(assignments_repo, assignment)
     await _touch_slot(slots, planning_slot)
-    return _assignment_response(assignment)
+    return _assignment_result(assignment, planning_slot, instance)
 
 
 @router.get("", response_model=list[ServiceAssignmentResponse])
@@ -275,7 +308,7 @@ async def inline_change_assignment(
     )
 
 
-@router.put("/{assignment_id}", response_model=ServiceAssignmentResponse)
+@router.put("/{assignment_id}", response_model=InlineAssignmentResult)
 async def update_assignment(
     event_id: uuid.UUID,
     assignment_id: uuid.UUID,
@@ -285,7 +318,9 @@ async def update_assignment(
     slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
     leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
-) -> ServiceAssignmentResponse:
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+) -> InlineAssignmentResult:
     # Lock the slot before reading its assignment: dependent event updates hold
     # the same lock, so every writer observes a consistent schedule snapshot.
     planning_slot = await slots.get_for_update(event_id)
@@ -294,6 +329,7 @@ async def update_assignment(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
         )
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
+    instance = await _require_event_revision(instance_repo, planning_slot, if_match)
 
     assignment = await assignments_repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
@@ -338,7 +374,7 @@ async def update_assignment(
                 event_date=planning_slot.planning_date,
             ),
         )
-    return _assignment_response(assignment)
+    return _assignment_result(assignment, planning_slot, instance)
 
 
 async def _leader_display_name(
@@ -360,6 +396,8 @@ async def delete_assignment(
     db: DbSession,
     slots: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     assignments_repo: SqlServiceAssignmentRepository = Depends(get_service_assignment_repository),
+    instance_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> None:
     # Lock the slot before reading its assignment: dependent event updates hold
     # the same lock, so every writer observes a consistent schedule snapshot.
@@ -369,6 +407,7 @@ async def delete_assignment(
             status_code=status.HTTP_404_NOT_FOUND, detail="Planungseintrag nicht gefunden"
         )
     require_role_in_district(auth, Role.PLANNER, planning_slot.district_id)
+    await _require_event_revision(instance_repo, planning_slot, if_match)
 
     assignment = await assignments_repo.get(assignment_id)
     if not assignment or assignment.event_id != event_id:
