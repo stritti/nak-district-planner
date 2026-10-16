@@ -44,6 +44,22 @@ class SqlDistrictReminderConfigRepository:
         row = result.scalar_one_or_none()
         return _to_domain(row) if row else None
 
+    async def get_for_update(
+        self, district_id: uuid.UUID, config_id: uuid.UUID
+    ) -> DistrictReminderConfig | None:
+        """Read the latest state while holding a row lock through the transaction."""
+        result = await self._session.execute(
+            select(DistrictReminderConfigORM)
+            .where(
+                DistrictReminderConfigORM.id == config_id,
+                DistrictReminderConfigORM.district_id == district_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        row = result.scalar_one_or_none()
+        return _to_domain(row) if row else None
+
     async def list_by_district(self, district_id: uuid.UUID) -> list[DistrictReminderConfig]:
         result = await self._session.execute(
             select(DistrictReminderConfigORM)

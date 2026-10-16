@@ -56,6 +56,8 @@ import type { ReminderConfig, ReminderConfigInput } from '../api/reminderConfigs
 const props = defineProps<{ districtId: string }>()
 const store = useReminderConfigsStore()
 const editingId = ref<string | null>(null)
+// Revision read when the edit started; a later reload must not silently replace it.
+const editingRevision = ref('')
 const defaults = (): ReminderConfigInput => ({
   day_of_month: 10,
   time_of_day: '10:00',
@@ -68,10 +70,12 @@ const form = reactive<ReminderConfigInput>(defaults())
 
 function reset() {
   editingId.value = null
+  editingRevision.value = ''
   Object.assign(form, defaults())
 }
 function edit(item: ReminderConfig) {
   editingId.value = item.id
+  editingRevision.value = item.revision
   Object.assign(form, {
     day_of_month: item.day_of_month,
     time_of_day: item.time_of_day.slice(0, 5),
@@ -83,7 +87,7 @@ function edit(item: ReminderConfig) {
 }
 async function save() {
   try {
-    if (editingId.value) await store.update(editingId.value, { ...form })
+    if (editingId.value) await store.update(editingId.value, { ...form }, editingRevision.value)
     else await store.create({ ...form })
     reset()
   } catch { /* Error is displayed by the store. */ }

@@ -3,9 +3,9 @@
 - [x] 1.2 Frontend sends the opened revision, handles 412/428 by refreshing the list
 
 ## 2. Reminder configurations and event hooks
-- [ ] 2.1 Revision and `If-Match` on `PUT /reminder-configs/{id}` (dialog and active switch)
-- [ ] 2.2 Revision and `If-Match` on `PUT /event-hooks/{id}` (dialog and active switch)
-- [ ] 2.3 Frontend clients and views send the revision and handle stale writes
+- [x] 2.1 Revision and `If-Match` on `PUT`/`DELETE /reminder-configs/{id}` (dialog and active switch; DELETE returns the updated record)
+- [x] 2.2 Revision and `If-Match` on `PUT /event-hooks/{id}` (dialog and active switch)
+- [x] 2.3 Frontend clients and views send the revision and handle stale writes
 
 ## 3. Organisational duties panel
 - [ ] 3.1 Revision and `If-Match` on duty assignment and suggestion changes
