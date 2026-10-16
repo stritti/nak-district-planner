@@ -16,7 +16,6 @@ import re
 import sqlalchemy as sa
 
 from alembic import op
-
 from app.adapters.db.migrations.event_duty_rls import (
     _FUNCTIONS,
     _subject_leader_read,
