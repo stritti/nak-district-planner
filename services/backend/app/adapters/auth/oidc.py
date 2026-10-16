@@ -129,11 +129,11 @@ class OIDCAdapter:
             return self._discovery_cache
 
         except httpx.HTTPError as e:
-            msg = f"OIDC discovery failed: {e}"
+            msg = f"OIDC discovery failed ({type(e).__name__})"
             logger.error(msg)
             raise OIDCDiscoveryError(msg) from e
         except (json.JSONDecodeError, KeyError) as e:
-            msg = f"OIDC discovery: invalid response: {e}"
+            msg = f"OIDC discovery: invalid response ({type(e).__name__})"
             logger.error(msg)
             raise OIDCDiscoveryError(msg) from e
 
@@ -145,13 +145,15 @@ class OIDCAdapter:
                 return self._jwks_cache
 
         if (
-            force_refresh
-            and self._jwks_cache is not None
-            and self._jwks_last_attempt is not None
+            self._jwks_last_attempt is not None
             and (datetime.now(UTC) - self._jwks_last_attempt).total_seconds()
             < self.jwks_min_refresh_interval
         ):
-            return self._jwks_cache
+            # Every upstream attempt, successful or not, starts the quiet period. Serve the
+            # cache if there is one; without a cache fail closed instead of hammering the IdP.
+            if self._jwks_cache is not None:
+                return self._jwks_cache
+            raise JWKSFetchError("JWKS refresh throttled after a recent failed attempt")
 
         self._jwks_last_attempt = datetime.now(UTC)
         try:
@@ -176,7 +178,7 @@ class OIDCAdapter:
             return self._jwks_cache
 
         except httpx.HTTPError as e:
-            msg = f"JWKS fetch failed: {e}"
+            msg = f"JWKS fetch failed ({type(e).__name__})"
             logger.error(msg)
             self._jwks_fetch_error = e
 
@@ -186,7 +188,7 @@ class OIDCAdapter:
 
             raise JWKSFetchError(msg) from e
         except (json.JSONDecodeError, KeyError) as e:
-            msg = f"JWKS: invalid response: {e}"
+            msg = f"JWKS: invalid response ({type(e).__name__})"
             logger.error(msg)
             self._jwks_fetch_error = e
 
@@ -374,7 +376,7 @@ class OIDCAdapter:
                 timeout=10,
             )
         except httpx.HTTPError as e:
-            raise TokenValidationError(f"userinfo request failed: {e}") from e
+            raise TokenValidationError(f"userinfo request failed ({type(e).__name__})") from e
 
         if response.status_code == 401:
             raise TokenValidationError("userinfo rejected token (401)")
@@ -416,7 +418,7 @@ class OIDCAdapter:
                 timeout=10,
             )
         except httpx.HTTPError as e:
-            raise TokenValidationError(f"introspection request failed: {e}") from e
+            raise TokenValidationError(f"introspection request failed ({type(e).__name__})") from e
 
         if response.status_code >= 400:
             raise TokenValidationError(
