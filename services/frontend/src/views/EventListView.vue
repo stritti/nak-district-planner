@@ -790,9 +790,13 @@ async function saveInlineStart(event: EventResponse, value: string, revision: st
   void nextTick(() => eventsStore.fetch({ preserveRows: true }))
 }
 
-/** Holiday slots are generated; their category is not a planner decision. */
-function canInlineEditCategory(event: EventResponse): boolean {
+/** Generated holiday slots keep their category and scope; nothing here may re-home them. */
+function canInlineEditScope(event: EventResponse): boolean {
   return canInlineEditSchedule(event) && event.category !== 'Feiertag'
+}
+
+function canInlineEditCategory(event: EventResponse): boolean {
+  return canInlineEditScope(event)
 }
 
 const inlineCongregationChoices = computed(() =>
@@ -800,7 +804,7 @@ const inlineCongregationChoices = computed(() =>
 )
 
 function canInlineEditCongregation(event: EventResponse): boolean {
-  return canInlineEditSchedule(event) && inlineCongregationChoices.value.length > 0
+  return canInlineEditScope(event) && inlineCongregationChoices.value.length > 0
 }
 
 function scopeLabel(event: EventResponse): string {

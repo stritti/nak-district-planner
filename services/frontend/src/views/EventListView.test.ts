@@ -145,7 +145,7 @@ beforeEach(() => {
   vi.mocked(leadersApi.listLeaders).mockResolvedValue([])
   vi.mocked(eventsApi.previewEventChange).mockResolvedValue({
     blocked: false, requires_confirmation: false, items: [],
-    duties_newly_flagged: 0, duties_flagged_after: 0, duties_quarantined_after: 0,
+    duties_newly_flagged: 0, duties_newly_quarantined: 0, duties_flagged_after: 0, duties_quarantined_after: 0,
   })
   vi.mocked(districtsApi.listGroups).mockResolvedValue([
     { id: 'g1', name: 'Gruppe Eins', district_id: 'd1', created_at: now, updated_at: now },
@@ -699,14 +699,16 @@ describe('Inline editing in the event overview', () => {
     await cell.get('input').trigger('keydown', { key: 'Enter' })
     await flushPromises()
     expect(eventsApi.previewEventChange).toHaveBeenCalledWith('e1', { category: 'Jugendstunde' }, '"revision-1"')
-    expect(eventsApi.updateEvent).toHaveBeenCalledWith('e1', { category: 'Jugendstunde' }, '"revision-1"')
+    expect(eventsApi.updateEvent).toHaveBeenCalledWith('e1', {
+      category: 'Jugendstunde', acknowledged_duty_impact: { newly_flagged: 0, newly_quarantined: 0 },
+    }, '"revision-1"')
     expect(mocks.confirm).not.toHaveBeenCalled()
   })
 
   it('asks before a congregation move flags duties and keeps the draft when declined', async () => {
     vi.mocked(eventsApi.previewEventChange).mockResolvedValue({
       blocked: false, requires_confirmation: false, items: [],
-      duties_newly_flagged: 2, duties_flagged_after: 2, duties_quarantined_after: 2,
+      duties_newly_flagged: 2, duties_newly_quarantined: 2, duties_flagged_after: 2, duties_quarantined_after: 2,
     })
     mocks.confirm.mockResolvedValue(false)
     const { wrapper } = setup([event()])
@@ -723,6 +725,40 @@ describe('Inline editing in the event overview', () => {
     }))
     expect(eventsApi.updateEvent).not.toHaveBeenCalled()
     expect(cell.get('[role=alert]').text()).toContain('abgebrochen')
+  })
+
+  it('keeps generated holidays out of every inline scope edit on desktop and mobile', async () => {
+    const { wrapper } = setup([event({ id: 'holiday', category: 'Feiertag' })])
+    await flushPromises()
+    await flushPromises()
+    for (const layout of ['desktop', 'mobile']) {
+      for (const field of ['category', 'congregation']) {
+        const cell = wrapper.get(`[data-inline-cell-id="event-${field}-${layout}-holiday"]`)
+        await cell.trigger('click')
+        expect(cell.find('input, select').exists()).toBe(false)
+      }
+    }
+    expect(eventsApi.previewEventChange).not.toHaveBeenCalled()
+  })
+
+  it('shows the server duty-impact rejection when duties changed after the preview', async () => {
+    vi.mocked(eventsApi.updateEvent).mockRejectedValue(new ApiError(409, 'Conflict', {
+      detail: { code: 'duty_impact_unacknowledged', message: 'Bitte die Auswirkungen erneut prüfen und bestätigen.' },
+    }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await flushPromises()
+    for (const layout of ['desktop', 'mobile']) {
+      const cell = wrapper.get(`[data-inline-cell-id="event-category-${layout}-e1"]`)
+      await cell.trigger('click')
+      await flushPromises()
+      await cell.get('input').setValue('Jugendstunde' + layout)
+      await cell.get('input').trigger('keydown', { key: 'Enter' })
+      await flushPromises()
+      expect(cell.get('[role=alert]').text()).toContain('erneut prüfen und bestätigen')
+      await cell.get('input').trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+    }
   })
 
   it('does not offer category or congregation edits for holidays or invitation copies', async () => {

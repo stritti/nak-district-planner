@@ -75,6 +75,11 @@ async def _update_event_with_revision(event_id, body, auth, session, **kwargs):
     slot = slots.get.return_value
     slots.get_for_update.return_value = slot
     kwargs.setdefault("if_match", '"missing-slot-snapshot"')
+    # No duty assignments: scope changes in these legacy tests carry no duty impact.
+    kwargs.setdefault(
+        "duties_repo",
+        AsyncMock(catalog=AsyncMock(return_value=([], [])), list_assignments=AsyncMock(return_value=[])),
+    )
     if isinstance(slot, PlanningSlot):
         slots.get_for_update.return_value = slot
         instances = kwargs.get("inst_repo")

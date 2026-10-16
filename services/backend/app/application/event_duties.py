@@ -37,6 +37,15 @@ class DutyScopeImpact:
     newly_flagged: int
     flagged_after: int
     quarantined_after: int
+    newly_quarantined: int = 0
+
+    @property
+    def needs_acknowledgement(self) -> bool:
+        return self.newly_flagged > 0 or self.newly_quarantined > 0
+
+    def is_covered_by(self, newly_flagged: int, newly_quarantined: int) -> bool:
+        """True when a client acknowledged at least what is about to happen."""
+        return self.newly_flagged <= newly_flagged and self.newly_quarantined <= newly_quarantined
 
 
 @dataclass(frozen=True)
@@ -129,6 +138,9 @@ class EventDutiesService:
             newly_flagged=sum(1 for key, (flag, _) in after.items() if flag and not before[key][0]),
             flagged_after=sum(1 for flag, _ in after.values() if flag),
             quarantined_after=sum(1 for _, quarantined in after.values() if quarantined),
+            newly_quarantined=sum(
+                1 for key, (_, quarantined) in after.items() if quarantined and not before[key][1]
+            ),
         )
 
     async def assign(

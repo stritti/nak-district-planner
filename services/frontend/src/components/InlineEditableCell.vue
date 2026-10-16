@@ -143,7 +143,9 @@ function saveError(cause: unknown): string {
   if (cause instanceof ApiError) {
     const detail = (cause.body as { detail?: unknown } | null)?.detail
     if (typeof detail === 'string' && detail.trim()) return detail
-    const conflicts = (detail as { conflicts?: { message: string }[] } | undefined)?.conflicts
+    const structured = detail as { message?: unknown; conflicts?: { message: string }[] } | undefined
+    if (typeof structured?.message === 'string' && structured.message.trim()) return structured.message
+    const conflicts = structured?.conflicts
     if (conflicts?.length) return conflicts.map((item) => item.message).join(' ')
     if (cause.status === 412) return 'Der Eintrag wurde geändert. Bitte neu laden und vergleichen.'
     if (cause.status === 428) return 'Die Versionsinformation fehlt. Bitte neu laden.'
