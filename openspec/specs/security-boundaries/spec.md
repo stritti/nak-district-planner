@@ -67,7 +67,7 @@ The fallback limiter is process-local: the effective limit is `limit × worker p
 - **AND** stale-bucket cleanup is performed periodically rather than on every request
 
 ### Requirement: Distributed rate-limit buckets have bounded route cardinality
-The distributed rate limiter SHALL key its Valkey buckets by client identity, window and a bounded scope: the configured endpoint-limit rule that matches the request, otherwise one client-global bucket; bursts use a separate client-global burst bucket. Arbitrary path segments, invalid route parameters and secret-bearing export URLs SHALL NOT create independently exhaustible Valkey buckets, so the number of buckets per client is bounded by the configured rules. A request SHALL NOT be charged against another rule's stricter ceiling.
+The distributed rate limiter SHALL key Valkey buckets by client, window and a bounded scope: the matching configured endpoint rule, otherwise one client-global bucket, with a separate burst bucket. Request paths, route parameters and export secrets SHALL NOT become key material.
 
 #### Scenario: Invalid export tokens cannot reset a limit
 - **WHEN** one client sends requests to many distinct invalid `/api/v1/export/{token}/calendar.ics` URLs
