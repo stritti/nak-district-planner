@@ -312,14 +312,14 @@ async def _validate_scope_assignment(
     if body.scope_type == ScopeType.DISTRICT:
         if body.scope_id != district_id:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="scope_id muss dem Bezirk entsprechen, wenn scope_type=DISTRICT",
             )
     elif body.scope_type == ScopeType.CONGREGATION:
         congregation = await cong_repo.get(body.scope_id)
         if congregation is None or congregation.district_id != district_id:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="scope_id muss eine Gemeinde des Bezirkes sein, wenn scope_type=CONGREGATION",
             )
 

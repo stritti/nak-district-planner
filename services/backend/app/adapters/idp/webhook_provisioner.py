@@ -60,7 +60,7 @@ class HttpIdpProvisioningAdapter(IdpProvisioner):
 
         if response.status_code >= 400:
             raise IdpProvisioningError(
-                f"Provisioning endpoint returned {response.status_code}: {response.text}"
+                f"Provisioning endpoint returned {response.status_code}"
             )
 
         body: Any

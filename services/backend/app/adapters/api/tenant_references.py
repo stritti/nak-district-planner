@@ -24,7 +24,7 @@ from app.adapters.db.orm_models.leader import LeaderORM
 
 def _reject(field: str) -> HTTPException:
     return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=f"{field} ist ungueltig oder gehoert nicht zum Bezirk",
     )
 

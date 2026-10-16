@@ -62,7 +62,7 @@ def _validate_credentials_url(calendar_type: CalendarType, credentials: dict) ->
     try:
         validate_calendar_url(credentials.get("url"))
     except UnsafeCalendarUrlError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
 
 
 def _to_response(integration: CalendarIntegration) -> CalendarIntegrationResponse:
@@ -112,7 +112,7 @@ async def create_calendar_integration(
 
     if body.type not in SUPPORTED_CALENDAR_TYPES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(UnsupportedCalendarTypeError(body.type)),
         )
     _validate_credentials_url(body.type, body.credentials)

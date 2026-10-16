@@ -31,6 +31,24 @@ class DutyAssignmentView:
 
 
 @dataclass(frozen=True)
+class DutyScopeImpact:
+    """Dry-run result of changing a slot's category and/or congregation."""
+
+    newly_flagged: int
+    flagged_after: int
+    quarantined_after: int
+    newly_quarantined: int = 0
+
+    @property
+    def needs_acknowledgement(self) -> bool:
+        return self.newly_flagged > 0 or self.newly_quarantined > 0
+
+    def is_covered_by(self, newly_flagged: int, newly_quarantined: int) -> bool:
+        """True when a client acknowledged at least what is about to happen."""
+        return self.newly_flagged <= newly_flagged and self.newly_quarantined <= newly_quarantined
+
+
+@dataclass(frozen=True)
 class SlotDutyView:
     categories: list[EventDutyCategory]
     assignments: list[DutyAssignmentView]
@@ -83,6 +101,47 @@ class EventDutiesService:
                 )
             )
         return SlotDutyView(categories=effective, assignments=assignments)
+
+    async def preview_scope_change(
+        self,
+        district_id,
+        slot,
+        *,
+        category,
+        congregation_id,
+    ) -> DutyScopeImpact:
+        """Count duties that would need review after a category/congregation change.
+
+        Nothing is persisted: assignments always stay stored and are only flagged
+        on read (see ``list_slot_duties``), so this mirrors that projection for
+        the proposed scope and subtracts what is already flagged today.
+        """
+        assignments = await self.repository.list_assignments([slot.id])
+
+        async def flagged(event_category, scope_id):
+            categories, overrides = await self.repository.catalog(district_id, scope_id)
+            effective_ids = {
+                c.id for c in effective_categories(categories, overrides, event_category, scope_id)
+            }
+            result = {}
+            for assignment in assignments:
+                visible = assignment.visible_in(district_id, scope_id)
+                result[assignment.id] = (
+                    not visible or assignment.duty_category_id not in effective_ids,
+                    not visible,
+                )
+            return result
+
+        before = await flagged(slot.category, slot.congregation_id)
+        after = await flagged(category, congregation_id)
+        return DutyScopeImpact(
+            newly_flagged=sum(1 for key, (flag, _) in after.items() if flag and not before[key][0]),
+            flagged_after=sum(1 for flag, _ in after.values() if flag),
+            quarantined_after=sum(1 for _, quarantined in after.values() if quarantined),
+            newly_quarantined=sum(
+                1 for key, (_, quarantined) in after.items() if quarantined and not before[key][1]
+            ),
+        )
 
     async def assign(
         self,

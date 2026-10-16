@@ -30,7 +30,7 @@
         :disabled="saving"
         @keydown="onEditorKeydown"
       >
-        <option value="">Auswählen…</option>
+        <option value="">{{ emptyLabel }}</option>
         <option v-for="choice in choices" :key="choice.value" :value="choice.value">
           {{ choice.label }}
         </option>
@@ -39,7 +39,7 @@
         v-else
         ref="input"
         v-model="draft"
-        type="text"
+        :type="inputType"
         :aria-label="label"
         :aria-invalid="!!error"
         :aria-describedby="error ? id + '-error' : undefined"
@@ -85,9 +85,11 @@ const props = withDefaults(defineProps<{
   reload?: () => Promise<{ value: string | null | undefined; revision: string }>
   revision: string
   as?: 'td' | 'div'
+  inputType?: 'text' | 'datetime-local'
+  emptyLabel?: string
   required?: boolean
   maxLength?: number
-}>(), { as: 'td', required: false })
+}>(), { as: 'td', required: false, inputType: 'text', emptyLabel: 'Auswählen…' })
 
 const root = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)
@@ -141,7 +143,9 @@ function saveError(cause: unknown): string {
   if (cause instanceof ApiError) {
     const detail = (cause.body as { detail?: unknown } | null)?.detail
     if (typeof detail === 'string' && detail.trim()) return detail
-    const conflicts = (detail as { conflicts?: { message: string }[] } | undefined)?.conflicts
+    const structured = detail as { message?: unknown; conflicts?: { message: string }[] } | undefined
+    if (typeof structured?.message === 'string' && structured.message.trim()) return structured.message
+    const conflicts = structured?.conflicts
     if (conflicts?.length) return conflicts.map((item) => item.message).join(' ')
     if (cause.status === 412) return 'Der Eintrag wurde geändert. Bitte neu laden und vergleichen.'
     if (cause.status === 428) return 'Die Versionsinformation fehlt. Bitte neu laden.'

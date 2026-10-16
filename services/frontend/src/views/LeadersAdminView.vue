@@ -445,116 +445,22 @@
     </template>
     <!-- /Unavailabilities tab -->
 
-    <!-- Approve registration modal -->
-    <div
+    <ApproveRegistrationModal
       v-if="approveModal.open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      @click.self="approveModal.open = false"
-    >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900">Registrierung genehmigen</h2>
-          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="approveModal.open = false">
-            <XMarkIcon class="h-5 w-5" />
-          </button>
-        </div>
-        <p class="text-sm text-gray-600 mb-4">
-          <strong>{{ approveModal.name }}</strong> ({{ approveModal.email }}) wird als Amtstragende:r hinzugefügt.
-          Sie können Grad und Gemeinde vor der Genehmigung anpassen.
-        </p>
-        <div class="space-y-3 mb-4">
-          <div>
-            <label class="form-label">Rolle</label>
-            <select v-model="approveModal.role" class="form-select w-full">
-              <option value="DISTRICT_ADMIN">DISTRICT_ADMIN</option>
-              <option value="CONGREGATION_ADMIN">CONGREGATION_ADMIN</option>
-              <option value="PLANNER">PLANNER</option>
-              <option value="VIEWER">VIEWER</option>
-            </select>
-          </div>
-          <div>
-            <label class="form-label">Geltungsbereich</label>
-            <select v-model="approveModal.scope_type" class="form-select w-full">
-              <option value="DISTRICT">Bezirk</option>
-              <option value="CONGREGATION">Gemeinde</option>
-            </select>
-          </div>
-          <div>
-            <label class="form-label">Grad</label>
-            <select v-model="approveModal.rank" class="form-select w-full">
-              <option :value="null">— kein Grad —</option>
-              <option v-for="r in LEADER_RANKS" :key="r.value" :value="r.value">{{ r.label }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="form-label">Gemeinde</label>
-            <select v-model="approveModal.congregation_id" class="form-select w-full">
-              <option :value="null">— Bezirksebene —</option>
-              <option v-for="c in congregations" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="form-label">Beauftragung</label>
-            <select v-model="approveModal.special_role" class="form-select w-full">
-              <option :value="null">— keine —</option>
-              <option v-for="r in SPECIAL_ROLES" :key="r.value" :value="r.value">{{ r.label }}</option>
-            </select>
-          </div>
-        </div>
-        <p v-if="approveModal.error" class="text-sm text-red-600 mb-3">{{ approveModal.error }}</p>
-        <div class="flex justify-end gap-3">
-          <button
-            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-            @click="approveModal.open = false"
-          >Abbrechen</button>
-          <button
-            class="text-sm px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-            :disabled="saving"
-            @click="doApprove"
-          >Genehmigen</button>
-        </div>
-      </div>
-    </div>
+      :modal="approveModal"
+      :congregations="congregations"
+      :saving="saving"
+      @close="approveModal.open = false"
+      @submit="doApprove"
+    />
 
-    <!-- Reject registration modal -->
-    <div
+    <RejectRegistrationModal
       v-if="rejectModal.open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      @click.self="rejectModal.open = false"
-    >
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold text-gray-900">Registrierung ablehnen</h2>
-          <button class="p-1 rounded hover:bg-gray-100 text-gray-400" @click="rejectModal.open = false">
-            <XMarkIcon class="h-5 w-5" />
-          </button>
-        </div>
-        <p class="text-sm text-gray-600 mb-4">
-          Die Registrierung von <strong>{{ rejectModal.name }}</strong> wird abgelehnt.
-        </p>
-        <div class="mb-4">
-          <label class="form-label">Begründung (optional)</label>
-          <textarea
-            v-model="rejectModal.reason"
-            rows="3"
-            class="form-input w-full resize-none"
-            placeholder="Grund für die Ablehnung…"
-          />
-        </div>
-        <p v-if="rejectModal.error" class="text-sm text-red-600 mb-3">{{ rejectModal.error }}</p>
-        <div class="flex justify-end gap-3">
-          <button
-            class="text-sm px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-            @click="rejectModal.open = false"
-          >Abbrechen</button>
-          <button
-            class="text-sm px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-            :disabled="saving"
-            @click="doReject"
-          >Ablehnen</button>
-        </div>
-      </div>
-    </div>
+      :modal="rejectModal"
+      :saving="saving"
+      @close="rejectModal.open = false"
+      @submit="doReject"
+    />
 
     <!-- Delete registration confirm dialog -->
     <ConfirmDialog
@@ -594,274 +500,31 @@
       @cancel="pendingDeleteUnavailability = null"
     />
 
-    <div
+    <LeaderAddModal
       v-if="addModal.open"
-      class="modal-backdrop"
-      @click.self="addModal.open = false"
-    >
-      <div class="modal-panel max-w-lg">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="modal-title">Amtstragende:n hinzufügen</h2>
-          <button class="modal-close" @click="addModal.open = false">
-            <XMarkIcon class="h-5 w-5" />
-          </button>
-        </div>
+      :modal="addModal"
+      :congregation-label="congregationName(addModal.congregationId)"
+      :saving="saving"
+      @close="addModal.open = false"
+      @submit="saveAdd"
+    />
 
-        <div class="mb-4 px-3 py-2 bg-gray-50 dark:bg-gray-800 rounded text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
-          <BuildingOffice2Icon v-if="addModal.congregationId === null" class="h-3.5 w-3.5 text-indigo-400" />
-          <HomeModernIcon v-else class="h-3.5 w-3.5 text-teal-400" />
-          Ebene:
-          <span class="font-medium text-gray-700 dark:text-gray-300">
-            {{ addModal.congregationId ? congregationName(addModal.congregationId) : 'Bezirksebene' }}
-          </span>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <div class="col-span-1 sm:col-span-2">
-            <label class="form-label">Name *</label>
-            <input
-              v-model="addModal.name"
-              type="text"
-              class="form-input"
-              placeholder="Vor- und Nachname"
-              @keyup.enter="saveAdd"
-            />
-          </div>
-
-          <div>
-            <label class="form-label">Grad *</label>
-            <select
-              v-model="addModal.rank"
-              class="form-input"
-            >
-              <option value="">Grad wählen…</option>
-              <option v-for="r in LEADER_RANKS" :key="r.value" :value="r.value">{{ r.label }}</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="form-label">Besondere Beauftragung</label>
-            <select
-              v-model="addModal.special_role"
-              class="form-input"
-            >
-              <option :value="null">Keine</option>
-              <option v-for="sr in SPECIAL_ROLES" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="form-label">E-Mail</label>
-            <input
-              v-model="addModal.email"
-              type="email"
-              class="form-input"
-              placeholder="optional"
-            />
-          </div>
-
-          <div>
-            <label class="form-label">Telefon</label>
-            <input
-              v-model="addModal.phone"
-              type="text"
-              class="form-input"
-              placeholder="optional"
-            />
-          </div>
-        </div>
-
-        <p v-if="addModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ addModal.error }}</p>
-
-        <div class="flex justify-end gap-3">
-          <button
-            class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
-            @click="addModal.open = false"
-          >
-            Abbrechen
-          </button>
-          <button
-            class="btn-primary px-4 py-2"
-            :disabled="!addModal.name.trim() || !addModal.rank || saving"
-            @click="saveAdd"
-          >
-            <PlusIcon class="h-4 w-4" />
-            {{ saving ? 'Speichern…' : 'Hinzufügen' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Edit modal -->
-    <div
+    <LeaderEditModal
       v-if="editModal.open"
-      class="modal-backdrop"
-      @click.self="editModal.open = false"
-    >
-      <div class="modal-panel max-w-lg">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="modal-title">Amtstragende:n bearbeiten</h2>
-          <button class="modal-close" @click="editModal.open = false">
-            <XMarkIcon class="h-5 w-5" />
-          </button>
-        </div>
+      :modal="editModal"
+      :congregations="congregations"
+      :saving="saving"
+      @close="editModal.open = false"
+      @submit="saveEdit"
+    />
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <div class="col-span-1 sm:col-span-2">
-            <label class="form-label">Name *</label>
-            <input
-              v-model="editModal.name"
-              type="text"
-              class="form-input"
-            />
-          </div>
-
-          <div>
-            <label class="form-label">Grad *</label>
-            <select
-              v-model="editModal.rank"
-              class="form-input"
-            >
-              <option value="">Grad wählen…</option>
-              <option v-for="r in LEADER_RANKS" :key="r.value" :value="r.value">{{ r.label }}</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="form-label">Besondere Beauftragung</label>
-            <select
-              v-model="editModal.special_role"
-              class="form-input"
-            >
-              <option :value="null">Keine</option>
-              <option v-for="sr in SPECIAL_ROLES" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="form-label">Gemeinde</label>
-            <select
-              v-model="editModal.congregation_id"
-              class="form-input"
-            >
-              <option :value="null">Bezirksebene</option>
-              <option v-for="c in congregations" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="form-label">E-Mail</label>
-            <input
-              v-model="editModal.email"
-              type="email"
-              class="form-input"
-            />
-          </div>
-
-          <div>
-            <label class="form-label">Telefon</label>
-            <input
-              v-model="editModal.phone"
-              type="text"
-              class="form-input"
-            />
-          </div>
-
-          <div class="col-span-1 sm:col-span-2">
-            <label class="form-label">Notizen</label>
-            <textarea
-              v-model="editModal.notes"
-              rows="2"
-              class="form-input"
-            />
-          </div>
-        </div>
-
-        <label class="flex items-center gap-2 text-sm mb-4">
-          <input v-model="editModal.is_active" type="checkbox" class="rounded" />
-          <span class="text-gray-700 dark:text-gray-300">Aktiv (für Dienstplan-Zuweisung verfügbar)</span>
-        </label>
-
-        <label class="flex items-center gap-2 text-sm mb-4">
-          <input v-model="editModal.hidden_from_lists" type="checkbox" class="rounded" />
-          <span>Aus normalen Listen ausblenden</span>
-        </label>
-        <label class="block text-sm mb-4">Dienstende (einschließlich)
-          <input v-model="editModal.service_end_date" type="date" class="form-input" />
-        </label>
-
-        <p v-if="editModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ editModal.error }}</p>
-
-        <div class="flex justify-end gap-3">
-          <button
-            class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
-            @click="editModal.open = false"
-          >
-            Abbrechen
-          </button>
-          <button
-            class="btn-primary px-4 py-2"
-            :disabled="!editModal.name.trim() || !editModal.rank || saving"
-            @click="saveEdit"
-          >
-            <CheckIcon class="h-4 w-4" />
-            {{ saving ? 'Speichern…' : 'Speichern' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ICS Export modal -->
-    <div
+    <LeaderExportModal
       v-if="exportModal.open"
-      class="modal-backdrop"
-      @click.self="exportModal.open = false"
-    >
-      <div class="modal-panel max-w-md">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="modal-title">
-            ICS-Export: {{ exportModal.leaderRank }} {{ exportModal.leaderName }}
-          </h2>
-          <button class="modal-close" @click="exportModal.open = false">
-            <XMarkIcon class="h-5 w-5" />
-          </button>
-        </div>
-
-        <template v-if="exportModal.icsUrl">
-          <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">Persönliche Kalender-URL (nur zugewiesene Gottesdienste):</p>
-          <div class="flex items-center gap-2 mb-1">
-            <input
-              :value="exportModal.icsUrl"
-              readonly
-              class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono"
-            />
-            <CopyButton :value="exportModal.icsUrl" />
-          </div>
-        </template>
-
-        <template v-else>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Erstelle einen persönlichen Kalender-Export-Token. Die URL enthält alle zugewiesenen Gottesdienste.
-          </p>
-          <p v-if="exportModal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ exportModal.error }}</p>
-          <div class="flex justify-end gap-3">
-            <button
-              class="btn-secondary hover:bg-gray-50 dark:hover:bg-gray-800"
-              @click="exportModal.open = false"
-            >
-              Abbrechen
-            </button>
-            <button
-              class="btn-primary px-4 py-2"
-              :disabled="saving"
-              @click="createExportToken"
-            >
-              Token erstellen
-            </button>
-          </div>
-        </template>
-      </div>
-    </div>
+      :modal="exportModal"
+      :saving="saving"
+      @close="exportModal.open = false"
+      @submit="createExportToken"
+    />
     </template><!-- closes v-else (district selected) -->
   </div>
 </template>
@@ -871,7 +534,18 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import CopyButton from '../components/CopyButton.vue'
+import ApproveRegistrationModal from '../components/leaders/ApproveRegistrationModal.vue'
+import LeaderAddModal from '../components/leaders/LeaderAddModal.vue'
+import LeaderEditModal from '../components/leaders/LeaderEditModal.vue'
+import LeaderExportModal from '../components/leaders/LeaderExportModal.vue'
+import RejectRegistrationModal from '../components/leaders/RejectRegistrationModal.vue'
+import type {
+  AddModalState,
+  ApproveModalState,
+  EditModalState,
+  ExportModalState,
+  RejectModalState,
+} from '../components/leaders/modalState'
 import EmptyState from '../components/EmptyState.vue'
 import LeaderUnavailabilityForm from '../components/LeaderUnavailabilityForm.vue'
 import LeaderUnavailabilityList from '../components/LeaderUnavailabilityList.vue'
@@ -898,8 +572,6 @@ import {
   unlinkSelfFromLeader,
   updateLeader,
   updateLeaderInline,
-  LEADER_RANKS,
-  SPECIAL_ROLES,
   leaderNameFromId,
   type LeaderRank,
   type LeaderResponse,
@@ -1107,7 +779,7 @@ async function executeDeleteUnavailability() {
 }
 
 // Approve modal
-const approveModal = reactive({
+const approveModal = reactive<ApproveModalState>({
   open: false,
   registrationId: '',
   name: '',
@@ -1178,7 +850,7 @@ async function doApprove() {
 }
 
 // Reject modal
-const rejectModal = reactive({
+const rejectModal = reactive<RejectModalState>({
   open: false,
   registrationId: '',
   name: '',
@@ -1386,7 +1058,7 @@ async function removeSelfLink() {
 
 // ── Add modal ─────────────────────────────────────────────────────────────────
 
-const addModal = reactive({
+const addModal = reactive<AddModalState>({
   open: false,
   congregationId: null as string | null,
   name: '',
@@ -1433,7 +1105,7 @@ async function saveAdd() {
 
 // ── Edit modal ────────────────────────────────────────────────────────────────
 
-const editModal = reactive({
+const editModal = reactive<EditModalState>({
   open: false,
   leaderId: '',
   revision: '',
@@ -1521,7 +1193,7 @@ async function executeDeleteLeader() {
 
 // ── ICS Export modal ──────────────────────────────────────────────────────────
 
-const exportModal = reactive({
+const exportModal = reactive<ExportModalState>({
   open: false,
   leaderId: '',
   leaderName: '',

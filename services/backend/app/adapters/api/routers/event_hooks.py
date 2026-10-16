@@ -14,13 +14,13 @@ from app.adapters.api.deps import (
     DbSession,
     get_event_mail_hook_repository,
 )
+from app.adapters.api.district_guards import require_district_admin
 from app.adapters.api.schemas.event_hooks import (
     EventHookCreate,
     EventHookResponse,
     EventHookUpdate,
     EventTypeInfo,
 )
-from app.adapters.auth.permissions import require_role_in_district
 from app.adapters.db.orm_models.district import DistrictORM
 from app.adapters.db.repositories.event_mail_hook import SqlEventMailHookRepository
 from app.domain.events import EventType
@@ -28,14 +28,6 @@ from app.domain.models.event_mail_hook import EVENT_PLACEHOLDERS, EventMailHook
 from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/event-hooks", tags=["event-hooks"])
-
-
-async def _require_district_admin(
-    district_id: uuid.UUID, auth: CurrentUserWithMemberships, db: DbSession
-) -> None:
-    require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
-    if await db.get(DistrictORM, district_id) is None:
-        raise HTTPException(status_code=404, detail="Bezirk nicht gefunden")
 
 
 async def _existing_hook(
@@ -52,7 +44,7 @@ async def list_event_types(
     district_id: uuid.UUID, auth: CurrentUserWithMemberships, db: DbSession
 ) -> list[EventTypeInfo]:
     """Return supported event types and placeholders for the editor."""
-    await _require_district_admin(district_id, auth, db)
+    await require_district_admin(district_id, auth, db)
     return [
         EventTypeInfo(event_type=event_type, placeholders=sorted(EVENT_PLACEHOLDERS[event_type]))
         for event_type in EventType
@@ -66,7 +58,7 @@ async def list_event_hooks(
     db: DbSession,
     repository: SqlEventMailHookRepository = Depends(get_event_mail_hook_repository),
 ) -> list[EventMailHook]:
-    await _require_district_admin(district_id, auth, db)
+    await require_district_admin(district_id, auth, db)
     return await repository.list_by_district(district_id)
 
 
@@ -78,7 +70,7 @@ async def create_event_hook(
     db: DbSession,
     repository: SqlEventMailHookRepository = Depends(get_event_mail_hook_repository),
 ) -> EventMailHook:
-    await _require_district_admin(district_id, auth, db)
+    await require_district_admin(district_id, auth, db)
     try:
         hook = EventMailHook(district_id=district_id, **body.model_dump())
     except ValueError as exc:
@@ -96,7 +88,7 @@ async def update_event_hook(
     db: DbSession,
     repository: SqlEventMailHookRepository = Depends(get_event_mail_hook_repository),
 ) -> EventMailHook:
-    await _require_district_admin(district_id, auth, db)
+    await require_district_admin(district_id, auth, db)
     hook = await _existing_hook(repository, district_id, hook_id)
     try:
         updated = hook.update(**body.model_dump())
@@ -115,7 +107,7 @@ async def deactivate_event_hook(
     repository: SqlEventMailHookRepository = Depends(get_event_mail_hook_repository),
 ) -> Response:
     """Soft delete a hook while retaining it for audit visibility."""
-    await _require_district_admin(district_id, auth, db)
+    await require_district_admin(district_id, auth, db)
     hook = await _existing_hook(repository, district_id, hook_id)
     await repository.save(hook.update(is_active=False))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

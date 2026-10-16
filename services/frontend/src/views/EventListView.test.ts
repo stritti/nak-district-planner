@@ -143,7 +143,10 @@ beforeEach(() => {
       : [congregation('c3', 'Gemeinde Drei', 'd2')]
   ))
   vi.mocked(leadersApi.listLeaders).mockResolvedValue([])
-  vi.mocked(eventsApi.previewEventChange).mockResolvedValue({ blocked: false, requires_confirmation: false, items: [] })
+  vi.mocked(eventsApi.previewEventChange).mockResolvedValue({
+    blocked: false, requires_confirmation: false, items: [],
+    duties_newly_flagged: 0, duties_newly_quarantined: 0, duties_flagged_after: 0, duties_quarantined_after: 0,
+  })
   vi.mocked(districtsApi.listGroups).mockResolvedValue([
     { id: 'g1', name: 'Gruppe Eins', district_id: 'd1', created_at: now, updated_at: now },
   ])
@@ -649,6 +652,144 @@ describe('Inline editing in the event overview', () => {
     await flushPromises()
     expect(eventsApi.updateEventInline).toHaveBeenCalledWith('e1', { title: 'Geändert' }, '"revision-1"')
     expect(eventsApi.listEvents).toHaveBeenCalledTimes(initialFetches + 1)
+  })
+
+  it('reschedules inline with the captured revision, keeping the duration', async () => {
+    vi.mocked(eventsApi.updateEvent).mockResolvedValue(event({ revision: '"revision-2"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-start-desktop-e1"]')
+    expect(cell.find('input').exists()).toBe(false)
+    await cell.trigger('click')
+    await flushPromises()
+    expect(cell.get('input').attributes('type')).toBe('datetime-local')
+    await cell.get('input').setValue('2030-01-02T10:00')
+    await cell.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(eventsApi.updateEvent).toHaveBeenCalledOnce()
+    const [id, payload, revision] = vi.mocked(eventsApi.updateEvent).mock.calls[0]
+    expect(id).toBe('e1')
+    expect(revision).toBe('"revision-1"')
+    expect(payload.start_at).toBe(new Date('2030-01-02T10:00').toISOString())
+    expect(payload.confirm_warnings).toBeUndefined()
+  })
+
+  it('keeps the start draft and shows the server message when rescheduling fails', async () => {
+    vi.mocked(eventsApi.updateEvent).mockRejectedValue(new ApiError(412, 'Precondition Failed', { detail: 'Ereignis wurde zwischenzeitlich geändert.' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-start-desktop-e1"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('input').setValue('2030-01-02T10:00')
+    await cell.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(cell.get('[role=alert]').text()).toContain('zwischenzeitlich geändert')
+    expect((cell.get('input').element as HTMLInputElement).value).toBe('2030-01-02T10:00')
+  })
+
+  it('changes the category inline after a clean impact preview', async () => {
+    vi.mocked(eventsApi.updateEvent).mockResolvedValue(event({ category: 'Jugendstunde', revision: '"revision-2"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-category-desktop-e1"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('input').setValue('Jugendstunde')
+    await cell.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(eventsApi.previewEventChange).toHaveBeenCalledWith('e1', { category: 'Jugendstunde' }, '"revision-1"')
+    expect(eventsApi.updateEvent).toHaveBeenCalledWith('e1', {
+      category: 'Jugendstunde', acknowledged_duty_impact: { newly_flagged: 0, newly_quarantined: 0 },
+    }, '"revision-1"')
+    expect(mocks.confirm).not.toHaveBeenCalled()
+  })
+
+  it('asks before a congregation move flags duties and keeps the draft when declined', async () => {
+    vi.mocked(eventsApi.previewEventChange).mockResolvedValue({
+      blocked: false, requires_confirmation: false, items: [],
+      duties_newly_flagged: 2, duties_newly_quarantined: 2, duties_flagged_after: 2, duties_quarantined_after: 2,
+    })
+    mocks.confirm.mockResolvedValue(false)
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-congregation-desktop-e1"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('select').setValue('c2')
+    await cell.get('select').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('ausgeblendet'),
+    }))
+    expect(eventsApi.updateEvent).not.toHaveBeenCalled()
+    expect(cell.get('[role=alert]').text()).toContain('abgebrochen')
+  })
+
+  it('keeps generated holidays out of every inline scope edit', async () => {
+    const { wrapper } = setup([event({ id: 'holiday', category: 'Feiertag' })])
+    await flushPromises()
+    await flushPromises()
+    for (const layout of ['desktop']) {
+      for (const field of ['category', 'congregation']) {
+        const cell = wrapper.get(`[data-inline-cell-id="event-${field}-${layout}-holiday"]`)
+        await cell.trigger('click')
+        expect(cell.find('input, select').exists()).toBe(false)
+      }
+    }
+    expect(eventsApi.previewEventChange).not.toHaveBeenCalled()
+  })
+
+  it('shows the server duty-impact rejection when duties changed after the preview', async () => {
+    vi.mocked(eventsApi.updateEvent).mockRejectedValue(new ApiError(409, 'Conflict', {
+      detail: { code: 'duty_impact_unacknowledged', message: 'Bitte die Auswirkungen erneut prüfen und bestätigen.' },
+    }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await flushPromises()
+    for (const layout of ['desktop']) {
+      const cell = wrapper.get(`[data-inline-cell-id="event-category-${layout}-e1"]`)
+      await cell.trigger('click')
+      await flushPromises()
+      await cell.get('input').setValue('Jugendstunde' + layout)
+      await cell.get('input').trigger('keydown', { key: 'Enter' })
+      await flushPromises()
+      expect(cell.get('[role=alert]').text()).toContain('erneut prüfen und bestätigen')
+      await cell.get('input').trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+    }
+  })
+
+  it('does not offer category or congregation edits for holidays or invitation copies', async () => {
+    const { wrapper } = setup([
+      event({ id: 'holiday', category: 'Feiertag' }),
+      event({ id: 'invited', invitation_source_event_id: 'src' }),
+    ])
+    await flushPromises()
+    for (const id of ['holiday', 'invited']) {
+      const cell = wrapper.get('[data-inline-cell-id="event-category-desktop-' + id + '"]')
+      await cell.trigger('click')
+      expect(cell.find('input').exists()).toBe(false)
+    }
+    const invitedScope = wrapper.get('[data-inline-cell-id="event-congregation-desktop-invited"]')
+    await invitedScope.trigger('click')
+    expect(invitedScope.find('select').exists()).toBe(false)
+    expect(eventsApi.previewEventChange).not.toHaveBeenCalled()
+  })
+
+  it('does not offer inline rescheduling for linked invitation copies or read-only rows', async () => {
+    const { wrapper } = setup([
+      event({ id: 'external', source: 'EXTERNAL' }),
+      event({ id: 'invited', invitation_source_event_id: 'src' }),
+    ])
+    await flushPromises()
+    for (const id of ['external', 'invited']) {
+      const cell = wrapper.get('[data-inline-cell-id="event-start-desktop-' + id + '"]')
+      await cell.trigger('click')
+      expect(cell.find('input').exists()).toBe(false)
+    }
+    expect(eventsApi.updateEvent).not.toHaveBeenCalled()
   })
 
   it('does not edit external events, cancelled events or missing-version rows', async () => {

@@ -112,7 +112,7 @@ async def create_district(
     state_code = body.state_code.upper() if body.state_code else None
     if state_code and state_code not in DE_STATES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Unbekanntes Bundesland-Kürzel: {state_code}. Gültig: {', '.join(DE_STATES)}",
         )
 
@@ -325,7 +325,7 @@ async def _validate_group_assignment(
     group = await group_repo.get(group_id)
     if group is None or group.district_id != district_id:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Gruppe ist ungueltig oder gehoert nicht zum Bezirk",
         )
 
@@ -493,7 +493,7 @@ async def get_matrix(
 
     if effective_to_dt < effective_from_dt:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="to_dt muss groesser oder gleich from_dt sein",
         )
 
@@ -755,7 +755,7 @@ async def generate_matrix_drafts(
     to_date = to_dt.date()
     if to_date < from_date:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="to_dt muss groesser oder gleich from_dt sein",
         )
 
@@ -834,7 +834,7 @@ async def import_feiertage_endpoint(
 
     if body.state_code and body.state_code.upper() not in DE_STATES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Unbekanntes Bundesland-Kürzel: {body.state_code}. Gültig: {', '.join(DE_STATES)}",
         )
 

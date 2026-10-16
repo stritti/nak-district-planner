@@ -59,6 +59,7 @@ class OIDCAdapter:
         audience: str | None = None,
         httpx_client: httpx.AsyncClient | None = None,
         jwks_cache_ttl: int = 3600,
+        jwks_min_refresh_interval: int = 30,
         clock_skew_seconds: int = 120,
     ):
         """Initialize the OIDC adapter.
@@ -72,6 +73,9 @@ class OIDCAdapter:
             audience: Expected audience for access tokens (defaults to client_id)
             httpx_client: Optional httpx.AsyncClient for testing
             jwks_cache_ttl: JWKS cache time-to-live in seconds
+            jwks_min_refresh_interval: Minimum seconds between upstream JWKS fetch
+                attempts; forced refreshes (unknown ``kid``) inside this window are
+                served from cache so callers cannot trigger a fetch per request.
             clock_skew_seconds: Allowed clock skew (exp/nbf/iat leeway)
         """
         self.discovery_url = discovery_url
@@ -80,6 +84,8 @@ class OIDCAdapter:
         self.issuer = issuer
         self.audience = audience
         self.jwks_cache_ttl = jwks_cache_ttl
+        self.jwks_min_refresh_interval = jwks_min_refresh_interval
+        self._jwks_last_attempt: datetime | None = None
         self.clock_skew_seconds = clock_skew_seconds
 
         self._httpx_client = httpx_client
@@ -138,6 +144,16 @@ class OIDCAdapter:
             if elapsed < self.jwks_cache_ttl:
                 return self._jwks_cache
 
+        if (
+            force_refresh
+            and self._jwks_cache is not None
+            and self._jwks_last_attempt is not None
+            and (datetime.now(UTC) - self._jwks_last_attempt).total_seconds()
+            < self.jwks_min_refresh_interval
+        ):
+            return self._jwks_cache
+
+        self._jwks_last_attempt = datetime.now(UTC)
         try:
             discovery = await self.discover()
             jwks_uri = discovery.get("jwks_uri")

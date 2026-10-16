@@ -102,6 +102,11 @@ export interface EventUpdate {
   applicability?: string[]
   /** Acknowledges WARN conflicts on a schedule change; required server-side for those. */
   confirm_warnings?: boolean
+  /**
+   * Duty reviews/quarantines the user accepted in the impact preview. The server recomputes the
+   * impact and answers 409 if more duties would be affected than acknowledged.
+   */
+  acknowledged_duty_impact?: { newly_flagged: number; newly_quarantined: number }
 }
 
 export function updateEvent(id: string, data: EventUpdate, revision: string): Promise<EventResponse> {
@@ -117,6 +122,7 @@ export interface EventChangeImpactRequest {
   start_at?: string
   end_at?: string
   congregation_id?: string | null
+  category?: string | null
 }
 
 export interface EventChangeImpactItem {
@@ -129,6 +135,13 @@ export interface EventChangeImpact {
   blocked: boolean
   requires_confirmation: boolean
   items: EventChangeImpactItem[]
+  /** Duties that would newly need review after a category/congregation change. */
+  duties_newly_flagged: number
+  /** Duties that would newly be hidden from the new scope. */
+  duties_newly_quarantined: number
+  duties_flagged_after: number
+  /** Duties hidden from the new scope until an authorised planner revalidates them. */
+  duties_quarantined_after: number
 }
 
 /** Read-only preview; nothing is persisted until the matching PATCH is sent. */

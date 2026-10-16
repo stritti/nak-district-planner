@@ -48,7 +48,7 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
             raise IdpProvisioningError("Keycloak admin token request failed") from exc
         if response.status_code >= 400:
             raise IdpProvisioningError(
-                f"Keycloak admin token request failed: {response.status_code} {response.text}"
+                f"Keycloak admin token request failed: {response.status_code}"
             )
         try:
             payload = response.json()
@@ -70,7 +70,7 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
             raise IdpProvisioningError("Keycloak user lookup failed") from exc
         if response.status_code >= 400:
             raise IdpProvisioningError(
-                f"Keycloak user lookup failed: {response.status_code} {response.text}"
+                f"Keycloak user lookup failed: {response.status_code}"
             )
         try:
             payload = response.json()
@@ -110,7 +110,7 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
 
         if response.status_code not in (201, 409):
             raise IdpProvisioningError(
-                f"Keycloak user creation failed: {response.status_code} {response.text}"
+                f"Keycloak user creation failed: {response.status_code}"
             )
 
         if response.status_code == 409:
@@ -143,7 +143,7 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
             raise IdpProvisioningError("Keycloak invite email failed") from exc
         if response.status_code >= 400:
             raise IdpProvisioningError(
-                f"Keycloak invite email failed: {response.status_code} {response.text}"
+                f"Keycloak invite email failed: {response.status_code}"
             )
 
     @staticmethod

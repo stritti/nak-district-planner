@@ -352,3 +352,66 @@ def test_overrides_are_exact_and_district_events_ignore_local_config():
     assert len(effective_categories(repo.categories, [override], "Gottesdienst", None)) == 3
     with pytest.raises(ValueError):
         replace(override, capacity=0)
+
+
+@pytest.mark.asyncio
+async def test_scope_change_preview_counts_only_newly_flagged_duties():
+    repo = Repository()
+    service = EventDutiesService(repo)
+    category = next(c for c in repo.categories if "Gottesdienst" in c.event_categories)
+    repo.assignments = [
+        EventDutyAssignment.create(repo.slot_id, category, repo.congregation, name="Anna"),
+    ]
+
+    unchanged = await service.preview_scope_change(
+        repo.district, repo.slot, category="Gottesdienst", congregation_id=repo.congregation
+    )
+    assert (unchanged.newly_flagged, unchanged.flagged_after) == (0, 0)
+
+    moved = await service.preview_scope_change(
+        repo.district, repo.slot, category="Gottesdienst", congregation_id=uuid4()
+    )
+    assert (moved.newly_flagged, moved.flagged_after) == (1, 1)
+    assert (moved.newly_quarantined, moved.quarantined_after) == (1, 1)
+
+    recategorised = await service.preview_scope_change(
+        repo.district, repo.slot, category="Feiertag", congregation_id=repo.congregation
+    )
+    assert recategorised.newly_flagged == 1
+    assert (recategorised.newly_quarantined, recategorised.quarantined_after) == (0, 0)
+
+
+@pytest.mark.asyncio
+async def test_scope_change_preview_does_not_recount_already_flagged_duties():
+    repo = Repository()
+    service = EventDutiesService(repo)
+    category = next(c for c in repo.categories if "Gottesdienst" in c.event_categories)
+    foreign = replace(
+        EventDutyAssignment.create(repo.slot_id, category, uuid4(), name="Berta"),
+    )
+    repo.assignments = [foreign]  # already quarantined: owned by another scope
+
+    impact = await service.preview_scope_change(
+        repo.district, repo.slot, category="Feiertag", congregation_id=repo.congregation
+    )
+    assert impact.newly_flagged == 0
+    assert impact.flagged_after == 1
+
+
+@pytest.mark.asyncio
+async def test_scope_change_preview_reports_quarantine_of_already_flagged_duty():
+    """A duty already in review that is additionally hidden by a move is a new quarantine."""
+    repo = Repository()
+    service = EventDutiesService(repo)
+    category = next(c for c in repo.categories if "Gottesdienst" in c.event_categories)
+    repo.slot.category = "Feiertag"  # organist is not offered for this category: already flagged
+    repo.assignments = [
+        EventDutyAssignment.create(repo.slot_id, category, repo.congregation, name="Anna"),
+    ]
+
+    impact = await service.preview_scope_change(
+        repo.district, repo.slot, category="Feiertag", congregation_id=uuid4()
+    )
+    assert impact.newly_flagged == 0
+    assert impact.newly_quarantined == 1
+    assert impact.quarantined_after == 1
