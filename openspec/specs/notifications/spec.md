@@ -47,5 +47,5 @@ Notifications SHALL be shared district-scoped records, but `read_at` and `dismis
 
 #### Scenario: Migration from legacy shared timestamps
 - **WHEN** a database contains notifications with legacy global read/dismiss timestamps
-- **THEN** those timestamps SHALL NOT be attributed to any subject without evidence
-- **AND** users independently rebuild their own acknowledgement states after migration
+- **THEN** those timestamps keep their pre-migration effect for every user, so previously dismissed notifications stay hidden and previously read ones stay read
+- **AND** the legacy timestamps are never written again; new acknowledgements are stored only in the per-subject state table

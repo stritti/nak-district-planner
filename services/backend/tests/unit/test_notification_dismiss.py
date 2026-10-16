@@ -102,8 +102,8 @@ async def test_repository_lists_only_visible_notifications_even_without_unread_f
     assert await repo.list_by_district(uuid.uuid4(), "test-sub", unread_only=False) == ([], 0)
     count_sql = str(session.execute.await_args_list[0].args[0])
     list_sql = str(session.execute.await_args_list[1].args[0])
-    assert "dismissed_at IS NULL" in count_sql
-    assert "dismissed_at IS NULL" in list_sql
+    assert "dismissed_at, notifications.dismissed_at) IS NULL" in count_sql
+    assert "dismissed_at, notifications.dismissed_at) IS NULL" in list_sql
 
 
 @pytest.mark.asyncio

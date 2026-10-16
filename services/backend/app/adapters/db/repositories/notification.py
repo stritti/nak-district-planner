@@ -17,6 +17,18 @@ from app.domain.models.notification import Notification, NotificationType
 from app.domain.ports.repositories import NotificationRepository
 
 
+# Notifications acknowledged before per-user state existed carry a single global
+# ``read_at``/``dismissed_at``. It stays authoritative for those legacy rows (new
+# rows never set it), so a deploy neither resurrects dismissed notifications nor
+# lets one user's acknowledgement affect another's.
+def _effective_read_at(state):
+    return func.coalesce(state.read_at, NotificationORM.read_at)
+
+
+def _effective_dismissed_at(state):
+    return func.coalesce(state.dismissed_at, NotificationORM.dismissed_at)
+
+
 def _orm_to_domain(
     row: NotificationORM, state: NotificationUserStateORM | None = None
 ) -> Notification:
@@ -24,8 +36,8 @@ def _orm_to_domain(
         id=row.id, district_id=row.district_id, congregation_id=row.congregation_id,
         type=NotificationType(row.type), title=row.title, body=row.body,
         payload=dict(row.payload or {}), created_at=row.created_at,
-        read_at=state.read_at if state is not None else None,
-        dismissed_at=state.dismissed_at if state is not None else None,
+        read_at=(state.read_at if state is not None else None) or row.read_at,
+        dismissed_at=(state.dismissed_at if state is not None else None) or row.dismissed_at,
     )
 
 
@@ -50,9 +62,12 @@ class SqlNotificationRepository(NotificationRepository):
         join_condition = and_(
             state.notification_id == NotificationORM.id, state.user_sub == user_sub
         )
-        visibility = [NotificationORM.district_id == district_id, state.dismissed_at.is_(None)]
+        visibility = [
+            NotificationORM.district_id == district_id,
+            _effective_dismissed_at(state).is_(None),
+        ]
         if unread_only:
-            visibility.append(state.read_at.is_(None))
+            visibility.append(_effective_read_at(state).is_(None))
 
         total_result = await self._session.execute(
             select(func.count()).select_from(NotificationORM)
@@ -121,8 +136,8 @@ class SqlNotificationRepository(NotificationRepository):
             )
             .where(
                 NotificationORM.district_id == district_id,
-                state.read_at.is_(None),
-                state.dismissed_at.is_(None),
+                _effective_read_at(state).is_(None),
+                _effective_dismissed_at(state).is_(None),
             )
         )
         statement = insert(state).from_select(
