@@ -439,154 +439,36 @@
 
     <!-- ── Wochenansicht ──────────────────────────────────────────────────── -->
     <template v-else-if="viewMode === 'week'">
-      <div class="table-container overflow-x-auto">
-        <div v-if="calendarLoading" class="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Laden…</div>
-        <div v-else class="grid grid-cols-7 divide-x divide-gray-200 dark:divide-gray-700 min-w-[700px]">
-          <div v-for="day in weekDays" :key="day.iso" class="min-w-[100px]">
-            <!-- Spaltenkopf -->
-            <div
-              class="px-2 py-2 text-center border-b border-gray-200 dark:border-gray-700 text-xs font-medium"
-              :class="day.isToday ? 'bg-blue-600 text-white' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400'"
-            >
-              <div>{{ day.weekdayShort }}</div>
-              <div class="text-base font-semibold" :class="day.isToday ? 'text-white' : 'text-gray-900 dark:text-gray-100'">
-                {{ day.day }}
-              </div>
-            </div>
-            <!-- Events -->
-            <div class="p-1.5 space-y-1 min-h-[140px]">
-              <!-- Feiertage oben im Inhaltsbereich (wie in der Monatsansicht) -->
-              <template v-if="calendarHolidays[day.iso]?.length">
-                <div
-                  v-for="name in calendarHolidays[day.iso]"
-                  :key="name"
-                  class="rounded px-1.5 py-1 text-xs leading-tight bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 font-medium"
-                >{{ name }}</div>
-              </template>
-              <!-- Reguläre Events -->
-              <template v-if="eventsByDate[day.iso]?.filter(e => e.category !== 'Feiertag').length">
-                <div
-                  v-for="event in eventsByDate[day.iso].filter(e => e.category !== 'Feiertag')"
-                  :key="event.id"
-                  class="rounded px-1.5 py-1 text-xs leading-tight cursor-pointer hover:opacity-80"
-                  :class="eventPillClass(event)"
-                  @click="openEdit(event)"
-                >
-                  <div class="font-medium break-words">{{ event.title }}</div>
-                  <div class="text-[10px] opacity-70">{{ formatTime(event.start_at) }}</div>
-                </div>
-              </template>
-              <div
-                v-if="!calendarHolidays[day.iso]?.length && !eventsByDate[day.iso]?.filter(e => e.category !== 'Feiertag').length"
-                class="text-gray-200 dark:text-gray-700 text-xs text-center pt-4"
-              >–</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <EventWeekGrid
+        :days="weekDays"
+        :holidays="calendarHolidays"
+        :events-by-date="eventsByDate"
+        :loading="calendarLoading"
+        @select="openEdit"
+      />
     </template>
 
     <!-- ── Monatsansicht ──────────────────────────────────────────────────── -->
     <template v-else-if="viewMode === 'month'">
-      <div class="table-container overflow-x-auto">
-        <!-- Wochentag-Header -->
-        <div class="grid grid-cols-7 divide-x divide-gray-200 dark:divide-gray-700 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 min-w-[560px]">
-          <div
-            v-for="wd in WEEKDAY_LABELS"
-            :key="wd"
-            class="py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400"
-          >
-            {{ wd }}
-          </div>
-        </div>
-
-        <div v-if="calendarLoading" class="py-12 text-center text-sm text-gray-400 dark:text-gray-500">Laden…</div>
-        <div v-else class="grid grid-cols-7 divide-x divide-gray-200 dark:divide-gray-700 min-w-[560px]">
-          <div
-            v-for="day in calendarDays"
-            :key="day.iso"
-            class="border-b border-gray-200 dark:border-gray-700 min-h-[100px] p-1"
-            :class="day.currentMonth ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'"
-          >
-            <!-- Tagesnummer -->
-            <div class="flex items-center justify-between mb-1">
-              <span
-                class="inline-flex items-center justify-center w-6 h-6 text-xs font-medium rounded-full"
-                :class="day.isToday ? 'bg-blue-600 text-white' : day.currentMonth ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'"
-              >
-                {{ day.day }}
-              </span>
-            </div>
-
-            <!-- Feiertage -->
-            <template v-if="calendarHolidays[day.iso]?.length">
-              <div
-                v-for="name in calendarHolidays[day.iso]"
-                :key="name"
-                class="text-[10px] leading-tight px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 font-medium mb-0.5 truncate"
-              >
-                {{ name }}
-              </div>
-            </template>
-
-            <!-- Events (max. 3, dann "+N weitere") -->
-            <template v-if="eventsByDate[day.iso]?.filter(e => e.category !== 'Feiertag').length">
-              <div
-                v-for="event in eventsByDate[day.iso].filter(e => e.category !== 'Feiertag').slice(0, 3)"
-                :key="event.id"
-                class="text-[10px] leading-tight px-1 py-0.5 rounded mb-0.5 truncate cursor-pointer hover:opacity-80"
-                :class="eventPillClass(event)"
-                @click="openEdit(event)"
-              >
-                {{ event.title }}
-              </div>
-              <div
-                v-if="eventsByDate[day.iso].filter(e => e.category !== 'Feiertag').length > 3"
-                class="text-[10px] text-gray-400 dark:text-gray-500 px-1"
-              >
-                +{{ eventsByDate[day.iso].filter(e => e.category !== 'Feiertag').length - 3 }} weitere
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
+      <EventMonthGrid
+        :days="calendarDays"
+        :holidays="calendarHolidays"
+        :events-by-date="eventsByDate"
+        :loading="calendarLoading"
+        @select="openEdit"
+      />
     </template>
 
 
-    <div v-if="createOpen" class="modal-backdrop" @click.self="createOpen = false">
-      <form class="modal-panel max-w-md space-y-3" @submit.prevent="submitCreate">
-        <div class="flex items-center justify-between">
-          <h2 class="modal-title">Ereignis anlegen</h2>
-          <button type="button" class="modal-close" @click="createOpen = false"><XMarkIcon class="h-5 w-5" /></button>
-        </div>
-        <label class="form-label" for="new-event-title">Titel</label>
-        <input id="new-event-title" v-model.trim="createForm.title" class="form-input" maxlength="500" required />
-        <label class="form-label" for="new-event-start">Beginn</label>
-        <input id="new-event-start" v-model="createForm.start" type="datetime-local" class="form-input" required />
-        <label class="form-label" for="new-event-end">Ende</label>
-        <input id="new-event-end" v-model="createForm.end" type="datetime-local" class="form-input" required />
-        <label class="form-label" for="new-event-category">Kategorie</label>
-        <input id="new-event-category" v-model.trim="createForm.category" class="form-input" maxlength="255" />
-        <label class="form-label" for="new-event-congregation">Gemeinde</label>
-        <select id="new-event-congregation" v-model="createForm.congregation_id" class="form-input">
-          <option value="">Bezirksebene</option>
-          <option v-for="c in districtsStore.congregations" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-        <label class="form-label" for="new-event-description">Beschreibung</label>
-        <textarea id="new-event-description" v-model="createForm.description" class="form-input" rows="2" />
-        <label class="form-label" for="new-event-visibility">Sichtbarkeit</label>
-        <select id="new-event-visibility" v-model="createForm.visibility" class="form-input">
-          <option value="PUBLIC">Öffentlich nach Freigabe</option>
-          <option value="INTERNAL">Nur intern</option>
-        </select>
-        <p class="text-xs text-gray-500">Neue Ereignisse werden immer als Entwurf angelegt.</p>
-        <p v-if="createError" role="alert" class="text-sm text-red-600">{{ createError }}</p>
-        <div class="flex justify-end gap-2">
-          <button type="button" class="btn-secondary px-3" @click="createOpen = false">Abbrechen</button>
-          <button type="submit" class="btn-primary px-3" :disabled="createSaving">{{ createSaving ? 'Speichern…' : 'Anlegen' }}</button>
-        </div>
-      </form>
-    </div>
+    <EventCreateModal
+      v-if="createOpen"
+      :form="createForm"
+      :congregations="districtsStore.congregations"
+      :error="createError"
+      :saving="createSaving"
+      @close="createOpen = false"
+      @submit="submitCreate"
+    />
 
     <!-- ── Zuordnungs-Modal (alle Ansichten) ──────────────────────────────── -->
     <div
@@ -710,6 +592,9 @@
 </template>
 
 <script setup lang="ts">
+import EventCreateModal from '../components/events/EventCreateModal.vue'
+import EventMonthGrid from '../components/events/EventMonthGrid.vue'
+import EventWeekGrid from '../components/events/EventWeekGrid.vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
@@ -838,7 +723,6 @@ const currentPeriodStart = ref(new Date())
 const calendarEvents = ref<EventResponse[]>([])
 const calendarLoading = ref(false)
 
-const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 const WEEKDAY_SHORT  = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES    = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
                         'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
@@ -1183,26 +1067,12 @@ function formatDt(iso: string): string {
   })
 }
 
-function formatTime(iso: string): string {
-  const d = new Date(iso)
-  const h = String(d.getHours()).padStart(2, '0')
-  const m = String(d.getMinutes()).padStart(2, '0')
-  return h === '00' && m === '00' ? '' : `${h}:${m}`
-}
-
 function statusLabel(s: PlanningSlotStatus): string {
   return { ACTIVE: 'Aktiv', CANCELLED: 'Abgesagt' }[s] ?? s
 }
 
 function statusClass(s: PlanningSlotStatus): string {
   return { ACTIVE: 'bg-green-100 text-green-800', CANCELLED: 'bg-red-100 text-red-700' }[s] ?? 'bg-gray-100 text-gray-600'
-}
-
-function eventPillClass(event: EventResponse): string {
-  if (event.category === 'Feiertag')   return 'bg-amber-100 text-amber-800'
-  if (event.status === 'CANCELLED')    return 'bg-red-100 text-red-600 line-through'
-  if (event.is_service)                return 'bg-blue-100 text-blue-800'
-  return 'bg-gray-100 text-gray-700'
 }
 
 // ── Manual event creation ────────────────────────────────────────────────────
