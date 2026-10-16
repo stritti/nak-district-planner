@@ -408,14 +408,27 @@ class TestRateLimiterKeyGeneration:
 
         assert key1 != key2
 
-    def test_key_includes_endpoint(self):
-        """Test that key includes endpoint."""
+    def test_paths_share_global_limit_bucket(self):
+        """Changing a raw URL must never reset a client's limit."""
         limiter = RateLimiter()
+        key1 = limiter._get_key("ip:203.0.113.10", "/api/test1", 60)
+        key2 = limiter._get_key("ip:203.0.113.10", "/api/test2", 60)
+        invalid_ics = limiter._get_key(
+            "ip:203.0.113.10", "/api/v1/export/guessed-token/calendar.ics", 60
+        )
 
-        key1 = limiter._get_key("user:123", "/api/test1", 60)
-        key2 = limiter._get_key("user:123", "/api/test2", 60)
+        assert key1 == key2 == invalid_ics
+        assert limiter._get_key("ip:203.0.113.11", "/api/test1", 60) != key1
 
-        assert key1 != key2
+    def test_normal_and_burst_buckets_remain_separate(self):
+        limiter = RateLimiter()
+        normal = limiter._get_key("ip:203.0.113.10", "/api/test", 60)
+        burst = limiter._get_key("ip:203.0.113.10", "/api/test__burst__", 60)
+
+        assert normal != burst
+        assert burst == limiter._get_key(
+            "ip:203.0.113.10", "/api/v1/export/random/calendar.ics__burst__", 60
+        )
 
     def test_key_includes_window(self):
         """Test that key includes window."""

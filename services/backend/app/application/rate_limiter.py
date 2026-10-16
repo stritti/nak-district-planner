@@ -142,11 +142,12 @@ class RateLimiter:
         Returns:
             Redis key string.
         """
-        # Normalize endpoint (remove query parameters, etc.)
-        clean_endpoint = endpoint.split("?")[0].split("#")[0]
-
-        # Create a hash of the identifier + endpoint to keep keys short
-        key_data = f"rate_limit:{window}:{identifier}:{clean_endpoint}"
+        # Route matching happens *after* this middleware. Never use untrusted
+        # path segments (including ICS secrets and arbitrary 404 URLs) as keys.
+        # A client shares one global normal bucket and one global burst bucket;
+        # route-specific thresholds may only make those limits stricter.
+        scope = "burst" if endpoint.endswith("__burst__") else "global"
+        key_data = f"rate_limit:{window}:{identifier}:{scope}"
         return hashlib.sha256(key_data.encode()).hexdigest()
 
     async def check_rate_limit(
