@@ -33,6 +33,14 @@ def _install_sql() -> str:
     return "\n".join(str(call.args[0]) for call in op.execute.call_args_list)
 
 
+def _function_body(sql: str, name: str) -> str:
+    """Return the complete CREATE FUNCTION statement including its body."""
+    start = sql.index(f"CREATE FUNCTION {name}")
+    body_open = sql.index("$$", start)
+    body_close = sql.index("$$", body_open + 2)
+    return sql[start:body_close]
+
+
 def test_all_security_definer_functions_are_pinned():
     """Every DEFINER function, including duty_assignment_count, is audited."""
     sql = _install_sql()
@@ -47,9 +55,7 @@ def test_security_definer_functions_fix_search_path():
     """A DEFINER function without a fixed search_path allows privilege escalation."""
     sql = _install_sql()
     for name in (*_EXPECTED_FUNCTIONS, "duty_assignment_count", "seed_event_duty_defaults"):
-        start = sql.index(f"CREATE FUNCTION {name}")
-        end = sql.index("$$", start)
-        definition = sql[start:end]
+        definition = _function_body(sql, name)
         assert "SECURITY DEFINER" in definition, name
         assert "SET search_path=public,pg_temp" in definition, name
 
@@ -58,9 +64,7 @@ def test_functions_are_stable_and_do_not_mutate():
     """STABLE must hold for every helper language, including plpgsql defaults."""
     sql = _install_sql()
     for name in (*_EXPECTED_FUNCTIONS, "duty_assignment_count"):
-        start = sql.index(f"CREATE FUNCTION {name}")
-        end = sql.index("$$", start)
-        definition = sql[start:end]
+        definition = _function_body(sql, name)
         assert " STABLE " in definition, f"{name} must be STABLE"
         assert "INSERT " not in definition, name
         assert "UPDATE " not in definition, name
@@ -78,6 +82,9 @@ def test_duty_export_slot_allowed_checks_both_assignment_sources():
 
 def test_current_duty_export_subject_only_returns_bound_subjects():
     sql = next(s for s in event_duty_rls._FUNCTIONS if "current_duty_export_subject" in s)
+    assert (
+        "et.token=current_setting('app.current_export_token',true)" in sql
+    ), "subject must come from the presented export token"
     assert "et.token_type='INTERNAL'" in sql
     assert "duty_subject_scope" in sql
 
@@ -101,7 +108,9 @@ def test_assignment_read_restricts_subject_bound_tokens_to_matching_slots():
             "CREATE POLICY event_duty_assignments_insert"
         )
     ]
-    assert "current_duty_export_subject()" in read_policy
+    assert (
+        "linked_user_sub=current_duty_export_subject()" in read_policy
+    ), "assignment rows must match the export subject exactly"
     assert "duty_export_slot_allowed(planning_slot_id)" in read_policy
     assert (
         "ps.congregation_id IS NOT DISTINCT FROM event_duty_assignments.congregation_id"
