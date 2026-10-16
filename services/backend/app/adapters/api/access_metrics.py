@@ -18,6 +18,8 @@ import re
 from opentelemetry import metrics
 from starlette.requests import Request
 
+from app.adapters.api.log_redaction import redact_secret_path
+
 _UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 _meter = metrics.get_meter("nak.security")
@@ -38,7 +40,7 @@ def route_template(request: Request) -> str:
     template = getattr(route, "path", None)
     if template:
         return template
-    return _UUID.sub("{id}", request.url.path)
+    return _UUID.sub("{id}", redact_secret_path(request.url.path))
 
 
 def record_access_denied(request: Request) -> None:

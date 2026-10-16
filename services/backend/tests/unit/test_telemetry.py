@@ -8,6 +8,7 @@ All OTel SDK components are mocked so no real OTLP endpoint is needed.
 
 from __future__ import annotations
 
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -190,7 +191,12 @@ class TestSetupTelemetryEnabled:
         ):
             setup_telemetry(fastapi_app=mock_fastapi_app)
 
-            mock_fastapi.instrument_app.assert_called_once_with(mock_fastapi_app)
+            mock_fastapi.instrument_app.assert_called_once()
+            args, kwargs = mock_fastapi.instrument_app.call_args
+            assert args == (mock_fastapi_app,)
+            # The ICS feed path is a bearer secret and must not become a span attribute.
+            assert re.search(kwargs["excluded_urls"], "http://x/api/v1/export/SECRET/calendar.ics")
+            assert not re.search(kwargs["excluded_urls"], "http://x/api/v1/export-tokens")
 
     def test_fastapi_not_instrumented_when_no_app(self):
         """FastAPI instrumentation must be skipped when no app is passed."""

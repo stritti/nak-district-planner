@@ -14,6 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.status import HTTP_403_FORBIDDEN
 
+from app.adapters.api.log_redaction import redact_secret_path
 from app.application.csrf import CSRFError, CSRFTokenService
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             self.csrf_service.validate_token(csrf_token, session_id)
 
         except CSRFError as e:
-            logger.warning(f"CSRF validation failed for {request.method} {request.url.path}: {e}")
+            logger.warning(f"CSRF validation failed for {request.method} {redact_secret_path(request.url.path)}: {e}")
             return JSONResponse(
                 status_code=HTTP_403_FORBIDDEN,
                 content={"detail": "CSRF validation failed"},

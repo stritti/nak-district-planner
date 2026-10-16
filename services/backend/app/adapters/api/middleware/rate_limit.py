@@ -15,6 +15,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 
 from app.adapters.api.client_ip import get_client_ip
+from app.adapters.api.log_redaction import redact_secret_path
 from app.application.local_rate_limiter import LocalFallbackRateLimiter
 from app.application.rate_limiter import (
     RateLimitConfig,
@@ -149,7 +150,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "Rate limit exceeded for %s on %s %s (%s)",
             identifier,
             request.method,
-            request.url.path,
+            redact_secret_path(request.url.path),
             source,
         )
         return JSONResponse(

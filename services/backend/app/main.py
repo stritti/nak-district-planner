@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.adapters.api import deps
+from app.adapters.api.log_redaction import install_log_redaction
 from app.adapters.api.middleware.audit import AuditMiddleware
 from app.adapters.api.middleware.csrf import CSRFMiddleware
 from app.adapters.api.middleware.rate_limit import RateLimitMiddleware
@@ -63,6 +64,7 @@ def configure_logging() -> None:
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
         force=True,
     )
+    install_log_redaction()
 
 
 @asynccontextmanager

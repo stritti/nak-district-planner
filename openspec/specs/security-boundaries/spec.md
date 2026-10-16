@@ -82,3 +82,10 @@ The distributed rate limiter SHALL key Valkey buckets by client, window and a bo
 #### Scenario: Unrelated traffic does not exhaust a stricter route limit
 - **WHEN** a client sends more requests to unconfigured routes than a configured route's ceiling
 - **THEN** a request to the configured route is still evaluated only against its own bucket
+
+### Requirement: Secret ICS export URLs are never recorded
+Request paths below `/api/v1/export/` SHALL be recorded only with the secret segment replaced by `{redacted}` in application logs, audit metadata, metric labels and access logs; the feed route SHALL NOT be traced.
+
+#### Scenario: Any outcome of a feed request
+- **WHEN** a feed URL request ends with 200, 403, 404, 429 or 500
+- **THEN** no log line, audit record or metric label contains the raw token

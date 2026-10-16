@@ -74,6 +74,7 @@ Eine Route darf nur dann ohne Bearer-Authentifizierung erreichbar sein, wenn sie
 - Secrets, API-Keys und Client-Credentials werden nicht committed.
 - externe Kalender-Credentials werden verschluesselt gespeichert.
 - sensitive Token-/Secret-Werte duerfen nicht in Logs oder Fehlerantworten gelangen.
+- ICS-Feed-URLs (`/api/v1/export/{token}/calendar.ics`) tragen ein Bearer-Secret im Pfad. Backend (Rate-Limit-, CSRF- und Audit-Logs, Metrik-Labels, uvicorn-Access-Log), Tracing (Feed-Route nicht instrumentiert) und das Frontend-nginx (maskiertes `access_log`, Error-Log nur `crit` fuer diesen Pfad) schreiben den Token nicht. Ein vorgeschalteter TLS-Proxy muss den Pfad ebenfalls maskieren oder nicht protokollieren (siehe Runbook).
 - Production-Secrets werden ueber Secret-Management bereitgestellt.
 - `SECRET_KEY`-Rotation ist ein geplanter Betriebsvorgang, weil davon verschluesselte Daten betroffen sein koennen.
 
