@@ -1101,3 +1101,17 @@ async def test_external_event_full_editor_allowed_but_inline_forbidden() -> None
             )
     assert exc.value.status_code == 403
     instance_repo.save.assert_not_awaited()
+
+
+def test_list_events_offset_has_an_upper_bound() -> None:
+    """Deep OFFSET scans stay bounded (#604); the API rejects absurd values."""
+    from fastapi.routing import APIRoute
+
+    route = next(
+        r for r in events.router.routes if isinstance(r, APIRoute) and r.path == "/api/v1/events"
+        and "GET" in r.methods
+    )
+    offset = next(p for p in route.dependant.query_params if p.name == "offset")
+    constraints = {type(m).__name__: m for m in offset.field_info.metadata}
+    assert constraints["Le"].le == events.MAX_LIST_OFFSET
+    assert constraints["Ge"].ge == 0

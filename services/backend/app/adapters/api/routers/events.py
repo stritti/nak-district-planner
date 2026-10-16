@@ -78,6 +78,8 @@ router = APIRouter(prefix="/api/v1/events", tags=["events"])
 SERVICE_CATEGORY = "Gottesdienst"
 # Longest accepted from/to span for listings (default window is 3 years).
 MAX_LIST_WINDOW_DAYS = 1100
+# Deep OFFSET pages make PostgreSQL skip every earlier row; refine filters instead.
+MAX_LIST_OFFSET = 10_000
 
 
 class EventResponsible(BaseModel):
@@ -326,7 +328,7 @@ async def list_events(
     from_dt: datetime | None = Query(None),
     to_dt: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=MAX_LIST_OFFSET),
     slot_repo: SqlPlanningSlotRepository = Depends(get_planning_slot_repository),
     cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
     inst_repo: SqlEventInstanceRepository = Depends(get_event_instance_repository),

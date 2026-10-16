@@ -35,7 +35,7 @@ Every event response SHALL contain `is_service`, true exactly when the category 
 - **THEN** only events with category `Gottesdienst` are returned
 
 ### Requirement: Event listing is bounded in the database
-`GET /api/v1/events` SHALL reject a range whose `to_dt` precedes `from_dt` or that spans more than 1100 days with HTTP 422, and SHALL apply all filters, the total count and pagination in SQL so that at most one page of slots is materialised. Visibility rules SHALL be unchanged: a congregation sees its own slots in every state and district slots only while ACTIVE, CONFIRMED and applicable to it.
+`GET /api/v1/events` SHALL reject a range whose `to_dt` precedes `from_dt` or that spans more than 1100 days with HTTP 422, and SHALL apply all filters, the total count and pagination in SQL so that at most one page of slots is materialised. `offset` SHALL NOT exceed 10000 (HTTP 422), so deep pagination cannot force the database to skip unbounded rows. Visibility rules SHALL be unchanged: a congregation sees its own slots in every state and district slots only while ACTIVE, CONFIRMED and applicable to it.
 
 #### Scenario: Oversized or reversed range
 - **WHEN** the requested range exceeds 1100 days or ends before it starts
