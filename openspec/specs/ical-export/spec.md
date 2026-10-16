@@ -85,7 +85,7 @@ Personal calendar feeds for an authenticated, securely linked participant or a s
 
 
 ### Requirement: Export credentials are hash-only at rest
-Each ICS bearer credential SHALL be generated using at least 32 random bytes and SHALL be returned only once in the creation response. The database SHALL retain only a cryptographic digest (SHA-256 of the high-entropy original) and SHALL NOT persist or re-expose its plaintext form. All anonymous export RLS policies and bounded SECURITY DEFINER helpers SHALL compare the stored digest against the digest of the presented `app.current_export_token`. Hash strings themselves SHALL NOT grant feed access.
+Each ICS bearer credential SHALL be generated using at least 32 random bytes and returned only in the creation response. Only its SHA-256 digest SHALL persist in the database. Anonymous feed RLS and SECURITY DEFINER authorization SHALL compare digests of the presented credentials. A stored hash string SHALL NOT itself authorize a feed.
 
 #### Scenario: Legacy subscription survives contract migration
 - **WHEN** a previously issued valid ICS URL is fetched after the hash-only migration
