@@ -2,7 +2,7 @@
      SPDX-License-Identifier: AGPL-3.0-only -->
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   createPersonalToken,
   listPersonalEvents,
@@ -21,78 +21,111 @@ const from = ref(new Date().toISOString().slice(0, 10))
 const to = ref(new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10))
 const events = ref<PersonalEvent[]>([])
 const tokens = ref<PersonalToken[]>([])
-const loading = ref(false)
-const error = ref('')
-let version = 0
+const eventsLoading = ref(false)
+const tokensLoading = ref(false)
+const savingFeed = ref(false)
+const eventError = ref('')
+const tokenError = ref('')
+const actionError = ref('')
+const loading = computed(() => eventsLoading.value || tokensLoading.value || savingFeed.value)
+const error = computed(() => actionError.value || tokenError.value || eventError.value)
+let eventVersion = 0
+let tokenVersion = 0
 
 watch(
   [() => districts.selectedDistrictId, () => auth.user?.sub, from, to],
   async ([district, subject]) => {
-    const current = ++version
+    const current = ++eventVersion
     events.value = []
-    tokens.value = []
-    error.value = ''
+    eventError.value = ''
+    eventsLoading.value = false
     if (!district || !subject) return
-    loading.value = true
+    eventsLoading.value = true
     try {
-      const [entries, feeds] = await Promise.all([
-        listPersonalEvents(district, from.value, to.value),
-        listPersonalTokens(district, subject),
-      ])
-      if (current === version) {
-        events.value = entries
-        tokens.value = feeds
-      }
+      const entries = await listPersonalEvents(district, from.value, to.value)
+      if (current === eventVersion) events.value = entries
     } catch (cause) {
-      if (current === version) {
-        error.value = cause instanceof Error
+      if (current === eventVersion) {
+        eventError.value = cause instanceof Error
           ? cause.message
           : 'Kalender konnte nicht geladen werden'
       }
     } finally {
-      if (current === version) loading.value = false
+      if (current === eventVersion) eventsLoading.value = false
     }
   },
   { immediate: true },
 )
 
+// Secrets belong to an identity and district, independently of the event date filter.
+watch(
+  [() => districts.selectedDistrictId, () => auth.user?.sub],
+  async ([district, subject]) => {
+    const current = ++tokenVersion
+    tokens.value = []
+    tokenError.value = ''
+    actionError.value = ''
+    tokensLoading.value = false
+    savingFeed.value = false
+    if (!district || !subject) return
+    tokensLoading.value = true
+    try {
+      const feeds = await listPersonalTokens(district, subject)
+      if (current === tokenVersion) tokens.value = feeds
+    } catch (cause) {
+      if (current === tokenVersion) {
+        tokenError.value = cause instanceof Error
+          ? cause.message
+          : 'Kalender konnte nicht geladen werden'
+      }
+    } finally {
+      if (current === tokenVersion) tokensLoading.value = false
+    }
+  },
+  { immediate: true },
+)
+
+function icsUrl(secret: string): string {
+  return `${window.location.origin}/api/v1/export/${encodeURIComponent(secret)}/calendar.ics`
+}
+
 async function createFeed() {
   const district = districts.selectedDistrictId
   const subject = auth.user?.sub
-  const current = version
+  const current = tokenVersion
   if (!district || !subject || loading.value) return
-  loading.value = true
-  error.value = ''
+  savingFeed.value = true
+  actionError.value = ''
   try {
     const token = await createPersonalToken(district, subject)
-    if (current === version) tokens.value.push(token)
+    if (current === tokenVersion) tokens.value.push(token)
   } catch (cause) {
-    if (current === version) {
-      error.value = cause instanceof Error
+    if (current === tokenVersion) {
+      actionError.value = cause instanceof Error
         ? cause.message
         : 'Kalenderlink konnte nicht erstellt werden'
     }
   } finally {
-    if (current === version) loading.value = false
+    if (current === tokenVersion) savingFeed.value = false
   }
 }
 
 async function revoke(id: string) {
   if (loading.value) return
-  const current = version
-  loading.value = true
-  error.value = ''
+  const current = tokenVersion
+  savingFeed.value = true
+  actionError.value = ''
   try {
     await revokePersonalToken(id)
-    if (current === version) {
+    if (current === tokenVersion) {
       tokens.value = tokens.value.filter(token => token.id !== id)
     }
   } catch (cause) {
-    if (current === version) {
-      error.value = cause instanceof Error ? cause.message : 'Widerruf fehlgeschlagen'
+    if (current === tokenVersion) {
+      actionError.value = cause instanceof Error ? cause.message : 'Widerruf fehlgeschlagen'
     }
   } finally {
-    if (current === version) loading.value = false
+    if (current === tokenVersion) savingFeed.value = false
   }
 }
 </script>
@@ -150,7 +183,7 @@ async function revoke(id: string) {
     >
       <a
         v-if="token.token"
-        :href="`/api/v1/export/${encodeURIComponent(token.token)}/calendar.ics`"
+        :href="icsUrl(token.token)"
         class="text-blue-600 underline"
       >
         {{ token.label }} (ICS)
@@ -160,7 +193,7 @@ async function revoke(id: string) {
       </span>
       <CopyButton
         v-if="token.token"
-        :value="`/api/v1/export/${encodeURIComponent(token.token)}/calendar.ics`"
+        :value="icsUrl(token.token)"
         label="URL kopieren"
         variant="icon"
       />

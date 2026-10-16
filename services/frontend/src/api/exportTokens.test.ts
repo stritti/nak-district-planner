@@ -9,7 +9,8 @@ import * as client from './client'
 import {
   createExportToken,
   deleteExportToken,
-  listExportTokens,} from './exportTokens'
+  listExportTokens,
+} from './exportTokens'
 
 const apiFetch = vi.mocked(client.apiFetch)
 

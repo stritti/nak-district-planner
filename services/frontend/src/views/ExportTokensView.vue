@@ -327,7 +327,6 @@ async function saveToken() {
       congregation_id: form.congregation_id || null,
     })
     tokens.value.unshift(created)
-    await ensureAllCongregations()
     form.open = false
     if (created.token) {
       toastStore.success(
@@ -337,6 +336,7 @@ async function saveToken() {
     } else {
       toastStore.success('Export-Token erstellt', created.label)
     }
+    void loadCongregationNames()
   } catch (e) {
     form.error = e instanceof Error ? e.message : 'Fehler'
   } finally {
@@ -366,6 +366,17 @@ async function doDelete() {
   }
 }
 
-// Preload congregation names for display
-onMounted(ensureAllCongregations)
+async function loadCongregationNames() {
+  try {
+    await ensureAllCongregations()
+  } catch {
+    toastStore.error(
+      'Gemeindenamen konnten nicht geladen werden',
+      'Kalenderlinks bleiben verfügbar.',
+    )
+  }
+}
+
+// Name loading must never turn an already created credential into an apparent failure.
+onMounted(loadCongregationNames)
 </script>

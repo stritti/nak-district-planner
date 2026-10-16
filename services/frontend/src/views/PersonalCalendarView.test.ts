@@ -152,6 +152,9 @@ it('clears secrets on an identity switch even when event loading fails', async (
 
   expect(wrapper.findComponent(CopyButton).exists()).toBe(false)
   expect(wrapper.html()).not.toContain('private-secret')
+  // The district store clears its selection on identity changes.
+  useDistrictsStore().selectedDistrictId = 'd'
+  await flushPromises()
   expect(api.listPersonalTokens).toHaveBeenLastCalledWith('d', 'other')
 })
 

@@ -3,6 +3,13 @@
 
 """Export tokens carry a hash digest; the plaintext secret is shown once."""
 
+import uuid
+from unittest.mock import AsyncMock
+
+import pytest
+
+from app.adapters.api.routers.export import _token_response
+from app.adapters.db.repositories.export_token import SqlExportTokenRepository
 from app.domain.models.export_token import (
     ExportToken,
     TokenType,
@@ -40,3 +47,34 @@ def test_hash_is_sha256_hex_digest():
     digest = hash_export_token("secret")
     assert len(digest) == 64
     assert all(character in "0123456789abcdef" for character in digest)
+
+
+@pytest.mark.parametrize("token_type", [TokenType.PUBLIC, TokenType.INTERNAL])
+def test_creation_response_is_the_only_response_with_a_secret(token_type):
+    token, raw = _create(token_type=token_type, district_id=uuid.uuid4())
+    assert _token_response(token, raw_secret=raw).token == raw
+    listed = _token_response(token).model_dump(mode="json")
+    assert listed["token"] is None
+    assert raw not in listed.values()
+    assert token.token_hash not in listed.values()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"token_type": TokenType.PUBLIC},
+        {"leader_id": uuid.uuid4()},
+        {"congregation_id": uuid.uuid4()},
+    ],
+)
+def test_invalid_subject_token_is_rejected(overrides):
+    with pytest.raises(ValueError, match="Subject tokens require"):
+        _create(subject_sub="alice", **overrides)
+
+
+@pytest.mark.asyncio
+async def test_unknown_secret_returns_no_token_under_the_expand_contract():
+    session = AsyncMock()
+    session.execute.return_value.scalar_one_or_none = lambda: None
+    assert await SqlExportTokenRepository(session).get_by_token("unknown-secret") is None
+    session.execute.assert_awaited_once()

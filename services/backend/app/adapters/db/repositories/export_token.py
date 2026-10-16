@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.db.orm_models.export_token import ExportTokenORM
-from app.domain.models.export_token import ExportToken, TokenType, hash_export_token
+from app.domain.models.export_token import ExportToken, TokenType
 
 
 def _orm_to_domain(row: ExportTokenORM) -> ExportToken:
@@ -51,23 +51,15 @@ class SqlExportTokenRepository:
         return token
 
     async def get_by_token(self, token: str) -> ExportToken | None:
-        """Find a token row by its presented plaintext.
+        """Resolve the presented secret using the expand-phase RLS contract.
 
-        The RLS context carries the presented plaintext, so the lookup
-        matches either the plaintext column (legacy and rollback-compatible
-        rows) or the hash column (rows whose plaintext was contracted away).
+        Plaintext stays authoritative until a separate migration upgrades every
+        export policy, SECURITY DEFINER helper and ORM reader to hash-only storage.
         """
         result = await self._session.execute(
             select(ExportTokenORM).where(ExportTokenORM.token == token)
         )
         row = result.scalar_one_or_none()
-        if row is None:
-            result = await self._session.execute(
-                select(ExportTokenORM).where(
-                    ExportTokenORM.token_hash == hash_export_token(token)
-                )
-            )
-            row = result.scalar_one_or_none()
         return _orm_to_domain(row) if row else None
 
     async def get(self, token_id: uuid.UUID) -> ExportToken | None:

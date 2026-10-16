@@ -32,7 +32,7 @@ def upgrade() -> None:
     op.execute(
         """UPDATE export_tokens
         SET token_hash = encode(sha256(token::bytea), 'hex')
-        WHERE token !~ '^[0-9a-f]{64}$'"""
+        WHERE token_hash IS NULL"""
     )
 
 

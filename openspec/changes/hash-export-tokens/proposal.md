@@ -1,30 +1,37 @@
-# Store export tokens hashed
+# Prepare export-token hash storage with a safe expand phase
 
 ## Why
 
-Export tokens are stored as plaintext in `export_tokens.token`. Since subject-bound INTERNAL tokens authorize personal duty feeds (PR #579), a database leak would expose private duty-holder identities for every feed. A hash digest at rest removes that exposure once the plaintext column is contracted away.
+Export tokens currently remain reusable secrets in the database. #582 tracks replacing plaintext storage to reduce exposure after a database leak. A direct destructive migration breaks existing calendar subscriptions when the application is rolled back.
 
 ## What Changes
 
-Expand/contract rollout:
+This change delivers only the rollback-compatible **expand phase**:
 
-- **Expand (this change):** add a nullable `token_hash` column (SHA-256 hex) with a unique index; backfill it for existing rows. New tokens store plaintext in `token` (rollback compatibility) plus their hash in `token_hash`.
-- **Readers:** feed lookup prefers the plaintext column and falls back to the hash column, so both hash-aware and hash-unaware releases work during rollout; the RLS export context still carries the presented plaintext and all existing policies stay untouched.
-- **Secret exposure:** `GET /api/v1/export-tokens` lists metadata without the secret; the plaintext is returned exactly once in the creation response.
-- **Contract (follow-up revision after the rollback window closes):** drop the plaintext `token` column and require `token_hash`; the hash-only lookup path is already exercised by this change.
+- Add a nullable, uniquely indexed SHA-256 `token_hash` column and backfill every existing plaintext token.
+- New writers persist both the original secret in `token` and its digest in `token_hash`. Older application versions may continue writing rows with no hash.
+- Keep plaintext lookup and the existing RLS session-token contract authoritative. A digest is not accepted as a feed credential. This phase does not claim hash-only feed support.
+- Return the secret only in the creation response. Listings return metadata, including `token: null`.
+- Offer an absolute, copyable subscription URL immediately after creation. Event-date changes and ancillary name-loading failures must not discard that URL; an identity or district switch must clear it.
+- Document migration ordering, rollback compatibility and the impact on links that have not been copied.
 
 ## Capabilities
 
 ### Modified Capabilities
 
-- `ical-export`: token hash column, secret-once lifecycle, feed lookup with hash fallback.
+- `ical-export`: additive hash storage, one-time creation response and preserved feed compatibility.
 
 ## Impact
 
-Breaking for UI flows that expect a reusable listed token. Rollback to a hash-unaware release keeps every existing ICS subscription working because the plaintext column survives the expand phase. No change to RBAC, token types, scoping, RLS policies or feed content.
+The UI can no longer reconstruct an existing link from listings; already subscribed calendars continue using their original URL. The migration must run before the new backend starts. RBAC, RLS policies, token types and feed content remain unchanged.
+
+**Security limitation:** plaintext remains in the database during this phase. #582 stays open; this release does not yet protect export secrets against a database leak.
+
+## Follow-up: contract phase
+
+After an explicitly closed rollback window, a separate change must backfill rows written by older versions, update every RLS policy and SECURITY DEFINER helper to verify hashes, adapt ORM/repository readers, prove anonymous personal and district feeds under NOBYPASSRLS, and only then remove plaintext storage. Dropping a column alone is not sufficient.
 
 ## Non-goals
 
-- Token rotation reminders or expiry policies.
-- Changing token entropy (`secrets.token_urlsafe(32)` stays).
-- Encrypting instead of hashing (feeds must remain verifiable without a server-side secret store beyond the digest).
+- Completing the contract phase or offering a reveal endpoint.
+- Changing token entropy, rotation or expiry policies.
