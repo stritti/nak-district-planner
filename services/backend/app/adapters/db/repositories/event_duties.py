@@ -245,6 +245,15 @@ class SqlEventDutiesRepository(EventDutiesRepository):
         row = await self.session.get(DutyNameSuggestionORM, suggestion_id)
         return _to_domain(DutyNameSuggestion, row) if row else None
 
+    async def lock_suggestion(self, suggestion_id):
+        row = await self.session.scalar(
+            select(DutyNameSuggestionORM)
+            .where(DutyNameSuggestionORM.id == suggestion_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return _to_domain(DutyNameSuggestion, row) if row else None
+
     async def list_suggestions(self, district_id, congregation_id, category_id):
         rows = (
             await self.session.scalars(

@@ -14,3 +14,8 @@ Every writer of a field that is also editable inline SHALL be conditional on the
 #### Scenario: Dialog retains the revision it was opened with
 - **WHEN** a matrix dialog or the event editor saves an assignment
 - **THEN** it sends the revision read with the cell or returned by the preceding event update, never a later or empty one
+
+#### Scenario: Rows without a modification timestamp
+- **WHEN** an organisational duty assignment or a name suggestion is changed
+- **THEN** its revision is derived from the row content, so any concurrent change to the row invalidates an earlier revision
+- **AND** creating a new assignment remains unconditional because there is no prior state to protect

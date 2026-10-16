@@ -82,6 +82,10 @@ class Repository:
     async def get_suggestion(self, suggestion_id):
         return next((s for s in self.suggestions if s.id == suggestion_id), None)
 
+    async def lock_suggestion(self, suggestion_id):
+        self.locks.append("suggestion")
+        return await self.get_suggestion(suggestion_id)
+
     async def get_assignment(self, assignment_id):
         return next((a for a in self.assignments if a.id == assignment_id), None)
 

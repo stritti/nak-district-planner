@@ -3,6 +3,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { ApiError } from '../api/errors'
 import {
   deleteDutyAssignment,
   getSlotDuties,
@@ -34,6 +35,8 @@ const kind = ref('name')
 const name = ref('')
 const subject = ref('')
 const editing = ref<string>()
+// Revision read when the edit started; a reload must not silently replace it.
+const editingRevision = ref('')
 const loading = ref(false)
 const error = ref('')
 let version = 0
@@ -110,6 +113,13 @@ interface ActionOptions<Result> {
   mutated?: boolean
 }
 
+const STALE =
+  'Der Eintrag wurde zwischenzeitlich geändert. Die Ansicht wurde aktualisiert – bitte erneut versuchen.'
+
+function isStale(cause: unknown): boolean {
+  return cause instanceof ApiError && (cause.status === 412 || cause.status === 428)
+}
+
 async function runAction<Result>(
   action: () => Promise<Result>,
   options: ActionOptions<Result>,
@@ -123,7 +133,14 @@ async function runAction<Result>(
     if (options.mutated) emit('mutated')
     if (options.reload) await load()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : options.failure
+    if (isStale(cause)) {
+      // Reload first (it clears the error), then explain why the action did not apply.
+      editing.value = undefined
+      await load()
+      error.value = STALE
+    } else {
+      error.value = cause instanceof Error ? cause.message : options.failure
+    }
   } finally {
     loading.value = false
   }
@@ -140,6 +157,7 @@ async function save() {
       props.slotId,
       identity,
       editing.value,
+      editing.value ? editingRevision.value : undefined,
     ),
     {
       failure: 'Speichern fehlgeschlagen',
@@ -147,6 +165,7 @@ async function save() {
         name.value = ''
         subject.value = ''
         editing.value = undefined
+        editingRevision.value = ''
       },
       mutated: true,
       reload: true,
@@ -154,23 +173,28 @@ async function save() {
   )
 }
 
-async function remove(id: string) {
+async function remove(assignment: DutyAssignment) {
   await runAction(
-    () => deleteDutyAssignment(props.districtId, id),
+    () => deleteDutyAssignment(props.districtId, assignment.id, assignment.revision),
     { failure: 'Entfernen fehlgeschlagen', mutated: true, reload: true },
   )
 }
 
-async function revalidate(id: string) {
+async function revalidate(assignment: DutyAssignment) {
   await runAction(
-    () => revalidateDutyAssignment(props.districtId, id),
+    () => revalidateDutyAssignment(props.districtId, assignment.id, assignment.revision),
     { failure: 'Bestätigung fehlgeschlagen', mutated: true, reload: true },
   )
 }
 
 async function hide(suggestion: DutySuggestion) {
   await runAction(
-    () => setSuggestionHidden(props.districtId, suggestion.id, !suggestion.hidden),
+    () => setSuggestionHidden(
+      props.districtId,
+      suggestion.id,
+      !suggestion.hidden,
+      suggestion.revision,
+    ),
     {
       failure: 'Änderung fehlgeschlagen',
       apply: updated => {
@@ -184,6 +208,7 @@ async function hide(suggestion: DutySuggestion) {
 
 function edit(assignment: DutyAssignment) {
   editing.value = assignment.id
+  editingRevision.value = assignment.revision
   category.value = assignment.duty_category_id
   kind.value = assignment.linked_user_sub ? 'account' : 'name'
   subject.value = assignment.linked_user_sub ?? ''
@@ -214,7 +239,7 @@ function edit(assignment: DutyAssignment) {
           data-testid="revalidate-duty"
           :disabled="loading"
           class="text-blue-600"
-          @click="revalidate(assignment.id)"
+          @click="revalidate(assignment)"
         >
           Geltungsbereich bestätigen
         </button>
@@ -232,7 +257,7 @@ function edit(assignment: DutyAssignment) {
           data-testid="remove-duty"
           :disabled="loading"
           class="text-red-600"
-          @click="remove(assignment.id)"
+          @click="remove(assignment)"
         >
           Entfernen
         </button>

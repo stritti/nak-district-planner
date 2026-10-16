@@ -4,9 +4,10 @@
 """Scoped organisational duty administration and planner assignment APIs."""
 
 from dataclasses import asdict, replace
+from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.exc import IntegrityError
 
 from app.adapters.api.deps import (
@@ -14,6 +15,7 @@ from app.adapters.api.deps import (
     DbSession,
     get_event_duties_repository,
 )
+from app.adapters.api.revisions import content_revision, require_current_revision
 from app.adapters.api.schemas.event_duty import (
     AssignmentWrite,
     CategoryCreate,
@@ -35,6 +37,12 @@ from app.domain.models.role import Role
 from app.domain.ports.event_duties import EventDutiesRepository
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/duties", tags=["event-duties"])
+
+IfMatch = Annotated[str | None, Header(alias="If-Match")]
+
+
+def with_revision(entity) -> dict:
+    return {**asdict(entity), "revision": content_revision(entity)}
 
 
 def guard(auth, district_id, congregation_id, role):
@@ -58,7 +66,7 @@ async def slot_for(repository, auth, district_id, slot_id, role):
 
 async def assignment_result(operation):
     try:
-        return asdict(await operation)
+        return with_revision(await operation)
     except DutyNotFoundError as exc:
         raise HTTPException(404, "Reference not found") from exc
     except DutyConflictError as exc:
@@ -210,7 +218,7 @@ async def assignments(
         "categories": [asdict(category) for category in view.categories],
         "assignments": [
             dict(
-                asdict(item.assignment),
+                with_revision(item.assignment),
                 needs_review=item.needs_review,
                 over_capacity=item.over_capacity,
                 quarantined=item.quarantined,
@@ -257,9 +265,13 @@ async def replace_assignment(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     repository: EventDutiesRepository = Depends(get_event_duties_repository),
+    if_match: IfMatch = None,
 ):
     assignment = await assignment_for(repository, auth, district_id, assignment_id)
     slot = await slot_for(repository, auth, district_id, assignment.planning_slot_id, Role.PLANNER)
+    # The service re-reads the row under its lock and rejects any difference (409),
+    # so the revision verified here is the state the write starts from.
+    require_current_revision(if_match, content_revision(assignment))
     return await assignment_result(
         EventDutiesService(repository).replace(
             district_id,
@@ -279,6 +291,7 @@ async def remove_assignment(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     repository: EventDutiesRepository = Depends(get_event_duties_repository),
+    if_match: IfMatch = None,
 ):
     assignment = await assignment_for(repository, auth, district_id, assignment_id)
     slot = await repository.lock_slot(assignment.planning_slot_id, district_id)
@@ -300,6 +313,7 @@ async def remove_assignment(
         locked_assignment.congregation_id,
         Role.PLANNER,
     )
+    require_current_revision(if_match, content_revision(locked_assignment))
     await repository.delete_assignment(assignment_id)
 
 
@@ -310,9 +324,11 @@ async def revalidate_assignment(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     repository: EventDutiesRepository = Depends(get_event_duties_repository),
+    if_match: IfMatch = None,
 ):
     assignment = await assignment_for(repository, auth, district_id, assignment_id)
     slot = await slot_for(repository, auth, district_id, assignment.planning_slot_id, Role.PLANNER)
+    require_current_revision(if_match, content_revision(assignment))
     return await assignment_result(
         EventDutiesService(repository).revalidate(
             district_id,
@@ -335,7 +351,7 @@ async def suggestions(
 ):
     await scope(db, auth, district_id, congregation_id, Role.PLANNER)
     rows = await repository.list_suggestions(district_id, congregation_id, duty_category_id)
-    return [asdict(row) for row in rows if include_hidden or not row.hidden]
+    return [with_revision(row) for row in rows if include_hidden or not row.hidden]
 
 
 @router.post("/suggestions", status_code=201)
@@ -351,7 +367,7 @@ async def remember(
     if not any(category.id == body.duty_category_id for category in category_rows):
         raise HTTPException(404, "Reference not found")
     try:
-        return asdict(
+        return with_revision(
             await repository.remember(
                 district_id,
                 body.congregation_id,
@@ -372,12 +388,14 @@ async def suppress(
     auth: CurrentUserWithMemberships,
     db: DbSession,
     repository: EventDutiesRepository = Depends(get_event_duties_repository),
+    if_match: IfMatch = None,
 ):
-    suggestion = await repository.get_suggestion(suggestion_id)
+    suggestion = await repository.lock_suggestion(suggestion_id)
     if not suggestion or suggestion.district_id != district_id:
         raise HTTPException(404, "Reference not found")
     await scope(db, auth, district_id, suggestion.congregation_id, Role.PLANNER)
-    return asdict(await repository.save_suggestion(replace(suggestion, hidden=body.hidden)))
+    require_current_revision(if_match, content_revision(suggestion))
+    return with_revision(await repository.save_suggestion(replace(suggestion, hidden=body.hidden)))
 
 
 @router.get("/eligible-users")
