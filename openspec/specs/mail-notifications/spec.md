@@ -13,6 +13,18 @@ The domain SHALL define a `MailService` port with `send(to, subject, body)`. The
 - **WHEN** `EMAIL_FOOTER` is empty
 - **THEN** the body is sent without separator or footer
 
+### Requirement: SMTP credentials require verified TLS
+The SMTP adapter SHALL NOT authenticate unless the connection was upgraded with STARTTLS using a certificate- and hostname-verifying context. Production startup SHALL be refused when `SMTP_USER`/`SMTP_PASSWORD` are set together with `SMTP_STARTTLS=false`. A relay without authentication MAY be used without STARTTLS only as an explicit operator choice.
+
+#### Scenario: Credentials with TLS disabled
+- **WHEN** `SMTP_USER` and `SMTP_PASSWORD` are configured and `SMTP_STARTTLS` is `false`
+- **THEN** the production guard and the adapter constructor reject the configuration before any mail is sent
+
+#### Scenario: STARTTLS unavailable or certificate invalid
+- **WHEN** the server offers no STARTTLS or the certificate fails verification
+- **THEN** delivery fails with `MailDeliveryError`
+- **AND** the password is never transmitted
+
 ### Requirement: Reminder configuration
 District admins SHALL manage reminder configurations under `/api/v1/districts/{id}/reminder-configs` (create, list incl. inactive, update, delete) with day of month, local time, `recipient_role` (an RBAC role), subject and body templates and `is_active`.
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+import ssl
 import uuid
 from datetime import UTC, date, datetime, time
 from unittest.mock import MagicMock, patch
@@ -146,6 +147,56 @@ def test_smtp_failure_is_translated_without_leaking_credentials() -> None:
         )
         with pytest.raises(MailDeliveryError, match="SMTP delivery failed"):
             service.send(["one@example.org"], "subject", "body")
+
+
+def test_smtp_never_sends_credentials_without_tls() -> None:
+    with pytest.raises(ValueError, match="STARTTLS"):
+        SmtpMailService(
+            host="smtp.example.org", port=587, username="user", password="password",
+            from_address="sender@example.org", use_starttls=False,
+        )
+
+
+def test_smtp_login_fails_closed_when_starttls_is_unavailable() -> None:
+    smtp = MagicMock()
+    smtp.__enter__.return_value = smtp
+    smtp.starttls.side_effect = smtplib.SMTPNotSupportedError("STARTTLS not supported")
+    with patch("app.adapters.mail.smtp.smtplib.SMTP", return_value=smtp):
+        service = SmtpMailService(
+            host="smtp.example.org", port=587, username="user", password="password",
+            from_address="sender@example.org",
+        )
+        with pytest.raises(MailDeliveryError):
+            service.send(["one@example.org"], "subject", "body")
+    smtp.login.assert_not_called()
+    smtp.send_message.assert_not_called()
+
+
+def test_smtp_certificate_failure_aborts_before_login() -> None:
+    smtp = MagicMock()
+    smtp.__enter__.return_value = smtp
+    smtp.starttls.side_effect = ssl.SSLCertVerificationError("bad certificate")
+    with patch("app.adapters.mail.smtp.smtplib.SMTP", return_value=smtp):
+        service = SmtpMailService(
+            host="smtp.example.org", port=587, username="user", password="password",
+            from_address="sender@example.org",
+        )
+        with pytest.raises(MailDeliveryError):
+            service.send(["one@example.org"], "subject", "body")
+    smtp.login.assert_not_called()
+
+
+def test_smtp_uses_certificate_verifying_context() -> None:
+    smtp = MagicMock()
+    smtp.__enter__.return_value = smtp
+    with patch("app.adapters.mail.smtp.smtplib.SMTP", return_value=smtp):
+        SmtpMailService(
+            host="smtp.example.org", port=587, username="user", password="password",
+            from_address="sender@example.org",
+        ).send(["one@example.org"], "subject", "body")
+    context = smtp.starttls.call_args.kwargs["context"]
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
 
 
 def test_smtp_rejects_header_injection_and_incomplete_credentials() -> None:

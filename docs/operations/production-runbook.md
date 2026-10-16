@@ -26,6 +26,7 @@ Dieses Runbook beschreibt den operativen Mindestablauf fuer produktive Deploymen
 | IDP-Provisioning | bei Aktivierung HTTPS-Endpunkt und Secret gesetzt |
 | `SUPERADMIN_SUB` | bei frischer leerer Installation vor der Migration gesetzt |
 | `BACKUP_ENCRYPT_KEY` | fuer verschluesselte Backups gesetzt |
+| `SMTP_STARTTLS` | `true`, sobald `SMTP_USER`/`SMTP_PASSWORD` gesetzt sind (in Produktion erzwungen; Start schlaegt sonst fehl). Ein Relay ohne Authentifizierung darf bewusst ohne STARTTLS betrieben werden, nur im vertrauenswuerdigen internen Netz. |
 | `CALENDAR_ALLOW_INSECURE_URLS` | `false` (in Produktion erzwungen; Start von API, Worker und Beat schlaegt sonst fehl) |
 | `CALENDAR_NAT64_PREFIXES` | Nur bei IPv6-only-Hosts mit DNS64/NAT64 und netzspezifischem Praefix (RFC 6052) setzen: kommagetrennte IPv6-CIDRs der Laenge 32/40/48/56/64/96, z. B. `2001:db8:64::/96`. Ohne Eintrag koennten Kalender-URLs ueber das NAT64-Praefix interne IPv4-Ziele erreichen (SSRF). `64:ff9b::/96` und `64:ff9b:1::/48` werden immer geprueft. Ungueltige Werte verhindern den Start. |
 
