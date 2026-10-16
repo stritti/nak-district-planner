@@ -498,7 +498,7 @@ def test_notification_state_rls_is_subject_and_tenant_scoped(owner, data) -> Non
                 "WHERE notification_id IN (%s, %s)",
                 (first, foreign),
             )
-            assert cur.fetchall() == [(uuid.UUID(first), viewer)]
+            assert cur.fetchall() == [(first, viewer)]
             cur.execute(
                 "UPDATE notification_user_states SET dismissed_at=now() "
                 "WHERE notification_id=%s AND user_sub=%s RETURNING user_sub",
