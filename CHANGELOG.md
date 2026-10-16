@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.2.0](https://github.com/stritti/nak-district-planner/compare/v1.1.0...v1.2.0) (2026-10-16)
+
+
+### Features
+
+* **events:** inline category and congregation changes with duty impact preview ([145d326](https://github.com/stritti/nak-district-planner/commit/145d3268096dc88f934c652078afe088e69c8e6b))
+* **events:** inline rescheduling in the event list with conditional write and conflict confirmation ([f01196d](https://github.com/stritti/nak-district-planner/commit/f01196d7eecbf053c5aa5afb481c0f6a1a3177dd))
+* **events:** inline start, category and congregation on mobile event cards ([23d0767](https://github.com/stritti/nak-district-planner/commit/23d0767544f065d9e8e20931b5b211e08aece93c))
+* **events:** Inline-Editing auf mobilen Ereigniskarten ([24c8d81](https://github.com/stritti/nak-district-planner/commit/24c8d81a99a94e83e02e83213e02026f5318f3ac))
+* **inline-editing:** Change abschließen und archivieren (bedingte Schreibzugriffe, Tabellen-Regressionen) ([#599](https://github.com/stritti/nak-district-planner/issues/599)) ([1f4848f](https://github.com/stritti/nak-district-planner/commit/1f4848fb090de8a58bec18bfa8642b49fdb668bb))
+* **leaders:** inline grade, special role, home congregation and active state ([8d6005f](https://github.com/stritti/nak-district-planner/commit/8d6005f6d15f9bddde7c0d498d89f29cda6bf4f0))
+* **leaders:** Inline-Editing in der Amtstragenden-Verwaltung ([72db29d](https://github.com/stritti/nak-district-planner/commit/72db29da6a87d181fde274164aa0b241ff05ea7b))
+
+
+### Bug Fixes
+
+* **auth:** keep provider details out of adapter errors and throttle JWKS without a cache ([#471](https://github.com/stritti/nak-district-planner/issues/471)) ([2604925](https://github.com/stritti/nak-district-planner/commit/26049255a706dc3629d89afe6f180b79b06fc866))
+* **auth:** Provider-Details aus Adapter-Fehlern halten, JWKS ohne Cache drosseln, Spec abgleichen ([#471](https://github.com/stritti/nak-district-planner/issues/471)) ([b1cb206](https://github.com/stritti/nak-district-planner/commit/b1cb206e7aaf9bc4ae8e75eacead21e09eb197e2))
+* cover reveal endpoint and hashed-token UI branches, satisfy ruff C408 ([421f902](https://github.com/stritti/nak-district-planner/commit/421f9025c82563330301b7e8dcf98688847eb762))
+* derive permission-guard hierarchy from PRIVILEGE_ORDER ([96e0275](https://github.com/stritti/nak-district-planner/commit/96e0275b4fa7af43e1f8a795e0377e2f0a601bce))
+* do not hash legacy tokens during unauthenticated feed lookups ([902b8ce](https://github.com/stritti/nak-district-planner/commit/902b8ce1beaa52e18c71f5a2f75bdbecfaa08dae))
+* drop unnecessary list comprehension in audit snapshot test ([8ec7423](https://github.com/stritti/nak-district-planner/commit/8ec74233278050c996f00051eb825a8427c61b8c))
+* **events:** enforce duty impact server-side and address review findings ([ef4577d](https://github.com/stritti/nak-district-planner/commit/ef4577d75a9631cc2f9dc667951da3acb841f8df))
+* expand/contract rollout for hashed export tokens per review ([2792c06](https://github.com/stritti/nak-district-planner/commit/2792c0630f728181d751512013c3a91ef6455dcd))
+* **export:** prepare token hashes and preserve one-time calendar links ([7c95652](https://github.com/stritti/nak-district-planner/commit/7c95652e5b896a3208901d47483cf3a1da3ebf84))
+* **export:** preserve one-time links during the token hash expand rollout ([dd85c29](https://github.com/stritti/nak-district-planner/commit/dd85c29ec09487487e7876ec9c6d70d008c78777))
+* hash-only migration without column type change, complete spec scenarios, align test toast ([a1bef06](https://github.com/stritti/nak-district-planner/commit/a1bef06e503a912a4863ff68396f0d0650ed687f))
+* interpolate role filter in duty_assignment_count SQL and drop unused f-prefixes ([52b8349](https://github.com/stritti/nak-district-planner/commit/52b83491d3d0a5a47823ffee9c27ab36a0c7fdee))
+* **leaders:** enforce deactivation confirmation server-side and reload inactive leaders after 412 ([cb2af46](https://github.com/stritti/nak-district-planner/commit/cb2af462a7e5f9a03eb8e078ca671bc96789f6b4))
+* **planning:** stabiler Fehlervertrag für wiederkehrende Termine ([#557](https://github.com/stritti/nak-district-planner/issues/557)) ([d2b31f7](https://github.com/stritti/nak-district-planner/commit/d2b31f7b0dddcff1e2a5ab3a707d8709ea6aa8cc))
+* **planning:** stable error contract for single recurring occurrence actions ([#557](https://github.com/stritti/nak-district-planner/issues/557)) ([d2a6aa5](https://github.com/stritti/nak-district-planner/commit/d2a6aa5a2098811b3ee814ee6afe90e36bab2e2e))
+* **planning:** whitelist-only error display and codes for template endpoints ([#557](https://github.com/stritti/nak-district-planner/issues/557)) ([78d79dd](https://github.com/stritti/nak-district-planner/commit/78d79ddb09987434b544f7b13b123d52326579b9))
+* RLS-aware export token lookup for legacy plaintext rows ([4e888cc](https://github.com/stritti/nak-district-planner/commit/4e888cce7249db9c0aabfef326eeee0872b2e99f))
+* **security:** clientweite Rate-Limit-Buckets statt URL-Pfad ([#600](https://github.com/stritti/nak-district-planner/issues/600)) ([#607](https://github.com/stritti/nak-district-planner/issues/607)) ([199cd4b](https://github.com/stritti/nak-district-planner/commit/199cd4b5432072e9c0b867a8e94e5490ed7b3c04))
+* **security:** Notification-Status pro Benutzer isolieren ([#601](https://github.com/stritti/nak-district-planner/issues/601)) ([#608](https://github.com/stritti/nak-district-planner/issues/608)) ([677c91b](https://github.com/stritti/nak-district-planner/commit/677c91b7bad0d9ee918bc997e298616c869fdb7e))
+
 ## [1.1.0](https://github.com/stritti/nak-district-planner/compare/v1.0.0...v1.1.0) (2026-10-15)
 
 
