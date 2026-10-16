@@ -50,7 +50,7 @@ class TestNotificationsRouter:
         )
         assert result["total"] == 0
         assert result["items"] == []
-        service.list.assert_awaited_once_with(district_id, unread_only=False, limit=50, offset=0)
+        service.list.assert_awaited_once_with(district_id, "test-user", unread_only=False, limit=50, offset=0)
 
     async def test_list_notifications_unread_only(self):
         service = AsyncMock()
@@ -65,7 +65,7 @@ class TestNotificationsRouter:
             offset=5,
             service=service,
         )
-        service.list.assert_awaited_once_with(district_id, unread_only=True, limit=10, offset=5)
+        service.list.assert_awaited_once_with(district_id, "test-user", unread_only=True, limit=10, offset=5)
 
     async def test_unread_count(self):
         service = AsyncMock()
@@ -78,7 +78,7 @@ class TestNotificationsRouter:
             service=service,
         )
         assert result == {"count": 7}
-        service.get_unread_count.assert_awaited_once_with(district_id)
+        service.get_unread_count.assert_awaited_once_with(district_id, "test-user")
 
     async def test_unread_count_zero(self):
         service = AsyncMock()
@@ -103,7 +103,7 @@ class TestNotificationsRouter:
             service=service,
         )
         assert result is None  # 204 No Content
-        service.mark_read.assert_awaited_once_with(notification_id)
+        service.mark_read.assert_awaited_once_with(notification_id, "test-user")
 
     async def test_mark_read_not_found(self):
         notification_id = uuid.uuid4()

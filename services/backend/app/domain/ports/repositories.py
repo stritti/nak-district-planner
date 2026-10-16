@@ -489,6 +489,7 @@ class NotificationRepository(ABC):
     async def list_by_district(
         self,
         district_id: uuid.UUID,
+        user_sub: str,
         *,
         unread_only: bool = False,
         limit: int = 50,
@@ -502,11 +503,11 @@ class NotificationRepository(ABC):
         pass
 
     @abstractmethod
-    async def mark_read(self, notification_id: uuid.UUID) -> None:
+    async def mark_read(self, notification_id: uuid.UUID, user_sub: str) -> None:
         pass
 
     @abstractmethod
-    async def mark_dismissed(self, notification_id: uuid.UUID) -> None:
+    async def mark_dismissed(self, notification_id: uuid.UUID, user_sub: str) -> None:
         """Idempotently dismiss an existing notification."""
         pass
 

@@ -38,7 +38,9 @@ async def list_notifications(
     service: NotificationService = Depends(get_notification_service),
 ) -> dict:
     require_role_in_district(auth, Role.VIEWER, district_id)
-    return await service.list(district_id, unread_only=unread_only, limit=limit, offset=offset)
+    return await service.list(
+        district_id, auth.user_sub, unread_only=unread_only, limit=limit, offset=offset
+    )
 
 
 @router.get("/{district_id}/unread-count")
@@ -48,7 +50,7 @@ async def unread_count(
     service: NotificationService = Depends(get_notification_service),
 ) -> dict:
     require_role_in_district(auth, Role.VIEWER, district_id)
-    count = await service.get_unread_count(district_id)
+    count = await service.get_unread_count(district_id, auth.user_sub)
     return {"count": count}
 
 
@@ -59,7 +61,7 @@ async def mark_read(
     service: NotificationService = Depends(get_notification_service),
 ) -> None:
     _authorized_notification(await service.get(notification_id), auth)
-    await service.mark_read(notification_id)
+    await service.mark_read(notification_id, auth.user_sub)
 
 
 @router.post("/{notification_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
@@ -70,7 +72,7 @@ async def dismiss_notification(
 ) -> None:
     """Dismiss a notification; repeated requests are idempotent."""
     _authorized_notification(await service.get(notification_id), auth)
-    await service.dismiss(notification_id)
+    await service.dismiss(notification_id, auth.user_sub)
 
 
 @router.post("/{district_id}/read-all", status_code=status.HTTP_200_OK)

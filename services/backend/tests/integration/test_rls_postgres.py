@@ -461,3 +461,75 @@ def test_export_expand_keeps_anonymous_feeds_scoped_and_rejects_digest(owner, da
         cur.execute("SELECT id FROM export_tokens WHERE token=%s", (secret,))
         assert cur.fetchall() == []
         assert _visible_ids(cur, "planning_slots", [data.a.slot_id, data.b.slot_id]) == set()
+
+
+
+def test_notification_state_rls_is_subject_and_tenant_scoped(owner, data) -> None:
+    """Two district members must not read or alter each other's notification state."""
+    first = str(uuid.uuid4())
+    foreign = str(uuid.uuid4())
+    viewer = data.sub("viewer-a")
+    planner = data.sub("planner-a")
+
+    with owner.cursor() as cur:
+        for notification_id, district_id in (
+            (first, data.a.district_id),
+            (foreign, data.b.district_id),
+        ):
+            cur.execute(
+                "INSERT INTO notifications "
+                "(id, district_id, type, title, body, payload, created_at) "
+                "VALUES (%s, %s, 'SYSTEM', 'Security test', '', '{}', now())",
+                (notification_id, str(district_id)),
+            )
+        for notification_id, user_sub in (
+            (first, viewer), (first, planner), (foreign, viewer),
+        ):
+            cur.execute(
+                "INSERT INTO notification_user_states (notification_id, user_sub) "
+                "VALUES (%s, %s)",
+                (notification_id, user_sub),
+            )
+
+    try:
+        with app_session(viewer) as cur:
+            cur.execute(
+                "SELECT notification_id, user_sub FROM notification_user_states "
+                "WHERE notification_id IN (%s, %s)",
+                (first, foreign),
+            )
+            assert cur.fetchall() == [(first, viewer)]
+            cur.execute(
+                "UPDATE notification_user_states SET dismissed_at=now() "
+                "WHERE notification_id=%s AND user_sub=%s RETURNING user_sub",
+                (first, planner),
+            )
+            assert cur.fetchall() == []
+            cur.execute(
+                "UPDATE notification_user_states SET dismissed_at=now() "
+                "WHERE notification_id=%s AND user_sub=%s RETURNING user_sub",
+                (first, viewer),
+            )
+            assert cur.fetchall() == [(viewer,)]
+
+        with app_session(planner) as cur:
+            cur.execute(
+                "SELECT user_sub, dismissed_at FROM notification_user_states "
+                "WHERE notification_id=%s",
+                (first,),
+            )
+            assert cur.fetchall() == [(planner, None)]
+
+        with app_session(data.sub("outsider")) as cur:
+            cur.execute(
+                "SELECT notification_id FROM notification_user_states "
+                "WHERE notification_id IN (%s, %s)",
+                (first, foreign),
+            )
+            assert cur.fetchall() == []
+    finally:
+        with owner.cursor() as cur:
+            cur.execute(
+                "DELETE FROM notifications WHERE id IN (%s, %s)",
+                (first, foreign),
+            )
