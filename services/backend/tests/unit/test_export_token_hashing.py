@@ -30,7 +30,7 @@ def _create(**overrides):
 
 def test_create_returns_plaintext_once_and_computes_hash():
     token, raw_secret = _create()
-    assert token.token == raw_secret
+    assert not hasattr(token, "token")
     assert token.token_hash == hash_export_token(raw_secret)
     assert token.token_hash != raw_secret
 
