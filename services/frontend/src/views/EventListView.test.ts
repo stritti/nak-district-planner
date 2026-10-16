@@ -850,6 +850,115 @@ describe('Inline editing in the event overview', () => {
     expect(eventsApi.previewEventChange).not.toHaveBeenCalled()
   })
 
+  it.each([['VIEWER'], [undefined]])(
+    'offers no inline editor to a user with role %s, on desktop or mobile',
+    async (role) => {
+      const { wrapper } = setup([event()])
+      useAuthStore().memberships = role
+        ? [{ role, scope_type: 'DISTRICT', scope_id: 'd1' }] as never
+        : []
+      await flushPromises()
+      await flushPromises()
+      for (const layout of ['desktop', 'mobile']) {
+        for (const field of ['title', 'start', 'category', 'congregation']) {
+          const cell = wrapper.get(`[data-inline-cell-id="event-${field}-${layout}-e1"]`)
+          await cell.trigger('click')
+          await cell.trigger('keydown', { key: 'Enter' })
+          expect(cell.find('input, select').exists()).toBe(false)
+        }
+      }
+      expect(wrapper.findAll('[data-inline-editable="true"]')).toHaveLength(0)
+      expect(eventsApi.updateEventInline).not.toHaveBeenCalled()
+      expect(eventsApi.updateEvent).not.toHaveBeenCalled()
+    },
+  )
+
+  it('saves with Tab and moves the editor to the next editable cell, Shift+Tab back', async () => {
+    vi.mocked(eventsApi.updateEventInline).mockResolvedValue(event({ title: 'Neu', revision: '"revision-2"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await flushPromises()
+
+    const title = wrapper.get('[data-inline-cell-id="event-title-desktop-e1"]')
+    await title.trigger('click')
+    await flushPromises()
+    await title.get('input').setValue('Neu')
+    await title.get('input').trigger('keydown', { key: 'Tab' })
+    await flushPromises()
+
+    expect(eventsApi.updateEventInline).toHaveBeenCalledWith('e1', { title: 'Neu' }, '"revision-1"')
+    const start = wrapper.get('[data-inline-cell-id="event-start-desktop-e1"]')
+    expect(start.find('input').exists()).toBe(true)
+
+    await start.get('input').trigger('keydown', { key: 'Tab', shiftKey: true })
+    await flushPromises()
+    expect(wrapper.get('[data-inline-cell-id="event-title-desktop-e1"]').find('input').exists()).toBe(true)
+  })
+
+  it('does not move on with Tab while the current cell cannot be saved', async () => {
+    vi.mocked(eventsApi.updateEventInline).mockRejectedValue(
+      new ApiError(409, 'Conflict', { detail: 'Konflikt' }),
+    )
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await flushPromises()
+    const title = wrapper.get('[data-inline-cell-id="event-title-desktop-e1"]')
+    await title.trigger('click')
+    await flushPromises()
+    await title.get('input').setValue('Neu')
+    await title.get('input').trigger('keydown', { key: 'Tab' })
+    await flushPromises()
+    expect(title.find('input').exists()).toBe(true)
+    expect(title.get('[role="alert"]').text()).toContain('Konflikt')
+    expect(wrapper.get('[data-inline-cell-id="event-start-desktop-e1"]').find('input').exists()).toBe(false)
+  })
+
+  it('retries a failed save with the same draft and revision after a transport error', async () => {
+    vi.mocked(eventsApi.updateEventInline)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(event({ title: 'Neu', revision: '"revision-2"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    await flushPromises()
+    const title = wrapper.get('[data-inline-cell-id="event-title-desktop-e1"]')
+    await title.trigger('click')
+    await flushPromises()
+    await title.get('input').setValue('Neu')
+    await title.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(title.get('[role="alert"]').text()).toContain('offline')
+    await title.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(eventsApi.updateEventInline).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(eventsApi.updateEventInline).mock.calls[1]).toEqual(
+      ['e1', { title: 'Neu' }, '"revision-1"'],
+    )
+    expect(title.find('input').exists()).toBe(false)
+  })
+
+  it('keeps the current page and filters when an inline save refreshes the list', async () => {
+    vi.mocked(eventsApi.updateEventInline).mockResolvedValue(event({ title: 'Neu', revision: '"revision-2"' }))
+    const { wrapper, eventsStore } = setup([event()])
+    vi.mocked(eventsApi.listEvents).mockResolvedValue(response([event()], 120))
+    await flushPromises()
+    eventsStore.goToPage(2)
+    await eventsStore.fetch()
+    await flushPromises()
+    const before = vi.mocked(eventsApi.listEvents).mock.calls.length
+
+    const title = wrapper.get('[data-inline-cell-id="event-title-desktop-e1"]')
+    await title.trigger('click')
+    await flushPromises()
+    await title.get('input').setValue('Neu')
+    await title.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    const refreshed = vi.mocked(eventsApi.listEvents).mock.calls.slice(before)
+    expect(refreshed.length).toBeGreaterThan(0)
+    for (const [params] of refreshed) expect(params?.offset).toBe(50)
+    expect(eventsStore.currentPage).toBe(2)
+  })
+
   it('does not offer inline rescheduling for linked invitation copies or read-only rows', async () => {
     const { wrapper } = setup([
       event({ id: 'external', source: 'EXTERNAL' }),

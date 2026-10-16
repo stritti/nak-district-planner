@@ -521,3 +521,93 @@ describe.each(['desktop', 'mobile'] as const)('LeadersAdminView inline appointme
     await vi.waitFor(() => expect(cell.get('[role=alert]').text()).toContain('Aktueller Stand geladen'))
   })
 })
+
+describe('LeadersAdminView table regressions', () => {
+  beforeEach(() => {
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([versionedLeader])
+    vi.mocked(leadersApi.updateLeaderInline).mockResolvedValue({ ...versionedLeader, revision: '"v2"' })
+  })
+
+  const FIELDS = ['name', 'email', 'phone', 'rank', 'special_role', 'congregation_id', 'is_active'] as const
+
+  it.each([['VIEWER'], [undefined]])('offers no inline editor to a user with role %s', async (role) => {
+    const { wrapper } = await mountView()
+    const auth = useAuthStore()
+    auth.isSuperadmin = false
+    auth.memberships = role ? [{ role, scope_type: 'DISTRICT', scope_id: 'd1' }] as never : []
+    await flushPromises()
+    for (const layout of ['desktop', 'mobile']) {
+      for (const field of FIELDS) {
+        const cell = wrapper.get(`[data-inline-cell-id="leader-${field}-${layout}-l1"]`)
+        await cell.trigger('click')
+        await cell.trigger('keydown', { key: 'F2' })
+        expect(cell.find('input, select').exists()).toBe(false)
+      }
+    }
+    expect(wrapper.findAll('[data-inline-editable="true"]')).toHaveLength(0)
+    expect(leadersApi.updateLeaderInline).not.toHaveBeenCalled()
+  })
+
+  it('saves with Tab and continues in the next editable cell of the same row', async () => {
+    const { wrapper } = await mountView()
+    const name = wrapper.get('[data-inline-cell-id="leader-name-desktop-l1"]')
+    await name.trigger('click')
+    await flushPromises()
+    await name.get('input').setValue('Neuer Name')
+    await name.get('input').trigger('keydown', { key: 'Tab' })
+    await flushPromises()
+    expect(leadersApi.updateLeaderInline).toHaveBeenCalledWith('d1', 'l1', { name: 'Neuer Name' }, '"v1"')
+    expect(wrapper.get('[data-inline-cell-id="leader-special_role-desktop-l1"]').find('select').exists()).toBe(true)
+  })
+
+  it('does not advance with Tab while the current cell cannot be saved', async () => {
+    vi.mocked(leadersApi.updateLeaderInline).mockRejectedValue(
+      new ApiError(409, 'Conflict', { detail: 'Konflikt' }),
+    )
+    const { wrapper } = await mountView()
+    const name = wrapper.get('[data-inline-cell-id="leader-name-desktop-l1"]')
+    await name.trigger('click')
+    await flushPromises()
+    await name.get('input').setValue('Neuer Name')
+    await name.get('input').trigger('keydown', { key: 'Tab' })
+    await flushPromises()
+    expect(name.get('[role="alert"]').text()).toContain('Konflikt')
+    expect(wrapper.get('[data-inline-cell-id="leader-special_role-desktop-l1"]').find('select').exists()).toBe(false)
+  })
+
+  it('retries the same draft and revision after a transport failure', async () => {
+    vi.mocked(leadersApi.updateLeaderInline)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ ...versionedLeader, name: 'Neu', revision: '"v2"' })
+    const { wrapper } = await mountView()
+    const name = wrapper.get('[data-inline-cell-id="leader-name-desktop-l1"]')
+    await name.trigger('click')
+    await flushPromises()
+    await name.get('input').setValue('Neu')
+    await name.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(name.get('[role="alert"]').text()).toContain('offline')
+    await name.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(vi.mocked(leadersApi.updateLeaderInline).mock.calls.map((call) => [call[2], call[3]])).toEqual([
+      [{ name: 'Neu' }, '"v1"'],
+      [{ name: 'Neu' }, '"v1"'],
+    ])
+  })
+
+  it('shows registrations as a read-only table whose actions only open dialogs', async () => {
+    const { wrapper } = await mountView()
+    await buttonByText(wrapper, 'Registrierungen').trigger('click')
+    await flushPromises()
+    const table = wrapper.get('[data-testid="registrations-table"]')
+    expect(table.find('[data-inline-editable]').exists()).toBe(false)
+    expect(table.find('[data-inline-cell-id]').exists()).toBe(false)
+    expect(table.find('input, select, textarea').exists()).toBe(false)
+    expect(table.get('thead').classes()).toContain('table-thead')
+    expect(table.get('th').classes()).toContain('table-th')
+
+    await table.get('button[title="Genehmigen"]').trigger('click')
+    expect(registrationsApi.approveRegistration).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Registrierung genehmigen')
+  })
+})
