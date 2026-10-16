@@ -29,16 +29,29 @@ def redact_secret_path(value: str) -> str:
 
 
 class RedactSecretPathsFilter(logging.Filter):
-    """Redact export secrets from the formatted message of any log record."""
+    """Redact export secrets from the message, traceback and stack of any log record.
+
+    ``Formatter.format`` appends the traceback (``exc_info``) and ``stack_info``
+    after ``getMessage()``, so both are rendered and redacted here as well; the
+    formatter then reuses the already redacted ``exc_text``.
+    """
+
+    _formatter = logging.Formatter()
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:
             message = record.getMessage()
-        except Exception:  # noqa: BLE001 - never break logging because of a bad format string
+            if _EXPORT_PREFIX in message:
+                record.msg = redact_secret_path(message)
+                record.args = None
+            if record.exc_info and not record.exc_text:
+                record.exc_text = self._formatter.formatException(record.exc_info)
+            if record.exc_text:
+                record.exc_text = redact_secret_path(record.exc_text)
+            if record.stack_info:
+                record.stack_info = redact_secret_path(record.stack_info)
+        except Exception:  # noqa: BLE001 - never break logging because of a bad record
             return True
-        if _EXPORT_PREFIX in message:
-            record.msg = redact_secret_path(message)
-            record.args = None
         return True
 
 

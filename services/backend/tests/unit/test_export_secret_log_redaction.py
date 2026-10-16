@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import re
 from pathlib import Path
@@ -90,6 +91,52 @@ def test_uvicorn_style_access_record_is_redacted() -> None:
     )
     assert RedactSecretPathsFilter().filter(record) is True
     assert CANARY not in record.getMessage()
+
+
+def _formatted(record: logging.LogRecord) -> str:
+    """What a real handler writes: message plus traceback and stack info."""
+    handler = logging.StreamHandler()
+    handler.addFilter(RedactSecretPathsFilter())
+    assert handler.filter(record)
+    return handler.format(record)
+
+
+def test_traceback_and_stack_info_are_redacted_in_the_final_output() -> None:
+    try:
+        raise RuntimeError(f"upstream failed for {FEED}")
+    except RuntimeError:
+        import sys
+
+        record = logging.LogRecord(
+            "app", logging.ERROR, __file__, 1, "Feed failed", None, sys.exc_info()
+        )
+    record.stack_info = f"Stack (most recent call last):\n  GET {FEED}"
+    output = _formatted(record)
+    assert CANARY not in output
+    assert "{redacted}" in output
+    assert "RuntimeError" in output  # the traceback itself is preserved
+
+
+def test_logger_exception_with_the_url_in_the_message_is_redacted(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    logger = logging.getLogger("tests.redaction")
+    handler = logging.StreamHandler()
+    handler.addFilter(RedactSecretPathsFilter())
+    stream = io.StringIO()
+    handler.setStream(stream)
+    logger.addHandler(handler)
+    logger.propagate = False
+    try:
+        try:
+            raise ValueError(FEED)
+        except ValueError:
+            logger.exception("request %s failed", FEED)
+    finally:
+        logger.removeHandler(handler)
+        logger.propagate = True
+    assert CANARY not in stream.getvalue()
+    assert "ValueError" in stream.getvalue()
 
 
 def test_installed_filter_covers_handlers_of_uvicorn_loggers() -> None:
