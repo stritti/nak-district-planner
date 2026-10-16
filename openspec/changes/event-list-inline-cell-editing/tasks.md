@@ -51,6 +51,9 @@ See [table inventory](./table-inventory.md) for explicit deferred columns and re
 - **Category** and **Zuordnung (congregation)** inline: backend `change-impact` preview now reports
   duties that would newly need review or be quarantined (`EventDutiesService.preview_scope_change`);
   the frontend (`useInlineScopeSave`) previews, confirms once, then patches conditionally.
-- Still open (not checked off): leader-administration fields, leader administration remaining fields, and the per-table
+- Still open (not checked off): remaining leader-administration workflow fields (notes, user link,
+  list visibility, service end date), and the per-table
   regression sweep of 4.5/4.6. Tasks 1.2, 2.4, 3.x and 4.3-4.6 therefore stay unchecked per the acceptance gate above.
 - Mobile event cards now use the same inline Start, Category and Zuordnung cells as the desktop table.
+- Leader administration: grade, special role, home congregation and active state are inline editable via
+  the shared `LeaderInlineCell` (desktop and mobile); activity requires DISTRICT_ADMIN and a confirmation.
