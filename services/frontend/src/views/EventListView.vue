@@ -338,7 +338,20 @@
                 required
                 :max-length="500"
               />
-              <td class="table-td whitespace-nowrap">{{ formatDt(event.start_at) }}</td>
+              <InlineEditableCell
+                :id="'event-start-desktop-' + event.id"
+                class="whitespace-nowrap"
+                :value="toLocalInputValue(event.start_at)"
+                :display-value="formatDt(event.start_at)"
+                input-type="datetime-local"
+                :revision="event.revision ?? ''"
+                :label="'Start: ' + event.title"
+                :editable="canInlineEditSchedule(event)"
+                :coordinator="inlineCoordinator"
+                :save="(value, revision) => saveInlineStart(event, value, revision)"
+                :reload="() => reloadInlineStart(event)"
+                required
+              />
               <td class="table-td">{{ event.category ?? '—' }}</td>
               <td class="table-td text-xs">
                 <span>{{ districtName(event.district_id) }}</span>
@@ -632,6 +645,7 @@ import EventDutiesPanel from '../components/EventDutiesPanel.vue'
 import EventApprovalStatusBadge from '../components/EventApprovalStatusBadge.vue'
 import InlineEditableCell from '../components/InlineEditableCell.vue'
 import InlineAssignmentCell from '../components/InlineAssignmentCell.vue'
+import { toLocalInputValue, useInlineScheduleSave } from '../composables/useInlineScheduleSave'
 import { useInlineCellCoordinator } from '../composables/useInlineCellCoordinator'
 import { useInlineAssignmentSave } from '../composables/useInlineAssignmentSave'
 import EmptyState from '../components/EmptyState.vue'
@@ -664,6 +678,7 @@ function canManageEventDuties(event: EventResponse): boolean {
 
 const inlineCoordinator = useInlineCellCoordinator()
 const saveAssignment = useInlineAssignmentSave()
+const saveSchedule = useInlineScheduleSave()
 onBeforeRouteLeave(() => inlineCoordinator.finish())
 
 function canInlineEditEvent(event: EventResponse): boolean {
@@ -699,6 +714,24 @@ async function saveInlineResponsible(event: EventResponse, leaderId: string, rev
       status: saved.status,
     },
   })
+  void nextTick(() => eventsStore.fetch({ preserveRows: true }))
+}
+
+/** Linked invitation copies follow their source event and are not rescheduled here. */
+function canInlineEditSchedule(event: EventResponse): boolean {
+  return canInlineEditEvent(event) && !event.invitation_source_event_id
+}
+
+async function reloadInlineStart(event: EventResponse): Promise<{ value: string; revision: string }> {
+  const latest = await getEvent(event.id)
+  eventsStore.updateCached(latest)
+  return { value: toLocalInputValue(latest.start_at), revision: latest.revision ?? '' }
+}
+
+async function saveInlineStart(event: EventResponse, value: string, revision: string): Promise<void> {
+  const saved = await saveSchedule(event, value, revision)
+  eventsStore.updateCached(saved)
+  // Re-fetch so filters and sorting reflect the new date without remounting the edited row.
   void nextTick(() => eventsStore.fetch({ preserveRows: true }))
 }
 

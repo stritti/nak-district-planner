@@ -651,6 +651,54 @@ describe('Inline editing in the event overview', () => {
     expect(eventsApi.listEvents).toHaveBeenCalledTimes(initialFetches + 1)
   })
 
+  it('reschedules inline with the captured revision, keeping the duration', async () => {
+    vi.mocked(eventsApi.updateEvent).mockResolvedValue(event({ revision: '"revision-2"' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-start-desktop-e1"]')
+    expect(cell.find('input').exists()).toBe(false)
+    await cell.trigger('click')
+    await flushPromises()
+    expect(cell.get('input').attributes('type')).toBe('datetime-local')
+    await cell.get('input').setValue('2030-01-02T10:00')
+    await cell.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(eventsApi.updateEvent).toHaveBeenCalledOnce()
+    const [id, payload, revision] = vi.mocked(eventsApi.updateEvent).mock.calls[0]
+    expect(id).toBe('e1')
+    expect(revision).toBe('"revision-1"')
+    expect(payload.start_at).toBe(new Date('2030-01-02T10:00').toISOString())
+    expect(payload.confirm_warnings).toBeUndefined()
+  })
+
+  it('keeps the start draft and shows the server message when rescheduling fails', async () => {
+    vi.mocked(eventsApi.updateEvent).mockRejectedValue(new ApiError(412, 'Precondition Failed', { detail: 'Ereignis wurde zwischenzeitlich geändert.' }))
+    const { wrapper } = setup([event()])
+    await flushPromises()
+    const cell = wrapper.get('[data-inline-cell-id="event-start-desktop-e1"]')
+    await cell.trigger('click')
+    await flushPromises()
+    await cell.get('input').setValue('2030-01-02T10:00')
+    await cell.get('input').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(cell.get('[role=alert]').text()).toContain('zwischenzeitlich geändert')
+    expect((cell.get('input').element as HTMLInputElement).value).toBe('2030-01-02T10:00')
+  })
+
+  it('does not offer inline rescheduling for linked invitation copies or read-only rows', async () => {
+    const { wrapper } = setup([
+      event({ id: 'external', source: 'EXTERNAL' }),
+      event({ id: 'invited', invitation_source_event_id: 'src' }),
+    ])
+    await flushPromises()
+    for (const id of ['external', 'invited']) {
+      const cell = wrapper.get('[data-inline-cell-id="event-start-desktop-' + id + '"]')
+      await cell.trigger('click')
+      expect(cell.find('input').exists()).toBe(false)
+    }
+    expect(eventsApi.updateEvent).not.toHaveBeenCalled()
+  })
+
   it('does not edit external events, cancelled events or missing-version rows', async () => {
     const { wrapper } = setup([
       event({ id: 'external', source: 'EXTERNAL' }),

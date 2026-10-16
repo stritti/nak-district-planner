@@ -39,7 +39,7 @@
         v-else
         ref="input"
         v-model="draft"
-        type="text"
+        :type="inputType"
         :aria-label="label"
         :aria-invalid="!!error"
         :aria-describedby="error ? id + '-error' : undefined"
@@ -85,9 +85,10 @@ const props = withDefaults(defineProps<{
   reload?: () => Promise<{ value: string | null | undefined; revision: string }>
   revision: string
   as?: 'td' | 'div'
+  inputType?: 'text' | 'datetime-local'
   required?: boolean
   maxLength?: number
-}>(), { as: 'td', required: false })
+}>(), { as: 'td', required: false, inputType: 'text' })
 
 const root = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)

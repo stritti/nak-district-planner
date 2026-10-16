@@ -40,3 +40,14 @@ See [table inventory](./table-inventory.md) for explicit deferred columns and re
 - **Remaining cross-application tranche:** Classify and migrate other eligible leader-administration fields and read-only tabular surfaces; verify accessible compact display and screen-by-screen keyboard, sorting and filtering regressions. This scope is not automatically covered by PRs #577 or #578 and must be tracked explicitly.
 
 **Acceptance:** Do not check off 1.2, 2.4-2.5, 3.1-3.4 or 4.3-4.6 until corresponding code, edge-case tests, OpenSpec validation and CI coverage over 80% are verified on their actual PR heads. A green foundation CI alone does not complete the change.
+
+
+## Implementation progress (release 1.1.x review branch)
+
+- Event list **Start** column is inline editable through the shared cell (`inputType="datetime-local"`)
+  and `useInlineScheduleSave`: conditional `PATCH` (428/412), duration preserved, single explicit
+  WARN confirmation, BLOCK/412 keep the draft. Covered by composable and view regression tests.
+- **Responsible** column integrated in PR #577; the inventory was stale and has been corrected.
+- Still open (not checked off): category/congregation (needs backend duty-review and quarantine
+  workflow), mobile start editing, leader administration remaining fields, and the per-table
+  regression sweep of 4.5/4.6. Tasks 1.2, 2.4, 3.x and 4.3-4.6 therefore stay unchecked per the acceptance gate above.

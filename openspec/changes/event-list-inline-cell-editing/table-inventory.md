@@ -9,9 +9,9 @@ the domain's permission/confirmation rules can be preserved.
 | Surface | Columns | Classification and mutation contract | Status |
 | --- | --- | --- | --- |
 | EventListView list / mobile cards | Title | Scalar, planner in event district, internal active slot; `PATCH /api/v1/events/{id}/inline` with `If-Match` | **Integrated** |
-| EventListView list | Start | Date/time plus duration and minister/duty validity, dependent atomic change; `PATCH /api/v1/events/{id}` has no mandatory version | **Deferred** |
-| EventListView list | Category, congregation | Scope changes require reassessing/quarantining assignments; legacy `PATCH /api/v1/events/{id}` lacks the complete duty-review workflow | **Deferred** |
-| EventListView list | Responsible | Assignment create/update/delete, warning acknowledgment and deletion confirmation, must use `/api/v1/events/{id}/assignments`; no end-to-end conditional-write path yet | **Deferred** |
+| EventListView list | Start | Date/time moved together with the end (duration kept); `PATCH /api/v1/events/{id}` with mandatory `If-Match` (428/412), atomic minister revalidation on the server; WARN conflicts need one explicit confirmation, BLOCK/412 stay in the cell. Not offered for invitation copies, external or cancelled events | **Integrated** (desktop table; mobile cards keep the edit dialog) |
+| EventListView list | Category, congregation | `PATCH` now requires `If-Match`, but a category change deliberately has no duty-review trigger (`_changes_service_dependencies`) and a congregation move lacks the old-scope quarantine; both stay in the edit dialog until the backend workflow exists | **Deferred** |
+| EventListView list / mobile cards | Responsible | Assignment via `PUT /api/v1/service-assignments/inline` with `If-Match` (428/412), WARN acknowledgement once; clearing/deleting remains in the dialog | **Integrated** (PR #577) |
 | EventListView list | District, invitation, type, source | Derived, tenancy metadata, cross-scope or external authority | Read-only |
 | EventListView list | Status, approval | Cancellation/release workflow with existing confirmation and irreversible transitions | Action/workflow |
 | EventListView list | Edit action | Opens domain modal, including destructive confirmation | Action |
