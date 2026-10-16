@@ -369,6 +369,7 @@ def test_district_routes_return_403(auth_client, method, path_template, role, me
     cong_repo.get.return_value = SimpleNamespace(
         id=congregation_id, district_id=district_id, group_id=None, name="C"
     )
+    cong_repo.get_for_update.return_value = cong_repo.get.return_value
 
     group_repo = AsyncMock()
     group_repo.get.return_value = SimpleNamespace(
