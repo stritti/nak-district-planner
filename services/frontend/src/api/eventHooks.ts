@@ -28,6 +28,7 @@ export interface EventHook extends EventHookCreateInput {
   district_id: string
   created_at: string
   updated_at: string
+  revision: string
 }
 
 export interface EventTypeInfo {
@@ -55,13 +56,25 @@ export function updateEventHook(
   districtId: string,
   hookId: string,
   input: EventHookInput,
+  revision: string,
 ): Promise<EventHook> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
   return apiFetch(`${baseUrl(districtId)}/${encodeURIComponent(hookId)}`, {
     method: 'PUT',
+    headers: { 'If-Match': revision },
     body: JSON.stringify(input),
   })
 }
 
-export function deactivateEventHook(districtId: string, hookId: string): Promise<void> {
-  return apiFetch(`${baseUrl(districtId)}/${encodeURIComponent(hookId)}`, { method: 'DELETE' })
+/** Soft-deactivates; the response is the updated hook with its new revision. */
+export function deactivateEventHook(
+  districtId: string,
+  hookId: string,
+  revision: string,
+): Promise<EventHook> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+  return apiFetch(`${baseUrl(districtId)}/${encodeURIComponent(hookId)}`, {
+    method: 'DELETE',
+    headers: { 'If-Match': revision },
+  })
 }

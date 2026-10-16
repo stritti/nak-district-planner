@@ -3,6 +3,7 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { ApiError } from '../api/errors'
 import {
   createEventHook,
   deactivateEventHook,
@@ -14,6 +15,10 @@ import {
   type EventHookInput,
   type EventTypeInfo,
 } from '../api/eventHooks'
+
+const STALE = 'Die Benachrichtigung wurde zwischenzeitlich geändert. Die Liste wurde aktualisiert – bitte erneut versuchen.'
+
+const isStale = (cause: unknown) => cause instanceof ApiError && (cause.status === 412 || cause.status === 428)
 
 function message(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message ? cause.message : fallback
@@ -45,6 +50,18 @@ export const useEventHooksStore = defineStore('event-hooks', () => {
     }
   }
 
+  /** Re-reads the hooks after a stale write so the next attempt uses current revisions. */
+  async function refresh(id: string) {
+    try {
+      const hooks = await listEventHooks(id)
+      if (districtId.value === id) items.value = hooks
+    } catch {
+      // The stale-write message already asks the user to retry.
+    }
+  }
+
+  const revisionOf = (hookId: string) => items.value.find(item => item.id === hookId)?.revision ?? ''
+
   /** Runs a write for the current district; errors are shown and rethrown. */
   async function write<T>(fallback: string, operation: (id: string) => Promise<T>, apply: (result: T) => void) {
     if (!districtId.value) throw new Error('Kein Bezirk ausgewählt')
@@ -55,7 +72,12 @@ export const useEventHooksStore = defineStore('event-hooks', () => {
       const result = await operation(id)
       if (districtId.value === id) apply(result)
     } catch (cause) {
-      error.value = message(cause, fallback)
+      if (isStale(cause)) {
+        error.value = STALE
+        await refresh(id)
+      } else {
+        error.value = message(cause, fallback)
+      }
       throw cause
     } finally {
       saving.value = false
@@ -72,14 +94,21 @@ export const useEventHooksStore = defineStore('event-hooks', () => {
     })
   }
 
-  function update(hookId: string, input: EventHookInput) {
-    return write('Benachrichtigung konnte nicht gespeichert werden', id => updateEventHook(id, hookId, input), replace)
+  /** `revision` is the one the caller read when it started editing; defaults to the listed one. */
+  function update(hookId: string, input: EventHookInput, revision?: string) {
+    return write(
+      'Benachrichtigung konnte nicht gespeichert werden',
+      id => updateEventHook(id, hookId, input, revision ?? revisionOf(hookId)),
+      replace,
+    )
   }
 
   function deactivate(hookId: string) {
-    return write('Benachrichtigung konnte nicht deaktiviert werden', id => deactivateEventHook(id, hookId), () => {
-      items.value = items.value.map(item => (item.id === hookId ? { ...item, is_active: false } : item))
-    })
+    return write(
+      'Benachrichtigung konnte nicht deaktiviert werden',
+      id => deactivateEventHook(id, hookId, revisionOf(hookId)),
+      replace,
+    )
   }
 
   function placeholdersFor(eventType: string): string[] {

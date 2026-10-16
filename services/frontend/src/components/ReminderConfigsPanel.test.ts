@@ -21,6 +21,7 @@ const existing: ReminderConfig = {
   is_active: true,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
+  revision: '"reminder-1:v1"',
 }
 
 function setup(items: ReminderConfig[] = [], configureListMock = true) {
@@ -106,11 +107,12 @@ describe('ReminderConfigsPanel', () => {
       'district-1',
       'reminder-1',
       expect.objectContaining({ subject_template: 'Geändert' }),
+      '"reminder-1:v1"',
     )
   })
 
   it('deactivates active reminders and reactivates inactive reminders', async () => {
-    vi.mocked(reminderApi.deleteReminderConfig).mockResolvedValue(undefined)
+    vi.mocked(reminderApi.deleteReminderConfig).mockResolvedValue({ ...existing, is_active: false, revision: '"reminder-1:v2"' })
     vi.mocked(reminderApi.updateReminderConfig).mockImplementation(async (_district, _id, input) => ({
       ...existing,
       ...input,
@@ -120,7 +122,7 @@ describe('ReminderConfigsPanel', () => {
 
     await wrapper.get('input[type="checkbox"]').trigger('change')
     await flushPromises()
-    expect(reminderApi.deleteReminderConfig).toHaveBeenCalledWith('district-1', 'reminder-1')
+    expect(reminderApi.deleteReminderConfig).toHaveBeenCalledWith('district-1', 'reminder-1', '"reminder-1:v1"')
 
     await wrapper.get('input[type="checkbox"]').trigger('change')
     await flushPromises()
@@ -128,6 +130,7 @@ describe('ReminderConfigsPanel', () => {
       'district-1',
       'reminder-1',
       { is_active: true },
+      '"reminder-1:v2"',
     )
   })
 

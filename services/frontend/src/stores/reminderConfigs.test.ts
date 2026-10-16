@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useReminderConfigsStore } from './reminderConfigs'
 import * as api from '../api/reminderConfigs'
+import { ApiError } from '../api/errors'
 
 vi.mock('../api/reminderConfigs')
 
@@ -23,6 +24,7 @@ const existing: api.ReminderConfig = {
   district_id: district,
   created_at: '2026-09-30T08:00:00Z',
   updated_at: '2026-09-30T08:00:00Z',
+  revision: '"reminder-1:v1"',
 }
 
 beforeEach(() => {
@@ -86,8 +88,8 @@ describe('useReminderConfigsStore', () => {
   it('creates, updates, and soft-deactivates a reminder', async () => {
     vi.mocked(api.listReminderConfigs).mockResolvedValue([])
     vi.mocked(api.createReminderConfig).mockResolvedValue(existing)
-    vi.mocked(api.updateReminderConfig).mockResolvedValue({ ...existing, day_of_month: 28 })
-    vi.mocked(api.deleteReminderConfig).mockResolvedValue(undefined)
+    vi.mocked(api.updateReminderConfig).mockResolvedValue({ ...existing, day_of_month: 28, revision: '"reminder-1:v2"' })
+    vi.mocked(api.deleteReminderConfig).mockResolvedValue({ ...existing, is_active: false, revision: '"reminder-1:v3"' })
     const store = useReminderConfigsStore()
     await store.load(district)
 
@@ -95,8 +97,12 @@ describe('useReminderConfigsStore', () => {
     expect(store.items).toEqual([existing])
     await store.update(existing.id, { day_of_month: 28 })
     expect(store.items[0].day_of_month).toBe(28)
+    expect(api.updateReminderConfig).toHaveBeenCalledWith(district, existing.id, { day_of_month: 28 }, existing.revision)
     await store.deactivate(existing.id)
     expect(store.items[0].is_active).toBe(false)
+    // The deactivation continues from the revision returned by the previous write.
+    expect(api.deleteReminderConfig).toHaveBeenCalledWith(district, existing.id, '"reminder-1:v2"')
+    expect(store.items[0].revision).toBe('"reminder-1:v3"')
     expect(store.saving).toBe(false)
   })
 
@@ -178,5 +184,51 @@ describe('useReminderConfigsStore', () => {
     resolveDelete()
     await deactivate
     expect(store.items[0].is_active).toBe(true)
+  })
+
+  it.each([
+    ['update', 412],
+    ['update', 428],
+    ['deactivate', 412],
+  ] as const)('refreshes the list and explains a stale %s (%i)', async (operation, status) => {
+    const remote = { ...existing, subject_template: 'Remote', revision: '"reminder-1:v9"' }
+    vi.mocked(api.listReminderConfigs).mockResolvedValueOnce([existing]).mockResolvedValueOnce([remote])
+    const stale = new ApiError(status, 'Precondition', { detail: 'x' })
+    vi.mocked(api.updateReminderConfig).mockRejectedValue(stale)
+    vi.mocked(api.deleteReminderConfig).mockRejectedValue(stale)
+    const store = useReminderConfigsStore()
+    await store.load(district)
+
+    const call = operation === 'update'
+      ? store.update(existing.id, { day_of_month: 5 })
+      : store.deactivate(existing.id)
+    await expect(call).rejects.toBe(stale)
+
+    expect(store.error).toContain('zwischenzeitlich geändert')
+    expect(store.items).toEqual([remote])
+    expect(store.saving).toBe(false)
+  })
+
+  it('uses the revision the editor captured, not the reloaded one', async () => {
+    vi.mocked(api.listReminderConfigs).mockResolvedValue([{ ...existing, revision: '"reminder-1:v5"' }])
+    vi.mocked(api.updateReminderConfig).mockResolvedValue(existing)
+    const store = useReminderConfigsStore()
+    await store.load(district)
+
+    await store.update(existing.id, { day_of_month: 5 }, '"reminder-1:v1"')
+
+    expect(api.updateReminderConfig).toHaveBeenCalledWith(district, existing.id, { day_of_month: 5 }, '"reminder-1:v1"')
+  })
+
+  it('keeps the stale-write message when the refresh itself fails', async () => {
+    vi.mocked(api.listReminderConfigs).mockResolvedValueOnce([existing]).mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(api.updateReminderConfig).mockRejectedValue(new ApiError(412, 'Precondition', {}))
+    const store = useReminderConfigsStore()
+    await store.load(district)
+
+    await expect(store.update(existing.id, {})).rejects.toBeInstanceOf(ApiError)
+
+    expect(store.error).toContain('zwischenzeitlich geändert')
+    expect(store.items).toEqual([existing])
   })
 })

@@ -86,6 +86,8 @@ const ROLE_LABELS: Record<RecipientRole, string> = {
 const props = defineProps<{ districtId: string }>()
 const store = useEventHooksStore()
 const editing = ref<string | null>(null)
+// Revision read when the edit started; a later reload must not silently replace it.
+const editingRevision = ref('')
 const defaults = (): EventHookCreateInput => ({
   event_type: 'EXTERNAL_EVENT_DETECTED',
   recipient_role: 'DISTRICT_ADMIN',
@@ -100,11 +102,13 @@ const placeholderHint = computed(
 
 function reset() {
   editing.value = null
+  editingRevision.value = ''
   Object.assign(form, defaults())
 }
 
 function edit(item: EventHook) {
   editing.value = item.id
+  editingRevision.value = item.revision
   Object.assign(form, {
     event_type: item.event_type,
     recipient_role: item.recipient_role,
@@ -118,7 +122,7 @@ async function save() {
   try {
     if (editing.value) {
       const { event_type: _immutable, ...changes } = form
-      await store.update(editing.value, changes)
+      await store.update(editing.value, changes, editingRevision.value)
     } else {
       await store.create({ ...form })
     }

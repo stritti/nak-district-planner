@@ -35,12 +35,22 @@ describe('event hook API', () => {
   })
 
   it('replaces mutable fields with PUT and deactivates with DELETE', async () => {
-    await api.updateEventHook('district/a', 'hook 1', input)
-    await api.deactivateEventHook('district/a', 'hook 1')
+    await api.updateEventHook('district/a', 'hook 1', input, '"h:v1"')
+    await api.deactivateEventHook('district/a', 'hook 1', '"h:v2"')
     expect(apiFetch).toHaveBeenNthCalledWith(1, `${path}/hook%201`, {
       method: 'PUT',
+      headers: { 'If-Match': '"h:v1"' },
       body: JSON.stringify(input),
     })
-    expect(apiFetch).toHaveBeenNthCalledWith(2, `${path}/hook%201`, { method: 'DELETE' })
+    expect(apiFetch).toHaveBeenNthCalledWith(2, `${path}/hook%201`, {
+      method: 'DELETE',
+      headers: { 'If-Match': '"h:v2"' },
+    })
+  })
+
+  it('never sends a write without a revision', async () => {
+    await expect(api.updateEventHook('district/a', 'hook 1', input, '')).rejects.toThrow(/Versionsinformation/)
+    await expect(api.deactivateEventHook('district/a', 'hook 1', '')).rejects.toThrow(/Versionsinformation/)
+    expect(apiFetch).not.toHaveBeenCalled()
   })
 })
