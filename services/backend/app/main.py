@@ -5,7 +5,6 @@
 
 import logging
 import sys
-import traceback
 from contextlib import asynccontextmanager
 
 import httpx
@@ -191,8 +190,14 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
-    traceback.print_exc(file=sys.stderr)
-    sys.stderr.flush()
+    # Never bypass the process-wide secret-path redaction on log handlers.
+    # Pass the caught exception explicitly: a registered handler may run outside
+    # the original except block, where sys.exc_info() is no longer available.
+    logger.error(
+        "Unhandled request exception (%s)",
+        type(exc).__name__,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     detail = str(exc) if settings.app_env == "development" else "Internal Server Error"
     return JSONResponse(status_code=500, content={"detail": detail})
 
