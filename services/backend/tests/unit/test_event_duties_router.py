@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
+from app.adapters.api.revisions import content_revision
 from app.adapters.api.routers import event_duties as api
 from app.adapters.api.schemas.event_duty import (
     AssignmentWrite,
@@ -143,7 +144,9 @@ async def test_assignment_delete_uses_the_locked_current_row(setup):
     row = EventDutyAssignment.create(repo.slot_id, repo.categories[0], repo.congregation, "Anna")
     repo.assignments.append(row)
 
-    await api.remove_assignment(repo.district, row.id, auth(repo), db, repository=repo)
+    await api.remove_assignment(
+        repo.district, row.id, auth(repo), db, repository=repo, if_match=content_revision(row)
+    )
 
     assert repo.assignments == []
     assert repo.locks[-2:] == ["slot", "assignment"]
@@ -246,6 +249,7 @@ async def test_dual_scope_permission_required_before_revalidation(setup):
         auth(repo, Role.DISTRICT_ADMIN, district=True),
         db,
         repository=repo,
+        if_match=content_revision(row),
     )
     assert result["congregation_id"] == repo.congregation
 
@@ -331,6 +335,7 @@ async def test_suggestion_hiding_requires_scope_planner(setup):
         auth(repo),
         db,
         repository=repo,
+        if_match=content_revision(suggestion),
     )
     assert result["hidden"]
 
@@ -383,3 +388,132 @@ async def test_linked_user_picker_requires_scope_planner(setup):
             repository=repo,
         )
     assert error.value.status_code == 403
+
+
+class TestConditionalDutyWrites:
+    """Assignment and suggestion changes are conditional: 428 missing, 412 stale."""
+
+    @staticmethod
+    def _assignment(repo):
+        row = EventDutyAssignment.create(repo.slot_id, repo.categories[0], repo.congregation, "Anna")
+        repo.assignments.append(row)
+        return row
+
+    @staticmethod
+    async def _replace(repo, db, row, **kwargs):
+        return await api.replace_assignment(
+            repo.district, row.id,
+            AssignmentWrite(duty_category_id=repo.categories[0].id, name="Berta"),
+            auth(repo), db, repository=repo, **kwargs,
+        )
+
+    @pytest.mark.asyncio
+    async def test_responses_carry_a_revision(self, setup):
+        repo, db = setup
+        created = await api.assign(
+            repo.district, repo.slot_id,
+            AssignmentWrite(duty_category_id=repo.categories[0].id, name="Anna"),
+            auth(repo), db, repository=repo,
+        )
+        listed = await api.assignments(repo.district, repo.slot_id, auth(repo), db, repository=repo)
+        assert created["revision"] == listed["assignments"][0]["revision"]
+
+    @pytest.mark.asyncio
+    async def test_replace_with_current_revision_returns_a_new_one(self, setup):
+        repo, db = setup
+        row = self._assignment(repo)
+        before = content_revision(row)
+        result = await self._replace(repo, db, row, if_match=before)
+        assert result["display_name"] == "Berta"
+        assert result["revision"] != before
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("if_match", "status_code"), [(None, 428), ('"stale"', 412)])
+    async def test_replace_without_current_revision_changes_nothing(self, setup, if_match, status_code):
+        repo, db = setup
+        row = self._assignment(repo)
+        with pytest.raises(HTTPException) as error:
+            await self._replace(repo, db, row, if_match=if_match)
+        assert error.value.status_code == status_code
+        assert repo.assignments == [row]
+
+    @pytest.mark.asyncio
+    async def test_a_changed_assignment_invalidates_an_earlier_revision(self, setup):
+        repo, db = setup
+        row = self._assignment(repo)
+        earlier = content_revision(row)
+        repo.assignments[0] = replace(row, display_name="Zwischendurch", normalized_name="zwischendurch")
+        with pytest.raises(HTTPException) as error:
+            await self._replace(repo, db, row, if_match=earlier)
+        assert error.value.status_code == 412
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("if_match", "status_code"), [(None, 428), ('"stale"', 412)])
+    async def test_delete_without_current_revision_removes_nothing(self, setup, if_match, status_code):
+        repo, db = setup
+        row = self._assignment(repo)
+        with pytest.raises(HTTPException) as error:
+            await api.remove_assignment(
+                repo.district, row.id, auth(repo), db, repository=repo, if_match=if_match
+            )
+        assert error.value.status_code == status_code
+        assert repo.assignments == [row]
+
+    @pytest.mark.asyncio
+    async def test_delete_with_current_revision_removes_the_row(self, setup):
+        repo, db = setup
+        row = self._assignment(repo)
+        await api.remove_assignment(
+            repo.district, row.id, auth(repo), db, repository=repo, if_match=content_revision(row)
+        )
+        assert repo.assignments == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("if_match", "status_code"), [(None, 428), ('"stale"', 412)])
+    async def test_revalidate_requires_the_current_revision(self, setup, if_match, status_code):
+        repo, db = setup
+        row = self._assignment(repo)
+        with pytest.raises(HTTPException) as error:
+            await api.revalidate_assignment(
+                repo.district, row.id, auth(repo), db, repository=repo, if_match=if_match
+            )
+        assert error.value.status_code == status_code
+        result = await api.revalidate_assignment(
+            repo.district, row.id, auth(repo), db, repository=repo, if_match=content_revision(row)
+        )
+        assert result["revision"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("if_match", "status_code"), [(None, 428), ('"stale"', 412)])
+    async def test_suggestion_visibility_requires_the_current_revision(self, setup, if_match, status_code):
+        repo, db = setup
+        suggestion = DutyNameSuggestion(
+            uuid4(), repo.district, repo.congregation, repo.categories[0].id, "Anna", "anna"
+        )
+        repo.suggestions.append(suggestion)
+        with pytest.raises(HTTPException) as error:
+            await api.suppress(
+                repo.district, suggestion.id, SuggestionUpdate(hidden=True), auth(repo), db,
+                repository=repo, if_match=if_match,
+            )
+        assert error.value.status_code == status_code
+        assert not suggestion.hidden
+        result = await api.suppress(
+            repo.district, suggestion.id, SuggestionUpdate(hidden=True), auth(repo), db,
+            repository=repo, if_match=content_revision(suggestion),
+        )
+        assert result["hidden"] and result["revision"] != content_revision(suggestion)
+        assert "suggestion" in repo.locks  # the write happens under a row lock
+
+    @pytest.mark.asyncio
+    async def test_suggestion_listing_exposes_revisions(self, setup):
+        repo, db = setup
+        suggestion = DutyNameSuggestion(
+            uuid4(), repo.district, repo.congregation, repo.categories[0].id, "Anna", "anna"
+        )
+        repo.suggestions.append(suggestion)
+        rows = await api.suggestions(
+            repo.district, repo.categories[0].id, auth(repo), db,
+            congregation_id=repo.congregation, repository=repo,
+        )
+        assert rows[0]["revision"] == content_revision(suggestion)

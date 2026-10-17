@@ -8,8 +8,8 @@
 - [x] 2.3 Frontend clients and views send the revision and handle stale writes
 
 ## 3. Organisational duties panel
-- [ ] 3.1 Revision and `If-Match` on duty assignment and suggestion changes
-- [ ] 3.2 Frontend panel sends the revision and handles stale writes
+- [x] 3.1 Content-derived revision and `If-Match` on duty assignment replace, revalidate and delete and on suggestion visibility (rows have no `updated_at`; the revision hashes the row content). Creating an assignment stays unconditional
+- [x] 3.2 Frontend panel sends the revision captured when the edit started, reloads and explains stale writes
 
 ## 4. Closure
-- [ ] 4.1 Baseline spec updated, change archived
+- [x] 4.1 Baseline spec updated, change archived

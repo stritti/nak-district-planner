@@ -3,6 +3,9 @@
 
 """Strong validators shared by event, matrix and assignment writes."""
 
+import hashlib
+import json
+from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
@@ -24,6 +27,20 @@ def entity_revision(entity_id: object, updated_at: datetime) -> str:
     caller advances ``updated_at`` with :func:`next_updated_at`.
     """
     return f'"{entity_id}:{aware_timestamp(updated_at).isoformat(timespec="microseconds")}"'
+
+
+def content_revision(entity: object) -> str:
+    """Strong ETag for rows without ``updated_at``: ``"<id>:<sha256 of the row content>"``.
+
+    Equality-only like :func:`entity_revision`. Two states with identical content
+    share a revision, which is harmless for a conditional write: the write would
+    start from, and produce, the same content.
+    """
+    if not is_dataclass(entity) or isinstance(entity, type):
+        raise TypeError("content_revision needs a dataclass instance")
+    payload = json.dumps(asdict(entity), sort_keys=True, default=str, separators=(",", ":"))
+    digest = hashlib.sha256(payload.encode()).hexdigest()
+    return f'"{entity.id}:{digest}"'
 
 
 def require_current_revision(if_match: str | None, current: str) -> None:

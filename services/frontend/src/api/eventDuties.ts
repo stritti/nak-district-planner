@@ -36,12 +36,14 @@ export interface DutyAssignment {
   needs_review: boolean
   over_capacity: boolean
   quarantined: boolean
+  revision: string
 }
 
 export interface DutySuggestion {
   id: string
   display_name: string
   hidden: boolean
+  revision: string
 }
 
 export interface EligibleUser {
@@ -128,33 +130,52 @@ export function getSlotDuties(
   return apiFetch(`${base(district)}/slots/${encodeURIComponent(id)}${query}`)
 }
 
+const missingRevision = () =>
+  Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+
+/** Creates an assignment, or replaces `id` conditionally on the `revision` it was read with. */
 export function saveDutyAssignment(
   district: string,
   slot: string,
   data: DutyIdentity,
   id?: string,
+  revision?: string,
 ): Promise<DutyAssignment> {
-  return apiFetch(
-    id
-      ? `${base(district)}/assignments/${encodeURIComponent(id)}`
-      : `${base(district)}/slots/${encodeURIComponent(slot)}`,
-    { method: id ? 'PATCH' : 'POST', body: JSON.stringify(data) },
-  )
+  if (!id) {
+    return apiFetch(`${base(district)}/slots/${encodeURIComponent(slot)}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+  if (!revision) return missingRevision()
+  return apiFetch(`${base(district)}/assignments/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'If-Match': revision },
+    body: JSON.stringify(data),
+  })
 }
 
 export function revalidateDutyAssignment(
   district: string,
   id: string,
+  revision: string,
 ): Promise<DutyAssignment> {
+  if (!revision) return missingRevision()
   return apiFetch(
     `${base(district)}/assignments/${encodeURIComponent(id)}/revalidate`,
-    { method: 'POST' },
+    { method: 'POST', headers: { 'If-Match': revision } },
   )
 }
 
-export function deleteDutyAssignment(district: string, id: string): Promise<void> {
+export function deleteDutyAssignment(
+  district: string,
+  id: string,
+  revision: string,
+): Promise<void> {
+  if (!revision) return missingRevision()
   return apiFetch(`${base(district)}/assignments/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    headers: { 'If-Match': revision },
   })
 }
 
@@ -183,9 +204,12 @@ export function setSuggestionHidden(
   district: string,
   id: string,
   hidden: boolean,
+  revision: string,
 ): Promise<DutySuggestion> {
+  if (!revision) return missingRevision()
   return apiFetch(`${base(district)}/suggestions/${encodeURIComponent(id)}`, {
     method: 'PATCH',
+    headers: { 'If-Match': revision },
     body: JSON.stringify({ hidden }),
   })
 }
