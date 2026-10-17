@@ -279,8 +279,9 @@ async def update_congregation(
     db: DbSession,
     cong_repo: SqlCongregationRepository = Depends(get_congregation_repository),
     group_repo: SqlCongregationGroupRepository = Depends(get_congregation_group_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> CongregationResponse:
-    congregation = await cong_repo.get(congregation_id)
+    congregation = await cong_repo.get_for_update(congregation_id)
     if not congregation or congregation.district_id != district_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gemeinde nicht gefunden")
     # Determine if request comes through congregation_admin fallback
@@ -293,6 +294,7 @@ async def update_congregation(
             is_congregation_scoped = True
         except PermissionError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    require_current_revision(if_match, entity_revision(congregation.id, congregation.updated_at))
     if body.name is not None:
         congregation.name = body.name
     if body.service_times is not None:
@@ -315,7 +317,7 @@ async def update_congregation(
         congregation.invitation_target_congregation_id = body.invitation_target_congregation_id
     if "invitation_external_note" in body.model_fields_set:
         congregation.invitation_external_note = body.invitation_external_note
-    congregation.updated_at = datetime.now(UTC)
+    congregation.updated_at = next_updated_at(congregation.updated_at)
     await cong_repo.save(congregation)
     group_name = None
     if congregation.group_id is not None:
@@ -352,6 +354,7 @@ def _cong_response(c: Congregation, group_name: str | None = None) -> Congregati
         service_times=[ServiceTime(**st) for st in c.service_times],
         created_at=c.created_at,
         updated_at=c.updated_at,
+        revision=entity_revision(c.id, c.updated_at),
     )
 
 

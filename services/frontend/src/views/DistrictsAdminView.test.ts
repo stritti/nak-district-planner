@@ -56,6 +56,7 @@ const congregation = (
   service_times: serviceTimes,
   created_at: now,
   updated_at: now,
+  revision: `"${id}:v1"`,
 })
 
 const ConfirmDialogStub = defineComponent({
@@ -321,6 +322,7 @@ describe('DistrictsAdminView', () => {
       'd1',
       'c1',
       expect.objectContaining({ name: 'Gemeinde Neu', group_id: null }),
+      '"c1:v1"',
     )
 
     vi.mocked(districtsApi.updateCongregation).mockRejectedValueOnce('kaputt')
@@ -330,6 +332,37 @@ describe('DistrictsAdminView', () => {
     await modal.findAll('button').find((button) => button.text().includes('Speichern'))!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Fehler beim Speichern')
+  })
+
+  it('uses the revision of the opened congregation and refreshes after a stale write', async () => {
+    vi.mocked(districtsApi.updateCongregation)
+      .mockResolvedValueOnce({ ...congregation('c1', 'Erst'), revision: '"c1:v2"' })
+      .mockRejectedValueOnce(
+        new ApiError(412, 'Precondition Failed', { detail: 'Datensatz wurde zwischenzeitlich geändert.' }),
+      )
+    const { wrapper } = setup()
+    await flushPromises()
+
+    await wrapper.get('button[title="Gemeinde bearbeiten"]').trigger('click')
+    let modal = findModal(wrapper, 'Gemeinde bearbeiten')
+    await modal.get('input.form-input.mb-4').setValue('Erst')
+    await modal.findAll('button').find((button) => button.text().includes('Speichern'))!.trigger('click')
+    await flushPromises()
+
+    // The saved row carries the fresh revision, so a second edit is conditional on it.
+    vi.mocked(districtsApi.listCongregations).mockResolvedValue([
+      { ...congregation('c1', 'Remote'), revision: '"c1:v9"' },
+    ])
+    await wrapper.get('button[title="Gemeinde bearbeiten"]').trigger('click')
+    modal = findModal(wrapper, 'Gemeinde bearbeiten')
+    await modal.get('input.form-input.mb-4').setValue('Zweit')
+    await modal.findAll('button').find((button) => button.text().includes('Speichern'))!.trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(districtsApi.updateCongregation).mock.calls[1][3]).toBe('"c1:v2"')
+    expect(wrapper.text()).toContain('zwischenzeitlich geändert')
+    expect(districtsApi.listCongregations).toHaveBeenCalledWith('d1')
+    expect(wrapper.text()).toContain('Remote')
   })
 
   it('renames a group inline with its revision and ignores empty names', async () => {

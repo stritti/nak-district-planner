@@ -435,6 +435,7 @@ import {
   type DistrictResponse,
   type ServiceTime,
 } from '../api/districts'
+import { ApiError } from '../api/errors'
 import { buildCongregationSections } from '../utils/congregationGrouping'
 import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
@@ -502,6 +503,7 @@ const editCongModal = reactive({
   open: false,
   districtId: '',
   congregationId: '',
+  revision: '',
   name: '',
   groupId: '' as string | null,
   serviceTimes: [] as EditableServiceTime[],
@@ -512,6 +514,7 @@ function openEditCong(districtId: string, cong: CongregationResponse) {
   editCongModal.open = true
   editCongModal.districtId = districtId
   editCongModal.congregationId = cong.id
+  editCongModal.revision = cong.revision ?? ''
   editCongModal.name = cong.name
   editCongModal.groupId = cong.group_id
   editCongModal.serviceTimes = cong.service_times.map((st) => ({ ...st }))
@@ -523,6 +526,14 @@ function congregationSections(districtId: string) {
     congregationsByDistrict[districtId] ?? [],
     groupsByDistrict[districtId] ?? [],
   )
+}
+
+async function refreshCongregations(districtId: string) {
+  try {
+    congregationsByDistrict[districtId] = (await listCongregations(districtId)) || []
+  } catch {
+    // The stale-revision message already tells the user to reopen the dialog.
+  }
 }
 
 function closeEditCong() {
@@ -553,13 +564,20 @@ async function saveEditCong() {
           time: st.time,
         })),
       },
+      editCongModal.revision,
     )
     const list = congregationsByDistrict[editCongModal.districtId]
     const idx = list?.findIndex((c) => c.id === editCongModal.congregationId) ?? -1
     if (idx !== -1) list[idx] = updated
     closeEditCong()
   } catch (e) {
-    editCongModal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+    if (e instanceof ApiError && (e.status === 412 || e.status === 428)) {
+      editCongModal.error =
+        'Die Gemeinde wurde zwischenzeitlich geändert. Die Ansicht wurde aktualisiert – bitte schließen und erneut öffnen.'
+      await refreshCongregations(editCongModal.districtId)
+    } else {
+      editCongModal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+    }
   } finally {
     saving.value = false
   }

@@ -78,11 +78,18 @@ describe('district API', () => {
       body: JSON.stringify({ name: 'Tuttlingen', service_times: serviceTimes, group_id: 'group-1' }),
     })
 
-    await updateCongregation('district-1', 'congregation-1', { name: 'Neu', group_id: null })
+    await updateCongregation('district-1', 'congregation-1', { name: 'Neu', group_id: null }, '"c:v1"')
     expect(apiFetch).toHaveBeenLastCalledWith(
       '/api/v1/districts/district-1/congregations/congregation-1',
-      { method: 'PATCH', body: JSON.stringify({ name: 'Neu', group_id: null }) },
+      {
+        method: 'PATCH',
+        headers: { 'If-Match': '"c:v1"' },
+        body: JSON.stringify({ name: 'Neu', group_id: null }),
+      },
     )
+    await expect(
+      updateCongregation('district-1', 'congregation-1', { name: 'Neu' }, ''),
+    ).rejects.toThrow(/Versionsinformation/)
   })
 
   it('covers congregation group CRUD', async () => {
