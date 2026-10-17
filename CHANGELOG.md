@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0](https://github.com/stritti/nak-district-planner/compare/v1.2.2...v1.3.0) (2026-10-17)
+
+
+### Features
+
+* **admin:** conditional writes for reminder configurations and event hooks ([#624](https://github.com/stritti/nak-district-planner/issues/624)) ([419e3d3](https://github.com/stritti/nak-district-planner/commit/419e3d3e3e5bcf94818cb420eb7bd6250185c9bb))
+* **congregations:** bedingte Schreibzugriffe für den Gemeinde-Dialog ([#621](https://github.com/stritti/nak-district-planner/issues/621)) ([21a0b6f](https://github.com/stritti/nak-district-planner/commit/21a0b6f2684fe3bd5c904d94672bac4e5a33bd77))
+* **duties:** conditional writes for the organisational duties panel; archive the change ([#623](https://github.com/stritti/nak-district-planner/issues/623)) ([f3ee884](https://github.com/stritti/nak-district-planner/commit/f3ee884536b8626d6dbbf1b578850a8162fb19d7))
+
+
+### Bug Fixes
+
+* **security:** ICS-Export-Tokens nur noch als Hash persistieren ([#602](https://github.com/stritti/nak-district-planner/issues/602)) ([#609](https://github.com/stritti/nak-district-planner/issues/609)) ([3b9b23b](https://github.com/stritti/nak-district-planner/commit/3b9b23ba49cc26b57c3f2a8db934e1c92b035b39))
+
 ## [1.2.2](https://github.com/stritti/nak-district-planner/compare/v1.2.1...v1.2.2) (2026-10-16)
 
 
