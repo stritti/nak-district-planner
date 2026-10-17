@@ -46,6 +46,18 @@ class SqlEventMailHookRepository(EventMailHookRepository):
         )
         return _to_domain(row) if row else None
 
+    async def get_for_update(
+        self, district_id: uuid.UUID, hook_id: uuid.UUID
+    ) -> EventMailHook | None:
+        """Read the latest state while holding a row lock through the transaction."""
+        row = await self._session.scalar(
+            select(EventMailHookORM)
+            .where(EventMailHookORM.id == hook_id, EventMailHookORM.district_id == district_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return _to_domain(row) if row else None
+
     async def list_by_district(self, district_id: uuid.UUID) -> list[EventMailHook]:
         rows = await self._session.scalars(
             select(EventMailHookORM)

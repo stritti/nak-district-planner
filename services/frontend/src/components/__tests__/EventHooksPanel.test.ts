@@ -19,6 +19,7 @@ const hook: api.EventHook = {
   is_active: true,
   created_at: '2026-09-30T08:00:00Z',
   updated_at: '2026-09-30T08:00:00Z',
+  revision: '"hook-1:v1"',
 }
 const types: api.EventTypeInfo[] = [
   { event_type: 'SYNC_ERROR', placeholders: ['district_name', 'error_message'] },
@@ -92,7 +93,7 @@ describe('EventHooksPanel', () => {
       subject_template: 'Geändert',
       body_template: '{error_message}',
       is_active: true,
-    })
+    }, '"hook-1:v1"')
   })
 
   it('keeps the form input when saving fails', async () => {
@@ -110,12 +111,12 @@ describe('EventHooksPanel', () => {
 
   it('toggles activation via deactivate and full update', async () => {
     const wrapper = await mountPanel()
-    vi.mocked(api.deactivateEventHook).mockResolvedValue(undefined)
+    vi.mocked(api.deactivateEventHook).mockResolvedValue({ ...hook, is_active: false, revision: '"hook-1:v2"' })
     const checkbox = wrapper.get('[data-testid="event-hook-hook-1"] input[type="checkbox"]')
 
     await checkbox.trigger('change')
     await flushPromises()
-    expect(api.deactivateEventHook).toHaveBeenCalledWith('district-a', 'hook-1')
+    expect(api.deactivateEventHook).toHaveBeenCalledWith('district-a', 'hook-1', '"hook-1:v1"')
 
     vi.mocked(api.updateEventHook).mockResolvedValue(hook)
     await wrapper.get('[data-testid="event-hook-hook-1"] input[type="checkbox"]').trigger('change')
@@ -125,7 +126,7 @@ describe('EventHooksPanel', () => {
       subject_template: 'Fehler {integration_name}',
       body_template: '{error_message}',
       is_active: true,
-    })
+    }, '"hook-1:v2"')
   })
 
   it('reloads and resets the form when the district changes', async () => {

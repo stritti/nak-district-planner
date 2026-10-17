@@ -37,17 +37,23 @@ describe('reminder configuration API', () => {
   })
 
   it('updates only the selected reminder', async () => {
-    await api.updateReminderConfig('district-a', 'reminder-1', { is_active: false })
+    await api.updateReminderConfig('district-a', 'reminder-1', { is_active: false }, '"r:v1"')
     expect(apiFetch).toHaveBeenCalledWith(`${path}/reminder-1`, {
-      method: 'PUT', body: JSON.stringify({ is_active: false }),
+      method: 'PUT', headers: { 'If-Match': '"r:v1"' }, body: JSON.stringify({ is_active: false }),
     })
   })
 
+  it('never sends a write without a revision', async () => {
+    await expect(api.updateReminderConfig('district-a', 'reminder-1', {}, '')).rejects.toThrow(/Versionsinformation/)
+    await expect(api.deleteReminderConfig('district-a', 'reminder-1', '')).rejects.toThrow(/Versionsinformation/)
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
   it('uses soft-delete endpoint and escapes IDs', async () => {
-    await api.deleteReminderConfig('district/a', 'reminder/1')
+    await api.deleteReminderConfig('district/a', 'reminder/1', '"r:v2"')
     expect(apiFetch).toHaveBeenCalledWith(
       '/api/v1/districts/district%2Fa/reminder-configs/reminder%2F1',
-      { method: 'DELETE' },
+      { method: 'DELETE', headers: { 'If-Match': '"r:v2"' } },
     )
   })
 })

@@ -13,6 +13,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from app.adapters.api.revisions import entity_revision
 from app.adapters.api.routers import event_hooks as router
 from app.adapters.api.schemas.event_hooks import EventHookCreate, EventHookUpdate
 from app.domain.events import EventType
@@ -55,6 +56,10 @@ def update_body(**overrides) -> EventHookUpdate:
     return EventHookUpdate(**{**values, **overrides})
 
 
+def revision_of(hook: EventMailHook) -> str:
+    return entity_revision(hook.id, hook.updated_at)
+
+
 def existing_hook(district_id: uuid.UUID = DISTRICT) -> EventMailHook:
     return EventMailHook(district_id=district_id, **create_body().model_dump())
 
@@ -71,6 +76,7 @@ def repo() -> AsyncMock:
     repository = AsyncMock()
     repository.save = AsyncMock()
     repository.get = AsyncMock(return_value=None)
+    repository.get_for_update = AsyncMock(return_value=None)
     repository.list_by_district = AsyncMock(return_value=[])
     return repository
 
@@ -109,7 +115,8 @@ class TestCrud:
         assert hook.district_id == DISTRICT
         assert hook.is_active
         assert hook.recipient_role == Role.PLANNER
-        repo.save.assert_awaited_once_with(hook)
+        repo.save.assert_awaited_once_with(repo.save.await_args.args[0])
+        assert hook.revision
 
     async def test_create_rejects_placeholder_of_other_event_type(self, db, repo) -> None:
         with pytest.raises(HTTPException) as error:
@@ -126,39 +133,46 @@ class TestCrud:
     async def test_list_returns_district_hooks(self, db, repo) -> None:
         hooks = [existing_hook()]
         repo.list_by_district.return_value = hooks
-        assert await router.list_event_hooks(DISTRICT, auth_for(DISTRICT), db, repo) == hooks
+        listed = await router.list_event_hooks(DISTRICT, auth_for(DISTRICT), db, repo)
+        assert [h.id for h in listed] == [h.id for h in hooks]
+        assert listed[0].revision == revision_of(hooks[0])
         repo.list_by_district.assert_awaited_once_with(DISTRICT)
 
     async def test_update_replaces_mutable_fields_and_keeps_identity(self, db, repo) -> None:
         hook = existing_hook()
-        repo.get.return_value = hook
+        repo.get_for_update.return_value = hook
 
         updated = await router.update_event_hook(
-            DISTRICT, hook.id, update_body(is_active=False), auth_for(DISTRICT), db, repo
+            DISTRICT, hook.id, update_body(is_active=False), auth_for(DISTRICT), db, repo,
+            if_match=revision_of(hook),
         )
 
         assert updated.id == hook.id and updated.event_type == hook.event_type
         assert updated.recipient_role == Role.DISTRICT_ADMIN
         assert not updated.is_active
-        repo.get.assert_awaited_once_with(DISTRICT, hook.id)
-        repo.save.assert_awaited_once_with(updated)
+        repo.get_for_update.assert_awaited_once_with(DISTRICT, hook.id)
+        saved = repo.save.await_args.args[0]
+        assert saved.id == updated.id and updated.revision == revision_of(saved)
+        assert updated.revision != revision_of(hook)
 
     async def test_update_rejects_invalid_template(self, db, repo) -> None:
-        repo.get.return_value = existing_hook()
+        hook = existing_hook()
+        repo.get_for_update.return_value = hook
         with pytest.raises(HTTPException) as error:
             await router.update_event_hook(
                 DISTRICT,
-                uuid.uuid4(),
+                hook.id,
                 update_body(subject_template="{x.__class__}"),
                 auth_for(DISTRICT),
                 db,
                 repo,
+                if_match=revision_of(hook),
             )
         assert error.value.status_code == 422
 
     @pytest.mark.parametrize("operation", ["update", "delete"])
     async def test_hook_of_other_district_is_not_found(self, operation, db, repo) -> None:
-        repo.get.return_value = None
+        repo.get_for_update.return_value = None
         with pytest.raises(HTTPException) as error:
             if operation == "update":
                 await router.update_event_hook(
@@ -173,15 +187,15 @@ class TestCrud:
 
     async def test_delete_is_soft(self, db, repo) -> None:
         hook = existing_hook()
-        repo.get.return_value = hook
+        repo.get_for_update.return_value = hook
 
         response = await router.deactivate_event_hook(
-            DISTRICT, hook.id, auth_for(DISTRICT), db, repo
+            DISTRICT, hook.id, auth_for(DISTRICT), db, repo, if_match=revision_of(hook)
         )
 
-        assert response.status_code == 204
         saved = repo.save.await_args.args[0]
         assert saved.id == hook.id and not saved.is_active
+        assert not response.is_active and response.revision == revision_of(saved)
 
 
 async def test_event_types_list_placeholders_for_editor(db) -> None:
@@ -211,3 +225,50 @@ def test_create_schema_rejects_invalid_input(overrides) -> None:
     }
     with pytest.raises(ValidationError):
         EventHookCreate.model_validate(values)
+
+
+class TestConditionalWrites:
+    """Updates and the active switch are conditional: 428 missing, 412 stale."""
+
+    @pytest.mark.parametrize("operation", ["update", "delete"])
+    @pytest.mark.parametrize(("if_match", "status_code"), [(None, 428), ('"stale"', 412)])
+    async def test_missing_or_stale_precondition_changes_nothing(
+        self, operation, if_match, status_code, db, repo
+    ) -> None:
+        hook = existing_hook()
+        repo.get_for_update.return_value = hook
+        with pytest.raises(HTTPException) as error:
+            if operation == "update":
+                await router.update_event_hook(
+                    DISTRICT, hook.id, update_body(is_active=False), auth_for(DISTRICT), db, repo,
+                    if_match=if_match,
+                )
+            else:
+                await router.deactivate_event_hook(
+                    DISTRICT, hook.id, auth_for(DISTRICT), db, repo, if_match=if_match
+                )
+        assert error.value.status_code == status_code
+        repo.save.assert_not_awaited()
+        assert hook.is_active
+
+    async def test_back_to_back_toggles_get_distinct_revisions(self, db, repo) -> None:
+        hook = existing_hook()
+        repo.get_for_update.return_value = hook
+        first = await router.update_event_hook(
+            DISTRICT, hook.id, update_body(is_active=False), auth_for(DISTRICT), db, repo,
+            if_match=revision_of(hook),
+        )
+        repo.get_for_update.return_value = repo.save.await_args.args[0]
+        second = await router.update_event_hook(
+            DISTRICT, hook.id, update_body(is_active=True), auth_for(DISTRICT), db, repo,
+            if_match=first.revision,
+        )
+        assert second.revision != first.revision
+
+    async def test_permission_is_checked_before_the_lookup(self, db, repo) -> None:
+        with pytest.raises(HTTPException) as error:
+            await router.update_event_hook(
+                DISTRICT, uuid.uuid4(), update_body(), auth_for(uuid.uuid4()), db, repo
+            )
+        assert error.value.status_code == 403
+        repo.get_for_update.assert_not_awaited()

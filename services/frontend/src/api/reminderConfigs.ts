@@ -19,6 +19,7 @@ export interface ReminderConfig extends ReminderConfigInput {
   district_id: string
   created_at: string
   updated_at: string
+  revision: string
 }
 
 const baseUrl = (districtId: string) => `/api/v1/districts/${encodeURIComponent(districtId)}/reminder-configs`
@@ -34,17 +35,31 @@ export function createReminderConfig(districtId: string, input: ReminderConfigIn
   })
 }
 
+const missingRevision = () => Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+
 export function updateReminderConfig(
   districtId: string,
   configId: string,
   input: Partial<ReminderConfigInput>,
+  revision: string,
 ): Promise<ReminderConfig> {
+  if (!revision) return missingRevision()
   return apiFetch(`${baseUrl(districtId)}/${encodeURIComponent(configId)}`, {
     method: 'PUT',
+    headers: { 'If-Match': revision },
     body: JSON.stringify(input),
   })
 }
 
-export function deleteReminderConfig(districtId: string, configId: string): Promise<void> {
-  return apiFetch(`${baseUrl(districtId)}/${encodeURIComponent(configId)}`, { method: 'DELETE' })
+/** Soft-deactivates; the response is the updated record with its new revision. */
+export function deleteReminderConfig(
+  districtId: string,
+  configId: string,
+  revision: string,
+): Promise<ReminderConfig> {
+  if (!revision) return missingRevision()
+  return apiFetch(`${baseUrl(districtId)}/${encodeURIComponent(configId)}`, {
+    method: 'DELETE',
+    headers: { 'If-Match': revision },
+  })
 }
