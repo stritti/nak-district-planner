@@ -89,3 +89,9 @@ Request paths below `/api/v1/export/` SHALL be recorded only with the secret seg
 #### Scenario: Any outcome of a feed request
 - **WHEN** a feed URL request ends with 200, 403, 404, 429 or 500
 - **THEN** no log line, audit record or metric label contains the raw token
+
+#### Scenario: Unhandled exception while rendering an ICS feed
+- **WHEN** an ICS export request raises an unexpected exception containing the feed bearer token in its message or traceback
+- **THEN** the production HTTP 500 response contains no bearer token
+- **AND** the traceback passes through the central secret-redacting log handler
+- **AND** no unfiltered traceback is written directly to standard error
