@@ -5,4 +5,4 @@
 - [x] Check profile subject consistency and prevent UserInfo-only authentication
 - [x] Add unit regression tests for negative cases
 - [x] Synchronize the OIDC baseline specification
-- [ ] Verify targeted backend tests and CI on the pull request
+- [x] Verify targeted backend tests and CI on the pull request _Nachweis (17.10.2026): ausgeliefert in main, CI auf main grün, strikte OpenSpec-Validierung ohne Befund._

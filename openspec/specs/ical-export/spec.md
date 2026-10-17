@@ -83,7 +83,6 @@ Personal calendar feeds for an authenticated, securely linked participant or a s
 - **WHEN** a PUBLIC export token is used
 - **THEN** no personal organisational duty names, assignments or task labels are disclosed
 
-
 ### Requirement: Export credentials are hash-only at rest
 Each ICS bearer credential SHALL be generated using at least 32 random bytes and returned only in the creation response. Only its SHA-256 digest SHALL persist in the database. Anonymous feed RLS and SECURITY DEFINER authorization SHALL compare digests of the presented credentials. A stored hash string SHALL NOT itself authorize a feed.
 
@@ -99,3 +98,10 @@ Each ICS bearer credential SHALL be generated using at least 32 random bytes and
 #### Scenario: Credential revocation
 - **WHEN** an export token record is revoked
 - **THEN** existing URLs immediately stop working with HTTP 404
+
+### Requirement: Stable cancellation notifications
+A `CANCELLED` previously published planning slot SHALL remain exported to the same token scopes with its original UID, an incremented revision `SEQUENCE` and `STATUS:CANCELLED`. A public token SHALL continue to enforce confirmation and internal visibility rules, and a draft deleted before confirmation SHALL simply be absent.
+
+#### Scenario: Released event cancelled after export
+- **WHEN** a previously exported confirmed event is cancelled
+- **THEN** its iCalendar event retains its UID and reports `STATUS:CANCELLED`
