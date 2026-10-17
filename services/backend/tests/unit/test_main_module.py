@@ -74,9 +74,11 @@ async def test_health_endpoint_degrades_without_database_details() -> None:
 
 @pytest.mark.asyncio
 async def test_unhandled_exception_handler() -> None:
-    with patch("app.main.traceback.print_exc"), patch("app.main.sys.stderr.flush"):
+    with patch("app.main.logger.error") as log_error:
         response = await main._unhandled(MagicMock(), RuntimeError("boom"))
     assert response.status_code == 500
+    log_error.assert_called_once()
+    assert log_error.call_args.kwargs["exc_info"][0] is RuntimeError
 
 
 @pytest.mark.asyncio
