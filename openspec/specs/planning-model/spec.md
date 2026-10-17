@@ -251,3 +251,10 @@ Deleting an unreleased generated slot SHALL persist a tenant-scoped suppression 
 #### Scenario: Deleted recurring series occurrence
 - **WHEN** a planner removes one unreleased series occurrence and a scheduler regenerates the same series
 - **THEN** that occurrence stays deleted while other dates in the series may still be generated
+
+### Requirement: Zeitkonsistente Aktualisierung von Planungsserien
+Beim Ändern einer Planungsserie SHALL der Router `updated_at` als zeitzonenbewussten UTC-Zeitstempel speichern, konsistent mit der initialen Erzeugung. Der Zeitstempel SHALL nicht in eine naive lokale Zeit umgewandelt werden.
+
+#### Scenario: Planungsserie wird geändert
+- **WHEN** ein berechtigter Bezirksadministrator eine Planungsserie aktualisiert
+- **THEN** ist `updated_at` UTC-bewusst und nicht älter als der zuvor gespeicherte UTC-Zeitstempel
