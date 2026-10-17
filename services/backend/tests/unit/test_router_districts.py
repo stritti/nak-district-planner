@@ -249,7 +249,8 @@ async def test_create_and_list_congregations_success() -> None:
     district_repo = AsyncMock()
     district_repo.get.return_value = District.create(name="Bezirk")
     cong_repo = AsyncMock()
-    cong_repo.list_by_district.return_value = [cong]
+    # First call: name check while creating (nothing there yet); second call: the listing.
+    cong_repo.list_by_district.side_effect = [[], [cong]]
     group_repo = AsyncMock()
     group_repo.get.return_value = None
 
@@ -1397,3 +1398,117 @@ class TestConditionalCongregationUpdate:
                 AsyncMock(), cong_repo=repo, group_repo=AsyncMock(),
             )
         assert err.value.status_code == 403
+
+
+class TestUniqueUnitNames:
+    """District names are unique system-wide, congregation names per district (409)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("taken", ["Bezirk Nord", "  bezirk   NORD ", "BEZIRK NORD"])
+    async def test_creating_a_district_with_a_taken_name_is_rejected(self, taken) -> None:
+        repo = AsyncMock()
+        repo.list_all.return_value = [District.create(name="Bezirk Nord")]
+        user = _superadmin_user()
+        with pytest.raises(HTTPException) as err:
+            await r.create_district(DistrictCreate(name=taken), user, AsyncMock(), district_repo=repo)
+        assert err.value.status_code == 409
+        repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_creating_a_district_with_a_new_name_is_accepted(self) -> None:
+        repo = AsyncMock()
+        repo.list_all.return_value = [District.create(name="Bezirk Nord")]
+        user = _superadmin_user()
+        with (
+            patch("app.adapters.api.routers.districts.import_feiertage", new=AsyncMock()),
+            patch("app.adapters.api.routers.districts.import_kirchliche_festtage", new=AsyncMock()),
+        ):
+            created = await r.create_district(
+                DistrictCreate(name="Bezirk Süd"), user, AsyncMock(), district_repo=repo
+            )
+        assert created.name == "Bezirk Süd"
+
+    @pytest.mark.asyncio
+    async def test_renaming_a_district_to_a_taken_name_is_rejected_but_keeping_its_own_is_not(self) -> None:
+        mine, other = District.create(name="Eins"), District.create(name="Zwei")
+        repo = AsyncMock()
+        repo.get_for_update.return_value = mine
+        repo.list_all.return_value = [mine, other]
+        with patch("app.adapters.api.routers.districts.require_role_in_district"):
+            with pytest.raises(HTTPException) as err:
+                await r.update_district(
+                    mine.id, DistrictUpdate(name="zwei"), object(), AsyncMock(), repo=repo,
+                    if_match=r._district_response(mine).revision,
+                )
+            assert err.value.status_code == 409
+            assert mine.name == "Eins"
+            same = await r.update_district(
+                mine.id, DistrictUpdate(name=" EINS "), object(), AsyncMock(), repo=repo,
+                if_match=r._district_response(mine).revision,
+            )
+        assert same.name == " EINS " or same.name.strip().casefold() == "eins"
+
+    @staticmethod
+    def _congregation_repos(district_id, existing_names):
+        district_repo = AsyncMock()
+        district_repo.get.return_value = District.create(name="B")
+        cong_repo = AsyncMock()
+        cong_repo.list_by_district.return_value = [
+            Congregation.create(name=name, district_id=district_id) for name in existing_names
+        ]
+        return district_repo, cong_repo
+
+    @pytest.mark.asyncio
+    async def test_creating_a_congregation_with_a_taken_name_is_rejected(self) -> None:
+        district_id = uuid.uuid4()
+        district_repo, cong_repo = self._congregation_repos(district_id, ["Gemeinde Mitte"])
+        with (
+            patch("app.adapters.api.routers.districts.require_role_in_district"),
+            pytest.raises(HTTPException) as err,
+        ):
+            await r.create_congregation(
+                district_id, CongregationCreate(name="gemeinde  mitte"), object(), AsyncMock(),
+                district_repo=district_repo, cong_repo=cong_repo, group_repo=AsyncMock(),
+            )
+        assert err.value.status_code == 409
+        cong_repo.save.assert_not_awaited()
+        cong_repo.list_by_district.assert_awaited_once_with(district_id)
+
+    @pytest.mark.asyncio
+    async def test_renaming_a_congregation_to_a_taken_name_is_rejected(self) -> None:
+        district_id = uuid.uuid4()
+        mine = Congregation.create(name="Alt", district_id=district_id)
+        taken = Congregation.create(name="Besetzt", district_id=district_id)
+        cong_repo = AsyncMock()
+        cong_repo.get_for_update.return_value = mine
+        cong_repo.list_by_district.return_value = [mine, taken]
+        with (
+            patch("app.adapters.api.routers.districts.assert_has_role_in_district"),
+            pytest.raises(HTTPException) as err,
+        ):
+            await r.update_congregation(
+                district_id, mine.id, CongregationUpdate(name="BESETZT"), object(), AsyncMock(),
+                cong_repo=cong_repo, group_repo=AsyncMock(),
+                if_match=r._cong_response(mine).revision,
+            )
+        assert err.value.status_code == 409
+        assert mine.name == "Alt"
+        cong_repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_updating_other_fields_of_a_row_with_an_existing_duplicate_is_not_blocked(self) -> None:
+        district_id = uuid.uuid4()
+        mine = Congregation.create(name="Doppelt", district_id=district_id)
+        twin = Congregation.create(name="doppelt", district_id=district_id)
+        cong_repo = AsyncMock()
+        cong_repo.get_for_update.return_value = mine
+        cong_repo.list_by_district.return_value = [mine, twin]
+        with patch("app.adapters.api.routers.districts.assert_has_role_in_district"):
+            result = await r.update_congregation(
+                district_id, mine.id,
+                CongregationUpdate(service_times=[{"weekday": 0, "time": "10:00"}]),
+                object(), AsyncMock(), cong_repo=cong_repo, group_repo=AsyncMock(),
+                if_match=r._cong_response(mine).revision,
+            )
+        assert result.name == "Doppelt"
+        cong_repo.list_by_district.assert_not_awaited()  # name untouched: no lookup needed
