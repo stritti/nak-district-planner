@@ -9,7 +9,7 @@ import io
 import logging
 import re
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.requests import Request
@@ -169,12 +169,16 @@ async def test_unhandled_export_error_never_bypasses_log_redaction(
         try:
             raise RuntimeError(f"upstream failed for {FEED}")
         except RuntimeError as exc:
-            response = await _unhandled(_request(), exc)
+            from app.config import settings
+
+            with patch.object(settings, "app_env", "production"):
+                response = await _unhandled(_request(), exc)
     finally:
         logger.removeHandler(handler)
         logger.setLevel(original_level)
 
     assert response.status_code == 500
+    assert CANARY not in response.body.decode("utf-8")
     assert CANARY not in capsys.readouterr().err
     assert CANARY not in stream.getvalue()
     assert "{redacted}" in stream.getvalue()
