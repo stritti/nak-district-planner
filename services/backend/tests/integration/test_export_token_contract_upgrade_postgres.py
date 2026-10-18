@@ -225,7 +225,7 @@ def _runtime_visible_slot_ids(url, token: str, ids: list[uuid.UUID]) -> set[uuid
                 "SELECT id FROM planning_slots WHERE id = ANY(%s::uuid[])",
                 ([str(slot_id) for slot_id in ids],),
             )
-            return {row[0] for row in cur.fetchall()}
+            return {uuid.UUID(str(row[0])) for row in cur.fetchall()}
     finally:
         connection.rollback()
         connection.close()
