@@ -48,7 +48,7 @@ from app.adapters.db.orm_models.recurring_event import (
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.tenant import TenantContext
 
-logger = logging.getLogger(__name__)
+
 
 class AuditTenantResolutionError(RuntimeError):
     """Reject a mutation whose mandatory domain audit cannot be tenant-scoped."""
