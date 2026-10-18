@@ -517,3 +517,65 @@ class TestConditionalDutyWrites:
             congregation_id=repo.congregation, repository=repo,
         )
         assert rows[0]["revision"] == content_revision(suggestion)
+
+
+class TestDutyIdentityConflicts:
+    """Overlapping duties of one person answer with the shared 409 conflict contract."""
+
+    @staticmethod
+    def _overlap(strong):
+        from datetime import UTC, datetime, timedelta
+
+        start = datetime(2026, 11, 1, 9, 30, tzinfo=UTC)
+        from app.domain.planning.duty_conflicts import ScheduledDuty
+
+        return ScheduledDuty(uuid4(), uuid4(), start, start + timedelta(minutes=90), strong)
+
+    @pytest.mark.asyncio
+    async def test_a_verified_overlap_answers_409_with_a_blocking_conflict(self, setup):
+        repo, db = setup
+        repo.identity_schedule = [self._overlap(strong=True)]
+        with pytest.raises(HTTPException) as error:
+            await api.assign(
+                repo.district, repo.slot_id,
+                AssignmentWrite(duty_category_id=repo.categories[0].id, linked_user_sub="verified"),
+                auth(repo), db, repository=repo,
+            )
+        assert error.value.status_code == 409
+        [conflict] = error.value.detail["conflicts"]
+        assert (conflict["rule_id"], conflict["severity"]) == ("duty_double_booking", "BLOCK")
+        assert repo.assignments == []
+
+    @pytest.mark.asyncio
+    async def test_a_name_overlap_needs_confirmation_in_the_request(self, setup):
+        repo, db = setup
+        repo.identity_schedule = [self._overlap(strong=False)]
+        with pytest.raises(HTTPException) as error:
+            await api.assign(
+                repo.district, repo.slot_id,
+                AssignmentWrite(duty_category_id=repo.categories[0].id, name="Anna"),
+                auth(repo), db, repository=repo,
+            )
+        assert error.value.status_code == 409
+        assert error.value.detail["conflicts"][0]["severity"] == "WARN"
+        result = await api.assign(
+            repo.district, repo.slot_id,
+            AssignmentWrite(duty_category_id=repo.categories[0].id, name="Anna", confirm_warnings=True),
+            auth(repo), db, repository=repo,
+        )
+        assert result["display_name"] == "Anna" and len(repo.assignments) == 1
+
+    @pytest.mark.asyncio
+    async def test_replace_answers_with_the_same_contract(self, setup):
+        repo, db = setup
+        row = EventDutyAssignment.create(repo.slot_id, repo.categories[0], repo.congregation, "Anna")
+        repo.assignments.append(row)
+        repo.identity_schedule = [self._overlap(strong=False)]
+        with pytest.raises(HTTPException) as error:
+            await api.replace_assignment(
+                repo.district, row.id,
+                AssignmentWrite(duty_category_id=repo.categories[0].id, name="Berta"),
+                auth(repo), db, repository=repo, if_match=content_revision(row),
+            )
+        assert error.value.status_code == 409
+        assert error.value.detail["conflicts"][0]["rule_id"] == "duty_possible_namesake"

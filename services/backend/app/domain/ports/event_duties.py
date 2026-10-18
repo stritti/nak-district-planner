@@ -89,3 +89,19 @@ class EventDutiesRepository(ABC):
     @abstractmethod
     async def save_suggestion(self, suggestion):
         raise NotImplementedError
+
+    @abstractmethod
+    async def slot_schedule(self, slot_id):
+        """Planned date/time and actual instance times of a slot as a ``ScheduledService``."""
+
+    @abstractmethod
+    async def list_identity_schedule(
+        self, district_id, *, linked_user_sub, normalized_name, window_start, window_end,
+        exclude_slot_id,
+    ):
+        """Other duties of one person near a time window, as ``ScheduledDuty`` values.
+
+        ``linked_user_sub`` matches strongly, ``normalized_name`` only by typed name.
+        Duties of ``exclude_slot_id`` are ignored (several duties on one event are fine).
+        """
+
