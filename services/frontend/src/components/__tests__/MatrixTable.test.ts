@@ -150,6 +150,30 @@ describe('MatrixTable planning conflicts', () => {
   it('shows nothing without conflicts', () => {
     expect(mountWith([]).find('[data-testid="cell-conflict"]').exists()).toBe(false)
   })
+
+  it('shows that more than one same-day service contributes to the conflict marker', async () => {
+    const wrapper = mountWith([
+      { rule_id: 'no_double_booking', severity: 'BLOCK', message: '10:30 Uhr: Doppelbelegung' },
+    ])
+    const store = useMatrixStore()
+    store.matrix!.rows[0].cells['2030-04-14'].service_count = 2
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="cell-service-count"]').text()).toContain('2 Gottesdienste')
+    expect(wrapper.get('[data-testid="cell-conflict"]').text()).toContain('10:30 Uhr')
+  })
+
+  it('shows a refresh warning when conflicts have been invalidated after a save', async () => {
+    const wrapper = mountWith([])
+    const store = useMatrixStore()
+    store.conflictsStale = true
+    store.conflictsRefreshError = 'Zuordnung gespeichert, aber Konflikte konnten nicht aktualisiert werden.'
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="matrix-conflicts-refresh-status"]').text()).toContain(
+      'Konflikte konnten nicht aktualisiert werden',
+    )
+  })
 })
 
 describe('MatrixTable scroll shadows', () => {
