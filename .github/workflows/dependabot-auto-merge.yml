@@ -1,0 +1,40 @@
+# Dependabot metadata is read from the trusted base branch. Never check out
+# or execute pull-request code with this workflow's write-capable token.
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  enable-auto-merge:
+    name: Enable Dependabot auto-merge
+    if: >-
+      github.repository == 'stritti/nak-district-planner' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.base.ref == 'main' &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Verify Dependabot update metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7 # v2.3.0
+
+      - name: Enable native auto-merge for patch and minor updates
+        if: >-
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+           steps.metadata.outputs.update-type == 'version-update:semver-minor') &&
+          steps.metadata.outputs.maintainer-changes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          # GitHub enforces every required status check and the up-to-date
+          # main branch ruleset before performing the actual merge.
+          gh pr merge --auto --squash "$PR_URL"
