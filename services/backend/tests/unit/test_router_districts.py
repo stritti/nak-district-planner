@@ -648,6 +648,52 @@ async def test_matrix_warns_about_short_travel_time_and_ignores_free_text_leader
 
 
 @pytest.mark.asyncio
+async def test_matrix_aggregates_conflicts_from_two_same_day_services() -> None:
+    district_id = uuid.uuid4()
+    nord = Congregation.create(name="Nord", district_id=district_id)
+    leader = Leader.create(name="Muster", district_id=district_id)
+    start = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
+    first = _slot_with_leader(district_id, nord, leader, start)
+    second = _slot_with_leader(district_id, nord, leader, start + timedelta(minutes=30))
+
+    result = await _matrix_for(district_id, [nord], [first, second], [leader], start)
+
+    cell = result.rows[0].cells[start.date().isoformat()]
+    assert cell.service_count == 2
+    assert [item.rule_id for item in cell.conflicts] == [
+        "no_double_booking", "no_double_booking",
+    ]
+    assert cell.conflicts[0].message.startswith("10:00 Uhr:")
+    assert cell.conflicts[1].message.startswith("10:30 Uhr:")
+
+
+@pytest.mark.asyncio
+async def test_matrix_shows_later_same_day_service_conflict_when_primary_is_clear() -> None:
+    district_id = uuid.uuid4()
+    nord = Congregation.create(name="Nord", district_id=district_id)
+    sued = Congregation.create(name="Sued", district_id=district_id)
+    leader = Leader.create(name="Muster", district_id=district_id)
+    other_leader = Leader.create(name="Andere", district_id=district_id)
+    start = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
+    primary = _slot_with_leader(district_id, nord, other_leader, start)
+    later = _slot_with_leader(district_id, nord, leader, start + timedelta(minutes=30))
+    competing = _slot_with_leader(district_id, sued, leader, start + timedelta(minutes=30))
+
+    result = await _matrix_for(
+        district_id, [nord, sued], [primary, later, competing],
+        [leader, other_leader], start,
+    )
+
+    cell = next(row for row in result.rows if row.congregation_id == nord.id).cells[
+        start.date().isoformat()
+    ]
+    assert cell.service_count == 2
+    assert len(cell.conflicts) == 1
+    assert cell.conflicts[0].rule_id == "no_double_booking"
+    assert cell.conflicts[0].message.startswith("10:30 Uhr:")
+
+
+@pytest.mark.asyncio
 async def test_matrix_conflicts_follow_the_conflict_check_switch(monkeypatch) -> None:
     monkeypatch.setattr("app.adapters.api.routers.districts.settings.conflict_check_enabled", False)
     district_id = uuid.uuid4()
