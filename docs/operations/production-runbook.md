@@ -42,7 +42,7 @@ Mit konfigurierten `SMTP_USER`/`SMTP_PASSWORD` sind `SMTP_STARTTLS=true`, eine g
 
 ```bash
 cd services/backend
-uv run python -m app.adapters.mail.starttls_probe --host smtp.example.org --port 587
+python3 scripts/check_smtp_starttls.py --host smtp.example.org --port 587
 ```
 
 Den Hostnamen und Port mit der eingesetzten Relay-Konfiguration ersetzen. Es wird der System-Truststore genutzt; Zertifikats- oder Hostname-Pruefung niemals zum Erreichen eines gruenen Tests deaktivieren. Der Aufruf gibt nur `PASS` oder `FAIL` aus, niemals Benutzername, Passwort oder Mailinhalt. `FAIL` verhindert den Produktiv-Rollout, bis die Ursache (fehlendes STARTTLS, Zertifikatskette, Hostname, Netzwerk) behoben ist.
