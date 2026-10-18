@@ -30,11 +30,11 @@
 
 ### Task 1: Threat model and proxy-safe defaults
 
-**Files:** `docs/operations/production-runbook.md`
+**Files:** `docs/operations/production-runbook.md`; `services/backend/tests/unit/test_proxy_log_redaction_documentation.py`
 
-**Interfaces:** Consumes the existing component contracts in the OpenSpec design. Produces the behavior asserted by `docs/operations/production-runbook.md`.
+**Interfaces:** Produces a documented nginx-safe logging configuration validated by `services/backend/tests/unit/test_proxy_log_redaction_documentation.py`.
 
-- [ ] **Step 1 — RED:** Add `test_runbook_documents_sensitive_proxy_route: document exact token URL pattern and safe nginx logging suppression vs version-checked Traefik/Caddy options` in `docs/operations/production-runbook.md`; state the pre-change behavior that violates the assertion.
+- [ ] **Step 1 — RED:** Add `test_proxy_log_configuration_uses_original_request_and_suppresses_errors` in `services/backend/tests/unit/test_proxy_log_redaction_documentation.py`; state the pre-change behavior that violates the assertion.
 - [ ] **Step 2 — Verify failure:** `python -m pytest services/backend/tests/unit/test_proxy_log_redaction_documentation.py -v`. Expected: FAIL with the targeted behavior assertion before any production modification.
 - [ ] **Step 3 — GREEN:** In `docs/operations/production-runbook.md`, avoid claiming Traefik accessLog.filters edits arbitrary URI; prefer path logging off when cannot prove sanitation.
 - [ ] **Step 4 — Verify green:** `python -m pytest services/backend/tests/unit/test_proxy_log_redaction_documentation.py -v`. Expected: PASS, zero unexpected skips.
