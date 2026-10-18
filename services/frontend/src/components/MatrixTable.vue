@@ -8,6 +8,14 @@
     class="relative"
   >
     <div
+      v-if="matrixStore.conflictsStale"
+      data-testid="matrix-conflicts-refresh-status"
+      role="status"
+      class="mb-2 text-sm text-amber-700 dark:text-amber-300"
+    >
+      {{ matrixStore.conflictsRefreshError ?? 'Konflikte werden neu geprüft…' }}
+    </div>
+    <div
       ref="scrollContainer"
       class="matrix-scroll-container max-h-[70dvh] overflow-auto overscroll-x-contain overscroll-y-auto touch-auto [&::-webkit-scrollbar:horizontal]:h-0"
       data-testid="matrix-scroll"
@@ -332,6 +340,7 @@ async function saveInlineAssignment(cell: MatrixCell, leaderId: string, revision
   if (!eventId) throw new Error('Planungseintrag fehlt')
   const saved = await saveAssignment(eventId, leaderId, revision)
   matrixStore.applyInlineAssignment(eventId, saved)
+  await matrixStore.refreshConflicts()
 }
 
 type OverflowTitleEl = HTMLElement & {
