@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@pinia/testing": "^2.0",
-    "@playwright/test": "^1.63",
+    "@playwright/test": "^1.64",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0",
     "@vitest/coverage-v8": "^5.0.3",
