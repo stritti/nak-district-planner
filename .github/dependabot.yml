@@ -9,6 +9,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # CodeQL init/analyze must use exactly the same action version in each job.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
   - package-ecosystem: "bun" # See documentation for possible values
     directory: "/services/frontend" # Location of package manifests
     schedule:
