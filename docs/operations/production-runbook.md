@@ -36,6 +36,21 @@ Der Production Guard verhindert den Start bei kritischen unsicheren Werten.
 
 `/api/v1/export/<token>/calendar.ics` enthaelt ein Bearer-Secret im Pfad. Anwendung und Frontend-nginx maskieren den Token in Logs, Audit-Metadaten, Metrik-Labels und Traces. **Der externe TLS-Proxy (Traefik, Caddy, nginx, Load Balancer) ist nicht Teil dieses Repos** und muss selbst maskieren oder den Pfad `/api/v1/export/` nicht protokollieren (zum Beispiel Traefik `accessLog.filters`/Feld-Redaktion oder ein eigenes nginx-`log_format` mit maskiertem URI). Bereits protokollierte Feed-URLs gelten als offengelegt: Log-Retention pruefen und betroffene Tokens bei Bedarf widerrufen und neu ausgeben.
 
+### 1.1b SMTP-Relay: STARTTLS-Smoke-Test vor Produktion
+
+Mit konfigurierten `SMTP_USER`/`SMTP_PASSWORD` sind `SMTP_STARTTLS=true`, eine gueltige Zertifikatskette und ein zum Relay-Hostnamen passendes Zertifikat erforderlich. Der folgende **verbindungsbasierte** Smoke-Test verbindet sich mit dem tatsaechlichen Staging-/Produktions-Relay und fuehrt ausschliesslich EHLO, STARTTLS, TLS-Handshake, EHLO und QUIT durch. Er **authentifiziert sich nicht und sendet keine Mail**. Ein erfolgreiches Ergebnis bestaetigt deshalb die TLS-Verbindung, nicht die korrekte Berechtigung der Credentials oder die Zustellbarkeit an Empfaenger.
+
+```bash
+cd services/backend
+uv run python -m app.adapters.mail.starttls_probe --host smtp.example.org --port 587
+```
+
+Den Hostnamen und Port mit der eingesetzten Relay-Konfiguration ersetzen. Es wird der System-Truststore genutzt; Zertifikats- oder Hostname-Pruefung niemals zum Erreichen eines gruenen Tests deaktivieren. Der Aufruf gibt nur `PASS` oder `FAIL` aus, niemals Benutzername, Passwort oder Mailinhalt. `FAIL` verhindert den Produktiv-Rollout, bis die Ursache (fehlendes STARTTLS, Zertifikatskette, Hostname, Netzwerk) behoben ist.
+
+Anschliessend im geschuetzten Staging mit einem eigens eingerichteten Test-Postfach eine einzelne kontrollierte Ende-zu-Ende-Zustellung pruefen. Das Passwort darf erst nach erfolgreich verifiziertem TLS-Handshake uebertragen werden. Die lokalen Socket-Integrationstests `tests/integration/test_smtp_starttls.py` pruefen im CI genau diese Reihenfolge einschliesslich fehlender STARTTLS-Unterstuetzung, nicht vertrauenswuerdigem Zertifikat, Hostnamenabweichung und abgebrochenem TLS-Upgrade. Sie ersetzen **nicht** die Live-Pruefung.
+
+**Betriebsnachweis:** Datum, ausfuehrende Rolle, Relay-Host/Port, Zertifikat-SAN und Ablaufdatum, Ergebnis des credential-freien Probes, Ergebnis der einmaligen Test-Postfach-Zustellung und Rollout-Freigabe dokumentieren. Keine Passwoerter oder SMTP-AUTH-Befehle mit Credentials archivieren.
+
 ### 1.2 Reverse Proxy und Client-IP
 
 Rate Limiting und Audit-Log verwenden dieselbe Client-IP. Die Vertrauenskette ist:
