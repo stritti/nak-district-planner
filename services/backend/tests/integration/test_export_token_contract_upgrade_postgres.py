@@ -191,3 +191,122 @@ def test_empty_installation_migrates(database) -> None:
     assert _alembic(database, PREDECESSOR).returncode == 0
     assert _alembic(database, "head").returncode == 0
     assert "token" not in _columns(_connect(database))
+
+
+def _app_role_connection(url):
+    """Connect with the actual non-owner, non-BYPASSRLS runtime role."""
+    password = os.getenv("RLS_TEST_APP_PASSWORD")
+    if not password:
+        pytest.fail("RLS_TEST_APP_PASSWORD is required for the contract runtime-role test")
+    connection = psycopg2.connect(
+        host=url.host,
+        port=url.port,
+        user=os.getenv("APP_DB_USER", "nak_app"),
+        password=password,
+        dbname=url.database,
+    )
+    connection.autocommit = False
+    return connection
+
+
+def _runtime_visible_slot_ids(url, token: str, ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    """Set bearer context transaction-locally, then query as NOBYPASSRLS."""
+    connection = _app_role_connection(url)
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT current_user")
+            assert cur.fetchone()[0] == os.getenv("APP_DB_USER", "nak_app")
+            cur.execute(
+                "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user"
+            )
+            assert cur.fetchone() == (False, False)
+            cur.execute("SELECT set_config('app.current_export_token', %s, true)", (token,))
+            cur.execute(
+                "SELECT id FROM planning_slots WHERE id = ANY(%s::uuid[])",
+                ([str(slot_id) for slot_id in ids],),
+            )
+            return {row[0] for row in cur.fetchall()}
+    finally:
+        connection.rollback()
+        connection.close()
+
+
+def test_runtime_role_token_visibility_after_contract_upgrade(database) -> None:
+    """PUBLIC, INTERNAL and subject tokens stay tenant-scoped; revoked tokens lose access."""
+    assert os.getenv("RLS_TEST_APP_PASSWORD"), "application-role credentials required"
+    assert _alembic(database, PREDECESSOR).returncode == 0
+    owner = _connect(database)
+    token_values = {
+        kind: f"{kind.lower()}-{uuid.uuid4().hex}{uuid.uuid4().hex}"
+        for kind in ("PUBLIC", "INTERNAL", "PERSONAL", "REVOKED", "FOREIGN")
+    }
+    own_ids = _seed(
+        owner,
+        [
+            ("PUBLIC", token_values["PUBLIC"], None),
+            ("INTERNAL", token_values["INTERNAL"], None),
+            ("PERSONAL", token_values["PERSONAL"], None),
+            ("PUBLIC", token_values["REVOKED"], None),
+        ],
+    )
+    foreign_ids = _seed(owner, [("INTERNAL", token_values["FOREIGN"], None)])
+    cur = owner.cursor()
+    cur.execute("SELECT district_id FROM export_tokens WHERE id=%s", (str(own_ids[0]),))
+    own_district = cur.fetchone()[0]
+    cur.execute("SELECT district_id FROM export_tokens WHERE id=%s", (str(foreign_ids[0]),))
+    foreign_district = cur.fetchone()[0]
+    own_slot, foreign_slot = uuid.uuid4(), uuid.uuid4()
+    for slot_id, district in [(own_slot, own_district), (foreign_slot, foreign_district)]:
+        cur.execute(
+            "INSERT INTO planning_slots "
+            "(id, district_id, planning_date, planning_time, status, created_at, updated_at) "
+            "VALUES (%s, %s, '2026-12-24', '09:30', 'ACTIVE', now(), now())",
+            (str(slot_id), str(district)),
+        )
+    result = _alembic(database, "head")
+    assert result.returncode == 0, result.stderr[-1000:]
+    assert "token" not in _columns(owner)
+
+    # An application role may use a valid bearer token, but must never see a foreign district.
+    for kind in ("PUBLIC", "INTERNAL", "PERSONAL"):
+        assert _runtime_visible_slot_ids(
+            database, token_values[kind], [own_slot, foreign_slot]
+        ) == {own_slot}, kind
+
+    # The owner revokes the token; a fresh runtime transaction must not see either tenant.
+    cur.execute("DELETE FROM export_tokens WHERE id=%s", (str(own_ids[3]),))
+    for token in (token_values["REVOKED"], "missing-" + uuid.uuid4().hex):
+        assert _runtime_visible_slot_ids(database, token, [own_slot, foreign_slot]) == set()
+    assert _runtime_visible_slot_ids(
+        database, token_values["FOREIGN"], [own_slot, foreign_slot]
+    ) == {foreign_slot}
+
+    # Absence of a token is not a privileged state.
+    assert _runtime_visible_slot_ids(database, "", [own_slot, foreign_slot]) == set()
+
+
+def test_contract_policies_and_functions_drop_plaintext_dependency(database) -> None:
+    """Inspect active PostgreSQL definitions, not just Python migration source."""
+    import re
+
+    assert _alembic(database, PREDECESSOR).returncode == 0
+    owner = _connect(database)
+    _seed(owner, [("PUBLIC", "pub-" + uuid.uuid4().hex, None)])
+    result = _alembic(database, "head")
+    assert result.returncode == 0, result.stderr[-1000:]
+
+    cur = owner.cursor()
+    cur.execute("SELECT qual, with_check FROM pg_policies")
+    policy_sql = [part for row in cur.fetchall() for part in row if part]
+    cur.execute(
+        "SELECT pg_get_functiondef(p.oid) FROM pg_proc p "
+        "JOIN pg_namespace n ON n.oid=p.pronamespace "
+        "WHERE n.nspname='public' AND p.prokind='f'"
+    )
+    function_sql = [row[0] for row in cur.fetchall() if "app.current_export_token" in row[0]]
+    definitions = [*policy_sql, *function_sql]
+    assert definitions, "expected actual export-token dependent SQL definitions"
+    assert any("token_hash" in sql for sql in definitions)
+    for statement in definitions:
+        assert re.search(r"\\b(?:et|export_tokens)\\s*\\.\\s*token\\b", statement, re.I) is None
+    assert "token" not in _columns(owner)
