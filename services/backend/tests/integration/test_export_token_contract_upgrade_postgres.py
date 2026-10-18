@@ -231,6 +231,24 @@ def _runtime_visible_slot_ids(url, token: str, ids: list[uuid.UUID]) -> set[uuid
         connection.close()
 
 
+def _runtime_personal_scopes(
+    url, token: str, subject: str, district_id: uuid.UUID
+) -> set[tuple[str, uuid.UUID]]:
+    """Use the actual post-upgrade SECURITY DEFINER subject feed helper as runtime role."""
+    connection = _app_role_connection(url)
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT set_config('app.current_export_token', %s, true)", (token,))
+            cur.execute(
+                "SELECT scope_type, scope_id FROM personal_calendar_scopes(%s, %s)",
+                (subject, str(district_id)),
+            )
+            return {(scope, uuid.UUID(str(scope_id))) for scope, scope_id in cur.fetchall()}
+    finally:
+        connection.rollback()
+        connection.close()
+
+
 def test_runtime_role_token_visibility_after_contract_upgrade(database) -> None:
     """PUBLIC, INTERNAL and subject tokens stay tenant-scoped; revoked tokens lose access."""
     assert os.getenv("RLS_TEST_APP_PASSWORD"), "application-role credentials required"
@@ -267,11 +285,52 @@ def test_runtime_role_token_visibility_after_contract_upgrade(database) -> None:
     assert result.returncode == 0, result.stderr[-1000:]
     assert "token" not in _columns(owner)
 
-    # An application role may use a valid bearer token, but must never see a foreign district.
-    for kind in ("PUBLIC", "INTERNAL", "PERSONAL"):
+    # Public/internal tokens read their own tenant, never the neighboring district.
+    for kind in ("PUBLIC", "INTERNAL"):
         assert _runtime_visible_slot_ids(
             database, token_values[kind], [own_slot, foreign_slot]
         ) == {own_slot}, kind
+
+    # Personal feeds do NOT gain wholesale access to district slots. They see
+    # only linked duties/services; their permitted memberships come from the
+    # SECURITY DEFINER personal_calendar_scopes helper.
+    assert _runtime_visible_slot_ids(
+        database, token_values["PERSONAL"], [own_slot, foreign_slot]
+    ) == set()
+    cur.execute(
+        "SELECT subject_sub FROM export_tokens WHERE id=%s", (str(own_ids[2]),)
+    )
+    personal_sub = cur.fetchone()[0]
+    cur.execute(
+        "INSERT INTO memberships "
+        "(id, user_sub, role, scope_type, scope_id, created_at, updated_at) "
+        "VALUES (%s, %s, 'VIEWER', 'DISTRICT', %s, now(), now())",
+        (str(uuid.uuid4()), personal_sub, str(own_district)),
+    )
+    foreign_subject = f"foreign-{uuid.uuid4().hex}"
+    cur.execute(
+        "INSERT INTO users (id, sub, email, username, is_superadmin, created_at, updated_at) "
+        "VALUES (%s, %s, %s, %s, false, now(), now())",
+        (
+            str(uuid.uuid4()), foreign_subject,
+            f"{foreign_subject}@example.test", foreign_subject,
+        ),
+    )
+    cur.execute(
+        "INSERT INTO memberships "
+        "(id, user_sub, role, scope_type, scope_id, created_at, updated_at) "
+        "VALUES (%s, %s, 'VIEWER', 'DISTRICT', %s, now(), now())",
+        (str(uuid.uuid4()), foreign_subject, str(own_district)),
+    )
+    assert _runtime_personal_scopes(
+        database, token_values["PERSONAL"], personal_sub, own_district
+    ) == {("DISTRICT", own_district)}
+    assert _runtime_personal_scopes(
+        database, token_values["PERSONAL"], personal_sub, foreign_district
+    ) == set()
+    assert _runtime_personal_scopes(
+        database, token_values["PERSONAL"], foreign_subject, own_district
+    ) == set()
 
     # The owner revokes the token; a fresh runtime transaction must not see either tenant.
     cur.execute("DELETE FROM export_tokens WHERE id=%s", (str(own_ids[3]),))
