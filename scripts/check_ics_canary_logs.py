@@ -16,11 +16,31 @@ from pathlib import Path
 
 _CHUNK_SIZE = 64 * 1024
 
+_UNSUPPORTED_SUFFIXES = frozenset({".gz", ".zip", ".bz2", ".xz", ".zst"})
+_COMPRESSED_SIGNATURES = (
+    bytes.fromhex("1f8b"), bytes.fromhex("504b0304"),
+    b"BZh", bytes.fromhex("fd377a585a00"), bytes.fromhex("28b52ffd"),
+)
+
+
+class _SafeParser(argparse.ArgumentParser):
+    """Never echo unknown argument values: they may be bearer credentials."""
+
+    def error(self, message: str) -> None:
+        self.exit(2, "INCOMPLETE: invalid arguments (values withheld)\n")
+
+
 
 def _contains_token(path: Path, token: bytes) -> bool:
     """Scan large binary logs without missing matches across chunk boundaries."""
     overlap = b""
+    if path.suffix.lower() in _UNSUPPORTED_SUFFIXES:
+        raise ValueError("unsupported compressed log export")
     with path.open("rb") as source:
+        first = source.read(8)
+        if any(first.startswith(signature) for signature in _COMPRESSED_SIGNATURES):
+            raise ValueError("unsupported compressed log export")
+        source.seek(0)
         while chunk := source.read(_CHUNK_SIZE):
             data = overlap + chunk
             if token in data:
@@ -30,7 +50,7 @@ def _contains_token(path: Path, token: bytes) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
+    parser = _SafeParser(
         description="Check exported log files without displaying an ICS bearer token."
     )
     parser.add_argument(
@@ -51,7 +71,7 @@ def main() -> int:
     for source in args.source:
         try:
             leaks += _contains_token(Path(source), token)
-        except OSError:
+        except (OSError, ValueError):
             print("INCOMPLETE: one or more log sources cannot be read", file=sys.stderr)
             return 2
 
