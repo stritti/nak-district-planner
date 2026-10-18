@@ -20,3 +20,14 @@ The matrix response SHALL list per cell the planning conflicts of its leader ass
 #### Scenario: Different leaders
 - **WHEN** two different leaders are assigned to overlapping events
 - **THEN** no conflict is reported
+
+#### Scenario: Multiple services on the same day
+- **WHEN** a congregation has more than one visible service on the same date
+- **THEN** the matrix cell reports the number of services and aggregates conflicts from all of them
+- **AND** conflict messages include the affected service time to distinguish same-day assignments
+
+#### Scenario: Inline assignment update
+- **WHEN** a leader assignment is saved inline
+- **THEN** the matrix reloads the authoritative conflicts for all cells in the selected range
+- **AND** stale conflict indicators are hidden until the refresh succeeds
+- **AND** the UI makes a failed conflict refresh visible without misrepresenting the assignment save as failed
