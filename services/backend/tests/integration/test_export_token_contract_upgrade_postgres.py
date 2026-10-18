@@ -237,7 +237,7 @@ def test_runtime_role_token_visibility_after_contract_upgrade(database) -> None:
     assert _alembic(database, PREDECESSOR).returncode == 0
     owner = _connect(database)
     token_values = {
-        kind: f"{kind.lower()}-{uuid.uuid4().hex}{uuid.uuid4().hex}"
+        kind: f"{kind.lower()[:3]}-{uuid.uuid4().hex}"
         for kind in ("PUBLIC", "INTERNAL", "PERSONAL", "REVOKED", "FOREIGN")
     }
     own_ids = _seed(
