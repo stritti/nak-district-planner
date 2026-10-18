@@ -49,7 +49,6 @@ from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.tenant import TenantContext
 
 
-
 class AuditTenantResolutionError(RuntimeError):
     """Reject a mutation whose mandatory domain audit cannot be tenant-scoped."""
 
