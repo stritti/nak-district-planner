@@ -4,9 +4,9 @@
 """SQL adapter. Slot/category locks serialize capacity and configuration edits."""
 
 from dataclasses import fields
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy import and_, delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.adapters.db.orm_models.event_duty import (
@@ -15,7 +15,9 @@ from app.adapters.db.orm_models.event_duty import (
     EventDutyCategoryORM,
     EventTypeDutyConfigurationORM,
 )
+from app.adapters.db.orm_models.event_instance import EventInstanceORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+from app.config import settings
 from app.domain.models.event_duty import (
     DutyNameSuggestion,
     EventDutyAssignment,
@@ -24,7 +26,9 @@ from app.domain.models.event_duty import (
     display_name,
     normalize_name,
 )
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
+from app.domain.planning.conflict_result import ScheduledService
+from app.domain.planning.duty_conflicts import ScheduledDuty
 from app.domain.ports.event_duties import EventDutiesRepository
 
 
@@ -104,6 +108,75 @@ class SqlEventDutiesRepository(EventDutiesRepository):
             .execution_options(populate_existing=True)
         )
         return _to_domain(PlanningSlot, row) if row else None
+
+    async def slot_schedule(self, slot_id):
+        row = (
+            await self.session.execute(
+                select(
+                    PlanningSlotORM.congregation_id,
+                    PlanningSlotORM.planning_date,
+                    PlanningSlotORM.planning_time,
+                    EventInstanceORM.actual_start_at,
+                    EventInstanceORM.actual_end_at,
+                )
+                .select_from(PlanningSlotORM)
+                .outerjoin(EventInstanceORM, EventInstanceORM.planning_slot_id == PlanningSlotORM.id)
+                .where(PlanningSlotORM.id == slot_id)
+            )
+        ).first()
+        return ScheduledService(*row) if row else None
+
+    async def list_identity_schedule(
+        self, district_id, *, linked_user_sub, normalized_name, window_start, window_end,
+        exclude_slot_id,
+    ):
+        identity = []
+        if linked_user_sub:
+            identity.append(EventDutyAssignmentORM.linked_user_sub == linked_user_sub)
+        if normalized_name:
+            identity.append(
+                and_(
+                    EventDutyAssignmentORM.linked_user_sub.is_(None),
+                    EventDutyAssignmentORM.normalized_name == normalized_name,
+                )
+            )
+        if not identity:
+            return []
+        rows = (
+            await self.session.execute(
+                select(
+                    EventDutyAssignmentORM.planning_slot_id,
+                    EventDutyAssignmentORM.linked_user_sub,
+                    PlanningSlotORM.congregation_id,
+                    PlanningSlotORM.planning_date,
+                    PlanningSlotORM.planning_time,
+                    EventInstanceORM.actual_start_at,
+                    EventInstanceORM.actual_end_at,
+                )
+                .select_from(EventDutyAssignmentORM)
+                .join(PlanningSlotORM, PlanningSlotORM.id == EventDutyAssignmentORM.planning_slot_id)
+                .outerjoin(EventInstanceORM, EventInstanceORM.planning_slot_id == PlanningSlotORM.id)
+                .where(
+                    EventDutyAssignmentORM.district_id == district_id,
+                    EventDutyAssignmentORM.planning_slot_id != exclude_slot_id,
+                    PlanningSlotORM.status == PlanningSlotStatus.ACTIVE,
+                    or_(*identity),
+                    PlanningSlotORM.planning_date.between(
+                        window_start.astimezone(UTC).date(), window_end.astimezone(UTC).date()
+                    ),
+                )
+            )
+        ).all()
+        default_duration = timedelta(minutes=settings.sync_expected_duration_minutes)
+        duties = []
+        for slot_id, sub, congregation_id, day, time_, actual_start, actual_end in rows:
+            start, end = ScheduledService(
+                congregation_id, day, time_, actual_start, actual_end
+            ).window(default_duration)
+            duties.append(
+                ScheduledDuty(slot_id, congregation_id, start, end, strong=sub is not None)
+            )
+        return duties
 
     async def lock_category(self, category_id, district_id):
         row = await self.session.scalar(

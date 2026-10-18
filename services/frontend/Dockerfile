@@ -1,5 +1,5 @@
 # Stage 1: build
-FROM oven/bun:1.4.2-alpine AS build
+FROM oven/bun:1.4.3-alpine AS build
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY . .
 RUN bun run build
 
 # Stage 2: serve
-FROM nginxinc/nginx-unprivileged:1.31.6-alpine3.24
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine3.24
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf

@@ -4,14 +4,18 @@
 """Duty use cases and read projection independent of SQLAlchemy and HTTP."""
 
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from uuid import UUID
 
+from app.config import settings
 from app.domain.models.event_duty import (
     EventDutyAssignment,
     EventDutyCategory,
     effective_categories,
     normalize_name,
 )
+from app.domain.planning.conflict_result import Severity
+from app.domain.planning.duty_conflicts import duty_identity_conflicts
 
 
 class DutyNotFoundError(ValueError):
@@ -20,6 +24,14 @@ class DutyNotFoundError(ValueError):
 
 class DutyConflictError(ValueError):
     pass
+
+
+class DutyIdentityConflictError(ValueError):
+    """The person already holds an overlapping duty; ``conflicts`` explains which."""
+
+    def __init__(self, conflicts):
+        super().__init__("Duty identity conflict")
+        self.conflicts = conflicts
 
 
 @dataclass(frozen=True)
@@ -153,6 +165,7 @@ class EventDutiesService:
         linked_user_sub=None,
         suggestion_id=None,
         expected_congregation_id=_UNSET,
+        confirm_warnings=False,
     ):
         slot, category, existing, _ = await self._write_context(
             district_id,
@@ -177,6 +190,7 @@ class EventDutiesService:
             resolved_name,
             activate=True,
         )
+        await self._guard_identity_conflicts(district_id, slot, assignment, confirm_warnings)
         await self.repository.save_assignment(assignment)
         return assignment
 
@@ -191,6 +205,7 @@ class EventDutiesService:
         linked_user_sub=None,
         suggestion_id=None,
         expected_congregation_id=_UNSET,
+        confirm_warnings=False,
     ):
         slot, category, existing, replacing = await self._write_context(
             district_id,
@@ -220,6 +235,7 @@ class EventDutiesService:
             resolved_name,
             activate=False,
         )
+        await self._guard_identity_conflicts(district_id, slot, assignment, confirm_warnings)
         await self.repository.save_assignment(assignment)
         return assignment
 
@@ -264,6 +280,31 @@ class EventDutiesService:
         )
         await self.repository.save_assignment(assignment)
         return assignment
+
+    async def _guard_identity_conflicts(self, district_id, slot, assignment, confirm_warnings):
+        """Refuse a duty when the same person holds an overlapping one (block or confirm)."""
+        if not settings.conflict_check_enabled:
+            return
+        schedule = await self.repository.slot_schedule(slot.id)
+        if schedule is None:
+            return
+        default_duration = timedelta(minutes=settings.sync_expected_duration_minutes)
+        start, end = schedule.window(default_duration)
+        others = await self.repository.list_identity_schedule(
+            district_id,
+            linked_user_sub=assignment.linked_user_sub,
+            normalized_name=assignment.normalized_name or normalize_name(assignment.display_name),
+            window_start=start - default_duration,
+            window_end=end,
+            exclude_slot_id=slot.id,
+        )
+        conflicts = duty_identity_conflicts(start, end, others)
+        blocking = any(conflict.severity == Severity.BLOCK for conflict in conflicts)
+        unconfirmed = not confirm_warnings and any(
+            conflict.severity == Severity.WARN for conflict in conflicts
+        )
+        if blocking or unconfirmed:
+            raise DutyIdentityConflictError(conflicts)
 
     async def _write_context(
         self,

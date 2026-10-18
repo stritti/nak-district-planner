@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 from dataclasses import replace
+from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from pydantic import ValidationError
 from app.adapters.api.schemas.event_duty import AssignmentWrite, CategoryCreate
 from app.application.event_duties import (
     DutyConflictError,
+    DutyIdentityConflictError,
     DutyNotFoundError,
     EventDutiesService,
 )
@@ -21,6 +23,8 @@ from app.domain.models.event_duty import (
     EventTypeDutyConfiguration,
     normalize_name,
 )
+from app.domain.planning.conflict_result import ScheduledService, Severity
+from app.domain.planning.duty_conflicts import ScheduledDuty
 
 _USE_STORED_ASSIGNMENT = object()
 
@@ -37,6 +41,7 @@ class Repository:
         self.categories = EventDutyCategory.defaults(self.district)
         self.overrides, self.assignments, self.suggestions = [], [], []
         self.locks = []
+        self.identity_schedule, self.identity_queries = [], []
         self.users = [{"sub": "verified", "display_name": "User Name"}]
         self.assignment_lock_result = _USE_STORED_ASSIGNMENT
 
@@ -81,6 +86,15 @@ class Repository:
 
     async def get_suggestion(self, suggestion_id):
         return next((s for s in self.suggestions if s.id == suggestion_id), None)
+
+    async def slot_schedule(self, slot_id):
+        return ScheduledService(
+            self.congregation, date(2026, 11, 1), time(9, 0), None, None
+        )
+
+    async def list_identity_schedule(self, district_id, **query):
+        self.identity_queries.append(query)
+        return self.identity_schedule
 
     async def lock_suggestion(self, suggestion_id):
         self.locks.append("suggestion")
@@ -419,3 +433,80 @@ async def test_scope_change_preview_reports_quarantine_of_already_flagged_duty()
     assert impact.newly_flagged == 0
     assert impact.newly_quarantined == 1
     assert impact.quarantined_after == 1
+
+
+def _overlapping(repo, *, strong, offset=30):
+    start = datetime(2026, 11, 1, 9, 0, tzinfo=UTC) + timedelta(minutes=offset)
+    return ScheduledDuty(uuid4(), uuid4(), start, start + timedelta(minutes=90), strong)
+
+
+@pytest.mark.asyncio
+async def test_a_verified_identity_with_an_overlapping_duty_is_blocked():
+    repo = Repository()
+    repo.identity_schedule = [_overlapping(repo, strong=True)]
+    with pytest.raises(DutyIdentityConflictError) as error:
+        await EventDutiesService(repo).assign(
+            repo.district, repo.slot_id, repo.categories[0].id, linked_user_sub="verified"
+        )
+    assert [c.severity for c in error.value.conflicts] == [Severity.BLOCK]
+    assert repo.assignments == []
+    assert repo.identity_queries[0]["linked_user_sub"] == "verified"
+    assert repo.identity_queries[0]["exclude_slot_id"] == repo.slot_id
+
+
+@pytest.mark.asyncio
+async def test_a_name_match_warns_until_it_is_confirmed():
+    repo = Repository()
+    repo.identity_schedule = [_overlapping(repo, strong=False)]
+    service = EventDutiesService(repo)
+    with pytest.raises(DutyIdentityConflictError) as error:
+        await service.assign(repo.district, repo.slot_id, repo.categories[0].id, name="Anna")
+    assert [c.severity for c in error.value.conflicts] == [Severity.WARN]
+    assert repo.assignments == []
+    saved = await service.assign(
+        repo.district, repo.slot_id, repo.categories[0].id, name="Anna", confirm_warnings=True
+    )
+    assert repo.assignments == [saved]
+    assert repo.identity_queries[-1]["normalized_name"] == "anna"
+
+
+@pytest.mark.asyncio
+async def test_a_block_cannot_be_confirmed_away():
+    repo = Repository()
+    repo.identity_schedule = [_overlapping(repo, strong=True), _overlapping(repo, strong=False)]
+    with pytest.raises(DutyIdentityConflictError):
+        await EventDutiesService(repo).assign(
+            repo.district, repo.slot_id, repo.categories[0].id, linked_user_sub="verified",
+            confirm_warnings=True,
+        )
+    assert repo.assignments == []
+
+
+@pytest.mark.asyncio
+async def test_replace_checks_the_new_identity():
+    repo = Repository()
+    row = EventDutyAssignment.create(repo.slot_id, repo.categories[0], repo.congregation, "Anna")
+    repo.assignments.append(row)
+    repo.identity_schedule = [_overlapping(repo, strong=False)]
+    with pytest.raises(DutyIdentityConflictError):
+        await EventDutiesService(repo).replace(
+            repo.district, repo.slot_id, repo.categories[0].id, row, name="Berta"
+        )
+    assert repo.assignments == [row]
+
+
+@pytest.mark.asyncio
+async def test_no_overlap_and_a_disabled_check_assign_normally(monkeypatch):
+    repo = Repository()
+    saved = await EventDutiesService(repo).assign(
+        repo.district, repo.slot_id, repo.categories[0].id, name="Anna"
+    )
+    assert repo.assignments == [saved]
+    repo2 = Repository()
+    repo2.identity_schedule = [_overlapping(repo2, strong=True)]
+    monkeypatch.setattr("app.application.event_duties.settings.conflict_check_enabled", False)
+    await EventDutiesService(repo2).assign(
+        repo2.district, repo2.slot_id, repo2.categories[0].id, linked_user_sub="verified"
+    )
+    assert len(repo2.assignments) == 1 and repo2.identity_queries == []
+

@@ -14,7 +14,7 @@ const congregations = [{ id: 'c1', name: 'Gemeinde Eins' }] as never[]
 const cases = [
   ['approve', ApproveRegistrationModal, { modal: { open: true, registrationId: 'r', name: 'Max', email: 'm@x.de', role: 'PLANNER', scope_type: 'DISTRICT', rank: null, congregation_id: null, special_role: null, error: 'Boom' }, congregations }, 'Genehmigen'],
   ['reject', RejectRegistrationModal, { modal: { open: true, registrationId: 'r', name: 'Max', reason: '', error: 'Boom' } }, 'Ablehnen'],
-  ['add', LeaderAddModal, { modal: { open: true, congregationId: 'c1', name: 'Max', rank: 'Pr.', special_role: null, email: '', phone: '', error: 'Boom' }, congregationLabel: 'Gemeinde Eins' }, 'Hinzufügen'],
+  ['add', LeaderAddModal, { modal: { open: true, congregationId: 'c1', name: 'Max', rank: 'Pr.', special_role: null, email: '', phone: '', error: 'Boom', duplicates: [] }, congregationLabel: 'Gemeinde Eins' }, 'Hinzufügen'],
   ['edit', LeaderEditModal, { modal: { open: true, leaderId: 'l', revision: '1', name: 'Max', rank: 'Pr.', congregation_id: null, special_role: null, email: '', phone: '', notes: '', is_active: true, hidden_from_lists: false, service_end_date: '', error: 'Boom' }, congregations }, 'Speichern'],
   ['export', LeaderExportModal, { modal: { open: true, leaderId: 'l', leaderName: 'Max', leaderRank: 'Pr.', icsUrl: '', error: 'Boom' } }, 'Token erstellen'],
 ] as const
@@ -54,3 +54,26 @@ describe('export modal result state', () => {
     expect((wrapper.get('input').element as HTMLInputElement).value).toBe('https://x/calendar.ics')
   })
 })
+
+describe('add modal duplicate hint', () => {
+  const modal = (duplicates: { id: string; label: string }[]) => ({
+    open: true, congregationId: null, name: 'Hans Müller', rank: 'Pr.', special_role: null,
+    email: '', phone: '', error: '', duplicates,
+  })
+
+  it('shows no hint without matches and offers the normal action', () => {
+    const wrapper = mount(LeaderAddModal as never, { props: { modal: modal([]), congregationLabel: '', saving: false } as never })
+    expect(wrapper.find('[data-testid="duplicate-leader-hint"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Hinzufügen')
+  })
+
+  it('lists the matches, relabels the action and clears the hint when the name changes', async () => {
+    const state = modal([{ id: 'l1', label: 'Hans Müller · Gemeinde Eins · aktiv' }])
+    const wrapper = mount(LeaderAddModal as never, { props: { modal: state, congregationLabel: '', saving: false } as never })
+    expect(wrapper.get('[data-testid="duplicate-leader-hint"]').text()).toContain('Gemeinde Eins')
+    expect(wrapper.text()).toContain('Trotzdem neu anlegen')
+    await wrapper.get('input[type="text"]').setValue('Hans Meier')
+    expect(state.duplicates).toEqual([])
+  })
+})
+

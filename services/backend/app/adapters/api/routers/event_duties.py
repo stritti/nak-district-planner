@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.exc import IntegrityError
 
+from app.adapters.api.conflict_http import raise_for_conflicts
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
     DbSession,
@@ -28,6 +29,7 @@ from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
 from app.application.event_duties import (
     DutyConflictError,
+    DutyIdentityConflictError,
     DutyNotFoundError,
     EventDutiesService,
 )
@@ -69,6 +71,10 @@ async def assignment_result(operation):
         return with_revision(await operation)
     except DutyNotFoundError as exc:
         raise HTTPException(404, "Reference not found") from exc
+    except DutyIdentityConflictError as exc:
+        # Same 409 contract as service assignments: BLOCK conflicts and unconfirmed WARNs.
+        raise_for_conflicts(exc.conflicts, confirm_warnings=False)
+        raise  # unreachable: the helper always raises for the conflicts it is given
     except DutyConflictError as exc:
         raise HTTPException(409, str(exc)) from exc
     except IntegrityError as exc:

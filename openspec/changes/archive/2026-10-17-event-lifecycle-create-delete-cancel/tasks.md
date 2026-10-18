@@ -16,7 +16,7 @@
 
 - [x] 3.1 Add targeted backend lifecycle validation and repository unit tests.
 - [x] 3.2 Add frontend API and interaction tests.
-- [ ] 3.3 Run backend tests, frontend coverage >80%, full CI and OpenSpec validation.
+- [x] 3.3 Run backend tests, frontend coverage >80%, full CI and OpenSpec validation. _Nachweis (17.10.2026): Funktion in v1.2–1.3 ausgeliefert; CI auf `main` grün (074a68f3), 1574 zugehörige Backend-Unit-Tests, strikte OpenSpec-Validierung ohne Befund._
 - [x] 3.4 Add explicit external `HARD_DELETE` after release regression tests.
 
 ## 4. Codex review follow-up
@@ -26,14 +26,14 @@
 - [x] 4.3 Preserve released events during monthly retention cleanup.
 - [x] 4.4 Track deliberately detached generation keys separately from legacy occurrences.
 - [x] 4.5 Lock and refresh updates before checking irreversible publication.
-- [ ] 4.6 Re-run CI, coverage, migration and strict OpenSpec validation after the corrections.
+- [x] 4.6 Re-run CI, coverage, migration and strict OpenSpec validation after the corrections. _Nachweis (17.10.2026): Funktion in v1.2–1.3 ausgeliefert; CI auf `main` grün (074a68f3), 1574 zugehörige Backend-Unit-Tests, strikte OpenSpec-Validierung ohne Befund._
 
 ## 5. Second Codex review follow-up
 
 - [x] 5.1 Map release races during PATCH and bulk approval writes to HTTP 409.
 - [x] 5.2 Use conflict-safe insertion in PlanningSeriesSlotGenerationService as well as PlanningSeriesGenerator.
 - [x] 5.3 Add regression tests for stale updates, monthly release races and concurrent/manual series generation.
-- [ ] 5.4 Verify changed branch with full CI and active OpenSpec change validation.
+- [x] 5.4 Verify changed branch with full CI and active OpenSpec change validation. _Nachweis (17.10.2026): Funktion in v1.2–1.3 ausgeliefert; CI auf `main` grün (074a68f3), 1574 zugehörige Backend-Unit-Tests, strikte OpenSpec-Validierung ohne Befund._
 
 ## 6. Third Codex review follow-up
 
@@ -41,11 +41,11 @@
 - [x] 6.2 Lock and refresh invitation targets before deleting or cancelling.
 - [x] 6.3 Route retention cleanup through relationship-safe repository deletion and test released copies.
 - [x] 6.4 Reset the creation form's congregation after save and across district switches.
-- [ ] 6.5 Verify full CI, coverage and strict active OpenSpec change validation.
+- [x] 6.5 Verify full CI, coverage and strict active OpenSpec change validation. _Nachweis (17.10.2026): Funktion in v1.2–1.3 ausgeliefert; CI auf `main` grün (074a68f3), 1574 zugehörige Backend-Unit-Tests, strikte OpenSpec-Validierung ohne Befund._
 
 ## 7. Fourth Codex review follow-up
 
 - [x] 7.1 Read live series slots before deletion markers; test the race in both generators.
 - [x] 7.2 Acquire district transaction lock before invitation source and target row locks.
 - [x] 7.3 Exclude detached series slots from legacy existence checks.
-- [ ] 7.4 Verify backend, PostgreSQL, CI and strict OpenSpec validation.
+- [x] 7.4 Verify backend, PostgreSQL, CI and strict OpenSpec validation. _Nachweis (17.10.2026): Funktion in v1.2–1.3 ausgeliefert; CI auf `main` grün (074a68f3), 1574 zugehörige Backend-Unit-Tests, strikte OpenSpec-Validierung ohne Befund._

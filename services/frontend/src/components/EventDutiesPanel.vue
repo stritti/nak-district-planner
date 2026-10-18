@@ -3,7 +3,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ApiError } from '../api/errors'
+import { ApiError, parseConflictError, type ConflictError } from '../api/errors'
 import {
   deleteDutyAssignment,
   getSlotDuties,
@@ -37,6 +37,8 @@ const subject = ref('')
 const editing = ref<string>()
 // Revision read when the edit started; a reload must not silently replace it.
 const editingRevision = ref('')
+// Overlap with another duty of the same person: blocks, or asks for confirmation (warnings only).
+const pendingConflict = ref<ConflictError | null>(null)
 const loading = ref(false)
 const error = ref('')
 let version = 0
@@ -111,6 +113,8 @@ interface ActionOptions<Result> {
   apply?: (result: Result) => void
   reload?: boolean
   mutated?: boolean
+  /** Return true when the failure was handled and needs no generic message. */
+  handleError?: (cause: unknown) => boolean
 }
 
 const STALE =
@@ -127,13 +131,16 @@ async function runAction<Result>(
   if (loading.value) return
   loading.value = true
   error.value = ''
+  pendingConflict.value = null
   try {
     const result = await action()
     options.apply?.(result)
     if (options.mutated) emit('mutated')
     if (options.reload) await load()
   } catch (cause) {
-    if (isStale(cause)) {
+    if (options.handleError?.(cause)) {
+      // handled by the caller (for example an overlap that needs a decision)
+    } else if (isStale(cause)) {
       // Reload first (it clears the error), then explain why the action did not apply.
       editing.value = undefined
       await load()
@@ -146,11 +153,12 @@ async function runAction<Result>(
   }
 }
 
-async function save() {
+async function save(confirmWarnings = false) {
   if (!category.value || !(kind.value === 'name' ? name.value.trim() : subject.value)) return
+  const confirmation = confirmWarnings ? { confirm_warnings: true } : {}
   const identity = kind.value === 'name'
-    ? { duty_category_id: category.value, name: name.value.trim() }
-    : { duty_category_id: category.value, linked_user_sub: subject.value }
+    ? { duty_category_id: category.value, name: name.value.trim(), ...confirmation }
+    : { duty_category_id: category.value, linked_user_sub: subject.value, ...confirmation }
   await runAction(
     () => saveDutyAssignment(
       props.districtId,
@@ -169,6 +177,12 @@ async function save() {
       },
       mutated: true,
       reload: true,
+      handleError: (cause) => {
+        const conflict = parseConflictError(cause)
+        if (!conflict) return false
+        pendingConflict.value = conflict
+        return true
+      },
     },
   )
 }
@@ -224,6 +238,25 @@ function edit(assignment: DutyAssignment) {
     </p>
     <p v-if="loading" role="status">Laden…</p>
     <p v-if="error" role="alert" class="text-red-600">{{ error }}</p>
+    <div
+      v-if="pendingConflict"
+      role="alert"
+      data-testid="duty-conflict"
+      class="rounded border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900"
+    >
+      <ul class="list-disc pl-5">
+        <li v-for="item in pendingConflict.conflicts" :key="item.rule_id">{{ item.message }}</li>
+      </ul>
+      <button
+        v-if="!pendingConflict.blocking.length"
+        type="button"
+        class="btn-secondary mt-2 px-3"
+        data-testid="duty-conflict-confirm"
+        @click="save(true)"
+      >
+        Trotzdem zuweisen
+      </button>
+    </div>
 
     <div v-for="assignment in assignments" :key="assignment.id" class="rounded border p-2 text-sm">
       <p>
@@ -264,7 +297,7 @@ function edit(assignment: DutyAssignment) {
       </div>
     </div>
 
-    <form v-if="canEdit && categories.length" class="space-y-2" @submit.prevent="save">
+    <form v-if="canEdit && categories.length" class="space-y-2" @submit.prevent="save()">
       <label class="block">
         Dienst
         <select v-model="category" class="form-input">

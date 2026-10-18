@@ -365,6 +365,23 @@ describe('DistrictsAdminView', () => {
     expect(wrapper.text()).toContain('Remote')
   })
 
+  it('shows the server detail when a congregation name is already taken', async () => {
+    vi.mocked(districtsApi.updateCongregation).mockRejectedValueOnce(
+      new ApiError(409, 'Conflict', { detail: 'Eine Gemeinde mit diesem Namen existiert bereits' }),
+    )
+    const { wrapper } = setup()
+    await flushPromises()
+
+    await wrapper.get('button[title="Gemeinde bearbeiten"]').trigger('click')
+    const modal = findModal(wrapper, 'Gemeinde bearbeiten')
+    await modal.get('input.form-input.mb-4').setValue('Doppelt')
+    await modal.findAll('button').find((button) => button.text().includes('Speichern'))!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Eine Gemeinde mit diesem Namen existiert bereits')
+    expect(wrapper.text()).not.toContain('409 Conflict')
+  })
+
   it('renames a group inline with its revision and ignores empty names', async () => {
     vi.mocked(districtsApi.updateGroup).mockResolvedValueOnce({ ...group('g1', 'Gruppe Neu'), revision: '"g1:v2"' })
     const { wrapper } = setup()

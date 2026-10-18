@@ -17,14 +17,14 @@
     "pinia": "^4.0",
     "pinia-plugin-persistedstate": "^4.7.1",
     "vue": "^3.5",
-    "vue-router": "^5.3"
+    "vue-router": "^5.4"
   },
   "devDependencies": {
     "@pinia/testing": "^2.0",
-    "@playwright/test": "^1.63",
+    "@playwright/test": "^1.64",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0",
-    "@vitest/coverage-v8": "^5.0.3",
+    "@vitest/coverage-v8": "^5.0.5",
     "@vue/test-utils": "^2.5",
     "@vue/tsconfig": "^0.9",
     "eslint": "^10",
@@ -37,6 +37,6 @@
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.0",
     "vue-eslint-parser": "^10.0.0",
-    "vue-tsc": "^3.3.12"
+    "vue-tsc": "^3.3.13"
   }
 }

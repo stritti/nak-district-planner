@@ -6,4 +6,4 @@
 - [x] Remove duplicated development override environment values.
 - [x] Update `.env.example` comments for host-local versus Docker-internal URLs.
 - [x] Add focused regression tests including required-input and credential-isolation cases.
-- [ ] Verify focused tests and project CI on the pull request.
+- [x] Verify focused tests and project CI on the pull request. _Nachweis (17.10.2026): ausgeliefert in main, CI auf main grün, strikte OpenSpec-Validierung ohne Befund._

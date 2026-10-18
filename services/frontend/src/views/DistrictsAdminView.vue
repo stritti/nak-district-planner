@@ -435,7 +435,7 @@ import {
   type DistrictResponse,
   type ServiceTime,
 } from '../api/districts'
-import { ApiError } from '../api/errors'
+import { ApiError, userMessage } from '../api/errors'
 import { buildCongregationSections } from '../utils/congregationGrouping'
 import { useAuthStore } from '../stores/auth'
 import { useDistrictsStore } from '../stores/districts'
@@ -576,7 +576,7 @@ async function saveEditCong() {
         'Die Gemeinde wurde zwischenzeitlich geändert. Die Ansicht wurde aktualisiert – bitte schließen und erneut öffnen.'
       await refreshCongregations(editCongModal.districtId)
     } else {
-      editCongModal.error = e instanceof Error ? e.message : 'Fehler beim Speichern'
+      editCongModal.error = userMessage(e, 'Fehler beim Speichern')
     }
   } finally {
     saving.value = false
@@ -675,7 +675,7 @@ async function saveNewDistrict() {
     congregationsByDistrict[created.id] = []
     newDistrictOpen.value = false
   } catch (e) {
-    modalError.value = e instanceof Error ? e.message : 'Fehler'
+    modalError.value = userMessage(e, 'Fehler')
   } finally {
     saving.value = false
   }
@@ -728,7 +728,7 @@ async function saveCongregation() {
     ].sort((a, b) => a.name.localeCompare(b.name))
     closeNewCong()
   } catch (e) {
-    newCongModal.error = e instanceof Error ? e.message : 'Fehler'
+    newCongModal.error = userMessage(e, 'Fehler')
   } finally {
     saving.value = false
   }
