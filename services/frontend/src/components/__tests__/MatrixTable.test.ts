@@ -163,6 +163,20 @@ describe('MatrixTable planning conflicts', () => {
     expect(wrapper.get('[data-testid="cell-conflict"]').text()).toContain('10:30 Uhr')
   })
 
+  it('shows the later service conflict even when the primary service is an unfilled gap', async () => {
+    const wrapper = mountWith([
+      { rule_id: 'no_double_booking', severity: 'BLOCK', message: '10:30 Uhr: Doppelbelegung' },
+    ])
+    const store = useMatrixStore()
+    store.matrix!.rows[0].cells['2030-04-14'].is_gap = true
+    store.matrix!.rows[0].cells['2030-04-14'].service_count = 2
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('LÜCKE')
+    expect(wrapper.get('[data-testid="cell-service-count"]').text()).toContain('2 Gottesdienste')
+    expect(wrapper.get('[data-testid="cell-conflict"]').text()).toContain('10:30 Uhr')
+  })
+
   it('shows a refresh warning when conflicts have been invalidated after a save', async () => {
     const wrapper = mountWith([])
     const store = useMatrixStore()
