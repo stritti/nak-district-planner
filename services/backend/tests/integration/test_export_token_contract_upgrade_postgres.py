@@ -308,5 +308,5 @@ def test_contract_policies_and_functions_drop_plaintext_dependency(database) -> 
     assert definitions, "expected actual export-token dependent SQL definitions"
     assert any("token_hash" in sql for sql in definitions)
     for statement in definitions:
-        assert re.search(r"\\b(?:et|export_tokens)\\s*\\.\\s*token\\b", statement, re.I) is None
+        assert re.search(r"\b(?:et|export_tokens)\s*\.\s*token\b", statement, re.I) is None
     assert "token" not in _columns(owner)
