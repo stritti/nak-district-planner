@@ -27,6 +27,8 @@ class LeaderCreate(BaseModel):
     is_active: bool = True
     hidden_from_lists: bool = False
     service_end_date: date | None = None
+    # Set after the user confirmed that a same-named person is a different one.
+    confirm_duplicate: bool = False
 
 
 class LeaderUpdate(BaseModel):

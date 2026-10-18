@@ -34,6 +34,8 @@ export interface AddModalState {
   email: string
   phone: string
   error: string
+  /** Same-named people the server reported; non-empty means a confirmation is pending. */
+  duplicates: { id: string; label: string }[]
 }
 
 export interface EditModalState {

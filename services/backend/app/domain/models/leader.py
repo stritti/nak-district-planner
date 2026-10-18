@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -99,6 +101,29 @@ def normalize_leader_name(name: str) -> str:
     import unicodedata
 
     return " ".join(unicodedata.normalize("NFKC", name).casefold().split())
+
+
+_HONORIFICS = frozenset({"br", "bruder", "sr", "schwester", "dr", "prof", "herr", "frau"})
+
+
+def _plain_tokens(text: str) -> list[str]:
+    decomposed = unicodedata.normalize("NFKD", text)
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return re.findall(r"\w+", stripped.casefold())
+
+
+def person_match_key(name: str) -> str:
+    """Key under which two typed names count as the same person.
+
+    Ignores case, spacing, punctuation, accents and leading honorifics or church
+    ranks ("Br.", "Dr.", "Ev."). A match is only a hint that needs confirmation,
+    never an identity: namesakes exist.
+    """
+    prefixes = _HONORIFICS | {t for rank in LeaderRank for t in _plain_tokens(rank.value)}
+    tokens = _plain_tokens(name)
+    while len(tokens) > 1 and tokens[0] in prefixes:
+        tokens.pop(0)
+    return " ".join(tokens)
 
 
 def assignment_needs_review(

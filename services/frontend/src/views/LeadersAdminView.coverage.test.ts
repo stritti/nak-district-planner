@@ -8,6 +8,7 @@ import { defineComponent } from 'vue'
 import * as districtsApi from '../api/districts'
 import * as leadersApi from '../api/leaders'
 import * as registrationsApi from '../api/registrations'
+import { ApiError } from '../api/errors'
 import * as exportTokensApi from '../api/exportTokens'
 import type {
   LeaderUnavailabilityCreate,
@@ -369,6 +370,41 @@ describe('LeadersAdminView coverage gaps', () => {
     await vm.executeDeleteReg()
     expect(registrationsApi.deleteRegistration).toHaveBeenCalledWith('d1', 'delete-me')
     expect(vm.registrations.some((value) => value.id === 'delete-me')).toBe(false)
+  })
+
+  it('asks before creating a namesake and then sends the confirmation', async () => {
+    const { vm, toastStore } = setup()
+    const success = vi.spyOn(toastStore, 'success')
+    await loadView(vm)
+
+    vm.openAddModal('c1')
+    vm.addModal.name = 'Hans Müller'
+    vm.addModal.rank = 'Di.'
+    vi.mocked(leadersApi.createLeader).mockRejectedValueOnce(
+      new ApiError(409, 'Conflict', {
+        detail: {
+          code: 'LEADER_DUPLICATE',
+          matches: [
+            { id: 'l9', name: 'Hans Müller', congregation_id: 'c1', is_active: true },
+            { id: 'l8', name: 'Hans Müller', congregation_id: null, is_active: false },
+          ],
+        },
+      }),
+    )
+    await vm.saveAdd()
+
+    expect(vm.addModal.open).toBe(true)
+    expect(vm.addModal.error).toBe('')
+    expect(vm.addModal.duplicates).toHaveLength(2)
+    expect(vm.addModal.duplicates[0].label).toContain('aktiv')
+    expect(vm.addModal.duplicates[1].label).toContain('Bezirksebene')
+    expect(vm.addModal.duplicates[1].label).toContain('inaktiv')
+    expect(leadersApi.createLeader).toHaveBeenLastCalledWith('d1', expect.not.objectContaining({ confirm_duplicate: true }))
+
+    await vm.saveAdd()
+    expect(leadersApi.createLeader).toHaveBeenLastCalledWith('d1', expect.objectContaining({ confirm_duplicate: true }))
+    expect(vm.addModal.open).toBe(false)
+    expect(success).toHaveBeenCalled()
   })
 
   it('exercises leader create, edit, delete and export workflows', async () => {
