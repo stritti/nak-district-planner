@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 
 import pytest
 from sqlalchemy import text
@@ -65,6 +65,8 @@ async def test_atomic_business_write_rolls_back_when_audit_insert_fails() -> Non
                         planning_time=time(9, 30),
                         status=PlanningSlotStatus.ACTIVE,
                         category="Gottesdienst",
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC),
                     )
                 )
                 await session.commit()
