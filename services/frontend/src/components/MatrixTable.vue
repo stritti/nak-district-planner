@@ -8,6 +8,14 @@
     class="relative"
   >
     <div
+      v-if="matrixStore.conflictsStale"
+      data-testid="matrix-conflicts-refresh-status"
+      role="status"
+      class="mb-2 text-sm text-amber-700 dark:text-amber-300"
+    >
+      {{ matrixStore.conflictsRefreshError ?? 'Konflikte werden neu geprüft…' }}
+    </div>
+    <div
       ref="scrollContainer"
       class="matrix-scroll-container max-h-[70dvh] overflow-auto overscroll-x-contain overscroll-y-auto touch-auto [&::-webkit-scrollbar:horizontal]:h-0"
       data-testid="matrix-scroll"
@@ -177,6 +185,27 @@
                     Einladungen: {{ row.cells[date].invitation_count }}
                   </div>
                 </button>
+                <div
+                  v-if="(row.cells[date].service_count ?? 0) > 1"
+                  data-testid="cell-service-count"
+                  class="text-[10px] text-gray-600 dark:text-gray-300"
+                >
+                  {{ row.cells[date].service_count }} Gottesdienste an diesem Tag
+                </div>
+                <div
+                  v-if="row.cells[date].conflicts?.length"
+                  data-testid="cell-conflict"
+                  :title="conflictTitle(row.cells[date])"
+                  :class="[
+                    'text-[10px] font-medium',
+                    hasBlockingConflict(row.cells[date])
+                      ? 'text-red-700 dark:text-red-300'
+                      : 'text-amber-700 dark:text-amber-300',
+                  ]"
+                >
+                  {{ hasBlockingConflict(row.cells[date]) ? 'Konflikt' : 'Warnung' }}:
+                  {{ row.cells[date].conflicts?.length === 1 ? row.cells[date].conflicts?.[0].message : `${row.cells[date].conflicts?.length} Hinweise` }}
+                </div>
                 <InlineEditableCell
                   v-if="canInlineAssign(row.cells[date])"
                   :id="'matrix-leader-' + row.congregation_id + '-' + date"
@@ -257,6 +286,14 @@ import { useInlineAssignmentSave } from '../composables/useInlineAssignmentSave'
 import InlineEditableCell from './InlineEditableCell.vue'
 import type { MatrixCell, MatrixRow } from '../api/matrix'
 import { filterMatrixRows, sortMatrixRows } from '../utils/matrixRows'
+
+function hasBlockingConflict(cell: MatrixCell): boolean {
+  return (cell.conflicts ?? []).some((conflict) => conflict.severity === 'BLOCK')
+}
+
+function conflictTitle(cell: MatrixCell): string {
+  return (cell.conflicts ?? []).map((conflict) => conflict.message).join('\n')
+}
 import { useScrollShadow } from '../composables/useScrollShadow'
 import { useStickyScrollbar } from '../composables/useStickyScrollbar'
 import EmptyState from './EmptyState.vue'
@@ -303,6 +340,7 @@ async function saveInlineAssignment(cell: MatrixCell, leaderId: string, revision
   if (!eventId) throw new Error('Planungseintrag fehlt')
   const saved = await saveAssignment(eventId, leaderId, revision)
   matrixStore.applyInlineAssignment(eventId, saved)
+  void matrixStore.refreshConflicts()
 }
 
 type OverflowTitleEl = HTMLElement & {

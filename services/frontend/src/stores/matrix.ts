@@ -19,6 +19,10 @@ export const useMatrixStore = defineStore('matrix', () => {
   const matrix = ref<MatrixResponse | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const conflictsStale = ref(false)
+  const conflictsRefreshError = ref<string | null>(null)
+  // Discard refresh responses that predate a newer inline write or a full reload.
+  let conflictRevision = 0
 
   // Active filters
   const districtId = ref<string>('')
@@ -39,6 +43,9 @@ export const useMatrixStore = defineStore('matrix', () => {
         toDt.value,
         groupId.value || undefined,
       )
+      conflictRevision++
+      conflictsStale.value = false
+      conflictsRefreshError.value = null
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unbekannter Fehler'
     } finally {
@@ -46,7 +53,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     }
   }
 
-  /** Reconcile the authoritative result in place so keyboard focus stays mounted. */
+  /** Apply the saved assignment without remounting the editing cell. */
   function applyInlineAssignment(eventId: string, saved: InlineAssignmentResult) {
     const leaders = useLeadersStore()
     const label = saved.leader_name ?? (
@@ -54,15 +61,56 @@ export const useMatrixStore = defineStore('matrix', () => {
     )
     for (const row of matrix.value?.rows ?? []) {
       for (const cell of Object.values(row.cells)) {
-        if ((cell.assignment_event_id ?? cell.event_id) !== eventId) continue
-        Object.assign(cell, {
-          assignment_id: saved.id,
-          assignment_status: saved.status,
-          leader_id: saved.leader_id,
-          leader_name: label,
-          revision: saved.event_revision,
-          is_gap: false,
-        })
+        if ((cell.assignment_event_id ?? cell.event_id) === eventId) {
+          Object.assign(cell, {
+            assignment_id: saved.id,
+            assignment_status: saved.status,
+            leader_id: saved.leader_id,
+            leader_name: label,
+            revision: saved.event_revision,
+            is_gap: false,
+          })
+        }
+        // Any assignment may affect other leaders' conflicts in the date range.
+        // Do not keep displaying stale warnings while the refresh is in flight.
+        cell.conflicts = []
+      }
+    }
+    conflictRevision++
+    conflictsStale.value = true
+    conflictsRefreshError.value = null
+  }
+
+  /** Refresh conflict markers in place, preserving inline editor focus and saved state. */
+  async function refreshConflicts() {
+    if (!matrix.value || !districtId.value || !fromDt.value || !toDt.value) {
+      conflictsRefreshError.value = 'Konfliktprüfung nicht verfügbar. Matrix neu laden.'
+      return
+    }
+    const revision = conflictRevision
+    const [district, from, to, group] = [
+      districtId.value, fromDt.value, toDt.value, groupId.value,
+    ]
+    try {
+      const latest = await fetchMatrix(district, from, to, group || undefined)
+      if (revision !== conflictRevision ||
+          district !== districtId.value || from !== fromDt.value ||
+          to !== toDt.value || group !== groupId.value) return
+
+      const latestRows = new Map(latest.rows.map((row) => [row.congregation_id, row]))
+      for (const row of matrix.value.rows) {
+        const newCells = latestRows.get(row.congregation_id)?.cells
+        for (const [date, cell] of Object.entries(row.cells)) {
+          cell.conflicts = newCells?.[date]?.conflicts ?? []
+          cell.service_count = newCells?.[date]?.service_count
+        }
+      }
+      conflictsStale.value = false
+      conflictsRefreshError.value = null
+    } catch {
+      if (revision === conflictRevision) {
+        conflictsRefreshError.value =
+          'Zuordnung gespeichert, aber Konflikte konnten nicht aktualisiert werden. Matrix neu laden.'
       }
     }
   }
@@ -113,6 +161,8 @@ export const useMatrixStore = defineStore('matrix', () => {
     matrix,
     loading,
     error,
+    conflictsStale,
+    conflictsRefreshError,
     districtId,
     groupId,
     fromDt,
@@ -120,6 +170,7 @@ export const useMatrixStore = defineStore('matrix', () => {
     congregationQuery,
     fetch,
     applyInlineAssignment,
+    refreshConflicts,
     assign,
     clearAssignment,
     generateDraftsForCurrentRange,

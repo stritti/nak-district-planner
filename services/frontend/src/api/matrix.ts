@@ -10,6 +10,7 @@ export interface MatrixCell {
   assignment_event_id?: string | null
   invitation_source_congregation_name?: string | null
   invitation_count?: number
+  service_count?: number
   event_title: string | null
   event_start_at?: string | null
   event_end_at?: string | null
@@ -26,9 +27,17 @@ export interface MatrixCell {
   leader_id: string | null
   leader_name: string | null
   needs_review?: boolean
+  /** Double booking / short travel time with the leader's other assignments (server-computed). */
+  conflicts?: MatrixCellConflict[]
   // Deviation details for tooltip
   deviation_start_diff_minutes?: number | null
   deviation_end_diff_minutes?: number | null
+}
+
+export interface MatrixCellConflict {
+  rule_id: string
+  severity: 'BLOCK' | 'WARN'
+  message: string
 }
 
 export interface MatrixRow {

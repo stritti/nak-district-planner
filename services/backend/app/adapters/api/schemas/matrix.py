@@ -6,10 +6,18 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.domain.models.planning_slot import EventApprovalStatus
 from app.domain.models.service_assignment import AssignmentStatus
+
+
+class MatrixCellConflict(BaseModel):
+    """A planning conflict of the assignment shown in a matrix cell."""
+
+    rule_id: str
+    severity: str  # "BLOCK" | "WARN"
+    message: str
 
 
 class MatrixCell(BaseModel):
@@ -21,6 +29,7 @@ class MatrixCell(BaseModel):
     assignment_event_id: uuid.UUID | None = None
     invitation_source_congregation_name: str | None = None
     invitation_count: int = 0
+    service_count: int = 0  # Number of visible services on this day, including the primary one.
     event_title: str | None = None
     event_start_at: datetime | None = None
     event_end_at: datetime | None = None
@@ -37,6 +46,8 @@ class MatrixCell(BaseModel):
     leader_id: uuid.UUID | None = None
     leader_name: str | None = None
     needs_review: bool = False
+    # Double booking / short travel time with the leader's other assignments in this matrix.
+    conflicts: list[MatrixCellConflict] = Field(default_factory=list)
     # Deviation details for frontend display
     deviation_start_diff_minutes: int | None = None
     deviation_end_diff_minutes: int | None = None
