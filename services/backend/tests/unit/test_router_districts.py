@@ -580,6 +580,89 @@ async def test_get_matrix_success() -> None:
     assert result.rows[0].congregation_id == congregation.id
 
 
+def _slot_with_leader(district_id, congregation, leader, start, *, minutes=60, status=AssignmentStatus.ASSIGNED):
+    slot = PlanningSlot.create(
+        district_id=district_id, congregation_id=congregation.id, planning_date=start.date(),
+        planning_time=start.time(), category="Gottesdienst", title="GD",
+        status=PlanningSlotStatus.ACTIVE,
+    )
+    instance = EventInstance.create(
+        planning_slot_id=slot.id, title="GD", actual_start_at=start,
+        actual_end_at=start + timedelta(minutes=minutes), source=EventSource.INTERNAL,
+        visibility=EventVisibility.INTERNAL,
+    )
+    assignment = ServiceAssignment.create(
+        event_id=slot.id, planning_slot_id=slot.id, leader_id=leader.id, status=status,
+    )
+    return slot, instance, assignment
+
+
+async def _matrix_for(district_id, congregations, parts, leaders, day):
+    slots, instances, assignments = zip(*parts, strict=True)
+    repos = _matrix_repos(
+        district=District.create(name="D"), congregations=congregations, slots=list(slots),
+        instances=list(instances), assignments=list(assignments), leaders=leaders,
+    )
+    return await r.get_matrix(
+        district_id, _superadmin_auth(), AsyncMock(), from_dt=day - timedelta(days=1),
+        to_dt=day + timedelta(days=1), group_id=None, **repos,
+    )
+
+
+@pytest.mark.asyncio
+async def test_matrix_marks_overlapping_assignments_of_one_leader() -> None:
+    district_id = uuid.uuid4()
+    nord = Congregation.create(name="Nord", district_id=district_id)
+    sued = Congregation.create(name="Sued", district_id=district_id)
+    leader = Leader.create(name="Muster", district_id=district_id)
+    start = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
+    first = _slot_with_leader(district_id, nord, leader, start)
+    second = _slot_with_leader(district_id, sued, leader, start + timedelta(minutes=30))
+    free = _slot_with_leader(district_id, nord, Leader.create(name="Andere", district_id=district_id), start + timedelta(days=1))
+
+    result = await _matrix_for(
+        district_id, [nord, sued], [first, second, free], [leader], start,
+    )
+
+    cells = {row.congregation_name: row.cells for row in result.rows}
+    day = start.date().isoformat()
+    for name in ("Nord", "Sued"):
+        [conflict] = cells[name][day].conflicts
+        assert (conflict.rule_id, conflict.severity) == ("no_double_booking", "BLOCK")
+    assert cells["Nord"][(start + timedelta(days=1)).date().isoformat()].conflicts == []
+
+
+@pytest.mark.asyncio
+async def test_matrix_warns_about_short_travel_time_and_ignores_free_text_leaders() -> None:
+    district_id = uuid.uuid4()
+    nord = Congregation.create(name="Nord", district_id=district_id)
+    sued = Congregation.create(name="Sued", district_id=district_id)
+    leader = Leader.create(name="Muster", district_id=district_id)
+    start = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
+    first = _slot_with_leader(district_id, nord, leader, start)
+    second = _slot_with_leader(district_id, sued, leader, start + timedelta(minutes=70))  # 10 min gap
+    result = await _matrix_for(district_id, [nord, sued], [first, second], [leader], start)
+    day = start.date().isoformat()
+    [conflict] = result.rows[0].cells[day].conflicts
+    assert (conflict.rule_id, conflict.severity) == ("travel_time_check", "WARN")
+
+
+@pytest.mark.asyncio
+async def test_matrix_conflicts_follow_the_conflict_check_switch(monkeypatch) -> None:
+    monkeypatch.setattr("app.adapters.api.routers.districts.settings.conflict_check_enabled", False)
+    district_id = uuid.uuid4()
+    nord = Congregation.create(name="Nord", district_id=district_id)
+    sued = Congregation.create(name="Sued", district_id=district_id)
+    leader = Leader.create(name="Muster", district_id=district_id)
+    start = datetime(2026, 4, 8, 10, 0, tzinfo=UTC)
+    parts = [
+        _slot_with_leader(district_id, nord, leader, start),
+        _slot_with_leader(district_id, sued, leader, start),
+    ]
+    result = await _matrix_for(district_id, [nord, sued], parts, [leader], start)
+    assert all(not cell.conflicts for row in result.rows for cell in row.cells.values())
+
+
 @pytest.mark.asyncio
 async def test_get_matrix_not_found_and_invalid_range() -> None:
     district_id = uuid.uuid4()

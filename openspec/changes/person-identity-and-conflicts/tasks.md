@@ -9,7 +9,7 @@
 - [ ] 2.2c Cross-congregation duty check for congregation-scoped planners (SECURITY DEFINER lookup returning only the existence of a conflict)
 
 ## 3. Matrix conflict display
-- [ ] 3.1 Matrix endpoint returns conflicts per cell; cells show a marker
+- [x] 3.1 Matrix endpoint returns conflicts per cell (double booking, travel time among the loaded assignments; unavailability and duties are not part of this step); cells show a labelled marker
 
 ## 4. Person–congregation–role model
 - [ ] 4.1 Relation, migration and screens replacing home congregation and special role

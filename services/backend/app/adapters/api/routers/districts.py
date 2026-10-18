@@ -47,7 +47,12 @@ from app.adapters.api.schemas.district import (
     FeiertageImportResult,
     ServiceTime,
 )
-from app.adapters.api.schemas.matrix import MatrixCell, MatrixResponse, MatrixRow
+from app.adapters.api.schemas.matrix import (
+    MatrixCell,
+    MatrixCellConflict,
+    MatrixResponse,
+    MatrixRow,
+)
 from app.adapters.api.tenant_references import ensure_congregation_in_district
 from app.adapters.auth.permissions import (
     PermissionError,
@@ -74,6 +79,7 @@ from app.application.feiertage_service import (
     reference_feiertage_for_congregation,
 )
 from app.application.planning_series_generator import PlanningSeriesGenerator
+from app.config import settings
 from app.domain.models.congregation import Congregation
 from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
@@ -83,6 +89,8 @@ from app.domain.models.leader import assignment_needs_review, normalize_leader_n
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
+from app.domain.planning.conflict_result import ScheduledService
+from app.domain.planning.matrix_conflicts import PlannedService, matrix_conflicts
 
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
 
@@ -474,6 +482,39 @@ def _group_response(g: CongregationGroup) -> CongregationGroupResponse:
 # ── Matrix ────────────────────────────────────────────────────────────────────
 
 
+def _assignment_conflicts(
+    assignments: list[ServiceAssignment],
+    slots: list[PlanningSlot],
+    instance_by_slot_id: dict[uuid.UUID, EventInstance],
+) -> dict[uuid.UUID, list[Any]]:
+    """Double booking and short travel time among the leader assignments of this matrix.
+
+    Free-text guests carry no identity and are skipped; so are assignments whose slot
+    lies outside the loaded range.
+    """
+    if not settings.conflict_check_enabled:
+        return {}
+    slot_by_id = {slot.id: slot for slot in slots}
+    default_duration = timedelta(minutes=settings.sync_expected_duration_minutes)
+    planned: list[PlannedService] = []
+    for assignment in assignments:
+        slot = slot_by_id.get(assignment.planning_slot_id or assignment.event_id)
+        if assignment.leader_id is None or slot is None or slot.planning_time is None:
+            continue
+        instance = instance_by_slot_id.get(slot.id)
+        start, end = ScheduledService(
+            slot.congregation_id,
+            slot.planning_date,
+            slot.planning_time,
+            instance.actual_start_at if instance else None,
+            instance.actual_end_at if instance else None,
+        ).window(default_duration)
+        planned.append(
+            PlannedService(assignment.id, assignment.leader_id, slot.congregation_id, start, end)
+        )
+    return matrix_conflicts(planned, min_travel_minutes=settings.min_travel_minutes)
+
+
 @router.get("/{district_id}/matrix", response_model=MatrixResponse)
 async def get_matrix(
     district_id: uuid.UUID,
@@ -634,6 +675,10 @@ async def get_matrix(
         if assignment_key not in assignment_by_slot_id:
             assignment_by_slot_id[assignment_key] = a
 
+    conflicts_by_assignment = _assignment_conflicts(
+        assignments, gottesdienst_slots, instance_by_slot_id
+    )
+
     # Build matrix rows
     rows: list[MatrixRow] = []
     groups = await group_repo.list_by_district(district_id)
@@ -749,6 +794,14 @@ async def get_matrix(
                 invitation_count=invitation_count,
                 deviation_start_diff_minutes=None,
                 deviation_end_diff_minutes=None,
+                conflicts=[
+                    MatrixCellConflict(
+                        rule_id=item.rule_id, severity=item.severity.value, message=item.message
+                    )
+                    for item in conflicts_by_assignment.get(assignment.id, [])
+                ]
+                if assignment
+                else [],
             )
 
             # Calculate deviation details if instance exists and has deviation

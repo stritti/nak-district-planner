@@ -152,6 +152,20 @@
                   >
                     Prüfung erforderlich
                   </div>
+                  <div
+                    v-if="row.cells[date].conflicts?.length"
+                    data-testid="cell-conflict"
+                    :title="conflictTitle(row.cells[date])"
+                    :class="[
+                      'text-[10px] font-medium',
+                      hasBlockingConflict(row.cells[date])
+                        ? 'text-red-700 dark:text-red-300'
+                        : 'text-amber-700 dark:text-amber-300',
+                    ]"
+                  >
+                    {{ hasBlockingConflict(row.cells[date]) ? 'Konflikt' : 'Warnung' }}:
+                    {{ row.cells[date].conflicts?.length === 1 ? row.cells[date].conflicts?.[0].message : `${row.cells[date].conflicts?.length} Hinweise` }}
+                  </div>
                   <EventApprovalStatusBadge
                     v-if="row.cells[date].approval_status"
                     :status="row.cells[date].approval_status"
@@ -257,6 +271,14 @@ import { useInlineAssignmentSave } from '../composables/useInlineAssignmentSave'
 import InlineEditableCell from './InlineEditableCell.vue'
 import type { MatrixCell, MatrixRow } from '../api/matrix'
 import { filterMatrixRows, sortMatrixRows } from '../utils/matrixRows'
+
+function hasBlockingConflict(cell: MatrixCell): boolean {
+  return (cell.conflicts ?? []).some((conflict) => conflict.severity === 'BLOCK')
+}
+
+function conflictTitle(cell: MatrixCell): string {
+  return (cell.conflicts ?? []).map((conflict) => conflict.message).join('\n')
+}
 import { useScrollShadow } from '../composables/useScrollShadow'
 import { useStickyScrollbar } from '../composables/useStickyScrollbar'
 import EmptyState from './EmptyState.vue'

@@ -12,6 +12,14 @@ from app.domain.models.planning_slot import EventApprovalStatus
 from app.domain.models.service_assignment import AssignmentStatus
 
 
+class MatrixCellConflict(BaseModel):
+    """A planning conflict of the assignment shown in a matrix cell."""
+
+    rule_id: str
+    severity: str  # "BLOCK" | "WARN"
+    message: str
+
+
 class MatrixCell(BaseModel):
     """MatrixCell."""
 
@@ -37,6 +45,8 @@ class MatrixCell(BaseModel):
     leader_id: uuid.UUID | None = None
     leader_name: str | None = None
     needs_review: bool = False
+    # Double booking / short travel time with the leader's other assignments in this matrix.
+    conflicts: list[MatrixCellConflict] = []
     # Deviation details for frontend display
     deviation_start_diff_minutes: int | None = None
     deviation_end_diff_minutes: int | None = None

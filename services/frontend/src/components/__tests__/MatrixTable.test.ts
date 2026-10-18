@@ -93,6 +93,65 @@ describe('MatrixTable lifecycle review state', () => {
   })
 })
 
+describe('MatrixTable planning conflicts', () => {
+  const cell = (conflicts: { rule_id: string; severity: 'BLOCK' | 'WARN'; message: string }[]) => ({
+    event_id: 'event',
+    event_title: 'Gottesdienst',
+    category: 'Gottesdienst',
+    is_gap: false,
+    assignment_id: 'assignment',
+    assignment_status: 'ASSIGNED' as const,
+    leader_id: 'leader',
+    leader_name: 'Pr. Muster',
+    conflicts,
+  })
+
+  const mountWith = (conflicts: Parameters<typeof cell>[0]) => {
+    const store = useMatrixStore()
+    store.matrix = {
+      dates: ['2030-04-14'],
+      rows: [{ congregation_id: 'c', congregation_name: 'Gemeinde', cells: { '2030-04-14': cell(conflicts) } }],
+      holidays: {},
+    }
+    return mount(MatrixTable, { props: { compactMode: false, matrixSortMode: 'default' } })
+  }
+
+  it('marks a blocking conflict with its message and a non-colour label', () => {
+    const wrapper = mountWith([
+      { rule_id: 'no_double_booking', severity: 'BLOCK', message: 'Der Amtsträger ist in einem überlappenden Zeitraum bereits zugewiesen.' },
+    ])
+    const marker = wrapper.get('[data-testid="cell-conflict"]')
+    expect(marker.text()).toContain('Konflikt')
+    expect(marker.attributes('title')).toContain('überlappenden Zeitraum')
+    expect(marker.classes().join(' ')).toContain('red')
+  })
+
+  it('marks short travel time as a warning and lists every message', () => {
+    const wrapper = mountWith([
+      { rule_id: 'travel_time_check', severity: 'WARN', message: 'Die Wechselzeit zwischen Gemeinden ist zu kurz.' },
+    ])
+    const marker = wrapper.get('[data-testid="cell-conflict"]')
+    expect(marker.text()).toContain('Warnung')
+    expect(marker.attributes('title')).toContain('Wechselzeit')
+    expect(marker.classes().join(' ')).toContain('amber')
+  })
+
+  it('shows the strongest severity when both kinds are present', () => {
+    const wrapper = mountWith([
+      { rule_id: 'travel_time_check', severity: 'WARN', message: 'Wechselzeit' },
+      { rule_id: 'no_double_booking', severity: 'BLOCK', message: 'Doppelt' },
+    ])
+    const marker = wrapper.get('[data-testid="cell-conflict"]')
+    expect(marker.text()).toContain('Konflikt')
+    expect(marker.attributes('title')).toContain('Wechselzeit')
+    expect(marker.attributes('title')).toContain('Doppelt')
+  })
+
+  it('shows nothing without conflicts', () => {
+    expect(mountWith([]).find('[data-testid="cell-conflict"]').exists()).toBe(false)
+  })
+})
+
 describe('MatrixTable scroll shadows', () => {
   it('renders both shadow overlays as decorative elements', () => {
     const { wrapper } = mountTable()
