@@ -627,11 +627,12 @@ async def get_matrix(
     for slot in gottesdienst_slots:
         gottesdienst_slots_by_date.setdefault(slot.planning_date.isoformat(), []).append(slot)
 
-    def _cell_slot(congregation_id: uuid.UUID, date_key: str) -> PlanningSlot | None:
-        """Own slot before a distributed district slot; earliest time first.
+    def _visible_cell_slots(congregation_id: uuid.UUID, date_key: str) -> list[PlanningSlot]:
+        """Visible services in display order, including later same-day services.
 
-        An invited congregation attends the host's service instead of holding its
-        own, so the invitation copy wins over its own slots without a leader.
+        The matrix currently presents one primary service per date. Keep the
+        existing invitation precedence while retaining all visible services for
+        conflict aggregation.
         """
         visible = [
             slot
@@ -646,10 +647,9 @@ async def get_matrix(
                 if s.invitation_source_event_id is None and s.id in assignment_by_slot_id
             ]
             visible = led_own or copies
-        return min(
+        return sorted(
             visible,
             key=lambda slot: (slot.congregation_id is None, slot.planning_time),
-            default=None,
         )
 
     # Batch-load leaders for this district
@@ -718,12 +718,12 @@ async def get_matrix(
         cells: dict[str, MatrixCell] = {}
 
         for date_key in sorted_dates:
-            slot: PlanningSlot | None = _cell_slot(congregation.id, date_key)
-
-            if slot is None:
+            visible_slots = _visible_cell_slots(congregation.id, date_key)
+            if not visible_slots:
                 # No visible slot for this congregation on this date
                 cells[date_key] = MatrixCell()
                 continue
+            slot = visible_slots[0]
 
             # Get instance and assignment for this slot
             instance: EventInstance | None = instance_by_slot_id.get(slot.id)
@@ -754,6 +754,33 @@ async def get_matrix(
                     ldr = leaders_by_id[assignment.leader_id]
                     rank_prefix = f"{ldr.rank.value} " if ldr.rank else ""
                     leader_name = f"{rank_prefix}{ldr.name}"
+
+            # The matrix has one cell per congregation and day. Include conflicts
+            # from every visible service, not only the primary (earliest) one.
+            # Prefix the time when there is more than one service so the affected
+            # assignment remains identifiable without changing the matrix shape.
+            cell_conflicts: list[MatrixCellConflict] = []
+            for visible_slot in visible_slots:
+                visible_assignment = assignment_by_slot_id.get(visible_slot.id)
+                if visible_assignment is None and visible_slot.invitation_source_event_id:
+                    visible_assignment = assignment_by_slot_id.get(
+                        visible_slot.invitation_source_event_id
+                    )
+                if visible_assignment is None:
+                    continue
+                for conflict in conflicts_by_assignment.get(visible_assignment.id, []):
+                    time_prefix = (
+                        f"{visible_slot.planning_time:%H:%M} Uhr: "
+                        if len(visible_slots) > 1 and visible_slot.planning_time is not None
+                        else ""
+                    )
+                    cell_conflicts.append(
+                        MatrixCellConflict(
+                            rule_id=conflict.rule_id,
+                            severity=conflict.severity.value,
+                            message=f"{time_prefix}{conflict.message}",
+                        )
+                    )
 
             # Get invitation count for this slot
             invitation_count: int = len(invitation_by_source_slot.get(slot.id, []))
@@ -792,16 +819,10 @@ async def get_matrix(
                     slot.planning_date,
                 ),
                 invitation_count=invitation_count,
+                service_count=len(visible_slots),
                 deviation_start_diff_minutes=None,
                 deviation_end_diff_minutes=None,
-                conflicts=[
-                    MatrixCellConflict(
-                        rule_id=item.rule_id, severity=item.severity.value, message=item.message
-                    )
-                    for item in conflicts_by_assignment.get(assignment.id, [])
-                ]
-                if assignment
-                else [],
+                conflicts=cell_conflicts,
             )
 
             # Calculate deviation details if instance exists and has deviation
