@@ -20,7 +20,6 @@ name under ``changes.redacted_fields``.
 from __future__ import annotations
 
 import enum
-import logging
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -50,6 +49,10 @@ from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
 from app.tenant import TenantContext
 
 logger = logging.getLogger(__name__)
+
+class AuditTenantResolutionError(RuntimeError):
+    """Reject a mutation whose mandatory domain audit cannot be tenant-scoped."""
+
 
 AUDIT_SOURCE = "domain"
 
@@ -257,14 +260,11 @@ def collect_entries(session: Session) -> list[AuditEntry]:
 def _audit_row(session: Session, entry: AuditEntry, now: datetime) -> dict[str, Any] | None:
     district_id, congregation_id = entry.resource.tenant(session, entry.row)
     if district_id is None and congregation_id is None:
-        # Without a tenant the entry would be invisible and, for non-superadmins,
-        # rejected by RLS, which would abort the business transaction.
-        logger.warning(
-            "Domain audit skipped, tenant unknown: resource_type=%s resource_id=%s",
-            entry.resource.resource_type,
-            entry.row.id,
+        # Fail closed: a missing tenant must never silently discard the audit
+        # intent while committing the protected business mutation.
+        raise AuditTenantResolutionError(
+            f"Audit tenant is required for {entry.resource.resource_type}"
         )
-        return None
     changes = {"redacted_fields": list(entry.redacted_fields)} if entry.redacted_fields else None
     return {
         "id": uuid.uuid4(),
