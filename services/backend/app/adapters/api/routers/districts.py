@@ -89,7 +89,7 @@ from app.domain.models.leader import assignment_needs_review, normalize_leader_n
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
-from app.domain.planning.conflict_result import ScheduledService
+from app.domain.planning.conflict_result import ConflictResult, ScheduledService
 from app.domain.planning.matrix_conflicts import PlannedService, matrix_conflicts
 
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
@@ -486,7 +486,7 @@ def _assignment_conflicts(
     assignments: list[ServiceAssignment],
     slots: list[PlanningSlot],
     instance_by_slot_id: dict[uuid.UUID, EventInstance],
-) -> dict[uuid.UUID, list[Any]]:
+) -> dict[uuid.UUID, list[ConflictResult]]:
     """Double booking and short travel time among the leader assignments of this matrix.
 
     Free-text guests carry no identity and are skipped; so are assignments whose slot
