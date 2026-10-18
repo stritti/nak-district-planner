@@ -34,7 +34,50 @@ Der Production Guard verhindert den Start bei kritischen unsicheren Werten.
 
 ### 1.1a Geheime ICS-URLs in Logs
 
-`/api/v1/export/<token>/calendar.ics` enthaelt ein Bearer-Secret im Pfad. Anwendung und Frontend-nginx maskieren den Token in Logs, Audit-Metadaten, Metrik-Labels und Traces. **Der externe TLS-Proxy (Traefik, Caddy, nginx, Load Balancer) ist nicht Teil dieses Repos** und muss selbst maskieren oder den Pfad `/api/v1/export/` nicht protokollieren (zum Beispiel Traefik `accessLog.filters`/Feld-Redaktion oder ein eigenes nginx-`log_format` mit maskiertem URI). Bereits protokollierte Feed-URLs gelten als offengelegt: Log-Retention pruefen und betroffene Tokens bei Bedarf widerrufen und neu ausgeben.
+`/api/v1/export/<token>/calendar.ics` enthaelt ein **Bearer-Secret im Pfad**. Anwendung und Frontend-nginx maskieren diesen Pfad bereits. **Jeder externe TLS-Proxy, Ingress, Load Balancer, WAF, Tracer und zentrale Logsink muss separat geprueft werden.** Ein normales `accessLog.filters` von Traefik ist kein Nachweis dafuer, dass beliebige URL-Pfadsegmente umgeschrieben werden. Falls die eingesetzte Version keine nachweisbar sichere Pfadredaktion unterstuetzt, den Zugriff auf `/api/v1/export/` nicht protokollieren.
+
+**nginx-Beispiel am externen TLS-Proxy (Logging des sensiblen Pfads abschalten):** Diese `map` gehoert in den `http`-Kontext, das `access_log` in den passenden `server`-Kontext. Zusaetzliche `access_log`-Direktiven, Unterserver und vorgeschaltete Gateways sind gesondert zu pruefen.
+
+```nginx
+map $uri $log_ics_request {
+    default 1;
+    ~^/api/v1/export/ 0;
+}
+
+server {
+    access_log /var/log/nginx/access.log main if=$log_ics_request;
+    # Unveraenderte vorhandene TLS- und Proxy-Konfiguration
+}
+```
+
+**Traefik/Caddy:** Die konkrete Version und Log-Konfiguration kontrollieren. Nur verifizierte Optionen zum vollstaendigen Unterdruecken des betreffenden Request-Logs oder Redigieren **aller** Felder verwenden, die `RequestPath`, `RequestAddr`, den Roh-Request, `url.path` oder einen kompletten URL-String enthalten koennen. Zusaetzlich strukturierte Access-Logs, Middleware-/Error-Logs, APM-Labels und zentrale Exporter pruefen. Eine maskierte Logspalte allein genuegt nicht, wenn ein anderes Feld das Token speichert. Wo ein Proxy keine selektive Redigierung erlaubt, Access-Logs fuer den sensiblen Dienst insgesamt abschalten oder vor der Weitergabe in den Collector bereinigen.
+
+**Canary-Nachweis im echten Betrieb (Pflicht):**
+
+1. Einen befristeten **Test-Feed** ausstellen und den Token nur in einer geheim gehaltenen Operatorsitzung bereitstellen. Keine Tokens im Ticket, Screenshot, Terminal-Trace, CI-Log oder Shell-Kommandozeilenargument speichern. `set +x` vor dem Test.
+2. Den Feed **ueber den oeffentlichen TLS-Endpunkt** einmal abrufen. Danach die Access-/Fehlerlogs aller vorgelagerten Proxys, WAFs, das zentrale Logging sowie APM-Spans und Metriklabels fuer dasselbe Zeitfenster **vollstaendig und sicher lokal exportieren**. Token nicht als Suchparameter an Cloud-APIs senden.
+3. Mit dem Repository-Pruefer ausschliesslich die exportierten, lokal vorliegenden Log- und Tracedateien kontrollieren. Das Token wird ueber stdin uebergeben, niemals als Argument; Ausgabe enthaelt **nur Status und Anzahl der Quellen**:
+
+   ```bash
+   set +x
+   umask 077
+   read -r -s -p 'Canary-Token (keine Ausgabe): ' CANARY_TOKEN
+   printf '\\n'
+   printf '%s\\n' "$CANARY_TOKEN" |
+     python3 scripts/check_ics_canary_logs.py \\
+       --source /secure/exports/proxy.jsonl \\
+       --source /secure/exports/traces.jsonl \\
+       --source /secure/exports/metrics.txt
+   STATUS=$?
+   unset CANARY_TOKEN
+   echo "Canary check exit code: $STATUS"
+   ```
+
+   Exitcode `0`: Token in allen **uebergebenen lokalen** Quellen nicht gefunden. `1`: Token gefunden, vor Freigabe rotieren/Logs behandeln. `2`: fehlende, unlesbare oder unvollstaendige Quellen; **kein** Sicherheitsnachweis. Der Pruefer beweist weder, dass alle Quellen exportiert wurden, noch dass historische Daten sauber sind.
+4. Historische Logs separat auf exponierte gueltige Abos pruefen. Retention, Leseberechtigungen und Loesch- oder Sperrfristen kontrollieren; betroffene Tokens ueber die normale Feed-Funktion widerrufen und neu ausstellen. Auch das Canary-Abo anschliessend widerrufen.
+5. Protokollieren: **Datum, Betreiber, Proxy-Produkt und Version, eingesetzte Schutzregel, alle kontrollierten Log-/Trace-/Metrik-Sinks, Testzeitfenster, Exitcode, Retention-Ergebnis, Anzahl rotierter Abos und Freigabeentscheidung**. Niemals den Token oder die vollstaendige ICS-URL dokumentieren.
+
+**Betriebs-Freigabekriterium fuer #629:** Erst nach Anpassung des *tatsaechlichen externen TLS-Proxys*, Pruefung aller beobachtbaren Datenpfade, Behandlung alter Logs und bestandenem Canary-Check die Betriebsmassnahme als erledigt markieren. Wenn ein Log-/Telemetry-Sink nicht geprueft werden konnte, bleibt das Issue offen.
 
 ### 1.2 Reverse Proxy und Client-IP
 
