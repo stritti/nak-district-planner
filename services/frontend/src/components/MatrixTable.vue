@@ -160,27 +160,6 @@
                   >
                     Prüfung erforderlich
                   </div>
-                  <div
-                    v-if="(row.cells[date].service_count ?? 0) > 1"
-                    data-testid="cell-service-count"
-                    class="text-[10px] text-gray-600 dark:text-gray-300"
-                  >
-                    {{ row.cells[date].service_count }} Gottesdienste an diesem Tag
-                  </div>
-                  <div
-                    v-if="row.cells[date].conflicts?.length"
-                    data-testid="cell-conflict"
-                    :title="conflictTitle(row.cells[date])"
-                    :class="[
-                      'text-[10px] font-medium',
-                      hasBlockingConflict(row.cells[date])
-                        ? 'text-red-700 dark:text-red-300'
-                        : 'text-amber-700 dark:text-amber-300',
-                    ]"
-                  >
-                    {{ hasBlockingConflict(row.cells[date]) ? 'Konflikt' : 'Warnung' }}:
-                    {{ row.cells[date].conflicts?.length === 1 ? row.cells[date].conflicts?.[0].message : `${row.cells[date].conflicts?.length} Hinweise` }}
-                  </div>
                   <EventApprovalStatusBadge
                     v-if="row.cells[date].approval_status"
                     :status="row.cells[date].approval_status"
@@ -206,6 +185,27 @@
                     Einladungen: {{ row.cells[date].invitation_count }}
                   </div>
                 </button>
+                <div
+                  v-if="(row.cells[date].service_count ?? 0) > 1"
+                  data-testid="cell-service-count"
+                  class="text-[10px] text-gray-600 dark:text-gray-300"
+                >
+                  {{ row.cells[date].service_count }} Gottesdienste an diesem Tag
+                </div>
+                <div
+                  v-if="row.cells[date].conflicts?.length"
+                  data-testid="cell-conflict"
+                  :title="conflictTitle(row.cells[date])"
+                  :class="[
+                    'text-[10px] font-medium',
+                    hasBlockingConflict(row.cells[date])
+                      ? 'text-red-700 dark:text-red-300'
+                      : 'text-amber-700 dark:text-amber-300',
+                  ]"
+                >
+                  {{ hasBlockingConflict(row.cells[date]) ? 'Konflikt' : 'Warnung' }}:
+                  {{ row.cells[date].conflicts?.length === 1 ? row.cells[date].conflicts?.[0].message : `${row.cells[date].conflicts?.length} Hinweise` }}
+                </div>
                 <InlineEditableCell
                   v-if="canInlineAssign(row.cells[date])"
                   :id="'matrix-leader-' + row.congregation_id + '-' + date"
