@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import runpy
 import socketserver
 import ssl
 import subprocess
@@ -17,18 +18,27 @@ import pytest
 
 from app.adapters.mail import smtp as smtp_adapter
 from app.adapters.mail.smtp import SmtpMailService
-from app.adapters.mail.starttls_probe import verify_smtp_starttls
 from app.domain.ports.mail import MailDeliveryError
+
+PROBE = runpy.run_path(str(Path(__file__).resolve().parents[2] / "scripts" / "check_smtp_starttls.py"))
+verify_smtp_starttls = PROBE["verify_smtp_starttls"]
+SmtpTlsProbeError = PROBE["SmtpTlsProbeError"]
 
 
 class _Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, context: ssl.SSLContext, *, offer_starttls: bool = True, break_tls: bool = False):
+    def __init__(
+        self, context: ssl.SSLContext, *, offer_starttls: bool = True,
+        break_tls: bool = False, fail_second_ehlo: bool = False,
+        advertise_auth: bool = True,
+    ):
         self.tls_context = context
         self.offer_starttls = offer_starttls
         self.break_tls = break_tls
+        self.fail_second_ehlo = fail_second_ehlo
+        self.advertise_auth = advertise_auth
         self.events: list[tuple[str, bool]] = []
         super().__init__(("127.0.0.1", 0), _Handler)
 
@@ -42,10 +52,14 @@ class _Handler(socketserver.StreamRequestHandler):
             cmd = line.decode("ascii", errors="replace").strip().split(" ", 1)[0].upper()
             self.server.events.append((cmd, tls))
             if cmd == "EHLO":
+                if tls and self.server.fail_second_ehlo:
+                    self.wfile.write(b"554 EHLO denied after TLS\r\n")
+                    self.wfile.flush()
+                    continue
                 advertised = b"250-localhost\r\n"
                 if self.server.offer_starttls and not tls:
                     advertised += b"250-STARTTLS\r\n"
-                if tls:
+                if tls and self.server.advertise_auth:
                     advertised += b"250-AUTH PLAIN LOGIN\r\n"
                 self.wfile.write(advertised + b"250 HELP\r\n")
             elif cmd == "STARTTLS":
@@ -112,8 +126,12 @@ def tls_context(certificate: tuple[Path, Path]) -> ssl.SSLContext:
 def server_factory(tls_context: ssl.SSLContext) -> Iterator[Any]:
     servers: list[_Server] = []
 
-    def start(*, offer_starttls: bool = True, break_tls: bool = False) -> _Server:
-        server = _Server(tls_context, offer_starttls=offer_starttls, break_tls=break_tls)
+    def start(*, offer_starttls: bool = True, break_tls: bool = False,
+              fail_second_ehlo: bool = False, advertise_auth: bool = True) -> _Server:
+        server = _Server(
+            tls_context, offer_starttls=offer_starttls, break_tls=break_tls,
+            fail_second_ehlo=fail_second_ehlo, advertise_auth=advertise_auth,
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         servers.append(server)
@@ -152,6 +170,9 @@ def test_trusted_starttls_authenticates_only_after_handshake(
     assert ("AUTH", True) in server.events
     assert ("BODY", True) in server.events
     _assert_no_pre_tls_auth(server.events)
+    commands = [cmd for cmd, _ in server.events]
+    required = ["EHLO", "STARTTLS", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "BODY"]
+    assert commands[:len(required)] == required
 
 
 def test_missing_starttls_never_sends_credentials(server_factory) -> None:
@@ -203,6 +224,30 @@ def test_relay_preflight_verifies_tls_without_authentication(
 
 def test_relay_preflight_fails_when_starttls_unavailable(server_factory) -> None:
     server = server_factory(offer_starttls=False)
-    with pytest.raises(MailDeliveryError):
+    with pytest.raises(SmtpTlsProbeError):
         verify_smtp_starttls(host="localhost", port=server.server_address[1])
+    assert not any(cmd in {"AUTH", "MAIL", "RCPT", "DATA", "BODY"} for cmd, _ in server.events)
+
+def test_relay_preflight_rejects_failed_ehlo_after_tls(
+    certificate: tuple[Path, Path], server_factory
+) -> None:
+    server = server_factory(fail_second_ehlo=True)
+    with pytest.raises(SmtpTlsProbeError, match="EHLO"):
+        verify_smtp_starttls(
+            host="localhost", port=server.server_address[1],
+            context=ssl.create_default_context(cafile=str(certificate[0])),
+        )
+    assert not any(cmd in {"AUTH", "MAIL", "RCPT", "DATA", "BODY"} for cmd, _ in server.events)
+
+
+def test_relay_preflight_rejects_missing_post_tls_auth(
+    certificate: tuple[Path, Path], server_factory
+) -> None:
+    server = server_factory(advertise_auth=False)
+    with pytest.raises(SmtpTlsProbeError, match="AUTH"):
+        verify_smtp_starttls(
+            host="localhost", port=server.server_address[1],
+            context=ssl.create_default_context(cafile=str(certificate[0])),
+        )
+    assert ("EHLO", True) in server.events
     assert not any(cmd in {"AUTH", "MAIL", "RCPT", "DATA", "BODY"} for cmd, _ in server.events)
