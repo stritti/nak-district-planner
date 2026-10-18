@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import gzip
 import subprocess
 import sys
 from pathlib import Path
@@ -73,6 +74,34 @@ def test_one_missing_sink_invalidates_other_clean_sink(tmp_path: Path) -> None:
     clean = tmp_path / "clean.log"
     clean.write_text("status=200 route=export_ics\n")
     result = _run(tmp_path, sources=[str(clean), str(tmp_path / "unavailable.log")])
+    assert result.returncode == 2
+    assert "INCOMPLETE" in result.stderr
+    _assert_secret_not_reported(result)
+
+def test_gzip_log_export_is_never_approved_as_clean(tmp_path: Path) -> None:
+    source = tmp_path / "proxy.jsonl.gz"
+    source.write_bytes(gzip.compress(f"request={TOKEN}".encode()))
+    result = _run(tmp_path, sources=[str(source)])
+    assert result.returncode == 2
+    assert "INCOMPLETE" in result.stderr
+    _assert_secret_not_reported(result)
+
+
+def test_gzip_magic_rejected_without_extension(tmp_path: Path) -> None:
+    source = tmp_path / "proxy.log"
+    source.write_bytes(gzip.compress(f"request={TOKEN}".encode()))
+    result = _run(tmp_path, sources=[str(source)])
+    assert result.returncode == 2
+    _assert_secret_not_reported(result)
+
+
+def test_misplaced_positional_secret_never_echoed(tmp_path: Path) -> None:
+    source = tmp_path / "proxy.log"
+    source.write_text("clear")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--source", str(source), TOKEN],
+        input=TOKEN + "\n", text=True, capture_output=True, check=False,
+    )
     assert result.returncode == 2
     assert "INCOMPLETE" in result.stderr
     _assert_secret_not_reported(result)
