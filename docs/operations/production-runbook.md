@@ -62,11 +62,11 @@ server {
    set +x
    umask 077
    read -r -s -p 'Canary-Token (keine Ausgabe): ' CANARY_TOKEN
-   printf '\\n'
-   printf '%s\\n' "$CANARY_TOKEN" |
-     python3 scripts/check_ics_canary_logs.py \\
-       --source /secure/exports/proxy.jsonl \\
-       --source /secure/exports/traces.jsonl \\
+   printf '\n'
+   printf '%s\n' "$CANARY_TOKEN" |
+     python3 scripts/check_ics_canary_logs.py \
+       --source /secure/exports/proxy.jsonl \
+       --source /secure/exports/traces.jsonl \
        --source /secure/exports/metrics.txt
    STATUS=$?
    unset CANARY_TOKEN
