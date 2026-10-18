@@ -340,7 +340,7 @@ async function saveInlineAssignment(cell: MatrixCell, leaderId: string, revision
   if (!eventId) throw new Error('Planungseintrag fehlt')
   const saved = await saveAssignment(eventId, leaderId, revision)
   matrixStore.applyInlineAssignment(eventId, saved)
-  await matrixStore.refreshConflicts()
+  void matrixStore.refreshConflicts()
 }
 
 type OverflowTitleEl = HTMLElement & {
