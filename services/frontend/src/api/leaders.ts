@@ -72,6 +72,8 @@ export interface LeaderCreate {
   hidden_from_lists?: boolean
   service_end_date?: string | null
   is_active?: boolean
+  /** Set after the user confirmed that a same-named person is a different one. */
+  confirm_duplicate?: boolean
 }
 
 export interface LeaderUpdate {

@@ -31,6 +31,7 @@
           type="text"
           class="form-input"
           placeholder="Vor- und Nachname"
+          @input="modal.duplicates = []"
           @keyup.enter="emit('submit')"
         />
       </div>
@@ -78,6 +79,22 @@
       </div>
     </div>
 
+    <div
+      v-if="modal.duplicates.length"
+      role="alert"
+      data-testid="duplicate-leader-hint"
+      class="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+    >
+      <p class="font-medium">Eine Person mit diesem Namen existiert bereits:</p>
+      <ul class="mt-1 list-disc pl-5">
+        <li v-for="match in modal.duplicates" :key="match.id">{{ match.label }}</li>
+      </ul>
+      <p class="mt-1">
+        Bitte die vorhandene Person verwenden. Nur wenn es eine andere Person gleichen Namens ist,
+        „Trotzdem neu anlegen“ wählen.
+      </p>
+    </div>
+
     <p v-if="modal.error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ modal.error }}</p>
 
     <div class="flex justify-end gap-3">
@@ -93,7 +110,7 @@
         @click="emit('submit')"
       >
         <PlusIcon class="h-4 w-4" />
-        {{ saving ? 'Speichern…' : 'Hinzufügen' }}
+        {{ saving ? 'Speichern…' : modal.duplicates.length ? 'Trotzdem neu anlegen' : 'Hinzufügen' }}
       </button>
     </div>
   </div>

@@ -3,7 +3,7 @@
 - [x] 1.2 Event creation form rejects an end that is not after the start before submitting _(bereits vorhanden: `EventListView.submitCreate`, getestet in `EventListView.test.ts`)_
 
 ## 2. Duplicate persons and duty conflicts
-- [ ] 2.1 Leader creation: duplicate hint with explicit override
+- [x] 2.1 Leader creation: duplicate hint with explicit override (`LEADER_DUPLICATE`, `confirm_duplicate`, hint in the add dialog)
 - [ ] 2.2 Duties may reference a leader; cross-congregation conflict check for duties (block for strong identity, warn for names)
 
 ## 3. Matrix conflict display

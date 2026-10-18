@@ -575,6 +575,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useSessionViewSettings, sessionField, sessionText } from '../composables/useSessionViewSettings'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { parseLeaderDuplicate } from '../api/leaderDuplicate'
 import LeaderInlineCell from '../components/leaders/LeaderInlineCell.vue'
 import {
   inlineLeaderPayload,
@@ -1137,6 +1138,7 @@ const addModal = reactive<AddModalState>({
   email: '',
   phone: '',
   error: '',
+  duplicates: [],
 })
 
 function openAddModal(congregationId: string | null) {
@@ -1148,6 +1150,7 @@ function openAddModal(congregationId: string | null) {
   addModal.email = ''
   addModal.phone = ''
   addModal.error = ''
+  addModal.duplicates = []
 }
 
 async function saveAdd() {
@@ -1162,12 +1165,26 @@ async function saveAdd() {
       special_role: addModal.special_role,
       email: addModal.email.trim() || null,
       phone: addModal.phone.trim() || null,
+      // A pending hint means the user already saw the same-named people and chose to continue.
+      ...(addModal.duplicates.length ? { confirm_duplicate: true } : {}),
     })
     leaders.value = [...leaders.value, created]
     addModal.open = false
     toastStore.success('Amtsträger:in erstellt', created.name)
   } catch (e) {
-    addModal.error = e instanceof Error ? e.message : 'Fehler'
+    const matches = parseLeaderDuplicate(e)
+    if (matches) {
+      addModal.duplicates = matches.map((match) => ({
+        id: match.id,
+        label: [
+          match.name,
+          match.congregation_id ? congregationName(match.congregation_id) || 'andere Gemeinde' : 'Bezirksebene',
+          match.is_active ? 'aktiv' : 'inaktiv',
+        ].join(' · '),
+      }))
+    } else {
+      addModal.error = e instanceof Error ? e.message : 'Fehler'
+    }
   } finally {
     saving.value = false
   }

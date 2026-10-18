@@ -33,7 +33,7 @@ from app.adapters.auth.permissions import (
 from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
-from app.domain.models.leader import Leader, LeaderRank, SpecialRole
+from app.domain.models.leader import Leader, LeaderRank, SpecialRole, person_match_key
 from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/leaders", tags=["leaders"])
@@ -129,6 +129,30 @@ async def create_leader(
     await ensure_congregation_in_district(db, district_id, body.congregation_id)
     if not body.is_active or body.hidden_from_lists or body.service_end_date is not None:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    if not body.confirm_duplicate:
+        key = person_match_key(body.name)
+        matches = [
+            known for known in await leaders_repo.list_by_district(district_id)
+            if person_match_key(known.name) == key
+        ]
+        if matches:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "LEADER_DUPLICATE",
+                    "message": "Eine Person mit diesem Namen existiert bereits.",
+                    # No contact data: the creator may not be allowed to read it.
+                    "matches": [
+                        {
+                            "id": str(known.id),
+                            "name": known.name,
+                            "congregation_id": str(known.congregation_id) if known.congregation_id else None,
+                            "is_active": known.is_active,
+                        }
+                        for known in matches
+                    ],
+                },
+            )
     leader = Leader.create(
         name=body.name,
         district_id=district_id,
