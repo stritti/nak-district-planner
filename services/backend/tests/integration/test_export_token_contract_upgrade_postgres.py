@@ -324,7 +324,7 @@ def test_runtime_role_token_visibility_after_contract_upgrade(database) -> None:
     )
     assert _runtime_personal_scopes(
         database, token_values["PERSONAL"], personal_sub, own_district
-    ) == {("DISTRICT", own_district)}
+    ) == {("DISTRICT", uuid.UUID(str(own_district)))}
     assert _runtime_personal_scopes(
         database, token_values["PERSONAL"], personal_sub, foreign_district
     ) == set()
