@@ -9,7 +9,7 @@ import io
 import logging
 import re
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.requests import Request
@@ -149,6 +149,39 @@ def test_installed_filter_covers_handlers_of_uvicorn_loggers() -> None:
         assert sum(isinstance(f, RedactSecretPathsFilter) for f in handler.filters) == 1
     finally:
         access.removeHandler(handler)
+
+
+@pytest.mark.asyncio
+async def test_unhandled_export_error_never_bypasses_log_redaction(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Unexpected feed errors must be redacted even on the global 500 path."""
+    from app.main import _unhandled
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.addFilter(RedactSecretPathsFilter())
+    logger = logging.getLogger("app.main")
+    original_level = logger.level
+    logger.addHandler(handler)
+    logger.setLevel(logging.ERROR)
+    try:
+        try:
+            raise RuntimeError(f"upstream failed for {FEED}")
+        except RuntimeError as exc:
+            from app.config import settings
+
+            with patch.object(settings, "app_env", "production"):
+                response = await _unhandled(_request(), exc)
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
+
+    assert response.status_code == 500
+    assert CANARY not in response.body.decode("utf-8")
+    assert CANARY not in capsys.readouterr().err
+    assert CANARY not in stream.getvalue()
+    assert "{redacted}" in stream.getvalue()
 
 
 def test_nginx_access_log_masks_the_export_secret() -> None:
