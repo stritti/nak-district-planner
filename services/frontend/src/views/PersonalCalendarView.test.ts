@@ -173,3 +173,140 @@ it('ignores an old identity token response and remains usable after clearing the
   expect(wrapper.find('[role="status"]').exists()).toBe(false)
   expect(wrapper.html()).not.toContain('private-secret')
 })
+
+
+it('reports token-loading failures without exposing a calendar link', async () => {
+  vi.mocked(api.listPersonalTokens).mockRejectedValueOnce('token lookup failed')
+
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+
+  expect(wrapper.get('[role="alert"]').text()).toContain('Kalender konnte nicht geladen werden')
+  expect(wrapper.findComponent(CopyButton).exists()).toBe(false)
+
+  vi.mocked(api.listPersonalTokens).mockRejectedValueOnce(new Error('Access denied'))
+  useDistrictsStore().selectedDistrictId = 'another-district'
+  await flushPromises()
+
+  expect(wrapper.get('[role="alert"]').text()).toContain('Access denied')
+  expect(wrapper.findComponent(CopyButton).exists()).toBe(false)
+})
+
+it('ignores events returned from an obsolete date range', async () => {
+  let resolveOldEvents!: (events: api.PersonalEvent[]) => void
+  vi.mocked(api.listPersonalEvents).mockReturnValueOnce(new Promise((resolve) => {
+    resolveOldEvents = resolve
+  }))
+
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+
+  vi.mocked(api.listPersonalEvents).mockResolvedValueOnce([{
+    planning_slot_id: 'new-slot',
+    uid: 'new@nak',
+    title: 'Current appointment',
+    start_at: '2026-11-01T10:00:00Z',
+    end_at: '2026-11-01T11:00:00Z',
+    status: 'CONFIRMED',
+    duties: ['Organist'],
+    congregation_id: null,
+  }])
+  await wrapper.findAll('input[type="date"]')[0]!.setValue('2026-11-01')
+  await flushPromises()
+
+  resolveOldEvents([{
+    planning_slot_id: 'obsolete-slot',
+    uid: 'obsolete@nak',
+    title: 'Obsolete appointment',
+    start_at: '2026-10-01T10:00:00Z',
+    end_at: '2026-10-01T11:00:00Z',
+    status: 'CONFIRMED',
+    duties: [],
+    congregation_id: null,
+  }])
+  await flushPromises()
+
+  expect(wrapper.text()).toContain('Current appointment')
+  expect(wrapper.text()).not.toContain('Obsolete appointment')
+})
+
+it('does not show errors from an obsolete event request', async () => {
+  let rejectOldEvents!: (reason: unknown) => void
+  vi.mocked(api.listPersonalEvents).mockReturnValueOnce(new Promise((_, reject) => {
+    rejectOldEvents = reject
+  }))
+
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+
+  await wrapper.findAll('input[type="date"]')[0]!.setValue('2026-11-01')
+  await flushPromises()
+  rejectOldEvents(new Error('Old request denied'))
+  await flushPromises()
+
+  expect(wrapper.text()).not.toContain('Old request denied')
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  expect(wrapper.findAll('[data-testid="personal-event"]')).toHaveLength(1)
+})
+
+it('ignores a rejected token request after switching districts', async () => {
+  let rejectOldTokens!: (reason: unknown) => void
+  vi.mocked(api.listPersonalTokens).mockReturnValueOnce(new Promise((_, reject) => {
+    rejectOldTokens = reject
+  }))
+
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+
+  useDistrictsStore().selectedDistrictId = 'another-district'
+  await flushPromises()
+  rejectOldTokens(new Error('Old district denied'))
+  await flushPromises()
+
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  expect(wrapper.html()).not.toContain('Old district denied')
+  expect(api.listPersonalTokens).toHaveBeenLastCalledWith('another-district', 'me')
+})
+
+it('discards a token created for a district that is no longer selected', async () => {
+  let resolveCreation!: (token: api.PersonalToken) => void
+  vi.mocked(api.createPersonalToken).mockReturnValueOnce(new Promise((resolve) => {
+    resolveCreation = resolve
+  }))
+
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+  await wrapper.get('[data-testid="create-feed"]').trigger('click')
+
+  useDistrictsStore().selectedDistrictId = ''
+  await flushPromises()
+  resolveCreation({ id: 'old', token: 'obsolete-private-token', label: 'Old district' })
+  await flushPromises()
+
+  expect(wrapper.html()).not.toContain('obsolete-private-token')
+  expect(wrapper.findComponent(CopyButton).exists()).toBe(false)
+  expect(wrapper.find('[role="status"]').exists()).toBe(false)
+})
+
+it('ignores a late revocation failure after the district changes', async () => {
+  let rejectRevocation!: (reason: unknown) => void
+  vi.mocked(api.listPersonalTokens).mockResolvedValueOnce([{
+    id: 'old', token: 'private-token', label: 'Old district',
+  }])
+  vi.mocked(api.revokePersonalToken).mockReturnValueOnce(new Promise((_, reject) => {
+    rejectRevocation = reject
+  }))
+
+  const wrapper = mount(PersonalCalendarView)
+  await flushPromises()
+  await wrapper.get('button.btn-secondary').trigger('click')
+
+  useDistrictsStore().selectedDistrictId = ''
+  await flushPromises()
+  rejectRevocation(new Error('Old district revocation failed'))
+  await flushPromises()
+
+  expect(wrapper.html()).not.toContain('private-token')
+  expect(wrapper.html()).not.toContain('Old district revocation failed')
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+})
