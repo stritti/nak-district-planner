@@ -12,7 +12,7 @@
   "devDependencies": {
     "@stritti/vitepress-plugin-openspec": "^0.8.0",
     "vitepress": "^1.6.3",
-    "vue": "^3.5.43",
+    "vue": "^3.5.44",
     "vitepress-plugin-mermaid-diagram": "0.3.2"
   }
 }
