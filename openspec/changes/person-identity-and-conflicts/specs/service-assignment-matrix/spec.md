@@ -26,6 +26,11 @@ The matrix response SHALL list per cell the planning conflicts of its leader ass
 - **THEN** the matrix cell reports the number of services and aggregates conflicts from all of them
 - **AND** conflict messages include the affected service time to distinguish same-day assignments
 
+#### Scenario: Unassigned primary service
+- **WHEN** the earliest service is unassigned and a later service has a planning conflict
+- **THEN** the daily cell SHALL display both the gap and the aggregated conflict marker
+- **AND** the service count SHALL remain visible
+
 #### Scenario: Inline assignment update
 - **WHEN** a leader assignment is saved inline
 - **THEN** the matrix reloads the authoritative conflicts for all cells in the selected range
