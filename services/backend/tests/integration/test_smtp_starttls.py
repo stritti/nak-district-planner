@@ -17,6 +17,7 @@ import pytest
 
 from app.adapters.mail import smtp as smtp_adapter
 from app.adapters.mail.smtp import SmtpMailService
+from app.adapters.mail.starttls_probe import verify_smtp_starttls
 from app.domain.ports.mail import MailDeliveryError
 
 
@@ -185,3 +186,23 @@ def test_failed_tls_upgrade_never_authenticates(
     with pytest.raises(MailDeliveryError):
         _adapter(server).send(["receiver@example.test"], "Test", "Hello")
     assert not any(cmd in {"AUTH", "DATA", "BODY"} for cmd, _ in server.events)
+
+def test_relay_preflight_verifies_tls_without_authentication(
+    certificate: tuple[Path, Path], server_factory
+) -> None:
+    cert, _ = certificate
+    server = server_factory()
+    verify_smtp_starttls(
+        host="localhost", port=server.server_address[1],
+        context=ssl.create_default_context(cafile=str(cert)),
+    )
+    assert ("STARTTLS", False) in server.events
+    assert ("EHLO", True) in server.events
+    assert not any(cmd in {"AUTH", "MAIL", "RCPT", "DATA", "BODY"} for cmd, _ in server.events)
+
+
+def test_relay_preflight_fails_when_starttls_unavailable(server_factory) -> None:
+    server = server_factory(offer_starttls=False)
+    with pytest.raises(MailDeliveryError):
+        verify_smtp_starttls(host="localhost", port=server.server_address[1])
+    assert not any(cmd in {"AUTH", "MAIL", "RCPT", "DATA", "BODY"} for cmd, _ in server.events)
