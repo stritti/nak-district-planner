@@ -153,6 +153,13 @@
                     Prüfung erforderlich
                   </div>
                   <div
+                    v-if="(row.cells[date].service_count ?? 0) > 1"
+                    data-testid="cell-service-count"
+                    class="text-[10px] text-gray-600 dark:text-gray-300"
+                  >
+                    {{ row.cells[date].service_count }} Gottesdienste an diesem Tag
+                  </div>
+                  <div
                     v-if="row.cells[date].conflicts?.length"
                     data-testid="cell-conflict"
                     :title="conflictTitle(row.cells[date])"
