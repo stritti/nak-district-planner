@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, it, expect } from 'vitest'
-import { ApiError, ConflictError, parseConflictError } from './errors'
+import { ApiError, ConflictError, parseConflictError, userMessage } from './errors'
 
 describe('parseConflictError', () => {
   const conflictBody = {
@@ -58,5 +58,29 @@ describe('parseConflictError', () => {
     expect(parseConflictError(new ApiError(409, 'Conflict', { detail: 'sonstiges' }))).toBeNull()
     expect(parseConflictError(new ApiError(409, 'Conflict', 'kein json'))).toBeNull()
     expect(parseConflictError(new ApiError(409, 'Conflict', { detail: { conflicts: [] } }))).toBeNull()
+  })
+})
+
+describe('userMessage', () => {
+  it('shows the plain server detail for 409 and 422', () => {
+    expect(userMessage(new ApiError(409, 'Conflict', { detail: 'Eine Gemeinde mit diesem Namen existiert bereits' }), 'x'))
+      .toBe('Eine Gemeinde mit diesem Namen existiert bereits')
+    expect(userMessage(new ApiError(422, 'Unprocessable', { detail: 'Ungültig' }), 'x')).toBe('Ungültig')
+  })
+
+  it('falls back to the error message for structured details, other statuses and non-errors', () => {
+    const structured = new ApiError(409, 'Conflict', { detail: { conflicts: [] } }, '{"detail":{}}')
+    expect(userMessage(structured, 'x')).toBe(structured.message)
+    const server = new ApiError(500, 'Server Error', { detail: 'intern' }, 'intern')
+    expect(userMessage(server, 'x')).toBe(server.message)
+    expect(userMessage(new Error('Netz weg'), 'x')).toBe('Netz weg')
+    expect(userMessage('kaputt', 'Fehler')).toBe('Fehler')
+  })
+
+  it('ignores an empty or missing detail', () => {
+    const empty = new ApiError(409, 'Conflict', { detail: '' }, '')
+    expect(userMessage(empty, 'x')).toBe(empty.message)
+    const noBody = new ApiError(409, 'Conflict', undefined)
+    expect(userMessage(noBody, 'x')).toBe(noBody.message)
   })
 })

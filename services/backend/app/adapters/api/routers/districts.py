@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
@@ -78,7 +79,7 @@ from app.domain.models.congregation_group import CongregationGroup
 from app.domain.models.district import District
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.invitation import CongregationInvitation
-from app.domain.models.leader import assignment_needs_review
+from app.domain.models.leader import assignment_needs_review, normalize_leader_name
 from app.domain.models.planning_slot import PlanningSlot, PlanningSlotStatus
 from app.domain.models.role import Role
 from app.domain.models.service_assignment import ServiceAssignment
@@ -103,6 +104,18 @@ def _expected_dates(service_times: list[dict], from_date: date, to_date: date) -
     return dates
 
 
+def _reject_taken_name(name: str, others: Iterable[Any], what: str) -> None:
+    """409 when another unit already uses the name (case-, space- and compatibility-insensitive).
+
+    Enforced in the API only: duplicates that predate the rule stay untouched.
+    """
+    wanted = normalize_leader_name(name)
+    if any(normalize_leader_name(other.name) == wanted for other in others):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"{what} mit diesem Namen existiert bereits"
+        )
+
+
 # ── Districts ─────────────────────────────────────────────────────────────────
 
 
@@ -122,6 +135,7 @@ async def create_district(
             detail=f"Unbekanntes Bundesland-Kürzel: {state_code}. Gültig: {', '.join(DE_STATES)}",
         )
 
+    _reject_taken_name(body.name, await district_repo.list_all(), "Ein Bezirk")
     district = District.create(name=body.name, state_code=state_code)
     await district_repo.save(district)
 
@@ -177,6 +191,9 @@ async def update_district(
     require_current_revision(if_match, entity_revision(district.id, district.updated_at))
     fields = body.model_fields_set
     if "name" in fields and body.name is not None:
+        _reject_taken_name(
+            body.name, [d for d in await repo.list_all() if d.id != district.id], "Ein Bezirk"
+        )
         district.name = body.name
     if "state_code" in fields:
         district.state_code = body.state_code
@@ -216,6 +233,9 @@ async def create_congregation(
     if not await district_repo.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
     require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    _reject_taken_name(
+        body.name, await cong_repo.list_by_district(district_id), "Eine Gemeinde"
+    )
     await _validate_group_assignment(group_repo, district_id, body.group_id)
     await ensure_congregation_in_district(
         db, district_id, body.invitation_target_congregation_id,
@@ -296,6 +316,12 @@ async def update_congregation(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     require_current_revision(if_match, entity_revision(congregation.id, congregation.updated_at))
     if body.name is not None:
+        if normalize_leader_name(body.name) != normalize_leader_name(congregation.name):
+            _reject_taken_name(
+                body.name,
+                [c for c in await cong_repo.list_by_district(district_id) if c.id != congregation.id],
+                "Eine Gemeinde",
+            )
         congregation.name = body.name
     if body.service_times is not None:
         congregation.service_times = [st.model_dump() for st in body.service_times]
