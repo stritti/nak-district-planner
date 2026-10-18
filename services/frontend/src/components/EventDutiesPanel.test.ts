@@ -112,4 +112,28 @@ it('keeps the revision read when the edit started', async () => {
  await w.get('[data-testid="duty-name"]').setValue('Berta');await w.get('form').trigger('submit');await flushPromises()
  expect(api.saveDutyAssignment).toHaveBeenCalledWith('d','s',{duty_category_id:'cat',name:'Berta'},'a','"a:v1"')
 })
+const conflictBody = (severity: 'BLOCK' | 'WARN', rule_id: string, message: string) =>
+ new ApiError(409,'Conflict',{detail:{conflicts:[{rule_id,severity,message,details:{}}]}})
+it('lists an overlapping duty of the same name and assigns after explicit confirmation', async () => {
+ vi.mocked(api.saveDutyAssignment)
+  .mockRejectedValueOnce(conflictBody('WARN','duty_possible_namesake','Ein Dienst mit gleichem Namen liegt zur gleichen Zeit vor'))
+  .mockResolvedValueOnce({id:'a'} as never)
+ const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
+ await w.get('[data-testid="duty-name"]').setValue('Anna');await w.get('form').trigger('submit');await flushPromises()
+ expect(w.get('[data-testid="duty-conflict"]').text()).toContain('gleichem Namen')
+ expect(w.emitted('mutated')).toBeUndefined()
+ await w.get('[data-testid="duty-conflict-confirm"]').trigger('click');await flushPromises()
+ expect(api.saveDutyAssignment).toHaveBeenLastCalledWith('d','s',{duty_category_id:'cat',name:'Anna',confirm_warnings:true},undefined,undefined)
+ expect(w.find('[data-testid="duty-conflict"]').exists()).toBe(false)
+ expect(w.emitted('mutated')).toHaveLength(1)
+})
+it('offers no override for a blocking overlap', async () => {
+ vi.mocked(api.saveDutyAssignment).mockRejectedValueOnce(conflictBody('BLOCK','duty_double_booking','Dieselbe Person hat zur gleichen Zeit bereits einen Dienst.'))
+ const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
+ await w.get('[data-testid="identity-kind"]').setValue('account');await w.get('[data-testid="duty-account"]').setValue('verified')
+ await w.get('form').trigger('submit');await flushPromises()
+ expect(w.get('[data-testid="duty-conflict"]').text()).toContain('bereits einen Dienst')
+ expect(w.find('[data-testid="duty-conflict-confirm"]').exists()).toBe(false)
+ expect(w.find('[role="alert"].text-red-600').exists()).toBe(false)
+})
 

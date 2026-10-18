@@ -4,7 +4,9 @@
 
 ## 2. Duplicate persons and duty conflicts
 - [x] 2.1 Leader creation: duplicate hint with explicit override (`LEADER_DUPLICATE`, `confirm_duplicate`, hint in the add dialog)
-- [ ] 2.2 Duties may reference a leader; cross-congregation conflict check for duties (block for strong identity, warn for names)
+- [x] 2.2a Duty conflict check by linked account (block) and typed name (warn), overlap by event times with the default duration as fallback; runs with the caller's RLS view
+- [ ] 2.2b Duties may reference a leader as a third identity (migration) and are checked against service assignments of that leader
+- [ ] 2.2c Cross-congregation duty check for congregation-scoped planners (SECURITY DEFINER lookup returning only the existence of a conflict)
 
 ## 3. Matrix conflict display
 - [ ] 3.1 Matrix endpoint returns conflicts per cell; cells show a marker

@@ -37,10 +37,6 @@ export interface ConflictItem {
 }
 
 /**
- * Thrown when the backend rejects an assignment with 409.
- * Carries the structured conflict list from the API response.
- */
-/**
  * User-facing text of a failed request: the server's plain-text `detail` for 409/422
  * (for example a taken name), otherwise the error message or the fallback.
  */
@@ -52,6 +48,10 @@ export function userMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
+/**
+ * Thrown when the backend rejects an assignment with 409.
+ * Carries the structured conflict list from the API response.
+ */
 export class ConflictError extends Error {
   readonly conflicts: ConflictItem[]
 

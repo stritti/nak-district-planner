@@ -57,11 +57,13 @@ export type DutyIdentity =
       name: string
       suggestion_id?: string
       linked_user_sub?: never
+      confirm_warnings?: boolean
     }
   | {
       duty_category_id: string
       linked_user_sub: string
       name?: never
+      confirm_warnings?: boolean
     }
 
 const base = (district: string) =>

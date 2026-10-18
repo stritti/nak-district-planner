@@ -62,6 +62,8 @@ class AssignmentWrite(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     linked_user_sub: str | None = Field(default=None, min_length=1, max_length=512)
     suggestion_id: UUID | None = None
+    # Acknowledges name-only (WARN) matches with an overlapping duty of the same name.
+    confirm_warnings: bool = False
 
     @model_validator(mode="after")
     def identity(self):
