@@ -16,7 +16,9 @@ from app.adapters.db.orm_models.event_duty import (
     EventTypeDutyConfigurationORM,
 )
 from app.adapters.db.orm_models.event_instance import EventInstanceORM
+from app.adapters.db.orm_models.leader import LeaderORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
+from app.adapters.db.repositories.leader import _orm_to_domain as _leader_to_domain
 from app.config import settings
 from app.domain.models.event_duty import (
     DutyNameSuggestion,
@@ -126,11 +128,17 @@ class SqlEventDutiesRepository(EventDutiesRepository):
         ).first()
         return ScheduledService(*row) if row else None
 
+    async def get_leader(self, district_id, leader_id):
+        row = await self.session.scalar(
+            select(LeaderORM).where(LeaderORM.id == leader_id, LeaderORM.district_id == district_id)
+        )
+        return _leader_to_domain(row) if row else None
+
     async def list_identity_schedule(
-        self, district_id, *, linked_user_sub, normalized_name, window_start, window_end,
-        exclude_slot_id,
+        self, district_id, *, linked_user_sub, normalized_name, leader_id, window_start,
+        window_end, exclude_slot_id,
     ):
-        if not linked_user_sub and not normalized_name:
+        if not linked_user_sub and not normalized_name and not leader_id:
             return []
         # SECURITY DEFINER lookup: a congregation planner cannot read other congregations'
         # duties, but must still learn that the same person is booked there.
@@ -139,12 +147,13 @@ class SqlEventDutiesRepository(EventDutiesRepository):
                 text(
                     "SELECT slot_id, congregation_id, planning_date, planning_time, "
                     "actual_start_at, actual_end_at, strong "
-                    "FROM duty_identity_schedule(:district, :sub, :name, :exclude, :start, :end)"
+                    "FROM duty_identity_schedule(:district, :sub, :name, :leader, :exclude, :start, :end)"
                 ),
                 {
                     "district": district_id,
                     "sub": linked_user_sub,
                     "name": normalized_name,
+                    "leader": leader_id,
                     "exclude": exclude_slot_id,
                     "start": window_start.astimezone(UTC).date(),
                     "end": window_end.astimezone(UTC).date(),

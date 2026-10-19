@@ -163,6 +163,7 @@ class EventDutiesService:
         *,
         name=None,
         linked_user_sub=None,
+        leader_id=None,
         suggestion_id=None,
         expected_congregation_id=_UNSET,
         confirm_warnings=False,
@@ -180,6 +181,7 @@ class EventDutiesService:
             existing,
             name=name,
             linked_user_sub=linked_user_sub,
+            leader_id=leader_id,
             suggestion_id=suggestion_id,
         )
         assignment = await self._remember_name(
@@ -203,6 +205,7 @@ class EventDutiesService:
         *,
         name=None,
         linked_user_sub=None,
+        leader_id=None,
         suggestion_id=None,
         expected_congregation_id=_UNSET,
         confirm_warnings=False,
@@ -223,6 +226,7 @@ class EventDutiesService:
             existing,
             name=name,
             linked_user_sub=linked_user_sub,
+            leader_id=leader_id,
             suggestion_id=suggestion_id,
             replacing=replacing,
         )
@@ -259,8 +263,13 @@ class EventDutiesService:
             slot,
             category,
             existing,
-            name=replacing.display_name if not replacing.linked_user_sub else None,
+            name=(
+                replacing.display_name
+                if not replacing.linked_user_sub and not replacing.leader_id
+                else None
+            ),
             linked_user_sub=replacing.linked_user_sub,
+            leader_id=replacing.leader_id,
             suggestion_id=None,
             replacing=replacing,
         )
@@ -290,10 +299,19 @@ class EventDutiesService:
             return
         default_duration = timedelta(minutes=settings.sync_expected_duration_minutes)
         start, end = schedule.window(default_duration)
+        linked_user_sub = assignment.linked_user_sub
+        name_key = assignment.normalized_name or normalize_name(assignment.display_name)
+        if assignment.leader_id:
+            # A leader's own account and plain name are matched as well as the leader record.
+            leader = await self.repository.get_leader(district_id, assignment.leader_id)
+            if leader is not None:
+                linked_user_sub = leader.user_sub
+                name_key = normalize_name(leader.name)
         others = await self.repository.list_identity_schedule(
             district_id,
-            linked_user_sub=assignment.linked_user_sub,
-            normalized_name=assignment.normalized_name or normalize_name(assignment.display_name),
+            linked_user_sub=linked_user_sub,
+            normalized_name=name_key,
+            leader_id=assignment.leader_id,
             window_start=start - default_duration,
             window_end=end,
             exclude_slot_id=slot.id,
@@ -370,6 +388,7 @@ class EventDutiesService:
         name,
         linked_user_sub,
         suggestion_id,
+        leader_id=None,
         replacing=None,
     ):
         peers = [
@@ -391,6 +410,13 @@ class EventDutiesService:
             )
             if not linked_name:
                 raise DutyNotFoundError("Reference not found")
+        leader_label = None
+        if leader_id:
+            leader = await self.repository.get_leader(district_id, leader_id)
+            # Same eligibility as a service assignment: active, not retired before the event.
+            if leader is None or not leader.is_eligible_on(slot.planning_date):
+                raise DutyNotFoundError("Reference not found")
+            leader_label = f"{leader.rank.value} {leader.name}" if leader.rank else leader.name
         if suggestion_id:
             suggestion = await self.repository.get_suggestion(suggestion_id)
             if (
@@ -403,6 +429,7 @@ class EventDutiesService:
                 )
                 != (district_id, slot.congregation_id, category.id)
                 or linked_user_sub
+                or leader_id
             ):
                 raise DutyNotFoundError("Reference not found")
             if name and suggestion.normalized_name != normalize_name(name):
@@ -415,9 +442,12 @@ class EventDutiesService:
             name,
             linked_user_sub,
             linked_display_name=linked_name,
+            leader_id=leader_id,
+            leader_display_name=leader_label,
         )
         if any(
             (assignment.linked_user_sub and peer.linked_user_sub == assignment.linked_user_sub)
+            or (assignment.leader_id and peer.leader_id == assignment.leader_id)
             or (assignment.normalized_name and peer.normalized_name == assignment.normalized_name)
             for peer in peers
         ):

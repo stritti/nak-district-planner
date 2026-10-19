@@ -5,7 +5,8 @@
 ## 2. Duplicate persons and duty conflicts
 - [x] 2.1 Leader creation: duplicate hint with explicit override (`LEADER_DUPLICATE`, `confirm_duplicate`, hint in the add dialog)
 - [x] 2.2a Duty conflict check by linked account (block) and typed name (warn), overlap by event times with the default duration as fallback
-- [ ] 2.2b Duties may reference a leader as a third identity (migration) and are checked against service assignments of that leader
+- [x] 2.2b Duties may reference a leader as a third identity (migration `20261020_duty_leader_identity`, API, overlap lookup v2 incl. the leader's service assignments)
+- [ ] 2.2d Duties panel offers the leader choice; assigning a leader to a service checks the leader's duties (reverse direction)
 - [x] 2.2c Cross-congregation duty check for congregation-scoped planners (SECURITY DEFINER lookup `duty_identity_schedule` returning only schedule facts; pinned by an audit test and tested with the application role)
 
 ## 3. Matrix conflict display

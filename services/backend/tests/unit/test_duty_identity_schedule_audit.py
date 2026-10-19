@@ -10,7 +10,7 @@ deliberately together with this file.
 
 import re
 
-from app.adapters.db.migrations.duty_identity_schedule import FUNCTION_NAME, FUNCTION_SQL
+from app.adapters.db.migrations.duty_identity_schedule_v2 import FUNCTION_NAME, FUNCTION_SQL
 
 
 def test_is_a_stable_definer_function_with_a_fixed_search_path():
@@ -35,6 +35,10 @@ def test_returns_schedule_facts_only_never_names_or_assignment_details():
 
 def test_only_planners_superadmins_and_workers_of_the_district_may_ask():
     caller = FUNCTION_SQL[FUNCTION_SQL.index("AND (\n          current_setting"):]
+    # Both branches (duties and the leader's service assignments) carry the same check.
+    assert FUNCTION_SQL.count("current_setting('app.is_system_worker',true)='true'") == 2
+    assert FUNCTION_SQL.count("u.is_superadmin") == 2
+    assert FUNCTION_SQL.count("m.role IN ('DISTRICT_ADMIN','CONGREGATION_ADMIN','PLANNER')") == 2
     assert "app.is_system_worker" in caller
     assert "u.is_superadmin" in caller
     assert "m.role IN ('DISTRICT_ADMIN','CONGREGATION_ADMIN','PLANNER')" in caller
@@ -50,5 +54,21 @@ def test_results_stay_inside_the_requested_district_and_active_events():
     assert "da.planning_slot_id<>p_exclude_slot" in FUNCTION_SQL
 
 
-def test_name_matches_never_catch_linked_accounts():
-    assert "da.linked_user_sub IS NULL AND da.normalized_name=p_name" in FUNCTION_SQL
+def test_name_matches_never_catch_linked_accounts_or_leaders():
+    assert "da.linked_user_sub IS NULL AND da.leader_id IS NULL" in FUNCTION_SQL
+    assert "da.normalized_name=p_name" in FUNCTION_SQL
+
+
+def test_the_service_assignment_branch_is_restricted_to_the_district_and_the_leader():
+    branch = FUNCTION_SQL[FUNCTION_SQL.index("UNION ALL"):]
+    assert "p_leader IS NOT NULL AND sa.leader_id=p_leader" in branch
+    assert "ps.district_id=p_district" in branch
+    assert "ps.status='ACTIVE'" in branch
+    assert "ps.id<>p_exclude_slot" in branch
+
+
+def test_version_1_stays_frozen_for_the_migration_history():
+    from app.adapters.db.migrations import duty_identity_schedule as v1
+
+    assert "p_exclude_slot uuid, p_from date, p_to date)" in v1.FUNCTION_SQL
+    assert "p_leader" not in v1.FUNCTION_SQL
