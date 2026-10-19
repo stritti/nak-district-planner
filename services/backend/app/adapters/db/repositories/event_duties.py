@@ -130,52 +130,34 @@ class SqlEventDutiesRepository(EventDutiesRepository):
         self, district_id, *, linked_user_sub, normalized_name, window_start, window_end,
         exclude_slot_id,
     ):
-        identity = []
-        if linked_user_sub:
-            identity.append(EventDutyAssignmentORM.linked_user_sub == linked_user_sub)
-        if normalized_name:
-            identity.append(
-                and_(
-                    EventDutyAssignmentORM.linked_user_sub.is_(None),
-                    EventDutyAssignmentORM.normalized_name == normalized_name,
-                )
-            )
-        if not identity:
+        if not linked_user_sub and not normalized_name:
             return []
+        # SECURITY DEFINER lookup: a congregation planner cannot read other congregations'
+        # duties, but must still learn that the same person is booked there.
         rows = (
             await self.session.execute(
-                select(
-                    EventDutyAssignmentORM.planning_slot_id,
-                    EventDutyAssignmentORM.linked_user_sub,
-                    PlanningSlotORM.congregation_id,
-                    PlanningSlotORM.planning_date,
-                    PlanningSlotORM.planning_time,
-                    EventInstanceORM.actual_start_at,
-                    EventInstanceORM.actual_end_at,
-                )
-                .select_from(EventDutyAssignmentORM)
-                .join(PlanningSlotORM, PlanningSlotORM.id == EventDutyAssignmentORM.planning_slot_id)
-                .outerjoin(EventInstanceORM, EventInstanceORM.planning_slot_id == PlanningSlotORM.id)
-                .where(
-                    EventDutyAssignmentORM.district_id == district_id,
-                    EventDutyAssignmentORM.planning_slot_id != exclude_slot_id,
-                    PlanningSlotORM.status == PlanningSlotStatus.ACTIVE,
-                    or_(*identity),
-                    PlanningSlotORM.planning_date.between(
-                        window_start.astimezone(UTC).date(), window_end.astimezone(UTC).date()
-                    ),
-                )
+                text(
+                    "SELECT slot_id, congregation_id, planning_date, planning_time, "
+                    "actual_start_at, actual_end_at, strong "
+                    "FROM duty_identity_schedule(:district, :sub, :name, :exclude, :start, :end)"
+                ),
+                {
+                    "district": district_id,
+                    "sub": linked_user_sub,
+                    "name": normalized_name,
+                    "exclude": exclude_slot_id,
+                    "start": window_start.astimezone(UTC).date(),
+                    "end": window_end.astimezone(UTC).date(),
+                },
             )
         ).all()
         default_duration = timedelta(minutes=settings.sync_expected_duration_minutes)
         duties = []
-        for slot_id, sub, congregation_id, day, time_, actual_start, actual_end in rows:
+        for slot_id, congregation_id, day, time_, actual_start, actual_end, strong in rows:
             start, end = ScheduledService(
                 congregation_id, day, time_, actual_start, actual_end
             ).window(default_duration)
-            duties.append(
-                ScheduledDuty(slot_id, congregation_id, start, end, strong=sub is not None)
-            )
+            duties.append(ScheduledDuty(slot_id, congregation_id, start, end, strong=strong))
         return duties
 
     async def lock_category(self, category_id, district_id):
