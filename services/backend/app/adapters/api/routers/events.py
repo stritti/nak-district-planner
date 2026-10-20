@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 
+from app.adapters.api.conflict_checks import check_service_assignment_conflicts
 from app.adapters.api.conflict_http import conflict_items, raise_for_conflicts
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
@@ -45,10 +46,7 @@ from app.adapters.db.repositories.service_assignment import SqlServiceAssignment
 from app.adapters.db.transactional_events import publish_after_commit
 from app.application.deviation_service import DeviationService
 from app.application.event_duties import DutyScopeImpact, EventDutiesService
-from app.application.service_assignment_conflict import (
-    ProposedService,
-    check_service_assignment_conflicts,
-)
+from app.application.service_assignment_conflict import ProposedService
 from app.application.sync_service import push_conflict_resolution, push_deviation_resolution
 from app.domain.errors import UnsupportedCalendarTypeError
 from app.domain.event_payloads import plan_finalized

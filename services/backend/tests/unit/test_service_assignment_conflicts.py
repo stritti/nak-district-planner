@@ -132,6 +132,7 @@ async def _check(
     schedule: list[ScheduledService],
     leader: Leader | None,
     exclude_assignment_id: uuid.UUID | None = None,
+    duties: list | None = None,
 ):
     session = AsyncMock()
     with (
@@ -141,6 +142,8 @@ async def _check(
         patch(_PATCH + "SqlLeaderRepository") as leader_cls,
         patch(_PATCH + "SqlLeaderUnavailabilityRepository") as absence_cls,
     ):
+        duty_lookup = AsyncMock(return_value=duties or [])
+        _check.duty_query = duty_lookup
         slot_cls.return_value.get = AsyncMock(return_value=target_slot)
         instance_cls.return_value.get_by_planning_slot = AsyncMock(return_value=target_instance)
         schedule_query = AsyncMock(return_value=schedule)
@@ -156,6 +159,7 @@ async def _check(
             event_id=target_slot.id,
             leader_id=uuid.uuid4(),
             exclude_assignment_id=exclude_assignment_id,
+            duty_lookup=duty_lookup,
         )
     return result, schedule_query
 
@@ -268,3 +272,76 @@ async def test_schedule_window_covers_default_duration_longer_than_a_day() -> No
     kwargs = query.await_args.kwargs
     assert kwargs["window_start"] <= _START - timedelta(days=3, minutes=30)
     assert kwargs["window_end"] >= _START + timedelta(days=3, minutes=30)
+
+
+@pytest.mark.asyncio
+async def test_an_overlapping_duty_of_the_leader_blocks_the_service() -> None:
+    from app.domain.planning.duty_conflicts import ScheduledDuty
+
+    target = _slot()
+    duty = ScheduledDuty(
+        uuid.uuid4(), uuid.uuid4(), _START + timedelta(minutes=30),
+        _START + timedelta(minutes=120), strong=True,
+    )
+    leader = Leader.create(name="Hans", district_id=target.district_id, user_sub="leader-account")
+
+    result, _ = await _check(
+        target_slot=target, target_instance=None, schedule=[], leader=leader, duties=[duty]
+    )
+
+    assert [(c.rule_id, c.severity) for c in result] == [("no_double_booking", Severity.BLOCK)]
+    kwargs = _check.duty_query.await_args.kwargs
+    assert kwargs["leader_id"] is not None
+    assert kwargs["linked_user_sub"] == "leader-account"
+    assert kwargs["exclude_slot_id"] == target.id
+    assert _check.duty_query.await_args.args[0] == target.district_id
+
+
+@pytest.mark.asyncio
+async def test_a_duty_with_little_travel_time_in_another_congregation_warns() -> None:
+    from app.domain.planning.duty_conflicts import ScheduledDuty
+
+    target = _slot()
+    duty = ScheduledDuty(  # ends 10 minutes before the 90 minute service starts
+        uuid.uuid4(), uuid.uuid4(), _START - timedelta(minutes=100),
+        _START - timedelta(minutes=10), strong=True,
+    )
+    leader = Leader.create(name="Hans", district_id=target.district_id)
+
+    result, _ = await _check(
+        target_slot=target, target_instance=None, schedule=[], leader=leader, duties=[duty]
+    )
+
+    assert [(c.rule_id, c.severity) for c in result] == [("travel_time_check", Severity.WARN)]
+
+
+@pytest.mark.asyncio
+async def test_without_a_known_leader_the_duty_lookup_is_skipped() -> None:
+    target = _slot()
+    result, _ = await _check(target_slot=target, target_instance=None, schedule=[], leader=None)
+    assert result == []
+    _check.duty_query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_without_an_injected_lookup_duties_are_not_considered() -> None:
+    target = _slot()
+    leader = Leader.create(name="Hans", district_id=target.district_id)
+    session = AsyncMock()
+    with (
+        patch(_PATCH + "SqlPlanningSlotRepository") as slot_cls,
+        patch(_PATCH + "SqlEventInstanceRepository") as instance_cls,
+        patch(_PATCH + "SqlServiceAssignmentRepository") as assignment_cls,
+        patch(_PATCH + "SqlLeaderRepository") as leader_cls,
+        patch(_PATCH + "SqlLeaderUnavailabilityRepository") as absence_cls,
+    ):
+        slot_cls.return_value.get = AsyncMock(return_value=target)
+        instance_cls.return_value.get_by_planning_slot = AsyncMock(return_value=None)
+        assignment_cls.return_value.list_leader_schedule = AsyncMock(return_value=[])
+        leader_cls.return_value.get = AsyncMock(return_value=leader)
+        absence_cls.return_value.list_overlapping = AsyncMock(return_value=[])
+        result = await check_service_assignment_conflicts(
+            session, event_id=target.id, leader_id=leader.id
+        )
+    assert result == []
+
