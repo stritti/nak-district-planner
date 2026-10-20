@@ -14,4 +14,4 @@ The SMTP adapter requires a verified STARTTLS connection before authenticating, 
 - Embed SMTP credentials, CA private keys or production relay addresses in source.
 - Disable certificate or hostname validation to make tests pass.
 
-Issue: https://github.com/stritti/nak-district-planner/issues/627
+Issue: <https://github.com/stritti/nak-district-planner/issues/627>
