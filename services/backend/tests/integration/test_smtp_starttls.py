@@ -38,13 +38,13 @@ class _Server(socketserver.ThreadingTCPServer):
         offer_starttls: bool = True,
         break_tls: bool = False,
         fail_second_ehlo: bool = False,
-        advertise_auth: bool = True,
+        auth: str | None = "PLAIN LOGIN",
     ):
         self.tls_context = context
         self.offer_starttls = offer_starttls
         self.break_tls = break_tls
         self.fail_second_ehlo = fail_second_ehlo
-        self.advertise_auth = advertise_auth
+        self.auth = auth
         self.events: list[tuple[str, bool]] = []
         super().__init__(("127.0.0.1", 0), _Handler)
 
@@ -65,8 +65,8 @@ class _Handler(socketserver.StreamRequestHandler):
                 advertised = b"250-localhost\r\n"
                 if self.server.offer_starttls and not tls:
                     advertised += b"250-STARTTLS\r\n"
-                if tls and self.server.advertise_auth:
-                    advertised += b"250-AUTH PLAIN LOGIN\r\n"
+                if tls and self.server.auth is not None:
+                    advertised += f"250-AUTH {self.server.auth}".rstrip().encode() + b"\r\n"
                 self.wfile.write(advertised + b"250 HELP\r\n")
             elif cmd == "STARTTLS":
                 if not self.server.offer_starttls:
@@ -154,14 +154,14 @@ def server_factory(tls_context: ssl.SSLContext) -> Iterator[Any]:
         offer_starttls: bool = True,
         break_tls: bool = False,
         fail_second_ehlo: bool = False,
-        advertise_auth: bool = True,
+        auth: str | None = "PLAIN LOGIN",
     ) -> _Server:
         server = _Server(
             tls_context,
             offer_starttls=offer_starttls,
             break_tls=break_tls,
             fail_second_ehlo=fail_second_ehlo,
-            advertise_auth=advertise_auth,
+            auth=auth,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -289,10 +289,11 @@ def test_relay_preflight_rejects_failed_ehlo_after_tls(
     _assert_nothing_sensitive_sent(server.events)
 
 
-def test_relay_preflight_rejects_missing_post_tls_auth(
-    certificate: tuple[Path, Path], server_factory
+@pytest.mark.parametrize("auth", [None, "", "XOAUTH2"], ids=["absent", "empty", "unsupported"])
+def test_relay_preflight_rejects_unusable_post_tls_auth(
+    certificate: tuple[Path, Path], server_factory, auth: str | None
 ) -> None:
-    server = server_factory(advertise_auth=False)
+    server = server_factory(auth=auth)
     with pytest.raises(SmtpTlsProbeError, match="AUTH"):
         verify_smtp_starttls(
             host="localhost",
@@ -301,3 +302,27 @@ def test_relay_preflight_rejects_missing_post_tls_auth(
         )
     assert ("EHLO", True) in server.events
     _assert_nothing_sensitive_sent(server.events)
+
+
+def test_relay_preflight_names_a_rejected_certificate(server_factory) -> None:
+    server = server_factory()
+    with pytest.raises(SmtpTlsProbeError, match="certificate rejected"):
+        verify_smtp_starttls(host="localhost", port=server.server_address[1])
+    _assert_nothing_sensitive_sent(server.events)
+
+
+def test_unauthenticated_internal_relay_delivers_without_starttls(server_factory) -> None:
+    """The supported no-auth relay mode (no credentials, STARTTLS off) still delivers."""
+    server = server_factory(offer_starttls=False)
+    SmtpMailService(
+        host="localhost",
+        port=server.server_address[1],
+        username=None,
+        password=None,
+        from_address="sender@example.test",
+        use_starttls=False,
+        timeout=3,
+    ).send(["receiver@example.test"], "Test", "Hello")
+    commands = [command for command, _ in server.events]
+    assert "BODY" in commands
+    assert "STARTTLS" not in commands and "AUTH" not in commands
