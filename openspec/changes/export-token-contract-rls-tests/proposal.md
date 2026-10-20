@@ -14,4 +14,4 @@ The hash-only export token contract migration is exercised by an owner database 
 - Change the token contract, reintroduce plaintext tokens or relax RLS.
 - Depend on production or real subscribers during tests.
 
-Issue: https://github.com/stritti/nak-district-planner/issues/628
+Issue: <https://github.com/stritti/nak-district-planner/issues/628>
