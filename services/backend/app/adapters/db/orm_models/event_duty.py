@@ -86,8 +86,17 @@ class EventDutyAssignmentORM(Base):
     __tablename__ = "event_duty_assignments"
     __table_args__ = (
         CheckConstraint(
-            "(linked_user_sub IS NOT NULL AND normalized_name IS NULL) OR (linked_user_sub IS NULL AND normalized_name IS NOT NULL)",
+            "(linked_user_sub IS NOT NULL)::int + (normalized_name IS NOT NULL)::int "
+            "+ (leader_id IS NOT NULL)::int = 1",
             name="ck_duty_assignment_identity",
+        ),
+        Index(
+            "uq_duty_assignment_leader",
+            "planning_slot_id",
+            "duty_category_id",
+            "leader_id",
+            unique=True,
+            postgresql_where=text("leader_id IS NOT NULL"),
         ),
         Index(
             "uq_duty_assignment_subject",
@@ -127,3 +136,4 @@ class EventDutyAssignmentORM(Base):
     suggestion_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("duty_name_suggestions.id", ondelete="SET NULL")
     )
+    leader_id: Mapped[UUID | None] = mapped_column(ForeignKey("leaders.id"))

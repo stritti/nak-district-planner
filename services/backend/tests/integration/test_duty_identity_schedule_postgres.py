@@ -33,6 +33,17 @@ async def sessions():
     await engine.dispose()
 
 
+async def _as_system_worker(db) -> None:
+    """The lookup authorises the caller from the request GUCs, like every application query."""
+    await db.execute(text("SELECT set_config('app.is_system_worker', 'true', true)"))
+
+
+async def _as_app_user(db, sub: str) -> None:
+    """Run as the non-owner application role with a user identity (RLS applies)."""
+    await db.execute(text("SELECT set_config('app.current_user_sub', :sub, true)"), {"sub": sub})
+    await db.execute(text("SET LOCAL ROLE nak_app"))
+
+
 @pytest.fixture
 async def world(sessions):
     ids = {k: uuid.uuid4() for k in (
@@ -118,8 +129,9 @@ async def world(sessions):
 async def test_finds_only_overlap_candidates_of_the_same_person_in_the_same_district(sessions, world):
     ids, sub = world
     async with sessions() as db:
+        await _as_system_worker(db)
         found = await SqlEventDutiesRepository(db).list_identity_schedule(
-            ids["district"], linked_user_sub=sub, normalized_name=None,
+            ids["district"], linked_user_sub=sub, normalized_name=None, leader_id=None,
             window_start=START - timedelta(hours=1, minutes=30), window_end=START + timedelta(minutes=90),
             exclude_slot_id=ids["here"],
         )
@@ -131,8 +143,9 @@ async def test_finds_only_overlap_candidates_of_the_same_person_in_the_same_dist
 async def test_name_matches_are_weak_and_use_the_instance_times(sessions, world):
     ids, _ = world
     async with sessions() as db:
+        await _as_system_worker(db)
         found = await SqlEventDutiesRepository(db).list_identity_schedule(
-            ids["district"], linked_user_sub=None, normalized_name="anna",
+            ids["district"], linked_user_sub=None, normalized_name="anna", leader_id=None,
             window_start=START + timedelta(hours=4), window_end=START + timedelta(hours=8),
             exclude_slot_id=ids["here"],
         )
@@ -157,6 +170,201 @@ async def test_without_any_identity_nothing_is_returned(sessions, world):
     ids, _ = world
     async with sessions() as db:
         assert await SqlEventDutiesRepository(db).list_identity_schedule(
-            ids["district"], linked_user_sub=None, normalized_name=None,
+            ids["district"], linked_user_sub=None, normalized_name=None, leader_id=None,
             window_start=START, window_end=START + timedelta(hours=1), exclude_slot_id=ids["here"],
         ) == []
+
+
+# ── who may ask ────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+async def members(sessions, world):
+    ids, sub = world
+    now = datetime.now(UTC)
+    roles = {
+        "planner_c1": ("PLANNER", "CONGREGATION", "c1", "district"),
+        "viewer_c1": ("VIEWER", "CONGREGATION", "c1", "district"),
+        "planner_district": ("PLANNER", "DISTRICT", "district", "district"),
+        "planner_other": ("PLANNER", "DISTRICT", "other_district", "other_district"),
+    }
+    subs = {}
+    async with sessions() as db, db.begin():
+        for key, (role, scope_type, scope_key, _) in roles.items():
+            user_sub = f"{key}-{uuid.uuid4().hex[:8]}"
+            subs[key] = user_sub
+            await db.execute(
+                text("INSERT INTO users (id, sub, email, username, is_superadmin, created_at, updated_at) VALUES (:i, :s, :e, :s, false, :n, :n)"),
+                {"i": uuid.uuid4(), "s": user_sub, "e": f"{user_sub}@example.test", "n": now},
+            )
+            await db.execute(
+                text("INSERT INTO memberships (id, user_sub, role, scope_type, scope_id, created_at, updated_at) VALUES (:i, :s, :r, :t, :sc, :n, :n)"),
+                {"i": uuid.uuid4(), "s": user_sub, "r": role, "t": scope_type, "sc": ids[scope_key], "n": now},
+            )
+    yield ids, sub, subs
+    async with sessions() as db, db.begin():
+        for user_sub in subs.values():
+            await db.execute(text("DELETE FROM memberships WHERE user_sub=:s"), {"s": user_sub})
+            await db.execute(text("DELETE FROM users WHERE sub=:s"), {"s": user_sub})
+
+
+async def _lookup_as(sessions, ids, sub, user_sub):
+    async with sessions() as db, db.begin():
+        await _as_app_user(db, user_sub)
+        return await SqlEventDutiesRepository(db).list_identity_schedule(
+            ids["district"], linked_user_sub=sub, normalized_name=None, leader_id=None,
+            window_start=START - timedelta(hours=1, minutes=30), window_end=START + timedelta(minutes=90),
+            exclude_slot_id=ids["here"],
+        )
+
+
+async def test_a_congregation_planner_sees_a_conflict_in_another_congregation(sessions, members):
+    ids, sub, subs = members
+    # Under RLS the planner of c1 cannot read the duty of c2 directly ...
+    async with sessions() as db, db.begin():
+        await _as_app_user(db, subs["planner_c1"])
+        visible = (await db.execute(
+            text("SELECT count(*) FROM event_duty_assignments WHERE planning_slot_id=:s"),
+            {"s": ids["same_day_other"]},
+        )).scalar_one()
+    assert visible == 0
+    # ... but the definer lookup tells them the person is booked there.
+    found = await _lookup_as(sessions, ids, sub, subs["planner_c1"])
+    assert [d.slot_id for d in found] == [ids["same_day_other"]]
+
+
+async def test_a_district_planner_is_allowed_too(sessions, members):
+    ids, sub, subs = members
+    assert await _lookup_as(sessions, ids, sub, subs["planner_district"])
+
+
+@pytest.mark.parametrize("who", ["viewer_c1", "planner_other"])
+async def test_viewers_and_planners_of_other_districts_get_nothing(sessions, members, who):
+    ids, sub, subs = members
+    assert await _lookup_as(sessions, ids, sub, subs[who]) == []
+
+
+async def test_an_unknown_or_missing_identity_gets_nothing(sessions, members):
+    ids, sub, _ = members
+    assert await _lookup_as(sessions, ids, sub, "nobody") == []
+    async with sessions() as db, db.begin():
+        await db.execute(text("SET LOCAL ROLE nak_app"))  # no user GUC at all
+        found = await SqlEventDutiesRepository(db).list_identity_schedule(
+            ids["district"], linked_user_sub=sub, normalized_name=None, leader_id=None,
+            window_start=START - timedelta(hours=1, minutes=30), window_end=START + timedelta(minutes=90),
+            exclude_slot_id=ids["here"],
+        )
+    assert found == []
+
+
+# ── leader identity (step 2.2b) ───────────────────────────────────────────────
+
+
+@pytest.fixture
+async def leader_world(sessions, world):
+    """The world plus a leader with a duty and a service in other congregations."""
+    ids, _ = world
+    now = datetime.now(UTC)
+    leader_id, duty_slot, service_slot = uuid.uuid4(), ids["same_day_other"], uuid.uuid4()
+    async with sessions() as db, db.begin():
+        await db.execute(
+            text("INSERT INTO leaders (id, name, district_id) VALUES (:i, 'Hans Müller', :d)"),
+            {"i": leader_id, "d": ids["district"]},
+        )
+        # A leader-identified duty at "same_day_other" (09:30) ...
+        await db.execute(
+            text(
+                "INSERT INTO event_duty_assignments (id, planning_slot_id, duty_category_id, district_id, "
+                "congregation_id, display_name, duty_label, linked_user_sub, normalized_name, leader_id) "
+                "VALUES (:i, :s, :c, :d, NULL, 'Ev. Hans Müller', 'Organist', NULL, NULL, :l)"
+            ),
+            {"i": uuid.uuid4(), "s": duty_slot, "c": ids["category"], "d": ids["district"], "l": leader_id},
+        )
+        # ... and a service the same leader leads in another slot at 11:00.
+        await db.execute(
+            text(
+                "INSERT INTO planning_slots (id, district_id, congregation_id, category, planning_date, "
+                "planning_time, status, applicability, created_at, updated_at) VALUES (:i, :d, :c, 'Gottesdienst', "
+                ":day, :t, 'ACTIVE', '{}', :n, :n)"
+            ),
+            {"i": service_slot, "d": ids["district"], "c": ids["c2"], "day": DAY, "t": time(11, 0), "n": now},
+        )
+        await db.execute(
+            text(
+                "INSERT INTO service_assignments (id, event_id, planning_slot_id, leader_id, status, created_at, updated_at) "
+                "VALUES (:i, :s, :s, :l, 'ASSIGNED', :n, :n)"
+            ),
+            {"i": uuid.uuid4(), "s": service_slot, "l": leader_id, "n": now},
+        )
+    yield ids, leader_id, service_slot
+    async with sessions() as db, db.begin():
+        await db.execute(text("DELETE FROM service_assignments WHERE leader_id=:l"), {"l": leader_id})
+        await db.execute(text("DELETE FROM event_duty_assignments WHERE leader_id=:l"), {"l": leader_id})
+        await db.execute(text("DELETE FROM planning_slots WHERE id=:s"), {"s": service_slot})
+        await db.execute(text("DELETE FROM leaders WHERE id=:l"), {"l": leader_id})
+
+
+async def test_a_leader_matches_duties_and_service_assignments_strongly(sessions, leader_world):
+    ids, leader_id, service_slot = leader_world
+    async with sessions() as db:
+        await _as_system_worker(db)
+        found = await SqlEventDutiesRepository(db).list_identity_schedule(
+            ids["district"], linked_user_sub=None, normalized_name=None, leader_id=leader_id,
+            window_start=START - timedelta(hours=2), window_end=START + timedelta(hours=5),
+            exclude_slot_id=ids["here"],
+        )
+    assert {d.slot_id for d in found} == {ids["same_day_other"], service_slot}
+    assert all(d.strong for d in found)
+
+
+async def test_the_own_event_is_excluded_for_services_too(sessions, leader_world):
+    ids, leader_id, service_slot = leader_world
+    async with sessions() as db:
+        await _as_system_worker(db)
+        found = await SqlEventDutiesRepository(db).list_identity_schedule(
+            ids["district"], linked_user_sub=None, normalized_name=None, leader_id=leader_id,
+            window_start=START - timedelta(hours=2), window_end=START + timedelta(hours=5),
+            exclude_slot_id=service_slot,
+        )
+    assert {d.slot_id for d in found} == {ids["same_day_other"]}
+
+
+async def test_a_typed_name_never_matches_a_leader_row(sessions, leader_world):
+    ids, _, _ = leader_world
+    async with sessions() as db:
+        await _as_system_worker(db)
+        found = await SqlEventDutiesRepository(db).list_identity_schedule(
+            ids["district"], linked_user_sub=None, normalized_name="ev. hans müller", leader_id=None,
+            window_start=START - timedelta(hours=2), window_end=START + timedelta(hours=5),
+            exclude_slot_id=ids["here"],
+        )
+    assert found == []
+
+
+async def test_a_leader_lookup_requires_the_caller_to_be_a_planner(sessions, leader_world):
+    ids, leader_id, _ = leader_world
+    async with sessions() as db, db.begin():
+        await _as_app_user(db, "nobody")
+        found = await SqlEventDutiesRepository(db).list_identity_schedule(
+            ids["district"], linked_user_sub=None, normalized_name=None, leader_id=leader_id,
+            window_start=START - timedelta(hours=2), window_end=START + timedelta(hours=5),
+            exclude_slot_id=ids["here"],
+        )
+    assert found == []
+
+
+async def test_the_identity_constraint_allows_exactly_one_identity(sessions, leader_world):
+    from sqlalchemy.exc import IntegrityError
+
+    ids, leader_id, _ = leader_world
+    with pytest.raises(IntegrityError):
+        async with sessions() as db, db.begin():
+            await db.execute(
+                text(
+                    "INSERT INTO event_duty_assignments (id, planning_slot_id, duty_category_id, district_id, "
+                    "display_name, duty_label, linked_user_sub, normalized_name, leader_id) VALUES (:i, :s, :c, :d, "
+                    "'x', 'y', NULL, 'anna', :l)"
+                ),
+                {"i": uuid.uuid4(), "s": ids["here"], "c": ids["category"], "d": ids["district"], "l": leader_id},
+            )
+
