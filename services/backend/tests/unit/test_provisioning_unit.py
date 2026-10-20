@@ -22,8 +22,8 @@ def test_keycloak_provisioner_returned():
         mock_settings.idp_provisioning_provider = "keycloak"
         mock_settings.idp_provisioning_keycloak_base_url = "https://kc.example.com"
         mock_settings.idp_provisioning_keycloak_realm = "nak"
-        mock_settings.idp_provisioning_keycloak_admin_username = "admin"
-        mock_settings.idp_provisioning_keycloak_admin_password = "secret"
+        mock_settings.idp_provisioning_keycloak_client_id = "nak-planner-provisioning"
+        mock_settings.idp_provisioning_keycloak_client_secret = "secret"
         mock_settings.idp_provisioning_timeout_seconds = 10.0
         mock_settings.idp_provisioning_keycloak_invite_on_approval = True
 
@@ -39,8 +39,8 @@ def test_keycloak_missing_config_returns_none():
         mock_settings.idp_provisioning_provider = "keycloak"
         mock_settings.idp_provisioning_keycloak_base_url = None  # Missing
         mock_settings.idp_provisioning_keycloak_realm = "nak"
-        mock_settings.idp_provisioning_keycloak_admin_username = "admin"
-        mock_settings.idp_provisioning_keycloak_admin_password = "secret"
+        mock_settings.idp_provisioning_keycloak_client_id = "nak-planner-provisioning"
+        mock_settings.idp_provisioning_keycloak_client_secret = "secret"
 
         assert get_idp_provisioner() is None
 

@@ -35,12 +35,20 @@ docker compose logs -f keycloak
 # In another terminal, run setup script
 python3 setup_keycloak_realm.py \
   --keycloak-url http://localhost:8080 \
-  --admin-password admin_dev_pw
+  --admin-password admin_dev_pw \
+  --create-test-user
 
 # This will:
 # - Create realm "nak-planner"
 # - Create public OIDC client "nak-planner-frontend"
-# - Create test user "testuser" / "testpassword123"
+# - Apply secure realm defaults (no self-registration, verify email,
+#   brute-force detection, password policy length(15))
+# - Create confidential client "nak-planner-provisioning" (service account with
+#   only realm-management manage-users/view-users); copy its secret from
+#   Clients -> nak-planner-provisioning -> Credentials into the backend .env
+#   (IDP_PROVISIONING_KEYCLOAK_CLIENT_ID / _CLIENT_SECRET)
+# - Create test user "testuser" / "testpassword123" (only with --create-test-user;
+#   never use that flag against a production realm)
 # - Export realm config
 # - Print OIDC Discovery URL
 ```

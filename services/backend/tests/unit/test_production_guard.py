@@ -176,30 +176,88 @@ def test_production_guard_idp_keycloak_missing_config() -> None:
         idp_provisioning_provider="keycloak",
         idp_provisioning_keycloak_base_url="",
         idp_provisioning_keycloak_realm="",
-        idp_provisioning_keycloak_admin_username="",
-        idp_provisioning_keycloak_admin_password="",
+        idp_provisioning_keycloak_client_id="",
+        idp_provisioning_keycloak_client_secret="",
     )
     with pytest.raises(RuntimeError) as exc_info:
         production_guard(settings)
     msg = str(exc_info.value)
     assert "IDP_PROVISIONING_KEYCLOAK_BASE_URL" in msg
     assert "IDP_PROVISIONING_KEYCLOAK_REALM" in msg
-    assert "IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME" in msg
-    assert "IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD" in msg
+    assert "IDP_PROVISIONING_KEYCLOAK_CLIENT_ID" in msg
+    assert "IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET" in msg
     assert "IDP_PROVISIONING_API_KEY" not in msg
     assert "IDP_PROVISIONING_ENDPOINT" not in msg
 
 
+def _valid_keycloak_settings(**overrides: object) -> Settings:
+    kwargs: dict = {
+        "idp_provisioning_enabled": True,
+        "idp_provisioning_provider": "keycloak",
+        "idp_provisioning_keycloak_base_url": "https://keycloak.example.com",
+        "idp_provisioning_keycloak_realm": "nak-planner",
+        "idp_provisioning_keycloak_client_id": "nak-planner-provisioning",
+        "idp_provisioning_keycloak_client_secret": "strong-client-secret-123",
+    }
+    kwargs.update(overrides)
+    return _valid_prod_settings(**kwargs)
+
+
 def test_production_guard_idp_keycloak_valid() -> None:
-    settings = _valid_prod_settings(
-        idp_provisioning_enabled=True,
-        idp_provisioning_provider="keycloak",
-        idp_provisioning_keycloak_base_url="https://keycloak.example.com",
-        idp_provisioning_keycloak_realm="nak-planner",
-        idp_provisioning_keycloak_admin_username="admin",
-        idp_provisioning_keycloak_admin_password="strong-admin-password-123",
+    production_guard(_valid_keycloak_settings())
+
+
+def test_production_guard_idp_keycloak_valid_with_https_redirect() -> None:
+    production_guard(
+        _valid_keycloak_settings(
+            idp_provisioning_keycloak_invite_redirect_uri="https://planner.example.org/"
+        )
     )
-    production_guard(settings)
+
+
+def test_production_guard_idp_keycloak_placeholder_client_secret() -> None:
+    settings = _valid_keycloak_settings(
+        idp_provisioning_keycloak_client_secret="replace-with-provisioning-client-secret"
+    )
+    with pytest.raises(RuntimeError, match="IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET"):
+        production_guard(settings)
+
+
+@pytest.mark.parametrize(
+    "legacy",
+    [
+        {"idp_provisioning_keycloak_admin_username": "admin"},
+        {"idp_provisioning_keycloak_admin_password": "old-admin-password"},
+    ],
+)
+def test_production_guard_idp_keycloak_rejects_legacy_admin_credentials(legacy: dict) -> None:
+    settings = _valid_keycloak_settings(**legacy)
+    with pytest.raises(RuntimeError, match="no longer supported"):
+        production_guard(settings)
+
+
+def test_production_guard_idp_keycloak_redirect_must_be_https() -> None:
+    settings = _valid_keycloak_settings(
+        idp_provisioning_keycloak_invite_redirect_uri="http://planner.example.org/"
+    )
+    with pytest.raises(RuntimeError, match="IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI"):
+        production_guard(settings)
+
+
+def test_keycloak_invite_lifespan_default() -> None:
+    assert Settings(_env_file=None).idp_provisioning_keycloak_invite_lifespan_seconds == 259200
+
+
+@pytest.mark.parametrize("lifespan", [3599, 604801])
+def test_keycloak_invite_lifespan_out_of_range(lifespan: int) -> None:
+    with pytest.raises(ValueError, match="idp_provisioning_keycloak_invite_lifespan_seconds"):
+        Settings(_env_file=None, idp_provisioning_keycloak_invite_lifespan_seconds=lifespan)
+
+
+@pytest.mark.parametrize("lifespan", [3600, 604800])
+def test_keycloak_invite_lifespan_bounds_accepted(lifespan: int) -> None:
+    settings = Settings(_env_file=None, idp_provisioning_keycloak_invite_lifespan_seconds=lifespan)
+    assert settings.idp_provisioning_keycloak_invite_lifespan_seconds == lifespan
 
 
 def test_production_guard_oidc_client_secret_default() -> None:

@@ -243,9 +243,21 @@ Liefert der IdP den Claim nicht, wird nicht automatisch verknüpft; der Benutzer
 | `IDP_PROVISIONING_TIMEOUT_SECONDS` | `10.0` | Timeout für HTTP-Requests |
 | `IDP_PROVISIONING_KEYCLOAK_BASE_URL` | `None` | Keycloak-Basis-URL (z. B. `https://auth.example.com`) |
 | `IDP_PROVISIONING_KEYCLOAK_REALM` | `None` | Keycloak-Realm-Name |
-| `IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME` | `None` | Admin-User für Keycloak Admin API |
-| `IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD` | `None` | Passwort des Admin-Users |
+| `IDP_PROVISIONING_KEYCLOAK_CLIENT_ID` | `None` | Confidential Client mit Service Account im App-Realm |
+| `IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET` | `None` | Secret dieses Clients |
 | `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL` | `true` | Einladungsmail bei Freigabe senden |
+| `IDP_PROVISIONING_KEYCLOAK_INVITE_LIFESPAN_SECONDS` | `259200` | Gültigkeit des Einladungslinks (3600 bis 604800 Sekunden) |
+| `IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI` | `None` | Rücksprung in die App nach dem Passwortsetzen; muss eine gültige Redirect-URI des Clients `OIDC_CLIENT_ID` sein |
+
+`IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME`/`_PASSWORD` werden nicht mehr unterstützt. Sind sie in Produktion noch gesetzt, verweigert der `production_guard` den Start.
+
+### Zugang des Backends zu Keycloak
+
+Das Backend holt sich per `client_credentials` ein Token im App-Realm (`/realms/<Realm>/protocol/openid-connect/token`), nie im Realm `master`. Der Service Account des Clients hat nur die Rollen `manage-users` und `view-users` des Clients `realm-management`. Damit kann er Benutzer dieses Realms suchen, anlegen und Einladungen auslösen, aber keine Realm-Einstellungen, Clients oder andere Realms ändern. `idp-deploy/keycloak/setup_keycloak_realm.py` legt den Client an; das Secret steht im Tab *Credentials* des Clients und wird nicht ausgegeben.
+
+### Einladungsmail und SMTP
+
+Die Einladung (`VERIFY_EMAIL`, `UPDATE_PASSWORD`) verschickt Keycloak selbst. Ein eigener Mailserver ist nicht nötig: Im Realm unter *Realm settings → Email* dasselbe SMTP-Relay eintragen, das die App über `SMTP_*` nutzt (STARTTLS, eigene Absenderadresse), und mit *Test connection* prüfen. Der Link gilt `IDP_PROVISIONING_KEYCLOAK_INVITE_LIFESPAN_SECONDS` lang; danach sendet ein Realm-Admin die Einladung in der Keycloak-Konsole erneut (Benutzer → *Credentials* → *Credential reset* mit „Verify Email“ und „Update Password“).
 
 ### Produktions-Konfiguration (Keycloak)
 
@@ -254,9 +266,10 @@ IDP_PROVISIONING_ENABLED=true
 IDP_PROVISIONING_PROVIDER=keycloak
 IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://auth.example.com
 IDP_PROVISIONING_KEYCLOAK_REALM=nak-planner
-IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME=admin
-IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD=<secret>
+IDP_PROVISIONING_KEYCLOAK_CLIENT_ID=nak-planner-provisioning
+IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET=<secret>
 IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=true
+IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI=https://planner.example.org/
 ```
 
 ## Datenbank-Felder der Registration
