@@ -26,7 +26,7 @@ Stand nach `harden-keycloak-provisioning` (archiviert 2026-10-20): Confidential 
 
 **Nur alle Benutzer als Ziel, exklusives Modell.** Ressourcenspezifische Users-Permissions haben in FGAP v2 Vorrang vor der Permission für alle Benutzer. Existieren im Realm schon solche Permissions, könnten betroffene Benutzer für den Service Account unsichtbar werden. Das Skript sucht vor dem Entzug der Legacy-Rollen nach Users-Permissions mit konkreten Benutzern und bricht mit deren Namen ab. Die Doku nennt das exklusive Modell als Voraussetzung.
 
-**Legacy-Rollen zuletzt entziehen.** Das Skript legt erst Policy und Permissions an und entzieht danach `manage-users`/`view-users`, damit ein Abbruch mittendrin nicht zu einem Service Account ohne jede Berechtigung führt.
+**Legacy-Rollen zuletzt entziehen.** Das Skript legt erst Policy und Permissions an und entzieht danach `manage-users`/`view-users`, damit ein Abbruch mittendrin nicht zu einem Service Account ohne jede Berechtigung führt. Weil Admin-Rollen auch über Gruppen oder Composite-Rollen geerbt werden können und FGAP dann umgehen, prüft das Skript danach die effektiven `realm-management`-Rollen und bricht mit Rolle und Quelle ab, statt Gruppenmitgliedschaften selbst zu ändern.
 
 **Integrationstest mit Keycloak-Container.** Ein eigener pytest-Marker startet Keycloak in der Version aus `docker-compose.prod.yml`, führt das Setup-Skript aus und prüft die Szenarien der Spec mit dem Client-Credentials-Token. Läuft im CI als eigener Job, damit die Unit-Tests schnell bleiben.
 

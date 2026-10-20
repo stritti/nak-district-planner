@@ -43,6 +43,10 @@ When Keycloak provisioning is configured with the documented setup (Keycloak 26.
 - **WHEN** the setup script runs against a realm whose provisioning service account still holds `realm-management` roles
 - **THEN** those role mappings are removed after the fine-grained permissions are in place
 
+#### Scenario: Inherited legacy roles stop the setup
+- **WHEN** the service account still holds a `realm-management` role through a group or composite role after the direct mappings are removed
+- **THEN** the setup script stops with an error naming the role and its source, and does not report success
+
 #### Scenario: Unsupported Keycloak version
 - **WHEN** the setup script runs against a Keycloak without fine-grained admin permissions v2
 - **THEN** it stops with an error naming the minimum version 26.8.1 and changes no permissions

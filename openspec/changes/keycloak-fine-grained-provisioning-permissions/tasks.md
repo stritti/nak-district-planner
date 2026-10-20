@@ -8,7 +8,7 @@
 
 - [ ] 2.1 `setup_keycloak_realm.py` aktiviert Admin Permissions im Realm und bricht bei Serverversion < 26.8.1 oder fehlendem FGAP v2 mit klarer Meldung ab; verifiziert durch Unit-Tests auf Payload und Fehlerpfad.
 - [ ] 2.2 Skript legt idempotent die Realm-Rolle `nak-planner-provisioner`, ihre Zuweisung an den Service Account, eine Role-Policy und die Users-Permission mit `view` und `manage` sowie die sperrende `reset-password`-Permission (Rolle `nak-planner-password-reset`, nie zugewiesen) an, trägt `nak-planner-provisioner` in die Role-Scope-Mappings des Provisioning-Clients ein und bricht ab, wenn fremde Users-Permissions für konkrete Benutzer oder für `reset-password` auf alle Benutzer existieren; verifiziert durch Unit-Tests für Neuanlage und erneuten Lauf.
-- [ ] 2.3 Skript entzieht danach `manage-users`/`view-users` (und weitere `realm-management`-Rollen) dem Service Account; verifiziert durch Unit-Test, der die Reihenfolge Permissions vor Entzug prüft.
+- [ ] 2.3 Skript entzieht danach `manage-users`/`view-users` (und weitere `realm-management`-Rollen) dem Service Account, prüft danach die effektiven Rollen (`role-mappings/clients/{id}/composite`, Gruppen, Composite-Realm-Rollen) und bricht ab, wenn noch eine `realm-management`-Rolle geerbt wird; verifiziert durch Unit-Test, der die Reihenfolge Permissions vor Entzug prüft.
 - [ ] 2.4 `cd services/backend && uv run pytest tests/unit/ -v && uv run ruff check app tests` laufen grün.
 
 ## 3. Integrationstest
