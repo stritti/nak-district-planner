@@ -5,7 +5,7 @@
 
 Each test creates a throwaway database, migrates it to the immediate
 predecessor revision, seeds *existing* plaintext tokens as an old installation
-would have them, runs ``alembic upgrade head`` for real and inspects the result.
+would have them, upgrades to the contract revision for real and inspects the result.
 
 TEST_DATABASE_URL must be a PostgreSQL superuser URL
 (``postgresql+asyncpg://...``); databases are created and dropped on its server.
@@ -138,7 +138,7 @@ def test_existing_tokens_survive_backfill_and_drop(database) -> None:
     )
     assert "token" in _columns(conn)
 
-    result = _alembic(database, "head")
+    result = _alembic(database, CONTRACT)
     assert result.returncode == 0, result.stderr[-2000:]
 
     assert "token" not in _columns(conn)
@@ -170,7 +170,7 @@ def test_tampered_hash_aborts_the_whole_migration(database) -> None:
     good, bad = "ok-" + "f" * 40, "bad-" + "g" * 40
     _seed(conn, [("PUBLIC", good, None), ("INTERNAL", bad, _sha("something-else"))])
 
-    result = _alembic(database, "head")
+    result = _alembic(database, CONTRACT)
 
     assert result.returncode != 0
     assert "Export token hash mismatch" in result.stderr
@@ -189,7 +189,7 @@ def test_tampered_hash_aborts_the_whole_migration(database) -> None:
 
 def test_empty_installation_migrates(database) -> None:
     assert _alembic(database, PREDECESSOR).returncode == 0
-    assert _alembic(database, "head").returncode == 0
+    assert _alembic(database, CONTRACT).returncode == 0
     assert "token" not in _columns(_connect(database))
 
 
