@@ -43,6 +43,7 @@ Tabgebundene Koordinationsdaten duerfen `sessionStorage` verwenden, sofern sie k
 - fachliche Autorisierung erfolgt nach verifizierter Authentifizierung ueber Dependencies/RBAC; RLS bleibt letzte Datenbankgrenze: ✅ (PR #443)
 
 Ein vom Client kontrollierter Claim oder Header ist niemals alleinige Berechtigungsquelle.
+- `SECURITY DEFINER`-Funktionen lesen nur, setzen `search_path` fest und prüfen den Aufrufer selbst. `duty_identity_schedule` liefert Planer:innen des Bezirks ausschließlich Termin, Gemeinde, Zeitfenster und Treffer-Art anderer Dienste derselben Person (Doppelbelegungsprüfung über Gemeindegrenzen), nie Namen. Der Wortlaut ist durch `tests/unit/test_duty_identity_schedule_audit.py` festgeschrieben.
 
 ## 4. Superadmin-Bootstrap
 

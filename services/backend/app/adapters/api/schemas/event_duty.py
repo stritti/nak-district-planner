@@ -61,17 +61,18 @@ class AssignmentWrite(BaseModel):
     duty_category_id: UUID
     name: str | None = Field(default=None, min_length=1, max_length=255)
     linked_user_sub: str | None = Field(default=None, min_length=1, max_length=512)
+    leader_id: UUID | None = None
     suggestion_id: UUID | None = None
     # Acknowledges name-only (WARN) matches with an overlapping duty of the same name.
     confirm_warnings: bool = False
 
     @model_validator(mode="after")
     def identity(self):
-        if bool(self.name) == bool(self.linked_user_sub):
+        if sum(bool(value) for value in (self.name, self.linked_user_sub, self.leader_id)) != 1:
             raise ValueError("Exactly one identity required")
         if self.name:
             self.name = display_name(self.name)
-        if self.linked_user_sub and self.suggestion_id:
+        if (self.linked_user_sub or self.leader_id) and self.suggestion_id:
             raise ValueError("Linked identity cannot use a name suggestion")
         return self
 
