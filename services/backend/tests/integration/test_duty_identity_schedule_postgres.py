@@ -368,3 +368,16 @@ async def test_the_identity_constraint_allows_exactly_one_identity(sessions, lea
                 {"i": uuid.uuid4(), "s": ids["here"], "c": ids["category"], "d": ids["district"], "l": leader_id},
             )
 
+
+
+async def test_assigning_a_leader_to_a_service_checks_the_leaders_duties(sessions, leader_world):
+    """Reverse direction (step 2.2d): the organist of 09:30 cannot lead the 09:00 service."""
+    from app.adapters.api.conflict_checks import check_service_assignment_conflicts
+
+    ids, leader_id, _ = leader_world
+    async with sessions() as db:
+        await _as_system_worker(db)
+        conflicts = await check_service_assignment_conflicts(
+            db, event_id=ids["here"], leader_id=leader_id
+        )
+    assert [(c.rule_id, c.severity.value) for c in conflicts][:1] == [("no_double_booking", "BLOCK")]

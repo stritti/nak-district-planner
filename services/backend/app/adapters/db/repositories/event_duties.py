@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
+from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.orm_models.event_duty import (
     DutyNameSuggestionORM,
     EventDutyAssignmentORM,
@@ -133,6 +134,15 @@ class SqlEventDutiesRepository(EventDutiesRepository):
             select(LeaderORM).where(LeaderORM.id == leader_id, LeaderORM.district_id == district_id)
         )
         return _leader_to_domain(row) if row else None
+
+    async def list_leaders(self, district_id):
+        rows = await self.session.scalars(
+            select(LeaderORM).where(LeaderORM.district_id == district_id).order_by(LeaderORM.name)
+        )
+        return [_leader_to_domain(row) for row in rows]
+
+    async def lock_leader(self, leader_id):
+        await acquire_advisory_xact_lock(self.session, leader_id)
 
     async def list_identity_schedule(
         self, district_id, *, linked_user_sub, normalized_name, leader_id, window_start,

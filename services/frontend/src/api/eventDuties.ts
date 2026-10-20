@@ -32,6 +32,7 @@ export interface DutyAssignment {
   display_name: string
   duty_label: string
   linked_user_sub: string | null
+  leader_id?: string | null
   suggestion_id: string | null
   needs_review: boolean
   over_capacity: boolean
@@ -57,12 +58,21 @@ export type DutyIdentity =
       name: string
       suggestion_id?: string
       linked_user_sub?: never
+      leader_id?: never
       confirm_warnings?: boolean
     }
   | {
       duty_category_id: string
       linked_user_sub: string
       name?: never
+      leader_id?: never
+      confirm_warnings?: boolean
+    }
+  | {
+      duty_category_id: string
+      leader_id: string
+      name?: never
+      linked_user_sub?: never
       confirm_warnings?: boolean
     }
 
@@ -179,6 +189,17 @@ export function deleteDutyAssignment(
     method: 'DELETE',
     headers: { 'If-Match': revision },
   })
+}
+
+export interface DutyLeaderChoice {
+  id: string
+  name: string
+  rank: string | null
+}
+
+/** Leaders a duty of this slot may reference: eligible on its date, for any slot planner. */
+export function listLeaderChoices(district: string, slot: string): Promise<DutyLeaderChoice[]> {
+  return apiFetch(`${base(district)}/slots/${encodeURIComponent(slot)}/leaders`)
 }
 
 export function listEligibleUsers(

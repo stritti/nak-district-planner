@@ -255,6 +255,26 @@ async def assign(
     )
 
 
+@router.get("/slots/{planning_slot_id}/leaders")
+async def leader_choices(
+    district_id: UUID,
+    planning_slot_id: UUID,
+    auth: CurrentUserWithMemberships,
+    repository: EventDutiesRepository = Depends(get_event_duties_repository),
+):
+    """Leaders a duty of this slot may reference, authorized like the duty write itself.
+
+    Congregation planners cannot read the district leader list, so they get this reduced
+    view; it offers only leaders eligible on the slot date, as the write enforces.
+    """
+    slot = await slot_for(repository, auth, district_id, planning_slot_id, Role.PLANNER)
+    return [
+        {"id": leader.id, "name": leader.name, "rank": leader.rank.value if leader.rank else None}
+        for leader in await repository.list_leaders(district_id)
+        if leader.is_eligible_on(slot.planning_date)
+    ]
+
+
 async def assignment_for(repository, auth, district_id, assignment_id):
     assignment = await repository.get_assignment(assignment_id)
     if not assignment or assignment.district_id != district_id:

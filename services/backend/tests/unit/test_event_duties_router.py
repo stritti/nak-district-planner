@@ -579,3 +579,27 @@ class TestDutyIdentityConflicts:
             )
         assert error.value.status_code == 409
         assert error.value.detail["conflicts"][0]["rule_id"] == "duty_possible_namesake"
+
+
+@pytest.mark.asyncio
+async def test_congregation_planner_gets_leaders_eligible_on_the_slot_date(setup):
+    from datetime import date
+
+    from tests.unit.test_event_duties_service import _leader
+
+    repo, _ = setup
+    active = _leader(repo)
+    _leader(repo, service_end_date=date(2020, 1, 1))
+    _leader(repo, hidden_from_lists=True)
+    choices = await api.leader_choices(repo.district, repo.slot_id, auth(repo), repository=repo)
+    assert choices == [{"id": active.id, "name": "Hans Müller", "rank": "Ev."}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("membership", ["viewer", "other_congregation"])
+async def test_leader_choices_require_planner_scope_of_the_slot(setup, membership):
+    repo, _ = setup
+    caller = auth(repo, Role.VIEWER) if membership == "viewer" else auth(repo, congregation=uuid4())
+    with pytest.raises(HTTPException) as error:
+        await api.leader_choices(repo.district, repo.slot_id, caller, repository=repo)
+    assert error.value.status_code == 403

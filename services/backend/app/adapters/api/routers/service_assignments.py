@@ -12,6 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
+from app.adapters.api.conflict_checks import check_service_assignment_conflicts
 from app.adapters.api.conflict_http import raise_for_conflicts
 from app.adapters.api.deps import (
     CurrentUserWithMemberships,
@@ -37,7 +38,6 @@ from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
 from app.adapters.db.repositories.service_assignment import SqlServiceAssignmentRepository
 from app.adapters.db.transactional_events import publish_after_commit
-from app.application.service_assignment_conflict import check_service_assignment_conflicts
 from app.domain.event_payloads import assignment_confirmed
 from app.domain.models.event_instance import EventInstance
 from app.domain.models.leader import normalize_leader_name

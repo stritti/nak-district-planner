@@ -6,11 +6,12 @@ import { mount, flushPromises } from '@vue/test-utils'
 import EventDutiesPanel from './EventDutiesPanel.vue'
 import * as api from '../api/eventDuties'
 import { ApiError } from '../api/errors'
-vi.mock('../api/eventDuties', () => ({ getSlotDuties: vi.fn(), listEligibleUsers: vi.fn(), listSuggestions: vi.fn(), saveDutyAssignment: vi.fn(), revalidateDutyAssignment: vi.fn(), deleteDutyAssignment: vi.fn(), setSuggestionHidden: vi.fn() }))
+vi.mock('../api/eventDuties', () => ({ getSlotDuties: vi.fn(), listEligibleUsers: vi.fn(), listLeaderChoices: vi.fn(), listSuggestions: vi.fn(), saveDutyAssignment: vi.fn(), revalidateDutyAssignment: vi.fn(), deleteDutyAssignment: vi.fn(), setSuggestionHidden: vi.fn() }))
 const category = { id:'cat', label:'Organist', capacity:1, enabled:true }
 beforeEach(() => {
  vi.clearAllMocks(); vi.mocked(api.getSlotDuties).mockResolvedValue({ categories:[category], assignments:[] } as never)
  vi.mocked(api.listEligibleUsers).mockResolvedValue([{sub:'verified',display_name:'Anna'}])
+ vi.mocked(api.listLeaderChoices).mockResolvedValue([])
  vi.mocked(api.listSuggestions).mockResolvedValue([{id:'name',display_name:'Anna',hidden:false,revision:'"s:v1"'}] as never)
  vi.mocked(api.setSuggestionHidden).mockImplementation(async (_district, _id, hidden) => ({id:'name',display_name:'Anna',hidden,revision:'"s:v2"'}) as never)
 })
@@ -135,5 +136,48 @@ it('offers no override for a blocking overlap', async () => {
  expect(w.get('[data-testid="duty-conflict"]').text()).toContain('bereits einen Dienst')
  expect(w.find('[data-testid="duty-conflict-confirm"]').exists()).toBe(false)
  expect(w.find('[role="alert"].text-red-600').exists()).toBe(false)
+})
+const leaderList = [{ id: 'l1', name: 'Hans Müller', rank: 'Ev.' }, { id: 'l2', name: 'Anna Beispiel', rank: null }] as never
+it('offers existing leaders as a third identity and sends only the leader id', async () => {
+ vi.mocked(api.listLeaderChoices).mockResolvedValue(leaderList)
+ vi.mocked(api.saveDutyAssignment).mockResolvedValue({id:'a'} as never)
+ const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
+ expect(api.listLeaderChoices).toHaveBeenCalledWith('d','s')
+ expect(w.get('[data-testid="identity-kind"]').text()).toContain('Amtsträger')
+ await w.get('[data-testid="identity-kind"]').setValue('leader')
+ expect(w.get('[data-testid="duty-leader"]').text()).toContain('Ev. Hans Müller')
+ expect(w.get('[data-testid="duty-leader"]').text()).toContain('Anna Beispiel')
+ expect(w.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+ await w.get('[data-testid="duty-leader"]').setValue('l1')
+ await w.get('form').trigger('submit');await flushPromises()
+ expect(api.saveDutyAssignment).toHaveBeenCalledWith('d','s',{duty_category_id:'cat',leader_id:'l1'},undefined,undefined)
+ expect(w.emitted('mutated')).toHaveLength(1)
+})
+it('hides the leader option when no leaders can be loaded and keeps the panel usable', async () => {
+ vi.mocked(api.listLeaderChoices).mockRejectedValue(new Error('403'))
+ const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
+ expect(w.get('[data-testid="identity-kind"]').text()).not.toContain('Amtsträger')
+ expect(w.find('[role="alert"]').exists()).toBe(false)
+})
+it('shows a leader duty as such and re-edits it with the leader preselected', async () => {
+ vi.mocked(api.listLeaderChoices).mockResolvedValue(leaderList)
+ vi.mocked(api.getSlotDuties).mockResolvedValue({categories:[category],assignments:[{id:'a',duty_category_id:'cat',display_name:'Ev. Hans Müller',duty_label:'Organist',linked_user_sub:null,leader_id:'l1',needs_review:false,over_capacity:false,revision:'"a:v1"'}]} as never)
+ vi.mocked(api.saveDutyAssignment).mockResolvedValue({id:'a'} as never)
+ const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
+ expect(w.text()).toContain('(Amtsträger)')
+ await w.get('button.text-blue-600').trigger('click')
+ expect((w.get('[data-testid="identity-kind"]').element as HTMLSelectElement).value).toBe('leader')
+ expect((w.get('[data-testid="duty-leader"]').element as HTMLSelectElement).value).toBe('l1')
+ await w.get('form').trigger('submit');await flushPromises()
+ expect(api.saveDutyAssignment).toHaveBeenCalledWith('d','s',{duty_category_id:'cat',leader_id:'l1'},'a','"a:v1"')
+})
+it('shows a blocking overlap between a duty and a service of the leader', async () => {
+ vi.mocked(api.listLeaderChoices).mockResolvedValue(leaderList)
+ vi.mocked(api.saveDutyAssignment).mockRejectedValueOnce(conflictBody('BLOCK','duty_double_booking','Dieselbe Person hat zur gleichen Zeit bereits einen Dienst.'))
+ const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
+ await w.get('[data-testid="identity-kind"]').setValue('leader');await w.get('[data-testid="duty-leader"]').setValue('l2')
+ await w.get('form').trigger('submit');await flushPromises()
+ expect(w.get('[data-testid="duty-conflict"]').text()).toContain('bereits einen Dienst')
+ expect(w.find('[data-testid="duty-conflict-confirm"]').exists()).toBe(false)
 })
 
