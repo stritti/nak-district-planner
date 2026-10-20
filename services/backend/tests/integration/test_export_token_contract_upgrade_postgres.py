@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -220,6 +221,11 @@ def _runtime_visible_slot_ids(url, token: str, ids: list[uuid.UUID]) -> set[uuid
                 "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user"
             )
             assert cur.fetchone() == (False, False)
+            cur.execute(
+                "SELECT count(*) FROM pg_tables WHERE tableowner = current_user "
+                "AND tablename IN ('planning_slots', 'export_tokens')"
+            )
+            assert cur.fetchone()[0] == 0, "runtime role must not own the protected tables"
             cur.execute("SELECT set_config('app.current_export_token', %s, true)", (token,))
             cur.execute(
                 "SELECT id FROM planning_slots WHERE id = ANY(%s::uuid[])",
@@ -251,7 +257,6 @@ def _runtime_personal_scopes(
 
 def test_runtime_role_token_visibility_after_contract_upgrade(database) -> None:
     """PUBLIC, INTERNAL and subject tokens stay tenant-scoped; revoked tokens lose access."""
-    assert os.getenv("RLS_TEST_APP_PASSWORD"), "application-role credentials required"
     assert _alembic(database, PREDECESSOR).returncode == 0
     owner = _connect(database)
     token_values = {
@@ -346,8 +351,6 @@ def test_runtime_role_token_visibility_after_contract_upgrade(database) -> None:
 
 def test_contract_policies_and_functions_drop_plaintext_dependency(database) -> None:
     """Inspect active PostgreSQL definitions, not just Python migration source."""
-    import re
-
     assert _alembic(database, PREDECESSOR).returncode == 0
     owner = _connect(database)
     _seed(owner, [("PUBLIC", "pub-" + uuid.uuid4().hex, None)])
