@@ -289,7 +289,11 @@ def test_relay_preflight_rejects_failed_ehlo_after_tls(
     _assert_nothing_sensitive_sent(server.events)
 
 
-@pytest.mark.parametrize("auth", [None, "", "XOAUTH2"], ids=["absent", "empty", "unsupported"])
+@pytest.mark.parametrize(
+    "auth",
+    [None, "", "XOAUTH2", "plain login"],
+    ids=["absent", "empty", "unsupported", "lowercase"],
+)
 def test_relay_preflight_rejects_unusable_post_tls_auth(
     certificate: tuple[Path, Path], server_factory, auth: str | None
 ) -> None:

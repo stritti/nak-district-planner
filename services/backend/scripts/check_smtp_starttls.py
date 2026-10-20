@@ -51,7 +51,8 @@ def verify_smtp_starttls(
             code, _ = smtp.ehlo()
             if code != 250:
                 raise SmtpTlsProbeError("SMTP post-TLS EHLO failed")
-            offered = set((smtp.esmtp_features.get("auth") or "").upper().split())
+            # Case-sensitive, as smtplib.SMTP.login() matches the advertised tokens.
+            offered = set((smtp.esmtp_features.get("auth") or "").split())
             if not offered & _LOGIN_MECHANISMS:
                 raise SmtpTlsProbeError(
                     "SMTP relay offers no AUTH mechanism the adapter supports after STARTTLS"
