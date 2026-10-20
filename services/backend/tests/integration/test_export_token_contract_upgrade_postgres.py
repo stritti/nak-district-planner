@@ -236,7 +236,7 @@ def _runtime_visible_ids(url, token: str, table: str, ids: list[uuid.UUID]) -> s
             assert cur.fetchone()[0] == 0, "runtime role must not own the protected tables"
             cur.execute("SELECT set_config('app.current_export_token', %s, true)", (token,))
             cur.execute(
-                f"SELECT id FROM {table} WHERE id = ANY(%s::uuid[])",  # noqa: S608 - fixed names
+                f"SELECT id FROM {table} WHERE id = ANY(%s::uuid[])",  # nosec B608 - fixed table allowlist
                 ([str(row_id) for row_id in ids],),
             )
             return {uuid.UUID(str(row[0])) for row in cur.fetchall()}
