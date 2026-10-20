@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.4.0](https://github.com/stritti/nak-district-planner/compare/v1.3.0...v1.4.0) (2026-10-20)
+
+
+### Features
+
+* **admin:** unique district and congregation names, server detail in dialogs ([#651](https://github.com/stritti/nak-district-planner/issues/651)) ([f78cda8](https://github.com/stritti/nak-district-planner/commit/f78cda8cd4fc1428aca072b53afcd734d3913769))
+* **duties:** a duty may reference an existing leader (step 2.2b, backend) ([#675](https://github.com/stritti/nak-district-planner/issues/675)) ([601df36](https://github.com/stritti/nak-district-planner/commit/601df36c2e1e9ea61cc48bf4f1ad85a046f6b1fe))
+* **duties:** Amtsträger im Dienst-Panel und Gegenrichtung der Prüfung (Schritt 2.2d) ([#676](https://github.com/stritti/nak-district-planner/issues/676)) ([6163db2](https://github.com/stritti/nak-district-planner/commit/6163db2874d2a3d87bd728d1f03fe4b518353066))
+* **duties:** cross-congregation duty overlap check for congregation planners (step 2.2c) ([#674](https://github.com/stritti/nak-district-planner/issues/674)) ([e7165b7](https://github.com/stritti/nak-district-planner/commit/e7165b7e2986acbe03cf003fea5145354f063434))
+* **duties:** one person cannot hold overlapping duties (step 2.2a) ([#654](https://github.com/stritti/nak-district-planner/issues/654)) ([915373e](https://github.com/stritti/nak-district-planner/commit/915373edda01efc5ca34b26c88adbd2d62e21be9))
+* **leaders:** ask before creating a same-named leader (step 2.1) ([#653](https://github.com/stritti/nak-district-planner/issues/653)) ([34f4976](https://github.com/stritti/nak-district-planner/commit/34f497695aa20239df11385d4bfb26acc5f655cc))
+* **matrix:** Konflikte in Matrixzellen anzeigen (Schritt 3) ([#655](https://github.com/stritti/nak-district-planner/issues/655)) ([3aaf9c5](https://github.com/stritti/nak-district-planner/commit/3aaf9c50746fe4da980af3221797dd08a4086803))
+
+
+### Bug Fixes
+
+* **ci:** synchronize CodeQL actions and group Dependabot updates ([#644](https://github.com/stritti/nak-district-planner/issues/644)) ([ee581d6](https://github.com/stritti/nak-district-planner/commit/ee581d66d90f83552a6307c7c50d6c72c1b65522))
+* **deps-dev:** bump @vitejs/plugin-vue in /services/frontend ([#661](https://github.com/stritti/nak-district-planner/issues/661)) ([6a7f681](https://github.com/stritti/nak-district-planner/commit/6a7f681cdebecfc946771822dc849975fa008c1e))
+* **deps-dev:** bump ruff from 0.16.10 to 0.17.1 in /services/backend ([#659](https://github.com/stritti/nak-district-planner/issues/659)) ([54653d5](https://github.com/stritti/nak-district-planner/commit/54653d5cfd065abdb16c436b73d8c60a7785b7f9))
+* **deps-dev:** bump vitest from 5.0.3 to 5.0.5 in /services/frontend ([#660](https://github.com/stritti/nak-district-planner/issues/660)) ([35a7065](https://github.com/stritti/nak-district-planner/commit/35a70650beddfd9e9cfe16cdc7527df615f79908))
+* **deps:** bump authlib from 1.8.0 to 1.9.1 in /services/backend ([#664](https://github.com/stritti/nak-district-planner/issues/664)) ([9a9447e](https://github.com/stritti/nak-district-planner/commit/9a9447eee526d60787e7688101ee076e7bc54a4d))
+* **deps:** bump fastapi from 0.143.1 to 0.143.2 in /services/backend ([#665](https://github.com/stritti/nak-district-planner/issues/665)) ([6f39250](https://github.com/stritti/nak-district-planner/commit/6f392508bea9c33fdb8cedf2fd910bd3d7e02109))
+* **deps:** bump nginxinc/nginx-unprivileged in /services/frontend ([#656](https://github.com/stritti/nak-district-planner/issues/656)) ([225a26a](https://github.com/stritti/nak-district-planner/commit/225a26a6564c80f4e56b4b0190fbefd061e15918))
+* **deps:** bump valkey from 6.1.1 to 6.2.0 in /services/backend ([#662](https://github.com/stritti/nak-district-planner/issues/662)) ([2f2cb1f](https://github.com/stritti/nak-district-planner/commit/2f2cb1f294b3ceebbd5011b8429ead550d30fe1a))
+* **deps:** update sqlalchemy[asyncio] requirement in /services/backend ([#666](https://github.com/stritti/nak-district-planner/issues/666)) ([0d4b3d7](https://github.com/stritti/nak-district-planner/commit/0d4b3d7ef85141d7594f491cc274f873809cdd8a))
+* **duties:** serialize duties and services per leader account and match account-linked leaders ([#677](https://github.com/stritti/nak-district-planner/issues/677)) ([d49c489](https://github.com/stritti/nak-district-planner/commit/d49c489f1031e5cc095ad8ec9faa73a426581569))
+* **security:** prevent ICS export token leaks in unhandled exceptions ([#647](https://github.com/stritti/nak-district-planner/issues/647)) ([dc891a8](https://github.com/stritti/nak-district-planner/commit/dc891a8c72bf275f53e2a48dc210e6a7994da397))
+
 ## [1.3.0](https://github.com/stritti/nak-district-planner/compare/v1.2.2...v1.3.0) (2026-10-17)
 
 
