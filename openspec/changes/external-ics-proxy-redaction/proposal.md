@@ -15,4 +15,4 @@ ICS bearer tokens are embedded in export URLs. Application and frontend nginx re
 - Treat redaction of application/nginx logs as sufficient proof for the external proxy.
 - Include valid bearer tokens in issue comments, CI artifacts or source.
 
-Issue: https://github.com/stritti/nak-district-planner/issues/629
+Issue: <https://github.com/stritti/nak-district-planner/issues/629>
