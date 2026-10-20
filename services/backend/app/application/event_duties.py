@@ -307,30 +307,15 @@ class EventDutiesService:
             if leader is not None:
                 linked_user_sub = leader.user_sub
                 name_key = normalize_name(leader.name)
-        window = {
-            "window_start": start - default_duration,
-            "window_end": end,
-            "exclude_slot_id": slot.id,
-        }
         others = await self.repository.list_identity_schedule(
             district_id,
             linked_user_sub=linked_user_sub,
             normalized_name=name_key,
             leader_id=assignment.leader_id,
-            **window,
+            window_start=start - default_duration,
+            window_end=end,
+            exclude_slot_id=slot.id,
         )
-        if linked_user_sub and not assignment.leader_id:
-            # An account duty also meets the services and duties of leaders linked to it.
-            for leader_id in await self.repository.leader_ids_for_account(
-                district_id, linked_user_sub
-            ):
-                others += await self.repository.list_identity_schedule(
-                    district_id,
-                    linked_user_sub=None,
-                    normalized_name=None,
-                    leader_id=leader_id,
-                    **window,
-                )
         conflicts = duty_identity_conflicts(start, end, others)
         blocking = any(conflict.severity == Severity.BLOCK for conflict in conflicts)
         unconfirmed = not confirm_warnings and any(

@@ -44,7 +44,7 @@ class Repository:
         self.overrides, self.assignments, self.suggestions = [], [], []
         self.locks = []
         self.identity_schedule, self.identity_queries = [], []
-        self.leaders, self.leader_schedules = {}, {}
+        self.leaders = {}
         self.users = [{"sub": "verified", "display_name": "User Name"}]
         self.assignment_lock_result = _USE_STORED_ASSIGNMENT
 
@@ -90,13 +90,6 @@ class Repository:
     async def get_suggestion(self, suggestion_id):
         return next((s for s in self.suggestions if s.id == suggestion_id), None)
 
-    async def leader_ids_for_account(self, district_id, user_sub):
-        return [
-            leader.id
-            for leader in self.leaders.values()
-            if leader.district_id == district_id and leader.user_sub == user_sub
-        ]
-
     async def list_leaders(self, district_id):
         return [leader for leader in self.leaders.values() if leader.district_id == district_id]
 
@@ -117,7 +110,7 @@ class Repository:
 
     async def list_identity_schedule(self, district_id, **query):
         self.identity_queries.append(query)
-        return self.leader_schedules.get(query["leader_id"], self.identity_schedule)
+        return self.identity_schedule
 
     async def lock_suggestion(self, suggestion_id):
         self.locks.append("suggestion")
@@ -538,7 +531,7 @@ async def test_no_overlap_and_a_disabled_check_assign_normally(monkeypatch):
 def _leader(repo, **overrides):
     leader = Leader.create(
         name="Hans Müller", district_id=repo.district, rank=LeaderRank.EVANGELIST,
-        **({"user_sub": "leader-account"} | overrides),
+        user_sub="leader-account", **overrides,
     )
     repo.leaders[leader.id] = leader
     return leader
@@ -611,21 +604,6 @@ async def test_a_leaders_overlapping_service_blocks_the_duty():
         )
     assert [c.severity for c in error.value.conflicts] == [Severity.BLOCK]
     assert repo.assignments == []
-
-
-@pytest.mark.asyncio
-async def test_an_account_duty_meets_the_service_of_the_leader_linked_to_it():
-    repo = Repository()
-    leader = _leader(repo, user_sub="verified")
-    repo.leader_schedules[leader.id] = [_overlapping(repo, strong=True)]
-    with pytest.raises(DutyIdentityConflictError) as error:
-        await EventDutiesService(repo).assign(
-            repo.district, repo.slot_id, repo.categories[0].id, linked_user_sub="verified"
-        )
-    assert [c.severity for c in error.value.conflicts] == [Severity.BLOCK]
-    assert repo.assignments == []
-    assert [query["leader_id"] for query in repo.identity_queries] == [None, leader.id]
-    assert repo.identity_queries[1]["linked_user_sub"] is None
 
 
 @pytest.mark.asyncio

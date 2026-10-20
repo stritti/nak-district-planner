@@ -10,7 +10,7 @@ deliberately together with this file.
 
 import re
 
-from app.adapters.db.migrations.duty_identity_schedule_v2 import FUNCTION_NAME, FUNCTION_SQL
+from app.adapters.db.migrations.duty_identity_schedule_v3 import FUNCTION_NAME, FUNCTION_SQL
 
 
 def test_is_a_stable_definer_function_with_a_fixed_search_path():
@@ -72,3 +72,10 @@ def test_version_1_stays_frozen_for_the_migration_history():
 
     assert "p_exclude_slot uuid, p_from date, p_to date)" in v1.FUNCTION_SQL
     assert "p_leader" not in v1.FUNCTION_SQL
+
+
+def test_an_account_reaches_only_leaders_of_the_requested_district():
+    assert FUNCTION_SQL.count(
+        "(SELECT l.id FROM leaders l WHERE l.district_id=p_district AND l.user_sub=p_sub)"
+    ) == 2
+    assert FUNCTION_SQL.count("p_sub IS NOT NULL AND") == 3
