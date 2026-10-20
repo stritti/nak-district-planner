@@ -18,6 +18,8 @@ def test_proxy_log_configuration_uses_original_request_and_suppresses_errors() -
     assert "map $request_uri $log_ics_request" in section
     assert "error_log /dev/null crit;" in section
     assert "map $uri $log_ics_request" not in section
+    # The normalized route, which percent-encoded variants also reach, logs nothing.
+    assert "location ^~ /api/v1/export/ {\n        access_log off;" in section
 
 
 def test_canary_requires_live_response_failure_case_and_propagates_exit_code() -> None:

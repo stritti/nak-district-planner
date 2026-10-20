@@ -79,6 +79,16 @@ def test_one_missing_sink_invalidates_other_clean_sink(tmp_path: Path) -> None:
     _assert_secret_not_reported(result)
 
 
+def test_a_leak_outranks_an_unreadable_sink(tmp_path: Path) -> None:
+    leaking = tmp_path / "proxy.log"
+    leaking.write_text(f"GET /api/v1/export/{TOKEN}/calendar.ics\n")
+    result = _run(sources=[str(leaking), str(tmp_path / "unavailable.log")])
+    assert result.returncode == 1
+    assert "TOKEN FOUND" in result.stdout
+    assert "INCOMPLETE" in result.stderr
+    _assert_secret_not_reported(result)
+
+
 def test_gzip_log_export_is_never_approved_as_clean(tmp_path: Path) -> None:
     source = tmp_path / "proxy.jsonl.gz"
     source.write_bytes(gzip.compress(f"request={TOKEN}".encode()))

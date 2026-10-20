@@ -43,13 +43,13 @@
 
 ### Task 2: Canary/telemetry audit procedure
 
-**Files:** `docs/operations/production-runbook.md; scripts/verify-external-ics-logging.sh`
+**Files:** `docs/operations/production-runbook.md; scripts/check_ics_canary_logs.py`
 
 **Interfaces:** Consumes the existing component contracts in the OpenSpec design. Produces the behavior asserted by `services/backend/tests/unit/test_external_ics_canary.py`.
 
 - [ ] **Step 1 — RED:** Add `test_verifier_returns_only_status_not_token: feed URL and telemetry sink allowlist; fail closed if sink unavailable` in `services/backend/tests/unit/test_external_ics_canary.py`; state the pre-change behavior that violates the assertion.
 - [ ] **Step 2 — Verify failure:** `uv run pytest tests/unit/test_external_ics_canary.py -v`. Expected: FAIL with the targeted behavior assertion before any production modification.
-- [ ] **Step 3 — GREEN:** In `docs/operations/production-runbook.md`, canary must never echo/persist token; check proxy, APM, spans and central logs.
+- [ ] **Step 3 — GREEN:** Implement `scripts/check_ics_canary_logs.py` (token via stdin, status-only output) and document it in `docs/operations/production-runbook.md`; the canary must never echo/persist the token; check proxy, APM, spans and central logs.
 - [ ] **Step 4 — Verify green:** `uv run pytest tests/unit/test_external_ics_canary.py -v`. Expected: PASS, zero unexpected skips.
 - [ ] **Step 5 — Regression:** `cd services/backend && uv run pytest tests/unit tests/integration tests/performance -q`. Expected: PASS; no unauthorized skips.
 - [ ] **Step 6 — Commit:** Stage only these files; commit one cohesive functional change in the issue branch.

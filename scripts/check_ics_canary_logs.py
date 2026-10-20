@@ -72,17 +72,21 @@ def main() -> int:
         print("INCOMPLETE: invalid or absent canary input", file=sys.stderr)
         return 2
 
-    leaks = 0
+    leaks = unreadable = 0
     for source in args.source:
         try:
             leaks += _contains_token(Path(source), token)
         except OSError, ValueError:
-            print("INCOMPLETE: one or more log sources cannot be read", file=sys.stderr)
-            return 2
+            unreadable += 1
 
+    if unreadable:
+        print("INCOMPLETE: one or more log sources cannot be read", file=sys.stderr)
+    # A confirmed leak outranks incomplete evidence: it always demands rotation.
     if leaks:
         print("TOKEN FOUND: stop release; inspect retention and rotate exposed subscriptions")
         return 1
+    if unreadable:
+        return 2
     print(f"PASS: token absent from {len(args.source)} sources")
     return 0
 

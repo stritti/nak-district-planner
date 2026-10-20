@@ -36,7 +36,7 @@ Der Production Guard verhindert den Start bei kritischen unsicheren Werten.
 
 `/api/v1/export/<token>/calendar.ics` enthaelt ein **Bearer-Secret im Pfad**. Anwendung und Frontend-nginx maskieren diesen Pfad bereits. **Jeder externe TLS-Proxy, Ingress, Load Balancer, WAF, Tracer und zentrale Logsink muss separat geprueft werden.** Ein normales `accessLog.filters` von Traefik ist kein Nachweis dafuer, dass beliebige URL-Pfadsegmente umgeschrieben werden. Falls die eingesetzte Version keine nachweisbar sichere Pfadredaktion unterstuetzt, den Zugriff auf `/api/v1/export/` nicht protokollieren.
 
-**nginx-Beispiel am externen TLS-Proxy (Access-Logs fuer den sensiblen Pfad, Error-Logs fuer diesen Server unterdruecken):** Diese `map` gehoert in den `http`-Kontext. `$request_uri` enthaelt die urspruengliche unveraenderte URI; `$uri` kann durch interne Weiterleitungen veraendert werden und waere fuer die Filterung unsicher. Das serverweite `error_log /dev/null crit` verhindert auch Secrets in Fehlerlogs bei Upstream-Ausfall, unterdrueckt allerdings Diagnosemeldungen fuer **alle** Requests dieses virtuellen Servers. Ein separater ICS-vHost bzw. ein vorgelagerter Proxy mit nachweisbarer URL-Redaktion kann die Auswirkungen begrenzen. Saemtliche weiteren Error-/Access-Logs, Unterserver und vorgelagerten Gateways sind separat zu pruefen.
+**nginx-Beispiel am externen TLS-Proxy (Access-Logs fuer den sensiblen Pfad, Error-Logs fuer diesen Server unterdruecken):** Diese `map` gehoert in den `http`-Kontext. `$request_uri` enthaelt die urspruengliche unveraenderte URI; `$uri` kann durch interne Weiterleitungen veraendert werden und waere fuer die Filterung unsicher. Die `map` erkennt aber keine prozentkodierten Varianten wie `/api/v1/%65xport/...`, die nginx fuer das Routing normalisiert. Deshalb schaltet zusaetzlich eine eigene `location` fuer den normalisierten Pfad das Access-Log ab; darin keine `rewrite`-, `error_page`- oder `try_files`-Weiterleitung verwenden, damit der Request in dieser `location` protokolliert (also nicht protokolliert) wird. Das serverweite `error_log /dev/null crit` verhindert auch Secrets in Fehlerlogs bei Upstream-Ausfall, unterdrueckt allerdings Diagnosemeldungen fuer **alle** Requests dieses virtuellen Servers. Ein separater ICS-vHost bzw. ein vorgelagerter Proxy mit nachweisbarer URL-Redaktion kann die Auswirkungen begrenzen. Saemtliche weiteren Error-/Access-Logs, Unterserver und vorgelagerten Gateways sind separat zu pruefen.
 
 ```nginx
 map $request_uri $log_ics_request {
@@ -47,6 +47,11 @@ map $request_uri $log_ics_request {
 server {
     error_log /dev/null crit;  # keine Roh-Request-Zeilen auf 5xx-Fehlerpfaden
     access_log /var/log/nginx/access.log main if=$log_ics_request;
+
+    location ^~ /api/v1/export/ {
+        access_log off;  # greift auch fuer prozentkodierte Varianten des Pfads
+        proxy_pass http://127.0.0.1:80;  # vorhandenes Upstream-Ziel uebernehmen
+    }
     # Unveraenderte vorhandene TLS- und Proxy-Konfiguration
 }
 ```
