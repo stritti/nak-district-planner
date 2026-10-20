@@ -43,6 +43,7 @@ A duty assignment SHALL have exactly one identity: a typed name, a verified acco
 #### Scenario: Duty and service at the same time
 - **WHEN** the leader leads a service at an overlapping event, in this or another congregation
 - **THEN** the duty is blocked with a `duty_double_booking` conflict
+- **AND** a duty naming an account is checked against the duties and services of every leader linked to that account in the same way
 
 #### Scenario: Leader assigned to a service
 - **WHEN** a leader is assigned to a service while holding an overlapping duty, or the leader's own account does
@@ -56,6 +57,7 @@ A duty assignment SHALL have exactly one identity: a typed name, a verified acco
 #### Scenario: Concurrent duty and service of one leader
 - **WHEN** a duty and a service assignment of the same leader for overlapping times are written concurrently
 - **THEN** both writes take the same per-leader and per-account transaction locks (also when the duty names the leader's linked account), so at most one of them passes its conflict check
+- **AND** moving an event re-checks its service leaders under the same per-leader locks followed by the per-account locks of their linked accounts
 
 #### Scenario: Several identities
 - **WHEN** a request names more than one of name, account and leader, or a name suggestion together with a leader

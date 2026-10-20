@@ -111,6 +111,10 @@ class EventDutiesRepository(ABC):
         """The leader of this district, or ``None``."""
 
     @abstractmethod
+    async def leader_ids_for_account(self, district_id, user_sub):
+        """IDs of this district's leaders linked to the account."""
+
+    @abstractmethod
     async def list_leaders(self, district_id):
         """Leaders of this district, ordered by name."""
 

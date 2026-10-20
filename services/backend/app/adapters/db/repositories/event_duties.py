@@ -135,6 +135,15 @@ class SqlEventDutiesRepository(EventDutiesRepository):
         )
         return _leader_to_domain(row) if row else None
 
+    async def leader_ids_for_account(self, district_id, user_sub):
+        return list(
+            await self.session.scalars(
+                select(LeaderORM.id).where(
+                    LeaderORM.district_id == district_id, LeaderORM.user_sub == user_sub
+                )
+            )
+        )
+
     async def list_leaders(self, district_id):
         rows = await self.session.scalars(
             select(LeaderORM).where(LeaderORM.district_id == district_id).order_by(LeaderORM.name)

@@ -36,7 +36,7 @@ from app.adapters.api.revisions import aware_timestamp, slot_revision
 from app.adapters.api.schemas.conflict import ConflictItem
 from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import has_role_in_district, require_role_in_district
-from app.adapters.db.locks import acquire_advisory_xact_lock
+from app.adapters.db.locks import acquire_account_xact_lock, acquire_advisory_xact_lock
 from app.adapters.db.repositories.congregation import SqlCongregationRepository
 from app.adapters.db.repositories.event_duties import SqlEventDutiesRepository
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
@@ -523,8 +523,8 @@ async def _revalidate_dependent_change(
 
     Existing IDs still require same-district ownership; inactivity is not
     checked here. Invalid historic references are 422, never overridable WARN.
-    Leader advisory locks cover assignments across different events, which
-    row locks on this event's assignments cannot serialize.
+    Leader and account advisory locks cover assignments across different events,
+    which row locks on this event's assignments cannot serialize.
     """
     assignments = [
         a for a in await assignments_repo.list_by_planning_slot(slot.id) if a.leader_id is not None
@@ -534,6 +534,16 @@ async def _revalidate_dependent_change(
         await ensure_leader_in_district(session, slot.district_id, leader_id)
     for leader_id in leader_ids:
         await acquire_advisory_xact_lock(session, leader_id)
+    # Then the linked accounts (leaders first, as everywhere), which duties booked by
+    # such an account take as well.
+    leaders = SqlLeaderRepository(session)
+    accounts = {
+        leader.user_sub
+        for leader in [await leaders.get(leader_id) for leader_id in leader_ids]
+        if leader is not None and leader.user_sub
+    }
+    for user_sub in sorted(accounts):
+        await acquire_account_xact_lock(session, user_sub)
     conflicts: list[ConflictResult] = []
     for assignment in assignments:
         conflicts += await check_service_assignment_conflicts(
