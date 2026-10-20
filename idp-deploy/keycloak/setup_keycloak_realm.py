@@ -194,15 +194,23 @@ class KeycloakAdminClient:
             )
             role.raise_for_status()
             roles.append(role.json())
-        mapping = requests.post(
-            f"{base}/users/{sa.json()['id']}/role-mappings/clients/{rm_uuid}",
-            json=roles,
-            headers=self._headers(),
-            timeout=10,
-        )
+        mapping_url = f"{base}/users/{sa.json()['id']}/role-mappings/clients/{rm_uuid}"
+        mapping = requests.post(mapping_url, json=roles, headers=self._headers(), timeout=10)
         if mapping.status_code != 204:
             print(f"✗ Failed to assign roles: {mapping.status_code} {mapping.text}")
             raise Exception(f"Failed to assign roles: {mapping.text}")
+
+        # An existing client may carry broader realm-management roles from
+        # earlier setups; revoke everything beyond the provisioning roles.
+        current = requests.get(mapping_url, headers=self._headers(), timeout=10)
+        current.raise_for_status()
+        extras = [r for r in current.json() if r.get("name") not in self.PROVISIONING_ROLES]
+        if extras:
+            revoke = requests.delete(mapping_url, json=extras, headers=self._headers(), timeout=10)
+            if revoke.status_code != 204:
+                print(f"✗ Failed to revoke roles: {revoke.status_code} {revoke.text}")
+                raise Exception(f"Failed to revoke roles: {revoke.text}")
+            print(f"✓ Revoked extra roles: {', '.join(r['name'] for r in extras)}")
         print(f"✓ Service account roles: {', '.join(self.PROVISIONING_ROLES)}")
 
     def get_realm(self, realm_name: str) -> dict:

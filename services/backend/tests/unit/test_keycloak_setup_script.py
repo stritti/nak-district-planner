@@ -73,9 +73,7 @@ def test_realm_security_defaults_payload() -> None:
     assert "length(15)" in payload["passwordPolicy"]
 
 
-def test_provisioning_client_is_confidential_service_account_with_minimal_roles() -> None:
-    module = _load()
-
+def _provisioning_fake_get(current_mappings: list[dict]):
     def fake_get(url, **_kwargs):
         if url.endswith("clientId=nak-planner-provisioning"):
             return _response(200, [{"id": "prov-uuid"}])
@@ -83,11 +81,20 @@ def test_provisioning_client_is_confidential_service_account_with_minimal_roles(
             return _response(200, [{"id": "rm-uuid"}])
         if url.endswith("/service-account-user"):
             return _response(200, {"id": "sa-user"})
+        if url.endswith("/role-mappings/clients/rm-uuid"):
+            return _response(200, current_mappings)
         role = url.rsplit("/", 1)[-1]
         return _response(200, {"id": f"{role}-id", "name": role})
 
+    return fake_get
+
+
+def test_provisioning_client_is_confidential_service_account_with_minimal_roles() -> None:
+    module = _load()
+    current_mappings = [{"name": "manage-users"}, {"name": "view-users"}]
+
     with (
-        patch.object(module.requests, "get", side_effect=fake_get),
+        patch.object(module.requests, "get", side_effect=_provisioning_fake_get(current_mappings)),
         patch.object(module.requests, "post", side_effect=[_response(201), _response(204)]) as post,
     ):
         _admin(module).ensure_provisioning_client("nak-planner", "nak-planner-provisioning")
@@ -206,3 +213,16 @@ def test_main_uses_custom_health_url() -> None:
         module.main()
 
     assert get.call_args_list[0].args[0] == "https://auth.example/realms/nak-planner"
+
+
+def test_existing_provisioning_client_extra_roles_are_revoked() -> None:
+    module = _load()
+    current = [{"name": "manage-users"}, {"name": "view-users"}, {"name": "realm-admin"}]
+    with (
+        patch.object(module.requests, "get", side_effect=_provisioning_fake_get(current)),
+        patch.object(module.requests, "post", side_effect=[_response(409), _response(204)]),
+        patch.object(module.requests, "delete", return_value=_response(204)) as delete,
+    ):
+        _admin(module).ensure_provisioning_client("nak-planner", "nak-planner-provisioning")
+
+    assert delete.call_args.kwargs["json"] == [{"name": "realm-admin"}]
