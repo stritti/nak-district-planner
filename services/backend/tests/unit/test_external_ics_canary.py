@@ -89,6 +89,18 @@ def test_a_leak_outranks_an_unreadable_sink(tmp_path: Path) -> None:
     _assert_secret_not_reported(result)
 
 
+@pytest.mark.parametrize("encoding", ["utf-16", "utf-16-le", "utf-32"])
+def test_utf16_and_utf32_exports_are_never_approved_as_clean(
+    tmp_path: Path, encoding: str
+) -> None:
+    source = tmp_path / "proxy.log"
+    source.write_bytes(f"GET /api/v1/export/{TOKEN}/calendar.ics\n".encode(encoding))
+    result = _run(sources=[str(source)])
+    assert result.returncode == 2
+    assert "INCOMPLETE" in result.stderr
+    _assert_secret_not_reported(result)
+
+
 def test_gzip_log_export_is_never_approved_as_clean(tmp_path: Path) -> None:
     source = tmp_path / "proxy.jsonl.gz"
     source.write_bytes(gzip.compress(f"request={TOKEN}".encode()))

@@ -44,6 +44,10 @@ def _contains_token(path: Path, token: bytes) -> bool:
             raise ValueError("unsupported compressed log export")
         source.seek(0)
         while chunk := source.read(_CHUNK_SIZE):
+            # UTF-16/32 text (with or without BOM) interleaves NUL bytes and would hide
+            # the ASCII token; only ASCII-compatible exports such as UTF-8 are scanned.
+            if b"\x00" in chunk:
+                raise ValueError("unsupported text encoding")
             data = overlap + chunk
             if token in data:
                 return True
