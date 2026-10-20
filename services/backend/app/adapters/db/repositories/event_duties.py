@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, delete, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
-from app.adapters.db.locks import acquire_advisory_xact_lock
+from app.adapters.db.locks import acquire_account_xact_lock, acquire_advisory_xact_lock
 from app.adapters.db.orm_models.event_duty import (
     DutyNameSuggestionORM,
     EventDutyAssignmentORM,
@@ -143,6 +143,9 @@ class SqlEventDutiesRepository(EventDutiesRepository):
 
     async def lock_leader(self, leader_id):
         await acquire_advisory_xact_lock(self.session, leader_id)
+
+    async def lock_account(self, user_sub):
+        await acquire_account_xact_lock(self.session, user_sub)
 
     async def list_identity_schedule(
         self, district_id, *, linked_user_sub, normalized_name, leader_id, window_start,

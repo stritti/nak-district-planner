@@ -381,3 +381,29 @@ async def test_assigning_a_leader_to_a_service_checks_the_leaders_duties(session
             db, event_id=ids["here"], leader_id=leader_id
         )
     assert [(c.rule_id, c.severity.value) for c in conflicts][:1] == [("no_double_booking", "BLOCK")]
+
+
+async def test_an_account_matches_its_linked_leader_outside_the_callers_leader_rls(
+    sessions, leader_world, members
+):
+    """An account duty meets the service of the leader linked to it, even in c2 for a c1 planner."""
+    ids, leader_id, service_slot = leader_world
+    _, sub, subs = members
+    async with sessions() as db, db.begin():
+        await db.execute(
+            text("UPDATE leaders SET user_sub=:s, congregation_id=:c WHERE id=:l"),
+            {"s": sub, "c": ids["c2"], "l": leader_id},
+        )
+    async with sessions() as db, db.begin():
+        await _as_app_user(db, subs["planner_c1"])
+        visible = (
+            await db.execute(text("SELECT count(*) FROM leaders WHERE id=:l"), {"l": leader_id})
+        ).scalar_one()
+        found = await SqlEventDutiesRepository(db).list_identity_schedule(
+            ids["district"], linked_user_sub=sub, normalized_name=None, leader_id=None,
+            window_start=START - timedelta(hours=2), window_end=START + timedelta(hours=5),
+            exclude_slot_id=ids["here"],
+        )
+    assert visible == 0  # the leader itself stays hidden from the c1 planner
+    assert service_slot in {d.slot_id for d in found}
+    assert all(d.strong for d in found)

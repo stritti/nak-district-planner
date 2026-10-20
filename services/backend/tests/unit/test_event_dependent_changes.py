@@ -6,6 +6,7 @@
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -55,8 +56,15 @@ def _repos(slot: PlanningSlot, assignments: list[ServiceAssignment] | None = Non
 
 
 @contextmanager
-def _patches(conflicts: list[ConflictResult] | None = None):
+def _patches(conflicts: list[ConflictResult] | None = None, accounts: dict | None = None):
+    """``accounts`` maps leader IDs to their linked account (none linked by default)."""
+    leaders = MagicMock()
+    leaders.return_value.get = AsyncMock(
+        side_effect=lambda leader_id: SimpleNamespace(user_sub=(accounts or {}).get(leader_id))
+    )
     mocks = {
+        "SqlLeaderRepository": leaders,
+        "acquire_account_xact_lock": AsyncMock(),
         "require_role_in_district": MagicMock(),
         "ensure_leader_in_district": AsyncMock(),
         "acquire_advisory_xact_lock": AsyncMock(),
@@ -193,6 +201,30 @@ async def test_revalidation_locks_leaders_in_id_order() -> None:
     locked = [call.args[1] for call in mocks["acquire_advisory_xact_lock"].await_args_list]
     assert locked == sorted(locked, key=str)
     assert len(locked) == 2
+
+
+@pytest.mark.asyncio
+async def test_revalidation_locks_linked_accounts_after_all_leaders() -> None:
+    slot = _slot()
+    assignments = [_assigned(slot), _assigned(slot), _assigned(slot)]
+    accounts = {assignments[0].leader_id: "sub-b", assignments[1].leader_id: "sub-a"}
+    repos = _repos(slot, assignments)
+    order = MagicMock()
+    with _patches(accounts=accounts) as mocks:
+        order.attach_mock(mocks["acquire_advisory_xact_lock"], "leader")
+        order.attach_mock(mocks["acquire_account_xact_lock"], "account")
+        await _update(
+            slot,
+            repos,
+            events.EventUpdate(start_at=NEW_START),
+            if_match=events.slot_revision(slot),
+        )
+    kinds = [name for name, _, _ in order.mock_calls]
+    assert kinds == ["leader"] * 3 + ["account"] * 2
+    assert [c.args[1] for c in mocks["acquire_account_xact_lock"].await_args_list] == [
+        "sub-a",
+        "sub-b",
+    ]
 
 
 @pytest.mark.asyncio

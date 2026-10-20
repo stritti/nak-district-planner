@@ -32,7 +32,7 @@ from app.adapters.api.schemas.service_assignment import (
 )
 from app.adapters.api.tenant_references import ensure_leader_in_district
 from app.adapters.auth.permissions import require_role_in_district
-from app.adapters.db.locks import acquire_advisory_xact_lock
+from app.adapters.db.locks import acquire_account_xact_lock, acquire_advisory_xact_lock
 from app.adapters.db.repositories.event_instance import SqlEventInstanceRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.adapters.db.repositories.planning_slot import SqlPlanningSlotRepository
@@ -81,6 +81,9 @@ async def _check_leader(
     await acquire_advisory_xact_lock(db, leader_id)
     await ensure_leader_in_district(db, district_id, leader_id)
     leader = await SqlLeaderRepository(db).get(leader_id)
+    if leader is not None and leader.user_sub:
+        # Duties booked by the leader's own account take this lock (leader id first).
+        await acquire_account_xact_lock(db, leader.user_sub)
     slot = await SqlPlanningSlotRepository(db).get(event_id)
     if leader is None or slot is None or not leader.is_eligible_on(slot.planning_date):
         raise HTTPException(
