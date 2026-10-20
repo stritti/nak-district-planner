@@ -9,6 +9,10 @@ Automatisiert den Setup eines Keycloak-Realms für NAK Planner OIDC:
 - Erstellt Realm "nak-planner"
 - Erstellt OIDC Client "nak-planner-frontend" (Public für PKCE)
 - Legt einen Audience-Mapper an (aud = Client-ID, sonst lehnt das Backend die Tokens ab)
+- Setzt sichere Realm-Defaults (keine Selbstregistrierung, E-Mail-Verifikation,
+  Brute-Force-Schutz, Passwort-Policy)
+- Erstellt den Confidential Client "nak-planner-provisioning" (Service Account,
+  nur manage-users/view-users) für das IdP-Provisioning des Backends
 - Konfiguriert Redirect URIs für Auth Callback
 - Konfiguriert Logout URIs
 - Erstellt Test-User
@@ -118,6 +122,91 @@ class KeycloakAdminClient:
         else:
             print(f"✗ Failed to create realm: {response.status_code} {response.text}")
             raise Exception(f"Failed to create realm: {response.text}")
+
+    # NIST SP 800-63B: length over composition rules. Self-registration stays
+    # off because registration and approval run through the application.
+    REALM_SECURITY_DEFAULTS = {
+        "registrationAllowed": False,
+        "verifyEmail": True,
+        "loginWithEmailAllowed": True,
+        "resetPasswordAllowed": True,
+        "bruteForceProtected": True,
+        "passwordPolicy": "length(12) and notUsername and notEmail",
+    }
+
+    def apply_realm_security_defaults(self, realm_name: str) -> None:
+        """Apply REALM_SECURITY_DEFAULTS to a new or existing realm (partial update)."""
+        url = f"{self.keycloak_url}/admin/realms/{realm_name}"
+        response = requests.put(
+            url, json=self.REALM_SECURITY_DEFAULTS, headers=self._headers(), timeout=10
+        )
+        if response.status_code != 204:
+            print(f"✗ Failed to apply realm defaults: {response.status_code} {response.text}")
+            raise Exception(f"Failed to apply realm defaults: {response.text}")
+        print("✓ Realm security defaults applied")
+
+    PROVISIONING_ROLES = ("manage-users", "view-users")
+
+    def ensure_provisioning_client(self, realm_name: str, client_id: str) -> str:
+        """Create the backend's provisioning client and return its secret.
+
+        Confidential client with only the client credentials grant; its service
+        account gets nothing but realm-management manage-users/view-users.
+        """
+        print(f"Creating provisioning client: {client_id} in realm {realm_name}...")
+        base = f"{self.keycloak_url}/admin/realms/{realm_name}"
+        payload = {
+            "clientId": client_id,
+            "name": client_id,
+            "description": "NAK Planner backend IdP provisioning (service account)",
+            "enabled": True,
+            "protocol": "openid-connect",
+            "publicClient": False,
+            "clientAuthenticatorType": "client-secret",
+            "serviceAccountsEnabled": True,
+            "standardFlowEnabled": False,
+            "implicitFlowEnabled": False,
+            "directAccessGrantsEnabled": False,
+        }
+        response = requests.post(
+            f"{base}/clients", json=payload, headers=self._headers(), timeout=10
+        )
+        if response.status_code == 409:
+            print(f"⚠ Client already exists: {client_id}")
+        elif response.status_code != 201:
+            print(f"✗ Failed to create client: {response.status_code} {response.text}")
+            raise Exception(f"Failed to create client: {response.text}")
+        client_uuid = self.get_client_by_id(realm_name, client_id)["id"]
+
+        sa = requests.get(
+            f"{base}/clients/{client_uuid}/service-account-user",
+            headers=self._headers(),
+            timeout=10,
+        )
+        sa.raise_for_status()
+        rm_uuid = self.get_client_by_id(realm_name, "realm-management")["id"]
+        roles = []
+        for role_name in self.PROVISIONING_ROLES:
+            role = requests.get(
+                f"{base}/clients/{rm_uuid}/roles/{role_name}", headers=self._headers(), timeout=10
+            )
+            role.raise_for_status()
+            roles.append(role.json())
+        mapping = requests.post(
+            f"{base}/users/{sa.json()['id']}/role-mappings/clients/{rm_uuid}",
+            json=roles,
+            headers=self._headers(),
+            timeout=10,
+        )
+        if mapping.status_code != 204:
+            print(f"✗ Failed to assign roles: {mapping.status_code} {mapping.text}")
+            raise Exception(f"Failed to assign roles: {mapping.text}")
+        print(f"✓ Service account roles: {', '.join(self.PROVISIONING_ROLES)}")
+
+        secret = self.get_client_secret(realm_name, client_uuid)
+        if not secret:
+            raise Exception(f"Client secret not available: {client_id}")
+        return secret
 
     def get_realm(self, realm_name: str) -> dict:
         """Get realm details"""
@@ -333,6 +422,11 @@ def main():
     )
     parser.add_argument("--realm-name", default="nak-planner", help="Realm name")
     parser.add_argument("--client-id", default="nak-planner-frontend", help="OIDC Client ID")
+    parser.add_argument(
+        "--provisioning-client-id",
+        default="nak-planner-provisioning",
+        help="Confidential client for backend IdP provisioning (service account)",
+    )
     parser.add_argument("--test-user", default="testuser", help="Test user username")
     parser.add_argument(
         "--test-password", default="testpassword123", help="Test user password"
@@ -398,6 +492,7 @@ def main():
 
         # 1. Create Realm
         admin.create_realm(args.realm_name, "NAK Planner")
+        admin.apply_realm_security_defaults(args.realm_name)
 
         # 2. Create OIDC Public Client
         redirect_uris = [
@@ -416,6 +511,11 @@ def main():
 
         # 3. Audience mapper: aud must contain the client ID the backend validates
         admin.ensure_audience_mapper(args.realm_name, client["id"], args.client_id)
+
+        # 3b. Provisioning client (service account, least privilege)
+        provisioning_secret = admin.ensure_provisioning_client(
+            args.realm_name, args.provisioning_client_id
+        )
 
         # 4. Create Test User
         admin.create_user(
@@ -449,6 +549,10 @@ def main():
         print(f"  Username: {args.test_user}")
         print(f"  Password: {args.test_password}")
         print(f"  Email:    {args.test_email}\n")
+
+        print("Backend IdP provisioning (.env, shown once; store it securely):")
+        print(f"  IDP_PROVISIONING_KEYCLOAK_CLIENT_ID={args.provisioning_client_id}")
+        print(f"  IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET={provisioning_secret}\n")
 
         print("Frontend Environment Variables (.env.local):")
         print(f"  VITE_OIDC_DISCOVERY_URL={discovery_url}")

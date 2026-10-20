@@ -19,7 +19,7 @@
 
 **Client Credentials statt Password-Grant.** Ein Confidential Client `nak-planner-provisioning` im App-Realm mit aktiviertem Service Account und nur `realm-management: manage-users, view-users`. Token-Endpunkt ist `/realms/{realm}/protocol/openid-connect/token`. `manage-users` deckt Anlegen und `execute-actions-email` ab, `view-users` die Suche. Alternative: weiter ein Admin-Benutzer, aber im App-Realm statt master. Verworfen, weil weiterhin ein interaktiv nutzbares Passwort existiert und Rollen schwerer zu begrenzen sind.
 
-**Altes Verfahren ersatzlos entfernen.** Kein Fallback auf Password-Grant, damit kein zweiter, schwächerer Pfad bleibt. Der Produktions-Guard lehnt gesetzte `IDP_PROVISIONING_KEYCLOAK_ADMIN_*` aktiv ab, damit das Update nicht still mit kaputter Provisionierung startet. Außerhalb von Produktion werden die alten Variablen ignoriert und einmal als veraltet geloggt.
+**Altes Verfahren ersatzlos entfernen.** Kein Fallback auf Password-Grant, damit kein zweiter, schwächerer Pfad bleibt. Der Produktions-Guard lehnt gesetzte `IDP_PROVISIONING_KEYCLOAK_ADMIN_*` aktiv ab, damit das Update nicht still mit kaputter Provisionierung startet. Außerhalb von Produktion werden die alten Variablen ignoriert.
 
 **Laufzeit und Rücksprung als Settings.** `IDP_PROVISIONING_KEYCLOAK_INVITE_LIFESPAN_SECONDS` (Pydantic `Field(ge=3600, le=604800)`, Default 259200) wird immer als `lifespan` gesendet. `IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI` ist optional; nur wenn gesetzt, werden `client_id` (= `OIDC_CLIENT_ID`) und `redirect_uri` mitgeschickt. Keycloak prüft die URI gegen die Redirect-URIs des Clients, daher keine eigene Allowlist. In Produktion muss die URI `https://` verwenden.
 

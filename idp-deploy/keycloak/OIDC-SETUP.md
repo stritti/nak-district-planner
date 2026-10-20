@@ -40,6 +40,11 @@ python3 setup_keycloak_realm.py \
 # This will:
 # - Create realm "nak-planner"
 # - Create public OIDC client "nak-planner-frontend"
+# - Apply secure realm defaults (no self-registration, verify email,
+#   brute-force detection, password policy length(12))
+# - Create confidential client "nak-planner-provisioning" (service account with
+#   only realm-management manage-users/view-users) and print its secret once
+#   -> IDP_PROVISIONING_KEYCLOAK_CLIENT_ID / _CLIENT_SECRET in the backend .env
 # - Create test user "testuser" / "testpassword123"
 # - Export realm config
 # - Print OIDC Discovery URL

@@ -161,8 +161,8 @@ async def test_keycloak_provisioning_adapter_create_and_invite() -> None:
     adapter = KeycloakProvisioningAdapter(
         base_url="https://kc.example.com",
         realm="nak-planner",
-        admin_username="admin",
-        admin_password="secret",
+        client_id="nak-planner-provisioning",
+        client_secret="secret",
         timeout_seconds=2,
         invite_on_approval=True,
     )
@@ -204,8 +204,8 @@ async def test_keycloak_provisioning_adapter_existing_user() -> None:
     adapter = KeycloakProvisioningAdapter(
         base_url="https://kc.example.com",
         realm="nak-planner",
-        admin_username="admin",
-        admin_password="secret",
+        client_id="nak-planner-provisioning",
+        client_secret="secret",
         timeout_seconds=2,
         invite_on_approval=False,
     )
@@ -239,8 +239,8 @@ def _kc_adapter(invite: bool) -> KeycloakProvisioningAdapter:
     return KeycloakProvisioningAdapter(
         base_url="https://kc.example.com",
         realm="nak-planner",
-        admin_username="admin",
-        admin_password="secret",
+        client_id="nak-planner-provisioning",
+        client_secret="secret",
         timeout_seconds=2,
         invite_on_approval=invite,
     )
@@ -257,6 +257,94 @@ async def _kc_provision(adapter: KeycloakProvisioningAdapter, client_ctx: AsyncM
             scope_type="DISTRICT",
             scope_id=str(uuid.uuid4()),
         )
+
+
+@pytest.mark.asyncio
+async def test_keycloak_token_uses_client_credentials_in_app_realm() -> None:
+    token_resp = MagicMock(status_code=200)
+    token_resp.json.return_value = {"access_token": "t"}
+    lookup = MagicMock(status_code=200)
+    lookup.json.return_value = [{"id": "existing-1", "emailVerified": True}]
+    client_ctx = AsyncMock()
+    c = client_ctx.__aenter__.return_value
+    c.post = AsyncMock(return_value=token_resp)
+    c.get = AsyncMock(return_value=lookup)
+
+    await _kc_provision(_kc_adapter(False), client_ctx)
+
+    token_call = c.post.await_args_list[0]
+    assert token_call.args[0] == (
+        "https://kc.example.com/realms/nak-planner/protocol/openid-connect/token"
+    )
+    assert token_call.kwargs["data"] == {
+        "grant_type": "client_credentials",
+        "client_id": "nak-planner-provisioning",
+        "client_secret": "secret",
+    }
+    called_urls = [call.args[0] for call in c.post.await_args_list + c.get.await_args_list]
+    assert not any("/realms/master/" in url for url in called_urls)
+
+
+@pytest.mark.asyncio
+async def test_keycloak_rejected_client_credentials_do_not_leak_secret() -> None:
+    client_ctx = AsyncMock()
+    c = client_ctx.__aenter__.return_value
+    c.post = AsyncMock(return_value=MagicMock(status_code=401, text="unauthorized_client"))
+
+    with pytest.raises(IdpProvisioningError) as exc_info:
+        await _kc_provision(_kc_adapter(False), client_ctx)
+
+    assert "401" in str(exc_info.value)
+    assert "secret" not in str(exc_info.value)
+
+
+def _invite_client_ctx() -> AsyncMock:
+    token_resp = MagicMock(status_code=200)
+    token_resp.json.return_value = {"access_token": "t"}
+    lookup = MagicMock(status_code=200)
+    lookup.json.return_value = [{"id": "existing-1", "emailVerified": True}]
+    client_ctx = AsyncMock()
+    c = client_ctx.__aenter__.return_value
+    c.post = AsyncMock(return_value=token_resp)
+    c.get = AsyncMock(return_value=lookup)
+    c.put = AsyncMock(return_value=MagicMock(status_code=204, text=""))
+    return client_ctx
+
+
+@pytest.mark.asyncio
+async def test_keycloak_invite_sends_default_lifespan_without_redirect() -> None:
+    client_ctx = _invite_client_ctx()
+
+    await _kc_provision(_kc_adapter(True), client_ctx)
+
+    put_call = client_ctx.__aenter__.return_value.put.await_args
+    assert put_call.kwargs["params"] == {"lifespan": 259200}
+    assert put_call.kwargs["json"] == ["VERIFY_EMAIL", "UPDATE_PASSWORD"]
+
+
+@pytest.mark.asyncio
+async def test_keycloak_invite_sends_client_id_and_redirect_when_configured() -> None:
+    adapter = KeycloakProvisioningAdapter(
+        base_url="https://kc.example.com",
+        realm="nak-planner",
+        client_id="nak-planner-provisioning",
+        client_secret="secret",
+        timeout_seconds=2,
+        invite_on_approval=True,
+        invite_lifespan_seconds=3600,
+        invite_client_id="nak-planner",
+        invite_redirect_uri="https://planner.example.org/",
+    )
+    client_ctx = _invite_client_ctx()
+
+    await _kc_provision(adapter, client_ctx)
+
+    put_call = client_ctx.__aenter__.return_value.put.await_args
+    assert put_call.kwargs["params"] == {
+        "lifespan": 3600,
+        "client_id": "nak-planner",
+        "redirect_uri": "https://planner.example.org/",
+    }
 
 
 @pytest.mark.asyncio
