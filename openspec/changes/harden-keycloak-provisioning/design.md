@@ -23,7 +23,7 @@
 
 **Laufzeit und Rücksprung als Settings.** `IDP_PROVISIONING_KEYCLOAK_INVITE_LIFESPAN_SECONDS` (Pydantic `Field(ge=3600, le=604800)`, Default 259200) wird immer als `lifespan` gesendet. `IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI` ist optional; nur wenn gesetzt, werden `client_id` (= `OIDC_CLIENT_ID`) und `redirect_uri` mitgeschickt. Keycloak prüft die URI gegen die Redirect-URIs des Clients, daher keine eigene Allowlist. Ziel ist die App-Wurzel (nicht `/auth/callback`, das ohne Code fehlschlägt); das Setup-Skript nimmt sie in die Redirect-URIs auf. In Produktion muss die URI `https://` verwenden.
 
-**Realm-Defaults im Setup-Skript.** `registrationAllowed=false`, `verifyEmail=true`, `loginWithEmailAllowed=true`, `resetPasswordAllowed=true`, `bruteForceProtected=true`, `passwordPolicy="length(15) and notUsername and notEmail"`. Keine Zeichenklassen-Regeln (NIST SP 800-63B). Bestehende Realms werden per `PUT` auf diese Werte gebracht; das Skript gibt das Client-Secret einmalig aus, statt es in eine Datei zu schreiben.
+**Realm-Defaults im Setup-Skript.** `registrationAllowed=false`, `verifyEmail=true`, `loginWithEmailAllowed=true`, `resetPasswordAllowed=true`, `bruteForceProtected=true`, `passwordPolicy="length(15) and notUsername and notEmail"`. Keine Zeichenklassen-Regeln (NIST SP 800-63B). Bestehende Realms werden per `PUT` auf diese Werte gebracht; das Skript gibt das Client-Secret nicht aus (kein Secret in Terminal-Logs); es wird im Credentials-Tab abgelesen.
 
 ## Risks / Trade-offs
 

@@ -253,7 +253,7 @@ Liefert der IdP den Claim nicht, wird nicht automatisch verknüpft; der Benutzer
 
 ### Zugang des Backends zu Keycloak
 
-Das Backend holt sich per `client_credentials` ein Token im App-Realm (`/realms/<Realm>/protocol/openid-connect/token`), nie im Realm `master`. Der Service Account des Clients hat nur die Rollen `manage-users` und `view-users` des Clients `realm-management`. Damit kann er Benutzer dieses Realms suchen, anlegen und Einladungen auslösen, aber keine Realm-Einstellungen, Clients oder andere Realms ändern. `idp-deploy/keycloak/setup_keycloak_realm.py` legt den Client an und gibt das Secret einmalig aus.
+Das Backend holt sich per `client_credentials` ein Token im App-Realm (`/realms/<Realm>/protocol/openid-connect/token`), nie im Realm `master`. Der Service Account des Clients hat nur die Rollen `manage-users` und `view-users` des Clients `realm-management`. Damit kann er Benutzer dieses Realms suchen, anlegen und Einladungen auslösen, aber keine Realm-Einstellungen, Clients oder andere Realms ändern. `idp-deploy/keycloak/setup_keycloak_realm.py` legt den Client an; das Secret steht im Tab *Credentials* des Clients und wird nicht ausgegeben.
 
 ### Einladungsmail und SMTP
 

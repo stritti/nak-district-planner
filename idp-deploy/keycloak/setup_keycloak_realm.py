@@ -12,7 +12,8 @@ Automatisiert den Setup eines Keycloak-Realms für NAK Planner OIDC:
 - Setzt sichere Realm-Defaults (keine Selbstregistrierung, E-Mail-Verifikation,
   Brute-Force-Schutz, Passwort-Policy)
 - Erstellt den Confidential Client "nak-planner-provisioning" (Service Account,
-  nur manage-users/view-users) für das IdP-Provisioning des Backends
+  nur manage-users/view-users) für das IdP-Provisioning des Backends; das Secret
+  steht im Credentials-Tab des Clients und wird nicht ausgegeben
 - Konfiguriert Redirect URIs für Auth Callback
 - Konfiguriert Logout URIs
 - Erstellt nur mit --create-test-user einen Test-User (Entwicklung)
@@ -148,8 +149,8 @@ class KeycloakAdminClient:
 
     PROVISIONING_ROLES = ("manage-users", "view-users")
 
-    def ensure_provisioning_client(self, realm_name: str, client_id: str) -> str:
-        """Create the backend's provisioning client and return its secret.
+    def ensure_provisioning_client(self, realm_name: str, client_id: str) -> None:
+        """Create the backend's provisioning client.
 
         Confidential client with only the client credentials grant; its service
         account gets nothing but realm-management manage-users/view-users.
@@ -203,11 +204,6 @@ class KeycloakAdminClient:
             print(f"✗ Failed to assign roles: {mapping.status_code} {mapping.text}")
             raise Exception(f"Failed to assign roles: {mapping.text}")
         print(f"✓ Service account roles: {', '.join(self.PROVISIONING_ROLES)}")
-
-        secret = self.get_client_secret(realm_name, client_uuid)
-        if not secret:
-            raise Exception(f"Client secret not available: {client_id}")
-        return secret
 
     def get_realm(self, realm_name: str) -> dict:
         """Get realm details"""
@@ -523,7 +519,7 @@ def main():
         admin.ensure_audience_mapper(args.realm_name, client["id"], args.client_id)
 
         # 3b. Provisioning client (service account, least privilege)
-        provisioning_secret = admin.ensure_provisioning_client(
+        admin.ensure_provisioning_client(
             args.realm_name, args.provisioning_client_id
         )
 
@@ -560,12 +556,16 @@ def main():
         if args.create_test_user:
             print("Test User Credentials:")
             print(f"  Username: {args.test_user}")
-            print(f"  Password: {args.test_password}")
+            print("  Password: value of --test-password")
             print(f"  Email:    {args.test_email}\n")
 
-        print("Backend IdP provisioning (.env, shown once; store it securely):")
+        # The secret is never printed; copy it from the admin console.
+        print("Backend IdP provisioning (.env):")
         print(f"  IDP_PROVISIONING_KEYCLOAK_CLIENT_ID={args.provisioning_client_id}")
-        print(f"  IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET={provisioning_secret}\n")
+        print(
+            "  IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET=<Admin console: Clients → "
+            f"{args.provisioning_client_id} → Credentials>\n"
+        )
 
         print("Frontend Environment Variables (.env.local):")
         print(f"  VITE_OIDC_DISCOVERY_URL={discovery_url}")

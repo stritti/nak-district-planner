@@ -14,7 +14,7 @@
 ## 3. Realm-Setup-Skript
 
 - [x] 3.1 `setup_keycloak_realm.py` setzt die sicheren Realm-Defaults (auch bei bestehendem Realm per `PUT`); verifiziert durch Erweiterung von `tests/unit/test_keycloak_setup_script.py`, die das Payload prüft.
-- [x] 3.2 Skript legt den Confidential Client `nak-planner-provisioning` mit Service Account und nur `manage-users`/`view-users` an und gibt das Secret einmalig aus; verifiziert durch Unit-Test auf Client-Payload und Rollen-Zuweisung.
+- [x] 3.2 Skript legt den Confidential Client `nak-planner-provisioning` mit Service Account und nur `manage-users`/`view-users` an ohne das Secret auszugeben; verifiziert durch Unit-Test auf Client-Payload und Rollen-Zuweisung.
 
 - [x] 3.3 Testbenutzer nur mit `--create-test-user`, App-Wurzel als zusätzliche Redirect-URI des Frontend-Clients; verifiziert durch Unit-Tests auf das Argument und die Redirect-URIs.
 

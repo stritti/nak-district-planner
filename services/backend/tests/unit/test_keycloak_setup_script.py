@@ -83,8 +83,6 @@ def test_provisioning_client_is_confidential_service_account_with_minimal_roles(
             return _response(200, [{"id": "rm-uuid"}])
         if url.endswith("/service-account-user"):
             return _response(200, {"id": "sa-user"})
-        if url.endswith("/client-secret"):
-            return _response(200, {"value": "generated-secret"})
         role = url.rsplit("/", 1)[-1]
         return _response(200, {"id": f"{role}-id", "name": role})
 
@@ -92,11 +90,8 @@ def test_provisioning_client_is_confidential_service_account_with_minimal_roles(
         patch.object(module.requests, "get", side_effect=fake_get),
         patch.object(module.requests, "post", side_effect=[_response(201), _response(204)]) as post,
     ):
-        secret = _admin(module).ensure_provisioning_client(
-            "nak-planner", "nak-planner-provisioning"
-        )
+        _admin(module).ensure_provisioning_client("nak-planner", "nak-planner-provisioning")
 
-    assert secret == "generated-secret"
     client_payload = post.call_args_list[0].kwargs["json"]
     assert client_payload["publicClient"] is False
     assert client_payload["serviceAccountsEnabled"] is True
@@ -127,7 +122,6 @@ def test_frontend_client_is_created_public() -> None:
 
 def _run_main(module, *extra_args: str) -> MagicMock:
     admin = MagicMock()
-    admin.ensure_provisioning_client.return_value = "secret"
     admin.create_oidc_public_client.return_value = {"id": "c1"}
     argv = ["setup", "--keycloak-url", "http://kc", "--admin-password", "pw", *extra_args]
     with (
@@ -139,9 +133,11 @@ def _run_main(module, *extra_args: str) -> MagicMock:
     return admin
 
 
-def test_main_skips_test_user_by_default_and_allowlists_app_root() -> None:
+def test_main_skips_test_user_by_default_and_allowlists_app_root(capsys) -> None:
     module = _load()
     admin = _run_main(module)
+
+    assert "testpassword123" not in capsys.readouterr().out
 
     admin.create_user.assert_not_called()
     redirect_uris = admin.create_oidc_public_client.call_args.kwargs["redirect_uris"]
