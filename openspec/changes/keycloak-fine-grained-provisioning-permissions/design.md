@@ -1,6 +1,6 @@
 ## Context
 
-Stand nach `harden-keycloak-provisioning` (archiviert 2026-10-20): Confidential Client `nak-planner-provisioning` mit Service Account und `realm-management`-Rollen `manage-users`/`view-users`. Das Backend nutzt nur vier Admin-API-Aufrufe: Benutzer per E-Mail suchen, Benutzer anlegen, bei 409 erneut suchen, `execute-actions-email`. Der mitgelieferte Keycloak ist 26.8 (`docker-compose.prod.yml`), FGAP v2 gibt es ab 26.2. Motivation siehe `proposal.md`, Anforderung siehe `specs/approved-user-onboarding/spec.md`.
+Stand nach `harden-keycloak-provisioning` (archiviert 2026-10-20): Confidential Client `nak-planner-provisioning` mit Service Account und `realm-management`-Rollen `manage-users`/`view-users`. Das Backend nutzt nur vier Admin-API-Aufrufe: Benutzer per E-Mail suchen, Benutzer anlegen, bei 409 erneut suchen, `execute-actions-email`. Der mitgelieferte Keycloak ist 26.8 (`docker-compose.prod.yml`, Tag ohne Patch-Version), FGAP v2 gibt es ab 26.2, den Scope `reset-password` ab 26.4. Bis einschließlich 26.8.0 ließ sich eine `reset-password`-Sperre über ein allgemeines Benutzer-Update mit `credentials` (CVE-2026-97177, keycloak/keycloak#53158) und über das Löschen von Credentials (CVE-2026-94001, #53057) umgehen; beides ist in 26.8.1 behoben. Motivation siehe `proposal.md`, Anforderung siehe `specs/approved-user-onboarding/spec.md`.
 
 ## Goals / Non-Goals
 
@@ -11,7 +11,7 @@ Stand nach `harden-keycloak-provisioning` (archiviert 2026-10-20): Confidential 
 **Non-Goals:**
 - Keine Änderung am Backend-Code oder an der Konfiguration der App.
 - Keine Einschränkung auf einzelne Gruppen oder Benutzerteilmengen (alle Benutzer des App-Realms bleiben Ziel).
-- Keine Unterstützung für Keycloak < 26.2 in der dokumentierten Einrichtung; das Skript bricht dort ab.
+- Keine Unterstützung für Keycloak < 26.8.1 in der dokumentierten Einrichtung; das Skript bricht dort ab.
 - Kein Verbot von Löschen und Attributänderungen: Keycloak 26.8 bindet Anlegen und `execute-actions-email` an `manage`, das beides einschließt (siehe Risiken).
 
 ## Decisions
@@ -20,9 +20,9 @@ Stand nach `harden-keycloak-provisioning` (archiviert 2026-10-20): Confidential 
 
 **Scopes `view` und `manage`.** Laut Admin-Handbuch 26.8 decken `manage` Anlegen, Bearbeiten und Löschen ab, und `execute-actions-email` verlangt derzeit `manage`, nicht `reset-password` (keycloak/keycloak#51411). `view` wird für Suche und Lesen gebraucht. `map-roles`, `manage-group-membership`, `impersonate` und `delegate` bleiben ungesetzt. Der erste Task bestätigt das gegen die eingesetzte Version; ändert Keycloak die Zuordnung, wird die Spec angepasst.
 
-**Role-Policy statt Client-Policy.** `view`-Permissions werden für Benutzerabfragen teilweise vorab ausgewertet und funktionieren laut Handbuch 26.8 nur mit User-, Group-, Role- oder unterstützten Aggregated-Policies. Eine Client-Policy würde die Suche per E-Mail nach dem Entzug von `view-users` brechen. Deshalb bekommt der Service Account eine eigene Realm-Rolle `nak-planner-provisioner`, und die Permission referenziert eine Role-Policy darauf. Die Rolle bleibt stabil, auch wenn der Service-Account-Benutzer neu angelegt wird; eine User-Policy müsste dann aktualisiert werden. Die Rolle selbst gewährt in Keycloak nichts außer über diese Policy.
+**Role-Policy statt Client-Policy.** `view`-Permissions werden für Benutzerabfragen teilweise vorab ausgewertet und funktionieren laut Handbuch 26.8 nur mit User-, Group-, Role- oder unterstützten Aggregated-Policies. Eine Client-Policy würde die Suche per E-Mail nach dem Entzug von `view-users` brechen. Deshalb bekommt der Service Account eine eigene Realm-Rolle `nak-planner-provisioner`, und die Permission referenziert eine Role-Policy darauf. Die Rolle bleibt stabil, auch wenn der Service-Account-Benutzer neu angelegt wird; eine User-Policy müsste dann aktualisiert werden. Role-Policies berücksichtigen standardmäßig nur Rollen im Scope des anfragenden Clients; das Skript trägt `nak-planner-provisioner` deshalb idempotent in die Role-Scope-Mappings des Provisioning-Clients ein, damit es auch mit `Full Scope Allowed = false` funktioniert. Die Rolle selbst gewährt in Keycloak nichts außer über diese Policy.
 
-**`reset-password` explizit sperren.** Ohne eigene `reset-password`-Permission fällt Keycloak 26.8 auf `manage` zurück; der Service Account könnte dann Passwörter beliebiger Benutzer setzen und Konten übernehmen. Das Skript legt deshalb eine Users-Permission mit Scope `reset-password` an, deren Role-Policy auf eine nie zugewiesene Realm-Rolle `nak-planner-password-reset` zeigt. Damit existiert die Permission und gewährt niemandem etwas. Eine negative Policy auf `nak-planner-provisioner` wäre verworfen, weil sie allen anderen FGAP-ausgewerteten Admins das Recht gewähren würde. Der Spike prüft, dass `execute-actions-email` danach weiter funktioniert; verlangt Keycloak dafür künftig `reset-password` (keycloak/keycloak#51411), muss der Change neu bewertet werden.
+**`reset-password` explizit sperren.** Ohne eigene `reset-password`-Permission fällt Keycloak 26.8 auf `manage` zurück; der Service Account könnte dann Passwörter beliebiger Benutzer setzen und Konten übernehmen. Das Skript legt deshalb eine Users-Permission mit Scope `reset-password` an, deren Role-Policy auf eine nie zugewiesene Realm-Rolle `nak-planner-password-reset` zeigt. Damit existiert die Permission und gewährt niemandem etwas. Weil Keycloak bei mehreren Permissions auf denselben Scope Deny-Overrides anwendet, würde diese Sperre auch andere Admins treffen, denen eine bestehende Permission `reset-password` für alle Benutzer gibt. Das Setup übernimmt den Scope deshalb exklusiv: Findet es eine fremde `reset-password`-Permission für alle Benutzer, bricht es ab. Die Doku nennt das; Passwort-Resets durch Helpdesk-Admins laufen weiter über `realm-management`-Rollen oder den Self-Service-Flow. Eine negative Policy auf `nak-planner-provisioner` wäre verworfen, weil sie allen anderen FGAP-ausgewerteten Admins das Recht gewähren würde. Der Spike prüft, dass `execute-actions-email` danach weiter funktioniert; verlangt Keycloak dafür künftig `reset-password` (keycloak/keycloak#51411), muss der Change neu bewertet werden.
 
 **Nur alle Benutzer als Ziel, exklusives Modell.** Ressourcenspezifische Users-Permissions haben in FGAP v2 Vorrang vor der Permission für alle Benutzer. Existieren im Realm schon solche Permissions, könnten betroffene Benutzer für den Service Account unsichtbar werden. Das Skript sucht vor dem Entzug der Legacy-Rollen nach Users-Permissions mit konkreten Benutzern und bricht mit deren Namen ab. Die Doku nennt das exklusive Modell als Voraussetzung.
 
@@ -33,13 +33,13 @@ Stand nach `harden-keycloak-provisioning` (archiviert 2026-10-20): Confidential 
 ## Risks / Trade-offs
 
 - [`manage` umfasst auch Löschen und Attribut-Änderungen] → Bewusst akzeptiert und dokumentiert: Ein kompromittiertes Backend könnte Benutzer löschen oder ändern (Verfügbarkeit, Integrität), aber keine Passwörter setzen, keine Rollen oder Gruppen vergeben und sich nicht als andere Benutzer anmelden. Zu beachten: Ein geändertes E-Mail-Attribut plus `execute-actions-email` könnte eine Einladung an eine fremde Adresse schicken; deshalb empfiehlt die Doku Admin-Events und eine Alarmierung auf `UPDATE`/`DELETE` des Service Accounts. Die App autorisiert über eigene Memberships; Keycloak-Löschungen führen zu fehlgeschlagenem Login, nicht zu Rechteausweitung. Kontrolle über Keycloak-Admin-Events (Audit) wird in der Doku empfohlen.
-- [Delegation] → `delegate` wird nicht vergeben; der Integrationstest versucht, eine Permission anzulegen, und erwartet 403.
+- [Delegation] → `delegate` wird nicht vergeben; der Integrationstest stellt eine Token-Exchange-Anfrage mit Delegation und prüft, dass weder Delegations-Scope noch `may_act` im Token stehen.
 - [FGAP-v2-Fehler in Keycloak, z. B. unerwartete Denies bei überlappenden Permissions] → Genau eine Permission pro Scope-Set, Integrationstest auf der konkreten Version.
-- [Externer Keycloak < 26.2] → Skript erkennt fehlendes FGAP v2 und bricht ohne Änderungen ab; die Upgrade-Notiz nennt 26.2 als Mindestversion. Bis zum Keycloak-Update läuft der bisherige Rollen-Ansatz weiter, ohne die neue Anforderung zu erfüllen.
+- [Externer Keycloak < 26.8.1] → Skript prüft die Serverversion und bricht ohne Änderungen ab; die Upgrade-Notiz nennt 26.8.1 als Mindestversion. Bis zum Keycloak-Update läuft der bisherige Rollen-Ansatz weiter, ohne die neue Anforderung zu erfüllen.
 
 ## Migration Plan
 
-1. Keycloak auf mindestens 26.2 (mitgeliefert: 26.8).
+1. Keycloak auf mindestens 26.8.1; `docker-compose.prod.yml` pinnt `26.8.1` statt `26.8`.
 2. Setup-Skript erneut gegen den Realm ausführen (Befehl wie in `production-compose.md`) oder Permissions laut Doku in der Admin-Konsole anlegen und danach die zwei Rollen entziehen.
 3. Eine Testfreigabe durchführen; `idp_provision_status` muss wie bisher `CREATED_INVITED` bzw. `EXISTING…` sein.
 4. Rollback: Rollen `manage-users`/`view-users` wieder zuweisen; Admin Permissions können aktiv bleiben.
