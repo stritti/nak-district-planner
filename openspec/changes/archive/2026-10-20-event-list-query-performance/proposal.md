@@ -15,4 +15,4 @@ Event-list pagination was moved into SQL in PR #618, but #626 requires load evid
 - Silently switch the public offset/limit API to keyset pagination.
 - Place load-generation artifacts or sensitive production data in source.
 
-Issue: https://github.com/stritti/nak-district-planner/issues/626
+Issue: <https://github.com/stritti/nak-district-planner/issues/626>
