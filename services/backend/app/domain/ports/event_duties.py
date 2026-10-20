@@ -122,3 +122,7 @@ class EventDutiesRepository(ABC):
         same leader cannot both pass their conflict checks concurrently.
         """
 
+    @abstractmethod
+    async def lock_account(self, user_sub):
+        """Serialize bookings of one account (a leader's linked account included)."""
+

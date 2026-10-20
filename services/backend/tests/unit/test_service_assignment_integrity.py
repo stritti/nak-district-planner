@@ -70,13 +70,16 @@ async def test_rank_prefixed_typed_name_cannot_bypass_lifecycle() -> None:
 def _patches(order: AsyncMock, slot: PlanningSlot):
     """Allow the request, record lock + conflict check in call order."""
     leader_repo = AsyncMock()
-    leader_repo.get.return_value = SimpleNamespace(is_eligible_on=lambda planning_date: True)
+    leader_repo.get.return_value = SimpleNamespace(
+        is_eligible_on=lambda planning_date: True, user_sub="leader-account"
+    )
     slot_repo = AsyncMock()
     slot_repo.get.return_value = slot
     return (
         patch(_ROUTER + "require_role_in_district"),
         patch(_ROUTER + "ensure_leader_in_district", new=AsyncMock()),
         patch(_ROUTER + "acquire_advisory_xact_lock", new=order.lock),
+        patch(_ROUTER + "acquire_account_xact_lock", new=order.account_lock),
         patch(_ROUTER + "check_service_assignment_conflicts", new=order.check),
         patch(_ROUTER + "SqlLeaderRepository", return_value=leader_repo),
         patch(_ROUTER + "SqlPlanningSlotRepository", return_value=slot_repo),
@@ -91,13 +94,15 @@ async def test_create_locks_leader_before_conflict_check() -> None:
     order.check.return_value = []
     db = AsyncMock()
     patches = _patches(order, slot)
-    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
         await sa_router.create_assignment(
             slot.id, ServiceAssignmentCreate(leader_id=leader_id), object(), db, _repo(slot), _repo(), **precondition(slot)
         )
 
-    assert order.mock_calls[:2] == [
+    # The leader's account lock is shared with duties booked by that account.
+    assert order.mock_calls[:3] == [
         call.lock(db, leader_id),
+        call.account_lock(db, "leader-account"),
         call.check(db, event_id=slot.id, leader_id=leader_id, exclude_assignment_id=None),
     ]
 
@@ -111,7 +116,7 @@ async def test_update_locks_new_leader_before_conflict_check() -> None:
     order.check.return_value = []
     db = AsyncMock()
     patches = _patches(order, slot)
-    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
         await sa_router.update_assignment(
             slot.id, assignment.id, ServiceAssignmentUpdate(leader_id=leader_id), object(), db,
             _repo(slot), _repo(assignment), AsyncMock(), **precondition(slot)
@@ -132,6 +137,7 @@ async def test_create_without_leader_takes_no_lock() -> None:
         patches[3],
         patches[4],
         patches[5],
+        patches[6],
         patch(_ROUTER + "_check_typed_name", new=AsyncMock()),
     ):
         await sa_router.create_assignment(

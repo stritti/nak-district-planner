@@ -405,6 +405,8 @@ class EventDutiesService:
             raise DutyConflictError("Duty capacity exceeded")
         linked_name = None
         if linked_user_sub:
+            # Same account lock a service of the leader linked to this account takes.
+            await self.repository.lock_account(linked_user_sub)
             linked_name = await self.repository.eligible_user_display_name(
                 district_id, slot.congregation_id, linked_user_sub
             )
@@ -418,6 +420,8 @@ class EventDutiesService:
             # Same eligibility as a service assignment: active, not retired before the event.
             if leader is None or not leader.is_eligible_on(slot.planning_date):
                 raise DutyNotFoundError("Reference not found")
+            if leader.user_sub:
+                await self.repository.lock_account(leader.user_sub)
             leader_label = f"{leader.rank.value} {leader.name}" if leader.rank else leader.name
         if suggestion_id:
             suggestion = await self.repository.get_suggestion(suggestion_id)

@@ -96,6 +96,9 @@ class Repository:
     async def lock_leader(self, leader_id):
         self.locks.append("leader")
 
+    async def lock_account(self, user_sub):
+        self.locks.append(f"account:{user_sub}")
+
     async def get_leader(self, district_id, leader_id):
         leader = self.leaders.get(leader_id)
         return leader if leader is not None and leader.district_id == district_id else None
@@ -172,7 +175,8 @@ async def test_linked_identity_and_optional_name_snapshot():
     row = await add(repo, linked_user_sub="verified")
     assert row.display_name == "User Name"
     assert row.normalized_name is None and repo.suggestions == []
-    assert repo.locks == ["slot", "category"]
+    # The account lock a service of the leader linked to this account takes as well.
+    assert repo.locks == ["slot", "category", "account:verified"]
 
 
 @pytest.mark.asyncio
@@ -550,7 +554,7 @@ async def test_a_duty_can_reference_an_existing_leader():
     assert query["linked_user_sub"] == "leader-account"
     assert query["normalized_name"] == "hans müller"
     # The per-leader lock that service assignments take, after the slot lock (same order).
-    assert repo.locks == ["slot", "category", "leader"]
+    assert repo.locks == ["slot", "category", "leader", "account:leader-account"]
 
 
 @pytest.mark.asyncio
