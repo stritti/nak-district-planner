@@ -36,6 +36,7 @@ pytestmark = pytest.mark.skipif(
 PLAN_REPORT = Path(__file__).resolve().parents[2] / "event-list-query-plans.json"
 START, END = date(2031, 1, 1), date(2031, 12, 31)
 SIZE = 50_000
+DISTRICT_DATE_INDEX = "ix_planning_slots_district_date"
 SAMPLES = 5  # measured EXPLAIN ANALYZE runs per statement, after one warm-up
 # Bounds every query of the measured path, including the warm-up list_page() call.
 _TIMEOUT = {"server_settings": {"statement_timeout": "10s"}}
@@ -210,6 +211,14 @@ async def _query_with_plans(engine, planner, **filters) -> tuple[int, list[dict]
     return total, evidence
 
 
+def _indexes(node: dict) -> set[str]:
+    """Index names used anywhere in an EXPLAIN JSON plan node."""
+    names = {node["Index Name"]} if "Index Name" in node else set()
+    for child in node.get("Plans", []):
+        names |= _indexes(child)
+    return names
+
+
 async def test_event_listing_50k_query_plans(workload) -> None:
     engine, planner, district, congregations = workload
     base = {
@@ -235,6 +244,10 @@ async def test_event_listing_50k_query_plans(workload) -> None:
             "page_median_ms": plans[1]["median_ms"],
             "plans": plans,
         }
+    PLAN_REPORT.write_text(json.dumps(reports, indent=2, default=str), encoding="utf-8")
+    # Every page query reads the slots through the district/date index (no sequential scan).
+    for name, report in reports.items():
+        assert DISTRICT_DATE_INDEX in _indexes(report["plans"][1]["Plan"]), name
     # Exact totals of the deterministic fixture: the reference semantics hold and none of
     # the foreign district's slots leak in. Every 4th slot is a district event
     # (applicability ``all``); a congregation sees its own 1/25 of the rest plus those.
@@ -242,4 +255,3 @@ async def test_event_listing_50k_query_plans(workload) -> None:
     assert reports["district_deep"]["total"] == SIZE
     assert reports["district_only"]["total"] == SIZE // 4
     assert reports["congregation"]["total"] == 14_000
-    PLAN_REPORT.write_text(json.dumps(reports, indent=2, default=str), encoding="utf-8")
