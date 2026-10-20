@@ -40,7 +40,10 @@ PLAN_REPORT = Path(__file__).resolve().parents[2] / "event-list-query-plans.json
 START, END = date(2031, 1, 1), date(2031, 12, 31)
 SIZE = 50_000
 DISTRICT_DATE_INDEX = "ix_planning_slots_district_date"
-SAMPLES = 5  # measured EXPLAIN ANALYZE runs per statement, after one warm-up
+SAMPLES = 5  # measured EXPLAIN ANALYZE runs per statement
+# Unrecorded runs first: PostgreSQL may switch a prepared statement from custom to
+# generic plans after five executions, so samples reflect a warm pooled connection.
+WARMUP_RUNS = 6
 # Bounds every query of the measured path, including the warm-up list_page() call.
 _TIMEOUT = {"server_settings": {"statement_timeout": "10s"}}
 
@@ -137,7 +140,7 @@ async def workload():
                 {"id": uuid.uuid4(), "sub": planner, "d": district},
             )
         await _maintain(owner, "ANALYZE")  # plan from current statistics, not empty ones
-        yield app, planner, district, congregations
+        yield app, planner, district, foreign, congregations
     finally:
         async with owner.begin() as connection:
             await connection.execute(
@@ -190,7 +193,8 @@ async def _query_with_plans(engine, planner, **filters) -> tuple[int, list[dict]
             session = async_sessionmaker(bind=connection, expire_on_commit=False)()
             async with session:
                 page, total = await SqlPlanningSlotRepository(session).list_page(**filters)
-                assert len(page) <= filters["limit"]
+                # Every case matches far more rows than its offset: the page is full.
+                assert len(page) == filters["limit"]
         finally:
             event.remove(engine.sync_engine, "before_cursor_execute", capture)
 
@@ -198,13 +202,14 @@ async def _query_with_plans(engine, planner, **filters) -> tuple[int, list[dict]
         evidence = []
         for query, params in captured:
             samples = []
-            for _ in range(SAMPLES):
+            for run in range(WARMUP_RUNS + SAMPLES):
                 plan = (
                     await connection.exec_driver_sql(
                         "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + query, params
                     )
                 ).scalar_one()
-                samples.append((json.loads(plan) if isinstance(plan, str) else plan)[0])
+                if run >= WARMUP_RUNS:
+                    samples.append((json.loads(plan) if isinstance(plan, str) else plan)[0])
             times = [sample["Execution Time"] for sample in samples]
             evidence.append(
                 {"median_ms": statistics.median(times), "max_ms": max(times)} | samples[-1]
@@ -223,7 +228,7 @@ def _indexes(node: dict) -> set[str]:
 
 
 async def test_event_listing_50k_query_plans(workload) -> None:
-    engine, planner, district, congregations = workload
+    engine, planner, district, foreign, congregations = workload
     base = {
         "district_id": district,
         "from_date": START,
@@ -258,3 +263,14 @@ async def test_event_listing_50k_query_plans(workload) -> None:
     assert reports["district_deep"]["total"] == SIZE
     assert reports["district_only"]["total"] == SIZE // 4
     assert reports["congregation"]["total"] == 14_000
+    # RLS, not only the district predicate, hides the foreign district from the planner.
+    connection = await _as_planner(engine, planner)
+    try:
+        session = async_sessionmaker(bind=connection, expire_on_commit=False)()
+        async with session:
+            _, foreign_total = await SqlPlanningSlotRepository(session).list_page(
+                **(base | {"district_id": foreign})
+            )
+    finally:
+        await connection.close()
+    assert foreign_total == 0
