@@ -8,16 +8,17 @@ import {
   deleteDutyAssignment,
   getSlotDuties,
   listEligibleUsers,
+  listLeaderChoices,
   listSuggestions,
   revalidateDutyAssignment,
   saveDutyAssignment,
   setSuggestionHidden,
   type DutyAssignment,
   type DutyCategory,
+  type DutyLeaderChoice,
   type DutySuggestion,
   type EligibleUser,
 } from '../api/eventDuties'
-import { listLeaders, type LeaderResponse } from '../api/leaders'
 
 const props = defineProps<{
   districtId: string
@@ -30,7 +31,7 @@ const emit = defineEmits<{ mutated: [] }>()
 const categories = ref<DutyCategory[]>([])
 const assignments = ref<DutyAssignment[]>([])
 const users = ref<EligibleUser[]>([])
-const leaders = ref<LeaderResponse[]>([])
+const leaders = ref<DutyLeaderChoice[]>([])
 const suggestions = ref<DutySuggestion[]>([])
 const category = ref('')
 const kind = ref('name')
@@ -69,7 +70,7 @@ async function load() {
       )
       if (current === version) users.value = choices
       // A missing leader list only removes that option; the other identities still work.
-      const choosable = await listLeaders(props.districtId).catch(() => [])
+      const choosable = await listLeaderChoices(props.districtId, props.slotId).catch(() => [])
       if (current === version) leaders.value = choosable
     }
   } catch (cause) {

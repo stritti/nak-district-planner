@@ -50,7 +50,12 @@ A duty assignment SHALL have exactly one identity: a typed name, a verified acco
 
 #### Scenario: Choosing a leader in the panel
 - **WHEN** a planner edits the duties of an event
-- **THEN** the panel offers the district's leaders as a third identity next to free name and account, and shows such a duty as "Amtsträger"
+- **THEN** the panel offers the district's leaders eligible on the event date as a third identity next to free name and account, and shows such a duty as "Amtsträger"
+- **AND** the choice list is authorized like the duty write, so congregation-scoped planners receive it as well, with only id, name and rank
+
+#### Scenario: Concurrent duty and service of one leader
+- **WHEN** a duty and a service assignment of the same leader for overlapping times are written concurrently
+- **THEN** both writes take the same per-leader transaction lock, so at most one of them passes its conflict check
 
 #### Scenario: Several identities
 - **WHEN** a request names more than one of name, account and leader, or a name suggestion together with a leader

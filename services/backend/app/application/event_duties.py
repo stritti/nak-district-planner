@@ -412,6 +412,8 @@ class EventDutiesService:
                 raise DutyNotFoundError("Reference not found")
         leader_label = None
         if leader_id:
+            # Held until commit; taken after the slot lock, the order service assignments use.
+            await self.repository.lock_leader(leader_id)
             leader = await self.repository.get_leader(district_id, leader_id)
             # Same eligibility as a service assignment: active, not retired before the event.
             if leader is None or not leader.is_eligible_on(slot.planning_date):

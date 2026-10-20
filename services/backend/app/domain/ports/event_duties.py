@@ -110,3 +110,15 @@ class EventDutiesRepository(ABC):
     async def get_leader(self, district_id, leader_id):
         """The leader of this district, or ``None``."""
 
+    @abstractmethod
+    async def list_leaders(self, district_id):
+        """Leaders of this district, ordered by name."""
+
+    @abstractmethod
+    async def lock_leader(self, leader_id):
+        """Serialize bookings of one leader until the transaction ends.
+
+        Service assignments take the same lock, so a duty and a service of the
+        same leader cannot both pass their conflict checks concurrently.
+        """
+

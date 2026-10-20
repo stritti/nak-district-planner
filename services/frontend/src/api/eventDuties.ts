@@ -191,6 +191,17 @@ export function deleteDutyAssignment(
   })
 }
 
+export interface DutyLeaderChoice {
+  id: string
+  name: string
+  rank: string | null
+}
+
+/** Leaders a duty of this slot may reference: eligible on its date, for any slot planner. */
+export function listLeaderChoices(district: string, slot: string): Promise<DutyLeaderChoice[]> {
+  return apiFetch(`${base(district)}/slots/${encodeURIComponent(slot)}/leaders`)
+}
+
 export function listEligibleUsers(
   district: string,
   congregation?: string,
