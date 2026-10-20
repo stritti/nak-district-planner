@@ -175,6 +175,11 @@ async def test_event_listing_50k_query_plans(workload) -> None:
             "page_ms": plans[1]["Execution Time"],
             "plans": plans,
         }
+    # Exact totals of the deterministic fixture: the reference semantics hold and none of
+    # the foreign district's slots leak in. Every 4th slot is a district event
+    # (applicability ``all``); a congregation sees its own 1/25 of the rest plus those.
     assert reports["district_first"]["total"] == SIZE
     assert reports["district_deep"]["total"] == SIZE
+    assert reports["district_only"]["total"] == SIZE // 4
+    assert reports["congregation"]["total"] == 14_000
     PLAN_REPORT.write_text(json.dumps(reports, indent=2, default=str), encoding="utf-8")
