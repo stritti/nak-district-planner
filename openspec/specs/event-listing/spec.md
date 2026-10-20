@@ -1,7 +1,7 @@
 # event-listing Specification
 
 ## Purpose
-TBD - created by archiving change event-list-query-performance. Update Purpose after archive.
+Defines how the planning event list is queried and how its performance is evidenced: page and total-count queries over district and congregation filters, including distributed events, measured against a reproducible large PostgreSQL fixture.
 
 ## Requirements
 
