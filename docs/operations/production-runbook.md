@@ -34,7 +34,61 @@ Der Production Guard verhindert den Start bei kritischen unsicheren Werten.
 
 ### 1.1a Geheime ICS-URLs in Logs
 
-`/api/v1/export/<token>/calendar.ics` enthaelt ein Bearer-Secret im Pfad. Anwendung und Frontend-nginx maskieren den Token in Logs, Audit-Metadaten, Metrik-Labels und Traces. **Der externe TLS-Proxy (Traefik, Caddy, nginx, Load Balancer) ist nicht Teil dieses Repos** und muss selbst maskieren oder den Pfad `/api/v1/export/` nicht protokollieren (zum Beispiel Traefik `accessLog.filters`/Feld-Redaktion oder ein eigenes nginx-`log_format` mit maskiertem URI). Bereits protokollierte Feed-URLs gelten als offengelegt: Log-Retention pruefen und betroffene Tokens bei Bedarf widerrufen und neu ausgeben.
+`/api/v1/export/<token>/calendar.ics` enthaelt ein **Bearer-Secret im Pfad**. Anwendung und Frontend-nginx maskieren diesen Pfad bereits. **Jeder externe TLS-Proxy, Ingress, Load Balancer, WAF, Tracer und zentrale Logsink muss separat geprueft werden.** Ein normales `accessLog.filters` von Traefik ist kein Nachweis dafuer, dass beliebige URL-Pfadsegmente umgeschrieben werden. Falls die eingesetzte Version keine nachweisbar sichere Pfadredaktion unterstuetzt, den Zugriff auf `/api/v1/export/` nicht protokollieren.
+
+**nginx-Beispiel am externen TLS-Proxy (Access-Logs fuer den sensiblen Pfad, Error-Logs fuer diesen Server unterdruecken):** Diese `map` gehoert in den `http`-Kontext. `$request_uri` enthaelt die urspruengliche unveraenderte URI; `$uri` kann durch interne Weiterleitungen veraendert werden und waere fuer die Filterung unsicher. Die `map` erkennt aber keine prozentkodierten Varianten wie `/api/v1/%65xport/...`, die nginx fuer das Routing normalisiert. Deshalb schaltet zusaetzlich eine eigene `location` fuer den normalisierten Pfad das Access-Log ab; darin keine `rewrite`-, `error_page`- oder `try_files`-Weiterleitung verwenden, damit der Request in dieser `location` protokolliert (also nicht protokolliert) wird. Das serverweite `error_log /dev/null crit` verhindert auch Secrets in Fehlerlogs bei Upstream-Ausfall, unterdrueckt allerdings Diagnosemeldungen fuer **alle** Requests dieses virtuellen Servers. Ein separater ICS-vHost bzw. ein vorgelagerter Proxy mit nachweisbarer URL-Redaktion kann die Auswirkungen begrenzen. Saemtliche weiteren Error-/Access-Logs, Unterserver und vorgelagerten Gateways sind separat zu pruefen.
+
+```nginx
+map $request_uri $log_ics_request {
+    default 1;
+    ~^/api/v1/export/ 0;
+}
+
+server {
+    error_log /dev/null crit;  # keine Roh-Request-Zeilen auf 5xx-Fehlerpfaden
+    access_log /var/log/nginx/access.log main if=$log_ics_request;
+
+    location ^~ /api/v1/export/ {
+        access_log off;  # greift auch fuer prozentkodierte Varianten des Pfads
+        proxy_pass http://127.0.0.1:80;  # vorhandenes Upstream-Ziel uebernehmen
+    }
+    # Unveraenderte vorhandene TLS- und Proxy-Konfiguration
+}
+```
+
+**Traefik/Caddy:** Die konkrete Version und Log-Konfiguration kontrollieren. Nur verifizierte Optionen zum vollstaendigen Unterdruecken des betreffenden Request-Logs oder Redigieren **aller** Felder verwenden, die `RequestPath`, `RequestAddr`, den Roh-Request, `url.path` oder einen kompletten URL-String enthalten koennen. Zusaetzlich strukturierte Access-Logs, Middleware-/Error-Logs, APM-Labels und zentrale Exporter pruefen. Eine maskierte Logspalte allein genuegt nicht, wenn ein anderes Feld das Token speichert. Wo ein Proxy keine selektive Redigierung erlaubt, Access-Logs fuer den sensiblen Dienst insgesamt abschalten oder vor der Weitergabe in den Collector bereinigen.
+
+**Canary-Nachweis im echten Betrieb (Pflicht):**
+
+1. Einen befristeten **Test-Feed** ausstellen und den Token nur in einer geheim gehaltenen Operatorsitzung bereitstellen. Keine Tokens im Ticket, Screenshot, Terminal-Trace, CI-Log oder Shell-Kommandozeilenargument speichern. `set +x` vor dem Test.
+2. Den Feed **ueber den oeffentlichen TLS-Endpunkt** mit Cache-Bypass abrufen und vor der weiteren Pruefung **HTTP 200 und einen gueltigen ICS-Content-Type** bestaetigen. Zur Vermeidung eines Tokens in Shell-Prozessargumenten den URL-Wert ueber stdin mit `curl --config -` uebergeben, z. B. in der vertraulichen Operatorsitzung: `printf 'url = "https://<public-host>/api/v1/export/%s/calendar.ics"\\n' "$CANARY_TOKEN" | curl --config - --silent --show-error --fail -H 'Cache-Control: no-cache' --output /dev/null --write-out '%{http_code} %{content_type}\\n'`. Vor jeder Freigabe muss das Ergebnis inhaltlich kontrolliert sein. In Staging darueber hinaus einen **kontrollierten Upstream-5xx-Fehlerfall** (z. B. zeitweise nicht erreichbarer Test-Upstream) mit einem separaten Canary-Request ausloesen und **auch die dann entstehenden Fehlerlogs** nach dem Token durchsuchen. Bei fehlgeschlagenem Abruf oder ungeprueftem 5xx-Fall ist die Pruefung unvollstaendig. Danach die Access-/Fehlerlogs aller vorgelagerten Proxys, WAFs, das zentrale Logging sowie APM-Spans und Metriklabels fuer dasselbe Zeitfenster **vollstaendig und sicher lokal exportieren**. Token nicht als Suchparameter an Cloud-APIs senden.
+3. Mit dem Repository-Pruefer ausschliesslich die exportierten, lokal vorliegenden Log- und Tracedateien kontrollieren. Das Token wird ueber stdin uebergeben, niemals als Argument; Ausgabe enthaelt **nur Status und Anzahl der Quellen**:
+
+   ```bash
+   (
+   set +x
+   umask 077
+   read -r -s -p 'Canary-Token (keine Ausgabe): ' CANARY_TOKEN
+   printf '\n'
+   printf '%s\n' "$CANARY_TOKEN" |
+     python3 scripts/check_ics_canary_logs.py \
+       --source /secure/exports/proxy.jsonl \
+       --source /secure/exports/traces.jsonl \
+       --source /secure/exports/metrics.txt
+   STATUS=$?
+   unset CANARY_TOKEN
+   echo "Canary check exit code: $STATUS"
+   exit "$STATUS"
+   )
+   ```
+
+   Nur unkomprimierte, unterstuetzte Klartext-Exporte verwenden: `.gz`, `.zip`, `.bz2`, `.xz`, `.zst` oder Dateien mit bekannten Kompressionssignaturen werden als unvollstaendig abgelehnt, ebenso UTF-16/UTF-32-Exporte (NUL-Bytes); Exporte daher als UTF-8 bzw. ASCII erzeugen. Ein erfolgreiches Scan-Ergebnis **allein** beweist keinen erfolgreichen externen Request oder Test des Fehlerpfads.
+
+   Exitcode `0`: Token in allen **uebergebenen lokalen** Quellen nicht gefunden. `1`: Token gefunden, vor Freigabe rotieren/Logs behandeln. `2`: fehlende, unlesbare oder unvollstaendige Quellen; **kein** Sicherheitsnachweis. Der Pruefer beweist weder, dass alle Quellen exportiert wurden, noch dass historische Daten sauber sind.
+4. Historische Logs separat auf exponierte gueltige Abos pruefen. Retention, Leseberechtigungen und Loesch- oder Sperrfristen kontrollieren; betroffene Tokens ueber die normale Feed-Funktion widerrufen und neu ausstellen. **Zuordnung ohne Offenlegen des Bearer-Secrets:** In einer geschuetzten Operatorsitzung das kompromittierte Token verdeckt einlesen; mit `HASH="$(printf '%s' "$LEAKED_TOKEN" | sha256sum | cut -d' ' -f1)"` lokal SHA-256 bilden und anschliessend `unset LEAKED_TOKEN`. Als Datenbank-Owner das Ergebnis gegen `SELECT id, district_id, label FROM export_tokens WHERE token_hash='<HASH>'` vergleichen; die gefundenen Token-IDs im Admin-Workflow widerrufen. **Nicht** das Klartexttoken oder eine komplette URL in SQL-Befehle, History, Tickets oder Logs kopieren. Den berechneten Hash nur temporaer nutzen und vernichten. Falls sich keine eindeutige ID ermitteln laesst, alle Abos des nachweislich betroffenen Umfangs widerrufen und neu ausstellen, statt von einem unbekannten Rest-Risiko auszugehen. Auch das Canary-Abo anschliessend widerrufen.
+5. Protokollieren: **Datum, Betreiber, Proxy-Produkt und Version, eingesetzte Schutzregel, alle kontrollierten Log-/Trace-/Metrik-Sinks, Testzeitfenster, Exitcode, Retention-Ergebnis, Anzahl rotierter Abos und Freigabeentscheidung**. Niemals den Token oder die vollstaendige ICS-URL dokumentieren.
+
+**Betriebs-Freigabekriterium fuer #629:** Erst nach Anpassung des *tatsaechlichen externen TLS-Proxys*, Pruefung aller beobachtbaren Datenpfade, Behandlung alter Logs und bestandenem Canary-Check die Betriebsmassnahme als erledigt markieren. Wenn ein Log-/Telemetry-Sink nicht geprueft werden konnte, bleibt das Issue offen.
 
 ### 1.1b SMTP-Relay: STARTTLS-Smoke-Test vor Produktion
 
