@@ -141,11 +141,11 @@ Mit den Overrides aus [Bestehenden Traefik oder Keycloak einbinden](#bestehenden
 
 Optional kann das Backend freigegebene Registrierungen direkt in Keycloak anlegen („IdP-Provisioning“). Es spricht die Admin-API dann intern an, ohne den Umweg über Traefik und die Admin-Allowlist. Es meldet sich mit einem eigenen Confidential Client im Realm `nak-planner` an (`client_credentials`), nie im Realm `master`:
 
-1. Im Realm `nak-planner` einen Client `nak-planner-provisioning` anlegen: *Client authentication* an, *Service accounts roles* an, *Standard flow* und *Direct access grants* aus. Alternativ legt `idp-deploy/keycloak/setup_keycloak_realm.py` ihn an und gibt das Secret einmalig aus.
+1. Im Realm `nak-planner` einen Client `nak-planner-provisioning` anlegen: *Client authentication* an, *Service accounts roles* an, *Standard flow* und *Direct access grants* aus. Alternativ legt `idp-deploy/keycloak/setup_keycloak_realm.py` ihn an und gibt das Secret einmalig aus (ohne `--create-test-user`, das legt einen Testbenutzer mit bekanntem Passwort an).
 2. Unter *Service accounts roles → Assign role → Client roles* nur `manage-users` und `view-users` des Clients `realm-management` zuweisen.
 3. Das Secret aus dem Tab *Credentials* als `IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET` eintragen. Zum Rotieren dort *Regenerate* wählen, den neuen Wert eintragen und Backend und Worker neu starten.
 4. Einladungs-Mails versendet Keycloak selbst, nicht die Anwendung. Dafür im Realm `nak-planner` unter *Realm settings → Email* dasselbe SMTP-Relay wie für die App (`SMTP_*`) und eine Absenderadresse eintragen und mit *Test connection* prüfen. Ohne SMTP legt Keycloak den Benutzer zwar an, die Einladung scheitert aber, und die Freigabe wird als fehlgeschlagen protokolliert. Wer keine Einladungs-Mails will, setzt `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=false`.
-5. Im Realm unter *Realm settings → Login* die *User registration* ausschalten (die Registrierung läuft über die App) und *Verify email* einschalten. Unter *Security defenses* die *Brute force detection* aktivieren, unter *Authentication → Policies* eine Passwort-Policy mit mindestens 12 Zeichen setzen. Das Setup-Skript setzt diese Werte ebenfalls. Für Bezirksadmins zusätzlich OTP oder Passkey (WebAuthn) als Required Action verlangen.
+5. Im Realm unter *Realm settings → Login* die *User registration* ausschalten (die Registrierung läuft über die App) und *Verify email* einschalten. Unter *Security defenses* die *Brute force detection* aktivieren, unter *Authentication → Policies* eine Passwort-Policy mit mindestens 15 Zeichen setzen. Das Setup-Skript setzt diese Werte ebenfalls. Für Bezirksadmins zusätzlich OTP oder Passkey (WebAuthn) als Required Action verlangen.
 
 Der `production_guard` verlangt die Keycloak-Werte und lehnt die früheren Variablen `IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME`/`_PASSWORD` ab:
 
@@ -161,7 +161,7 @@ IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI=https://<APP_HOST>/
 IDP_PROVISIONING_KEYCLOAK_INVITE_LIFESPAN_SECONDS=259200
 ```
 
-Die Rücksprung-URI muss als gültige Redirect-URI des Clients `OIDC_CLIENT_ID` eingetragen sein, sonst lehnt Keycloak die Einladung ab.
+Die Rücksprung-URI muss als gültige Redirect-URI des Clients `OIDC_CLIENT_ID` eingetragen sein, sonst lehnt Keycloak die Einladung ab. Dafür die App-Wurzel `https://<APP_HOST>/` zusätzlich zu `/auth/callback` unter *Valid redirect URIs* eintragen (das Setup-Skript tut das). `/auth/callback` selbst eignet sich nicht, weil die Seite ohne Authorization-Code einen Fehler zeigt.
 
 **Umstieg von früheren Versionen:** Wer bisher einen `master`-Benutzer (`nak-provisioning`) verwendet hat, legt vor dem Update den Client wie oben an, ersetzt in `.env` die beiden `ADMIN`-Variablen durch `CLIENT_ID`/`CLIENT_SECRET` und löscht danach den `master`-Benutzer. Ohne diesen Schritt startet das Backend in Produktion nicht.
 

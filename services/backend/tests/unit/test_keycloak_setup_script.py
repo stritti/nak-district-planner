@@ -70,7 +70,7 @@ def test_realm_security_defaults_payload() -> None:
     assert payload["registrationAllowed"] is False
     assert payload["verifyEmail"] is True
     assert payload["bruteForceProtected"] is True
-    assert "length(12)" in payload["passwordPolicy"]
+    assert "length(15)" in payload["passwordPolicy"]
 
 
 def test_provisioning_client_is_confidential_service_account_with_minimal_roles() -> None:
@@ -107,3 +107,49 @@ def test_provisioning_client_is_confidential_service_account_with_minimal_roles(
         "http://kc/admin/realms/nak-planner/users/sa-user/role-mappings/clients/rm-uuid"
     )
     assert [r["name"] for r in mapping.kwargs["json"]] == ["manage-users", "view-users"]
+
+
+def test_frontend_client_is_created_public() -> None:
+    module = _load()
+    with (
+        patch.object(module.requests, "post", return_value=_response(201)) as post,
+        patch.object(module.requests, "get", return_value=_response(200, [{"id": "c1"}])),
+    ):
+        _admin(module).create_oidc_public_client(
+            "nak-planner", "nak-planner-frontend", ["https://app/auth/callback", "https://app/"]
+        )
+
+    payload = post.call_args.kwargs["json"]
+    assert payload["publicClient"] is True
+    assert "public" not in payload
+    assert payload["redirectUris"] == ["https://app/auth/callback", "https://app/"]
+
+
+def _run_main(module, *extra_args: str) -> MagicMock:
+    admin = MagicMock()
+    admin.ensure_provisioning_client.return_value = "secret"
+    admin.create_oidc_public_client.return_value = {"id": "c1"}
+    argv = ["setup", "--keycloak-url", "http://kc", "--admin-password", "pw", *extra_args]
+    with (
+        patch.object(module.sys, "argv", argv),
+        patch.object(module.requests, "get", return_value=_response(200)),
+        patch.object(module, "KeycloakAdminClient", return_value=admin),
+    ):
+        module.main()
+    return admin
+
+
+def test_main_skips_test_user_by_default_and_allowlists_app_root() -> None:
+    module = _load()
+    admin = _run_main(module)
+
+    admin.create_user.assert_not_called()
+    redirect_uris = admin.create_oidc_public_client.call_args.kwargs["redirect_uris"]
+    assert redirect_uris == ["http://localhost:5173/auth/callback", "http://localhost:5173/"]
+
+
+def test_main_creates_test_user_only_on_request() -> None:
+    module = _load()
+    admin = _run_main(module, "--create-test-user")
+
+    admin.create_user.assert_called_once()

@@ -15,7 +15,7 @@ Automatisiert den Setup eines Keycloak-Realms für NAK Planner OIDC:
   nur manage-users/view-users) für das IdP-Provisioning des Backends
 - Konfiguriert Redirect URIs für Auth Callback
 - Konfiguriert Logout URIs
-- Erstellt Test-User
+- Erstellt nur mit --create-test-user einen Test-User (Entwicklung)
 - Exportiert Realm-Config
 
 Requirements:
@@ -25,7 +25,7 @@ Requirements:
 
 Usage:
     python3 setup_keycloak_realm.py --keycloak-url http://localhost:8080 \
-        --admin-password admin_dev_pw
+        --admin-password admin_dev_pw --create-test-user
 """
 
 import argparse
@@ -123,7 +123,8 @@ class KeycloakAdminClient:
             print(f"✗ Failed to create realm: {response.status_code} {response.text}")
             raise Exception(f"Failed to create realm: {response.text}")
 
-    # NIST SP 800-63B: length over composition rules. Self-registration stays
+    # NIST SP 800-63B: length over composition rules; 15 characters because
+    # passwords may be the only factor (MFA is not enforced by the app). Self-registration stays
     # off because registration and approval run through the application.
     REALM_SECURITY_DEFAULTS = {
         "registrationAllowed": False,
@@ -131,7 +132,7 @@ class KeycloakAdminClient:
         "loginWithEmailAllowed": True,
         "resetPasswordAllowed": True,
         "bruteForceProtected": True,
-        "passwordPolicy": "length(12) and notUsername and notEmail",
+        "passwordPolicy": "length(15) and notUsername and notEmail",
     }
 
     def apply_realm_security_defaults(self, realm_name: str) -> None:
@@ -231,10 +232,11 @@ class KeycloakAdminClient:
             "name": client_id,
             "description": "NAK Planner Frontend (OIDC Public Client)",
             "enabled": True,
-            "public": True,  # PUBLIC CLIENT (no client_secret)
+            # Keycloak's field is publicClient; unknown keys such as "public"
+            # are ignored and would leave a confidential client behind.
+            "publicClient": True,  # PUBLIC CLIENT (no client_secret)
             # Protocol settings
             "protocol": "openid-connect",
-            "accessType": "PUBLIC",
             # Flow settings
             "standardFlowEnabled": True,
             "implicitFlowEnabled": False,
@@ -427,6 +429,11 @@ def main():
         default="nak-planner-provisioning",
         help="Confidential client for backend IdP provisioning (service account)",
     )
+    parser.add_argument(
+        "--create-test-user",
+        action="store_true",
+        help="Development only: create a test user with a known password",
+    )
     parser.add_argument("--test-user", default="testuser", help="Test user username")
     parser.add_argument(
         "--test-password", default="testpassword123", help="Test user password"
@@ -495,8 +502,11 @@ def main():
         admin.apply_realm_security_defaults(args.realm_name)
 
         # 2. Create OIDC Public Client
+        # The application root is the return target of invitation mails
+        # (IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI).
         redirect_uris = [
             f"{args.frontend_url}/auth/callback",
+            f"{args.frontend_url}/",
         ]
         logout_redirect_uris = [
             args.frontend_url,
@@ -517,15 +527,17 @@ def main():
             args.realm_name, args.provisioning_client_id
         )
 
-        # 4. Create Test User
-        admin.create_user(
-            realm_name=args.realm_name,
-            username=args.test_user,
-            email=args.test_email,
-            password=args.test_password,
-            first_name="Test",
-            last_name="User",
-        )
+        # 4. Test user only on request: a known password must never reach a
+        # production realm by default.
+        if args.create_test_user:
+            admin.create_user(
+                realm_name=args.realm_name,
+                username=args.test_user,
+                email=args.test_email,
+                password=args.test_password,
+                first_name="Test",
+                last_name="User",
+            )
 
         # 4. Export Realm
         try:
@@ -545,10 +557,11 @@ def main():
         print(f"  Realm:         {args.realm_name}")
         print(f"  Keycloak URL:  {args.keycloak_url}\n")
 
-        print("Test User Credentials:")
-        print(f"  Username: {args.test_user}")
-        print(f"  Password: {args.test_password}")
-        print(f"  Email:    {args.test_email}\n")
+        if args.create_test_user:
+            print("Test User Credentials:")
+            print(f"  Username: {args.test_user}")
+            print(f"  Password: {args.test_password}")
+            print(f"  Email:    {args.test_email}\n")
 
         print("Backend IdP provisioning (.env, shown once; store it securely):")
         print(f"  IDP_PROVISIONING_KEYCLOAK_CLIENT_ID={args.provisioning_client_id}")
