@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
@@ -27,6 +28,10 @@ from app.domain.planning.conflict_result import (
     ScheduledService,
 )
 from app.domain.planning.conflict_service import ConflictService
+
+# Lookup of a person's other duties (``EventDutiesRepository.list_identity_schedule``); injected
+# by the adapter layer so this module gains no further persistence dependency.
+DutyScheduleLookup = Callable[..., Awaitable[list]]
 
 
 @dataclass(frozen=True)
@@ -57,6 +62,7 @@ async def check_service_assignment_conflicts(
     leader_id: uuid.UUID,
     exclude_assignment_id: uuid.UUID | None = None,
     proposed: ProposedService | None = None,
+    duty_lookup: DutyScheduleLookup | None = None,
 ) -> list:
     """Evaluate conflicts for assigning a leader to a planning slot.
 
@@ -96,6 +102,24 @@ async def check_service_assignment_conflicts(
         ExistingAssignment(leader_id, *service.window(default_duration), service.congregation_id)
         for service in schedule
     )
+    if leader is not None and duty_lookup is not None:
+        # Organisational duties of the same person (leader record or the leader's own
+        # account) are bookings too: nobody leads a service and plays the organ elsewhere
+        # at the same time. The lookup also sees duties of congregations the caller may
+        # not read and returns schedule facts only.
+        duties = await duty_lookup(
+            leader.district_id,
+            linked_user_sub=leader.user_sub,
+            normalized_name=None,
+            leader_id=leader_id,
+            window_start=start - margin,
+            window_end=end + margin,
+            exclude_slot_id=event_id,
+        )
+        existing += tuple(
+            ExistingAssignment(leader_id, duty.start_time, duty.end_time, duty.congregation_id)
+            for duty in duties
+        )
     unavailability = await SqlLeaderUnavailabilityRepository(session).list_overlapping(
         leader_id=leader_id, start_at=start, end_at=end
     )

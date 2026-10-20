@@ -90,6 +90,12 @@ class Repository:
     async def get_suggestion(self, suggestion_id):
         return next((s for s in self.suggestions if s.id == suggestion_id), None)
 
+    async def list_leaders(self, district_id):
+        return [leader for leader in self.leaders.values() if leader.district_id == district_id]
+
+    async def lock_leader(self, leader_id):
+        self.locks.append("leader")
+
     async def get_leader(self, district_id, leader_id):
         leader = self.leaders.get(leader_id)
         return leader if leader is not None and leader.district_id == district_id else None
@@ -543,6 +549,8 @@ async def test_a_duty_can_reference_an_existing_leader():
     assert query["leader_id"] == leader.id
     assert query["linked_user_sub"] == "leader-account"
     assert query["normalized_name"] == "hans müller"
+    # The per-leader lock that service assignments take, after the slot lock (same order).
+    assert repo.locks == ["slot", "category", "leader"]
 
 
 @pytest.mark.asyncio
