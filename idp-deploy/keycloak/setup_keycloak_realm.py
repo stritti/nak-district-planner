@@ -261,6 +261,22 @@ class KeycloakAdminClient:
         elif response.status_code == 409:
             print(f"⚠ Client already exists: {client_id}")
             existing = self.get_client_by_id(realm_name, client_id)
+            # Reruns (e.g. migrations) must still add new redirect URIs such as
+            # the invitation return target; existing entries are kept.
+            current = existing.get("redirectUris") or []
+            missing = [uri for uri in redirect_uris if uri not in current]
+            if missing:
+                existing["redirectUris"] = current + missing
+                update = requests.put(
+                    f"{self.keycloak_url}/admin/realms/{realm_name}/clients/{existing['id']}",
+                    json=existing,
+                    headers=self._headers(),
+                    timeout=10,
+                )
+                if update.status_code != 204:
+                    print(f"✗ Failed to update client: {update.status_code} {update.text}")
+                    raise Exception(f"Failed to update client: {update.text}")
+                print(f"✓ Redirect URIs added: {', '.join(missing)}")
             return existing
         else:
             print(f"✗ Failed to create client: {response.status_code} {response.text}")
@@ -418,6 +434,14 @@ def main():
         required=True,
         help="Keycloak admin password",
     )
+    parser.add_argument(
+        "--health-url",
+        help=(
+            "Readiness URL (default: <keycloak-url>/health/ready). Behind the "
+            "production proxy the health endpoint is internal (port 9000); use "
+            "e.g. https://<AUTH_HOST>/realms/nak-planner instead"
+        ),
+    )
     parser.add_argument("--realm-name", default="nak-planner", help="Realm name")
     parser.add_argument("--client-id", default="nak-planner-frontend", help="OIDC Client ID")
     parser.add_argument(
@@ -456,13 +480,14 @@ def main():
         print("Waiting for Keycloak to be ready...")
         print(f"{'=' * 70}\n")
 
+        health_url = args.health_url or f"{args.keycloak_url}/health/ready"
         max_retries = 30
         retry_count = 0
         keycloak_ready = False
 
         while retry_count < max_retries:
             try:
-                response = requests.get(f"{args.keycloak_url}/health/ready", timeout=5)
+                response = requests.get(health_url, timeout=5)
                 if response.status_code == 200:
                     print(f"✓ Keycloak health check passed")
                     keycloak_ready = True

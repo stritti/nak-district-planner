@@ -149,3 +149,60 @@ def test_main_creates_test_user_only_on_request() -> None:
     admin = _run_main(module, "--create-test-user")
 
     admin.create_user.assert_called_once()
+
+
+def test_existing_frontend_client_gets_missing_redirect_uris() -> None:
+    module = _load()
+    existing = {"id": "c1", "redirectUris": ["https://app/auth/callback"]}
+    with (
+        patch.object(module.requests, "post", return_value=_response(409)),
+        patch.object(module.requests, "get", return_value=_response(200, [existing])),
+        patch.object(module.requests, "put", return_value=_response(204)) as put,
+    ):
+        _admin(module).create_oidc_public_client(
+            "nak-planner", "nak-planner-frontend", ["https://app/auth/callback", "https://app/"]
+        )
+
+    assert put.call_args.args[0] == "http://kc/admin/realms/nak-planner/clients/c1"
+    assert put.call_args.kwargs["json"]["redirectUris"] == [
+        "https://app/auth/callback",
+        "https://app/",
+    ]
+
+
+def test_existing_frontend_client_unchanged_when_uris_present() -> None:
+    module = _load()
+    existing = {"id": "c1", "redirectUris": ["https://app/auth/callback", "https://app/"]}
+    with (
+        patch.object(module.requests, "post", return_value=_response(409)),
+        patch.object(module.requests, "get", return_value=_response(200, [existing])),
+        patch.object(module.requests, "put") as put,
+    ):
+        _admin(module).create_oidc_public_client(
+            "nak-planner", "nak-planner-frontend", ["https://app/auth/callback", "https://app/"]
+        )
+
+    put.assert_not_called()
+
+
+def test_main_uses_custom_health_url() -> None:
+    module = _load()
+    admin = MagicMock()
+    admin.create_oidc_public_client.return_value = {"id": "c1"}
+    argv = [
+        "setup",
+        "--keycloak-url",
+        "https://auth.example",
+        "--admin-password",
+        "pw",
+        "--health-url",
+        "https://auth.example/realms/nak-planner",
+    ]
+    with (
+        patch.object(module.sys, "argv", argv),
+        patch.object(module.requests, "get", return_value=_response(200)) as get,
+        patch.object(module, "KeycloakAdminClient", return_value=admin),
+    ):
+        module.main()
+
+    assert get.call_args_list[0].args[0] == "https://auth.example/realms/nak-planner"
