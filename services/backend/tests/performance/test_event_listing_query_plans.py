@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Stephan Strittmatter
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Repeatable PostgreSQL query-plan evidence for event listing (#626).
 
 Seeds through the owner DSN and measures through the NOBYPASSRLS application role,
