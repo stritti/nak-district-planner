@@ -23,6 +23,7 @@ from app.domain.models.event_duty import (
     EventTypeDutyConfiguration,
     normalize_name,
 )
+from app.domain.models.leader import Leader, LeaderRank
 from app.domain.planning.conflict_result import ScheduledService, Severity
 from app.domain.planning.duty_conflicts import ScheduledDuty
 
@@ -37,11 +38,13 @@ class Repository:
             district_id=self.district,
             congregation_id=self.congregation,
             category="Gottesdienst",
+            planning_date=date(2026, 11, 1),
         )
         self.categories = EventDutyCategory.defaults(self.district)
         self.overrides, self.assignments, self.suggestions = [], [], []
         self.locks = []
         self.identity_schedule, self.identity_queries = [], []
+        self.leaders = {}
         self.users = [{"sub": "verified", "display_name": "User Name"}]
         self.assignment_lock_result = _USE_STORED_ASSIGNMENT
 
@@ -86,6 +89,10 @@ class Repository:
 
     async def get_suggestion(self, suggestion_id):
         return next((s for s in self.suggestions if s.id == suggestion_id), None)
+
+    async def get_leader(self, district_id, leader_id):
+        leader = self.leaders.get(leader_id)
+        return leader if leader is not None and leader.district_id == district_id else None
 
     async def slot_schedule(self, slot_id):
         return ScheduledService(
@@ -509,4 +516,126 @@ async def test_no_overlap_and_a_disabled_check_assign_normally(monkeypatch):
         repo2.district, repo2.slot_id, repo2.categories[0].id, linked_user_sub="verified"
     )
     assert len(repo2.assignments) == 1 and repo2.identity_queries == []
+
+
+def _leader(repo, **overrides):
+    leader = Leader.create(
+        name="Hans Müller", district_id=repo.district, rank=LeaderRank.EVANGELIST,
+        user_sub="leader-account", **overrides,
+    )
+    repo.leaders[leader.id] = leader
+    return leader
+
+
+@pytest.mark.asyncio
+async def test_a_duty_can_reference_an_existing_leader():
+    repo = Repository()
+    leader = _leader(repo)
+    saved = await EventDutiesService(repo).assign(
+        repo.district, repo.slot_id, repo.categories[0].id, leader_id=leader.id
+    )
+    assert saved.leader_id == leader.id
+    assert saved.display_name == "Ev. Hans Müller"
+    assert saved.linked_user_sub is None and saved.normalized_name is None
+    assert repo.assignments == [saved]
+    # No typed name is remembered for a leader, and the overlap lookup carries all identities.
+    query = repo.identity_queries[0]
+    assert query["leader_id"] == leader.id
+    assert query["linked_user_sub"] == "leader-account"
+    assert query["normalized_name"] == "hans müller"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["unknown", "other_district", "retired", "inactive"])
+async def test_an_unusable_leader_is_a_plain_not_found(case):
+    from datetime import date as _date
+
+    repo = Repository()
+    leader = _leader(repo)
+    leader_id = leader.id
+    if case == "unknown":
+        leader_id = uuid4()
+    elif case == "other_district":
+        repo.leaders[leader.id] = replace(leader, district_id=uuid4())
+    elif case == "retired":
+        repo.leaders[leader.id] = replace(leader, service_end_date=_date(2020, 1, 1))
+    else:
+        repo.leaders[leader.id] = replace(leader, is_active=False)
+    with pytest.raises(DutyNotFoundError):
+        await EventDutiesService(repo).assign(
+            repo.district, repo.slot_id, repo.categories[0].id, leader_id=leader_id
+        )
+    assert repo.assignments == []
+
+
+@pytest.mark.asyncio
+async def test_the_same_leader_cannot_hold_the_same_duty_twice():
+    repo = Repository()
+    repo.categories[0] = replace(repo.categories[0], capacity=2)
+    leader = _leader(repo)
+    service = EventDutiesService(repo)
+    await service.assign(repo.district, repo.slot_id, repo.categories[0].id, leader_id=leader.id)
+    with pytest.raises(DutyConflictError):
+        await service.assign(
+            repo.district, repo.slot_id, repo.categories[0].id, leader_id=leader.id
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_leaders_overlapping_service_blocks_the_duty():
+    repo = Repository()
+    leader = _leader(repo)
+    repo.identity_schedule = [_overlapping(repo, strong=True)]
+    with pytest.raises(DutyIdentityConflictError) as error:
+        await EventDutiesService(repo).assign(
+            repo.district, repo.slot_id, repo.categories[0].id, leader_id=leader.id
+        )
+    assert [c.severity for c in error.value.conflicts] == [Severity.BLOCK]
+    assert repo.assignments == []
+
+
+@pytest.mark.asyncio
+async def test_replacing_with_a_leader_and_revalidating_keep_the_leader_identity():
+    repo = Repository()
+    leader = _leader(repo)
+    row = EventDutyAssignment.create(repo.slot_id, repo.categories[0], repo.congregation, "Anna")
+    repo.assignments.append(row)
+    service = EventDutiesService(repo)
+    replaced = await service.replace(
+        repo.district, repo.slot_id, repo.categories[0].id, row, leader_id=leader.id
+    )
+    assert replaced.leader_id == leader.id and replaced.normalized_name is None
+    repo.assignments[:] = [replaced]
+    again = await service.revalidate(repo.district, repo.slot_id, replaced)
+    assert again.leader_id == leader.id and again.id == replaced.id
+
+
+def test_assignment_identity_is_exactly_one_of_name_account_or_leader():
+    category = EventDutyCategory.defaults(uuid4())[0]
+    slot_id, leader_id = uuid4(), uuid4()
+    leader_row = EventDutyAssignment.create(
+        slot_id, category, None, leader_id=leader_id, leader_display_name="Ev. Hans"
+    )
+    assert leader_row.leader_id == leader_id and leader_row.normalized_name is None
+    for kwargs in (
+        {"name": "A", "leader_id": leader_id, "leader_display_name": "L"},
+        {"linked_user_sub": "s", "leader_id": leader_id, "leader_display_name": "L"},
+        {},
+    ):
+        with pytest.raises(ValueError):
+            EventDutyAssignment.create(slot_id, category, None, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{"name": "A"}, {"linked_user_sub": "s"}, {}, {"suggestion_id": uuid4()}],
+    ids=["with-name", "with-account", "no-extra-but-suggestion-less", "with-suggestion"],
+)
+def test_the_write_schema_accepts_a_leader_only_alone(extra):
+    base = {"duty_category_id": uuid4(), "leader_id": uuid4()}
+    if extra == {}:
+        assert AssignmentWrite(**base).leader_id
+    else:
+        with pytest.raises(ValidationError):
+            AssignmentWrite(**base, **extra)
 
