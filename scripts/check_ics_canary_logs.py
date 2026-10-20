@@ -18,8 +18,11 @@ _CHUNK_SIZE = 64 * 1024
 
 _UNSUPPORTED_SUFFIXES = frozenset({".gz", ".zip", ".bz2", ".xz", ".zst"})
 _COMPRESSED_SIGNATURES = (
-    bytes.fromhex("1f8b"), bytes.fromhex("504b0304"),
-    b"BZh", bytes.fromhex("fd377a585a00"), bytes.fromhex("28b52ffd"),
+    bytes.fromhex("1f8b"),
+    bytes.fromhex("504b0304"),
+    b"BZh",
+    bytes.fromhex("fd377a585a00"),
+    bytes.fromhex("28b52ffd"),
 )
 
 
@@ -28,7 +31,6 @@ class _SafeParser(argparse.ArgumentParser):
 
     def error(self, message: str) -> None:
         self.exit(2, "INCOMPLETE: invalid arguments (values withheld)\n")
-
 
 
 def _contains_token(path: Path, token: bytes) -> bool:
@@ -54,7 +56,10 @@ def main() -> int:
         description="Check exported log files without displaying an ICS bearer token."
     )
     parser.add_argument(
-        "--source", action="append", default=[], metavar="EXPORTED_LOG",
+        "--source",
+        action="append",
+        default=[],
+        metavar="EXPORTED_LOG",
         help="A local log/APM export (repeat for every log and telemetry sink)",
     )
     args = parser.parse_args()
@@ -71,7 +76,7 @@ def main() -> int:
     for source in args.source:
         try:
             leaks += _contains_token(Path(source), token)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             print("INCOMPLETE: one or more log sources cannot be read", file=sys.stderr)
             return 2
 

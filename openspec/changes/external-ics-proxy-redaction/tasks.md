@@ -1,7 +1,7 @@
 ## 1. Document secure proxy choices
-- [ ] 1.1 Add external Traefik/nginx/Caddy logging options with version checks and fail-safe suppression.
-- [ ] 1.2 Document APM, tracing and central log path-redaction checks.
-- [ ] 1.3 Add secret-safe canary and retention/rotation evidence template to the production runbook.
+- [x] 1.1 Add external Traefik/nginx/Caddy logging options with version checks and fail-safe suppression.
+- [x] 1.2 Document APM, tracing and central log path-redaction checks.
+- [x] 1.3 Add secret-safe canary and retention/rotation evidence template to the production runbook.
 
 ## 2. Live operational work (requires operator access)
 - [ ] 2.1 Inspect actual external proxy configuration and apply verified redaction/suppression.
