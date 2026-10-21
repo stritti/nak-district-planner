@@ -36,6 +36,10 @@ A duty assignment SHALL have exactly one identity: a typed name, a verified acco
 - **WHEN** a planner assigns an eligible leader of the district to a duty
 - **THEN** the duty stores the leader reference and the display snapshot, and no name suggestion is remembered
 
+#### Scenario: One person under two identities
+- **WHEN** a leader and the account linked to that leader are added to the same duty of one event
+- **THEN** the second addition is rejected as a duplicate identity
+
 #### Scenario: Unusable leader
 - **WHEN** the leader is unknown, belongs to another district, is inactive, hidden or retired before the event
 - **THEN** the API answers as for any unknown reference (404) and saves nothing
@@ -58,6 +62,14 @@ A duty assignment SHALL have exactly one identity: a typed name, a verified acco
 - **WHEN** a duty and a service assignment of the same leader for overlapping times are written concurrently
 - **THEN** both writes take the same per-leader and per-account transaction locks (also when the duty names the leader's linked account), so at most one of them passes its conflict check
 - **AND** moving an event re-checks its service leaders under the same per-leader locks followed by the per-account locks of their linked accounts
+
+#### Scenario: Moved and long-running events
+- **WHEN** an event has an instance whose actual interval overlaps the new duty
+- **THEN** it conflicts whatever its planning date, and only events without an instance are judged by their planning date
+
+#### Scenario: Typed names are weak matches for every identity kind
+- **WHEN** a typed name equals, after normalisation, the typed name, the account display name or the leader name of another duty
+- **THEN** the result is a warning and never a block, whichever duty was entered first
 
 #### Scenario: Several identities
 - **WHEN** a request names more than one of name, account and leader, or a name suggestion together with a leader
