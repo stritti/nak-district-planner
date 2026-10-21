@@ -52,7 +52,14 @@ from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.adapters.idp.provisioning import IdpProvisioningError, get_idp_provisioner
 from app.domain.event_payloads import registration_received
-from app.domain.models.leader import Leader, LeaderAssignment, LeaderRank, SpecialRole
+from app.domain.models.leader import (
+    ROLE_LEVEL_MESSAGE,
+    Leader,
+    LeaderAssignment,
+    LeaderRank,
+    SpecialRole,
+    role_fits_level,
+)
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
@@ -276,6 +283,8 @@ async def approve_registration(
     await ensure_congregation_in_district(db, district_id, congregation_id)
     rank = body.rank if body.rank is not None else reg.rank
     special_role = body.special_role if body.special_role is not None else reg.special_role
+    if body.assignments is None and not role_fits_level(special_role, congregation_id):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=ROLE_LEVEL_MESSAGE)
 
     await _create_leader_and_approve(
         leader_repo, reg, body, auth, district_id, congregation_id, rank, special_role

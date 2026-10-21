@@ -267,3 +267,31 @@ def test_assignments_replace_the_single_choice_fields_and_need_one_home() -> Non
             district_id=district_id,
             assignments=[{"congregation_id": a}, {"congregation_id": b}],
         )
+
+
+def test_a_registration_role_must_fit_the_level():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        RegistrationCreate(name="M", email="m@example.com", special_role="Gemeindevorsteher")
+    with pytest.raises(ValidationError):
+        RegistrationCreate(
+            name="M", email="m@example.com", congregation_id=uuid.uuid4(), special_role="Bezirksvorsteher"
+        )
+    with pytest.raises(ValidationError):
+        _approve_body(
+            district_id=uuid.uuid4(),
+            assignments=[{"congregation_id": uuid.uuid4(), "role": "Bezirksvorsteher"}],
+        )
+
+
+@pytest.mark.asyncio
+async def test_approval_rejects_a_single_choice_whose_role_does_not_fit():
+    district_id = uuid.uuid4()
+    reg = LeaderRegistration.create(
+        district_id=district_id, name="M", email="m@example.com",
+        special_role=rr.SpecialRole.GEMEINDEVORSTEHER,  # no congregation
+    )
+    with pytest.raises(HTTPException) as err:
+        await _approve_with(reg, _approve_body(district_id=district_id), district_id)
+    assert err.value.status_code == 422

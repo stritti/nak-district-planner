@@ -11,7 +11,7 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.adapters.api.schemas.leader import LeaderAssignmentCreate, check_assignments
-from app.domain.models.leader import LeaderRank, SpecialRole
+from app.domain.models.leader import ROLE_LEVEL_MESSAGE, LeaderRank, SpecialRole, role_fits_level
 from app.domain.models.leader_registration import RegistrationStatus
 from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
@@ -27,6 +27,12 @@ class RegistrationCreate(BaseModel):
     special_role: SpecialRole | None = None
     phone: str | None = Field(default=None, max_length=100)
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def _role_fits_the_level(self) -> RegistrationCreate:
+        if not role_fits_level(self.special_role, self.congregation_id):
+            raise ValueError(ROLE_LEVEL_MESSAGE)
+        return self
 
 
 class RegistrationApprove(BaseModel):
