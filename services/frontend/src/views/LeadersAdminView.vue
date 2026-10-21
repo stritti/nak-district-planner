@@ -101,6 +101,7 @@
                   <LeaderInlineCell
                     class="text-xs font-mono font-medium text-blue-700 dark:text-blue-300"
                     :leader="leader"
+                  :section-congregation-id="section.congregationId"
                     field="rank"
                     layout="mobile"
                     :editable="canEditLeaderField(leader, 'rank')"
@@ -112,6 +113,7 @@
                   <LeaderInlineCell
                     class="font-medium text-gray-800 dark:text-gray-200 break-words min-w-0"
                     :leader="leader"
+                  :section-congregation-id="section.congregationId"
                     field="name"
                     layout="mobile"
                     :editable="canEditLeaderField(leader, 'name')"
@@ -124,6 +126,7 @@
                 <div class="mt-0.5 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
                   <LeaderInlineCell
                     :leader="leader"
+                  :section-congregation-id="section.congregationId"
                     field="email"
                     layout="mobile"
                     :editable="canEditLeaderField(leader, 'email')"
@@ -134,6 +137,7 @@
                   />
                   <LeaderInlineCell
                     :leader="leader"
+                  :section-congregation-id="section.congregationId"
                     field="phone"
                     layout="mobile"
                     :editable="canEditLeaderField(leader, 'phone')"
@@ -160,12 +164,13 @@
                     v-if="isHomeIn(leader, section.congregationId)"
                     class="rounded bg-teal-100 px-1.5 py-0.5 text-teal-800 dark:bg-teal-900 dark:text-teal-200"
                   >Heimat</span>
-                  <template v-else>Heimat: {{ homeLabel(leader) }}</template>
+                  <template v-else>{{ homeLabel(leader) ? `Heimat: ${homeLabel(leader)}` : 'Heimat nicht sichtbar' }}</template>
                 </p>
               </div>
               <LeaderInlineCell
                 class="shrink-0 text-xs"
                 :leader="leader"
+                  :section-congregation-id="section.congregationId"
                 field="is_active"
                 layout="mobile"
                 :editable="canEditLeaderField(leader, 'is_active')"
@@ -230,6 +235,7 @@
                 <LeaderInlineCell
                   class="py-2 font-mono text-blue-700 dark:text-blue-300"
                   :leader="leader"
+                  :section-congregation-id="section.congregationId"
                   field="rank"
                   layout="desktop"
                   :editable="canEditLeaderField(leader, 'rank')"
@@ -241,6 +247,7 @@
                 <LeaderInlineCell
                   class="py-2 font-medium text-gray-800 dark:text-gray-200"
                   :leader="leader"
+                  :section-congregation-id="section.congregationId"
                   field="name"
                   layout="desktop"
                   :editable="canEditLeaderField(leader, 'name')"
@@ -269,10 +276,12 @@
                   <span v-else-if="homeLabel(leader)" class="text-gray-500 dark:text-gray-400">
                     Heimat: {{ homeLabel(leader) }}
                   </span>
+                  <span v-else class="text-gray-500 dark:text-gray-400">Heimat nicht sichtbar</span>
                 </td>
                 <LeaderInlineCell
                   class="py-2"
                   :leader="leader"
+                  :section-congregation-id="section.congregationId"
                   field="email"
                   layout="desktop"
                   :editable="canEditLeaderField(leader, 'email')"
@@ -284,6 +293,7 @@
                 <LeaderInlineCell
                   class="py-2"
                   :leader="leader"
+                  :section-congregation-id="section.congregationId"
                   field="phone"
                   layout="desktop"
                   :editable="canEditLeaderField(leader, 'phone')"
@@ -295,6 +305,7 @@
                 <LeaderInlineCell
                   class="py-2 text-center"
                   :leader="leader"
+                  :section-congregation-id="section.congregationId"
                   field="is_active"
                   layout="desktop"
                   :editable="canEditLeaderField(leader, 'is_active')"
