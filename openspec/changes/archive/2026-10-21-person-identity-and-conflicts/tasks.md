@@ -20,4 +20,4 @@
 - [x] 4.5 Frontend: assignment list in the edit dialog (add, role, home, remove, limited by the user's rights), the overview repeats a person in every assigned section with the role held there and a home marker, the inline role cell edits the assignment of its section, role choices follow the level (add dialog, registration form, approval); pure role/assignment helpers live in `api/leaderRoles.ts` and `api/leaderAssignments.ts`
 
 ## 5. Closure
-- [ ] 5.1 Baseline specs updated, change archived
+- [x] 5.1 Baseline specs updated, change archived
