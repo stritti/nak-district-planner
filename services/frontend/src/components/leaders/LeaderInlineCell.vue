@@ -3,7 +3,7 @@
 
 <template>
   <InlineEditableCell
-    :id="`leader-${field}-${layout}-${leader.id}`"
+    :id="`leader-${field}-${layout}-${leader.id}-${sectionCongregationId ?? 'district'}`"
     :as="layout === 'mobile' ? 'div' : 'td'"
     :value="config.value"
     :display-value="config.display"
