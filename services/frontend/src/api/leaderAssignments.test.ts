@@ -11,9 +11,9 @@ const assignment = (id: string, congregation_id: string | null, is_home = false)
 const leader = (assignments: LeaderAssignment[]) => ({ assignments }) as LeaderResponse
 
 describe('assignment helpers', () => {
-  it('finds the home assignment, falling back to the first one', () => {
+  it('finds the explicitly marked home without inventing one', () => {
     expect(homeAssignment(leader([assignment('a', 'c1'), assignment('b', 'c2', true)]))?.id).toBe('b')
-    expect(homeAssignment(leader([assignment('a', 'c1'), assignment('b', 'c2')]))?.id).toBe('a')
+    expect(homeAssignment(leader([assignment('a', 'c1'), assignment('b', 'c2')]))).toBeNull()
     expect(homeAssignment(leader([]))).toBeNull()
   })
 
