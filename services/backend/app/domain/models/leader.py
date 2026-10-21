@@ -92,31 +92,10 @@ class Leader:
             self.assignments[0] if self.assignments else None
         )
 
-    # Transitional accessors for the home assignment while callers move to ``assignments``.
     @property
-    def congregation_id(self) -> uuid.UUID | None:
-        home = self.home_assignment
-        return home.congregation_id if home else None
-
-    @congregation_id.setter
-    def congregation_id(self, value: uuid.UUID | None) -> None:
-        self._home_for_update().congregation_id = value
-
-    @property
-    def special_role(self) -> SpecialRole | None:
-        home = self.home_assignment
-        return home.role if home else None
-
-    @special_role.setter
-    def special_role(self, value: SpecialRole | None) -> None:
-        self._home_for_update().role = value
-
-    def _home_for_update(self) -> LeaderAssignment:
-        home = self.home_assignment
-        if home is None:
-            home = LeaderAssignment.create(self.id, self.district_id, is_home=True)
-            self.assignments.append(home)
-        return home
+    def congregation_ids(self) -> set[uuid.UUID]:
+        """Congregations of all assignments (the district level has none)."""
+        return {a.congregation_id for a in self.assignments if a.congregation_id is not None}
 
     def is_eligible_on(self, target_date: date) -> bool:
         return (

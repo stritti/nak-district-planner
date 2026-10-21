@@ -28,7 +28,7 @@ from app.adapters.api.routers import service_assignments as sa_router
 from app.adapters.api.schemas.calendar_integration import CalendarIntegrationCreate
 from app.adapters.api.schemas.district import CongregationCreate, CongregationUpdate
 from app.adapters.api.schemas.export_token import ExportTokenCreate
-from app.adapters.api.schemas.leader import LeaderCreate, LeaderUpdate
+from app.adapters.api.schemas.leader import LeaderAssignmentCreate, LeaderCreate
 from app.adapters.api.schemas.planning_series import PlanningSeriesCreate, PlanningSeriesUpdate
 from app.adapters.api.schemas.registration import RegistrationApprove, RegistrationCreate
 from app.adapters.api.schemas.service_assignment import (
@@ -219,7 +219,9 @@ async def test_leader_create_rejects_foreign_congregation() -> None:
         with pytest.raises(HTTPException) as exc:
             await leaders_router.create_leader(
                 DISTRICT,
-                LeaderCreate(name="N", congregation_id=FOREIGN_ID),
+                LeaderCreate(
+                    name="N", assignments=[{"congregation_id": FOREIGN_ID}]
+                ),
                 object(),
                 _db(),
                 districts=_found(District.create(name="D")),
@@ -231,26 +233,22 @@ async def test_leader_create_rejects_foreign_congregation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_leader_update_rejects_foreign_congregation() -> None:
+async def test_leader_assignment_rejects_foreign_congregation() -> None:
     leaders_repo = _found(Leader.create(name="L", district_id=DISTRICT))
     leaders_repo.get_for_update.return_value = leaders_repo.get.return_value
     with patch("app.adapters.api.routers.leaders.require_role_in_district"):
         with pytest.raises(HTTPException) as exc:
-            await leaders_router.update_leader(
+            await leaders_router.add_leader_assignment(
                 DISTRICT,
                 uuid.uuid4(),
-                LeaderUpdate(congregation_id=FOREIGN_ID),
+                LeaderAssignmentCreate(congregation_id=FOREIGN_ID),
                 object(),
                 _db(),
                 leaders_repo=leaders_repo,
-                if_match=leaders_router._leader_revision(leaders_repo.get.return_value),
             )
 
     _assert_rejected(exc, "congregation_id")
     leaders_repo.save.assert_not_awaited()
-
-
-# ── planning series ─────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio

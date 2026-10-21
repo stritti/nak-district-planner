@@ -136,6 +136,17 @@ class SqlLeaderRepository(LeaderRepository):
         if existing is None:
             # A transient row must not lazy-load its (empty) collection in async code.
             row.assignments = []
+        if existing is not None:
+            # The partial unique index allows one home per leader: unset a demoted home
+            # before the new one is written, whatever order the unit of work picks.
+            wanted = {a.id: a for a in leader.assignments}
+            demoted = [
+                a for a in row.assignments if a.is_home and not (a.id in wanted and wanted[a.id].is_home)
+            ]
+            for assignment in demoted:
+                assignment.is_home = False
+            if demoted:
+                await self._session.flush()
         _sync_assignments(row, leader.assignments)
         await self._session.flush()
 

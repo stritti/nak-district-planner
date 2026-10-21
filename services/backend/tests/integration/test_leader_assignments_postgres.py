@@ -131,7 +131,7 @@ async def test_assignments_round_trip_through_the_repository(sessions, world):
         (ids["a"], True), (ids["b"], False),
     ]
     assert leader.assignments[0].role == SpecialRole.GEMEINDEVORSTEHER
-    assert leader.congregation_id == ids["a"]  # transitional accessor: the home congregation
+    assert leader.home_assignment.congregation_id == ids["a"]
 
 
 async def test_saving_updates_adds_and_removes_assignments(sessions, world):
@@ -160,6 +160,21 @@ async def test_saving_updates_adds_and_removes_assignments(sessions, world):
         await _system(db)
         final = await SqlLeaderRepository(db).get(ids["l"])
     assert {a.congregation_id for a in final.assignments} == {ids["a"], ids["c"]}
+
+
+async def test_moving_the_home_flag_in_one_save_respects_the_unique_index(sessions, world):
+    ids, _ = world
+    async with sessions() as db, db.begin():
+        await _system(db)
+        repo = SqlLeaderRepository(db)
+        leader = await repo.get(ids["l"])
+        old_home, new_home = leader.assignments  # a (home), b
+        old_home.is_home, new_home.is_home = False, True
+        await repo.save(leader)
+    async with sessions() as db, db.begin():
+        await _system(db)
+        reloaded = await SqlLeaderRepository(db).get(ids["l"])
+    assert [a.congregation_id for a in reloaded.assignments if a.is_home] == [ids["b"]]
 
 
 async def test_listing_by_congregation_matches_any_assignment(sessions, world):
