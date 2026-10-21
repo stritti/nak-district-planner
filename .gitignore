@@ -107,3 +107,5 @@ postgres_data/
 playwright-report/
 services/frontend/test-results/
 .graphify/
+# Query-plan report written by tests/performance (uploaded as CI artifact)
+services/backend/event-list-query-plans.json

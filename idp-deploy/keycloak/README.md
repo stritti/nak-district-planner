@@ -15,7 +15,7 @@ docker compose logs -f keycloak | grep "Started"
 
 # 3. Setup realm and OIDC client
 python3 setup_keycloak_realm.py --keycloak-url http://localhost:8080 \
-  --admin-password admin_dev_pw
+  --admin-password admin_dev_pw --create-test-user
 
 # 4. Copy OIDC settings from script output to frontend .env.local
 # 5. Start frontend and test at http://localhost:5173/login

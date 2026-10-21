@@ -110,6 +110,7 @@ class EventDutyAssignment:
     linked_user_sub: str | None
     normalized_name: str | None
     suggestion_id: UUID | None = None
+    leader_id: UUID | None = None
 
     @classmethod
     def create(
@@ -122,10 +123,16 @@ class EventDutyAssignment:
         *,
         linked_display_name=None,
         suggestion_id=None,
+        leader_id=None,
+        leader_display_name=None,
     ):
-        if bool(name) == bool(linked_user_sub):
+        """Exactly one identity: typed name, verified account or an existing leader."""
+        if sum(bool(identity) for identity in (name, linked_user_sub, leader_id)) != 1:
             raise ValueError("Exactly one identity required")
-        snapshot = display_name(linked_display_name if linked_user_sub else name)
+        if leader_id:
+            snapshot = display_name(leader_display_name)
+        else:
+            snapshot = display_name(linked_display_name if linked_user_sub else name)
         return cls(
             uuid4(),
             slot_id,
@@ -135,8 +142,9 @@ class EventDutyAssignment:
             snapshot,
             category.label,
             linked_user_sub,
-            None if linked_user_sub else normalize_name(name),
+            None if linked_user_sub or leader_id else normalize_name(name),
             suggestion_id,
+            leader_id,
         )
 
     def visible_in(self, district_id, congregation_id):

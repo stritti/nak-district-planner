@@ -96,12 +96,33 @@ class EventDutiesRepository(ABC):
 
     @abstractmethod
     async def list_identity_schedule(
-        self, district_id, *, linked_user_sub, normalized_name, window_start, window_end,
-        exclude_slot_id,
+        self, district_id, *, linked_user_sub, normalized_name, leader_id, window_start,
+        window_end, exclude_slot_id,
     ):
         """Other duties of one person near a time window, as ``ScheduledDuty`` values.
 
-        ``linked_user_sub`` matches strongly, ``normalized_name`` only by typed name.
+        ``linked_user_sub`` and ``leader_id`` match strongly (``leader_id`` also finds the
+        leader's service assignments), ``normalized_name`` only by typed name.
         Duties of ``exclude_slot_id`` are ignored (several duties on one event are fine).
         """
+
+    @abstractmethod
+    async def get_leader(self, district_id, leader_id):
+        """The leader of this district, or ``None``."""
+
+    @abstractmethod
+    async def list_leaders(self, district_id):
+        """Leaders of this district, ordered by name."""
+
+    @abstractmethod
+    async def lock_leader(self, leader_id):
+        """Serialize bookings of one leader until the transaction ends.
+
+        Service assignments take the same lock, so a duty and a service of the
+        same leader cannot both pass their conflict checks concurrently.
+        """
+
+    @abstractmethod
+    async def lock_account(self, user_sub):
+        """Serialize bookings of one account (a leader's linked account included)."""
 

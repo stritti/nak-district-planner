@@ -8,12 +8,14 @@ import {
   deleteDutyAssignment,
   getSlotDuties,
   listEligibleUsers,
+  listLeaderChoices,
   listSuggestions,
   revalidateDutyAssignment,
   saveDutyAssignment,
   setSuggestionHidden,
   type DutyAssignment,
   type DutyCategory,
+  type DutyLeaderChoice,
   type DutySuggestion,
   type EligibleUser,
 } from '../api/eventDuties'
@@ -29,11 +31,13 @@ const emit = defineEmits<{ mutated: [] }>()
 const categories = ref<DutyCategory[]>([])
 const assignments = ref<DutyAssignment[]>([])
 const users = ref<EligibleUser[]>([])
+const leaders = ref<DutyLeaderChoice[]>([])
 const suggestions = ref<DutySuggestion[]>([])
 const category = ref('')
 const kind = ref('name')
 const name = ref('')
 const subject = ref('')
+const leaderId = ref('')
 const editing = ref<string>()
 // Revision read when the edit started; a reload must not silently replace it.
 const editingRevision = ref('')
@@ -49,6 +53,7 @@ async function load() {
   categories.value = []
   assignments.value = []
   users.value = []
+  leaders.value = []
   suggestions.value = []
   error.value = ''
   loading.value = true
@@ -64,6 +69,9 @@ async function load() {
         props.congregationId ?? undefined,
       )
       if (current === version) users.value = choices
+      // A missing leader list only removes that option; the other identities still work.
+      const choosable = await listLeaderChoices(props.districtId, props.slotId).catch(() => [])
+      if (current === version) leaders.value = choosable
     }
   } catch (cause) {
     if (current === version) {
@@ -86,6 +94,12 @@ watch(
   },
   { immediate: true },
 )
+
+// A confirmation belongs to the exact assignment that was rejected: any change of what
+// would be sent withdraws it, so "Trotzdem zuweisen" never covers an unseen conflict.
+watch([category, kind, name, subject, leaderId, editing], () => {
+  pendingConflict.value = null
+})
 
 watch([category, () => props.districtId, () => props.congregationId], async () => {
   const current = ++suggestionsVersion
@@ -153,12 +167,19 @@ async function runAction<Result>(
   }
 }
 
+function chosenIdentity(): string {
+  if (kind.value === 'name') return name.value.trim()
+  return kind.value === 'leader' ? leaderId.value : subject.value
+}
+
 async function save(confirmWarnings = false) {
-  if (!category.value || !(kind.value === 'name' ? name.value.trim() : subject.value)) return
+  if (!category.value || !chosenIdentity()) return
   const confirmation = confirmWarnings ? { confirm_warnings: true } : {}
   const identity = kind.value === 'name'
     ? { duty_category_id: category.value, name: name.value.trim(), ...confirmation }
-    : { duty_category_id: category.value, linked_user_sub: subject.value, ...confirmation }
+    : kind.value === 'leader'
+      ? { duty_category_id: category.value, leader_id: leaderId.value, ...confirmation }
+      : { duty_category_id: category.value, linked_user_sub: subject.value, ...confirmation }
   await runAction(
     () => saveDutyAssignment(
       props.districtId,
@@ -172,6 +193,7 @@ async function save(confirmWarnings = false) {
       apply: () => {
         name.value = ''
         subject.value = ''
+        leaderId.value = ''
         editing.value = undefined
         editingRevision.value = ''
       },
@@ -224,8 +246,9 @@ function edit(assignment: DutyAssignment) {
   editing.value = assignment.id
   editingRevision.value = assignment.revision
   category.value = assignment.duty_category_id
-  kind.value = assignment.linked_user_sub ? 'account' : 'name'
+  kind.value = assignment.leader_id ? 'leader' : assignment.linked_user_sub ? 'account' : 'name'
   subject.value = assignment.linked_user_sub ?? ''
+  leaderId.value = assignment.leader_id ?? ''
   name.value = assignment.display_name
 }
 </script>
@@ -262,6 +285,7 @@ function edit(assignment: DutyAssignment) {
       <p>
         {{ assignment.duty_label }}: {{ assignment.display_name }}
         <span v-if="assignment.linked_user_sub">(Konto)</span>
+        <span v-else-if="assignment.leader_id">(Amtsträger)</span>
       </p>
       <p v-if="assignment.needs_review" class="text-amber-700">Prüfung erforderlich</p>
       <p v-if="assignment.over_capacity" class="text-amber-700">Kapazität überschritten</p>
@@ -311,6 +335,7 @@ function edit(assignment: DutyAssignment) {
         <select v-model="kind" data-testid="identity-kind" class="form-input">
           <option value="name">Freier Name</option>
           <option value="account">Verknüpftes Konto</option>
+          <option v-if="leaders.length" value="leader">Amtsträger</option>
         </select>
       </label>
       <label v-if="kind === 'name'" class="block">
@@ -330,6 +355,15 @@ function edit(assignment: DutyAssignment) {
           />
         </datalist>
       </label>
+      <label v-else-if="kind === 'leader'" class="block">
+        Amtsträger
+        <select v-model="leaderId" data-testid="duty-leader" class="form-input">
+          <option value="">Amtsträger auswählen</option>
+          <option v-for="leader in leaders" :key="leader.id" :value="leader.id">
+            {{ leader.rank ? `${leader.rank} ` : '' }}{{ leader.name }}
+          </option>
+        </select>
+      </label>
       <label v-else class="block">
         Konto
         <select v-model="subject" data-testid="duty-account" class="form-input">
@@ -342,7 +376,7 @@ function edit(assignment: DutyAssignment) {
       <button
         type="submit"
         class="btn-primary"
-        :disabled="loading || !(kind === 'name' ? name.trim() : subject)"
+        :disabled="loading || !chosenIdentity()"
       >
         {{ editing ? 'Zuordnung ersetzen' : 'Dienst zuordnen' }}
       </button>

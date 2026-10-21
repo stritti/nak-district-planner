@@ -21,25 +21,32 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
         *,
         base_url: str,
         realm: str,
-        admin_username: str,
-        admin_password: str,
+        client_id: str,
+        client_secret: str,
         timeout_seconds: float,
         invite_on_approval: bool,
+        invite_lifespan_seconds: int = 259200,
+        invite_client_id: str | None = None,
+        invite_redirect_uri: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._realm = realm
-        self._admin_username = admin_username
-        self._admin_password = admin_password
+        self._client_id = client_id
+        self._client_secret = client_secret
         self._timeout_seconds = timeout_seconds
         self._invite_on_approval = invite_on_approval
+        self._invite_lifespan_seconds = invite_lifespan_seconds
+        self._invite_client_id = invite_client_id
+        self._invite_redirect_uri = invite_redirect_uri
 
     async def _get_admin_token(self) -> str:
-        token_url = f"{self._base_url}/realms/master/protocol/openid-connect/token"
+        # Service account of a confidential client in the application realm;
+        # never the master realm (least privilege).
+        token_url = f"{self._base_url}/realms/{self._realm}/protocol/openid-connect/token"
         data = {
-            "grant_type": "password",
-            "client_id": "admin-cli",
-            "username": self._admin_username,
-            "password": self._admin_password,
+            "grant_type": "client_credentials",
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
         }
         try:
             async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
@@ -136,9 +143,15 @@ class KeycloakProvisioningAdapter(IdpProvisioner):
             "Content-Type": "application/json",
         }
         required_actions = ["VERIFY_EMAIL", "UPDATE_PASSWORD"]
+        params: dict[str, str | int] = {"lifespan": self._invite_lifespan_seconds}
+        if self._invite_redirect_uri and self._invite_client_id:
+            params["client_id"] = self._invite_client_id
+            params["redirect_uri"] = self._invite_redirect_uri
         try:
             async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                response = await client.put(actions_url, headers=headers, json=required_actions)
+                response = await client.put(
+                    actions_url, headers=headers, params=params, json=required_actions
+                )
         except httpx.HTTPError as exc:
             raise IdpProvisioningError("Keycloak invite email failed") from exc
         if response.status_code >= 400:

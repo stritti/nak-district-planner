@@ -109,21 +109,22 @@ _HONORIFICS = frozenset({"br", "bruder", "sr", "schwester", "dr", "prof", "herr"
 def _plain_tokens(text: str) -> list[str]:
     decomposed = unicodedata.normalize("NFKD", text)
     stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return re.findall(r"\w+", stripped.casefold())
+    return re.findall(r"[^\W_]+", stripped.casefold())
 
 
 def person_match_key(name: str) -> str:
     """Key under which two typed names count as the same person.
 
-    Ignores case, spacing, punctuation, accents and leading honorifics or church
-    ranks ("Br.", "Dr.", "Ev."). A match is only a hint that needs confirmation,
-    never an identity: namesakes exist.
+    Ignores case, spacing, punctuation (including apostrophes, hyphens and underscores),
+    accents and leading honorifics or church ranks ("Br.", "Dr.", "Ev."). Punctuation
+    and spaces are dropped alike, so "D'Angelo", "d angelo" and "DAngelo" agree. A match
+    is only a hint that needs confirmation, never an identity: namesakes exist.
     """
     prefixes = _HONORIFICS | {t for rank in LeaderRank for t in _plain_tokens(rank.value)}
     tokens = _plain_tokens(name)
     while len(tokens) > 1 and tokens[0] in prefixes:
         tokens.pop(0)
-    return " ".join(tokens)
+    return "".join(tokens)
 
 
 def assignment_needs_review(

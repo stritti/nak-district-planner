@@ -139,22 +139,31 @@ Mit den Overrides aus [Bestehenden Traefik oder Keycloak einbinden](#bestehenden
      Ohne diesen Mapper enthält das Access-Token nur `aud=account`. Das Backend lehnt dann jede API-Anfrage mit 401 ab, obwohl die Anmeldung klappt.
 4. Das Client-Secret in `.env` als `OIDC_CLIENT_SECRET` eintragen, dazu `OIDC_DISCOVERY_URL` und `OIDC_CLIENT_ID` (siehe Abschnitt 1).
 
-Optional kann das Backend freigegebene Registrierungen direkt in Keycloak anlegen („IdP-Provisioning“). Es spricht die Admin-API dann intern an, ohne den Umweg über Traefik und die Admin-Allowlist. Es meldet sich mit einem Benutzer des Realms `master` an (Client `admin-cli`). Dafür einen eigenen Benutzer anlegen, nicht den Bootstrap-Admin:
+Optional kann das Backend freigegebene Registrierungen direkt in Keycloak anlegen („IdP-Provisioning“). Es spricht die Admin-API dann intern an, ohne den Umweg über Traefik und die Admin-Allowlist. Es meldet sich mit einem eigenen Confidential Client im Realm `nak-planner` an (`client_credentials`), nie im Realm `master`:
 
-1. Im Realm `master` einen Benutzer `nak-provisioning` mit Passwort anlegen.
-2. Unter *Role mapping → Assign role → Client roles* nur die Rolle `manage-users` des Clients `nak-planner-realm` zuweisen (allgemein `<Realm>-realm`). Das reicht zum Suchen und Anlegen von Benutzern im Realm `nak-planner`; andere Realms bleiben gesperrt.
-3. Einladungs-Mails versendet Keycloak selbst, nicht die Anwendung. Dafür im Realm `nak-planner` unter *Realm settings → Email* einen SMTP-Server und eine Absenderadresse eintragen. Ohne SMTP legt Keycloak den Benutzer zwar an, die Einladung scheitert aber, und die Freigabe wird als fehlgeschlagen protokolliert. Wer keine Einladungs-Mails will, setzt `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=false`.
+1. Im Realm `nak-planner` einen Client `nak-planner-provisioning` anlegen: *Client authentication* an, *Service accounts roles* an, *Standard flow* und *Direct access grants* aus. Alternativ legt `idp-deploy/keycloak/setup_keycloak_realm.py` ihn an; das Secret steht danach im Tab *Credentials*. Gegen den produktiven Keycloak aus einem Netz in `KEYCLOAK_ADMIN_ALLOWED_IPS` aufrufen, mit `--admin-user <dauerhafter Admin> --admin-password "$KC_ADMIN_PW"` (Passwort vorher mit `read -rs KC_ADMIN_PW` einlesen, damit es nicht in der Shell-Historie landet), `--keycloak-url https://<AUTH_HOST> --client-id nak-planner --health-url https://<AUTH_HOST>/realms/nak-planner --frontend-url https://<APP_HOST>` (der Health-Endpunkt liegt intern auf Port 9000) und ohne `--create-test-user`, das einen Testbenutzer mit bekanntem Passwort anlegt.
+2. Unter *Service accounts roles → Assign role → Client roles* nur `manage-users` und `view-users` des Clients `realm-management` zuweisen.
+3. Das Secret aus dem Tab *Credentials* als `IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET` eintragen. Zum Rotieren dort *Regenerate* wählen, den neuen Wert eintragen und Backend und Worker neu starten.
+4. Einladungs-Mails versendet Keycloak selbst, nicht die Anwendung. Dafür im Realm `nak-planner` unter *Realm settings → Email* dasselbe SMTP-Relay wie für die App (`SMTP_*`) und eine Absenderadresse eintragen und mit *Test connection* prüfen. Ohne SMTP legt Keycloak den Benutzer zwar an, die Einladung scheitert aber, und die Freigabe wird als fehlgeschlagen protokolliert. Wer keine Einladungs-Mails will, setzt `IDP_PROVISIONING_KEYCLOAK_INVITE_ON_APPROVAL=false`.
+5. Im Realm unter *Realm settings → Login* die *User registration* ausschalten (die Registrierung läuft über die App) und *Verify email* einschalten. Unter *Security defenses* die *Brute force detection* aktivieren, unter *Authentication → Policies* eine Passwort-Policy mit mindestens 15 Zeichen setzen. Das Setup-Skript setzt diese Werte ebenfalls. Für Bezirksadmins zusätzlich OTP oder Passkey (WebAuthn) als Required Action verlangen.
 
-Der `production_guard` verlangt alle vier Keycloak-Werte:
+Der `production_guard` verlangt die Keycloak-Werte und lehnt die früheren Variablen `IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME`/`_PASSWORD` ab:
 
 ```dotenv
 IDP_PROVISIONING_ENABLED=true
 IDP_PROVISIONING_PROVIDER=keycloak
 IDP_PROVISIONING_KEYCLOAK_BASE_URL=http://keycloak:8080
 IDP_PROVISIONING_KEYCLOAK_REALM=nak-planner
-IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME=nak-provisioning
-IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD=<langes Zufallspasswort>
+IDP_PROVISIONING_KEYCLOAK_CLIENT_ID=nak-planner-provisioning
+IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET=<Secret aus dem Credentials-Tab>
+# optional: Rücksprung in die App und Gültigkeit des Einladungslinks (Default 72 h)
+IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI=https://<APP_HOST>/
+IDP_PROVISIONING_KEYCLOAK_INVITE_LIFESPAN_SECONDS=259200
 ```
+
+Die Rücksprung-URI muss als gültige Redirect-URI des Clients `OIDC_CLIENT_ID` eingetragen sein, sonst lehnt Keycloak die Einladung ab. Dafür die App-Wurzel `https://<APP_HOST>/` zusätzlich zu `/auth/callback` unter *Valid redirect URIs* eintragen (das Setup-Skript tut das). `/auth/callback` selbst eignet sich nicht, weil die Seite ohne Authorization-Code einen Fehler zeigt.
+
+**Umstieg von früheren Versionen:** Wer bisher einen `master`-Benutzer (`nak-provisioning`) verwendet hat, legt vor dem Update den Client wie oben an, ersetzt in `.env` die beiden `ADMIN`-Variablen durch `CLIENT_ID`/`CLIENT_SECRET` und löscht danach den `master`-Benutzer. Ohne diesen Schritt startet das Backend in Produktion nicht.
 
 Details zu Rollen, Mappern und Fehlerbildern stehen in `idp-deploy/keycloak/OIDC-SETUP.md`.
 
@@ -239,7 +248,7 @@ Prüfen, was tatsächlich startet: `docker compose config --services`
 2. Im vorhandenen Keycloak einen Client `nak-planner` anlegen, wie in Abschnitt „3. Keycloak starten und einrichten“ beschrieben (einschließlich Audience-Mapper), und `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` in `.env` eintragen.
 3. Der Issuer in der Discovery-Antwort muss über HTTPS mit einem öffentlich gültigen Zertifikat erreichbar sein. Das Backend prüft TLS und übernimmt den Issuer aus der Discovery-Antwort.
 4. `.env.keycloak` und `.env.keycloak-db` werden nicht gebraucht.
-5. Für das IdP-Provisioning die Admin-API des vorhandenen Keycloak verwenden (`IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://sso.example.org`) und dort einen Benutzer im Realm `master` mit der Rolle `manage-users` des Clients `<Realm>-realm` anlegen, wie oben beschrieben. Für Einladungs-Mails braucht der Realm einen SMTP-Server.
+5. Für das IdP-Provisioning die Admin-API des vorhandenen Keycloak verwenden (`IDP_PROVISIONING_KEYCLOAK_BASE_URL=https://sso.example.org`) und dort im App-Realm einen Confidential Client mit Service Account und nur `manage-users`/`view-users` von `realm-management` anlegen, wie oben beschrieben. Für Einladungs-Mails braucht der Realm einen SMTP-Server.
 
 ### Vorhandener Traefik
 
@@ -273,7 +282,7 @@ Wichtig für die Vertrauenskette der Client-IP und der Forwarded-Header:
 
 Der Docker-Socket gehört hier dem vorhandenen Traefik; dieser Stack mountet ihn weiterhin nicht. Arbeitet der vorhandene Traefik nur mit dem File-Provider, statt der Labels die Dateien aus `deploy/traefik/dynamic/` in dessen Konfiguration übernehmen:
 - Hostnamen eintragen
-- Service-URLs auf `http://nak-frontend:80` und `http://nak-keycloak:8080` ändern; das sind die eindeutigen Aliase im gemeinsamen Netz.
+- Service-URLs auf `http://nak-frontend:8080` und `http://nak-keycloak:8080` ändern; das sind die eindeutigen Aliase im gemeinsamen Netz.
 
 Das Backend erreicht `AUTH_HOST` ohne den mitgelieferten Traefik über das öffentliche DNS, also über den Router des Servers. Unterstützt das Netz kein Hairpin-NAT, `AUTH_HOST` per `extra_hosts` auf den Host zeigen lassen, z. B. in einer weiteren Override-Datei:
 

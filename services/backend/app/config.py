@@ -104,9 +104,19 @@ class Settings(BaseSettings):
     idp_provisioning_timeout_seconds: float = 10.0
     idp_provisioning_keycloak_base_url: str | None = None
     idp_provisioning_keycloak_realm: str | None = None
+    # Confidential client with a service account in the application realm
+    # (client credentials grant; only realm-management manage-users/view-users).
+    idp_provisioning_keycloak_client_id: str | None = None
+    idp_provisioning_keycloak_client_secret: str | None = None
+    # Removed: the master-realm admin password grant. Only read so that the
+    # production guard can refuse a stale configuration.
     idp_provisioning_keycloak_admin_username: str | None = None
     idp_provisioning_keycloak_admin_password: str | None = None
     idp_provisioning_keycloak_invite_on_approval: bool = True
+    idp_provisioning_keycloak_invite_lifespan_seconds: int = Field(
+        default=259200, ge=3600, le=604800
+    )
+    idp_provisioning_keycloak_invite_redirect_uri: str | None = None
     startup_generate_draft_services: bool = False
     use_series_generation: bool = True
     conflict_check_enabled: bool = True
@@ -322,17 +332,34 @@ def production_guard(settings: Settings) -> None:
                 errors.append(
                     "IDP_PROVISIONING_KEYCLOAK_REALM must be configured when using keycloak provider"
                 )
-            if not settings.idp_provisioning_keycloak_admin_username:
+            if not settings.idp_provisioning_keycloak_client_id:
                 errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME must be configured when using keycloak provider"
+                    "IDP_PROVISIONING_KEYCLOAK_CLIENT_ID must be configured when using keycloak provider"
                 )
-            if settings.idp_provisioning_keycloak_admin_password in (
+            if settings.idp_provisioning_keycloak_client_secret in (
                 None,
                 "",
-                "replace-with-admin-password",
+                "replace-with-provisioning-client-secret",
             ):
                 errors.append(
-                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_PASSWORD must be changed from the default value"
+                    "IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET must be changed from the default value"
+                )
+            if (
+                settings.idp_provisioning_keycloak_admin_username
+                or settings.idp_provisioning_keycloak_admin_password
+            ):
+                errors.append(
+                    "IDP_PROVISIONING_KEYCLOAK_ADMIN_USERNAME/_PASSWORD are no longer supported; "
+                    "remove them and use IDP_PROVISIONING_KEYCLOAK_CLIENT_ID/_CLIENT_SECRET"
+                )
+            if (
+                settings.idp_provisioning_keycloak_invite_redirect_uri
+                and not settings.idp_provisioning_keycloak_invite_redirect_uri.startswith(
+                    "https://"
+                )
+            ):
+                errors.append(
+                    "IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI should use HTTPS in production"
                 )
 
     if errors:

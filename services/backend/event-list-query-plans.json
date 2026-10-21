@@ -1,0 +1,820 @@
+{
+  "district_first": {
+    "total": 50000,
+    "count_ms": 30.241,
+    "page_ms": 1.38,
+    "plans": [
+      {
+        "Plan": {
+          "Node Type": "Aggregate",
+          "Strategy": "Plain",
+          "Partial Mode": "Simple",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 8.26,
+          "Total Cost": 8.27,
+          "Plan Rows": 1,
+          "Plan Width": 8,
+          "Actual Startup Time": 30.214,
+          "Actual Total Time": 30.215,
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Shared Hit Blocks": 50055,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Index Only Scan",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Scan Direction": "Forward",
+              "Index Name": "ix_planning_slots_district_date",
+              "Relation Name": "planning_slots",
+              "Alias": "planning_slots",
+              "Startup Cost": 0.28,
+              "Total Cost": 8.25,
+              "Plan Rows": 1,
+              "Plan Width": 0,
+              "Actual Startup Time": 0.048,
+              "Actual Total Time": 26.091,
+              "Actual Rows": 50000,
+              "Actual Loops": 1,
+              "Index Cond": "((district_id = '39fc9cf4-2a34-47eb-b793-8c87d0947a72'::uuid) AND (planning_date >= '2031-01-01'::date) AND (planning_date <= '2031-12-31'::date))",
+              "Rows Removed by Index Recheck": 0,
+              "Heap Fetches": 50000,
+              "Shared Hit Blocks": 50055,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.119,
+        "Triggers": [],
+        "Execution Time": 30.241
+      },
+      {
+        "Plan": {
+          "Node Type": "Limit",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 8.26,
+          "Total Cost": 8.31,
+          "Plan Rows": 2,
+          "Plan Width": 1199,
+          "Actual Startup Time": 0.452,
+          "Actual Total Time": 1.311,
+          "Actual Rows": 500,
+          "Actual Loops": 1,
+          "Shared Hit Blocks": 550,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Incremental Sort",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 8.26,
+              "Total Cost": 8.31,
+              "Plan Rows": 2,
+              "Plan Width": 1199,
+              "Actual Startup Time": 0.451,
+              "Actual Total Time": 1.259,
+              "Actual Rows": 500,
+              "Actual Loops": 1,
+              "Sort Key": [
+                "planning_date",
+                "planning_time",
+                "id"
+              ],
+              "Presorted Key": [
+                "planning_date"
+              ],
+              "Full-sort Groups": {
+                "Group Count": 4,
+                "Sort Methods Used": [
+                  "quicksort"
+                ],
+                "Sort Space Memory": {
+                  "Average Sort Space Used": 41,
+                  "Peak Sort Space Used": 41
+                }
+              },
+              "Pre-sorted Groups": {
+                "Group Count": 4,
+                "Sort Methods Used": [
+                  "quicksort"
+                ],
+                "Sort Space Memory": {
+                  "Average Sort Space Used": 60,
+                  "Peak Sort Space Used": 60
+                }
+              },
+              "Shared Hit Blocks": 550,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "ix_planning_slots_district_date",
+                  "Relation Name": "planning_slots",
+                  "Alias": "planning_slots",
+                  "Startup Cost": 0.28,
+                  "Total Cost": 8.25,
+                  "Plan Rows": 1,
+                  "Plan Width": 1199,
+                  "Actual Startup Time": 0.029,
+                  "Actual Total Time": 0.501,
+                  "Actual Rows": 548,
+                  "Actual Loops": 1,
+                  "Index Cond": "((district_id = '39fc9cf4-2a34-47eb-b793-8c87d0947a72'::uuid) AND (planning_date >= '2031-01-01'::date) AND (planning_date <= '2031-12-31'::date))",
+                  "Rows Removed by Index Recheck": 0,
+                  "Shared Hit Blocks": 550,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.202,
+        "Triggers": [],
+        "Execution Time": 1.38
+      }
+    ]
+  },
+  "district_deep": {
+    "total": 50000,
+    "count_ms": 29.836,
+    "page_ms": 21.866,
+    "plans": [
+      {
+        "Plan": {
+          "Node Type": "Aggregate",
+          "Strategy": "Plain",
+          "Partial Mode": "Simple",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 8.26,
+          "Total Cost": 8.27,
+          "Plan Rows": 1,
+          "Plan Width": 8,
+          "Actual Startup Time": 29.801,
+          "Actual Total Time": 29.803,
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Shared Hit Blocks": 50055,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Index Only Scan",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Scan Direction": "Forward",
+              "Index Name": "ix_planning_slots_district_date",
+              "Relation Name": "planning_slots",
+              "Alias": "planning_slots",
+              "Startup Cost": 0.28,
+              "Total Cost": 8.25,
+              "Plan Rows": 1,
+              "Plan Width": 0,
+              "Actual Startup Time": 0.028,
+              "Actual Total Time": 25.753,
+              "Actual Rows": 50000,
+              "Actual Loops": 1,
+              "Index Cond": "((district_id = '39fc9cf4-2a34-47eb-b793-8c87d0947a72'::uuid) AND (planning_date >= '2031-01-01'::date) AND (planning_date <= '2031-12-31'::date))",
+              "Rows Removed by Index Recheck": 0,
+              "Heap Fetches": 50000,
+              "Shared Hit Blocks": 50055,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.22,
+        "Triggers": [],
+        "Execution Time": 29.836
+      },
+      {
+        "Plan": {
+          "Node Type": "Limit",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 8.31,
+          "Total Cost": 8.33,
+          "Plan Rows": 1,
+          "Plan Width": 1199,
+          "Actual Startup Time": 20.888,
+          "Actual Total Time": 21.797,
+          "Actual Rows": 500,
+          "Actual Loops": 1,
+          "Shared Hit Blocks": 10564,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Incremental Sort",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 8.26,
+              "Total Cost": 8.31,
+              "Plan Rows": 2,
+              "Plan Width": 1199,
+              "Actual Startup Time": 0.511,
+              "Actual Total Time": 21.23,
+              "Actual Rows": 10500,
+              "Actual Loops": 1,
+              "Sort Key": [
+                "planning_date",
+                "planning_time",
+                "id"
+              ],
+              "Presorted Key": [
+                "planning_date"
+              ],
+              "Full-sort Groups": {
+                "Group Count": 77,
+                "Sort Methods Used": [
+                  "quicksort"
+                ],
+                "Sort Space Memory": {
+                  "Average Sort Space Used": 41,
+                  "Peak Sort Space Used": 41
+                }
+              },
+              "Pre-sorted Groups": {
+                "Group Count": 77,
+                "Sort Methods Used": [
+                  "quicksort"
+                ],
+                "Sort Space Memory": {
+                  "Average Sort Space Used": 60,
+                  "Peak Sort Space Used": 60
+                }
+              },
+              "Shared Hit Blocks": 10564,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "ix_planning_slots_district_date",
+                  "Relation Name": "planning_slots",
+                  "Alias": "planning_slots",
+                  "Startup Cost": 0.28,
+                  "Total Cost": 8.25,
+                  "Plan Rows": 1,
+                  "Plan Width": 1199,
+                  "Actual Startup Time": 0.028,
+                  "Actual Total Time": 8.041,
+                  "Actual Rows": 10549,
+                  "Actual Loops": 1,
+                  "Index Cond": "((district_id = '39fc9cf4-2a34-47eb-b793-8c87d0947a72'::uuid) AND (planning_date >= '2031-01-01'::date) AND (planning_date <= '2031-12-31'::date))",
+                  "Rows Removed by Index Recheck": 0,
+                  "Shared Hit Blocks": 10564,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.203,
+        "Triggers": [],
+        "Execution Time": 21.866
+      }
+    ]
+  },
+  "congregation": {
+    "total": 14000,
+    "count_ms": 27.103,
+    "page_ms": 1.467,
+    "plans": [
+      {
+        "Plan": {
+          "Node Type": "Aggregate",
+          "Strategy": "Plain",
+          "Partial Mode": "Simple",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 8.29,
+          "Total Cost": 8.3,
+          "Plan Rows": 1,
+          "Plan Width": 8,
+          "Actual Startup Time": 27.069,
+          "Actual Total Time": 27.071,
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Shared Hit Blocks": 50055,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Index Scan",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Scan Direction": "Forward",
+              "Index Name": "ix_planning_slots_district_date",
+              "Relation Name": "planning_slots",
+              "Alias": "planning_slots",
+              "Startup Cost": 0.28,
+              "Total Cost": 8.29,
+              "Plan Rows": 1,
+              "Plan Width": 0,
+              "Actual Startup Time": 0.035,
+              "Actual Total Time": 26.116,
+              "Actual Rows": 14000,
+              "Actual Loops": 1,
+              "Index Cond": "((district_id = '39fc9cf4-2a34-47eb-b793-8c87d0947a72'::uuid) AND (planning_date >= '2031-01-01'::date) AND (planning_date <= '2031-12-31'::date))",
+              "Rows Removed by Index Recheck": 0,
+              "Filter": "((congregation_id = 'd20d0b38-3604-4fe4-a7a9-912ae1233c18'::uuid) OR ((status = 'ACTIVE'::planning_slot_status) AND (congregation_id IS NULL) AND (approval_status = 'CONFIRMED'::event_approval_status) AND (('all'::text = ANY ((applicability)::text[])) OR ('d20d0b38-3604-4fe4-a7a9-912ae1233c18'::text = ANY ((applicability)::text[])))))",
+              "Rows Removed by Filter": 36000,
+              "Shared Hit Blocks": 50055,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.178,
+        "Triggers": [],
+        "Execution Time": 27.103
+      },
+      {
+        "Plan": {
+          "Node Type": "Limit",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 8.3,
+          "Total Cost": 8.34,
+          "Plan Rows": 2,
+          "Plan Width": 1199,
+          "Actual Startup Time": 0.195,
+          "Actual Total Time": 1.422,
+          "Actual Rows": 500,
+          "Actual Loops": 1,
+          "Shared Hit Blocks": 1788,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Incremental Sort",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 8.3,
+              "Total Cost": 8.34,
+              "Plan Rows": 2,
+              "Plan Width": 1199,
+              "Actual Startup Time": 0.195,
+              "Actual Total Time": 1.382,
+              "Actual Rows": 500,
+              "Actual Loops": 1,
+              "Sort Key": [
+                "planning_date",
+                "planning_time",
+                "id"
+              ],
+              "Presorted Key": [
+                "planning_date"
+              ],
+              "Full-sort Groups": {
+                "Group Count": 13,
+                "Sort Methods Used": [
+                  "quicksort"
+                ],
+                "Sort Space Memory": {
+                  "Average Sort Space Used": 33,
+                  "Peak Sort Space Used": 33
+                }
+              },
+              "Shared Hit Blocks": 1788,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "ix_planning_slots_district_date",
+                  "Relation Name": "planning_slots",
+                  "Alias": "planning_slots",
+                  "Startup Cost": 0.28,
+                  "Total Cost": 8.29,
+                  "Plan Rows": 1,
+                  "Plan Width": 1199,
+                  "Actual Startup Time": 0.027,
+                  "Actual Total Time": 0.952,
+                  "Actual Rows": 508,
+                  "Actual Loops": 1,
+                  "Index Cond": "((district_id = '39fc9cf4-2a34-47eb-b793-8c87d0947a72'::uuid) AND (planning_date >= '2031-01-01'::date) AND (planning_date <= '2031-12-31'::date))",
+                  "Rows Removed by Index Recheck": 0,
+                  "Filter": "((congregation_id = 'd20d0b38-3604-4fe4-a7a9-912ae1233c18'::uuid) OR ((status = 'ACTIVE'::planning_slot_status) AND (congregation_id IS NULL) AND (approval_status = 'CONFIRMED'::event_approval_status) AND (('all'::text = ANY ((applicability)::text[])) OR ('d20d0b38-3604-4fe4-a7a9-912ae1233c18'::text = ANY ((applicability)::text[])))))",
+                  "Rows Removed by Filter": 1276,
+                  "Shared Hit Blocks": 1788,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.259,
+        "Triggers": [],
+        "Execution Time": 1.467
+      }
+    ]
+  },
+  "district_only": {
+    "total": 12500,
+    "count_ms": 18.996,
+    "page_ms": 1.467,
+    "plans": [
+      {
+        "Plan": {
+          "Node Type": "Aggregate",
+          "Strategy": "Plain",
+          "Partial Mode": "Simple",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 8.26,
+          "Total Cost": 8.27,
+          "Plan Rows": 1,
+          "Plan Width": 8,
+          "Actual Startup Time": 18.968,
+          "Actual Total Time": 18.969,
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Shared Hit Blocks": 50055,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Index Scan",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Scan Direction": "Forward",
+              "Index Name": "ix_planning_slots_district_date",
+              "Relation Name": "planning_slots",
+              "Alias": "planning_slots",
+              "Startup Cost": 0.28,
+              "Total Cost": 8.25,
+              "Plan Rows": 1,
+              "Plan Width": 0,
+              "Actual Startup Time": 0.029,
+              "Actual Total Time": 18.223,
+              "Actual Rows": 12500,
+              "Actual Loops": 1,
+              "Index Cond": "((district_id = '39fc9cf4-2a34-47eb-b793-8c87d0947a72'::uuid) AND (planning_date >= '2031-01-01'::date) AND (planning_date <= '2031-12-31'::date))",
+              "Rows Removed by Index Recheck": 0,
+              "Filter": "(congregation_id IS NULL)",
+              "Rows Removed by Filter": 37500,
+              "Shared Hit Blocks": 50055,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.148,
+        "Triggers": [],
+        "Execution Time": 18.996
+      },
+      {
+        "Plan": {
+          "Node Type": "Limit",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 8.26,
+          "Total Cost": 8.31,
+          "Plan Rows": 2,
+          "Plan Width": 1199,
+          "Actual Startup Time": 0.224,
+          "Actual Total Time": 1.418,
+          "Actual Rows": 500,
+          "Actual Loops": 1,
+          "Shared Hit Blocks": 2060,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Incremental Sort",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 8.26,
+              "Total Cost": 8.31,
+              "Plan Rows": 2,
+              "Plan Width": 1199,
+              "Actual Startup Time": 0.223,
+              "Actual Total Time": 1.373,
+              "Actual Rows": 500,
+              "Actual Loops": 1,
+              "Sort Key": [
+                "planning_date",
+                "planning_time",
+                "id"
+              ],
+              "Presorted Key": [
+                "planning_date"
+              ],
+              "Full-sort Groups": {
+                "Group Count": 15,
+                "Sort Methods Used": [
+                  "quicksort"
+                ],
+                "Sort Space Memory": {
+                  "Average Sort Space Used": 33,
+                  "Peak Sort Space Used": 33
+                }
+              },
+              "Shared Hit Blocks": 2060,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "ix_planning_slots_district_date",
+                  "Relation Name": "planning_slots",
+                  "Alias": "planning_slots",
+                  "Startup Cost": 0.28,
+                  "Total Cost": 8.25,
+                  "Plan Rows": 1,
+                  "Plan Width": 1199,
+                  "Actual Startup Time": 0.032,
+                  "Actual Total Time": 0.892,
+                  "Actual Rows": 514,
+                  "Actual Loops": 1,
+                  "Index Cond": "((district_id = '39fc9cf4-2a34-47eb-b793-8c87d0947a72'::uuid) AND (planning_date >= '2031-01-01'::date) AND (planning_date <= '2031-12-31'::date))",
+                  "Rows Removed by Index Recheck": 0,
+                  "Filter": "(congregation_id IS NULL)",
+                  "Rows Removed by Filter": 1542,
+                  "Shared Hit Blocks": 2060,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.183,
+        "Triggers": [],
+        "Execution Time": 1.467
+      }
+    ]
+  }
+}
