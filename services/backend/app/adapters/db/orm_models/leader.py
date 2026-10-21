@@ -19,6 +19,7 @@ class LeaderORM(Base):
     """ORM model for leaderorm."""
 
     __tablename__ = "leaders"
+    __table_args__ = (sa.UniqueConstraint("id", "district_id", name="uq_leaders_id_district"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
