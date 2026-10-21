@@ -13,8 +13,8 @@
 - [x] 3.1 Matrix endpoint returns conflicts per cell (double booking, travel time among the loaded assignments; unavailability and duties are not part of this step); cells show a labelled marker
 
 ## 4. Person–congregation–role model
-- [ ] 4.1 Design and decisions recorded (`design.md`)
-- [ ] 4.2 Revision `leader_assignments` with backfill, drop of `congregation_id`/`special_role`, domain, repository and rewritten RLS
+- [x] 4.1 Design and decisions recorded (`design.md`)
+- [x] 4.2 Revision `20261022_leader_assignments` with backfill, drop of `congregation_id`/`special_role`, domain, repository, rewritten RLS and audit of assignment changes (the Leader model keeps transitional `congregation_id`/`special_role` accessors for the home assignment until 4.3 switches the API)
 - [ ] 4.3 API: assignments in leader responses and create, assignment sub-resource with rights per congregation
 - [ ] 4.4 Registration/approval and `link-self` on assignments
 - [ ] 4.5 Frontend: assignment list in the dialogs, repeated per congregation in the overview, home marker

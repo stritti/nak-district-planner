@@ -10,9 +10,22 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.db.orm_models.leader import LeaderORM
-from app.domain.models.leader import Leader, LeaderRank, SpecialRole
+from app.adapters.db.orm_models.leader import LeaderAssignmentORM, LeaderORM
+from app.domain.models.leader import Leader, LeaderAssignment, LeaderRank, SpecialRole
 from app.domain.ports.repositories import LeaderRepository
+
+
+def _assignment_to_domain(row: LeaderAssignmentORM) -> LeaderAssignment:
+    return LeaderAssignment(
+        id=row.id,
+        leader_id=row.leader_id,
+        district_id=row.district_id,
+        congregation_id=row.congregation_id,
+        role=SpecialRole(row.role) if row.role else None,
+        is_home=row.is_home,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 def _orm_to_domain(row: LeaderORM) -> Leader:
@@ -20,9 +33,7 @@ def _orm_to_domain(row: LeaderORM) -> Leader:
         id=row.id,
         name=row.name,
         district_id=row.district_id,
-        congregation_id=row.congregation_id,
         rank=LeaderRank(row.rank) if row.rank else None,
-        special_role=SpecialRole(row.special_role) if row.special_role else None,
         user_sub=row.user_sub,
         email=row.email,
         phone=row.phone,
@@ -32,7 +43,28 @@ def _orm_to_domain(row: LeaderORM) -> Leader:
         service_end_date=row.service_end_date,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        assignments=[_assignment_to_domain(a) for a in row.assignments],
     )
+
+
+def _sync_assignments(row: LeaderORM, assignments: list[LeaderAssignment]) -> None:
+    """Make ``row.assignments`` equal to the domain list (update, add, remove by id)."""
+    existing = {a.id: a for a in row.assignments}
+    wanted = {a.id for a in assignments}
+    for stale in [a for a in row.assignments if a.id not in wanted]:
+        row.assignments.remove(stale)
+    for assignment in assignments:
+        orm = existing.get(assignment.id)
+        if orm is None:
+            orm = LeaderAssignmentORM(id=assignment.id)
+            row.assignments.append(orm)
+        orm.leader_id = assignment.leader_id
+        orm.district_id = assignment.district_id
+        orm.congregation_id = assignment.congregation_id
+        orm.role = assignment.role.value if assignment.role else None
+        orm.is_home = assignment.is_home
+        orm.created_at = assignment.created_at
+        orm.updated_at = assignment.updated_at
 
 
 class SqlLeaderRepository(LeaderRepository):
@@ -60,7 +92,9 @@ class SqlLeaderRepository(LeaderRepository):
     ) -> list[Leader]:
         stmt = select(LeaderORM).where(LeaderORM.district_id == district_id)
         if congregation_id is not None:
-            stmt = stmt.where(LeaderORM.congregation_id == congregation_id)
+            stmt = stmt.where(
+                LeaderORM.assignments.any(LeaderAssignmentORM.congregation_id == congregation_id)
+            )
         if active_only:
             stmt = stmt.where(LeaderORM.is_active.is_(True), LeaderORM.hidden_from_lists.is_(False))
         stmt = stmt.order_by(LeaderORM.name)
@@ -89,9 +123,7 @@ class SqlLeaderRepository(LeaderRepository):
         row.id = leader.id
         row.name = leader.name
         row.district_id = leader.district_id
-        row.congregation_id = leader.congregation_id
         row.rank = leader.rank.value if leader.rank else None
-        row.special_role = leader.special_role.value if leader.special_role else None
         row.user_sub = leader.user_sub
         row.email = leader.email
         row.phone = leader.phone
@@ -101,6 +133,10 @@ class SqlLeaderRepository(LeaderRepository):
         row.service_end_date = leader.service_end_date
         row.created_at = leader.created_at
         row.updated_at = leader.updated_at
+        if existing is None:
+            # A transient row must not lazy-load its (empty) collection in async code.
+            row.assignments = []
+        _sync_assignments(row, leader.assignments)
         await self._session.flush()
 
     async def delete(self, leader_id: uuid.UUID) -> None:
