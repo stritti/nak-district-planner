@@ -221,7 +221,7 @@ def _series_obj(district_id: uuid.UUID):
 
 
 def _leader_obj(district_id: uuid.UUID):
-    return SimpleNamespace(id=uuid.uuid4(), district_id=district_id, congregation_id=None)
+    return SimpleNamespace(id=uuid.uuid4(), district_id=district_id, congregation_ids=set())
 
 
 def _notification_obj(district_id: uuid.UUID):

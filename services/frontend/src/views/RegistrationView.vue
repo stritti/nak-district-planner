@@ -87,7 +87,7 @@
             <label class="form-label">Beauftragung</label>
             <select v-model="form.special_role" class="form-select w-full">
               <option :value="null">— keine —</option>
-              <option v-for="r in SPECIAL_ROLES" :key="r.value" :value="r.value">{{ r.label }}</option>
+              <option v-for="r in roleChoicesFor(form.congregation_id)" :key="r.value" :value="r.value">{{ r.label }}</option>
             </select>
           </div>
 
@@ -149,7 +149,8 @@
 import { ref, watch } from 'vue'
 import { CheckCircleIcon } from '@heroicons/vue/24/outline'
 import ContextualHelp from '../components/ContextualHelp.vue'
-import { LEADER_RANKS, SPECIAL_ROLES } from '../api/leaders'
+import { LEADER_RANKS } from '../api/leaders'
+import { roleChoicesFor, roleFitsLevel } from '../api/leaderRoles'
 import type { LeaderRank, SpecialRole } from '../api/leaders'
 import {
   listDistrictsPublic,
@@ -191,6 +192,14 @@ listDistrictsPublic()
   .catch(() => {
     error.value = 'Bezirke konnten nicht geladen werden. Bitte Seite neu laden.'
   })
+
+// A role that no longer fits the chosen congregation would be rejected by the server.
+watch(
+  () => [form.value.congregation_id, form.value.special_role] as const,
+  ([congregationId, role]) => {
+    if (role && !roleFitsLevel(role, congregationId)) form.value.special_role = null
+  },
+)
 
 watch(
   () => form.value.district_id,

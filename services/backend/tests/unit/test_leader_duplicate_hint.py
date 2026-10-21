@@ -79,7 +79,7 @@ async def test_a_known_name_is_rejected_with_the_matching_people(active: bool) -
     detail = err.value.detail
     assert detail["code"] == "LEADER_DUPLICATE"
     assert detail["matches"] == [
-        {"id": str(known.id), "name": known.name, "congregation_id": str(known.congregation_id),
+        {"id": str(known.id), "name": known.name, "congregation_ids": [str(c) for c in known.congregation_ids],
          "is_active": active}
     ]
     assert "geheim@example.org" not in str(detail) and "0123" not in str(detail)

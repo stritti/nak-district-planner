@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 import unicodedata
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from enum import Enum, StrEnum
 
@@ -35,14 +35,59 @@ class SpecialRole(StrEnum):
     BEZIRKSVORSTEHER = "Bezirksvorsteher"
 
 
+def role_fits_level(role: SpecialRole | None, congregation_id: uuid.UUID | None) -> bool:
+    """A congregation leader serves a congregation, a district leader the district level."""
+    if role is SpecialRole.GEMEINDEVORSTEHER:
+        return congregation_id is not None
+    if role is SpecialRole.BEZIRKSVORSTEHER:
+        return congregation_id is None
+    return True
+
+
+ROLE_LEVEL_MESSAGE = (
+    "Gemeindevorsteher gehört zu einer Gemeinde, Bezirksvorsteher zur Bezirksebene (ohne Gemeinde)."
+)
+
+
+@dataclass
+class LeaderAssignment:
+    """A leader's service in one congregation (``None`` = district level) with an optional role.
+
+    Exactly one assignment of a leader is the home assignment (sorting, default scope).
+    """
+
+    id: uuid.UUID
+    leader_id: uuid.UUID
+    district_id: uuid.UUID
+    congregation_id: uuid.UUID | None
+    role: SpecialRole | None
+    is_home: bool
+    created_at: datetime
+    updated_at: datetime
+
+    @staticmethod
+    def create(
+        leader_id: uuid.UUID,
+        district_id: uuid.UUID,
+        congregation_id: uuid.UUID | None = None,
+        role: SpecialRole | None = None,
+        *,
+        is_home: bool = False,
+    ) -> LeaderAssignment:
+        now = datetime.now(UTC)
+        return LeaderAssignment(
+            id=uuid.uuid4(), leader_id=leader_id, district_id=district_id,
+            congregation_id=congregation_id, role=role, is_home=is_home,
+            created_at=now, updated_at=now,
+        )
+
+
 @dataclass
 class Leader:
     id: uuid.UUID
     name: str
     district_id: uuid.UUID
-    congregation_id: uuid.UUID | None
     rank: LeaderRank | None
-    special_role: SpecialRole | None
     user_sub: str | None
     email: str | None
     phone: str | None
@@ -53,6 +98,18 @@ class Leader:
 
     hidden_from_lists: bool = False
     service_end_date: date | None = None
+    assignments: list[LeaderAssignment] = field(default_factory=list)
+
+    @property
+    def home_assignment(self) -> LeaderAssignment | None:
+        return next((a for a in self.assignments if a.is_home), None) or (
+            self.assignments[0] if self.assignments else None
+        )
+
+    @property
+    def congregation_ids(self) -> set[uuid.UUID]:
+        """Congregations of all assignments (the district level has none)."""
+        return {a.congregation_id for a in self.assignments if a.congregation_id is not None}
 
     def is_eligible_on(self, target_date: date) -> bool:
         return (
@@ -77,13 +134,12 @@ class Leader:
         service_end_date: date | None = None,
     ) -> Leader:
         now = datetime.now(UTC)
+        leader_id = uuid.uuid4()
         return Leader(
-            id=uuid.uuid4(),
+            id=leader_id,
             name=name,
             district_id=district_id,
-            congregation_id=congregation_id,
             rank=rank,
-            special_role=special_role,
             user_sub=user_sub,
             email=email,
             phone=phone,
@@ -93,6 +149,11 @@ class Leader:
             service_end_date=service_end_date,
             created_at=now,
             updated_at=now,
+            assignments=[
+                LeaderAssignment.create(
+                    leader_id, district_id, congregation_id, special_role, is_home=True
+                )
+            ],
         )
 
 

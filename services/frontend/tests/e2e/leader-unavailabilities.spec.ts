@@ -64,7 +64,9 @@ test.describe('Leader unavailabilities admin', () => {
             name: 'Pastor Schmidt',
             rank: 'Pr.',
             is_active: true,
-            congregation_id: null,
+            assignments: [
+              { id: 'assignment-1', congregation_id: null, role: null, is_home: true, revision: 'ar-1' },
+            ],
             district_id: 'district-1',
           },
         ]),
@@ -108,7 +110,7 @@ test.describe('Leader unavailabilities admin', () => {
     })
 
     await page.goto(`${FRONTEND_URL}/admin/leaders`)
-    await expect(page.getByRole('cell', { name: 'Pastor Schmidt' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('cell', { name: /^Name: Pastor Schmidt/ })).toBeVisible({ timeout: 10000 })
 
     await page.getByTestId('unavailability-tab').click()
     await expect(page.getByText('Keine Abwesenheiten erfasst.')).toBeVisible()
@@ -144,7 +146,9 @@ test.describe('Leader unavailabilities admin', () => {
             name: 'Pastor Schmidt',
             rank: 'Pr.',
             is_active: true,
-            congregation_id: null,
+            assignments: [
+              { id: 'assignment-1', congregation_id: null, role: null, is_home: true, revision: 'ar-1' },
+            ],
             district_id: 'district-1',
           },
           {
@@ -152,7 +156,9 @@ test.describe('Leader unavailabilities admin', () => {
             name: 'Diakon Weber',
             rank: 'Di.',
             is_active: true,
-            congregation_id: null,
+            assignments: [
+              { id: 'assignment-1', congregation_id: null, role: null, is_home: true, revision: 'ar-1' },
+            ],
             district_id: 'district-1',
           },
         ]),
@@ -177,7 +183,7 @@ test.describe('Leader unavailabilities admin', () => {
     })
 
     await page.goto(`${FRONTEND_URL}/admin/leaders`)
-    await expect(page.getByRole('cell', { name: 'Pastor Schmidt' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('cell', { name: /^Name: Pastor Schmidt/ })).toBeVisible({ timeout: 10000 })
 
     await page
       .getByRole('row', { name: /Pastor Schmidt/ })
@@ -206,7 +212,9 @@ test.describe('Leader unavailabilities admin', () => {
             name: 'Pastor Schmidt',
             rank: 'Pr.',
             is_active: true,
-            congregation_id: null,
+            assignments: [
+              { id: 'assignment-1', congregation_id: null, role: null, is_home: true, revision: 'ar-1' },
+            ],
             district_id: 'district-1',
           },
         ]),
@@ -231,7 +239,7 @@ test.describe('Leader unavailabilities admin', () => {
     })
 
     await page.goto(`${FRONTEND_URL}/admin/leaders`)
-    await expect(page.getByRole('cell', { name: 'Pastor Schmidt' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('cell', { name: /^Name: Pastor Schmidt/ })).toBeVisible({ timeout: 10000 })
 
     await page.getByTestId('unavailability-tab').click()
     await page.getByTestId('unavailability-start-date').fill('2026-05-10')

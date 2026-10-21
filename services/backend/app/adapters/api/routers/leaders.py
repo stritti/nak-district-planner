@@ -20,6 +20,9 @@ from app.adapters.api.deps import (
 )
 from app.adapters.api.revisions import entity_revision, next_updated_at
 from app.adapters.api.schemas.leader import (
+    LeaderAssignmentCreate,
+    LeaderAssignmentResponse,
+    LeaderAssignmentUpdate,
     LeaderCreate,
     LeaderResponse,
     LeaderSelfLinkRequest,
@@ -33,7 +36,14 @@ from app.adapters.auth.permissions import (
 from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
-from app.domain.models.leader import Leader, LeaderRank, SpecialRole, person_match_key
+from app.domain.models.leader import (
+    ROLE_LEVEL_MESSAGE,
+    Leader,
+    LeaderAssignment,
+    LeaderRank,
+    person_match_key,
+    role_fits_level,
+)
 from app.domain.models.role import Role
 
 router = APIRouter(prefix="/api/v1/districts/{district_id}/leaders", tags=["leaders"])
@@ -52,8 +62,6 @@ class LeaderInlineUpdate(BaseModel):
     email: str | None = Field(None, max_length=255)
     phone: str | None = Field(None, max_length=100)
     rank: LeaderRank | None = None
-    special_role: SpecialRole | None = None
-    congregation_id: uuid.UUID | None = None
     is_active: bool | None = None
     confirm_deactivation: bool = Field(
         False,
@@ -71,14 +79,28 @@ def _leader_revision(leader: Leader) -> str:
     return entity_revision(leader.id, leader.updated_at)
 
 
+def _assignment_revision(assignment: LeaderAssignment) -> str:
+    return entity_revision(assignment.id, assignment.updated_at)
+
+
+def _assignment_response(assignment: LeaderAssignment) -> LeaderAssignmentResponse:
+    return LeaderAssignmentResponse(
+        id=assignment.id,
+        congregation_id=assignment.congregation_id,
+        role=assignment.role,
+        is_home=assignment.is_home,
+        revision=_assignment_revision(assignment),
+    )
+
+
 def _leader_response(leader: Leader) -> LeaderResponse:
+    ordered = sorted(leader.assignments, key=lambda a: (not a.is_home, a.created_at))
     return LeaderResponse(
         id=leader.id,
         name=leader.name,
         district_id=leader.district_id,
         rank=leader.rank,
-        congregation_id=leader.congregation_id,
-        special_role=leader.special_role,
+        assignments=[_assignment_response(a) for a in ordered],
         user_sub=leader.user_sub,
         email=leader.email,
         phone=leader.phone,
@@ -126,7 +148,8 @@ async def create_leader(
     require_role_in_district(auth, Role.PLANNER, district_id)
     if not await districts.get(district_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bezirk nicht gefunden")
-    await ensure_congregation_in_district(db, district_id, body.congregation_id)
+    for item in body.assignments or []:
+        await ensure_congregation_in_district(db, district_id, item.congregation_id)
     if not body.is_active or body.hidden_from_lists or body.service_end_date is not None:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
     # One creation at a time per district: two concurrent requests with the same new name
@@ -149,7 +172,7 @@ async def create_leader(
                         {
                             "id": str(known.id),
                             "name": known.name,
-                            "congregation_id": str(known.congregation_id) if known.congregation_id else None,
+                            "congregation_ids": sorted(str(c) for c in known.congregation_ids),
                             "is_active": known.is_active,
                         }
                         for known in matches
@@ -160,8 +183,6 @@ async def create_leader(
         name=body.name,
         district_id=district_id,
         rank=body.rank,
-        congregation_id=body.congregation_id,
-        special_role=body.special_role,
         user_sub=body.user_sub,
         email=body.email,
         phone=body.phone,
@@ -170,6 +191,13 @@ async def create_leader(
         hidden_from_lists=body.hidden_from_lists,
         service_end_date=body.service_end_date,
     )
+    if body.assignments is not None:
+        leader.assignments = [
+            LeaderAssignment.create(
+                leader.id, district_id, item.congregation_id, item.role, is_home=item.is_home
+            )
+            for item in body.assignments
+        ]
     await leaders_repo.save(leader)
     return _leader_response(leader)
 
@@ -218,11 +246,6 @@ async def update_leader(
         leader.name = body.name
     if "rank" in fields:
         leader.rank = body.rank
-    if "congregation_id" in fields:
-        await ensure_congregation_in_district(db, district_id, body.congregation_id)
-        leader.congregation_id = body.congregation_id
-    if "special_role" in fields:
-        leader.special_role = body.special_role
     if "user_sub" in fields:
         leader.user_sub = body.user_sub
     if "email" in fields:
@@ -289,9 +312,9 @@ async def link_self_to_leader(
     candidate = await repo.get(body.leader_id)
     if not candidate or candidate.district_id != district_id:
         raise HTTPException(status_code=404, detail="Amtstragende:r nicht gefunden")
-    congregation_ids = {candidate.congregation_id} if candidate.congregation_id else None
     require_role_in_district(
-        auth, Role.VIEWER, district_id, congregation_ids_in_district=congregation_ids
+        auth, Role.VIEWER, district_id,
+        congregation_ids_in_district=candidate.congregation_ids or None,
     )
 
     previous = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
@@ -303,7 +326,7 @@ async def link_self_to_leader(
     target = locked[body.leader_id]
     if target is None or target.district_id != district_id:
         raise HTTPException(status_code=404, detail="Amtstragende:r nicht gefunden")
-    if target.congregation_id != candidate.congregation_id:
+    if target.congregation_ids != candidate.congregation_ids:
         raise HTTPException(status_code=409, detail="Zuordnung wurde zwischenzeitlich geändert.")
     if target.user_sub and target.user_sub != auth.user_sub:
         raise HTTPException(
@@ -333,9 +356,9 @@ async def unlink_self_from_leader(
 ) -> LeaderSelfLinkResponse:
     repo = leaders_repo
     linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
-    congregation_ids = {linked.congregation_id} if linked and linked.congregation_id else None
     require_role_in_district(
-        auth, Role.VIEWER, district_id, congregation_ids_in_district=congregation_ids
+        auth, Role.VIEWER, district_id,
+        congregation_ids_in_district=(linked.congregation_ids or None) if linked else None,
     )
     if not linked:
         return LeaderSelfLinkResponse(linked=False, leader=None)
@@ -359,13 +382,153 @@ async def get_self_link(
 ) -> LeaderSelfLinkResponse:
     repo = leaders_repo
     linked = await repo.get_by_user_sub(auth.user_sub, district_id=district_id)
-    congregation_ids = {linked.congregation_id} if linked and linked.congregation_id else None
     require_role_in_district(
-        auth, Role.VIEWER, district_id, congregation_ids_in_district=congregation_ids
+        auth, Role.VIEWER, district_id,
+        congregation_ids_in_district=(linked.congregation_ids or None) if linked else None,
     )
     if not linked:
         return LeaderSelfLinkResponse(linked=False, leader=None)
     return LeaderSelfLinkResponse(linked=True, leader=_leader_response(linked))
+
+
+def _require_assignment_rights(
+    auth: CurrentUserWithMemberships, district_id: uuid.UUID, congregation_id: uuid.UUID | None
+) -> None:
+    """District planners manage every assignment, congregation planners only their own."""
+    require_role_in_district(
+        auth, Role.PLANNER, district_id,
+        congregation_ids_in_district={congregation_id} if congregation_id else None,
+    )
+
+
+def _assignment_error(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT, detail={"code": code, "message": message}
+    )
+
+
+async def _locked_leader(
+    repo: SqlLeaderRepository, district_id: uuid.UUID, leader_id: uuid.UUID
+) -> Leader:
+    leader = await repo.get_for_update(leader_id)
+    if not leader or leader.district_id != district_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Amtstragende:r nicht gefunden"
+        )
+    return leader
+
+
+def _find_assignment(leader: Leader, assignment_id: uuid.UUID) -> LeaderAssignment:
+    for assignment in leader.assignments:
+        if assignment.id == assignment_id:
+            return assignment
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zuordnung nicht gefunden")
+
+
+def _check_revision(assignment: LeaderAssignment, if_match: str | None) -> None:
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="If-Match ist erforderlich.")
+    if if_match != _assignment_revision(assignment):
+        raise HTTPException(status_code=412, detail="Datensatz wurde zwischenzeitlich geändert.")
+
+
+@router.post(
+    "/{leader_id}/assignments",
+    response_model=LeaderAssignmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_leader_assignment(
+    district_id: uuid.UUID,
+    leader_id: uuid.UUID,
+    body: LeaderAssignmentCreate,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+) -> LeaderAssignmentResponse:
+    _require_assignment_rights(auth, district_id, body.congregation_id)
+    await ensure_congregation_in_district(db, district_id, body.congregation_id)
+    leader = await _locked_leader(leaders_repo, district_id, leader_id)
+    if any(a.congregation_id == body.congregation_id for a in leader.assignments):
+        raise _assignment_error("assignment_exists", "Die Person ist dieser Gemeinde bereits zugeordnet.")
+    if body.is_home:
+        # Taking over the home flag also changes the previous home assignment.
+        previous = leader.home_assignment
+        _require_assignment_rights(auth, district_id, previous.congregation_id if previous else None)
+        if previous:
+            previous.is_home = False
+            previous.updated_at = next_updated_at(previous.updated_at)
+    assignment = LeaderAssignment.create(
+        leader.id, district_id, body.congregation_id, body.role,
+        is_home=body.is_home or not leader.assignments,
+    )
+    leader.assignments.append(assignment)
+    await leaders_repo.save(leader)
+    return _assignment_response(assignment)
+
+
+@router.patch("/{leader_id}/assignments/{assignment_id}", response_model=LeaderAssignmentResponse)
+async def update_leader_assignment(
+    district_id: uuid.UUID,
+    leader_id: uuid.UUID,
+    assignment_id: uuid.UUID,
+    body: LeaderAssignmentUpdate,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+) -> LeaderAssignmentResponse:
+    if body.is_home is False:
+        raise HTTPException(
+            status_code=422, detail="Eine andere Zuordnung muss zur Heimat-Zuordnung werden."
+        )
+    leader = await _locked_leader(leaders_repo, district_id, leader_id)
+    assignment = _find_assignment(leader, assignment_id)
+    _require_assignment_rights(auth, district_id, assignment.congregation_id)
+    _check_revision(assignment, if_match)
+    fields = body.model_fields_set
+    if "role" in fields:
+        if not role_fits_level(body.role, assignment.congregation_id):
+            raise HTTPException(status_code=422, detail=ROLE_LEVEL_MESSAGE)
+        assignment.role = body.role
+    if body.is_home and not assignment.is_home:
+        previous = leader.home_assignment
+        if previous is not None:
+            _require_assignment_rights(auth, district_id, previous.congregation_id)
+            previous.is_home = False
+            previous.updated_at = next_updated_at(previous.updated_at)
+        assignment.is_home = True
+    assignment.updated_at = next_updated_at(assignment.updated_at)
+    await leaders_repo.save(leader)
+    return _assignment_response(assignment)
+
+
+@router.delete(
+    "/{leader_id}/assignments/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def remove_leader_assignment(
+    district_id: uuid.UUID,
+    leader_id: uuid.UUID,
+    assignment_id: uuid.UUID,
+    auth: CurrentUserWithMemberships,
+    db: DbSession,
+    leaders_repo: SqlLeaderRepository = Depends(get_leader_repository),
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+) -> None:
+    leader = await _locked_leader(leaders_repo, district_id, leader_id)
+    assignment = _find_assignment(leader, assignment_id)
+    _require_assignment_rights(auth, district_id, assignment.congregation_id)
+    _check_revision(assignment, if_match)
+    if len(leader.assignments) == 1:
+        raise _assignment_error(
+            "last_assignment", "Die letzte Zuordnung kann nicht entfernt werden."
+        )
+    if assignment.is_home:
+        raise _assignment_error(
+            "home_assignment",
+            "Die Heimat-Zuordnung kann erst entfernt werden, wenn eine andere Zuordnung Heimat ist.",
+        )
+    leader.assignments.remove(assignment)
+    await leaders_repo.save(leader)
 
 
 @router.delete("/{leader_id}", status_code=status.HTTP_204_NO_CONTENT)

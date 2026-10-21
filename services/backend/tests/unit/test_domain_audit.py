@@ -25,6 +25,7 @@ from app.adapters.db.domain_audit import (
 from app.adapters.db.orm_models.audit_log import AuditAction, AuditStatus
 from app.adapters.db.orm_models.calendar_integration import CalendarIntegrationORM
 from app.adapters.db.orm_models.export_token import ExportTokenORM
+from app.adapters.db.orm_models.leader import LeaderAssignmentORM
 from app.adapters.db.orm_models.notification import NotificationORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.recurring_event import (
@@ -106,6 +107,24 @@ class TestEntryFor:
             "applicability": [],
             "congregation_id": str(CONGREGATION),
         }
+
+    def test_leader_assignments_are_audited_with_their_tenant(self) -> None:
+        leader_id = uuid.uuid4()
+        assignment = LeaderAssignmentORM(
+            id=uuid.uuid4(), leader_id=leader_id, district_id=DISTRICT, congregation_id=CONGREGATION,
+            role="Gemeindevorsteher", is_home=True,
+        )
+
+        entry = entry_for(AuditAction.CREATE, assignment)
+
+        assert entry.resource.resource_type == "leader_assignment"
+        assert entry.new_values == {
+            "leader_id": str(leader_id),
+            "congregation_id": str(CONGREGATION),
+            "role": "Gemeindevorsteher",
+            "is_home": True,
+        }
+        assert entry.resource.tenant(MagicMock(), assignment) == (DISTRICT, CONGREGATION)
 
     def test_delete_keeps_the_last_state(self) -> None:
         entry = entry_for(AuditAction.DELETE, _assignment(uuid.uuid4()))
