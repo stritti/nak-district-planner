@@ -101,7 +101,7 @@
                   <LeaderInlineCell
                     class="text-xs font-mono font-medium text-blue-700 dark:text-blue-300"
                     :leader="leader"
-                  :section-congregation-id="section.congregationId"
+                    :section-congregation-id="section.congregationId"
                     field="rank"
                     layout="mobile"
                     :editable="canEditLeaderField(leader, 'rank')"
@@ -113,7 +113,7 @@
                   <LeaderInlineCell
                     class="font-medium text-gray-800 dark:text-gray-200 break-words min-w-0"
                     :leader="leader"
-                  :section-congregation-id="section.congregationId"
+                    :section-congregation-id="section.congregationId"
                     field="name"
                     layout="mobile"
                     :editable="canEditLeaderField(leader, 'name')"
@@ -126,7 +126,7 @@
                 <div class="mt-0.5 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
                   <LeaderInlineCell
                     :leader="leader"
-                  :section-congregation-id="section.congregationId"
+                    :section-congregation-id="section.congregationId"
                     field="email"
                     layout="mobile"
                     :editable="canEditLeaderField(leader, 'email')"
@@ -137,7 +137,7 @@
                   />
                   <LeaderInlineCell
                     :leader="leader"
-                  :section-congregation-id="section.congregationId"
+                    :section-congregation-id="section.congregationId"
                     field="phone"
                     layout="mobile"
                     :editable="canEditLeaderField(leader, 'phone')"
@@ -276,7 +276,7 @@
                   <span v-else-if="homeLabel(leader)" class="text-gray-500 dark:text-gray-400">
                     Heimat: {{ homeLabel(leader) }}
                   </span>
-                  <span v-else class="text-gray-500 dark:text-gray-400">Heimat nicht sichtbar</span>
+                  <span v-else-if="leader.assignments.length > 1" class="text-gray-500 dark:text-gray-400">Heimat nicht sichtbar</span>
                 </td>
                 <LeaderInlineCell
                   class="py-2"
