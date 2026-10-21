@@ -6,7 +6,7 @@ import type { LeaderAssignment, LeaderResponse } from './leaders'
 // Pure helpers over a leader's assignments (no HTTP, unaffected by mocks of `./leaders`).
 
 export function homeAssignment(leader: LeaderResponse): LeaderAssignment | null {
-  return leader.assignments.find((a) => a.is_home) ?? leader.assignments[0] ?? null
+  return leader.assignments.find((a) => a.is_home) ?? null
 }
 
 export function assignmentFor(leader: LeaderResponse, congregationId: string | null): LeaderAssignment | null {
