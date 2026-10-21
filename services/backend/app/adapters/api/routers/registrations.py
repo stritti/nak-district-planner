@@ -52,7 +52,7 @@ from app.adapters.db.repositories.membership import SqlMembershipRepository
 from app.adapters.db.transactional_events import publish_after_commit
 from app.adapters.idp.provisioning import IdpProvisioningError, get_idp_provisioner
 from app.domain.event_payloads import registration_received
-from app.domain.models.leader import Leader, LeaderRank, SpecialRole
+from app.domain.models.leader import Leader, LeaderAssignment, LeaderRank, SpecialRole
 from app.domain.models.leader_registration import LeaderRegistration, RegistrationStatus
 from app.domain.models.membership import ScopeType
 from app.domain.models.role import Role
@@ -271,6 +271,8 @@ async def approve_registration(
     await _validate_scope_assignment(cong_repo, body, district_id)
 
     congregation_id = body.congregation_id if body.congregation_id is not None else reg.congregation_id
+    for item in body.assignments or []:
+        await ensure_congregation_in_district(db, district_id, item.congregation_id)
     await ensure_congregation_in_district(db, district_id, congregation_id)
     rank = body.rank if body.rank is not None else reg.rank
     special_role = body.special_role if body.special_role is not None else reg.special_role
@@ -345,6 +347,13 @@ async def _create_leader_and_approve(
         notes=reg.notes,
         is_active=True,
     )
+    if body.assignments is not None:
+        leader.assignments = [
+            LeaderAssignment.create(
+                leader.id, district_id, item.congregation_id, item.role, is_home=item.is_home
+            )
+            for item in body.assignments
+        ]
     await leader_repo.save(leader)
 
     now = datetime.now(UTC)

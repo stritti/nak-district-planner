@@ -38,6 +38,16 @@ class LeaderAssignmentResponse(BaseModel):
     revision: str
 
 
+def check_assignments(items: list[LeaderAssignmentCreate]) -> None:
+    """A lone assignment is the home; otherwise exactly one home and each congregation once."""
+    if len(items) == 1:
+        items[0].is_home = True
+    if sum(item.is_home for item in items) != 1:
+        raise ValueError("Genau eine Zuordnung muss die Heimat-Zuordnung sein.")
+    if len({item.congregation_id for item in items}) != len(items):
+        raise ValueError("Jede Gemeinde darf nur einmal zugeordnet werden.")
+
+
 class LeaderCreate(BaseModel):
     """LeaderCreate."""
 
@@ -57,15 +67,8 @@ class LeaderCreate(BaseModel):
 
     @model_validator(mode="after")
     def _one_home_and_no_repeats(self) -> LeaderCreate:
-        items = self.assignments
-        if items is None:
-            return self
-        if len(items) == 1:
-            items[0].is_home = True
-        if sum(item.is_home for item in items) != 1:
-            raise ValueError("Genau eine Zuordnung muss die Heimat-Zuordnung sein.")
-        if len({item.congregation_id for item in items}) != len(items):
-            raise ValueError("Jede Gemeinde darf nur einmal zugeordnet werden.")
+        if self.assignments is not None:
+            check_assignments(self.assignments)
         return self
 
 

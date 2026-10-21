@@ -8,8 +8,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
+from app.adapters.api.schemas.leader import LeaderAssignmentCreate, check_assignments
 from app.domain.models.leader import LeaderRank, SpecialRole
 from app.domain.models.leader_registration import RegistrationStatus
 from app.domain.models.membership import ScopeType
@@ -37,6 +38,17 @@ class RegistrationApprove(BaseModel):
     congregation_id: uuid.UUID | None = None
     rank: LeaderRank | None = None
     special_role: SpecialRole | None = None
+    # Several congregations: replaces the registrant's single choice and the two override fields.
+    assignments: list[LeaderAssignmentCreate] | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _assignments_replace_the_single_choice(self) -> RegistrationApprove:
+        if self.assignments is None:
+            return self
+        if self.congregation_id is not None or self.special_role is not None:
+            raise ValueError("assignments ersetzt congregation_id und special_role.")
+        check_assignments(self.assignments)
+        return self
 
 
 class RegistrationReject(BaseModel):

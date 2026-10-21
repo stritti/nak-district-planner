@@ -33,7 +33,7 @@ Every policy that read `leaders.congregation_id` (the four leader policies) is r
 * Leader responses carry `assignments: [{id, congregation_id, role, is_home, revision}]` instead of `congregation_id` and `special_role`; list filters by congregation match any assignment.
 * Create accepts `assignments` (at least one, exactly one home). Leader updates no longer touch assignments.
 * Assignment sub-resource under `/leaders/{leader_id}/assignments` (`POST`, `PATCH /{id}`, `DELETE /{id}`) with `If-Match`, row locks and the rights of decision 4; moving the home flag is a `PATCH` that unsets the previous home atomically; the last assignment cannot be removed, the home assignment only after another one became home.
-* Registration and approval carry `assignments` of the target leader instead of congregation and role.
+* Registration keeps the registrant's single congregation and role (one choice in a public form, no table change); approval creates the leader from that choice or from an explicit `assignments` list that replaces it and the two override fields.
 * `link-self` checks the visible assignments instead of the home congregation.
 
 ## Frontend

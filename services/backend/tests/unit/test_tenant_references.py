@@ -176,7 +176,7 @@ async def test_registration_submit_rejects_foreign_congregation() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("source", ["body", "registration"])
+@pytest.mark.parametrize("source", ["body", "registration", "assignments"])
 async def test_registration_approve_rejects_foreign_congregation(source: str) -> None:
     reg = LeaderRegistration.create(
         district_id=DISTRICT,
@@ -189,6 +189,7 @@ async def test_registration_approve_rejects_foreign_congregation(source: str) ->
         scope_type=ScopeType.DISTRICT,
         scope_id=DISTRICT,
         congregation_id=FOREIGN_ID if source == "body" else None,
+        assignments=[{"congregation_id": FOREIGN_ID}] if source == "assignments" else None,
     )
     leader_repo = AsyncMock()
     with patch("app.adapters.api.routers.registrations.require_role_in_district"):

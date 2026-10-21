@@ -16,7 +16,7 @@
 - [x] 4.1 Design and decisions recorded (`design.md`)
 - [x] 4.2 Revision `20261022_leader_assignments` with backfill, drop of `congregation_id`/`special_role`, domain, repository, rewritten RLS and audit of assignment changes (the Leader model keeps transitional `congregation_id`/`special_role` accessors for the home assignment until 4.3 switches the API)
 - [x] 4.3 API: `assignments` in leader responses and create (the duplicate hint lists `congregation_ids`), assignment sub-resource `/leaders/{id}/assignments` with rights per congregation, `If-Match`, home move and last-assignment rules; the legacy `congregation_id`/`special_role` fields and the domain accessors are gone; `link-self` already checks all assigned congregations
-- [ ] 4.4 Registration/approval on assignments (`link-self` is done in 4.3)
+- [x] 4.4 Approval creates the leader from the registrant's single congregation/role choice or from an explicit `assignments` list (mutually exclusive, same validation as create); the public registration form and table keep one choice, `link-self` was done in 4.3
 - [ ] 4.5 Frontend: assignment list in the dialogs, repeated per congregation in the overview, home marker
 
 ## 5. Closure
