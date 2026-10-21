@@ -3,19 +3,21 @@
 
 """Audit Service — Business logic for audit logging.
 
-Provides a high-level interface for creating audit log entries.
-Uses async writing to minimize performance impact on the main request flow.
+Provides a high-level interface for creating audit log entries. Entries are
+written synchronously so that a failure is visible to the caller (#648).
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+
+from opentelemetry import metrics
+from sqlalchemy import text
 
 from app.adapters.db.repositories.audit_log import SqlAuditLogRepository
 from app.adapters.db.session import AsyncSessionLocal
@@ -58,78 +60,45 @@ class AuditEvent:
     timestamp: datetime | None = None
 
 
+class AuditPersistenceError(RuntimeError):
+    """An audit entry could not be made durable; the caller must not report an audited result."""
+
+
+_meter = metrics.get_meter("nak.audit")
+audit_write_failures = _meter.create_counter(
+    "nak.audit.write_failures",
+    unit="{entry}",
+    description="Audit entries that could not be persisted (the request is answered with 503)",
+)
+
+
 class AuditService:
     """Service for creating audit log entries.
 
-    This service provides a high-level interface for audit logging with:
-    - Async writing to minimize performance impact
-    - Batch processing for multiple audit events
-    - Context management for request-scoped information
+    Entries are written synchronously and durably: ``record`` returns only after
+    the entry is committed, and raises ``AuditPersistenceError`` otherwise. There is
+    no queue; an entry that cannot be written is never silently dropped.
     """
 
-    def __init__(self):
-        """Initialize the audit service."""
-        self._queue: asyncio.Queue[AuditLogCreate] = asyncio.Queue()
-        self._running = False
-        self._writer_task: asyncio.Task | None = None
-
-    async def start(self) -> None:
-        """Start the async audit log writer."""
-        if self._running:
-            return
-
-        self._running = True
-        self._writer_task = asyncio.create_task(self._writer())
-        logger.info("Audit service started")
-
-    async def stop(self) -> None:
-        """Stop the async audit log writer and flush remaining entries."""
-        if not self._running:
-            return
-
-        self._running = False
-
-        # Wait for the writer to finish processing
-        if self._writer_task:
-            await self._writer_task
-            self._writer_task = None
-
-        logger.info("Audit service stopped")
-
-    async def _writer(self) -> None:
-        """Background task that writes audit logs to the database."""
-        from sqlalchemy import text
-
-        while self._running or not self._queue.empty():
-            try:
-                # Get next audit log entry
-                audit_log_create = await asyncio.wait_for(
-                    self._queue.get(), timeout=1.0 if self._running else 0.1
+    async def record(self, audit_log: AuditLogCreate) -> None:
+        """Persist one entry in its own short transaction (system-worker context)."""
+        try:
+            async with AsyncSessionLocal() as session:
+                # The audit writer is a system task: the entry is built by server code.
+                await session.execute(
+                    text("SELECT set_config('app.is_system_worker', 'true', true)")
                 )
-
-                # Write to database
-                async with AsyncSessionLocal() as session:
-                    # Set SYSTEM_WORKER GUC for RLS bypass (audit writer is a system task)
-                    await session.execute(
-                        text("SELECT set_config('app.is_system_worker', 'true', true)")
-                    )
-                    repo = SqlAuditLogRepository(session)
-                    try:
-                        await repo.create(audit_log_create)
-                        await session.commit()
-                    except Exception as e:
-                        await session.rollback()
-                        logger.error(f"Failed to write audit log: {e}")
-
-                self._queue.task_done()
-
-            except TimeoutError:
-                # No entries in queue, continue
-                continue
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in audit writer: {e}")
+                try:
+                    await SqlAuditLogRepository(session).create(audit_log)
+                    await session.commit()
+                except BaseException:
+                    await session.rollback()
+                    raise
+        except Exception as exc:
+            audit_write_failures.add(1, {"stage": "durable"})
+            # Type only: neither the entry nor the database message may reach the logs.
+            logger.error("Audit entry could not be persisted (%s)", type(exc).__name__)
+            raise AuditPersistenceError("audit entry not persisted") from exc
 
     async def log(
         self,
@@ -179,8 +148,7 @@ class AuditService:
             extra_metadata=extra_metadata,
         )
 
-        # Queue the audit log for async writing
-        await self._queue.put(audit_log)
+        await self.record(audit_log)
 
     async def log_event(
         self,

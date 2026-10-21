@@ -110,11 +110,9 @@ async def test_lifespan_initializes_and_cleans_up() -> None:
 @pytest.mark.asyncio
 async def test_lifespan_rejects_stale_schema_before_runtime_services_start() -> None:
     schema_check = AsyncMock(side_effect=main.SchemaVersionError("stale schema"))
-    audit_start = AsyncMock()
 
     with (
         patch("app.main.assert_database_schema_current", new=schema_check),
-        patch("app.main.audit_service.start", new=audit_start),
         patch("app.main.OIDCAdapter") as adapter_cls,
     ):
         with pytest.raises(main.SchemaVersionError, match="stale schema"):
@@ -122,7 +120,6 @@ async def test_lifespan_rejects_stale_schema_before_runtime_services_start() -> 
                 pass
 
     schema_check.assert_awaited_once_with(main.engine)
-    audit_start.assert_not_awaited()
     adapter_cls.assert_not_called()
 
 

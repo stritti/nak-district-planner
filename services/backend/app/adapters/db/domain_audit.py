@@ -47,6 +47,7 @@ from app.adapters.db.orm_models.recurring_event import (
     RecurringEventTemplateORM,
 )
 from app.adapters.db.orm_models.service_assignment import ServiceAssignmentORM
+from app.audit_request import mark_domain_audit
 from app.tenant import TenantContext
 
 logger = logging.getLogger(__name__)
@@ -298,6 +299,7 @@ def record_domain_audit(session: Session, _flush_context: Any) -> None:
     rows = [row for entry in entries if (row := _audit_row(session, entry, now)) is not None]
     if rows:
         session.connection().execute(insert(AuditLogORM.__table__), rows)
+        mark_domain_audit()
 
 
 def bulk_delete_audit_row(

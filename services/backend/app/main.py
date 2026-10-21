@@ -82,7 +82,6 @@ async def lifespan(app: FastAPI):
         logger.critical("Database schema check failed: %s", e)
         raise
 
-    await audit_service.start()
     register_event_mail_hooks()
 
     httpx_client = httpx.AsyncClient()
@@ -119,7 +118,6 @@ async def lifespan(app: FastAPI):
     yield
 
     await oidc_adapter.close()
-    await audit_service.stop()
     try:
         await rate_limiter.close()
     except Exception:
