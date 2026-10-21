@@ -35,6 +35,20 @@ class SpecialRole(StrEnum):
     BEZIRKSVORSTEHER = "Bezirksvorsteher"
 
 
+def role_fits_level(role: SpecialRole | None, congregation_id: uuid.UUID | None) -> bool:
+    """A congregation leader serves a congregation, a district leader the district level."""
+    if role is SpecialRole.GEMEINDEVORSTEHER:
+        return congregation_id is not None
+    if role is SpecialRole.BEZIRKSVORSTEHER:
+        return congregation_id is None
+    return True
+
+
+ROLE_LEVEL_MESSAGE = (
+    "Gemeindevorsteher gehört zu einer Gemeinde, Bezirksvorsteher zur Bezirksebene (ohne Gemeinde)."
+)
+
+
 @dataclass
 class LeaderAssignment:
     """A leader's service in one congregation (``None`` = district level) with an optional role.

@@ -37,11 +37,12 @@ from app.adapters.db.locks import acquire_advisory_xact_lock
 from app.adapters.db.repositories.district import SqlDistrictRepository
 from app.adapters.db.repositories.leader import SqlLeaderRepository
 from app.domain.models.leader import (
+    ROLE_LEVEL_MESSAGE,
     Leader,
     LeaderAssignment,
     LeaderRank,
-    SpecialRole,
     person_match_key,
+    role_fits_level,
 )
 from app.domain.models.role import Role
 
@@ -486,6 +487,8 @@ async def update_leader_assignment(
     _check_revision(assignment, if_match)
     fields = body.model_fields_set
     if "role" in fields:
+        if not role_fits_level(body.role, assignment.congregation_id):
+            raise HTTPException(status_code=422, detail=ROLE_LEVEL_MESSAGE)
         assignment.role = body.role
     if body.is_home and not assignment.is_home:
         previous = leader.home_assignment

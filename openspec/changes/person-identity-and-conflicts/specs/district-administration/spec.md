@@ -48,6 +48,10 @@ A leader SHALL have one or more assignments, each naming a congregation (or the 
 - **WHEN** a planner of congregation A changes or removes the assignment of the same person for congregation B
 - **THEN** the API responds with 403 and nothing is changed
 
+#### Scenario: Role on the wrong level
+- **WHEN** a request gives the congregation-leader role to a district-level assignment, or the district-leader role to a congregation assignment
+- **THEN** the API rejects it with 422 (registration, approval, create and assignment changes alike)
+
 #### Scenario: Last or home assignment
 - **WHEN** the last assignment, or the home assignment while others exist, is removed
 - **THEN** the API rejects the request until another assignment became the home assignment

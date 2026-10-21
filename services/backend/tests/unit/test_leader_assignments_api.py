@@ -310,3 +310,45 @@ async def test_an_unknown_assignment_is_not_found():
     with pytest.raises(HTTPException) as err:
         await _delete(leader, repo, DISTRICT_PLANNER, ghost)
     assert err.value.status_code == 404
+
+
+# ── role and level ──────────────────────────────────────────────────────────
+
+_MISFITS = [
+    {"congregation_id": None, "role": "Gemeindevorsteher"},
+    {"congregation_id": CONG_A, "role": "Bezirksvorsteher"},
+]
+
+
+@pytest.mark.parametrize("item", _MISFITS)
+def test_a_role_must_fit_the_level_of_its_assignment(item):
+    with pytest.raises(ValidationError):
+        LeaderAssignmentCreate(**item)
+    with pytest.raises(ValidationError):
+        LeaderCreate(name="N", assignments=[item])
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"congregation_id": CONG_A, "role": "Gemeindevorsteher"},
+        {"congregation_id": None, "role": "Bezirksvorsteher"},
+        {"congregation_id": CONG_A},
+        {"congregation_id": None},
+    ],
+)
+def test_fitting_roles_and_no_role_are_accepted(item):
+    assert LeaderAssignmentCreate(**item).role == item.get("role")
+
+
+@pytest.mark.asyncio
+async def test_changing_the_role_of_an_assignment_keeps_it_on_its_level():
+    leader, repo = _leader_in_a_and_b()
+    mine = _by_congregation(leader, CONG_A)
+    with pytest.raises(HTTPException) as err:
+        await _patch(
+            leader, repo, DISTRICT_PLANNER, mine, LeaderAssignmentUpdate(role=SpecialRole.BEZIRKSVORSTEHER)
+        )
+    assert err.value.status_code == 422
+    assert mine.role is None
+    repo.save.assert_not_awaited()

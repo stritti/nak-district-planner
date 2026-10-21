@@ -10,7 +10,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.domain.models.leader import LeaderRank, SpecialRole
+from app.domain.models.leader import ROLE_LEVEL_MESSAGE, LeaderRank, SpecialRole, role_fits_level
 
 
 class LeaderAssignmentCreate(BaseModel):
@@ -20,6 +20,12 @@ class LeaderAssignmentCreate(BaseModel):
     congregation_id: uuid.UUID | None = None
     role: SpecialRole | None = None
     is_home: bool = False
+
+    @model_validator(mode="after")
+    def _role_fits_the_level(self) -> LeaderAssignmentCreate:
+        if not role_fits_level(self.role, self.congregation_id):
+            raise ValueError(ROLE_LEVEL_MESSAGE)
+        return self
 
 
 class LeaderAssignmentUpdate(BaseModel):
@@ -36,6 +42,16 @@ class LeaderAssignmentResponse(BaseModel):
     role: SpecialRole | None
     is_home: bool
     revision: str
+
+
+def check_assignments(items: list[LeaderAssignmentCreate]) -> None:
+    """A lone assignment is the home; otherwise exactly one home and each congregation once."""
+    if len(items) == 1:
+        items[0].is_home = True
+    if sum(item.is_home for item in items) != 1:
+        raise ValueError("Genau eine Zuordnung muss die Heimat-Zuordnung sein.")
+    if len({item.congregation_id for item in items}) != len(items):
+        raise ValueError("Jede Gemeinde darf nur einmal zugeordnet werden.")
 
 
 class LeaderCreate(BaseModel):
@@ -57,15 +73,8 @@ class LeaderCreate(BaseModel):
 
     @model_validator(mode="after")
     def _one_home_and_no_repeats(self) -> LeaderCreate:
-        items = self.assignments
-        if items is None:
-            return self
-        if len(items) == 1:
-            items[0].is_home = True
-        if sum(item.is_home for item in items) != 1:
-            raise ValueError("Genau eine Zuordnung muss die Heimat-Zuordnung sein.")
-        if len({item.congregation_id for item in items}) != len(items):
-            raise ValueError("Jede Gemeinde darf nur einmal zugeordnet werden.")
+        if self.assignments is not None:
+            check_assignments(self.assignments)
         return self
 
 
