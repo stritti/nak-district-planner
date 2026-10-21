@@ -77,6 +77,8 @@ def upgrade() -> None:
     )
     for name in rls.ASSIGNMENT_POLICIES:
         op.execute(rls.assignment_policy_sql()[name])
+    for statement in rls.FUNCTIONS:
+        op.execute(statement)
     for name in rls.LEADER_POLICIES:
         op.execute(f"DROP POLICY {name} ON leaders")
     op.drop_column("leaders", "congregation_id")
@@ -101,5 +103,7 @@ def downgrade() -> None:
         op.execute(f"DROP POLICY {name} ON leaders")
     for statement in rls.legacy_policy_sql().values():
         op.execute(statement)
+    for function in rls.FUNCTION_NAMES:
+        op.execute(f"DROP FUNCTION {function}")
     op.drop_table("leader_assignments")
     op.drop_constraint("uq_leaders_id_district", "leaders", type_="unique")

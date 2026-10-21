@@ -14,6 +14,13 @@ assignments:
 * district planners manage all assignments, a congregation planner only the assignment of
   their own congregation (the write policy checks ``leader_assignments.congregation_id``).
 
+The leader policies reach the assignments through three small SECURITY DEFINER predicates
+(``FUNCTIONS``) instead of inline sub-selects: an inline ``leader_assignments`` sub-select
+pulls that table's own policy into every policy that reads ``leaders`` (service
+assignments, duties, ...), which multiplied the executor start-up of the matrix query
+about fivefold. The predicates answer yes/no questions about the *caller's own* rights
+and return nothing else.
+
 ``leader_assignments`` carries ``district_id`` itself so that its policies never read
 ``leaders`` (no policy recursion). The legacy policies are kept verbatim for the downgrade
 (taken from ``pg_policies`` before this revision; ``test_leader_assignment_migration``
@@ -42,6 +49,41 @@ ASSIGNMENT_POLICIES = (
     "leader_assignments_update",
     "leader_assignments_delete",
 )
+
+FUNCTION_NAMES = ("leader_assignment_member", "leader_assigned_to", "leader_subject_scope")
+
+
+def _function_sql() -> tuple[str, ...]:
+    return (
+        # The caller holds a congregation membership (optionally with one of p_roles) in a
+        # congregation the leader is assigned to.
+        """CREATE FUNCTION leader_assignment_member(p_leader uuid, p_roles text[])
+    RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+      SELECT EXISTS (
+        SELECT 1 FROM leader_assignments la
+        JOIN memberships m ON m.scope_type='CONGREGATION' AND m.scope_id=la.congregation_id
+        WHERE la.leader_id=p_leader
+          AND m.user_sub=current_setting('app.current_user_sub',true)
+          AND (p_roles IS NULL OR m.role=ANY(p_roles)))
+    $$""",
+        # The leader is assigned to this congregation.
+        """CREATE FUNCTION leader_assigned_to(p_leader uuid, p_congregation uuid)
+    RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+      SELECT EXISTS (
+        SELECT 1 FROM leader_assignments la
+        WHERE la.leader_id=p_leader AND la.congregation_id=p_congregation)
+    $$""",
+        # The subject account may read an assignment scope of the leader (duty feeds).
+        """CREATE FUNCTION leader_subject_scope(p_leader uuid, p_sub text, p_district uuid)
+    RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+      SELECT EXISTS (
+        SELECT 1 FROM leader_assignments la
+        WHERE la.leader_id=p_leader AND duty_subject_scope(p_sub,p_district,la.congregation_id))
+    $$""",
+    )
+
+
+FUNCTIONS = _function_sql()
 
 _TOKEN = "et.token_hash = encode(sha256(current_setting('app.current_export_token', true)::bytea), 'hex')"
 _USER = "current_setting('app.current_user_sub', true)"
@@ -73,11 +115,8 @@ LEGACY_LEADER_POLICIES = {
 
 def _assigned_congregation_membership(roles: str | None = None) -> str:
     """The caller is a member of a congregation the leader (``leaders``) is assigned to."""
-    role_filter = f"AND m.role IN ({roles})" if roles else ""
-    return f"""EXISTS (
-        SELECT 1 FROM leader_assignments la
-        JOIN memberships m ON m.scope_type = 'CONGREGATION' AND m.scope_id = la.congregation_id
-        WHERE la.leader_id = leaders.id AND m.user_sub = {_USER} {role_filter})"""
+    role_list = f"ARRAY[{roles}]::text[]" if roles else "NULL::text[]"
+    return f"leader_assignment_member(leaders.id, {role_list})"
 
 
 def _leader_export_token_read() -> str:
@@ -88,18 +127,15 @@ def _leader_export_token_read() -> str:
           AND (
             (et.subject_sub IS NULL AND (et.leader_id = leaders.id
               OR (et.leader_id IS NULL AND et.token_type = 'INTERNAL')))
-            OR (et.subject_sub = leaders.user_sub AND EXISTS (
-              SELECT 1 FROM leader_assignments la WHERE la.leader_id = leaders.id
-                AND duty_subject_scope(et.subject_sub, leaders.district_id, la.congregation_id)))))"""
+            OR (et.subject_sub = leaders.user_sub
+              AND leader_subject_scope(leaders.id, et.subject_sub, leaders.district_id))))"""
 
 
 def _leader_export_token_update() -> str:
     return f"""EXISTS (
         SELECT 1 FROM export_tokens et
         WHERE {_TOKEN} AND et.district_id = leaders.district_id
-          AND (et.congregation_id IS NULL OR EXISTS (
-            SELECT 1 FROM leader_assignments la
-            WHERE la.leader_id = leaders.id AND la.congregation_id = et.congregation_id)))"""
+          AND (et.congregation_id IS NULL OR leader_assigned_to(leaders.id, et.congregation_id)))"""
 
 
 def _leader_write_scope() -> str:

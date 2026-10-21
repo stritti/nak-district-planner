@@ -188,7 +188,7 @@ async def seed_test_data(*, dry_run: bool = False) -> None:
                 congregations_by_name[congregation.name] = congregation
 
             existing_leaders = {
-                (leader.name, leader.congregation_id): leader
+                (leader.name, leader.home_assignment.congregation_id if leader.home_assignment else None): leader
                 for leader in await leader_repo.list_by_district(district.id)
             }
 
@@ -216,7 +216,8 @@ async def seed_test_data(*, dry_run: bool = False) -> None:
                     created_leaders += 1
                 else:
                     leader.rank = leader_seed.rank
-                    leader.special_role = leader_seed.special_role
+                    if leader.home_assignment is not None:
+                        leader.home_assignment.role = leader_seed.special_role
                     leader.is_active = True
 
                 await leader_repo.save(leader)

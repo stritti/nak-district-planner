@@ -40,7 +40,6 @@ from app.domain.models.leader import (
     Leader,
     LeaderAssignment,
     LeaderRank,
-    SpecialRole,
     person_match_key,
 )
 from app.domain.models.role import Role
