@@ -129,7 +129,7 @@ describe('a person with several assignments', () => {
     const { wrapper } = await mountView()
     const roleIn = (section: string) =>
       wrapper.findAll('div.mb-8').find((s) => s.find('h2').text() === section)!
-        .get('[data-inline-cell-id="leader-special_role-desktop-l1-c2-c1-c2-c1"]').text()
+         .get(`[data-inline-cell-id="leader-special_role-desktop-l1-${section.endsWith('c1') ? 'c1' : 'c2'}"]`).text()
     expect(roleIn('Gemeinde c1')).toBe('—')
     expect(roleIn('Gemeinde c2')).toBe('Gemeindevorsteher')
   })
@@ -144,7 +144,7 @@ describe('a person with several assignments', () => {
     vi.mocked(leadersApi.updateLeaderAssignment).mockResolvedValue(assignment('a1', 'c1', true, 'Gemeindevorsteher'))
     const { wrapper } = await mountView()
     const cell = wrapper.findAll('div.mb-8').find((s) => s.find('h2').text() === 'Gemeinde c1')!
-      .get('[data-inline-cell-id="leader-special_role-desktop-l1"]')
+      .get('[data-inline-cell-id="leader-special_role-desktop-l1-c1"]')
     await cell.trigger('click')
     await flushPromises()
     await cell.get('select').setValue('Gemeindevorsteher')
@@ -159,7 +159,7 @@ describe('a person with several assignments', () => {
     vi.mocked(leadersApi.updateLeaderAssignment).mockRejectedValue(new ApiError(412, 'Precondition Failed', { detail: 'alt' }))
     const { wrapper } = await mountView()
     const cell = wrapper.findAll('div.mb-8').find((s) => s.find('h2').text() === 'Gemeinde c2')!
-      .get('[data-inline-cell-id="leader-special_role-desktop-l1"]')
+      .get('[data-inline-cell-id="leader-special_role-desktop-l1-c2"]')
     await cell.trigger('click')
     await flushPromises()
     await cell.get('select').setValue('')
