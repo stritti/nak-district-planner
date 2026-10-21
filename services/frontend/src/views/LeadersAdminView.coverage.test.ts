@@ -407,6 +407,32 @@ describe('LeadersAdminView coverage gaps', () => {
     expect(success).toHaveBeenCalled()
   })
 
+  it('ignores a slow duplicate answer after the name was edited', async () => {
+    const { vm } = setup()
+    await loadView(vm)
+
+    vm.openAddModal('c1')
+    vm.addModal.name = 'Hans Müller'
+    vm.addModal.rank = 'Di.'
+    let reject!: (error: unknown) => void
+    vi.mocked(leadersApi.createLeader).mockImplementationOnce(
+      () => new Promise((_resolve, rejectFn) => { reject = rejectFn }),
+    )
+    const pending = vm.saveAdd()
+    vm.addModal.name = 'Anna Neu' // edited while the request is in flight
+    reject(new ApiError(409, 'Conflict', {
+      detail: { code: 'LEADER_DUPLICATE', matches: [{ id: 'l9', name: 'Hans Müller', congregation_id: null, is_active: true }] },
+    }))
+    await pending
+
+    expect(vm.addModal.duplicates).toEqual([])
+    expect(vm.addModal.error).toBe('')
+    // The next submit is not treated as confirmed for the new name.
+    vi.mocked(leadersApi.createLeader).mockResolvedValueOnce(leaders[0])
+    await vm.saveAdd()
+    expect(leadersApi.createLeader).toHaveBeenLastCalledWith('d1', expect.not.objectContaining({ confirm_duplicate: true }))
+  })
+
   it('exercises leader create, edit, delete and export workflows', async () => {
     const { vm, toastStore } = setup()
     const success = vi.spyOn(toastStore, 'success')

@@ -129,6 +129,9 @@ async def create_leader(
     await ensure_congregation_in_district(db, district_id, body.congregation_id)
     if not body.is_active or body.hidden_from_lists or body.service_end_date is not None:
         require_role_in_district(auth, Role.DISTRICT_ADMIN, district_id)
+    # One creation at a time per district: two concurrent requests with the same new name
+    # must not both pass the duplicate check below before either is committed.
+    await acquire_advisory_xact_lock(db, district_id)
     if not body.confirm_duplicate:
         key = person_match_key(body.name)
         matches = [

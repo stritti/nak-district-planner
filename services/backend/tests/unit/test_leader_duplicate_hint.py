@@ -25,6 +25,21 @@ def test_person_match_key_ignores_case_spacing_accents_and_titles(variant: str) 
     assert person_match_key(variant) == person_match_key("Hans Müller")
 
 
+@pytest.mark.parametrize(
+    ("typed", "other"),
+    [
+        ("D'Angelo", "DAngelo"),
+        ("D’Angelo", "d angelo"),
+        ("O'Neil", "ONeil"),
+        ("Anna-Lena Weber", "Anna Lena Weber"),
+        ("Anna_Lena Weber", "AnnaLena Weber"),
+        ("Hans  Müller.", "Hans Müller"),
+    ],
+)
+def test_person_match_key_treats_punctuation_and_spacing_the_same_way(typed: str, other: str) -> None:
+    assert person_match_key(typed) == person_match_key(other)
+
+
 @pytest.mark.parametrize("other", ["Hans Meier", "Hans", "Johann Müller", "Müller Hans"])
 def test_person_match_key_keeps_different_names_apart(other: str) -> None:
     assert person_match_key(other) != person_match_key("Hans Müller")
@@ -103,3 +118,29 @@ async def test_the_rejection_saves_nothing() -> None:
                 districts=districts, leaders_repo=repo,
             )
     repo.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_the_check_and_the_save_are_serialised_per_district() -> None:
+    """Two concurrent creations must not both pass the duplicate check (advisory lock)."""
+    district_id = uuid.uuid4()
+    events: list[str] = []
+    districts = AsyncMock()
+    districts.get.return_value = District.create(name="B")
+    repo = AsyncMock()
+    repo.list_by_district.side_effect = lambda *_: events.append("check") or []
+    repo.save.side_effect = lambda *_: events.append("save")
+
+    async def lock(_db, key):
+        events.append(f"lock:{key == district_id}")
+
+    with (
+        patch("app.adapters.api.routers.leaders.require_role_in_district"),
+        patch("app.adapters.api.routers.leaders.acquire_advisory_xact_lock", side_effect=lock),
+    ):
+        await leaders_router.create_leader(
+            district_id, LeaderCreate(name="Neu Person"), object(), AsyncMock(),
+            districts=districts, leaders_repo=repo,
+        )
+    assert events == ["lock:True", "check", "save"]
+

@@ -1157,9 +1157,12 @@ async function saveAdd() {
   if (!addModal.name.trim() || !addModal.rank || !selectedDistrictId.value) return
   saving.value = true
   addModal.error = ''
+  // The server judges exactly this name; a slow answer must not be applied to a name
+  // the user has edited in the meantime (the confirmation would then cover another name).
+  const submittedName = addModal.name.trim()
   try {
     const created = await createLeader(selectedDistrictId.value, {
-      name: addModal.name.trim(),
+      name: submittedName,
       rank: addModal.rank,
       congregation_id: addModal.congregationId,
       special_role: addModal.special_role,
@@ -1173,7 +1176,9 @@ async function saveAdd() {
     toastStore.success('Amtsträger:in erstellt', created.name)
   } catch (e) {
     const matches = parseLeaderDuplicate(e)
-    if (matches) {
+    if (matches && addModal.name.trim() !== submittedName) {
+      // Stale answer for an earlier name: ignore it, the next submit is checked afresh.
+    } else if (matches) {
       addModal.duplicates = matches.map((match) => ({
         id: match.id,
         label: [
