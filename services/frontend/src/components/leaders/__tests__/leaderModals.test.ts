@@ -151,6 +151,52 @@ describe('edit modal assignments', () => {
     expect(wrapper.find('select[aria-label="Neue Zuordnung"]').exists()).toBe(false)
   })
 
+  it('disables home transfer unless both current and target home are manageable', () => {
+    const wrapper = mountAssignments((id) => id === 'c2')
+    const move = wrapper.get('[data-testid="assignment-a2"]').findAll('button')
+      .find((button) => button.text() === 'Als Heimat festlegen')!
+    expect(move.attributes('disabled')).toBeDefined()
+    const eligible = mountAssignments(() => true).get('[data-testid="assignment-a2"]')
+      .findAll('button').find((button) => button.text() === 'Als Heimat festlegen')!
+    expect(eligible.attributes('disabled')).toBeUndefined()
+  })
+
+  it('keeps legacy mismatched roles visible but does not offer them as a new choice', () => {
+    const legacy = [{ ...assignments[0], role: 'Bezirksvorsteher' }]
+    const wrapper = mount(LeaderEditModal, {
+      props: {
+        saving: false, congregations: twoCongregations, canManage: () => true,
+        modal: { open: true, leaderId: 'l', revision: '1', name: 'Max', rank: 'Pr.',
+          assignments: legacy, newAssignment: { target: '', role: null }, email: '', phone: '',
+          notes: '', is_active: true, hidden_from_lists: false, service_end_date: '', error: '' } as never,
+      },
+    })
+    const select = wrapper.get('[data-testid="assignment-a1"] select')
+    expect((select.element as HTMLSelectElement).value).toBe('Bezirksvorsteher')
+    expect(select.text()).toContain('Bezirksvorsteher')
+    expect(select.findAll('option').find(o => o.attributes('value') === 'Bezirksvorsteher')?.attributes('disabled'))
+      .toBeDefined()
+  })
+
+  it('clears a selected role when switching between congregation and district level', async () => {
+    const state = {
+      open: true, leaderId: 'l', revision: '1', name: 'Max', rank: 'Pr.',
+      assignments: assignments.slice(0, 1), newAssignment: { target: '', role: null as string | null },
+      email: '', phone: '', notes: '', is_active: true, hidden_from_lists: false, service_end_date: '', error: '',
+    }
+    const wrapper = mount(LeaderEditModal, {
+      props: { saving: false, congregations: twoCongregations, canManage: () => true, modal: state as never },
+    })
+    await wrapper.get('select[aria-label="Neue Zuordnung"]').setValue('c2')
+    await wrapper.get('select[aria-label="Beauftragung der neuen Zuordnung"]').setValue('Gemeindevorsteher')
+    expect(state.newAssignment.role).toBe('Gemeindevorsteher')
+    await wrapper.get('select[aria-label="Neue Zuordnung"]').setValue('district')
+    expect(state.newAssignment.role).toBeNull()
+    await wrapper.get('select[aria-label="Beauftragung der neuen Zuordnung"]').setValue('Bezirksvorsteher')
+    await wrapper.get('select[aria-label="Neue Zuordnung"]').setValue('c3')
+    expect(state.newAssignment.role).toBeNull()
+  })
+
   it('adds a manageable, still unassigned congregation', async () => {
     const wrapper = mount(LeaderEditModal, {
       props: {
