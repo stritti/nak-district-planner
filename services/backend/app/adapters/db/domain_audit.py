@@ -39,7 +39,7 @@ from app.adapters.db.orm_models.event_duty import (
     EventTypeDutyConfigurationORM,
 )
 from app.adapters.db.orm_models.export_token import ExportTokenORM
-from app.adapters.db.orm_models.leader import LeaderORM
+from app.adapters.db.orm_models.leader import LeaderAssignmentORM, LeaderORM
 from app.adapters.db.orm_models.planning_slot import PlanningSlotORM
 from app.adapters.db.orm_models.recurring_event import (
     RecurringEventDecisionORM,
@@ -104,6 +104,10 @@ class AuditedResource:
 AUDITED_RESOURCES: dict[type, AuditedResource] = {
     LeaderORM: AuditedResource(
         "leader", ("is_active", "hidden_from_lists", "service_end_date"), _own_tenant
+    ),
+    # Who serves in which congregation with which role is a rights-relevant fact.
+    LeaderAssignmentORM: AuditedResource(
+        "leader_assignment", ("leader_id", "congregation_id", "role", "is_home"), _own_tenant
     ),
     EventDutyCategoryORM: AuditedResource(
         "event_duty_category", ("label", "enabled", "capacity", "event_categories"), _own_tenant

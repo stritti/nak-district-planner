@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Stephan Strittmatter
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { LeaderRank, SpecialRole } from '../../api/leaders'
+import type { LeaderAssignment, LeaderRank, SpecialRole } from '../../api/leaders'
 
 /** Form state shapes for the leader administration modals (owned by the parent view). */
 export interface ApproveModalState {
@@ -44,8 +44,10 @@ export interface EditModalState {
   revision: string
   name: string
   rank: LeaderRank | ''
-  congregation_id: string | null
-  special_role: SpecialRole | null
+  /** Assignments as last loaded; they are changed through their own requests, not by "Speichern". */
+  assignments: LeaderAssignment[]
+  /** Draft of the assignment about to be added; `target` is '' (none), 'district' or a congregation id. */
+  newAssignment: { target: string; role: SpecialRole | null }
   email: string
   phone: string
   notes: string

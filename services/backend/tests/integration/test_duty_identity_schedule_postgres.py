@@ -390,9 +390,14 @@ async def test_an_account_matches_its_linked_leader_outside_the_callers_leader_r
     ids, leader_id, service_slot = leader_world
     _, sub, subs = members
     async with sessions() as db, db.begin():
+        await db.execute(text("UPDATE leaders SET user_sub=:s WHERE id=:l"), {"s": sub, "l": leader_id})
+        # The leader is assigned to c2 only (home assignment), so a c1 planner cannot read it.
         await db.execute(
-            text("UPDATE leaders SET user_sub=:s, congregation_id=:c WHERE id=:l"),
-            {"s": sub, "c": ids["c2"], "l": leader_id},
+            text(
+                "INSERT INTO leader_assignments (id, leader_id, district_id, congregation_id, role, is_home, "
+                "created_at, updated_at) VALUES (:i, :l, :d, :c, NULL, true, now(), now())"
+            ),
+            {"i": uuid.uuid4(), "l": leader_id, "d": ids["district"], "c": ids["c2"]},
         )
     async with sessions() as db, db.begin():
         await _as_app_user(db, subs["planner_c1"])

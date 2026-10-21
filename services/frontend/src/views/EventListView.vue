@@ -676,6 +676,7 @@ import {
 import { useDistrictsStore } from '../stores/districts'
 import { useEventsStore } from '../stores/events'
 import { useLeadersStore } from '../stores/leaders'
+import { leaderCongregationIds } from '../api/leaderAssignments'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import {
   listEvents,
@@ -1281,8 +1282,8 @@ const leaderOptions = computed((): AutocompleteOption[] =>
   leadersStore.activeLeaders(editTarget.value?.planning_date ?? undefined).map((l) => ({
     id: l.id,
     label: `${l.rank ? l.rank + ' ' : ''}${l.name}`,
-    sublabel: l.congregation_id ? congregationName(l.congregation_id) : undefined,
-    isPriority: l.congregation_id === editForm.congregation_id,
+    sublabel: leaderCongregationIds(l).map(congregationName).join(', ') || undefined,
+    isPriority: leaderCongregationIds(l).includes(editForm.congregation_id),
   })),
 )
 

@@ -69,8 +69,7 @@ function leader(
     name,
     district_id: 'd1',
     rank: 'Pr.',
-    congregation_id: null,
-    special_role: null,
+    assignments: [{ id: `a-${id}`, congregation_id: null, role: null, is_home: true, revision: `"a-${id}"` }],
     user_sub: null,
     email: null,
     phone: null,
@@ -116,8 +115,14 @@ function registration(
 }
 
 const leaders = [
-  leader('l1', 'Zeta', { rank: 'Di.', congregation_id: 'c1' }),
-  leader('l2', 'Alpha', { rank: 'Pr.', special_role: 'Gemeindevorsteher' }),
+  leader('l1', 'Zeta', {
+    rank: 'Di.',
+    assignments: [{ id: 'a-l1', congregation_id: 'c1', role: null, is_home: true, revision: '"a-l1"' }],
+  }),
+  leader('l2', 'Alpha', {
+    rank: 'Pr.',
+    assignments: [{ id: 'a-l2', congregation_id: null, role: 'Bezirksvorsteher', is_home: true, revision: '"a-l2"' }],
+  }),
   leader('l3', 'Beta', { rank: 'Pr.', is_active: false }),
 ]
 
@@ -385,8 +390,8 @@ describe('LeadersAdminView coverage gaps', () => {
         detail: {
           code: 'LEADER_DUPLICATE',
           matches: [
-            { id: 'l9', name: 'Hans Müller', congregation_id: 'c1', is_active: true },
-            { id: 'l8', name: 'Hans Müller', congregation_id: null, is_active: false },
+            { id: 'l9', name: 'Hans Müller', congregation_ids: ['c1'], is_active: true },
+            { id: 'l8', name: 'Hans Müller', congregation_ids: [], is_active: false },
           ],
         },
       }),
@@ -421,7 +426,7 @@ describe('LeadersAdminView coverage gaps', () => {
     const pending = vm.saveAdd()
     vm.addModal.name = 'Anna Neu' // edited while the request is in flight
     reject(new ApiError(409, 'Conflict', {
-      detail: { code: 'LEADER_DUPLICATE', matches: [{ id: 'l9', name: 'Hans Müller', congregation_id: null, is_active: true }] },
+      detail: { code: 'LEADER_DUPLICATE', matches: [{ id: 'l9', name: 'Hans Müller', congregation_ids: [], is_active: true }] },
     }))
     await pending
 
@@ -448,8 +453,7 @@ describe('LeadersAdminView coverage gaps', () => {
     expect(leadersApi.createLeader).toHaveBeenCalledWith('d1', {
       name: 'Neue Person',
       rank: 'Di.',
-      congregation_id: 'c1',
-      special_role: 'Gemeindevorsteher',
+      assignments: [{ congregation_id: 'c1', role: 'Gemeindevorsteher', is_home: true }],
       email: 'person@example.org',
       phone: '123',
     })

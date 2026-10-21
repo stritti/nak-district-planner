@@ -7,7 +7,7 @@ import { ApiError } from './errors'
 export interface LeaderDuplicateMatch {
   id: string
   name: string
-  congregation_id: string | null
+  congregation_ids: string[]
   is_active: boolean
 }
 

@@ -27,7 +27,7 @@ from app.adapters.db.orm_models.invitation import CongregationInvitationORM
 from app.adapters.db.orm_models.invitation_overwrite_request import (
     InvitationOverwriteRequestORM,
 )
-from app.adapters.db.orm_models.leader import LeaderORM
+from app.adapters.db.orm_models.leader import LeaderAssignmentORM, LeaderORM
 from app.adapters.db.orm_models.leader_registration import LeaderRegistrationORM
 from app.adapters.db.orm_models.leader_unavailability import LeaderUnavailabilityORM
 from app.adapters.db.orm_models.membership import MembershipORM
