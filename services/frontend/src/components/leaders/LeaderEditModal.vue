@@ -87,6 +87,11 @@
             @change="emit('assignment-role', assignment, ($event.target as HTMLSelectElement).value || null)"
           >
             <option value="">Keine</option>
+            <option
+              v-if="assignment.role && !roleFitsLevel(assignment.role, assignment.congregation_id)"
+              :value="assignment.role"
+              disabled
+            >{{ assignment.role }} (bisherige, hier nicht zulässige Beauftragung)</option>
             <option v-for="sr in roleChoicesFor(assignment.congregation_id)" :key="sr.value" :value="sr.value">
               {{ sr.label }}
             </option>
@@ -95,7 +100,7 @@
             v-if="!assignment.is_home && modal.assignments.length > 1"
             type="button"
             class="btn-secondary px-2 py-1 text-xs"
-            :disabled="!canManage(assignment.congregation_id) || busy"
+            :disabled="!canManage(assignment.congregation_id) || !currentHome || !canManage(currentHome.congregation_id) || busy"
             @click="emit('assignment-home', assignment)"
           >Als Heimat festlegen</button>
           <button
@@ -167,9 +172,9 @@
 <script setup lang="ts">
 import type { EditModalState } from './modalState'
 import { CheckIcon, XMarkIcon } from '@heroicons/vue/24/outline'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { LEADER_RANKS, type LeaderAssignment } from '../../api/leaders'
-import { roleChoicesFor } from '../../api/leaderRoles'
+import { roleChoicesFor, roleFitsLevel } from '../../api/leaderRoles'
 import type { CongregationResponse } from '../../api/districts'
 
 // The parent owns the form state (reactive object) and the save logic; this
@@ -185,6 +190,14 @@ const props = defineProps<{
   canManage: (congregationId: string | null) => boolean
 }>()
 const modal = props.modal
+const currentHome = computed(() => modal.assignments.find((assignment) => assignment.is_home) ?? null)
+
+watch(() => modal.newAssignment.target, (target) => {
+  const level = target === 'district' ? null : target
+  if (!target || !roleFitsLevel(modal.newAssignment.role, level)) {
+    modal.newAssignment.role = null
+  }
+})
 const emit = defineEmits<{
   close: []
   submit: []
