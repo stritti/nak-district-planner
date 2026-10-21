@@ -2,7 +2,8 @@ name: CI — Tests & Coverage
 
 on:
   pull_request:
-    branches: [main, develop]
+    # Run stacked feature PRs too (e.g. #691 targets #688), not only PRs against main.
+    branches: [main, develop, 'feature/**']
   push:
     branches: [main, develop]
 
