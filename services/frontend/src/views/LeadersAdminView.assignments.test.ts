@@ -127,11 +127,11 @@ describe('a person with several assignments', () => {
 
   it('shows the role held in each section', async () => {
     const { wrapper } = await mountView()
-    const roleIn = (section: string) =>
+    const roleIn = (section: string, congregationId: string) =>
       wrapper.findAll('div.mb-8').find((s) => s.find('h2').text() === section)!
-         .get(`[data-inline-cell-id="leader-special_role-desktop-l1-${section.endsWith('c1') ? 'c1' : 'c2'}"]`).text()
-    expect(roleIn('Gemeinde c1')).toBe('—')
-    expect(roleIn('Gemeinde c2')).toBe('Gemeindevorsteher')
+        .get(`[data-inline-cell-id="leader-special_role-desktop-l1-${congregationId}"]`).text()
+    expect(roleIn('Gemeinde c1', 'c1')).toBe('—')
+    expect(roleIn('Gemeinde c2', 'c2')).toBe('Gemeindevorsteher')
   })
 
   it('shows no home marker for a person with a single assignment', async () => {
