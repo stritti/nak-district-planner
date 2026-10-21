@@ -52,6 +52,12 @@ logger = logging.getLogger(__name__)
 
 
 _bearer_scheme = HTTPBearer(auto_error=False)
+
+# The session commits in the exit code of ``get_db_session``. With the default
+# ("request") scope FastAPI runs that code after the response exists, so a failed
+# commit would still be answered as a success. "function" scope commits when the
+# route function returns, before the response is sent (#648). Every consumer must use
+# this scope: FastAPI caches dependencies per scope, so a mismatch opens a second session.
 _oidc_adapter: OIDCAdapter | None = None
 
 
@@ -69,7 +75,7 @@ def get_oidc_adapter() -> OIDCAdapter | None:
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session, scope="function"),
 ) -> User:
     """Extract and validate the current user from the bearer token."""
     if not credentials:
@@ -158,7 +164,7 @@ class CurrentUserContext(NamedTuple):
 
 async def get_current_user_with_memberships(
     user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session, scope="function"),
 ) -> CurrentUserContext:
     """Get the current user together with effective memberships."""
     membership_repo = SqlMembershipRepository(session)
@@ -232,7 +238,7 @@ async def get_current_active_user(
 
 
 async def get_notification_service(
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session, scope="function"),
 ) -> NotificationService:
     """Provide the notification service."""
     repo = SqlNotificationRepository(session)
@@ -245,7 +251,7 @@ def make_repository_dependency[RepositoryT](
     """Create a typed FastAPI dependency for a SQLAlchemy repository adapter."""
 
     async def get_repository(
-        session: AsyncSession = Depends(get_db_session),
+        session: AsyncSession = Depends(get_db_session, scope="function"),
     ) -> RepositoryT:
         return repository_type(session)
 
@@ -280,7 +286,7 @@ get_external_event_candidate_repository = make_repository_dependency(
 
 
 async def get_candidate_review_service(
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session, scope="function"),
 ) -> CandidateReviewService:
     """Provide the candidate review service with its repository adapters."""
     return CandidateReviewService(
@@ -305,4 +311,4 @@ RawCurrentUserWithMemberships = Annotated[
 ]
 CurrentUserWithMemberships = Annotated[CurrentUserContext, Depends(require_membership_access)]
 CurrentActiveUser = Annotated[CurrentUserContext, Depends(require_membership_access)]
-DbSession = Annotated[AsyncSession, Depends(get_db_session)]
+DbSession = Annotated[AsyncSession, Depends(get_db_session, scope="function")]
