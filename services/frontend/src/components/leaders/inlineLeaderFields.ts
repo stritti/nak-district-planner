@@ -3,17 +3,14 @@
 
 import type { LeaderResponse, LeaderUpdate } from '../../api/leaders'
 
-export type InlineLeaderField =
-  | 'name'
-  | 'email'
-  | 'phone'
-  | 'rank'
-  | 'special_role'
-  | 'congregation_id'
-  | 'is_active'
+/** Fields stored on the person itself (PATCH .../inline). */
+export type InlineLeaderField = 'name' | 'email' | 'phone' | 'rank' | 'is_active'
+
+/** Cell kinds: the person's fields plus the role, which belongs to one assignment. */
+export type InlineCellField = InlineLeaderField | 'special_role'
 
 /** Fields whose change is a lifecycle decision and needs the district admin role. */
-export const LIFECYCLE_FIELDS: readonly InlineLeaderField[] = ['is_active']
+export const LIFECYCLE_FIELDS: readonly InlineCellField[] = ['is_active']
 
 /** Cell draft (always a string) -> inline PATCH body for exactly this field. */
 export function inlineLeaderPayload(
@@ -25,16 +22,12 @@ export function inlineLeaderPayload(
       return { is_active: value === 'true' }
     case 'rank':
       return { rank: value as NonNullable<LeaderUpdate['rank']> }
-    case 'special_role':
-      return { special_role: (value || null) as LeaderUpdate['special_role'] }
-    case 'congregation_id':
-      return { congregation_id: value || null }
     default:
       return { [field]: value || null } as Pick<LeaderUpdate, InlineLeaderField>
   }
 }
 
-/** Current stored value of a field as the cell's string draft representation. */
+/** Current stored value of a person field as the cell's string draft representation. */
 export function inlineLeaderValue(leader: LeaderResponse, field: InlineLeaderField): string {
   const value = leader[field]
   return value === null || value === undefined ? '' : String(value)

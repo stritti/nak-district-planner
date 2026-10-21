@@ -18,12 +18,8 @@ export const LEADER_RANKS = [
 
 export type LeaderRank = (typeof LEADER_RANKS)[number]['value']
 
-export const SPECIAL_ROLES = [
-  { value: 'Gemeindevorsteher', label: 'Gemeindevorsteher' },
-  { value: 'Bezirksvorsteher',  label: 'Bezirksvorsteher' },
-] as const
-
-export type SpecialRole = (typeof SPECIAL_ROLES)[number]['value']
+export { SPECIAL_ROLES, type SpecialRole } from './leaderRoles'
+import type { SpecialRole } from './leaderRoles'
 
 export function leaderDisplayName(leader: LeaderResponse): string {
   return leader.rank ? `${leader.rank} ${leader.name}` : leader.name
@@ -37,13 +33,28 @@ export function leaderNameFromId(
   return leader ? leaderDisplayName(leader) : '—'
 }
 
+/** One service of a person: a congregation (`null` = district level) with an optional role. */
+export interface LeaderAssignment {
+  id: string
+  congregation_id: string | null
+  role: SpecialRole | null
+  is_home: boolean
+  revision: string
+}
+
+export interface LeaderAssignmentCreate {
+  congregation_id: string | null
+  role?: SpecialRole | null
+  is_home?: boolean
+}
+
 export interface LeaderResponse {
   id: string
   name: string
   district_id: string
   rank: LeaderRank | null
-  congregation_id: string | null
-  special_role: SpecialRole | null
+  /** Home assignment first. */
+  assignments: LeaderAssignment[]
   user_sub: string | null
   email: string | null
   phone: string | null
@@ -64,8 +75,8 @@ export interface LeaderSelfLinkResponse {
 export interface LeaderCreate {
   name: string
   rank: LeaderRank
-  congregation_id?: string | null
-  special_role?: SpecialRole | null
+  /** Omitted: one district-level home assignment. Exactly one entry is the home. */
+  assignments?: LeaderAssignmentCreate[]
   email?: string | null
   phone?: string | null
   notes?: string | null
@@ -79,8 +90,6 @@ export interface LeaderCreate {
 export interface LeaderUpdate {
   name?: string
   rank?: LeaderRank | null
-  congregation_id?: string | null
-  special_role?: SpecialRole | null
   email?: string | null
   phone?: string | null
   notes?: string | null
@@ -118,7 +127,7 @@ export function updateLeader(
 export function updateLeaderInline(
   districtId: string,
   leaderId: string,
-  body: Pick<LeaderUpdate, 'name' | 'email' | 'phone' | 'rank' | 'special_role' | 'congregation_id' | 'is_active'> & {
+  body: Pick<LeaderUpdate, 'name' | 'email' | 'phone' | 'rank' | 'is_active'> & {
     /** Required by the server to deactivate; set only after the user confirmed. */
     confirm_deactivation?: boolean
   },
@@ -129,6 +138,50 @@ export function updateLeaderInline(
     method: 'PATCH',
     headers: { 'If-Match': revision },
     body: JSON.stringify(body),
+  })
+}
+
+function assignmentsUrl(districtId: string, leaderId: string): string {
+  return `/api/v1/districts/${districtId}/leaders/${leaderId}/assignments`
+}
+
+export function addLeaderAssignment(
+  districtId: string,
+  leaderId: string,
+  body: LeaderAssignmentCreate,
+): Promise<LeaderAssignment> {
+  return apiFetch<LeaderAssignment>(assignmentsUrl(districtId, leaderId), {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+/** Change the role, or make this the home assignment (`is_home: true` only). */
+export function updateLeaderAssignment(
+  districtId: string,
+  leaderId: string,
+  assignmentId: string,
+  body: { role?: SpecialRole | null; is_home?: true },
+  revision: string,
+): Promise<LeaderAssignment> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+  return apiFetch<LeaderAssignment>(`${assignmentsUrl(districtId, leaderId)}/${assignmentId}`, {
+    method: 'PATCH',
+    headers: { 'If-Match': revision },
+    body: JSON.stringify(body),
+  })
+}
+
+export function removeLeaderAssignment(
+  districtId: string,
+  leaderId: string,
+  assignmentId: string,
+  revision: string,
+): Promise<void> {
+  if (!revision) return Promise.reject(new Error('Versionsinformation fehlt. Bitte neu laden.'))
+  return apiFetch<void>(`${assignmentsUrl(districtId, leaderId)}/${assignmentId}`, {
+    method: 'DELETE',
+    headers: { 'If-Match': revision },
   })
 }
 

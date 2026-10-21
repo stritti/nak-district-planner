@@ -34,8 +34,11 @@ vi.mock('../api/leaders', () => ({
   leaderDisplayName: (value: { rank: string | null; name: string }) => `${value.rank ?? ''} ${value.name}`.trim(),
   leaderNameFromId: (id: string, values: Array<{ id: string; name: string }>) =>
     values.find((value) => value.id === id)?.name ?? '—',
+  addLeaderAssignment: vi.fn(),
   createLeader: vi.fn(),
   deleteLeader: vi.fn(),
+  removeLeaderAssignment: vi.fn(),
+  updateLeaderAssignment: vi.fn(),
   getSelfLeaderLink: vi.fn(),
   linkSelfToLeader: vi.fn(),
   listLeaders: vi.fn(),
@@ -57,8 +60,9 @@ const leader: leadersApi.LeaderResponse = {
   name: 'Anna Beispiel',
   district_id: 'd1',
   rank: 'Pr.',
-  congregation_id: 'c1',
-  special_role: 'Gemeindevorsteher',
+  assignments: [
+    { id: 'a1', congregation_id: 'c1', role: 'Gemeindevorsteher', is_home: true, revision: '"a1"' },
+  ],
   user_sub: null,
   email: 'anna@example.org',
   phone: '123',
@@ -420,8 +424,12 @@ async function edit(
   return cell
 }
 
-// District-level leader: the home-congregation column only exists in that section.
-const versionedLeader = { ...leader, congregation_id: null, revision: '"v1"' }
+// District-level leader: appears in the "Bezirksebene" section, where only the district role fits.
+const versionedLeader = {
+  ...leader,
+  assignments: [{ id: 'a1', congregation_id: null, role: null, is_home: true, revision: '"a1"' }],
+  revision: '"v1"',
+}
 
 describe.each(['desktop', 'mobile'] as const)('LeadersAdminView inline appointment fields (%s)', (layout) => {
   beforeEach(() => {
@@ -432,15 +440,29 @@ describe.each(['desktop', 'mobile'] as const)('LeadersAdminView inline appointme
     })))
   })
 
-  it.each([
-    ['rank', 'select', 'Bi.', { rank: 'Bi.' }],
-    ['special_role', 'select', '', { special_role: null }],
-    ['congregation_id', 'select', 'c2', { congregation_id: 'c2' }],
-  ] as const)('saves %s with the captured revision', async (field, control, value, payload) => {
+  it('saves rank with the captured revision', async () => {
     const wrapper = (await mountView()).wrapper
-    await edit(wrapper, `leader-${field}-${layout}-l1`, control, value)
-    expect(leadersApi.updateLeaderInline).toHaveBeenCalledWith('d1', 'l1', payload, '"v1"')
+    await edit(wrapper, `leader-rank-${layout}-l1`, 'select', 'Bi.')
+    expect(leadersApi.updateLeaderInline).toHaveBeenCalledWith('d1', 'l1', { rank: 'Bi.' }, '"v1"')
     expect(confirmMock).not.toHaveBeenCalled()
+  })
+
+  it('saves the role on the assignment of its section with that assignment\'s revision', async () => {
+    vi.mocked(leadersApi.updateLeaderAssignment).mockResolvedValue(versionedLeader.assignments[0] as never)
+    const wrapper = (await mountView()).wrapper
+    await edit(wrapper, `leader-special_role-${layout}-l1`, 'select', 'Bezirksvorsteher')
+    expect(leadersApi.updateLeaderAssignment).toHaveBeenCalledWith(
+      'd1', 'l1', 'a1', { role: 'Bezirksvorsteher' }, '"a1"',
+    )
+    expect(leadersApi.updateLeaderInline).not.toHaveBeenCalled()
+  })
+
+  it('offers only the roles that fit the district level', async () => {
+    const wrapper = (await mountView()).wrapper
+    const cell = wrapper.get(`[data-inline-cell-id="leader-special_role-${layout}-l1"]`)
+    await cell.trigger('click')
+    await flushPromises()
+    expect(cell.findAll('option').map((option) => option.text())).toEqual(['Keine', 'Bezirksvorsteher'])
   })
 
   it('does not allow clearing the grade', async () => {
@@ -528,7 +550,7 @@ describe('LeadersAdminView table regressions', () => {
     vi.mocked(leadersApi.updateLeaderInline).mockResolvedValue({ ...versionedLeader, revision: '"v2"' })
   })
 
-  const FIELDS = ['name', 'email', 'phone', 'rank', 'special_role', 'congregation_id', 'is_active'] as const
+  const FIELDS = ['name', 'email', 'phone', 'rank', 'special_role', 'is_active'] as const
 
   it.each([['VIEWER'], [undefined]])('offers no inline editor to a user with role %s', async (role) => {
     const { wrapper } = await mountView()

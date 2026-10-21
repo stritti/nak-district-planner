@@ -9,7 +9,7 @@
     :display-value="config.display"
     :choices="config.choices"
     :empty-label="config.emptyLabel"
-    :revision="leader.revision ?? ''"
+    :revision="revision"
     :label="`${config.label}: ${leader.name}`"
     :editable="editable"
     :coordinator="coordinator"
@@ -23,21 +23,32 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CongregationResponse } from '../../api/districts'
-import { LEADER_RANKS, SPECIAL_ROLES, type LeaderResponse } from '../../api/leaders'
+import { LEADER_RANKS, type LeaderResponse } from '../../api/leaders'
+import { assignmentFor } from '../../api/leaderAssignments'
+import { roleChoicesFor } from '../../api/leaderRoles'
 import type { InlineCellCoordinator } from '../../composables/useInlineCellCoordinator'
 import InlineEditableCell from '../InlineEditableCell.vue'
-import type { InlineLeaderField } from './inlineLeaderFields'
+import type { InlineCellField } from './inlineLeaderFields'
 
 const props = defineProps<{
   leader: LeaderResponse
-  field: InlineLeaderField
+  field: InlineCellField
+  /** The role belongs to the assignment of this section (`null` = district level). */
+  sectionCongregationId?: string | null
   layout: 'mobile' | 'desktop'
   editable: boolean
   congregations: CongregationResponse[]
   coordinator: InlineCellCoordinator
-  save: (field: InlineLeaderField, value: string, revision: string) => Promise<void>
-  reload: (field: InlineLeaderField) => Promise<{ value: string | null; revision: string }>
+  save: (field: InlineCellField, value: string, revision: string) => Promise<void>
+  reload: (field: InlineCellField) => Promise<{ value: string | null; revision: string }>
 }>()
+
+const roleAssignment = computed(() => assignmentFor(props.leader, props.sectionCongregationId ?? null))
+
+/** The role is versioned with its assignment, everything else with the person. */
+const revision = computed(() =>
+  props.field === 'special_role' ? (roleAssignment.value?.revision ?? '') : (props.leader.revision ?? ''),
+)
 
 interface FieldConfig {
   label: string
@@ -67,22 +78,16 @@ const config = computed<FieldConfig>(() => {
         emptyLabel: 'Grad wählen…',
         required: true,
       }
-    case 'special_role':
+    case 'special_role': {
+      const role = roleAssignment.value?.role ?? null
       return {
         label: 'Beauftragung',
-        value: leader.special_role ?? '',
-        display: leader.special_role ?? '—',
-        choices: SPECIAL_ROLES.map((r) => ({ value: r.value, label: r.label })),
+        value: role ?? '',
+        display: role ?? '—',
+        choices: roleChoicesFor(props.sectionCongregationId ?? null).map((r) => ({ value: r.value, label: r.label })),
         emptyLabel: 'Keine',
       }
-    case 'congregation_id':
-      return {
-        label: 'Heimat-Gemeinde',
-        value: leader.congregation_id ?? '',
-        display: props.congregations.find((c) => c.id === leader.congregation_id)?.name ?? '—',
-        choices: props.congregations.map((c) => ({ value: c.id, label: c.name })),
-        emptyLabel: 'Bezirksebene',
-      }
+    }
     default:
       return {
         label: 'Status',

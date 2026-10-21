@@ -36,28 +36,6 @@
       </div>
 
       <div>
-        <label class="form-label">Besondere Beauftragung</label>
-        <select
-          v-model="modal.special_role"
-          class="form-input"
-        >
-          <option :value="null">Keine</option>
-          <option v-for="sr in SPECIAL_ROLES" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="form-label">Gemeinde</label>
-        <select
-          v-model="modal.congregation_id"
-          class="form-input"
-        >
-          <option :value="null">Bezirksebene</option>
-          <option v-for="c in congregations" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-      </div>
-
-      <div>
         <label class="form-label">E-Mail</label>
         <input
           v-model="modal.email"
@@ -84,6 +62,72 @@
         />
       </div>
     </div>
+
+    <fieldset class="mb-4" data-testid="assignments">
+      <legend class="form-label">Zuordnungen</legend>
+      <ul class="space-y-2">
+        <li
+          v-for="assignment in modal.assignments"
+          :key="assignment.id"
+          class="flex flex-wrap items-center gap-2 text-sm"
+          :data-testid="`assignment-${assignment.id}`"
+        >
+          <span class="min-w-[8rem] font-medium text-gray-700 dark:text-gray-300">
+            {{ levelLabel(assignment.congregation_id) }}
+          </span>
+          <span
+            v-if="assignment.is_home"
+            class="rounded bg-teal-100 px-1.5 py-0.5 text-xs text-teal-800 dark:bg-teal-900 dark:text-teal-200"
+          >Heimat</span>
+          <select
+            :value="assignment.role ?? ''"
+            class="form-input w-auto"
+            :aria-label="`Beauftragung ${levelLabel(assignment.congregation_id)}`"
+            :disabled="!canManage(assignment.congregation_id) || busy"
+            @change="emit('assignment-role', assignment, ($event.target as HTMLSelectElement).value || null)"
+          >
+            <option value="">Keine</option>
+            <option v-for="sr in roleChoicesFor(assignment.congregation_id)" :key="sr.value" :value="sr.value">
+              {{ sr.label }}
+            </option>
+          </select>
+          <button
+            v-if="!assignment.is_home && modal.assignments.length > 1"
+            type="button"
+            class="btn-secondary px-2 py-1 text-xs"
+            :disabled="!canManage(assignment.congregation_id) || busy"
+            @click="emit('assignment-home', assignment)"
+          >Als Heimat festlegen</button>
+          <button
+            v-if="!assignment.is_home"
+            type="button"
+            class="btn-secondary px-2 py-1 text-xs text-red-600"
+            :disabled="!canManage(assignment.congregation_id) || busy"
+            @click="emit('assignment-remove', assignment)"
+          >Entfernen</button>
+        </li>
+      </ul>
+      <div v-if="targets.length" class="mt-3 flex flex-wrap items-center gap-2 text-sm">
+        <select v-model="modal.newAssignment.target" class="form-input w-auto" aria-label="Neue Zuordnung">
+          <option value="">Zuordnung hinzufügen…</option>
+          <option v-for="target in targets" :key="target.value" :value="target.value">{{ target.label }}</option>
+        </select>
+        <select
+          v-model="modal.newAssignment.role"
+          class="form-input w-auto"
+          aria-label="Beauftragung der neuen Zuordnung"
+        >
+          <option :value="null">Keine</option>
+          <option v-for="sr in newRoleChoices" :key="sr.value" :value="sr.value">{{ sr.label }}</option>
+        </select>
+        <button
+          type="button"
+          class="btn-secondary px-2 py-1 text-xs"
+          :disabled="!modal.newAssignment.target || busy"
+          @click="emit('assignment-add')"
+        >Hinzufügen</button>
+      </div>
+    </fieldset>
 
     <label class="flex items-center gap-2 text-sm mb-4">
       <input v-model="modal.is_active" type="checkbox" class="rounded" />
@@ -123,7 +167,9 @@
 <script setup lang="ts">
 import type { EditModalState } from './modalState'
 import { CheckIcon, XMarkIcon } from '@heroicons/vue/24/outline'
-import { LEADER_RANKS, SPECIAL_ROLES } from '../../api/leaders'
+import { computed } from 'vue'
+import { LEADER_RANKS, type LeaderAssignment } from '../../api/leaders'
+import { roleChoicesFor } from '../../api/leaderRoles'
 import type { CongregationResponse } from '../../api/districts'
 
 // The parent owns the form state (reactive object) and the save logic; this
@@ -133,7 +179,39 @@ const props = defineProps<{
   modal: EditModalState
   congregations: CongregationResponse[]
   saving: boolean
+  /** An assignment request is running. */
+  busy?: boolean
+  /** The user may change the assignment of this congregation (`null` = district level). */
+  canManage: (congregationId: string | null) => boolean
 }>()
 const modal = props.modal
-const emit = defineEmits<{ close: []; submit: [] }>()
+const emit = defineEmits<{
+  close: []
+  submit: []
+  'assignment-add': []
+  'assignment-role': [assignment: LeaderAssignment, role: string | null]
+  'assignment-home': [assignment: LeaderAssignment]
+  'assignment-remove': [assignment: LeaderAssignment]
+}>()
+
+function levelLabel(congregationId: string | null): string {
+  if (congregationId === null) return 'Bezirksebene'
+  return props.congregations.find((c) => c.id === congregationId)?.name ?? 'Gemeinde'
+}
+
+/** Levels the person is not yet assigned to and the user may manage. */
+const targets = computed(() => {
+  const taken = new Set(modal.assignments.map((a) => a.congregation_id))
+  return [
+    ...(taken.has(null) || !props.canManage(null) ? [] : [{ value: 'district', label: 'Bezirksebene' }]),
+    ...props.congregations
+      .filter((c) => !taken.has(c.id) && props.canManage(c.id))
+      .map((c) => ({ value: c.id, label: c.name })),
+  ]
+})
+
+const newRoleChoices = computed(() => {
+  const { target } = modal.newAssignment
+  return target ? roleChoicesFor(target === 'district' ? null : target) : []
+})
 </script>

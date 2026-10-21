@@ -52,7 +52,7 @@
         <label class="form-label">Beauftragung</label>
         <select v-model="modal.special_role" class="form-select w-full">
           <option :value="null">— keine —</option>
-          <option v-for="r in SPECIAL_ROLES" :key="r.value" :value="r.value">{{ r.label }}</option>
+          <option v-for="r in roleChoicesFor(modal.congregation_id)" :key="r.value" :value="r.value">{{ r.label }}</option>
         </select>
       </div>
     </div>
@@ -75,7 +75,9 @@
 <script setup lang="ts">
 import type { ApproveModalState } from './modalState'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
-import { LEADER_RANKS, SPECIAL_ROLES } from '../../api/leaders'
+import { watch } from 'vue'
+import { LEADER_RANKS } from '../../api/leaders'
+import { roleChoicesFor, roleFitsLevel, type SpecialRole } from '../../api/leaderRoles'
 import type { CongregationResponse } from '../../api/districts'
 
 // The parent owns the form state (reactive object) and the save logic; this
@@ -88,4 +90,12 @@ const props = defineProps<{
 }>()
 const modal = props.modal
 const emit = defineEmits<{ close: []; submit: [] }>()
+
+// A role that no longer fits the chosen level would be rejected by the server.
+watch(
+  () => [modal.congregation_id, modal.special_role] as const,
+  ([congregationId, role]) => {
+    if (role && !roleFitsLevel(role as SpecialRole, congregationId)) modal.special_role = null
+  },
+)
 </script>

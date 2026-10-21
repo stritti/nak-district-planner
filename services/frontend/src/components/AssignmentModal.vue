@@ -195,6 +195,7 @@ import { useConflictStore, type PendingConflictAction } from '../stores/conflict
 import { useMatrixStore } from '../stores/matrix'
 import { useDistrictsStore } from '../stores/districts'
 import { useLeadersStore } from '../stores/leaders'
+import { leaderCongregationIds } from '../api/leaderAssignments'
 import {
   createInvitations,
   deleteInvitation,
@@ -287,8 +288,8 @@ const autocompleteOptions = computed((): AutocompleteOption[] => {
   return leadersStore.activeLeaders(modal.date).map((l) => ({
     id: l.id,
     label: `${l.rank ? l.rank + ' ' : ''}${l.name}`,
-    sublabel: l.congregation_id ? congregationName(l.congregation_id) : undefined,
-    isPriority: l.congregation_id === modal.congregationId,
+    sublabel: leaderCongregationIds(l).map(congregationName).join(', ') || undefined,
+    isPriority: leaderCongregationIds(l).includes(modal.congregationId),
   }))
 })
 

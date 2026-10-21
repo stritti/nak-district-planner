@@ -65,8 +65,8 @@ function setup() {
   ] as typeof districts.congregations
   leaders.districtId = 'district-1'
   leaders.leaders = [
-    { id: 'leader-1', name: 'Anna Beispiel', rank: 'Pr.', is_active: true, congregation_id: 'cong-1' },
-    { id: 'leader-2', name: 'Bernd Muster', rank: null, is_active: true, congregation_id: 'cong-2' },
+    { id: 'leader-1', name: 'Anna Beispiel', rank: 'Pr.', is_active: true, assignments: [{ id: 'as-1', congregation_id: 'cong-1', role: null, is_home: true, revision: 'ar-1' }] },
+    { id: 'leader-2', name: 'Bernd Muster', rank: null, is_active: true, assignments: [{ id: 'as-2', congregation_id: 'cong-2', role: null, is_home: true, revision: 'ar-2' }] },
   ] as typeof leaders.leaders
 
   vi.spyOn(matrix, 'fetch').mockResolvedValue(undefined)

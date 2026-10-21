@@ -121,18 +121,6 @@
                     :reload="(field) => reloadInlineLeader(leader, field)"
                   />
                 </div>
-                <LeaderInlineCell
-                  v-if="section.congregationId === null"
-                  class="text-xs text-gray-500 dark:text-gray-400 mt-1"
-                  :leader="leader"
-                  field="congregation_id"
-                  layout="mobile"
-                  :editable="canEditLeaderField(leader, 'congregation_id')"
-                  :congregations="congregations"
-                  :coordinator="inlineCoordinator"
-                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
-                  :reload="(field) => reloadInlineLeader(leader, field)"
-                />
                 <div class="mt-0.5 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
                   <LeaderInlineCell
                     :leader="leader"
@@ -160,12 +148,20 @@
                   :leader="leader"
                   field="special_role"
                   layout="mobile"
-                  :editable="canEditLeaderField(leader, 'special_role')"
+                  :section-congregation-id="section.congregationId"
+                  :editable="canEditRole(leader, section.congregationId)"
                   :congregations="congregations"
                   :coordinator="inlineCoordinator"
-                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
-                  :reload="(field) => reloadInlineLeader(leader, field)"
+                  :save="(_field, value, revision) => saveInlineRole(leader, section.congregationId, value, revision)"
+                  :reload="() => reloadInlineRole(leader, section.congregationId)"
                 />
+                <p v-if="leader.assignments.length > 1" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400" data-testid="home-marker">
+                  <span
+                    v-if="isHomeIn(leader, section.congregationId)"
+                    class="rounded bg-teal-100 px-1.5 py-0.5 text-teal-800 dark:bg-teal-900 dark:text-teal-200"
+                  >Heimat</span>
+                  <template v-else>Heimat: {{ homeLabel(leader) }}</template>
+                </p>
               </div>
               <LeaderInlineCell
                 class="shrink-0 text-xs"
@@ -217,7 +213,7 @@
                 <th class="table-th py-2">Grad</th>
                 <th class="table-th py-2">Name</th>
                 <th class="table-th py-2">Beauftragung</th>
-                <th v-if="section.congregationId === null" class="table-th py-2">Heimat-Gemeinde</th>
+                <th class="table-th py-2">Heimat</th>
                 <th class="table-th py-2">E-Mail</th>
                 <th class="table-th py-2">Telefon</th>
                 <th class="table-th py-2 text-center">Status</th>
@@ -258,24 +254,22 @@
                   :leader="leader"
                   field="special_role"
                   layout="desktop"
-                  :editable="canEditLeaderField(leader, 'special_role')"
+                  :section-congregation-id="section.congregationId"
+                  :editable="canEditRole(leader, section.congregationId)"
                   :congregations="congregations"
                   :coordinator="inlineCoordinator"
-                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
-                  :reload="(field) => reloadInlineLeader(leader, field)"
+                  :save="(_field, value, revision) => saveInlineRole(leader, section.congregationId, value, revision)"
+                  :reload="() => reloadInlineRole(leader, section.congregationId)"
                 />
-                <LeaderInlineCell
-                  v-if="section.congregationId === null"
-                  class="py-2"
-                  :leader="leader"
-                  field="congregation_id"
-                  layout="desktop"
-                  :editable="canEditLeaderField(leader, 'congregation_id')"
-                  :congregations="congregations"
-                  :coordinator="inlineCoordinator"
-                  :save="(field, value, revision) => saveInlineLeader(leader, field, value, revision)"
-                  :reload="(field) => reloadInlineLeader(leader, field)"
-                />
+                <td class="table-td py-2 text-xs" data-testid="home-marker">
+                  <span
+                    v-if="isHomeIn(leader, section.congregationId)"
+                    class="rounded bg-teal-100 px-1.5 py-0.5 text-teal-800 dark:bg-teal-900 dark:text-teal-200"
+                  >Heimat</span>
+                  <span v-else-if="homeLabel(leader)" class="text-gray-500 dark:text-gray-400">
+                    Heimat: {{ homeLabel(leader) }}
+                  </span>
+                </td>
                 <LeaderInlineCell
                   class="py-2"
                   :leader="leader"
@@ -555,8 +549,14 @@
       :modal="editModal"
       :congregations="congregations"
       :saving="saving"
+      :busy="assignmentBusy"
+      :can-manage="canManageAssignment"
       @close="editModal.open = false"
       @submit="saveEdit"
+      @assignment-add="addAssignment"
+      @assignment-role="changeAssignmentRole"
+      @assignment-home="makeAssignmentHome"
+      @assignment-remove="dropAssignment"
     />
 
     <LeaderExportModal
@@ -581,6 +581,7 @@ import {
   inlineLeaderPayload,
   inlineLeaderValue,
   LIFECYCLE_FIELDS,
+  type InlineCellField,
   type InlineLeaderField,
 } from '../components/leaders/inlineLeaderFields'
 import { useConfirm } from '../composables/useConfirm'
@@ -613,8 +614,12 @@ import {
 } from '@heroicons/vue/24/outline'
 import { listCongregations, type CongregationResponse } from '../api/districts'
 import {
+  addLeaderAssignment,
   createLeader,
   deleteLeader,
+  removeLeaderAssignment,
+  updateLeaderAssignment,
+  type LeaderAssignment,
   getSelfLeaderLink,
   linkSelfToLeader,
   listLeaders,
@@ -627,6 +632,7 @@ import {
   type LeaderResponse,
   type SpecialRole,
 } from '../api/leaders'
+import { assignmentFor, homeAssignment } from '../api/leaderAssignments'
 import { createExportToken as apiCreateExportToken } from '../api/exportTokens'
 import {
   approveRegistration,
@@ -670,7 +676,7 @@ function canInlineEditLeader(leader: LeaderResponse): boolean {
 }
 
 /** Lifecycle fields (activity) are DISTRICT_ADMIN only; the server enforces the same rule. */
-function canEditLeaderField(leader: LeaderResponse, field: InlineLeaderField): boolean {
+function canEditLeaderField(leader: LeaderResponse, field: InlineCellField): boolean {
   if (!canInlineEditLeader(leader)) return false
   if (!LIFECYCLE_FIELDS.includes(field)) return true
   return authStore.isSuperadmin || authStore.memberships.some((m) =>
@@ -678,10 +684,78 @@ function canEditLeaderField(leader: LeaderResponse, field: InlineLeaderField): b
   )
 }
 
+/** District planners manage every assignment, congregation planners only their own. */
+function canManageAssignment(congregationId: string | null): boolean {
+  if (authStore.isSuperadmin) return true
+  const planner = ['PLANNER', 'CONGREGATION_ADMIN', 'DISTRICT_ADMIN']
+  return authStore.memberships.some((m) => planner.includes(m.role) && (
+    (m.scope_type === 'DISTRICT' && m.scope_id === selectedDistrictId.value) ||
+    (congregationId !== null && m.scope_type === 'CONGREGATION' && m.scope_id === congregationId)
+  ))
+}
+
+function canEditRole(leader: LeaderResponse, congregationId: string | null): boolean {
+  const assignment = assignmentFor(leader, congregationId)
+  return !!assignment && !!assignment.revision && leader.district_id === selectedDistrictId.value &&
+    canManageAssignment(congregationId)
+}
+
+function isHomeIn(leader: LeaderResponse, congregationId: string | null): boolean {
+  return leader.assignments.length > 1 && !!assignmentFor(leader, congregationId)?.is_home
+}
+
+/** Name of the home congregation of a person with several assignments. */
+function homeLabel(leader: LeaderResponse): string {
+  if (leader.assignments.length < 2) return ''
+  const home = homeAssignment(leader)
+  return home ? (home.congregation_id ? congregationName(home.congregation_id) : 'Bezirksebene') : ''
+}
+
+async function saveInlineRole(
+  leader: LeaderResponse,
+  congregationId: string | null,
+  value: string,
+  revision: string,
+): Promise<void> {
+  const assignment = assignmentFor(leader, congregationId)
+  if (!assignment) throw new Error('Zuordnung nicht gefunden. Bitte neu laden.')
+  const districtId = leader.district_id
+  await updateLeaderAssignment(districtId, leader.id, assignment.id, { role: (value || null) as SpecialRole | null }, revision)
+  if (selectedDistrictId.value !== districtId) return
+  await refreshLeaders(districtId)
+}
+
+async function reloadInlineRole(
+  leader: LeaderResponse,
+  congregationId: string | null,
+): Promise<{ value: string | null; revision: string }> {
+  const latest = (await listLeaders(leader.district_id, canIncludeInactiveLeaders(leader.district_id)))
+    .find((entry) => entry.id === leader.id)
+  if (!latest) throw new Error('Amtstragende:r wurde zwischenzeitlich entfernt.')
+  if (selectedDistrictId.value === leader.district_id) {
+    leaders.value = leaders.value.map((entry) => entry.id === latest.id ? latest : entry)
+  }
+  const assignment = assignmentFor(latest, congregationId)
+  return { value: assignment?.role ?? null, revision: assignment?.revision ?? '' }
+}
+
+/** Reload the list after a mutation; a failed refresh must not turn a persisted change into an error. */
+async function refreshLeaders(districtId: string): Promise<void> {
+  try {
+    const current = await listLeaders(districtId, canIncludeInactiveLeaders(districtId))
+    if (selectedDistrictId.value === districtId) leaders.value = current
+  } catch {
+    // The persisted change is visible after the next load.
+  }
+}
+
 async function reloadInlineLeader(
   leader: LeaderResponse,
-  field: InlineLeaderField,
+  cell: InlineCellField,
 ): Promise<{ value: string | null; revision: string }> {
+  // The role cell has its own handlers (reloadInlineRole / saveInlineRole).
+  if (cell === 'special_role') throw new Error('Die Beauftragung gehört zur Zuordnung.')
+  const field: InlineLeaderField = cell
   // Same visibility as the admin list: inactive/hidden leaders must stay reloadable after a 412.
   const latest = (await listLeaders(leader.district_id, canIncludeInactiveLeaders(leader.district_id)))
     .find((entry) => entry.id === leader.id)
@@ -694,10 +768,12 @@ async function reloadInlineLeader(
 
 async function saveInlineLeader(
   leader: LeaderResponse,
-  field: InlineLeaderField,
+  cell: InlineCellField,
   value: string,
   revision: string,
 ): Promise<void> {
+  if (cell === 'special_role') throw new Error('Die Beauftragung gehört zur Zuordnung.')
+  const field: InlineLeaderField = cell
   if (field === 'is_active' && value === 'false') {
     // Existing deactivation policy: future assignments are kept but flagged for review.
     const confirmed = await confirm({
@@ -1004,15 +1080,13 @@ const activeLeaderOptions = computed(() => {
 })
 
 function leadersForSection(congregationId: string | null): LeaderResponse[] {
-  const filtered =
-    congregationId === null
-      ? leaders.value.filter((l) => l.congregation_id === null)
-      : leaders.value.filter((l) => l.congregation_id === congregationId)
+  // A person with several assignments appears in every assigned section, with the role held there.
+  const filtered = leaders.value.filter((l) => assignmentFor(l, congregationId) !== null)
   return [...filtered].sort((a, b) => {
     const rankDiff = (RANK_ORDER[b.rank ?? ''] ?? -1) - (RANK_ORDER[a.rank ?? ''] ?? -1)
     if (rankDiff !== 0) return rankDiff
-    const roleA = a.special_role ? 1 : 0
-    const roleB = b.special_role ? 1 : 0
+    const roleA = assignmentFor(a, congregationId)?.role ? 1 : 0
+    const roleB = assignmentFor(b, congregationId)?.role ? 1 : 0
     if (roleB !== roleA) return roleB - roleA
     return a.name.localeCompare(b.name)
   })
@@ -1164,8 +1238,11 @@ async function saveAdd() {
     const created = await createLeader(selectedDistrictId.value, {
       name: submittedName,
       rank: addModal.rank,
-      congregation_id: addModal.congregationId,
-      special_role: addModal.special_role,
+      assignments: [{
+        congregation_id: addModal.congregationId,
+        role: addModal.special_role,
+        is_home: true,
+      }],
       email: addModal.email.trim() || null,
       phone: addModal.phone.trim() || null,
       // A pending hint means the user already saw the same-named people and chose to continue.
@@ -1183,7 +1260,9 @@ async function saveAdd() {
         id: match.id,
         label: [
           match.name,
-          match.congregation_id ? congregationName(match.congregation_id) || 'andere Gemeinde' : 'Bezirksebene',
+          match.congregation_ids.length
+            ? match.congregation_ids.map((id) => congregationName(id) || 'andere Gemeinde').join(', ')
+            : 'Bezirksebene',
           match.is_active ? 'aktiv' : 'inaktiv',
         ].join(' · '),
       }))
@@ -1203,8 +1282,8 @@ const editModal = reactive<EditModalState>({
   revision: '',
   name: '',
   rank: '' as LeaderRank | '',
-  congregation_id: null as string | null,
-  special_role: null as SpecialRole | null,
+  assignments: [] as LeaderAssignment[],
+  newAssignment: { target: '', role: null as SpecialRole | null },
   email: '',
   phone: '',
   notes: '',
@@ -1220,8 +1299,8 @@ function openEditModal(leader: LeaderResponse) {
   editModal.revision = leader.revision ?? ''
   editModal.name = leader.name
   editModal.rank = leader.rank ?? ''
-  editModal.congregation_id = leader.congregation_id
-  editModal.special_role = leader.special_role
+  editModal.assignments = leader.assignments
+  editModal.newAssignment = { target: '', role: null }
   editModal.email = leader.email ?? ''
   editModal.phone = leader.phone ?? ''
   editModal.notes = leader.notes ?? ''
@@ -1239,8 +1318,6 @@ async function saveEdit() {
     const updated = await updateLeader(selectedDistrictId.value, editModal.leaderId, {
       name: editModal.name.trim(),
       rank: editModal.rank,
-      congregation_id: editModal.congregation_id,
-      special_role: editModal.special_role,
       email: editModal.email.trim() || null,
       phone: editModal.phone.trim() || null,
       notes: editModal.notes.trim() || null,
@@ -1257,6 +1334,66 @@ async function saveEdit() {
   } finally {
     saving.value = false
   }
+}
+
+// Assignments are changed by their own requests, each with the revision of that assignment.
+const assignmentBusy = ref(false)
+
+async function runAssignmentChange(change: (districtId: string) => Promise<void>) {
+  if (!selectedDistrictId.value) return
+  const districtId = selectedDistrictId.value
+  assignmentBusy.value = true
+  editModal.error = ''
+  try {
+    await change(districtId)
+  } catch (e) {
+    editModal.error = e instanceof Error ? e.message : 'Fehler beim Ändern der Zuordnung'
+  } finally {
+    // Whatever happened, show the stored state (also after a 409/412).
+    try {
+      const current = await listLeaders(districtId, canIncludeInactiveLeaders(districtId))
+      if (selectedDistrictId.value === districtId) {
+        leaders.value = current
+        const latest = current.find((l) => l.id === editModal.leaderId)
+        if (latest) editModal.assignments = latest.assignments
+      }
+    } catch {
+      // keep the modal's last known state
+    }
+    assignmentBusy.value = false
+  }
+}
+
+function addAssignment() {
+  const { target, role } = editModal.newAssignment
+  if (!target) return
+  void runAssignmentChange(async (districtId) => {
+    await addLeaderAssignment(districtId, editModal.leaderId, {
+      congregation_id: target === 'district' ? null : target,
+      role,
+    })
+    editModal.newAssignment = { target: '', role: null }
+  })
+}
+
+function changeAssignmentRole(assignment: LeaderAssignment, role: string | null) {
+  void runAssignmentChange(async (districtId) => {
+    await updateLeaderAssignment(
+      districtId, editModal.leaderId, assignment.id, { role: role as SpecialRole | null }, assignment.revision,
+    )
+  })
+}
+
+function makeAssignmentHome(assignment: LeaderAssignment) {
+  void runAssignmentChange(async (districtId) => {
+    await updateLeaderAssignment(districtId, editModal.leaderId, assignment.id, { is_home: true }, assignment.revision)
+  })
+}
+
+function dropAssignment(assignment: LeaderAssignment) {
+  void runAssignmentChange(async (districtId) => {
+    await removeLeaderAssignment(districtId, editModal.leaderId, assignment.id, assignment.revision)
+  })
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
