@@ -180,4 +180,23 @@ it('shows a blocking overlap between a duty and a service of the leader', async 
  expect(w.get('[data-testid="duty-conflict"]').text()).toContain('bereits einen Dienst')
  expect(w.find('[data-testid="duty-conflict-confirm"]').exists()).toBe(false)
 })
+it.each([
+ ['the name', async (w: ReturnType<typeof mount>) => w.get('[data-testid="duty-name"]').setValue('Berta')],
+ ['the identity kind', async (w: ReturnType<typeof mount>) => w.get('[data-testid="identity-kind"]').setValue('account')],
+])('withdraws a pending confirmation when %s changes', async (_label, change) => {
+ vi.mocked(api.saveDutyAssignment).mockRejectedValueOnce(conflictBody('WARN','duty_possible_namesake','Gleicher Name'))
+ const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
+ await w.get('[data-testid="duty-name"]').setValue('Anna');await w.get('form').trigger('submit');await flushPromises()
+ expect(w.find('[data-testid="duty-conflict-confirm"]').exists()).toBe(true)
+ await change(w);await flushPromises()
+ expect(w.find('[data-testid="duty-conflict"]').exists()).toBe(false)
+ expect(api.saveDutyAssignment).toHaveBeenCalledTimes(1)
+})
+it('keeps the confirmation while the form is untouched', async () => {
+ vi.mocked(api.saveDutyAssignment).mockRejectedValueOnce(conflictBody('WARN','duty_possible_namesake','Gleicher Name'))
+ const w=mount(EventDutiesPanel,{props:{districtId:'d',slotId:'s',canEdit:true}});await flushPromises()
+ await w.get('[data-testid="duty-name"]').setValue('Anna');await w.get('form').trigger('submit');await flushPromises()
+ await flushPromises()
+ expect(w.find('[data-testid="duty-conflict-confirm"]').exists()).toBe(true)
+})
 

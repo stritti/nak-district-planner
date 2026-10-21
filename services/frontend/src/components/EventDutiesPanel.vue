@@ -95,6 +95,12 @@ watch(
   { immediate: true },
 )
 
+// A confirmation belongs to the exact assignment that was rejected: any change of what
+// would be sent withdraws it, so "Trotzdem zuweisen" never covers an unseen conflict.
+watch([category, kind, name, subject, leaderId, editing], () => {
+  pendingConflict.value = null
+})
+
 watch([category, () => props.districtId, () => props.congregationId], async () => {
   const current = ++suggestionsVersion
   suggestions.value = []
