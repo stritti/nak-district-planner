@@ -108,11 +108,28 @@ describe('a person with several assignments', () => {
     expect(other).toBe('Heimat: Gemeinde c1')
   })
 
+  it('has section-specific coordinator ids even for person-level columns', async () => {
+    const { wrapper } = await mountView()
+    const ids = wrapper.findAll('[data-inline-cell-id]').map((el) => el.attributes('data-inline-cell-id'))
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids).toContain('leader-name-desktop-l1-c1')
+    expect(ids).toContain('leader-name-desktop-l1-c2')
+  })
+
+  it('does not label an unseen home assignment as the first visible congregation', async () => {
+    vi.mocked(leadersApi.listLeaders).mockResolvedValue([hans([
+      assignment('a1', 'c1'), assignment('a2', 'c2'),
+    ])])
+    const { wrapper } = await mountView()
+    expect(wrapper.text()).not.toContain('Heimat: Gemeinde c1')
+    expect(wrapper.text()).toContain('Heimat nicht sichtbar')
+  })
+
   it('shows the role held in each section', async () => {
     const { wrapper } = await mountView()
     const roleIn = (section: string) =>
       wrapper.findAll('div.mb-8').find((s) => s.find('h2').text() === section)!
-        .get('[data-inline-cell-id="leader-special_role-desktop-l1"]').text()
+        .get('[data-inline-cell-id="leader-special_role-desktop-l1-c2-c1-c2-c1"]').text()
     expect(roleIn('Gemeinde c1')).toBe('—')
     expect(roleIn('Gemeinde c2')).toBe('Gemeindevorsteher')
   })
