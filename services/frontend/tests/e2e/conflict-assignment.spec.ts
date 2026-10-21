@@ -321,7 +321,10 @@ test.describe('Mocked conflict UI contract in assignment flow', () => {
     await setupAuthAndMatrix(page, matrixResponse({ isGap: true }))
     await page.route('**/api/v1/districts/district-1/leaders', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
-        { id: 'leader-1', name: 'Max Beispiel', rank: 'Pr.', congregation_id: 'cong-1', is_active: true },
+        {
+          id: 'leader-1', name: 'Max Beispiel', rank: 'Pr.', is_active: true,
+          assignments: [{ id: 'assignment-1', congregation_id: 'cong-1', role: null, is_home: true, revision: 'ar-1' }],
+        },
       ]) })
     })
     const requests: Record<string, unknown>[] = []
