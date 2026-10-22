@@ -13,7 +13,12 @@ import pytest
 from fastapi import Request
 
 from app.adapters.api.middleware.audit import AuditMiddleware
-from app.application.audit_service import AuditAction, AuditContext, AuditStatus
+from app.application.audit_service import (
+    AuditAction,
+    AuditContext,
+    AuditPersistenceError,
+    AuditStatus,
+)
 
 
 @pytest.fixture
@@ -326,8 +331,8 @@ class TestLogAuditEvent:
             duration=0.1,
         )
 
-        middleware.audit_service.log.assert_called_once()
-        call_kwargs = middleware.audit_service.log.call_args.kwargs
+        middleware.audit_service.record.assert_called_once()
+        call_kwargs = middleware.audit_service.record.call_args.args[0]._asdict()
         assert call_kwargs["status"] == AuditStatus.SUCCESS
         assert call_kwargs["action"] == AuditAction.CREATE
 
@@ -351,8 +356,8 @@ class TestLogAuditEvent:
             duration=0.1,
         )
 
-        middleware.audit_service.log.assert_called_once()
-        call_kwargs = middleware.audit_service.log.call_args.kwargs
+        middleware.audit_service.record.assert_called_once()
+        call_kwargs = middleware.audit_service.record.call_args.args[0]._asdict()
         assert call_kwargs["status"] == AuditStatus.FAILED
         assert "Something went wrong" in call_kwargs["error_message"]
 
@@ -380,8 +385,8 @@ class TestLogAuditEvent:
             duration=0.1,
         )
 
-        middleware.audit_service.log.assert_called_once()
-        call_kwargs = middleware.audit_service.log.call_args.kwargs
+        middleware.audit_service.record.assert_called_once()
+        call_kwargs = middleware.audit_service.record.call_args.args[0]._asdict()
         assert call_kwargs["status"] == AuditStatus.FAILED
         assert "HTTP 404" in call_kwargs["error_message"]
 
@@ -408,15 +413,15 @@ class TestLogAuditEvent:
             duration=0.1,
         )
 
-        middleware.audit_service.log.assert_called_once()
-        call_kwargs = middleware.audit_service.log.call_args.kwargs
+        middleware.audit_service.record.assert_called_once()
+        call_kwargs = middleware.audit_service.record.call_args.args[0]._asdict()
         assert call_kwargs["resource_id"] == eid
 
     @pytest.mark.asyncio
     async def test_audit_service_exception_caught(self, middleware):
-        """Test that exceptions from audit_service.log are caught."""
+        """An entry that cannot be persisted is reported to the caller, never swallowed."""
         middleware.audit_service = AsyncMock()
-        middleware.audit_service.log.side_effect = RuntimeError("Audit service down")
+        middleware.audit_service.record.side_effect = AuditPersistenceError("down")
 
         request = MagicMock(spec=Request)
         request.method = "POST"
@@ -425,14 +430,16 @@ class TestLogAuditEvent:
         response.status_code = 201
         context = AuditContext(request_id="req-5")
 
-        # Should not raise
-        await middleware._log_audit_event(
-            request=request,
-            response=response,
-            error=None,
-            context=context,
-            request_id="req-5",
-            duration=0.1,
+        assert (
+            await middleware._log_audit_event(
+                request=request,
+                response=response,
+                error=None,
+                context=context,
+                request_id="req-5",
+                duration=0.1,
+            )
+            is False
         )
 
 
@@ -453,6 +460,7 @@ class TestDispatch:
         request.client = None
 
         expected_response = MagicMock()
+        expected_response.status_code = 200
         call_next = AsyncMock(return_value=expected_response)
 
         response = await middleware.dispatch(request, call_next)
@@ -568,7 +576,7 @@ class TestAccessDenied:
                 duration=0.01,
             )
 
-        kwargs = middleware.audit_service.log.call_args.kwargs
+        kwargs = middleware.audit_service.record.call_args.args[0]._asdict()
         assert kwargs["action"] == AuditAction.ACCESS_DENIED
         assert kwargs["status"] == AuditStatus.FAILED
         assert kwargs["error_message"] == "HTTP 403"
@@ -590,7 +598,7 @@ class TestAccessDenied:
                 duration=0.01,
             )
 
-        assert middleware.audit_service.log.call_args.kwargs["action"] == AuditAction.CREATE
+        assert middleware.audit_service.record.call_args.args[0]._asdict()["action"] == AuditAction.CREATE
         record.assert_not_called()
 
     @pytest.mark.asyncio

@@ -10,16 +10,27 @@ import logging
 import re
 import time
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
-from starlette.status import HTTP_403_FORBIDDEN
+from starlette.responses import JSONResponse, Response
+from starlette.status import HTTP_403_FORBIDDEN, HTTP_503_SERVICE_UNAVAILABLE
 
 from app.adapters.api.access_metrics import record_access_denied
 from app.adapters.api.client_ip import get_client_ip
 from app.adapters.api.log_redaction import redact_secret_path
-from app.application.audit_service import AuditAction, AuditContext, AuditStatus, audit_service
+from app.adapters.db.repositories.audit_log import SqlAuditLogRepository
+from app.application.audit_service import (
+    AuditAction,
+    AuditContext,
+    AuditPersistenceError,
+    AuditStatus,
+    audit_service,
+    audit_write_failures,
+)
+from app.audit_request import begin_request_audit, end_request_audit
+from app.domain.models.audit_log import AuditLogCreate
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +45,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
     This middleware:
     - Generates a unique request ID for each request
     - Tracks request start time
-    - Logs audit events for state-changing requests
-    - Handles errors and logs failed attempts
+    - Logs audit events for denied and failed requests synchronously, before the
+      response is returned; if the entry cannot be persisted the response is 503
+    - Lets a successful state-changing request carry its entry in its own
+      transaction (see ``app.audit_request``) and writes it here only when no
+      transaction did
     """
 
     def __init__(
@@ -82,39 +96,77 @@ class AuditMiddleware(BaseHTTPMiddleware):
         ip_address = self._get_client_ip(request)
         user_agent = request.headers.get("user-agent")
 
-        # Process request
+        # A successful write is audited inside its own transaction (before the commit)
+        # unless its domain audit already is; the session dependency calls this hook.
+        state = begin_request_audit()
+        if self._is_state_changing(request):
+
+            async def transaction_entry(session) -> None:
+                context = self._extract_context(
+                    request, request_id, ip_address=ip_address, user_agent=user_agent
+                )
+                await self._insert_in_transaction(session, request, context)
+
+            state.transaction_entry = transaction_entry
+
         response = None
         error = None
-
         try:
             response = await call_next(request)
-            return response
         except Exception as e:
             error = e
-            raise
         finally:
-            # Calculate duration
-            duration = time.time() - start_time
+            end_request_audit()
 
-            # Log audit event if needed
-            # NOTE: context is extracted *after call_next* so FastAPI
-            # dependency resolution (get_current_user etc.) has already
-            # populated request.state.user before we read it.
-            if self._should_log_audit(request, response):
-                context = self._extract_context(
-                    request,
-                    request_id,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
+        duration = time.time() - start_time
+
+        # NOTE: context is extracted *after call_next* so FastAPI dependency
+        # resolution (get_current_user etc.) has already populated
+        # request.state.user before we read it.
+        if self._should_log_audit(request, response) and not (
+            error is None and not _is_failure(response) and state.covered
+        ):
+            context = self._extract_context(
+                request, request_id, ip_address=ip_address, user_agent=user_agent
+            )
+            if not await self._log_audit_event(
+                request, response, error, context, request_id, duration
+            ):
+                # Never hand out an unaudited decision or result.
+                return JSONResponse(
+                    {"detail": "Audit-Protokollierung nicht verfügbar"},
+                    status_code=HTTP_503_SERVICE_UNAVAILABLE,
                 )
-                await self._log_audit_event(
-                    request,
-                    response,
-                    error,
-                    context,
-                    request_id,
-                    duration,
-                )
+
+        if error is not None:
+            raise error
+        return response
+
+    def _is_state_changing(self, request: Request) -> bool:
+        return (
+            request.url.path not in self.exempt_paths
+            and request.method not in self.exempt_methods
+        )
+
+    async def _insert_in_transaction(
+        self, session, request: Request, context: AuditContext
+    ) -> None:
+        """Insert the entry of a successful write into the transaction about to commit.
+
+        The entry commits exactly when the change does. Row-level security would
+        reject it for routes without a tenant, so the system-worker context is set
+        for this single insert and cleared right after.
+        """
+        from sqlalchemy import text
+
+        entry = self._build_entry(
+            request, None, None, context, duration=None, status=AuditStatus.SUCCESS
+        )
+        await session.execute(text("SELECT set_config('app.is_system_worker', 'true', true)"))
+        try:
+            await SqlAuditLogRepository(session).create(entry)
+        finally:
+            await session.execute(text("SELECT set_config('app.is_system_worker', '', true)"))
 
     def _extract_context(
         self,
@@ -215,6 +267,73 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         return True
 
+    def _build_entry(
+        self,
+        request: Request,
+        response: Response | None,
+        error: Exception | None,
+        context: AuditContext,
+        *,
+        duration: float | None,
+        status: AuditStatus | None = None,
+    ) -> AuditLogCreate:
+        """Describe the request as an audit entry (no body, no secrets, redacted path)."""
+        if _is_denied(response):
+            action = AuditAction.ACCESS_DENIED
+        else:
+            action = self._get_action_from_method(request.method, request.url.path)
+
+        resource_type = self._get_resource_type(request.url.path)
+
+        if status is None:
+            # FAILED for exceptions and non-2xx/3xx responses
+            status = AuditStatus.SUCCESS
+            if error or (response and response.status_code >= 400):
+                status = AuditStatus.FAILED
+        error_message = (
+            redact_secret_path(str(error))
+            if error
+            else (
+                f"HTTP {response.status_code}"
+                if response and response.status_code >= 400
+                else None
+            )
+        )
+
+        resource_id = self._extract_resource_id(request.url.path)
+        # For CREATE responses with no path UUID, try Location header
+        if resource_id is None and action == AuditAction.CREATE and response:
+            location = response.headers.get("Location")
+            if location:
+                resource_id = self._extract_resource_id(location)
+
+        metadata = {
+            "http_method": request.method,
+            "path": redact_secret_path(request.url.path),
+            "user_agent": context.user_agent,
+        }
+        if response is not None or error is not None:
+            metadata["status_code"] = response.status_code if response else None
+        if duration is not None:
+            metadata["duration_ms"] = round(duration * 1000, 2)
+        return AuditLogCreate(
+            timestamp=datetime.now(UTC),
+            user_sub=context.user_sub,
+            user_email=context.user_email,
+            user_roles=context.user_roles,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            district_id=context.district_id,
+            congregation_id=context.congregation_id,
+            ip_address=context.ip_address,
+            user_agent=context.user_agent,
+            request_id=context.request_id,
+            status=status,
+            error_message=error_message,
+            extra_metadata=metadata,
+        )
+
     async def _log_audit_event(
         self,
         request: Request,
@@ -223,72 +342,21 @@ class AuditMiddleware(BaseHTTPMiddleware):
         context: AuditContext,
         request_id: str,
         duration: float,
-    ) -> None:
-        """Log an audit event for the request.
-
-        Args:
-            request: HTTP request.
-            response: HTTP response (if successful).
-            error: Exception (if request failed).
-            context: Audit context.
-            request_id: Unique request ID.
-            duration: Request duration in seconds.
-        """
+    ) -> bool:
+        """Persist the audit entry of the request; ``False`` when that failed."""
         try:
-            # Determine action based on HTTP method and path
             if _is_denied(response):
-                action = AuditAction.ACCESS_DENIED
                 record_access_denied(request)
-            else:
-                action = self._get_action_from_method(request.method, request.url.path)
-
-            # Determine resource type from path
-            resource_type = self._get_resource_type(request.url.path)
-
-            # Determine status — mark as FAILED for exceptions and non-2xx/3xx responses
-            status = AuditStatus.SUCCESS
-            if error:
-                status = AuditStatus.FAILED
-            elif response and response.status_code >= 400:
-                status = AuditStatus.FAILED
-            error_message = (
-                redact_secret_path(str(error))
-                if error
-                else (
-                    f"HTTP {response.status_code}"
-                    if response and response.status_code >= 400
-                    else None
-                )
-            )
-
-            # Extract resource ID from path if available
-            resource_id = self._extract_resource_id(request.url.path)
-            # For CREATE responses with no path UUID, try Location header
-            if resource_id is None and action == AuditAction.CREATE and response:
-                location = response.headers.get("Location")
-                if location:
-                    resource_id = self._extract_resource_id(location)
-
-            # Log the audit event
-            await self.audit_service.log(
-                action=action,
-                resource_type=resource_type,
-                resource_id=resource_id,
-                context=context,
-                status=status,
-                error_message=error_message,
-                extra_metadata={
-                    "http_method": request.method,
-                    "path": redact_secret_path(request.url.path),
-                    "status_code": response.status_code if response else None,
-                    "duration_ms": round(duration * 1000, 2),
-                    "user_agent": context.user_agent,
-                },
-            )
-
+            entry = self._build_entry(request, response, error, context, duration=duration)
+            await self.audit_service.record(entry)
+            return True
+        except AuditPersistenceError:
+            return False  # counted and logged by the service; the caller answers with 503
         except Exception as e:
-            # Don't let audit logging failures break the request
-            logger.error(f"Failed to log audit event: {e}")
+            # The entry could not even be built: counted like a persistence failure.
+            logger.error("Failed to build audit event (%s)", type(e).__name__)
+            audit_write_failures.add(1, {"stage": "build"})
+            return False
 
     def _get_action_from_method(self, method: str, path: str = "") -> AuditAction:
         """Map HTTP method to audit action.
@@ -418,6 +486,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 logger.debug("Ignoring invalid UUID %r in audit path %r", matches[-1], path)
 
         return None
+
+
+def _is_failure(response: Response | None) -> bool:
+    return response is not None and response.status_code >= 400
 
 
 def _is_denied(response: Response | None) -> bool:

@@ -14,7 +14,6 @@ repositories on the NOBYPASSRLS application role. Skipped unless configured:
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import hashlib
 import json
@@ -189,12 +188,9 @@ async def api(world: World) -> AsyncIterator[httpx.AsyncClient]:
             patch("app.adapters.db.session.AsyncSessionLocal", factory),
             patch.object(audit_module, "AsyncSessionLocal", factory),
         ):
-            audit_module.audit_service._queue = asyncio.Queue()
-            await audit_module.audit_service.start()
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 yield client
-            await audit_module.audit_service.stop()
     finally:
         app.dependency_overrides.pop(get_db_session, None)
         deps.set_oidc_adapter(None)
@@ -248,7 +244,6 @@ async def test_planner_manages_leaders_in_own_district(api, owner, world) -> Non
         id=uuid.UUID(leader_id),
     )
 
-    await audit_module.audit_service.stop()
     async with owner.connect() as conn:
         trail = (
             await conn.execute(
@@ -357,7 +352,6 @@ async def test_denied_read_is_audited_for_the_probed_district(api, owner, world)
     headers = await _headers(api, world.a.planner_sub)
     response = await api.get(f"/api/v1/districts/{world.b.district_id}/matrix", headers=headers)
     assert response.status_code == 403
-    await audit_module.audit_service.stop()
 
     async with owner.connect() as conn:
         rows = (
