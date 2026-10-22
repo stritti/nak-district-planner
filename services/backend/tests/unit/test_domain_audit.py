@@ -283,20 +283,25 @@ class TestRecordDomainAudit:
         assert row["district_id"] == DISTRICT
 
     @pytest.mark.parametrize("slot_id", [None, uuid.uuid4()], ids=["unlinked", "slot-gone"])
-    def test_entry_without_tenant_is_skipped_and_logged(self, slot_id, caplog) -> None:
+    def test_entry_without_tenant_fails_closed(self, slot_id) -> None:
         assignment = _assignment(slot_id)
         session = _session(deleted=[assignment], db_tenant=None)
 
-        record_domain_audit(session, None)
+        with pytest.raises(RuntimeError, match="Audit tenant"):
+            record_domain_audit(session, None)
 
+        # A missing tenant must not silently turn a security audit into a no-op.
         inserts = [
             call
             for call in session.connection.return_value.execute.call_args_list
             if len(call.args) == 2
         ]
         assert inserts == []
-        assert f"resource_id={assignment.id}" in caplog.text
-        assert "Anna" not in caplog.text
+
+    def test_new_planning_slot_without_tenant_fails_closed(self) -> None:
+        session = _session(new=[_slot(district_id=None, congregation_id=None)])
+        with pytest.raises(RuntimeError, match="Audit tenant"):
+            record_domain_audit(session, None)
 
     def test_nothing_is_written_without_audited_changes(self) -> None:
         session = _session(new=[NotificationORM()])
