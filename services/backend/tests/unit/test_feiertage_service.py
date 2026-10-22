@@ -7,13 +7,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime, time, timedelta, timezone
+from itertools import pairwise
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.application.feiertage_service import (
+    ADVENT_SUNDAYS,
     ENTSCHLAFENEN_MONATE,
     KIRCHLICHE_FESTTAGE,
+    _advent_sundays,
     _content_hash,
     _easter_sunday,
     _external_uid,
@@ -23,7 +26,42 @@ from app.application.feiertage_service import (
     import_kirchliche_festtage,
     reference_feiertage_for_congregation,
 )
-from app.domain.models.planning_slot import PlanningSlot
+from app.domain.models.planning_slot import EventApprovalStatus, PlanningSlot
+
+
+class TestAdventSundays:
+    """Tests for _advent_sundays() date calculation."""
+
+    def test_advent_sundays_2026(self):
+        assert _advent_sundays(2026) == [
+            ("1. Advent", date(2026, 11, 29)),
+            ("2. Advent", date(2026, 12, 6)),
+            ("3. Advent", date(2026, 12, 13)),
+            ("4. Advent", date(2026, 12, 20)),
+        ]
+
+    def test_fourth_advent_on_christmas_eve_when_christmas_is_monday(self):
+        assert _advent_sundays(2023) == [
+            ("1. Advent", date(2023, 12, 3)),
+            ("2. Advent", date(2023, 12, 10)),
+            ("3. Advent", date(2023, 12, 17)),
+            ("4. Advent", date(2023, 12, 24)),
+        ]
+
+    def test_every_year_has_four_consecutive_sundays_before_christmas(self):
+        for year in range(1900, 2200):
+            days = [day for _, day in _advent_sundays(year)]
+            assert all(day.weekday() == 6 for day in days), year
+            assert [b - a for a, b in pairwise(days)] == [timedelta(weeks=1)] * 3
+            assert days[-1] < date(year, 12, 25) <= days[-1] + timedelta(days=7), year
+
+    def test_advent_sundays_when_christmas_is_sunday(self):
+        assert _advent_sundays(2033) == [
+            ("1. Advent", date(2033, 11, 27)),
+            ("2. Advent", date(2033, 12, 4)),
+            ("3. Advent", date(2033, 12, 11)),
+            ("4. Advent", date(2033, 12, 18)),
+        ]
 
 
 class TestEasterSunday:
@@ -205,6 +243,14 @@ class TestImportKirchlicheFesttage:
                 category="Feiertag",
                 title=name,
             )
+        for name, day in _advent_sundays(2026):
+            slots[day] = PlanningSlot.create(
+                district_id=district_id,
+                planning_date=day,
+                planning_time=time(0, 0),
+                category="Feiertag",
+                title=name,
+            )
         return slots
 
     async def test_import_kirchliche_festtage_creates_slots(self):
@@ -223,11 +269,29 @@ class TestImportKirchlicheFesttage:
         ):
             result = await import_kirchliche_festtage(district_id, 2026, session)
 
-        assert result["created"] > 0
+        assert result["created"] == len(KIRCHLICHE_FESTTAGE) + len(ENTSCHLAFENEN_MONATE) + len(
+            ADVENT_SUNDAYS
+        )
         assert result["updated"] == 0
         assert result["skipped"] == 0
         assert slot_repo_mock.save.call_count == result["created"]
         assert all(c.args[0].applicability == ["all"] for c in slot_repo_mock.save.call_args_list)
+        advent_slots = {
+            slot.title: slot
+            for slot in (call.args[0] for call in slot_repo_mock.save.call_args_list)
+            if slot.title and slot.title.endswith("Advent")
+        }
+        assert {name: slot.planning_date for name, slot in advent_slots.items()} == {
+            "1. Advent": date(2026, 11, 29),
+            "2. Advent": date(2026, 12, 6),
+            "3. Advent": date(2026, 12, 13),
+            "4. Advent": date(2026, 12, 20),
+        }
+        assert all(slot.category == "Feiertag" for slot in advent_slots.values())
+        assert all(
+            slot.approval_status == EventApprovalStatus.CONFIRMED for slot in advent_slots.values()
+        )
+        assert all(slot.applicability == ["all"] for slot in advent_slots.values())
 
     async def test_import_kirchliche_festtage_skips_existing_unchanged(self):
         """Existing slots with same title/date should be skipped (idempotent)."""
@@ -250,7 +314,7 @@ class TestImportKirchlicheFesttage:
 
         assert result["created"] == 0
         assert result["updated"] == 0
-        assert result["skipped"] == 6  # 3 kirchliche Festtage + 3 Entschlafenen
+        assert result["skipped"] == 10  # 3 kirchliche Festtage + 3 Entschlafenen + 4 Advent
         slot_repo_mock.save.assert_not_called()
 
     async def test_import_kirchliche_festtage_updates_changed_events(self):
@@ -286,10 +350,10 @@ class TestImportKirchlicheFesttage:
             result = await import_kirchliche_festtage(district_id, 2026, session)
 
         # With repository-faithful mocking, the wrong-date slot is NOT found for easter date,
-        # so a new slot is created for Ostersonntag. The other 5 slots match and are skipped.
+        # so a new slot is created for Ostersonntag. The other 9 slots match and are skipped.
         assert result["created"] == 1
         assert result["updated"] == 0
-        assert result["skipped"] == 5
+        assert result["skipped"] == 9
         slot_repo_mock.save.assert_called_once()
 
 

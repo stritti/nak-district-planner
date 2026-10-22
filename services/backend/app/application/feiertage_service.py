@@ -4,7 +4,8 @@
 """Feiertags-Import — zwei Quellen:
 
 1. Nager.Date (öffentliche API): gesetzliche Feiertage pro Bundesland
-2. Kirchliche Festtage (berechnet): NAK-relevante bewegliche Festtage aus dem Ostertermin
+2. Kirchliche Festtage (berechnet): Palm-, Oster- und Pfingstsonntag (aus Ostern),
+   Entschlafenen-Gottesdienste und die vier Adventssonntage (aus Weihnachten)
 
 Idempotent: UIDs sind stabil — wiederholter Import überschreibt nur bei Änderungen.
 
@@ -68,11 +69,29 @@ ENTSCHLAFENEN_MONATE: list[tuple[str, int]] = [
 ]
 
 
+# Adventssonntage: von Weihnachten (25.12.) aus gezählt, 1. bis 4. Advent in zeitlicher Reihenfolge
+ADVENT_SUNDAYS: tuple[str, ...] = ("1. Advent", "2. Advent", "3. Advent", "4. Advent")
+
+
 def _first_sunday(year: int, month: int) -> date:
     """Return the first Sunday of the given month/year."""
     d = date(year, month, 1)
     days_until_sunday = (6 - d.weekday()) % 7
     return d + timedelta(days=days_until_sunday)
+
+
+def _advent_sundays(year: int) -> list[tuple[str, date]]:
+    """Return (name, date) of the four Advent Sundays of ``year``.
+
+    The 4th Advent is the Sunday strictly before 25 December (24 December itself
+    qualifies; a Sunday 25 December does not), the earlier ones follow at weekly intervals.
+    """
+    christmas = date(year, 12, 25)
+    fourth_advent = christmas - timedelta(days=christmas.weekday() + 1)
+    first_advent = fourth_advent - timedelta(weeks=len(ADVENT_SUNDAYS) - 1)
+    return [
+        (name, first_advent + timedelta(weeks=week)) for week, name in enumerate(ADVENT_SUNDAYS)
+    ]
 
 
 def _easter_sunday(year: int) -> date:
@@ -206,7 +225,8 @@ async def import_kirchliche_festtage(
     session: AsyncSession,
 ) -> dict[str, int]:
     """Import NAK-relevant computed dates:
-    - Kirchliche Festtage: Palmsonntag, Ostersonntag, Pfingstsonntag (aus Ostern abgeleitet)
+    - Kirchliche Festtage: Palm-, Oster- und Pfingstsonntag (aus Ostern) und die vier
+      Adventssonntage (aus Weihnachten)
     - Entschlafenen-Gottesdienste: erster Sonntag im März, Juli und November
 
     No external API call — purely computed.  Applies to all districts regardless of state_code.
@@ -222,6 +242,7 @@ async def import_kirchliche_festtage(
         festtage.append((name, easter + timedelta(days=offset)))
     for name, month in ENTSCHLAFENEN_MONATE:
         festtage.append((name, _first_sunday(year, month)))
+    festtage.extend(_advent_sundays(year))
 
     for name, day in festtage:
         # For church holidays, use the actual date's time (midnight for all-day)
