@@ -4,7 +4,8 @@
 """Feiertags-Import — zwei Quellen:
 
 1. Nager.Date (öffentliche API): gesetzliche Feiertage pro Bundesland
-2. Kirchliche Festtage (berechnet): NAK-relevante bewegliche Festtage aus dem Ostertermin
+2. Kirchliche Festtage (berechnet): Osterfesttage und Entschlafenen-Gottesdienste
+    sowie Adventssonntage aus dem Weihnachtsdatum
 
 Idempotent: UIDs sind stabil — wiederholter Import überschreibt nur bei Änderungen.
 
@@ -73,6 +74,13 @@ def _first_sunday(year: int, month: int) -> date:
     d = date(year, month, 1)
     days_until_sunday = (6 - d.weekday()) % 7
     return d + timedelta(days=days_until_sunday)
+
+
+def _advent_sundays(year: int) -> list[tuple[str, date]]:
+    christmas = date(year, 12, 25)
+    fourth_advent = christmas - timedelta(days=christmas.weekday() + 1)
+    first_advent = fourth_advent - timedelta(weeks=3)
+    return [(f"{week}. Advent", first_advent + timedelta(weeks=week - 1)) for week in range(1, 5)]
 
 
 def _easter_sunday(year: int) -> date:
@@ -206,7 +214,7 @@ async def import_kirchliche_festtage(
     session: AsyncSession,
 ) -> dict[str, int]:
     """Import NAK-relevant computed dates:
-    - Kirchliche Festtage: Palmsonntag, Ostersonntag, Pfingstsonntag (aus Ostern abgeleitet)
+    - Kirchliche Festtage: Palmsonntag, Ostersonntag, Pfingstsonntag und die vier Adventssonntage
     - Entschlafenen-Gottesdienste: erster Sonntag im März, Juli und November
 
     No external API call — purely computed.  Applies to all districts regardless of state_code.
@@ -222,6 +230,7 @@ async def import_kirchliche_festtage(
         festtage.append((name, easter + timedelta(days=offset)))
     for name, month in ENTSCHLAFENEN_MONATE:
         festtage.append((name, _first_sunday(year, month)))
+    festtage.extend(_advent_sundays(year))
 
     for name, day in festtage:
         # For church holidays, use the actual date's time (midnight for all-day)

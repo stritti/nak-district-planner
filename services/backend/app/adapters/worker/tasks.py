@@ -440,7 +440,7 @@ def auto_import_feiertage() -> dict:
                         total_updated += r["updated"]
                         total_skipped += r["skipped"]
 
-                    # Kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag) — immer
+                    # Kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag, Advent) — immer
                     r = await import_kirchliche_festtage(
                         district_id=district.id,
                         year=year,
