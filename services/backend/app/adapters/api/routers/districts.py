@@ -972,7 +972,7 @@ async def import_feiertage_endpoint(
         for k in totals:
             totals[k] += r[k]
 
-    # 2. Kirchliche Festtage (Palmsonntag, Ostersonntag, Pfingstsonntag, Advent) — immer
+    # 2. Kirchliche Festtage (berechnet) — immer
     r = await import_kirchliche_festtage(
         district_id=district_id,
         year=body.year,

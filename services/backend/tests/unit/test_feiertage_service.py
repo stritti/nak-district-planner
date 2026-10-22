@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime, time, timedelta, timezone
+from itertools import pairwise
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.application.feiertage_service import (
+    ADVENT_SUNDAYS,
     ENTSCHLAFENEN_MONATE,
     KIRCHLICHE_FESTTAGE,
     _advent_sundays,
@@ -37,6 +39,21 @@ class TestAdventSundays:
             ("3. Advent", date(2026, 12, 13)),
             ("4. Advent", date(2026, 12, 20)),
         ]
+
+    def test_fourth_advent_on_christmas_eve_when_christmas_is_monday(self):
+        assert _advent_sundays(2023) == [
+            ("1. Advent", date(2023, 12, 3)),
+            ("2. Advent", date(2023, 12, 10)),
+            ("3. Advent", date(2023, 12, 17)),
+            ("4. Advent", date(2023, 12, 24)),
+        ]
+
+    def test_every_year_has_four_consecutive_sundays_before_christmas(self):
+        for year in range(1900, 2200):
+            days = [day for _, day in _advent_sundays(year)]
+            assert all(day.weekday() == 6 for day in days), year
+            assert [b - a for a, b in pairwise(days)] == [timedelta(weeks=1)] * 3
+            assert days[-1] < date(year, 12, 25) <= days[-1] + timedelta(days=7), year
 
     def test_advent_sundays_when_christmas_is_sunday(self):
         assert _advent_sundays(2033) == [
@@ -252,7 +269,9 @@ class TestImportKirchlicheFesttage:
         ):
             result = await import_kirchliche_festtage(district_id, 2026, session)
 
-        assert result["created"] == 10
+        assert result["created"] == len(KIRCHLICHE_FESTTAGE) + len(ENTSCHLAFENEN_MONATE) + len(
+            ADVENT_SUNDAYS
+        )
         assert result["updated"] == 0
         assert result["skipped"] == 0
         assert slot_repo_mock.save.call_count == result["created"]
@@ -262,9 +281,12 @@ class TestImportKirchlicheFesttage:
             for slot in (call.args[0] for call in slot_repo_mock.save.call_args_list)
             if slot.title and slot.title.endswith("Advent")
         }
-        assert {name: slot.planning_date for name, slot in advent_slots.items()} == dict(
-            _advent_sundays(2026)
-        )
+        assert {name: slot.planning_date for name, slot in advent_slots.items()} == {
+            "1. Advent": date(2026, 11, 29),
+            "2. Advent": date(2026, 12, 6),
+            "3. Advent": date(2026, 12, 13),
+            "4. Advent": date(2026, 12, 20),
+        }
         assert all(slot.category == "Feiertag" for slot in advent_slots.values())
         assert all(
             slot.approval_status == EventApprovalStatus.CONFIRMED for slot in advent_slots.values()
