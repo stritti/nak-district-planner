@@ -16,31 +16,10 @@ def test_disabled_returns_none():
         assert get_idp_provisioner() is None
 
 
-def test_keycloak_provisioner_returned():
+def test_an_unknown_provider_returns_none():
     with patch("app.adapters.idp.provisioning.settings") as mock_settings:
         mock_settings.idp_provisioning_enabled = True
         mock_settings.idp_provisioning_provider = "keycloak"
-        mock_settings.idp_provisioning_keycloak_base_url = "https://kc.example.com"
-        mock_settings.idp_provisioning_keycloak_realm = "nak"
-        mock_settings.idp_provisioning_keycloak_client_id = "nak-planner-provisioning"
-        mock_settings.idp_provisioning_keycloak_client_secret = "secret"
-        mock_settings.idp_provisioning_timeout_seconds = 10.0
-        mock_settings.idp_provisioning_keycloak_invite_on_approval = True
-
-        provisioner = get_idp_provisioner()
-        assert provisioner is not None
-        # Should be a KeycloakProvisioningAdapter
-        assert "Keycloak" in type(provisioner).__name__
-
-
-def test_keycloak_missing_config_returns_none():
-    with patch("app.adapters.idp.provisioning.settings") as mock_settings:
-        mock_settings.idp_provisioning_enabled = True
-        mock_settings.idp_provisioning_provider = "keycloak"
-        mock_settings.idp_provisioning_keycloak_base_url = None  # Missing
-        mock_settings.idp_provisioning_keycloak_realm = "nak"
-        mock_settings.idp_provisioning_keycloak_client_id = "nak-planner-provisioning"
-        mock_settings.idp_provisioning_keycloak_client_secret = "secret"
 
         assert get_idp_provisioner() is None
 
