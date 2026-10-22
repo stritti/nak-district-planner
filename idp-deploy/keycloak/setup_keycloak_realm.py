@@ -125,11 +125,15 @@ class KeycloakAdminClient:
             raise Exception(f"Failed to create realm: {response.text}")
 
     # NIST SP 800-63B: length over composition rules; 15 characters because
-    # passwords may be the only factor (MFA is not enforced by the app). Self-registration stays
-    # off because registration and approval run through the application.
+    # passwords may be the only factor (MFA is not enforced by the app). Users create their
+    # own account (the backend holds no Keycloak admin credential): self-registration is
+    # only enabled together with email verification and the email as username, so an
+    # account without an approved registration gets no access and the app links an approved
+    # registration only through a verified email.
     REALM_SECURITY_DEFAULTS = {
-        "registrationAllowed": False,
+        "registrationAllowed": True,
         "verifyEmail": True,
+        "registrationEmailAsUsername": True,
         "loginWithEmailAllowed": True,
         "resetPasswordAllowed": True,
         "bruteForceProtected": True,
@@ -147,71 +151,28 @@ class KeycloakAdminClient:
             raise Exception(f"Failed to apply realm defaults: {response.text}")
         print("✓ Realm security defaults applied")
 
-    PROVISIONING_ROLES = ("manage-users", "view-users")
+    def remove_provisioning_client(self, realm_name: str, client_id: str) -> bool:
+        """Delete the former backend provisioning client so that its secret is invalid.
 
-    def ensure_provisioning_client(self, realm_name: str, client_id: str) -> None:
-        """Create the backend's provisioning client.
-
-        Confidential client with only the client credentials grant; its service
-        account gets nothing but realm-management manage-users/view-users.
+        The backend no longer provisions Keycloak users. Returns ``True`` when a client
+        was deleted, ``False`` when there was none (the normal case on a fresh realm).
         """
-        print(f"Creating provisioning client: {client_id} in realm {realm_name}...")
         base = f"{self.keycloak_url}/admin/realms/{realm_name}"
-        payload = {
-            "clientId": client_id,
-            "name": client_id,
-            "description": "NAK Planner backend IdP provisioning (service account)",
-            "enabled": True,
-            "protocol": "openid-connect",
-            "publicClient": False,
-            "clientAuthenticatorType": "client-secret",
-            "serviceAccountsEnabled": True,
-            "standardFlowEnabled": False,
-            "implicitFlowEnabled": False,
-            "directAccessGrantsEnabled": False,
-        }
-        response = requests.post(
-            f"{base}/clients", json=payload, headers=self._headers(), timeout=10
+        found = requests.get(
+            f"{base}/clients?clientId={client_id}", headers=self._headers(), timeout=10
         )
-        if response.status_code == 409:
-            print(f"⚠ Client already exists: {client_id}")
-        elif response.status_code != 201:
-            print(f"✗ Failed to create client: {response.status_code} {response.text}")
-            raise Exception(f"Failed to create client: {response.text}")
-        client_uuid = self.get_client_by_id(realm_name, client_id)["id"]
-
-        sa = requests.get(
-            f"{base}/clients/{client_uuid}/service-account-user",
-            headers=self._headers(),
-            timeout=10,
+        found.raise_for_status()
+        clients = found.json()
+        if not clients:
+            return False
+        deleted = requests.delete(
+            f"{base}/clients/{clients[0]['id']}", headers=self._headers(), timeout=10
         )
-        sa.raise_for_status()
-        rm_uuid = self.get_client_by_id(realm_name, "realm-management")["id"]
-        roles = []
-        for role_name in self.PROVISIONING_ROLES:
-            role = requests.get(
-                f"{base}/clients/{rm_uuid}/roles/{role_name}", headers=self._headers(), timeout=10
-            )
-            role.raise_for_status()
-            roles.append(role.json())
-        mapping_url = f"{base}/users/{sa.json()['id']}/role-mappings/clients/{rm_uuid}"
-        mapping = requests.post(mapping_url, json=roles, headers=self._headers(), timeout=10)
-        if mapping.status_code != 204:
-            print(f"✗ Failed to assign roles: {mapping.status_code} {mapping.text}")
-            raise Exception(f"Failed to assign roles: {mapping.text}")
-
-        # An existing client may carry broader realm-management roles from
-        # earlier setups; revoke everything beyond the provisioning roles.
-        current = requests.get(mapping_url, headers=self._headers(), timeout=10)
-        current.raise_for_status()
-        extras = [r for r in current.json() if r.get("name") not in self.PROVISIONING_ROLES]
-        if extras:
-            revoke = requests.delete(mapping_url, json=extras, headers=self._headers(), timeout=10)
-            if revoke.status_code != 204:
-                print(f"✗ Failed to revoke roles: {revoke.status_code} {revoke.text}")
-                raise Exception(f"Failed to revoke roles: {revoke.text}")
-            print(f"✓ Revoked extra roles: {', '.join(r['name'] for r in extras)}")
-        print(f"✓ Service account roles: {', '.join(self.PROVISIONING_ROLES)}")
+        if deleted.status_code != 204:
+            print(f"✗ Failed to delete provisioning client: {deleted.status_code} {deleted.text}")
+            raise Exception(f"Failed to delete the provisioning client: {deleted.text}")
+        print(f"✓ Provisioning client deleted: {client_id} (its secret is no longer valid)")
+        return True
 
     def get_realm(self, realm_name: str) -> dict:
         """Get realm details"""
@@ -254,7 +215,6 @@ class KeycloakAdminClient:
             # Redirect URIs
             "redirectUris": redirect_uris,
             "webOrigins": ["+"],  # Allow all origins
-            "validRedirectUris": redirect_uris,
         }
 
         if logout_redirect_uris:
@@ -455,7 +415,10 @@ def main():
     parser.add_argument(
         "--provisioning-client-id",
         default="nak-planner-provisioning",
-        help="Confidential client for backend IdP provisioning (service account)",
+        help=(
+            "Former backend provisioning client; deleted when present so that its "
+            "secret becomes invalid (the backend holds no Keycloak admin credential)"
+        ),
     )
     parser.add_argument(
         "--create-test-user",
@@ -531,8 +494,7 @@ def main():
         admin.apply_realm_security_defaults(args.realm_name)
 
         # 2. Create OIDC Public Client
-        # The application root is the return target of invitation mails
-        # (IDP_PROVISIONING_KEYCLOAK_INVITE_REDIRECT_URI).
+        # The application root is a valid return target after account creation.
         redirect_uris = [
             f"{args.frontend_url}/auth/callback",
             f"{args.frontend_url}/",
@@ -551,10 +513,8 @@ def main():
         # 3. Audience mapper: aud must contain the client ID the backend validates
         admin.ensure_audience_mapper(args.realm_name, client["id"], args.client_id)
 
-        # 3b. Provisioning client (service account, least privilege)
-        admin.ensure_provisioning_client(
-            args.realm_name, args.provisioning_client_id
-        )
+        # 3b. The backend no longer provisions users: remove the former client
+        admin.remove_provisioning_client(args.realm_name, args.provisioning_client_id)
 
         # 4. Test user only on request: a known password must never reach a
         # production realm by default.
@@ -592,13 +552,12 @@ def main():
             print("  Password: value of --test-password")
             print(f"  Email:    {args.test_email}\n")
 
-        # The secret is never printed; copy it from the admin console.
-        print("Backend IdP provisioning (.env):")
-        print(f"  IDP_PROVISIONING_KEYCLOAK_CLIENT_ID={args.provisioning_client_id}")
-        print(
-            "  IDP_PROVISIONING_KEYCLOAK_CLIENT_SECRET=<Admin console: Clients → "
-            f"{args.provisioning_client_id} → Credentials>\n"
-        )
+        print("User onboarding:")
+        print("  Users create their Keycloak account themselves (self-registration with")
+        print("  email verification; the email address is the username). The backend holds")
+        print("  no Keycloak admin credential. An approved registration is linked at the")
+        print("  first login through the verified email. Protect the registration with a")
+        print("  rate limit at the reverse proxy (see docs/operations/production-compose.md).\n")
 
         print("Frontend Environment Variables (.env.local):")
         print(f"  VITE_OIDC_DISCOVERY_URL={discovery_url}")
