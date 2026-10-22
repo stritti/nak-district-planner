@@ -5,9 +5,13 @@
 
 from __future__ import annotations
 
+import logging
+
 from app.adapters.idp.base import IdpProvisioner, IdpProvisioningError
 from app.adapters.idp.webhook_provisioner import HttpIdpProvisioningAdapter
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def get_idp_provisioner() -> IdpProvisioner | None:
@@ -22,6 +26,10 @@ def get_idp_provisioner() -> IdpProvisioner | None:
             api_key=settings.idp_provisioning_api_key,
             timeout_seconds=settings.idp_provisioning_timeout_seconds,
         )
+    logger.warning(
+        "Unknown IDP_PROVISIONING_PROVIDER %r: provisioning stays disabled",
+        settings.idp_provisioning_provider,
+    )
     return None
 
 

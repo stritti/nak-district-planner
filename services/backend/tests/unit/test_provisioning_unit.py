@@ -16,12 +16,20 @@ def test_disabled_returns_none():
         assert get_idp_provisioner() is None
 
 
-def test_an_unknown_provider_returns_none():
-    with patch("app.adapters.idp.provisioning.settings") as mock_settings:
+def test_an_unknown_provider_returns_none_and_logs_a_warning(caplog):
+    with (
+        patch("app.adapters.idp.provisioning.settings") as mock_settings,
+        caplog.at_level("WARNING", logger="app.adapters.idp.provisioning"),
+    ):
         mock_settings.idp_provisioning_enabled = True
-        mock_settings.idp_provisioning_provider = "keycloak"
+        mock_settings.idp_provisioning_provider = "webhk"
 
         assert get_idp_provisioner() is None
+
+    assert any(
+        "Unknown IDP_PROVISIONING_PROVIDER" in record.message and "webhk" in record.message
+        for record in caplog.records
+    )
 
 
 def test_webhook_provisioner_returned():
