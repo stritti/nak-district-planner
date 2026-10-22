@@ -2,7 +2,7 @@
 
 Das Backend legt bei einer Freigabe optional Benutzer in Keycloak an und verschickt Einladungen. Dafür hält es das Secret eines Service Accounts mit `manage-users`. Die Prüfung im Change `keycloak-fine-grained-provisioning-permissions` (PR #681) hat gezeigt, dass auch feingranulare Admin-Berechtigungen (FGAP v2) eine Kontoübernahme mit diesem Secret nicht verhindern: Keycloak 26.8.1 bindet E-Mail-Änderung plus `execute-actions-email`, das Löschen von OTP-/WebAuthn-Credentials und das Verknüpfen externer Identitäten allein an den Scope `manage`. Ein gestohlenes Backend-Secret würde damit jedes Konto übernehmen können, auch Bezirksadmins mit OTP.
 
-Die App braucht diese Rechte nicht: Ein Keycloak-Konto ohne App-Membership gewährt keinen Zugriff, und die App verknüpft freigegebene Registrierungen schon heute beim ersten Login über eine verifizierte E-Mail (`user-onboarding`, #461). Stephan hat am 2026-10-22 entschieden, die Provisionierung durch das Backend aufzugeben. Dieser Change ersetzt den nie umgesetzten FGAP-Change.
+Die App braucht diese Rechte nicht: Ein Keycloak-Konto ohne App-Membership gewährt keinen Zugriff, und die App verknüpft freigegebene Registrierungen schon heute beim ersten Login über eine verifizierte E-Mail (`user-onboarding`, #461). Entscheidung vom 2026-10-22: Das Backend gibt die Provisionierung auf. Dieser Change ersetzt den nie umgesetzten FGAP-Change.
 
 ## What Changes
 
@@ -22,7 +22,7 @@ Die App braucht diese Rechte nicht: Ein Keycloak-Konto ohne App-Membership gewä
 
 ## Impact
 
-- Backend: `app/adapters/idp/keycloak_provisioner.py` und Tests entfallen; `provisioning.py`, `config.py` (Einstellungen, Production Guard) und `.env.example`-Dateien werden angepasst. Die Spalten `idp_provision_*` bleiben für den Webhook-Provider und bestehende Datensätze erhalten; keine Migration.
+- Backend: `app/adapters/idp/keycloak_provisioner.py` und Tests entfallen; `provisioning.py`, `config.py` (Einstellungen, Production Guard) und `.env.example`-Dateien und `docker-compose.prod.yml` werden angepasst. Die Spalten `idp_provision_*` bleiben für den Webhook-Provider und bestehende Datensätze erhalten; keine Migration.
 - IdP-Deployment: `idp-deploy/keycloak/setup_keycloak_realm.py` und `test_keycloak_setup_script.py`.
-- Frontend: `RegistrationView.vue`, `useOIDC.ts` (Login mit `prompt=create`), Tests.
+- Frontend: `RegistrationView.vue`, `useOIDC.ts` und `oidcAuthorization.ts` (Login mit `prompt=create`), Tests.
 - Betrieb: Installationen mit Keycloak-Provisioning entfernen die Einstellungen, führen das Setup-Skript erneut aus und informieren ausstehende Bewerber, dass sie ihr Konto selbst anlegen.

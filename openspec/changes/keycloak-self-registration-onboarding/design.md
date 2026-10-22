@@ -2,7 +2,7 @@
 
 Heute: Registrierung in der App (anonym oder mit Token) → `PENDING` → Freigabe durch Bezirksadmin mit Rolle und Scope → optional legt das Backend den Benutzer per Admin-API in Keycloak an und schickt `VERIFY_EMAIL`/`UPDATE_PASSWORD`. Unabhängig davon verknüpft `get_current_user_with_memberships` beim Login eine freigegebene, noch unverknüpfte Registrierung über die SQL-Funktion `link_approved_registration`, aber nur bei `email_verified=true` im Token (#461). Der Realm hat `registrationAllowed=false`.
 
-Die Analyse in PR #681 ergab, dass jeder Admin-Zugang mit Scope `manage` Kontoübernahmen erlaubt. Entscheidung (Stephan, 2026-10-22): Das Backend hält kein Keycloak-Admin-Secret mehr.
+Die Analyse in PR #681 ergab, dass jeder Admin-Zugang mit Scope `manage` Kontoübernahmen erlaubt. Entscheidung (2026-10-22): Das Backend hält kein Keycloak-Admin-Secret mehr.
 
 ## Goals / Non-Goals
 
@@ -26,13 +26,15 @@ Die Analyse in PR #681 ergab, dass jeder Admin-Zugang mit Scope `manage` Kontoü
 
 **Provisioning-Client löschen.** Das Skript löscht `nak-planner-provisioning`, falls vorhanden, statt nur die Rollen zu entziehen. So wird das Secret sofort ungültig, und es bleibt nichts, das versehentlich wieder Rechte bekommt. Der Name ist per `--provisioning-client-id` überschreibbar, wie bisher.
 
-**Registrierungsseite führt zur Kontoanlage.** Nach dem Absenden zeigt die Seite einen Button „Konto anlegen“, der `signinRedirect({ prompt: 'create' })` aufruft (Keycloak zeigt dann das Registrierungsformular). Ist der Benutzer bereits angemeldet, sendet die Seite den Access Token mit, und die Registrierung bekommt sofort `user_sub`. Reihenfolge ist frei: Konto zuerst oder Registrierung zuerst führen beide über den Auto-Link zum Ziel.
+**Registrierungsseite führt zur Kontoanlage.** Nach dem Absenden zeigt die Seite einen Button „Konto anlegen“, der den Login mit `prompt=create` startet (Keycloak zeigt dann das Registrierungsformular). Die App baut die Autorisierungs-URL selbst (PKCE in `oidcAuthorization.getAuthorizationUrl`, kein `oidc-client-ts`); die Funktion bekommt dafür einen optionalen Parameter `prompt`, und `useOIDC` reicht ihn durch. Ist der Benutzer bereits angemeldet, sendet die Seite den Access Token mit, und die Registrierung bekommt sofort `user_sub`. Reihenfolge ist frei: Konto zuerst oder Registrierung zuerst führen beide über den Auto-Link zum Ziel.
 
 ## Risks / Trade-offs
 
 - [Spam-Konten in Keycloak] → Konten ohne Membership gewähren nichts. Doku empfiehlt Rate-Limit auf `/realms/*/login-actions/registration` am Reverse Proxy und optional den reCAPTCHA-Schritt im Registrierungsflow; ungenutzte, unverifizierte Konten lassen sich in Keycloak per Admin-Konsole bereinigen.
 - [Bewerber legt Konto mit anderer E-Mail an als in der Registrierung] → Auto-Link greift nicht; der Bewerber sieht „Freigabe ausstehend“. Registrierungsseite und Freigabe-Mail nennen die Bedingung; der Bezirksadmin kann die Registrierung mit korrigierter E-Mail neu anlegen lassen.
 - [Bestehende Installationen mit ausstehenden Einladungen] → Bereits verschickte Einladungslinks bleiben bis zum Ablauf (max. 7 Tage) gültig; neue Freigaben verschicken keine Einladung mehr. Upgrade-Notiz beschreibt das.
+- [Konto-Enumeration über das Registrierungsformular] → Keycloak meldet bei einer bereits vergebenen E-Mail-Adresse, dass das Konto existiert. Das Rate-Limit am Reverse Proxy (siehe oben) begrenzt das Abtasten; ein vollständiger Schutz ist mit der Selbstregistrierung nicht erreichbar und wird in der Doku als bewusste Folge genannt.
+- [Betreiber, die der Upgrade-Notiz zu 1.5.0 gefolgt sind] → Die Notiz `679-keycloak-provisioning-service-account.md` richtet genau den Service Account ein, den dieser Change entfernt. Die neue Upgrade-Notiz nennt das ausdrücklich als Ablösung und führt durch das Entfernen von Konfiguration und Client.
 - [Webhook-Provider mit eigenem Keycloak-Zugang] → Außerhalb dieses Changes; die Doku weist darauf hin, dass dort dieselben Übernahmepfade gelten.
 
 ## Migration Plan
