@@ -20,7 +20,7 @@ When Keycloak provisioning is configured with the documented setup (Keycloak 26.
 - **THEN** the issued token contains no delegation scope and no `may_act` claim, or the request is rejected
 
 #### Scenario: Conflicting permissions stop the setup
-- **WHEN** the setup script finds Users permissions it did not create that target specific users, or that cover the `reset-password` scope for all users
+- **WHEN** the setup script finds Users permissions it did not create that target specific users, or that cover the `view`, `manage` or `reset-password` scope for all users, or finds `nak-planner-password-reset` assigned to anyone, or a user storage provider with import disabled
 - **THEN** it stops with an error naming them, before changing permissions or removing any legacy roles
 
 #### Scenario: Provisioning works with restricted client scope
@@ -31,13 +31,17 @@ When Keycloak provisioning is configured with the documented setup (Keycloak 26.
 - **WHEN** the service account tries to add a user to a group
 - **THEN** Keycloak rejects the request with `403 Forbidden`
 
+#### Scenario: Group injection on user creation is denied
+- **WHEN** the service account creates a user whose request lists a group that maps an admin role
+- **THEN** Keycloak rejects the request and neither the user nor the membership exists afterwards
+
 #### Scenario: Impersonation is denied
 - **WHEN** the service account tries to impersonate a user
 - **THEN** Keycloak rejects the request with `403 Forbidden`
 
 #### Scenario: Deletion remains a documented residual risk
 - **WHEN** an operator reads the provisioning documentation
-- **THEN** it states that the `manage` scope required for user creation and required-action emails also allows deleting and editing users, and recommends enabling Keycloak admin events
+- **THEN** it states that the `manage` scope required for user creation and required-action emails also allows deleting and editing users, including changing a user's email and sending that address a required-action link, and it recommends OTP for privileged accounts and alerting on admin events
 
 #### Scenario: Legacy roles are removed
 - **WHEN** the setup script runs against a realm whose provisioning service account still holds `realm-management` roles
