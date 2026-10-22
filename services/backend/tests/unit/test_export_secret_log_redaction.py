@@ -69,15 +69,15 @@ async def test_rate_limit_log_never_contains_the_token(caplog: pytest.LogCapture
 @pytest.mark.parametrize("status_code", [200, 403, 404, 429, 500])
 async def test_audit_metadata_never_contains_the_token(status_code: int) -> None:
     audit_service = MagicMock()
-    audit_service.log = AsyncMock()
+    audit_service.record = AsyncMock()
     middleware = AuditMiddleware(app=MagicMock(), audit_service=audit_service)
     response = MagicMock(status_code=status_code, headers={})
     context = AuditContext(user_sub=None, ip_address="203.0.113.9", user_agent="test")
     await middleware._log_audit_event(
         _request(), response, RuntimeError(f"boom {FEED}"), context, "req-1", 0.01
     )
-    audit_service.log.assert_awaited_once()
-    assert CANARY not in repr(audit_service.log.await_args)
+    audit_service.record.assert_awaited_once()
+    assert CANARY not in repr(audit_service.record.await_args)
 
 
 def test_unmatched_route_metric_label_never_contains_the_token() -> None:

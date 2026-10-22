@@ -3,7 +3,6 @@
 
 """Unit tests for Audit Service."""
 
-import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,6 +12,7 @@ from app.application.audit_service import (
     AuditAction,
     AuditContext,
     AuditEvent,
+    AuditPersistenceError,
     AuditService,
     AuditStatus,
 )
@@ -111,87 +111,83 @@ class TestAuditEvent:
 
 
 class TestAuditService:
-    """Tests for AuditService class."""
+    """Entries are written synchronously and durably, or the caller is told (#648)."""
 
-    def test_init(self):
-        """Test AuditService initialization."""
-        service = AuditService()
-
-        assert service._running is False
-        assert service._writer_task is None
-        assert service._queue is not None
-
-    @pytest.mark.asyncio
-    async def test_start(self):
-        """Test starting the audit service."""
-        service = AuditService()
-        await service.start()
-
-        assert service._running is True
-        assert service._writer_task is not None
+    @staticmethod
+    def _session(commit_error: Exception | None = None):
+        session = AsyncMock()
+        session.__aenter__.return_value = session
+        session.add = MagicMock()  # AsyncSession.add is synchronous
+        session.commit.side_effect = commit_error
+        return session
 
     @pytest.mark.asyncio
-    async def test_stop(self):
-        """Test stopping the audit service."""
-        service = AuditService()
-        await service.start()
-        await service.stop()
+    async def test_record_commits_before_returning(self):
+        session = self._session()
+        with patch("app.application.audit_service.AsyncSessionLocal", return_value=session):
+            await AuditService().log(action=AuditAction.CREATE, resource_type="user")
 
-        assert service._running is False
-        assert service._writer_task is None
-
-    @pytest.mark.asyncio
-    async def test_log_queues_entry(self):
-        """Test that log method queues entries."""
-        service = AuditService()
-        await service.start()
-
-        # Mock the queue put method
-        original_put = service._queue.put
-        put_calls = []
-
-        async def mock_put(item):
-            put_calls.append(item)
-            await original_put(item)
-
-        service._queue.put = mock_put
-
-        # Log an event
-        await service.log(
-            action=AuditAction.CREATE,
-            resource_type="user",
-        )
-
-        # Check that entry was queued
-        assert len(put_calls) == 1
-        entry = put_calls[0]
-        assert entry.action == AuditAction.CREATE
-        assert entry.resource_type == "user"
-
-        await service.stop()
+        session.add.assert_called_once()
+        session.commit.assert_awaited_once()
+        session.rollback.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_log_with_context(self):
-        """Test logging with context."""
+    async def test_a_failed_commit_raises_and_rolls_back(self):
+        session = self._session(commit_error=RuntimeError("commit rejected"))
+        with (
+            patch("app.application.audit_service.AsyncSessionLocal", return_value=session),
+            pytest.raises(AuditPersistenceError),
+        ):
+            await AuditService().log(action=AuditAction.CREATE, resource_type="user")
+
+        session.rollback.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_a_session_that_cannot_be_opened_raises(self):
+        with (
+            patch(
+                "app.application.audit_service.AsyncSessionLocal",
+                side_effect=RuntimeError("DB connection failed"),
+            ),
+            pytest.raises(AuditPersistenceError),
+        ):
+            await AuditService().log(action=AuditAction.CREATE, resource_type="user")
+
+    @pytest.mark.asyncio
+    async def test_a_failure_is_counted_and_logged_without_payload(self, caplog):
+        session = self._session(commit_error=RuntimeError("secret-token-123 in message"))
+        with (
+            patch("app.application.audit_service.AsyncSessionLocal", return_value=session),
+            patch("app.application.audit_service.audit_write_failures") as counter,
+            pytest.raises(AuditPersistenceError),
+        ):
+            await AuditService().log(
+                action=AuditAction.UPDATE,
+                resource_type="user",
+                extra_metadata={"path": "/api/v1/export/secret-path-456"},
+            )
+
+        counter.add.assert_called_once_with(1, {"stage": "durable"})
+        assert "secret-token-123" not in caplog.text
+        assert "secret-path-456" not in caplog.text
+        assert "RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_the_system_worker_context_is_set_for_the_insert(self):
+        session = self._session()
+        with patch("app.application.audit_service.AsyncSessionLocal", return_value=session):
+            await AuditService().log(action=AuditAction.CREATE, resource_type="user")
+
+        statement = str(session.execute.await_args_list[0].args[0])
+        assert "app.is_system_worker" in statement
+
+    @pytest.mark.asyncio
+    async def test_log_builds_the_entry_from_context(self):
         import uuid
 
         service = AuditService()
-        await service.start()
-
-        context = AuditContext(
-            user_sub="user-123",
-            user_email="user@example.com",
-            district_id=uuid.uuid4(),
-        )
-
-        put_calls = []
-        original_put = service._queue.put
-
-        async def mock_put(item):
-            put_calls.append(item)
-            await original_put(item)
-
-        service._queue.put = mock_put
+        service.record = AsyncMock()
+        context = AuditContext(user_sub="user-123", user_email="user@example.com", district_id=uuid.uuid4())
 
         await service.log(
             action=AuditAction.UPDATE,
@@ -201,199 +197,47 @@ class TestAuditService:
             changes={"title": "new title"},
         )
 
-        assert len(put_calls) == 1
-        entry = put_calls[0]
+        entry = service.record.await_args.args[0]
         assert entry.user_sub == "user-123"
         assert entry.user_email == "user@example.com"
         assert entry.district_id == context.district_id
         assert entry.changes == {"title": "new title"}
-
-        # Verify that the timestamp is set
         assert entry.timestamp is not None
 
-        await service.stop()
-
     @pytest.mark.asyncio
-    async def test_log_event(self):
-        """Test logging with AuditEvent object."""
+    async def test_log_event_and_batch_write_every_event(self):
         service = AuditService()
-        await service.start()
-
-        event = AuditEvent(
-            action=AuditAction.DELETE,
-            resource_type="user",
-            resource_id=None,
-            status=AuditStatus.FAILED,
-            error_message="Test error",
-        )
-
-        put_calls = []
-        original_put = service._queue.put
-
-        async def mock_put(item):
-            put_calls.append(item)
-            await original_put(item)
-
-        service._queue.put = mock_put
-
-        await service.log_event(event)
-
-        assert len(put_calls) == 1
-        entry = put_calls[0]
-        assert entry.action == AuditAction.DELETE
-        assert entry.status == AuditStatus.FAILED
-        assert entry.error_message == "Test error"
-
-        await service.stop()
-
-    @pytest.mark.asyncio
-    async def test_context_manager(self):
-        """Test audit context manager."""
-        service = AuditService()
-
-        async with service.context(
-            user_sub="user-123",
-            user_email="user@example.com",
-        ) as ctx:
-            assert ctx.user_sub == "user-123"
-            assert ctx.user_email == "user@example.com"
-
-    @pytest.mark.asyncio
-    async def test_double_start(self):
-        """Test that starting twice doesn't cause issues."""
-        service = AuditService()
-        await service.start()
-        await service.start()  # Should not raise
-
-        assert service._running is True
-
-        await service.stop()
-
-    @pytest.mark.asyncio
-    async def test_log_event_with_all_fields(self):
-        """Test log_event with a fully populated AuditEvent."""
-        service = AuditService()
-        await service.start()
-
-        import uuid
-
-        event = AuditEvent(
-            action=AuditAction.CREATE,
-            resource_type="user",
-            resource_id=uuid.uuid4(),
-            changes={"name": "new name"},
-            old_values={"name": "old name"},
-            status=AuditStatus.FAILED,
-            error_message="Test error",
-            extra_metadata={"key": "value"},
-        )
-
-        put_calls = []
-        original_put = service._queue.put
-
-        async def mock_put(item):
-            put_calls.append(item)
-            await original_put(item)
-
-        service._queue.put = mock_put
-
-        await service.log_event(event)
-
-        assert len(put_calls) == 1
-        entry = put_calls[0]
-        assert entry.changes == {"name": "new name"}
-        assert entry.extra_metadata == {"key": "value"}
-        assert entry.status == AuditStatus.FAILED
-        assert entry.error_message == "Test error"
-
-        await service.stop()
-
-    @pytest.mark.asyncio
-    async def test_log_batch(self):
-        """Test logging multiple events in batch."""
-        service = AuditService()
-        await service.start()
-
+        service.record = AsyncMock()
         events = [
             AuditEvent(action=AuditAction.CREATE, resource_type="user"),
-            AuditEvent(action=AuditAction.UPDATE, resource_type="event"),
-            AuditEvent(action=AuditAction.DELETE, resource_type="leader"),
+            AuditEvent(
+                action=AuditAction.DELETE,
+                resource_type="leader",
+                status=AuditStatus.FAILED,
+                error_message="Test error",
+                extra_metadata={"key": "value"},
+            ),
         ]
-
-        put_calls = []
-        original_put = service._queue.put
-
-        async def mock_put(item):
-            put_calls.append(item)
-            await original_put(item)
-
-        service._queue.put = mock_put
 
         await service.log_batch(events)
 
-        # Each event should be logged separately via log_event
-        assert len(put_calls) == 3
-        assert put_calls[0].action == AuditAction.CREATE
-        assert put_calls[1].action == AuditAction.UPDATE
-        assert put_calls[2].action == AuditAction.DELETE
-
-        await service.stop()
+        entries = [call.args[0] for call in service.record.await_args_list]
+        assert [e.action for e in entries] == [AuditAction.CREATE, AuditAction.DELETE]
+        assert entries[1].status == AuditStatus.FAILED
+        assert entries[1].error_message == "Test error"
+        assert entries[1].extra_metadata == {"key": "value"}
 
     @pytest.mark.asyncio
-    async def test_stop_without_start(self):
-        """Test that stopping without starting doesn't cause issues."""
+    async def test_context_manager(self):
+        async with AuditService().context(user_sub="user-123", user_email="user@example.com") as ctx:
+            assert ctx.user_sub == "user-123"
+            assert ctx.user_email == "user@example.com"
+
+    def test_there_is_no_in_memory_queue_to_lose_entries_from(self):
         service = AuditService()
-        await service.stop()  # Should not raise
-
-        assert service._running is False
-
-    @pytest.mark.asyncio
-    async def test_writer_commits_successfully(self):
-        """Writer commits audit log when DB operations succeed."""
-        service = AuditService()
-        await service.start()
-
-        mock_session = AsyncMock()
-        mock_session.__aenter__.return_value = mock_session
-        mock_session.add = MagicMock()  # AsyncSession.add is synchronous
-        mock_session.commit.return_value = None
-        mock_session.rollback.return_value = None
-
-        with patch(
-            "app.application.audit_service.AsyncSessionLocal",
-            return_value=mock_session,
-        ):
-            await service.log(
-                action=AuditAction.CREATE,
-                resource_type="user",
-            )
-            # Let writer process the queue item
-            await asyncio.sleep(0.05)
-
-        await service.stop()
-
-        mock_session.add.assert_called_once()
-        mock_session.commit.assert_awaited_once()
-        mock_session.rollback.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_writer_handles_db_error(self):
-        """Writer handles exceptions when AsyncSessionLocal fails."""
-        service = AuditService()
-        await service.start()
-
-        with patch(
-            "app.application.audit_service.AsyncSessionLocal",
-            side_effect=RuntimeError("DB connection failed"),
-        ):
-            await service.log(
-                action=AuditAction.CREATE,
-                resource_type="user",
-            )
-            # Let writer process — should hit outer except Exception
-            await asyncio.sleep(0.05)
-
-        await service.stop()
+        assert not hasattr(service, "_queue")
+        assert not hasattr(service, "start")
+        assert not hasattr(service, "stop")
 
 
 class TestAuditAction:

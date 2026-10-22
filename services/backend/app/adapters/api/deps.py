@@ -4,7 +4,7 @@
 """app/adapters/api/deps.py: Module."""
 
 import logging
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from typing import Annotated, Any, NamedTuple
 
 from fastapi import Depends, HTTPException, Request, Security, status
@@ -45,6 +45,7 @@ from app.adapters.db.session import get_db_session
 from app.application.candidate_review import CandidateReviewService
 from app.application.notification_service import NotificationService
 from app.application.services.calendar_integration_service import CalendarIntegrationService
+from app.audit_request import current_request_audit
 from app.domain.models.membership import Membership
 from app.domain.models.user import User
 
@@ -53,11 +54,33 @@ logger = logging.getLogger(__name__)
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
+
 # The session commits in the exit code of ``get_db_session``. With the default
 # ("request") scope FastAPI runs that code after the response exists, so a failed
 # commit would still be answered as a success. "function" scope commits when the
 # route function returns, before the response is sent (#648). Every consumer must use
 # this scope: FastAPI caches dependencies per scope, so a mismatch opens a second session.
+async def audited_db_session(
+    session: AsyncSession = Depends(get_db_session, scope="function"),
+) -> AsyncGenerator[AsyncSession]:
+    """The request session, plus the request's audit entry in the same transaction.
+
+    Runs just before ``get_db_session`` commits: a successful state-changing request
+    that no domain audit covers gets its HTTP audit entry here, so the entry exists
+    exactly when the change does. If the route failed, this code does not run (the
+    middleware records the failure itself).
+    """
+    yield session
+    state = current_request_audit()
+    if state is None or state.transaction_entry is None:
+        return
+    # Flush first: the domain audit hook runs on flush and tells whether it wrote an entry.
+    await session.flush()
+    if not state.covered:
+        await state.transaction_entry(session)
+        state.transaction_entry_written = True
+
+
 _oidc_adapter: OIDCAdapter | None = None
 
 
@@ -75,7 +98,7 @@ def get_oidc_adapter() -> OIDCAdapter | None:
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
-    session: AsyncSession = Depends(get_db_session, scope="function"),
+    session: AsyncSession = Depends(audited_db_session, scope="function"),
 ) -> User:
     """Extract and validate the current user from the bearer token."""
     if not credentials:
@@ -164,7 +187,7 @@ class CurrentUserContext(NamedTuple):
 
 async def get_current_user_with_memberships(
     user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session, scope="function"),
+    session: AsyncSession = Depends(audited_db_session, scope="function"),
 ) -> CurrentUserContext:
     """Get the current user together with effective memberships."""
     membership_repo = SqlMembershipRepository(session)
@@ -238,7 +261,7 @@ async def get_current_active_user(
 
 
 async def get_notification_service(
-    session: AsyncSession = Depends(get_db_session, scope="function"),
+    session: AsyncSession = Depends(audited_db_session, scope="function"),
 ) -> NotificationService:
     """Provide the notification service."""
     repo = SqlNotificationRepository(session)
@@ -251,7 +274,7 @@ def make_repository_dependency[RepositoryT](
     """Create a typed FastAPI dependency for a SQLAlchemy repository adapter."""
 
     async def get_repository(
-        session: AsyncSession = Depends(get_db_session, scope="function"),
+        session: AsyncSession = Depends(audited_db_session, scope="function"),
     ) -> RepositoryT:
         return repository_type(session)
 
@@ -286,7 +309,7 @@ get_external_event_candidate_repository = make_repository_dependency(
 
 
 async def get_candidate_review_service(
-    session: AsyncSession = Depends(get_db_session, scope="function"),
+    session: AsyncSession = Depends(audited_db_session, scope="function"),
 ) -> CandidateReviewService:
     """Provide the candidate review service with its repository adapters."""
     return CandidateReviewService(
@@ -311,4 +334,4 @@ RawCurrentUserWithMemberships = Annotated[
 ]
 CurrentUserWithMemberships = Annotated[CurrentUserContext, Depends(require_membership_access)]
 CurrentActiveUser = Annotated[CurrentUserContext, Depends(require_membership_access)]
-DbSession = Annotated[AsyncSession, Depends(get_db_session, scope="function")]
+DbSession = Annotated[AsyncSession, Depends(audited_db_session, scope="function")]

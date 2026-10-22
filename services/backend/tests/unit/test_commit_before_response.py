@@ -110,6 +110,6 @@ def test_no_module_declares_the_session_dependency_with_the_default_scope():
     offenders = []
     for path in app_root.rglob("*.py"):
         for number, line in enumerate(path.read_text().splitlines(), start=1):
-            if re.search(r"Depends\(\s*get_db_session\b", line) and 'scope="function"' not in line:
+            if re.search(r"Depends\(\s*(get_db_session|audited_db_session)\b", line) and 'scope="function"' not in line:
                 offenders.append(f"{path.relative_to(app_root)}:{number}")
     assert offenders == []

@@ -48,6 +48,7 @@ def _mock_auth_context(district_id: uuid.UUID, calendar_repo: AsyncMock):
 
     async def _override_db_session():
         session = AsyncMock()
+        session.add = MagicMock()  # AsyncSession.add is synchronous; the audit entry uses it
         result = MagicMock()
         result.mappings.return_value.one_or_none.return_value = None
         # Keep the fixture user non-superadmin: the bootstrap grant read

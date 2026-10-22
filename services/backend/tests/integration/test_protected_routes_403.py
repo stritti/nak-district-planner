@@ -87,6 +87,7 @@ def mock_oidc_adapter():
 def override_db_session():
     async def _override_db_session():
         session = AsyncMock()
+        session.add = MagicMock()  # AsyncSession.add is synchronous; the audit entry uses it
         result = MagicMock()
         result.mappings.return_value.one_or_none.return_value = None
         result.scalar_one_or_none.return_value = False
