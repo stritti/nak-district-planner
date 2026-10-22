@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0](https://github.com/stritti/nak-district-planner/compare/v1.4.0...v1.5.0) (2026-10-22)
+
+
+### Features
+
+* **idp:** least-privilege Keycloak provisioning (harden-keycloak-provisioning) ([#679](https://github.com/stritti/nak-district-planner/issues/679)) ([be4316f](https://github.com/stritti/nak-district-planner/commit/be4316f0582478422470a1a8348f3a8cb36df8c4))
+* **leaders:** Person–Gemeinde–Rolle (mehrere Zuordnungen je Amtsträger) ([#688](https://github.com/stritti/nak-district-planner/issues/688)) ([b239861](https://github.com/stritti/nak-district-planner/commit/b239861595dd4260244456735da92d7dde9bc7b6))
+
+
+### Bug Fixes
+
+* **audit:** acknowledge a write only after its transaction committed ([#648](https://github.com/stritti/nak-district-planner/issues/648)) ([#694](https://github.com/stritti/nak-district-planner/issues/694)) ([bda0adb](https://github.com/stritti/nak-district-planner/commit/bda0adbeeb2da53ab3940d40e6ff5f77ddbda442))
+* **audit:** synchronous durable HTTP audit instead of a lossy queue ([#648](https://github.com/stritti/nak-district-planner/issues/648)) ([#695](https://github.com/stritti/nak-district-planner/issues/695)) ([88510c0](https://github.com/stritti/nak-district-planner/commit/88510c08a88316b4036fe5d62fbdaa494f71bf03))
+* **deps:** bump certifi to 2026.10.19 (PYSEC-2026-4320) ([#685](https://github.com/stritti/nak-district-planner/issues/685)) ([bdedba6](https://github.com/stritti/nak-district-planner/commit/bdedba664cd1d263311a2fab13f2937c046a9654))
+* **duties:** exact event intervals, symmetric name matching, one identity per person ([#683](https://github.com/stritti/nak-district-planner/issues/683)) ([9de60c3](https://github.com/stritti/nak-district-planner/commit/9de60c359f23e7cbebf54517829f67f6eefd73cb))
+* **leaders:** serialise the duplicate check, canonical punctuation, ignore stale hints ([#682](https://github.com/stritti/nak-district-planner/issues/682)) ([694f9ec](https://github.com/stritti/nak-district-planner/commit/694f9ec8f85d9f96ab2ec5f11761e16e20b180ec))
+
 ## [1.4.0](https://github.com/stritti/nak-district-planner/compare/v1.3.0...v1.4.0) (2026-10-20)
 
 
